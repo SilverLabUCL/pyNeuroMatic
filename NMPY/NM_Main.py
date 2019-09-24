@@ -1,31 +1,35 @@
 # -*- coding: utf-8 -*-
 """
-Main.py -  Defines NM Main class
+NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import copy
+from NM_Experiment import Experiment
+from NM_Utilities import quotes
 
 
-def quotes(text):
-    return "\"" + text + "\""
-
-
-class Main:
-    """NM Main class"""
+class Main(object):
+    """
+    NM Main class
+    
+    Class information here...
+    
+    Attributes:
+        experiments: list of Experiment objects
+        experiment_select: selected Experiment
+    """
 
     def __init__(self):
-        self.experiments = []  # list of existing Experiments
-        self.current_experiment = None  # select Experiment
-        name = self.next_experiment_name()
-        if name is not None:
-            self.new_experiment(name, current=True)  # default Experiment
-        print("NM Main class created")
+        self.experiments = []
+        self.experiment_select = None
+        self.experiment_new(name="", select=True)  # create default Experiment
 
-    def next_experiment_name(self):
+    def experiment_name_next(self) -> str:
         """
         Create next default name for an Experiment.
 
         Returns:
-            name (str) if successful, None otherwise
+            string name if successful, None otherwise
         """
         n = 10 + len(self.experiments)
         for i in range(0, n):
@@ -39,18 +43,21 @@ class Main:
                 return name
         return None
 
-    def check_experiment_name(self, name=None, exists=False, notexists=False):
+    def experiment_name_check(self, 
+                              name: str, 
+                              exists: bool = False, 
+                              notexists: bool = False) -> str:
         """
         Check if str name is OK to use for an Experiment.
         This function removes all special characters except '_'.
 
         Args:
-            name (str): name to check
-            exists (bool): check if name already exists as an Experiment
-            notexists (bool): check if name does not exist as an Experiment
+            name: name to check
+            exists: check if name already exists as an Experiment
+            notexists: check if name does not exist as an Experiment
 
         Returns:
-            name (str) if successful, None otherwise
+            string name if successful, None otherwise
         """
         if name is None:
             print("bad Experiment name: None")
@@ -82,114 +89,106 @@ class Main:
                 return None
         return name  # name is OK
 
-    def new_experiment(self, name=None, current=True):
+    def experiment_new(self, 
+                       name: str, 
+                       select: bool = True) -> Experiment:
         """
         Create a new Experiment and add to experiments list.
 
         Args:
-            name (str): name of new Experiment
-            current (bool): set as current Experiment
+            name: name of new Experiment
+            select: select this Experiment
 
         Returns:
-            Experiment (obj) if successful, None otherwise
+            new Experiment if successful, None otherwise
         """
         if name is None or len(name) == 0:
-            name = self.next_experiment_name()
-        name = self.check_experiment_name(name=name, exists=True)
+            name = self.experiment_name_next()
+        name = self.experiment_name_check(name=name, exists=True)
         if name is None:
             return None
         e = Experiment(name=name)
         self.experiments.append(e)
         print("created Experiment " + quotes(name))
-        if self.current_experiment is None or current:
-            self.current_experiment = e
-            print("set current Experiment " + quotes(name))
+        if self.experiment_select is None or select:
+            self.experiment_select = e
+            print("selected Experiment " + quotes(name))
         return e
+        
+    def experiment_copy(self,
+                        name: str, 
+                        newname: str,
+                        select: bool = False) -> Experiment:
+        """
+        Copy an existing Experiment and add to experiments list.
 
-    def kill_experiment(self, name=None):
+        Args:
+            name: name of Experiment to copy
+            newname: name of new Experiment
+
+        Returns:
+            new Experiment if successful, None otherwise
+        """
+        name = self.experiment_name_check(name=name, notexists=True)
+        if name is None or len(name) == 0:
+            return False
+        toCopy = None
+        for e in self.experiments:
+            if name.casefold() == e.name.casefold():
+                toCopy = e
+                break
+        if toCopy is None:
+            return False
+        e = copy.deepcopy(toCopy)
+        self.experiments.append(e)
+        print("copied Experiment " + quotes(name) + " to " + quotes(newname))
+        return True
+        
+    def experiment_kill(self, name: str) -> bool:
         """
         Kill an Experiment (i.e. remove from experiments list).
 
         Args:
-            name (str): name of Experiment
+            name: name of Experiment
 
         Returns:
             True for success, False otherwise
         """
-        name = self.check_experiment_name(name=name, notexists=True)
-        if name is None:
+        name = self.experiment_name_check(name=name, notexists=True)
+        if name is None or len(name) == 0:
             return False
         kill = None
         for e in self.experiments:
             if name.casefold() == e.name.casefold():
                 kill = e
                 break
-        if kill is not None:
-            current = kill is self.current_experiment
-            self.experiments.remove(kill)
-            if current:
-                if len(self.experiments) == 0:
-                    self.current_experiment = None
-                else:
-                    self.current_experiment = self.experiments[0]
-            print("killed Experiment " + quotes(name))
-            return True
-        return False
+        if kill is None:
+            return False
+        selected = kill is self.experiment_select
+        self.experiments.remove(kill)
+        if selected:
+            if len(self.experiments) == 0:
+                self.experiment_select = None
+            else:
+                self.experiment_select = self.experiments[0]
+        print("killed Experiment " + quotes(name))
+        return True
 
-    def set_current_experiment(self, name=None):
+    def experiment_select(self, name: str) -> bool:
         """
-        Set current Experiment.
+        Select Experiment.
 
         Args:
-            name (str): name of Experiment
+            name: name of Experiment
 
         Returns:
             True for success, False otherwise
         """
-        name = self.check_experiment_name(name=name, notexists=True)
+        name = self.experiment_name_check(name=name, notexists=True)
         if name is None:
             return False
         for e in self.experiments:
             if name.casefold() == e.name.casefold():
-                self.current_experiment = e
+                self.experiment_select = e
                 return True
         return False
-
-
-class Experiment:
-    """NM Experiment class"""
-
-    def __init__(self, name=None):
-        self.name = name
-        self.wave_prefixes = []  # list of WavePrefix objects
-        self.currnet_wave_prefix = None
- 
-    def new_wave_prefix(self, prefix=None, current=True):
-        """
-        Create new WavePrefix and add to wave_prefixes list.
-
-        Args:
-            prefix (str): new wave prefix
-            current (bool): set as current WavePrefix
-
-        Returns:
-            WavePrefix (obj) if successful, None otherwise
-        """
-        if prefix is None or len(prefix) == 0:
-            return None
-        wp = WavePrefix(prefix=prefix)
-        self.wave_prefixes.append(wp)
-        print("created WavePrefix " + quotes(prefix))
-        if self.currnet_wave_prefix is None or current:
-            self.currnet_wave_prefix = wp
-            print("set current WavePrefix " + quotes(prefix))
-        return wp
-
-class WavePrefix:
-    """NM Wave Prefix class"""
-
-    def __init__(self, prefix=None, numWavesTEMP=3):
-        self.prefix = prefix  # the wave prefix
-        self.wave_names = []  # list of wave names based on wave prefix
-        for i in range(0, numWavesTEMP):
-            self.wave_names.append(prefix + "A" + str(i))  # temp coding

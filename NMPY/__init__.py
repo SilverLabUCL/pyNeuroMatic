@@ -1,6 +1,6 @@
 import NM_Main
 
 nm = NM_Main.Main()
-nm.current_experiment.new_wave_prefix(prefix="Record")
+nm.experiment_select.wave_prefix_new(prefix="Record")
 
 print("initialized NM")
