@@ -5,45 +5,50 @@ Copyright 2019 Jason Rothman
 """
 
 
+def quotes(text):
+    return "\"" + text + "\""
+
+
 class Main:
     """NM Main class"""
+
     def __init__(self):
         self.experiments = []  # list of existing Experiments
         self.current_experiment = None  # select Experiment
         name = self.next_experiment_name()
         if name is not None:
-            self.new_experiment(name, current=True);  # create default Experiment
+            self.new_experiment(name, current=True)  # default Experiment
         print("NM Main class created")
-    def quotes(text):
-        return "\"" + text + "\""
+
     def next_experiment_name(self):
         """
         Create next default name for an Experiment.
-        
+
         Returns:
             name (str) if successful, None otherwise
         """
         n = 10 + len(self.experiments)
-        for i in range(0,n):
+        for i in range(0, n):
             name = "NMExp" + str(i)
             found = False
             for e in self.experiments:
                 if name.casefold() == e.name.casefold():
-                    found = True;
+                    found = True
                     break
             if not found:
                 return name
         return None
+
     def check_experiment_name(self, name=None, exists=False, notexists=False):
         """
         Check if str name is OK to use for an Experiment.
-        This function removes all special characters (except '_') before computing tests.
-        
+        This function removes all special characters except '_'.
+
         Args:
             name (str): name to check
             exists (bool): check if name already exists as an Experiment
             notexists (bool): check if name does not exist as an Experiment
-        
+
         Returns:
             name (str) if successful, None otherwise
         """
@@ -64,26 +69,27 @@ class Main:
         if exists:
             for e in self.experiments:
                 if name.casefold() == e.name.casefold():
-                    print("Experiment " + Main.quotes(name) + " already exists")
+                    print("Experiment "+Main.quotes(name)+" already exists")
                     return None
         if notexists:
-            found = False;
+            found = False
             for e in self.experiments:
                 if name.casefold() == e.name.casefold():
                     found = True
                     break
             if not found:
-                print("Experiment " + Main.quotes(name) + " does not exist")
+                print("Experiment " + quotes(name) + " does not exist")
                 return None
         return name  # name is OK
+
     def new_experiment(self, name=None, current=True):
         """
-        Create a new Experiment.
-        
+        Create a new Experiment and add to experiments list.
+
         Args:
             name (str): name of new Experiment
-            current (bool): set new Experiment as current Experiment
-        
+            current (bool): set as current Experiment
+
         Returns:
             Experiment (obj) if successful, None otherwise
         """
@@ -94,18 +100,19 @@ class Main:
             return None
         e = Experiment(name=name)
         self.experiments.append(e)
-        print("created Experiment " + Main.quotes(name))
+        print("created Experiment " + quotes(name))
         if self.current_experiment is None or current:
             self.current_experiment = e
-            print("set current Experiment " + Main.quotes(name))
-        return e;
+            print("set current Experiment " + quotes(name))
+        return e
+
     def kill_experiment(self, name=None):
         """
-        Kill an Experiment.
-        
+        Kill an Experiment (i.e. remove from experiments list).
+
         Args:
             name (str): name of Experiment
-        
+
         Returns:
             True for success, False otherwise
         """
@@ -125,16 +132,17 @@ class Main:
                     self.current_experiment = None
                 else:
                     self.current_experiment = self.experiments[0]
-            print("killed Experiment " + Main.quotes(name))
-            return True;
+            print("killed Experiment " + quotes(name))
+            return True
         return False
+
     def set_current_experiment(self, name=None):
         """
-        Set the current Experiment.
-        
+        Set current Experiment.
+
         Args:
             name (str): name of Experiment
-        
+
         Returns:
             True for success, False otherwise
         """
@@ -150,6 +158,38 @@ class Main:
 
 class Experiment:
     """NM Experiment class"""
+
     def __init__(self, name=None):
         self.name = name
-        
+        self.wave_prefixes = []  # list of WavePrefix objects
+        self.currnet_wave_prefix = None
+ 
+    def new_wave_prefix(self, prefix=None, current=True):
+        """
+        Create new WavePrefix and add to wave_prefixes list.
+
+        Args:
+            prefix (str): new wave prefix
+            current (bool): set as current WavePrefix
+
+        Returns:
+            WavePrefix (obj) if successful, None otherwise
+        """
+        if prefix is None or len(prefix) == 0:
+            return None
+        wp = WavePrefix(prefix=prefix)
+        self.wave_prefixes.append(wp)
+        print("created WavePrefix " + quotes(prefix))
+        if self.currnet_wave_prefix is None or current:
+            self.currnet_wave_prefix = wp
+            print("set current WavePrefix " + quotes(prefix))
+        return wp
+
+class WavePrefix:
+    """NM Wave Prefix class"""
+
+    def __init__(self, prefix=None, numWavesTEMP=3):
+        self.prefix = prefix  # the wave prefix
+        self.wave_names = []  # list of wave names based on wave prefix
+        for i in range(0, numWavesTEMP):
+            self.wave_names.append(prefix + "A" + str(i))  # temp coding
