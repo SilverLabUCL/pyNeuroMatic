@@ -3,6 +3,7 @@
 NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import numpy as np
 from nm_wave_prefix import WavePrefix
 from nm_utilities import quotes
 
@@ -22,6 +23,8 @@ class File(object):
         self.name = name
         self.wave_prefixes = []
         self.wave_prefix = None
+        self.d1 = np.random.random(size=10)
+        print(str(self.d1));
  
     def wave_prefix_new(self, 
                         prefix: str, 
@@ -40,7 +43,7 @@ class File(object):
             return None
         p = WavePrefix(prefix=prefix)
         self.wave_prefixes.append(p)
-        print("created WavePrefix " + quotes(prefix))
+        # print("created WavePrefix " + quotes(prefix))
         if self.wave_prefix is None or select:
             self.wave_prefix = p
             print("selected WavePrefix " + quotes(prefix))

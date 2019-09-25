@@ -20,6 +20,7 @@ class WavePrefix(object):
         self.channel = 0
         self.wavenum = 0
         self.wave_names_mock(channels=2, waves=5)
+        #self.wave_names_search()
         self.print_details()
 
     def wave_names_mock(self, channels, waves):
@@ -35,6 +36,10 @@ class WavePrefix(object):
                 channel_wave_names.append(self.prefix + chan_char + str(j))
             self.wave_names.append(channel_wave_names)
 
+    def wave_names_search(self, channels = 0):
+        # search for data array names that begin with prefix (e.g. RecordA0, RecordA1...)
+        pass
+    
     def print_details(self) -> None:
         print("WavePrefix = " + quotes(self.prefix))
         print("channels = " + str(self.channels))
