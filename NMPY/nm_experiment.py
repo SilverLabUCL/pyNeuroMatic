@@ -4,8 +4,10 @@ NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import copy
+import h5py
 from nm_file import File
 from nm_utilities import quotes
+from nm_utilities import removeSpecialChars
 
 
 class Experiment(object):
@@ -19,7 +21,11 @@ class Experiment(object):
         file: selected File
     """
 
-    def __init__(self):
+    def __init__(self,
+                 name=None):
+        if name is None or len(name) == 0:
+            name = "NMExp0"
+        self.name = removeSpecialChars(name)
         self.files = []
         self.file = None
         self.file_new(name="", select=True)  # create empty default File
@@ -35,8 +41,8 @@ class Experiment(object):
         for i in range(0, n):
             name = "NMFile" + str(i)
             found = False
-            for e in self.files:
-                if name.casefold() == e.name.casefold():
+            for f in self.files:
+                if name.casefold() == f.name.casefold():
                     found = True
                     break
             if not found:
@@ -44,11 +50,11 @@ class Experiment(object):
         return None
 
     def file_name_check(self, 
-                              name: str, 
-                              exists: bool = False, 
-                              notexists: bool = False) -> str:
+                        name: str, 
+                        exists: bool = False, 
+                        notexists: bool = False) -> str:
         """
-        Check if str name is OK to use for a File.
+        Check if str name is OK to use for a File. It must be unique.
         This function removes all special characters except '_'.
 
         Args:
@@ -65,23 +71,19 @@ class Experiment(object):
         if len(name) == 0:
             print("bad File name: 0 length")
             return None
-        temp = ""
-        for e in name:
-            if e.isalnum() or e == "_":
-                temp += e  # remove special characters
-        name = temp
+        name = removeSpecialChars(name)
         if len(name) == 0:
             print("bad File name: 0 length")
             return None
         if exists:
-            for e in self.files:
-                if name.casefold() == e.name.casefold():
-                    print("File "+Main.quotes(name)+" already exists")
+            for f in self.files:
+                if name.casefold() == f.name.casefold():
+                    print("File " + quotes(name) + " already exists")
                     return None
         if notexists:
             found = False
-            for e in self.files:
-                if name.casefold() == e.name.casefold():
+            for f in self.files:
+                if name.casefold() == f.name.casefold():
                     found = True
                     break
             if not found:
@@ -89,9 +91,31 @@ class Experiment(object):
                 return None
         return name  # name is OK
 
+    def file_add(self, 
+                 file: File, 
+                 select: bool = True) -> bool:
+        """
+        Add a File to Files list.
+
+        Args:
+            file: the File to add
+            select: select this File
+
+        Returns:
+            True for success, False otherwise
+        """
+        if file is None:
+            return False
+        self.files.append(file)
+        print("added File " + quotes(file.name) + " to current experiment")
+        if self.file is None or select:
+            self.file = file
+            print("selected File " + quotes(file.name))
+        return True
+    
     def file_new(self, 
-                       name: str, 
-                       select: bool = True) -> File:
+                 name: str, 
+                 select: bool = True) -> File:
         """
         Create a new File and add to Files list.
 
@@ -107,18 +131,18 @@ class Experiment(object):
         name = self.file_name_check(name=name, exists=True)
         if name is None:
             return None
-        e = File(name=name)
-        self.files.append(e)
+        f = File(name=name)
+        self.files.append(f)
         print("created File " + quotes(name))
         if self.file is None or select:
-            self.file = e
+            self.file = f
             print("selected File " + quotes(name))
-        return e
+        return f
         
     def file_copy(self,
-                        name: str, 
-                        newname: str,
-                        select: bool = False) -> File:
+                  name: str, 
+                  newname: str,
+                  select: bool = False) -> File:
         """
         Copy an existing File and add to Files list.
 
@@ -133,18 +157,19 @@ class Experiment(object):
         if name is None or len(name) == 0:
             return False
         toCopy = None
-        for e in self.files:
-            if name.casefold() == e.name.casefold():
-                toCopy = e
+        for f in self.files:
+            if name.casefold() == f.name.casefold():
+                toCopy = f
                 break
         if toCopy is None:
             return False
-        e = copy.deepcopy(toCopy)
-        self.files.append(e)
+        f = copy.deepcopy(toCopy)
+        self.files.append(f)
         print("copied File " + quotes(name) + " to " + quotes(newname))
         return True
         
-    def file_kill(self, name: str) -> bool:
+    def file_kill(self,
+                  name: str) -> bool:
         """
         Kill a File (i.e. remove from Files list).
 
@@ -158,9 +183,9 @@ class Experiment(object):
         if name is None or len(name) == 0:
             return False
         kill = None
-        for e in self.files:
-            if name.casefold() == e.name.casefold():
-                kill = e
+        for f in self.files:
+            if name.casefold() == f.name.casefold():
+                kill = f
                 break
         if kill is None:
             return False
@@ -174,7 +199,8 @@ class Experiment(object):
         print("killed File " + quotes(name))
         return True
 
-    def file(self, name: str) -> bool:
+    def file_select(self,
+                    name: str) -> bool:
         """
         Select File.
 
@@ -187,8 +213,13 @@ class Experiment(object):
         name = self.file_name_check(name=name, notexists=True)
         if name is None:
             return False
-        for e in self.files:
-            if name.casefold() == e.name.casefold():
-                self.file = e
+        for f in self.files:
+            if name.casefold() == f.name.casefold():
+                self.file = f
                 return True
         return False
+    
+    def file_open_hdf5(self):
+        f = h5py.File('nmFolder0.hdf5', 'r')
+        print(f.keys())
+
