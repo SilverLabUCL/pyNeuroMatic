@@ -4,7 +4,6 @@ NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import numpy as np
-import h5py
 from nm_wave_prefix import WavePrefix
 from nm_utilities import quotes
 
