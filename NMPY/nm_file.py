@@ -4,8 +4,10 @@ NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import numpy as np
+import h5py
 from nm_wave_prefix import WavePrefix
 from nm_utilities import quotes
+
 
 class File(object):
     """
@@ -24,10 +26,10 @@ class File(object):
         self.wave_prefixes = []
         self.wave_prefix = None
         self.d1 = np.random.random(size=10)
-        print(str(self.d1));
- 
-    def wave_prefix_new(self, 
-                        prefix: str, 
+        print(str(self.d1))
+
+    def wave_prefix_new(self,
+                        prefix: str,
                         select: bool = True) -> WavePrefix:
         """
         Create new WavePrefix and add to wave_prefixes list.
