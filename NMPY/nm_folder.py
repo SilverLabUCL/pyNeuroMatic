@@ -8,7 +8,7 @@ from nm_wave_prefix import WavePrefix
 from nm_utilities import quotes
 
 
-class File(object):
+class Folder(object):
     """
     NM File class
 
@@ -24,8 +24,8 @@ class File(object):
         self.name = name
         self.wave_prefixes = []
         self.wave_prefix = None
-        self.d1 = np.random.random(size=10)
-        print(str(self.d1))
+        #self.d1 = np.random.random(size=10)
+        #print(str(self.d1))
 
     def wave_prefix_new(self,
                         prefix: str,
