@@ -1,31 +1,48 @@
 # -*- coding: utf-8 -*-
 """
-NMPY - NeuroMatic in Python
+nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import nm_experiment
 
-exp = nm_experiment.Experiment()
-experiment_folder_test(exp, 1)
+nm = None
 
+class Manager(object):
+    """
+    NM Manager class
+    """
+    
+    def __init__(self):
+        self.__exp = nm_experiment.Experiment()
 
-def main():
-    #experiment = nm_experiment.Experiment()
-    #experiment_folder_test(experiment, 1)
-    print("initialized NM")
+    @property
+    def exp(self):
+        return self.__exp
 
+    @exp.setter
+    def exp(self, exp):
+        if exp is None:
+            return False
+        self.__exp = exp
+        return True
+    
+    def experiment_new(self, name=""):
+        if name.isalnum():
+            self.__exp = nm_experiment.Experiment(name=name)
+            return True
+        else:
+            print("bad experiment name: found special characters")
+            return False
 
-def experiment_folder_test(experiment, select):
-    if experiment.folder_select is None:
-        return False
-    if select == 0:
-        f = experiment.folder_select.wave_prefix_new(prefix="Record")
-    elif select == 1:
-        experiment.folder_open_hdf5()
-    else:
-        return False
-    return True
-
+    def experiment_open(self, path=None):
+        pass
+    
+    def experiment_save(self):
+        pass
 
 if __name__ == '__main__':
-    main()
+    nm = Manager()
+    nm.exp.folder_new(name="NMFolder0")
+    #nm.exp.folder_select.wave_prefix_new(prefix="Record")
+    nm.exp.folder_open_hdf5()
+        

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-NMPY - NeuroMatic in Python
+nmpy - NeuroMatic in Python
 NM utility functions
 Copyright 2019 Jason Rothman
 """
@@ -16,3 +16,6 @@ def removeSpecialChars(text: str) -> str:
         if c.isalnum() or c == "_":
             temp += c  # only alpha-numeric or "_"
     return temp
+
+def error(error=0, text=""):
+    print("NM error: " + text)

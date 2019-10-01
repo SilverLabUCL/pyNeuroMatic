@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-NMPY - NeuroMatic in Python
+nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import copy
 import h5py
 from nm_folder import Folder
 from nm_utilities import quotes
-from nm_utilities import removeSpecialChars
 
 
 class Experiment(object):
@@ -22,12 +21,12 @@ class Experiment(object):
     """
 
     def __init__(self,
-                 name=None):
+                 name=""):
         self.name = name
         self.__folders = []
         self.__folder_select = None
         self.__folder_name_select = None
-        self.folder_new(name="", select=True)  # create empty default Folder
+        self.folder_new()  # create empty default Folder
 
     @property
     def name(self):
@@ -36,9 +35,8 @@ class Experiment(object):
     @name.setter
     def name(self, name):
         if name is None or not name:
-            self.__name = "NMExperiment"
+            self.__name = "Untitled"
         else:
-            #self.__name = removeSpecialChars(name)
             self.__name = name
 
     @property
@@ -119,7 +117,7 @@ class Experiment(object):
         if exists:
             for f in self.__folders:
                 if name.casefold() == f.name.casefold():
-                    print("Folder " + quotes(name) + " already exists")
+                    print("folder " + quotes(name) + " already exists")
                     return None
         if notexists:
             found = False
@@ -128,9 +126,26 @@ class Experiment(object):
                     found = True
                     break
             if not found:
-                print("Folder " + quotes(name) + " does not exist")
+                print("folder " + quotes(name) + " does not exist")
                 return None
         return name  # name is OK
+    
+    def folder_name_exists(self, name):
+        """
+        Check if name already exists as a folder name.
+
+        Args:
+            name: name to check
+
+        Returns:
+            True if name already exists, False otherwise
+        """
+        if name is None or not name:
+            return False
+        for f in self.__folders:
+            if name.casefold() == f.name.casefold():
+                return True
+        return False
 
     def folder_add(self,
                    folder: Folder,
@@ -155,7 +170,7 @@ class Experiment(object):
         return True
 
     def folder_new(self,
-                   name: str,
+                   name: str = None,
                    select: bool = True) -> Folder:
         """
         Create a new Folder and add to Folders list.
@@ -169,15 +184,15 @@ class Experiment(object):
         """
         if name is None or not name:
             name = self.folder_name_next()
-        name = self.folder_name_check(name=name, exists=True)
-        if name is None:
+        elif self.folder_name_exists(name=name):
+            print("folder already exists: " + quotes(name))
             return None
         f = Folder(name=name)
         self.__folders.append(f)
-        print("created Folder " + quotes(name))
+        print("created folder " + quotes(name))
         if self.folder_select is None or select:
             self.folder_select = f
-            print("selected Folder " + quotes(name))
+            print("selected folder " + quotes(name))
         return f
 
     def folder_copy(self,

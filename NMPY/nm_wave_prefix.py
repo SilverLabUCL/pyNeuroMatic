@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-NMPY - NeuroMatic in Python
+nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_utilities import quotes
