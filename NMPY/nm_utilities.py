@@ -9,7 +9,7 @@ def quotes(text: str) -> str:
     return "\"" + text + "\""
 
 def removeSpecialChars(text: str) -> str:
-    if text is None or len(text) == 0:
+    if text is None or not text:
         return ""
     temp = ""
     for c in text:

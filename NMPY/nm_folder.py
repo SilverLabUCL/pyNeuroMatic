@@ -40,7 +40,7 @@ class Folder(object):
         Returns:
             new WavePrefix if successful, None otherwise
         """
-        if prefix is None or len(prefix) == 0:
+        if prefix is None or not prefix:
             return None
         p = WavePrefix(prefix=prefix)
         self.wave_prefixes.append(p)
@@ -60,7 +60,7 @@ class Folder(object):
         Returns:
             True for success, False otherwise
         """
-        if prefix is None or len(prefix) == 0:
+        if prefix is None or not prefix:
             return False
         kill = None
         for p in self.wave_prefixes:
@@ -71,7 +71,7 @@ class Folder(object):
             selected = kill is self.wave_prefix
             self.wave_prefixes.remove(kill)
             if selected:
-                if len(self.wave_prefixes) == 0:
+                if not self.wave_prefixes:
                     self.wave_prefix = None
                 else:
                     self.wave_prefix = self.wave_prefixes[0]
@@ -89,7 +89,7 @@ class Folder(object):
         Returns:
             True for success, False otherwise
         """
-        if prefix is None or len(prefix) == 0:
+        if prefix is None or not prefix:
             return False
         for p in self.wave_prefixes:
             if prefix.casefold() == p.prefix.casefold():
