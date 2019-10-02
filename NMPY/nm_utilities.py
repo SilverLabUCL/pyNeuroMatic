@@ -4,6 +4,7 @@ nmpy - NeuroMatic in Python
 NM utility functions
 Copyright 2019 Jason Rothman
 """
+import inspect
 
 
 def quotes(text: str) -> str:
@@ -29,5 +30,11 @@ def name_ok(name: str) -> str:
     return name.isalnum()
 
 
-def error(error=0, text=""):
-    print("NM error: " + text)
+def error(text):
+    fxn = inspect.stack()[1][3]
+    print("ERROR nm." + fxn + " : " + text)
+
+
+def history(text=""):
+    fxn = inspect.stack()[1][3]
+    print("nm." + fxn + " : " + text)

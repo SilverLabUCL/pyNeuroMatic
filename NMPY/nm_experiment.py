@@ -8,6 +8,8 @@ import h5py
 from nm_folder import Folder
 from nm_utilities import quotes
 from nm_utilities import name_ok
+from nm_utilities import error
+from nm_utilities import history
 
 
 class Experiment(object):
@@ -22,12 +24,13 @@ class Experiment(object):
     """
 
     def __init__(self,
-                 name="Untitled"):
+                 name="Untitled",
+                 default_folder = True):
         self.name = name
         self.__folders = []
-        self.__folder_select = None
-        self.__folder_name_select = None
-        self.folder_new()  # create empty default Folder
+        self.__folder = None
+        if default_folder:
+            self.folder_new()  # create empty default Folder
 
     @property
     def name(self):
@@ -38,160 +41,139 @@ class Experiment(object):
         if name_ok(name):
             self.__name = name
             return True
-        print("bad experiment name")
+        error("bad experiment name")
         return False
 
     @property
-    def folder_select(self):
-        return self.__folder_select
+    def folder(self):
+        return self.__folder
 
-    @folder_select.setter
-    def folder_select(self, folder):
+    @folder.setter
+    def folder(self, folder):
         if folder is None:
             return False
-        self.__folder_select = folder
-        self.__folder_name_select = folder.name
-        if not self.folder_exists(folder):
-            self.__folders.append(folder)  # save to folder array
+        self.__folder = folder
+        history("selected folder " + quotes(self.__folder.name))
+        if not self.folder_exists(folder=folder):
+            self.__folders.append(folder)  # save
         return True
-
-    @property
-    def folder_name_select(self):
-        return self.__folder_name_select
-
-    @folder_name_select.setter
-    def folder_name_select(self, folder_name):
-        folder_name = self.folder_name_check(name=folder_name, notexists=True)
-        if folder_name is None or not folder_name:
+    
+    def folder_get(self, name: str) -> Folder:
+        if not name_ok(name):
+            error("bad folder name")
+            return None
+        for f in self.__folders:
+            if name.casefold() == f.name.casefold():
+                return f
+        error("failed to find folder " + quotes(name))
+        return None
+    
+    def folder_set(self, name: str) -> bool:
+        if not name_ok(name):
+            error("bad folder name")
             return False
         for f in self.__folders:
-            if folder_name.casefold() == f.name.casefold():
-                self.__folder_select = f
+            if name.casefold() == f.name.casefold():
+                self.__folder = f
+                history("selected folder " + quotes(self.__folder.name))
                 return True
+        error("failed to find folder " + quotes(name))
         return False
 
     def folder_name_next(self) -> str:
         """
-        Create next default name for a Folder.
+        Create next default folder name.
 
         Returns:
-            string name if successful, None otherwise
+            folder name
         """
         n = 10 + len(self.__folders)
         for i in range(0, n):
             name = "NMFolder" + str(i)
-            if not self.folder_name_exists(name):
+            if not self.folder_exists(name=name):
                 return name
         return "NMFolder99999"
 
-    def folder_name_check(self,
-                        name: str,
-                        exists: bool = False,
-                        notexists: bool = False) -> str:
+    def folder_exists(self, 
+                      folder: Folder = None, 
+                      name: str = "") -> bool:
         """
-        Check if str name is OK to use for a Folder. It must be unique.
-        This function removes all special characters except '_'.
+        Check if folder resides in Folder list.
+        Pass a folder object (priority) or folder name
 
         Args:
-            name: name to check
-            exists: check if name already exists as a Folder
-            notexists: check if name does not exist as a Folder
+            folder: a Folder object
+            name: name of folder
 
         Returns:
-            string name if successful, None otherwise
+            True if folder exists, False otherwise
         """
-        if name is None or not name:
-            print("bad Folder name")
-            return None
-        # name = removeSpecialChars(name)
-        # if not name:
-            # print("bad Folder name: 0 length")
-            # return None
-        if exists:
+        if folder is not None:
+            for f in self.__folders:
+                if f == folder:
+                    return True
+        elif name_ok(name):
             for f in self.__folders:
                 if name.casefold() == f.name.casefold():
-                    print("folder " + quotes(name) + " already exists")
-                    return None
-        if notexists:
-            found = False
-            for f in self.__folders:
-                if name.casefold() == f.name.casefold():
-                    found = True
-                    break
-            if not found:
-                print("folder " + quotes(name) + " does not exist")
-                return None
-        return name  # name is OK
-
-    def folder_exists(self, folder):
-        for f in self.__folders:
-            if f == folder:
-                return True
-        return False
-
-    def folder_name_exists(self, name):
-        """
-        Check if name already exists as a folder name.
-
-        Args:
-            name: name to check
-
-        Returns:
-            True if name already exists, False otherwise
-        """
-        if name is None or not name:
-            return False
-        for f in self.__folders:
-            if name.casefold() == f.name.casefold():
-                return True
+                    return True
         return False
 
     def folder_add(self,
                    folder: Folder,
                    select: bool = True) -> bool:
         """
-        Add a Folder to Folders list.
+        Add a folder to Folders list.
 
         Args:
-            folder: the Folder to add
-            select: select this Folder
+            folder: the folder to add
+            select: select this folder
 
         Returns:
             True for success, False otherwise
         """
         if folder is None:
+            error("encountered null folder")
             return False
-        self.__folders.append(folder)
-        print("added folder " + quotes(folder.name))
-        if select or self.folder_select is None:
-            self.folder_select = folder
-            print("selected folder " + quotes(folder.name))
+        if not name_ok(folder.name):
+            error("bad folder name")
+            return False
+        if self.folder_exists(folder=folder):
+            pass  # nothing to do
+        else:
+            self.__folders.append(folder)
+            history("added folder " + quotes(folder.name))
+        if select or self.__folder is None:
+            self.__folder = folder
+            history("selected folder " + quotes(folder.name))
         return True
 
     def folder_new(self,
-                   name: str = None,
+                   name: str = "",
                    select: bool = True) -> Folder:
         """
-        Create a new Folder and add to Folders list.
+        Create a new folder and add to Folders list.
 
         Args:
-            name: name of new Folder
-            select: select this Folder
+            name: name of new folder
+            select: select this folder
 
         Returns:
-            new Folder if successful, None otherwise
+            new folder if successful, None otherwise
         """
         if name is None or not name:
             name = self.folder_name_next()
-        elif self.folder_name_exists(name=name):
-            print("folder name " + quotes(name) + " already exists")
+        elif not name_ok(name):
+            error("bad folder name")
+            return None
+        elif self.folder_exists(name=name):
+            error("folder " + quotes(name) + " already exists")
             return None
         f = Folder(name=name)
         self.__folders.append(f)
-        print("created folder " + quotes(name))
-        if select or self.folder_select is None:
-            self.folder_select = f
-            print("selected folder " + quotes(name))
+        history("created folder " + quotes(name))
+        if select or self.__folder is None:
+            self.__folder = f
+            history("selected folder " + quotes(name))
         return f
 
     def folder_copy(self,
@@ -199,59 +181,50 @@ class Experiment(object):
                     newname: str,
                     select: bool = False) -> Folder:
         """
-        Copy an existing Folder and add to Folders list.
+        Copy an existing folder and add copy to Folders list.
 
         Args:
-            name: name of Folder to copy
-            newname: name of new Folder
+            name: name of folder to copy
+            newname: name of new folder
 
         Returns:
-            new Folder if successful, None otherwise
+            new folder if successful, None otherwise
         """
-        name = self.folder_name_check(name=name, notexists=True)
-        if name is None or not name:
-            return False
-        toCopy = None
-        for f in self.__folders:
-            if name.casefold() == f.name.casefold():
-                toCopy = f
-                break
-        if toCopy is None:
-            return False
-        f = copy.deepcopy(toCopy)
-        self.__folders.append(f)
-        print("copied Folder " + quotes(name) + " to " + quotes(newname))
-        return True
+        f = self.folder_get(name=name)
+        if f is None:
+            error("failed to find folder " + quotes(name))
+            return None
+        c = copy.deepcopy(f)
+        if c is not None:
+            self.__folders.append(c)
+            history("copied folder " + quotes(name) + " to " + quotes(newname))
+        return c
 
     def folder_kill(self,
                     name: str) -> bool:
         """
-        Kill a Folder (i.e. remove from Folders list).
+        Kill a folder (i.e. remove from Folders list).
 
         Args:
-            name: name of Folder
+            name: name of folder
 
         Returns:
             True for success, False otherwise
         """
-        if name is None or not name:
+        f = self.folder_get(name=name)
+        if f is None:
+            error("failed to find folder " + quotes(name))
             return False
-        kill = None
-        for f in self.__folders:
-            if name.casefold() == f.name.casefold():
-                kill = f
-                break
-        if kill is None:
-            return False
-        selected = kill is self.folder_select
-        self.__folders.remove(kill)
-        if selected:
-            if not self.__folders:
-                self.folder_select = None
-            else:
-                self.folder_select = self.__folders[0]
-        print("killed Folder " + quotes(name))
+        selected = f is self.__folder
+        self.__folders.remove(f)
+        history("killed folder " + quotes(name))
+        if selected and len(self.__folders) > 0:
+            self.__folder = self.__folders[0]
+            history("selected folder " + quotes(self.__folder.name))
         return True
+    
+    def folder_open(self, path: str) -> Folder:
+        pass
 
     def folder_open_hdf5(self):
         wave_prefix = "Record"

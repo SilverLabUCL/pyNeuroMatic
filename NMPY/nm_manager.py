@@ -15,6 +15,7 @@ class Manager(object):
     """
 
     def __init__(self):
+        self.__experiments = []
         self.__exp = nm_experiment.Experiment()
 
     @property
@@ -28,8 +29,9 @@ class Manager(object):
         self.__exp = exp
         return True
 
-    def experiment_new(self, name=""):
-        self.__exp = nm_experiment.Experiment(name=name)
+    def experiment_new(self, name="Untitled"):
+        if name_ok(name):
+            self.__exp = nm_experiment.Experiment(name=name)
 
     def experiment_open(self, path=None):
         pass
