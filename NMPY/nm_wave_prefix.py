@@ -4,6 +4,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_utilities import quotes
+from nm_utilities import name_ok
 
 # things to include: Sets, Groups
 

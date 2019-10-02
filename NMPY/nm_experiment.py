@@ -7,6 +7,7 @@ import copy
 import h5py
 from nm_folder import Folder
 from nm_utilities import quotes
+from nm_utilities import name_ok
 
 
 class Experiment(object):
@@ -21,7 +22,7 @@ class Experiment(object):
     """
 
     def __init__(self,
-                 name=""):
+                 name="Untitled"):
         self.name = name
         self.__folders = []
         self.__folder_select = None
@@ -34,10 +35,11 @@ class Experiment(object):
 
     @name.setter
     def name(self, name):
-        if name is None or not name:
-            self.__name = "Untitled"
-        else:
+        if name_ok(name):
             self.__name = name
+            return True
+        print("bad experiment name")
+        return False
 
     @property
     def folder_select(self):
@@ -48,15 +50,11 @@ class Experiment(object):
         if folder is None:
             return False
         self.__folder_select = folder
-        found = False
-        for f in self.__folders:
-            if folder.name.casefold() == f.name.casefold():
-                found = True
-                break
-        if not found:
+        self.__folder_name_select = folder.name
+        if not self.folder_exists(folder):
             self.__folders.append(folder)  # save to folder array
         return True
-        
+
     @property
     def folder_name_select(self):
         return self.__folder_name_select
@@ -64,7 +62,7 @@ class Experiment(object):
     @folder_name_select.setter
     def folder_name_select(self, folder_name):
         folder_name = self.folder_name_check(name=folder_name, notexists=True)
-        if folder_name is None or not name:
+        if folder_name is None or not folder_name:
             return False
         for f in self.__folders:
             if folder_name.casefold() == f.name.casefold():
@@ -82,14 +80,9 @@ class Experiment(object):
         n = 10 + len(self.__folders)
         for i in range(0, n):
             name = "NMFolder" + str(i)
-            found = False
-            for f in self.__folders:
-                if name.casefold() == f.name.casefold():
-                    found = True
-                    break
-            if not found:
+            if not self.folder_name_exists(name):
                 return name
-        return None
+        return "NMFolder99999"
 
     def folder_name_check(self,
                         name: str,
@@ -110,10 +103,10 @@ class Experiment(object):
         if name is None or not name:
             print("bad Folder name")
             return None
-        #name = removeSpecialChars(name)
-        #if not name:
-            #print("bad Folder name: 0 length")
-            #return None
+        # name = removeSpecialChars(name)
+        # if not name:
+            # print("bad Folder name: 0 length")
+            # return None
         if exists:
             for f in self.__folders:
                 if name.casefold() == f.name.casefold():
@@ -129,7 +122,13 @@ class Experiment(object):
                 print("folder " + quotes(name) + " does not exist")
                 return None
         return name  # name is OK
-    
+
+    def folder_exists(self, folder):
+        for f in self.__folders:
+            if f == folder:
+                return True
+        return False
+
     def folder_name_exists(self, name):
         """
         Check if name already exists as a folder name.
@@ -163,10 +162,10 @@ class Experiment(object):
         if folder is None:
             return False
         self.__folders.append(folder)
-        print("added Folder " + quotes(folder.name) + " to current experiment")
-        if self.folder_select is None or select:
+        print("added folder " + quotes(folder.name))
+        if select or self.folder_select is None:
             self.folder_select = folder
-            print("selected Folder " + quotes(folder.name))
+            print("selected folder " + quotes(folder.name))
         return True
 
     def folder_new(self,
@@ -185,12 +184,12 @@ class Experiment(object):
         if name is None or not name:
             name = self.folder_name_next()
         elif self.folder_name_exists(name=name):
-            print("folder already exists: " + quotes(name))
+            print("folder name " + quotes(name) + " already exists")
             return None
         f = Folder(name=name)
         self.__folders.append(f)
         print("created folder " + quotes(name))
-        if self.folder_select is None or select:
+        if select or self.folder_select is None:
             self.folder_select = f
             print("selected folder " + quotes(name))
         return f
@@ -235,7 +234,6 @@ class Experiment(object):
         Returns:
             True for success, False otherwise
         """
-        name = self.folder_name_check(name=name, notexists=True)
         if name is None or not name:
             return False
         kill = None
@@ -266,7 +264,7 @@ class Experiment(object):
             # for name in f:
                 # print(name)
             d = f['RecordA0']
-            
+
             for i in d.attrs.keys():
                 print(i)
             # cannot get access to attribute values for keys:
