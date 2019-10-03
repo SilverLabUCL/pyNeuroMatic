@@ -79,6 +79,12 @@ class Experiment(object):
                 return True
         error("failed to find folder " + quotes(name))
         return False
+    
+    def folder_list(self):
+        flist = []
+        for f in self.__folders:
+            flist.append(f.name)
+        return flist
 
     def folder_name_next(self) -> str:
         """
@@ -93,6 +99,24 @@ class Experiment(object):
             if not self.folder_exists(name=name):
                 return name
         return "NMFolder99999"
+    
+    def folder_rename(self, name, newname):
+        if name is None or not name:
+            f = self.__folder
+        else:
+            f = self.folder_get(name=name)
+        if f is None:
+            return False
+        if not name_ok(name=newname):
+            error("bad folder name")
+            return False
+        if self.folder_exists(name=newname):
+            error("folder " + quotes(newname) + " already exists")
+            return False
+        oldname = f.name
+        f.name = newname
+        history("renamed folder " + quotes(oldname) + " to " + quotes(newname))
+        return True
 
     def folder_exists(self, 
                       folder: Folder = None, 
