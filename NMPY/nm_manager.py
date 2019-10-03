@@ -51,5 +51,5 @@ class Manager(object):
 if __name__ == '__main__':
     nm = Manager()
     # nm.exp.folder_new(name="NMFolder0")
-    nm.exp.folder.wave_prefix_new(prefix="Record")
+    nm.exp.folder.waveprefix_new(prefix="Record")
     # nm.exp.folder_open_hdf5()

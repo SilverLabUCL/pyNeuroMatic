@@ -14,7 +14,7 @@ class WavePrefix(object):
     """
 
     def __init__(self, prefix):
-        self.__prefix = prefix
+        self.prefix = prefix
         self.wave_names = []  # 2D matrix, i = channel #, j = wave #
         self.channels = 0
         self.waves = 0
@@ -29,9 +29,11 @@ class WavePrefix(object):
         return self.__prefix
 
     @prefix.setter
-    def name(self, prefix):
-        print("wave prefix names cannot be changed")
-        return False
+    def prefix(self, prefix):
+        self.__prefix = prefix
+        return True
+        #print("wave prefix names cannot be changed")
+        #return False
 
     def wave_names_mock(self, channels, waves):
         if channels == 0 or waves == 0:

@@ -17,14 +17,14 @@ class Folder(object):
 
     Attributes:
         name:
-        wave_prefixes: list of WavePrefix objects
-        wave_prefix: selected WavePrefix
+        waveprefixes: list of waveprefix objects
+        waveprefix: selected waveprefix
     """
 
     def __init__(self, name="NMFolder0"):
         self.name = name
-        self.__wave_prefixes = []
-        self.__wave_prefix_select = None
+        self.__waveprefixes = []
+        self.__waveprefix = None
         # self.d1 = np.random.random(size=10)
         # print(str(self.d1))
 
@@ -40,32 +40,57 @@ class Folder(object):
         print("bad folder name")
         return False
 
-    def wave_prefix_new(self,
+    @property
+    def waveprefix(self):
+        return self.__waveprefix
+
+    @waveprefix.setter
+    def waveprefix(self, waveprefix):
+        self.__waveprefix = waveprefix
+        return True
+    
+    def waveprefix_set(self, prefix: str) -> bool:
+        """
+        Select a waveprefix.
+
+        Args:
+            prefix: wave prefix to select
+
+        Returns:
+            True for success, False otherwise
+        """
+        if prefix is None or not prefix:
+            return False
+        for p in self.__waveprefixes:
+            if prefix.casefold() == p.prefix.casefold():
+                self.__waveprefix = p
+
+    def waveprefix_new(self,
                         prefix: str,
                         select: bool = True) -> WavePrefix:
         """
-        Create new WavePrefix and add to wave_prefixes list.
+        Create new waveprefix and add to waveprefixes list.
 
         Args:
             prefix: new wave prefix
-            select: select this WavePrefix
+            select: select this waveprefix
 
         Returns:
-            new WavePrefix if successful, None otherwise
+            new waveprefix if successful, None otherwise
         """
         if prefix is None or not prefix:
             return None
         p = WavePrefix(prefix=prefix)
-        self.__wave_prefixes.append(p)
+        self.__waveprefixes.append(p)
         print("created wave prefix " + quotes(prefix))
-        if select or self.__wave_prefix_select is None:
-            self.__wave_prefix_select = p
+        if select or self.__waveprefix is None:
+            self.__waveprefix = p
             print("selected wave prefix " + quotes(prefix))
         return p
 
-    def wave_prefix_kill(self, prefix: str) -> bool:
+    def waveprefix_kill(self, prefix: str) -> bool:
         """
-        Kill a wave prefix (i.e. remove from wave_prefixes list).
+        Kill a wave prefix (i.e. remove from waveprefixes list).
 
         Args:
             prefix: wave prefix to kill
@@ -76,34 +101,18 @@ class Folder(object):
         if prefix is None or not prefix:
             return False
         kill = None
-        for p in self.__wave_prefixes:
+        for p in self.__waveprefixes:
             if prefix.casefold() == p.prefix.casefold():
                 kill = p
                 break
         if kill is not None:
-            selected = kill is self.__wave_prefix_select
-            self.__wave_prefixes.remove(kill)
+            selected = kill is self.__waveprefix
+            self.__waveprefixes.remove(kill)
             if selected:
-                if not self.__wave_prefixes:
-                    self.__wave_prefix_select = None
+                if not self.__waveprefixes:
+                    self.__waveprefix = None
                 else:
-                    self.__wave_prefix_select = self.__wave_prefixes[0]
-            print("killed WavePrefix " + quotes(prefix))
+                    self.__waveprefix = self.__waveprefixes[0]
+            print("killed waveprefix " + quotes(prefix))
             return True
         return False
-
-    def wave_prefix_select(self, prefix: str) -> bool:
-        """
-        Select a WavePrefix.
-
-        Args:
-            prefix: wave prefix to select
-
-        Returns:
-            True for success, False otherwise
-        """
-        if prefix is None or not prefix:
-            return False
-        for p in self.__wave_prefixes:
-            if prefix.casefold() == p.prefix.casefold():
-                self.__wave_prefix_select = p
