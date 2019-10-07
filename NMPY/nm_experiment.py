@@ -26,7 +26,7 @@ class Experiment(Container):
         super().__init__(name)
         self.OBJECT_NAME_PREFIX = "NMFolder"
         self.new("")
-        self.new("")
+        # self.new("")
 
     def object_new(self, name):
         return Folder(name)

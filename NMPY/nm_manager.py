@@ -3,8 +3,7 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-from nm_container import Container
-from nm_experiment import Experiment
+from nm_container import Project
 from nm_utilities import quotes
 from nm_utilities import name_ok
 from nm_utilities import name_list
@@ -12,12 +11,106 @@ from nm_utilities import exists
 from nm_utilities import error
 from nm_utilities import history
 
-NM_EXP_PREFIX = "NMExp"
-
 nm = None  # holds NM Manager, accessed via console
 
 
 class Manager(object):
+    """
+    NM Manager class
+    Main outer class that does everything
+    """
+    def __init__(self):
+        self.project_new("NMProject")
+
+    def project_new(self, name):
+        """Create a new project"""
+        self.__project = Project(name)
+
+    @property
+    def project(self):
+        return self.__project
+    
+    @property
+    def experiment(self):
+        if self.__project:
+            return self.__project.experiment  # container of experiments
+        history("no experiments")
+        return None
+    
+    @property
+    def folder(self):
+        if self.__project:
+            e = self.__project.experiment.get("SELECTED")  # selected exp
+            if e:
+                return e.folder  # container of folders
+        history("no folders")
+        return None
+
+    @property
+    def waveprefix(self):
+        if self.__project:
+            e = self.__project.experiment.get("SELECTED")  # selected exp
+            if e:
+                f = e.folder.get("SELECTED")  # selected folder
+                if f:
+                    return f.waveprefix  # container of wave prefixes
+        history("no wave prefixes")
+        return None
+    
+    @property
+    def channel(self):
+        if self.__project:
+            e = self.__project.experiment.get("SELECTED")  # selected exp
+            if e:
+                f = e.folder.get("SELECTED")  # selected folder
+                if f:
+                    p = f.waveprefix.get("SELECTED")  # selected wave prefixe
+                    if p:
+                        return p.channel  # container of channels
+        history("no channels")
+        return None
+    
+    @property
+    def selected(self):
+        s = {}
+        s['project'] = self.project
+        s['experiment'] = self.experiment
+        s['folder'] = self.folder
+        s['waveprefix'] = self.waveprefix
+        s['channel'] = self.channel
+        return s
+    
+    @property
+    def selected_names(self):
+        s = {}
+        if self.project:
+            p = self.project.name
+        else:
+            p = "None"
+        if self.experiment:
+            e = self.experiment.name
+        else:
+            e = "None"
+        if self.folder:
+            f = self.folder.name
+        else:
+            f = "None"
+        if self.waveprefix:
+            wp = self.waveprefix.name
+        else:
+            wp = "None"
+        if self.channel:
+            c = self.channel.name
+        else:
+            c = "None"
+        s['project'] = p
+        s['experiment'] = e
+        s['folder'] = f
+        s['waveprefix'] = wp
+        s['channel'] = c
+        return s
+
+class ManagerOLD(object):
     """
     NM Manager class
     Main outer class that does everything
@@ -195,30 +288,10 @@ class Manager(object):
         print(project, experiment, folder, waveprefix, channel, waveset)
 
 
-class Project(Container):
-    """
-    NM Project class
-    Container for NM Experimnents
-    """
-
-    def __init__(self, name):
-        super().__init__(name)
-        self.OBJECT_NAME_PREFIX = "NMExp"
-        self.new("")
-        # self.new("")
-        # self.select("NMExp0")
-
-    def object_new(self, name):
-        return Experiment(name)
-
-    def instance_ok(self, obj):
-        return isinstance(obj, Experiment)
-
-
 if __name__ == '__main__':
     nm = Manager()
-    s = nm.select
-    nm.stats(**s)
+    # s = nm.select
+    # nm.stats(**s)
     # nm.exp.folder_new(name="NMFolder0")
     # nm.exp.folder.waveprefix_new(prefix="Record")
     # nm.exp.folder_open_hdf5()
