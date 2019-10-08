@@ -4,20 +4,20 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_container import Container
-from nm_folder import FolderContainer
 from nm_utilities import name_ok
+import numpy as np
 
-EXP_PREFIX = "NMExp"
+WAVE_PREFIX = "Record"
 
-
-class Experiment(object):
+class Wave(object):
     """
-    NM Experiment class
+    NM Wave class
+    Include: wave properties (xstart, dx...) and wave notes
     """
 
     def __init__(self, name):
         self.__name = name
-        self.__folder = FolderContainer()
+        self.__data = np.array([], dtype=np.float64)
 
     @property
     def name(self):
@@ -27,22 +27,22 @@ class Experiment(object):
     def name(self, name):
         if name_ok(name):
             self.__name = name
-
+            
     @property
-    def folder(self):
-        return self.__folder
+    def data(self):
+        return self.__data
 
 
-class ExperimentContainer(Container):
+class WaveContainer(Container):
     """
     Container for NM Experimnents
     """
     def __init__(self):
         super().__init__()
-        self.prefix = EXP_PREFIX
+        self.prefix = WAVE_PREFIX
 
     def object_new(self, name):
-        return Experiment(name)
+        return Wave(name)
 
     def instance_ok(self, obj):
-        return isinstance(obj, Experiment)
+        return isinstance(obj, Wave)

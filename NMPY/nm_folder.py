@@ -3,13 +3,13 @@
 NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import numpy as np
 import h5py
 from nm_container import Container
-from nm_wave_prefix import WavePrefixContainer
+from nm_wave import WaveContainer
+from nm_waveprefix import WavePrefixContainer
+from nm_utilities import name_ok
 
-
-WAVEPREFIX_PREFIX = "NMPrefix_"
+FOLDER_PREFIX = "NMFolder"
 
 
 class Folder(object):
@@ -19,12 +19,22 @@ class Folder(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__waveprefix = WavePrefixContainer(WAVEPREFIX_PREFIX)
+        self.__wave = WaveContainer()
+        self.__waveprefix = WavePrefixContainer()
 
     @property
     def name(self):
         return self.__name
-    
+
+    @name.setter
+    def name(self, name):
+        if name_ok(name):
+            self.__name = name
+
+    @property
+    def wave(self):
+        return self.__wave
+
     @property
     def waveprefix(self):
         return self.__waveprefix
@@ -35,6 +45,10 @@ class FolderContainer(Container):
     Container for NM Folders
     """
 
+    def __init__(self):
+        super().__init__()
+        self.prefix = FOLDER_PREFIX
+        
     def object_new(self, name):
         return Folder(name)
 

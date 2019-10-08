@@ -58,7 +58,7 @@ def error(text):
     if not text:
         return False
     fxn = inspect.stack()[1][3]
-    print("ERROR nm." + fxn + " : " + text)
+    print("NMError: " + fxn + ": " + text)
     return True
 
 
@@ -66,5 +66,5 @@ def history(text):
     if not text:
         return False
     fxn = inspect.stack()[1][3]
-    print("nm." + fxn + " : " + text)
+    print("NM." + fxn + ": " + text)
     return True

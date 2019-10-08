@@ -5,11 +5,12 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_container import Container
-from nm_sets import SetsContainer
+from nm_waveset import WaveSetContainer
+from nm_utilities import name_ok
 from nm_utilities import error
 
-SETS_PREFIX = "Set"
-
+CHAN_PREFIX = "Chan"
+CHAN_CHARS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']
 
 class Channel(object):
     """
@@ -18,7 +19,10 @@ class Channel(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__sets = SetsContainer(SETS_PREFIX)
+        self.__waveset = WaveSetContainer()
+        self.__waveset.new("Set1")
+        self.__waveset.new("Set2")
+        self.__waveset.new("SetX")
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
 
@@ -26,15 +30,24 @@ class Channel(object):
     def name(self):
         return self.__name
 
+    @name.setter
+    def name(self, name):
+        if name_ok(name):
+            self.__name = name
+
     @property
-    def sets(self):
-        return self.__sets
+    def waveset(self):
+        return self.__waveset
 
 
 class ChannelContainer(Container):
     """
-    Container for NM Channels
+    Container for NM Channel objects
     """
+
+    def __init__(self):
+        super().__init__()
+        self.prefix = CHAN_PREFIX
 
     def object_new(self, name):
         return Channel(name)
@@ -44,18 +57,17 @@ class ChannelContainer(Container):
 
     def name_next(self):
         """Get next default channel name."""
-        chan_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
         if self.prefix:
             prefix = self.prefix
         else:
             prefix = "Chan"
         n = 10 + len(self.getAll())
         for i in range(0, n):
-            name = prefix + chan_chars[i]
+            name = prefix + CHAN_CHARS[i]
             if not self.exists(name):
                 return name
         return prefix + "Z"
 
     def rename(self, name, newname):
-        error("cannot rename channel object")
+        error("cannot rename Channel object")
         return False

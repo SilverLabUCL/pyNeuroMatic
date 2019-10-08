@@ -1,23 +1,23 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_container import Container
-from nm_folder import FolderContainer
 from nm_utilities import name_ok
+from nm_utilities import error
 
-EXP_PREFIX = "NMExp"
+SET_PREFIX = "Set"
 
-
-class Experiment(object):
+class WaveSet(object):
     """
-    NM Experiment class
+    NM WaveSet class
     """
 
     def __init__(self, name):
         self.__name = name
-        self.__folder = FolderContainer()
+        self.__waveset = set()
 
     @property
     def name(self):
@@ -29,20 +29,21 @@ class Experiment(object):
             self.__name = name
 
     @property
-    def folder(self):
-        return self.__folder
+    def waveset(self):
+        return self.__waveset
 
 
-class ExperimentContainer(Container):
+class WaveSetContainer(Container):
     """
-    Container for NM Experimnents
+    Container for NM WaveSet
     """
+
     def __init__(self):
         super().__init__()
-        self.prefix = EXP_PREFIX
+        self.prefix = SET_PREFIX
 
     def object_new(self, name):
-        return Experiment(name)
+        return WaveSet(name)
 
     def instance_ok(self, obj):
-        return isinstance(obj, Experiment)
+        return isinstance(obj, WaveSet)

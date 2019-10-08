@@ -11,8 +11,6 @@ from nm_utilities import exists
 from nm_utilities import error
 from nm_utilities import history
 
-EXPERIMENT_PREFIX = "NMExp"
-
 nm = None  # holds NM Manager, accessed via console
 
 
@@ -25,16 +23,15 @@ class Manager(object):
         self.project_new("NMProject")
 
     def project_new(self, name):
-        """Create a new project"""
+        """Create new project"""
         self.__project = Project(name)
         self.experiment.new("")  # create default experiment
         self.folder.new("")  # create default folder
         self.waveprefix_test("Record")
-        
-        
+
     def waveprefix_test(self, waveprefix):
         p = self.waveprefix.new(waveprefix)
-        p.wave_names_mock(channels=3, waves=5)
+        p.wave_names_mock(channels=2, waves=5)
 
     @property
     def project(self):
@@ -55,6 +52,20 @@ class Manager(object):
             history("no selected experiment")
             return None
         return s.folder  # container of folders in selected experiment
+
+    @property
+    def wave(self):
+        f = self.folder
+        if not f:
+            return None
+        if f.items == 0:
+            history("no folders")
+            return None
+        s = f.get("SELECTED")
+        if not s:
+            history("no selected folder")
+            return None
+        return s.wave  # container of waves in seleted folder
 
     @property
     def waveprefix(self):
@@ -133,7 +144,7 @@ class Project(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__experiment = ExperimentContainer(EXPERIMENT_PREFIX)
+        self.__experiment = ExperimentContainer()
 
     @property
     def name(self):

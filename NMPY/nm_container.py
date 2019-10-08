@@ -14,18 +14,20 @@ from nm_utilities import history
 class Container(object):
     """
     NM Container class
-    Container (i.e. list) for objects, e.g. Experiment, Folder,
-    WavePrefix, Channel...
-    Each object stored in container must have a unique name.
-    The name can start with the same prefix, but this is optional.
+    Container (i.e. list) for objects, e.g. Experiment, Folder, WavePrefix...
     
-    Can __objects be a dictionary with names as keys???
+    Each stored object must have a unique name. The name can start with the
+    same prefix (e.g. "NMFolder") but this is optional. Use names_next to 
+    create unique names with the given prefix.
+    
+    One object is selected/activated at a given time. This object can be
+    accessed via get/select functions.
     """
 
-    def __init__(self, prefix):
-        self.prefix = prefix
-        self.__objects = []
-        self.__object_select = None
+    def __init__(self):
+        self.__prefix = "NMObj"  # for creating default names (see names_next)
+        self.__objects = []  # the container
+        self.__object_select = None  # selected item of container
 
     def object_new(self, name):  # child class should override
         return object  # change object to Experiment, Folder...
@@ -56,10 +58,9 @@ class Container(object):
             return self.__object_select.name  # name of selected object
         return "None"
 
-    # @name.setter
-    # def name(self, name):
-    #     if self.__object_select and name_ok(name) and not self.exists(name):
-    #         self.__object_select.name = name  # set name of selected object
+    @name.setter
+    def name(self, name):
+        error("use rename function instead")
 
     @property
     def items(self):
@@ -74,16 +75,29 @@ class Container(object):
             for o in self.__objects:
                 nlist.append(o.name)
         return nlist
+    
+    def name_next(self):
+        """Get next default object name based on prefix."""
+        if self.__prefix:
+            prefix = self.__prefix
+        else:
+            prefix = "None"
+        n = 10 + len(self.__objects)
+        for i in range(0, n):
+            name = prefix + str(i)
+            if not self.exists(name):
+                return name
+        return prefix + "99999"
 
     def get(self, name):
-        """Get object from container"""
+        """Get object from Container"""
         if not name or name.casefold() == "SELECTED".casefold():
             return self.__object_select
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 return o
         error("failed to find " + self.__tname(name))
-        self.name_list(history=True)
+        print("acceptable names: " + str(self.names))
         return None
 
     def getAll(self):
@@ -91,7 +105,7 @@ class Container(object):
         return self.__objects
 
     def select(self, name):
-        """Select object in container"""
+        """Select object in Container"""
         if not name_ok(name):
             return False
         for o in self.__objects:
@@ -100,7 +114,7 @@ class Container(object):
                 history("selected " + self.__tname(name))
                 return True
         error("failed to find " + self.__tname(name))
-        self.name_list(history=True)
+        print("acceptable names: " + str(self.names))
         return False
 
     def exists(self, name):
@@ -112,7 +126,7 @@ class Container(object):
         return False
 
     def add(self, obj, select=True):
-        """Add object to container."""
+        """Add object to Container."""
         if not self.instance_ok(obj):
             error("encountered bad Container")
             return False
@@ -153,19 +167,6 @@ class Container(object):
             self.__object_select = o
             history("selected " + self.__tname(name))
         return o
-
-    def name_next(self):
-        """Get next default object name based on prefix string."""
-        if not self.__prefix:
-            prefix = "None"
-        else:
-            prefix = self.__prefix
-        n = 10 + len(self.__objects)
-        for i in range(0, n):
-            name = prefix + str(i)
-            if not self.exists(name):
-                return name
-        return prefix + "99999"
 
     def rename(self, name, newname):
         o = self.get(name)
