@@ -7,13 +7,18 @@ Copyright 2019 Jason Rothman
 import inspect
 
 
+def chan_char(chanNum):
+    c = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']
+    return c[chanNum]
+    
+
 def quotes(text):
     if not text:
         text = ""
     return "\"" + text + "\""
 
 
-def removeSpecialChars(text):
+def remove_special_chars(text):
     if not text:
         return ""
     temp = ""

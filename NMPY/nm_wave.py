@@ -5,6 +5,7 @@ Copyright 2019 Jason Rothman
 """
 from nm_container import Container
 from nm_utilities import name_ok
+from nm_utilities import chan_char
 import numpy as np
 
 WAVE_PREFIX = "Record"
@@ -32,6 +33,14 @@ class Wave(object):
     def data(self):
         return self.__data
 
+    @data.setter
+    def data(self, data):
+        self.__data = data
+
+    @property
+    def numwaves(self):
+        return len(self.__data)
+
 
 class WaveContainer(Container):
     """
@@ -46,3 +55,16 @@ class WaveContainer(Container):
 
     def instance_ok(self, obj):
         return isinstance(obj, Wave)
+    
+    def make(self, prefix="", numchan=1, numwaves=5, points=10):
+        if not prefix:
+            prefix = self.prefix
+        mu, sigma = 0, 0.1 # mean and standard deviation
+        for i in range(0, numchan):
+            cc = chan_char(i)
+            for j in range(0, numwaves):
+                wname = prefix + cc + str(j)
+                w = self.new(wname)
+                if w:
+                    w.data = np.random.normal(mu, sigma, points)
+                    print(w.data)

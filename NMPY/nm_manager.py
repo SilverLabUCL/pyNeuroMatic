@@ -17,7 +17,7 @@ nm = None  # holds NM Manager, accessed via console
 class Manager(object):
     """
     NM Manager class
-    Main outer class that does everything
+    Main outer class that manages everything
     """
     def __init__(self):
         self.project_new("NMProject")
@@ -25,13 +25,14 @@ class Manager(object):
     def project_new(self, name):
         """Create new project"""
         self.__project = Project(name)
-        self.experiment.new("")  # create default experiment
-        self.folder.new("")  # create default folder
-        self.waveprefix_test("Record")
+        self.experiment.new()  # create default experiment
+        self.folder.new()  # create default folder
+        self.waveprefix_test("Test")
 
     def waveprefix_test(self, waveprefix):
-        p = self.waveprefix.new(waveprefix)
-        p.wave_names_mock(channels=2, waves=5)
+        self.wave.make(waveprefix, numchan=2, numwaves=3, points=5)
+        # p = self.waveprefix.new(waveprefix)
+        # p.wave_names_mock(channels=2, waves=5)
 
     @property
     def project(self):
@@ -99,11 +100,11 @@ class Manager(object):
     def selected(self):
         s = {}
         s['project'] = self.project
-        s['experiment'] = self.experiment
-        s['folder'] = self.folder
-        s['waveprefix'] = self.waveprefix
-        s['channel'] = self.channel
-        s['waveset'] = None
+        s['experiment'] = self.experiment  # container
+        s['folder'] = self.folder  # container
+        s['waveprefix'] = self.waveprefix  # container
+        s['channel'] = self.channel  # container
+        s['waveset'] = None  # container
         return s
 
     @property

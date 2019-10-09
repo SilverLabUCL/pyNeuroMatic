@@ -89,7 +89,7 @@ class Container(object):
                 return name
         return prefix + "99999"
 
-    def get(self, name):
+    def get(self, name=""):
         """Get object from Container"""
         if not name or name.casefold() == "SELECTED".casefold():
             return self.__object_select
@@ -136,13 +136,14 @@ class Container(object):
             pass  # nothing to do
         else:
             self.__objects.append(obj)
-            history("added " + self.__tname(obj.name))
         if select or not self.__object_select:
             self.__object_select = obj
-            history("selected " + self.__tname(obj.name))
+            history("added/selected " + self.__tname(obj.name))
+            return True
+        history("added " + self.__tname(obj.name))
         return True
 
-    def new(self, name, select=True):
+    def new(self, name="", select=True):
         """
         Create a new object and add to container.
 
@@ -162,10 +163,11 @@ class Container(object):
             return None
         o = self.object_new(name)
         self.__objects.append(o)
-        history("created " + self.__tname(name))
         if select or not self.__object_select:
             self.__object_select = o
-            history("selected " + self.__tname(name))
+            history("created/selected " + self.__tname(name))
+            return o
+        history("created " + self.__tname(name))
         return o
 
     def rename(self, name, newname):
