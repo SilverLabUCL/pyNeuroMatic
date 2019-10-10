@@ -20,7 +20,7 @@ class Folder(object):
     def __init__(self, name):
         self.__name = name
         self.__wave = WaveContainer()
-        self.__waveprefix = WavePrefixContainer()
+        self.__waveprefix = WavePrefixContainer(self.__wave)
 
     @property
     def name(self):
@@ -48,7 +48,7 @@ class FolderContainer(Container):
     def __init__(self):
         super().__init__()
         self.prefix = FOLDER_PREFIX
-        
+
     def object_new(self, name):
         return Folder(name)
 

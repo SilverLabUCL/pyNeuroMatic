@@ -72,9 +72,10 @@ class WavePrefixContainer(Container):
     Container for NM WavePrefixes
     """
 
-    def __init__(self):
+    def __init__(self, wave_container):
         super().__init__()
         self.prefix = WAVEPREFIX_PREFIX
+        self.__wave_container = wave_container
         
     def object_new(self, name):
         return WavePrefix(name)

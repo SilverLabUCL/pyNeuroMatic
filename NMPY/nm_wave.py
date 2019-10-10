@@ -10,6 +10,7 @@ import numpy as np
 
 WAVE_PREFIX = "Record"
 
+
 class Wave(object):
     """
     NM Wave class
@@ -28,7 +29,7 @@ class Wave(object):
     def name(self, name):
         if name_ok(name):
             self.__name = name
-            
+
     @property
     def data(self):
         return self.__data
@@ -55,11 +56,11 @@ class WaveContainer(Container):
 
     def instance_ok(self, obj):
         return isinstance(obj, Wave)
-    
+
     def make(self, prefix="", numchan=1, numwaves=5, points=10):
         if not prefix:
             prefix = self.prefix
-        mu, sigma = 0, 0.1 # mean and standard deviation
+        mu, sigma = 0, 0.1  # mean and standard deviation
         for i in range(0, numchan):
             cc = chan_char(i)
             for j in range(0, numwaves):

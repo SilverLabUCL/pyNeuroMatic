@@ -27,7 +27,7 @@ class Manager(object):
         self.__project = Project(name)
         self.experiment.new()  # create default experiment
         self.folder.new()  # create default folder
-        self.waveprefix_test("Test")
+        self.waveprefix_test("Record")
 
     def waveprefix_test(self, waveprefix):
         self.wave.make(waveprefix, numchan=2, numwaves=3, points=5)
