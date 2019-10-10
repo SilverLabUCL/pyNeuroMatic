@@ -4,11 +4,11 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import nm_configs as nmconfig
 from nm_container import Container
 from nm_utilities import name_ok
 from nm_utilities import error
 
-SET_PREFIX = "Set"
 
 class WaveSet(object):
     """
@@ -40,10 +40,10 @@ class WaveSetContainer(Container):
 
     def __init__(self):
         super().__init__()
-        self.prefix = SET_PREFIX
+        self.prefix = nmconfig.SET_PREFIX
 
-    def object_new(self, name):
+    def object_new(self, name):  # override, do not call super
         return WaveSet(name)
 
-    def instance_ok(self, obj):
+    def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, WaveSet)

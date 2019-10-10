@@ -4,13 +4,13 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import nm_configs as nmconfig
 from nm_container import Container
 from nm_waveset import WaveSetContainer
 from nm_utilities import name_ok
 from nm_utilities import error
 from nm_utilities import chan_char
 
-CHAN_PREFIX = "Chan"
 
 class Channel(object):
     """
@@ -47,15 +47,15 @@ class ChannelContainer(Container):
 
     def __init__(self):
         super().__init__()
-        self.prefix = CHAN_PREFIX
+        self.prefix = nmconfig.CHAN_PREFIX
 
-    def object_new(self, name):
+    def object_new(self, name):  # override, do not call super
         return Channel(name)
 
-    def instance_ok(self, obj):
+    def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Channel)
 
-    def name_next(self):
+    def name_next(self):  # override, do not call super
         """Get next default channel name."""
         if self.prefix:
             prefix = self.prefix
@@ -68,6 +68,6 @@ class ChannelContainer(Container):
                 return name
         return prefix + "Z"
 
-    def rename(self, name, newname):
+    def rename(self, name, newname):  # override, do not call super
         error("cannot rename Channel object")
         return False

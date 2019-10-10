@@ -4,12 +4,11 @@ NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import h5py
+import nm_configs as nmconfig
 from nm_container import Container
 from nm_wave import WaveContainer
 from nm_waveprefix import WavePrefixContainer
 from nm_utilities import name_ok
-
-FOLDER_PREFIX = "NMFolder"
 
 
 class Folder(object):
@@ -47,12 +46,12 @@ class FolderContainer(Container):
 
     def __init__(self):
         super().__init__()
-        self.prefix = FOLDER_PREFIX
+        self.prefix = nmconfig.FOLDER_PREFIX
 
-    def object_new(self, name):
+    def object_new(self, name):  # override, do not call super
         return Folder(name)
 
-    def instance_ok(self, obj):
+    def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Folder)
 
     def open_hdf5(self):

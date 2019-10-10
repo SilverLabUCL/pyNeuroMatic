@@ -5,6 +5,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import copy
+import datetime
 from nm_utilities import quotes
 from nm_utilities import name_ok
 from nm_utilities import error
@@ -14,11 +15,13 @@ from nm_utilities import history
 class Container(object):
     """
     NM Container class
-    Container (i.e. list) for objects, e.g. Experiment, Folder, WavePrefix...
+    Container (i.e. list) for NM objects
+    Children: ExperimentContainer, FolderContainer, ChannelContainer,
+    WaveContainer, WavePrefixContainer, WaveSetContainer
     
     Each stored object must have a unique name. The name can start with the
-    same prefix (e.g. "NMFolder") but this is optional. Use names_next to 
-    create unique names with the given prefix.
+    same prefix (e.g. "NMExp") but this is optional. Use names_next to 
+    create unique names with the given prefix (e.g. "NMExp0", "NMExp1", etc.)
     
     One object is selected/activated at a given time. This object can be
     accessed via get/select functions.
@@ -26,22 +29,9 @@ class Container(object):
 
     def __init__(self):
         self.__prefix = "NMObj"  # for creating default names (see names_next)
-        self.__objects = []  # the container
+        self.__objects = []  # the container of NM objects
         self.__object_select = None  # selected item of container
-
-    def object_new(self, name):  # child class should override
-        return object  # change object to Experiment, Folder...
-
-    def instance_ok(self, obj):  # child class should override
-        return isinstance(obj, object)  # change object to Folder...
-
-    def __type(self):
-        if not self.__objects:
-            return "None"
-        return self.__objects[0].__class__.__name__
-
-    def __tname(self, name):
-        return self.__type() + " " + quotes(name)  # object type + name
+        self.__date = str(datetime.datetime.now())
 
     @property
     def prefix(self):
@@ -75,6 +65,25 @@ class Container(object):
             for o in self.__objects:
                 nlist.append(o.name)
         return nlist
+
+    @property
+    def date(self):
+        return self.__date
+    
+    def object_new(self, name):  # child class should override this function
+        """Used in \"new\" function below"""
+        return object  # change object to Experiment, Folder, Wave, etc.
+
+    def instance_ok(self, obj):  # child class should override this function
+        return isinstance(obj, object)  # change object to Experiment, etc.
+
+    def __type(self):
+        if not self.__objects:
+            return "None"
+        return self.__objects[0].__class__.__name__
+
+    def __tname(self, name):
+        return self.__type() + " " + quotes(name)  # object type + name
     
     def name_next(self):
         """Get next default object name based on prefix."""

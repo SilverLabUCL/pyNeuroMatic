@@ -8,8 +8,12 @@ import inspect
 
 
 def chan_char(chanNum):
-    c = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']
-    return c[chanNum]
+    c = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
+         'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+    if chanNum >= 0 and chanNum < 26:
+        return c[chanNum]
+    error("channel number must be in the range 0-25")
+    return ''
     
 
 def quotes(text):
@@ -43,21 +47,46 @@ def name_ok(name, alert=True):
     return False
 
 
-def name_list(objlist):
-    nlist = []
-    if objlist:
-        for o in objlist:
-            nlist.append(o.name)
-    return nlist
-
-
-def exists(objlist, name):
-    if objlist and name_ok(name):
-        for o in objlist:
+def exists(nm_obj_list, name):
+    if nm_obj_list and name_ok(name):
+        for o in nm_obj_list:
             if name.casefold() == o.name.casefold():
                 return True
     return False
 
+
+def get_names(nm_obj_list):
+    nlist = []
+    if nm_obj_list:
+        for o in nm_obj_list:
+            nlist.append(o.name)
+    return nlist
+
+
+def get_items(nm_obj_list, prefix, chan_char = ""):
+    if nm_obj_list and name_ok(prefix):
+        olist = []
+        numchar = len(prefix)
+        for o in nm_obj_list:
+            if prefix.casefold() == o.name[:numchar].casefold():
+                if chan_char:
+                    if chan_char_exists(o.name[numchar:], chan_char):
+                        olist.append(o.name)
+                else:
+                    olist.append(o.name)
+        return olist
+    return None
+
+
+def chan_char_exists(text, chan_char):
+    if text and chan_char:
+        numchar = len(text)
+        for i in reversed(range(numchar)):  # search backwards
+            if text[i].isdigit():  # skip thru seq number
+                continue
+            if text[i] == chan_char:  # first char before seq #
+                return True
+    return False
 
 def error(text):
     if not text:

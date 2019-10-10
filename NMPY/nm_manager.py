@@ -3,11 +3,10 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import datetime
+import nm_configs as nmconfig
 from nm_experiment import ExperimentContainer
-from nm_utilities import quotes
 from nm_utilities import name_ok
-from nm_utilities import name_list
-from nm_utilities import exists
 from nm_utilities import error
 from nm_utilities import history
 
@@ -27,10 +26,14 @@ class Manager(object):
         self.__project = Project(name)
         self.experiment.new()  # create default experiment
         self.folder.new()  # create default folder
-        self.waveprefix_test("Record")
+        self.waveprefix_test()
 
-    def waveprefix_test(self, waveprefix):
-        self.wave.make(waveprefix, numchan=2, numwaves=3, points=5)
+    def waveprefix_test(self):
+        self.wave.make(prefix="Record", nchan=2, nwaves=3, points=5)
+        self.wave.make(prefix="Wave", nchan=1, nwaves=4, points=5)
+        self.waveprefix.new("Record")
+        self.waveprefix.new("Wave")
+        self.waveprefix.new("Test")
         # p = self.waveprefix.new(waveprefix)
         # p.wave_names_mock(channels=2, waves=5)
 
@@ -146,6 +149,7 @@ class Project(object):
     def __init__(self, name):
         self.__name = name
         self.__experiment = ExperimentContainer()
+        self.__date = str(datetime.datetime.now())
 
     @property
     def name(self):
@@ -160,6 +164,9 @@ class Project(object):
     def experiment(self):
         return self.__experiment
 
+    @property
+    def date(self):
+        return self.__date
 
 if __name__ == '__main__':
     nm = Manager()
