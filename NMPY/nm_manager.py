@@ -170,8 +170,8 @@ class Project(object):
 
 if __name__ == '__main__':
     nm = Manager()
-    s = nm.selected_names
-    nm.stats(**s)
+    # s = nm.selected_names
+    # nm.stats(**s)
     # nm.exp.folder_new(name="NMFolder0")
     # nm.exp.folder.waveprefix_new(prefix="Record")
     # nm.exp.folder_open_hdf5()

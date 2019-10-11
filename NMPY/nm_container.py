@@ -39,7 +39,9 @@ class Container(object):
 
     @prefix.setter
     def prefix(self, prefix):
-        if name_ok(prefix):
+        if not prefix:
+            prefix = ""
+        elif name_ok(prefix):
             self.__prefix = prefix
 
     @property
@@ -71,7 +73,6 @@ class Container(object):
         return self.__date
     
     def object_new(self, name):  # child class should override this function
-        """Used in \"new\" function below"""
         return object  # change object to Experiment, Folder, Wave, etc.
 
     def instance_ok(self, obj):  # child class should override this function

@@ -63,7 +63,7 @@ def get_names(nm_obj_list):
     return nlist
 
 
-def get_items(nm_obj_list, prefix, chan_char = ""):
+def get_items(nm_obj_list, prefix, chan_char=""):
     if nm_obj_list and name_ok(prefix):
         olist = []
         numchar = len(prefix)
@@ -88,17 +88,40 @@ def chan_char_exists(text, chan_char):
                 return True
     return False
 
+
 def error(text):
     if not text:
         return False
-    fxn = inspect.stack()[1][3]
-    print("NMError: " + fxn + ": " + text)
+    stack = inspect.stack()
+    child = stack_get_class(stack)
+    method = stack_get_method(stack)
+    print("ERROR." + child + "." + method + ": " + text)
     return True
 
 
 def history(text):
     if not text:
         return False
-    fxn = inspect.stack()[1][3]
-    print("NM." + fxn + ": " + text)
+    stack = inspect.stack()
+    child = stack_get_class(stack)
+    method = stack_get_method(stack)
+    print(child + "." + method + ": " + text)
     return True
+
+
+def stack_get_class(stack, child=True):
+    class_tree = str(stack[1][0].f_locals["self"].__class__)
+    class_tree = class_tree.replace("<class ", "")
+    class_tree = class_tree.replace("\'", "")
+    class_tree = class_tree.replace(">", "")
+    class_tree = class_tree.split(".")
+    class_child = class_tree[0]
+    class_parent = class_tree[1]
+    if child:
+        return class_child
+    return class_child + "." + class_parent
+
+
+def stack_get_method(stack):
+    # return inspect.stack()[1][3]
+    return stack[1][0].f_code.co_name

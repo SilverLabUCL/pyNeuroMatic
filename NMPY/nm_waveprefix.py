@@ -42,11 +42,11 @@ class WavePrefix(object):
     @property
     def channel(self):
         return self.__channel
-    
+
     @property
     def waves(self):
         return self.__waves
-    
+
     @waves.setter
     def waves(self, waves):
         self.__waves = waves
@@ -81,7 +81,7 @@ class WavePrefixContainer(Container):
         super().__init__()
         self.prefix = ""  # not used
         self.__thewaves = wave_container.getAll()
-        
+
     def object_new(self, name):  # override, do not call super
         return WavePrefix(name)
 
