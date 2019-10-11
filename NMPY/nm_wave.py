@@ -5,8 +5,10 @@ Copyright 2019 Jason Rothman
 """
 import nm_configs as nmconfig
 from nm_container import Container
-from nm_utilities import name_ok
 from nm_utilities import chan_char
+from nm_utilities import name_ok
+from nm_utilities import quotes
+from nm_utilities import error
 import numpy as np
 
 
@@ -26,8 +28,10 @@ class Wave(object):
 
     @name.setter
     def name(self, name):
-        if name_ok(name):
-            self.__name = name
+        if not name_ok(name):
+            return error("bad name " + quotes(name))
+        self.__name = name
+        return True
 
     @property
     def data(self):
@@ -61,6 +65,8 @@ class WaveContainer(Container):
             return False
         if not prefix:
             prefix = self.prefix
+        if not name_ok(prefix):
+            return error("bad prefix " + quotes(prefix))
         mu, sigma = 0, 0.1  # mean and standard deviation
         for i in range(0, nchan):
             cc = chan_char(i)

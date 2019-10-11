@@ -36,8 +36,10 @@ class WavePrefix(object):
 
     @name.setter
     def name(self, name):
-        if name_ok(name):
-            self.__name = name
+        if not name_ok(name):
+            return error("bad name " + quotes(name))
+        self.__name = name
+        return True
 
     @property
     def channel(self):
@@ -95,6 +97,7 @@ class WavePrefixContainer(Container):
     def new(self, name="", select=True):  # override, do not call super
         prefix = name  # name is actually a prefix
         if not name_ok(prefix):
+            error("bad prefix " + quotes(prefix))
             return None
         p = WavePrefix(prefix)
         foundsomething = False

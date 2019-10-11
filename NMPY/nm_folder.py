@@ -9,6 +9,8 @@ from nm_container import Container
 from nm_wave import WaveContainer
 from nm_waveprefix import WavePrefixContainer
 from nm_utilities import name_ok
+from nm_utilities import quotes
+from nm_utilities import error
 
 
 class Folder(object):
@@ -27,8 +29,10 @@ class Folder(object):
 
     @name.setter
     def name(self, name):
-        if name_ok(name):
-            self.__name = name
+        if not name_ok(name):
+            return error("bad name " + quotes(name))
+        self.__name = name
+        return True
 
     @property
     def wave(self):

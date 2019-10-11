@@ -5,6 +5,7 @@ NM utility functions
 Copyright 2019 Jason Rothman
 """
 import inspect
+from colorama import Fore, Back, Style
 
 
 def chan_char(chanNum):
@@ -35,15 +36,11 @@ def remove_special_chars(text):
 def name_ok(name, alert=True):
     ok = ["_"]  # list of symbols OK to include in names
     if not name:
-        if alert:
-            error("encountered empty name")
         return False
     for c in ok:
         name = name.replace(c, "")
     if name.isalnum():
         return True
-    elif alert:
-        error("bad name " + quotes(name))
     return False
 
 
@@ -95,8 +92,8 @@ def error(text):
     stack = inspect.stack()
     child = stack_get_class(stack)
     method = stack_get_method(stack)
-    print("ERROR." + child + "." + method + ": " + text)
-    return True
+    print(Fore.RED + "ERROR." + child + "." + method + ": " + text + Style.RESET_ALL)
+    return False
 
 
 def history(text):

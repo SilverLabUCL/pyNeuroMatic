@@ -7,6 +7,7 @@ import datetime
 import nm_configs as nmconfig
 from nm_experiment import ExperimentContainer
 from nm_utilities import name_ok
+from nm_utilities import quotes
 from nm_utilities import error
 from nm_utilities import history
 
@@ -157,8 +158,10 @@ class Project(object):
 
     @name.setter
     def name(self, name):
-        if name_ok(name):
-            self.__name = name
+        if not name_ok(name):
+            return error("bad name " + quotes(name))
+        self.__name = name
+        return True
 
     @property
     def experiment(self):

@@ -7,6 +7,7 @@ Copyright 2019 Jason Rothman
 import nm_configs as nmconfig
 from nm_container import Container
 from nm_utilities import name_ok
+from nm_utilities import quotes
 from nm_utilities import error
 
 
@@ -25,8 +26,10 @@ class WaveSet(object):
 
     @name.setter
     def name(self, name):
-        if name_ok(name):
-            self.__name = name
+        if not name_ok(name):
+            return error("bad name " + quotes(name))
+        self.__name = name
+        return True
 
     @property
     def waveset(self):

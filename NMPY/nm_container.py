@@ -41,8 +41,10 @@ class Container(object):
     def prefix(self, prefix):
         if not prefix:
             prefix = ""
-        elif name_ok(prefix):
-            self.__prefix = prefix
+        elif not name_ok(prefix):
+            return error("bad prefix " + quotes(prefix))
+        self.__prefix = prefix
+        return True
 
     @property
     def name(self):
@@ -79,9 +81,9 @@ class Container(object):
         return isinstance(obj, object)  # change object to Experiment, etc.
 
     def __type(self):
-        if not self.__objects:
-            return "None"
-        return self.__objects[0].__class__.__name__
+        if self.__objects:
+            return self.__objects[0].__class__.__name__
+        return "None"
 
     def __tname(self, name):
         return self.__type() + " " + quotes(name)  # object type + name
@@ -117,6 +119,8 @@ class Container(object):
     def select(self, name):
         """Select object in Container"""
         if not name_ok(name):
+            return error("bad name " + quotes(name))
+        if not self.__objects:
             return False
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
@@ -129,19 +133,21 @@ class Container(object):
 
     def exists(self, name):
         """Check if object exists within container"""
-        if self.__objects and name_ok(name):
-            for o in self.__objects:
-                if name.casefold() == o.name.casefold():
-                    return True
+        if not self.__objects:
+            return False
+        if not name_ok(name):
+            return error("bad name " + quotes(name))
+        for o in self.__objects:
+            if name.casefold() == o.name.casefold():
+                return True
         return False
 
     def add(self, obj, select=True):
         """Add object to Container."""
         if not self.instance_ok(obj):
-            error("encountered bad Container")
-            return False
+            return error("encountered bad Container")
         if not name_ok(obj.name):
-            return False
+            return error("bad name " + quotes(obj.name))
         if self.exists(obj.name):
             pass  # nothing to do
         else:
@@ -167,6 +173,7 @@ class Container(object):
         if not name:
             name = self.name_next()
         elif not name_ok(name):
+            error("bad name " + quotes(name))
             return None
         elif self.exists(name):
             error(self.__tname(name) + " already exists")
@@ -185,7 +192,7 @@ class Container(object):
         if not o:
             return False
         if not name_ok(newname):
-            return False
+            return error("bad newname " + quotes(newname))
         if self.exists(newname):
             error(self.__tname(newname) + " already exists")
             return False
@@ -209,7 +216,7 @@ class Container(object):
         if not o:
             return False
         if not name_ok(newname):
-            return False
+            return error("bad newname " + quotes(newname))
         if self.exists(newname):
             error(self.__tname(newname) + " already exists")
             return False
