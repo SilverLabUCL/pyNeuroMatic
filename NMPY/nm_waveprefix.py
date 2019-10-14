@@ -9,6 +9,7 @@ from nm_waveset import WaveSetContainer
 from nm_utilities import chan_char
 from nm_utilities import name_ok
 from nm_utilities import quotes
+from nm_utilities import alert
 from nm_utilities import error
 from nm_utilities import history
 from nm_utilities import get_items
@@ -22,20 +23,15 @@ class WavePrefix(object):
     def __init__(self, name):
         self.__name = name  # name is actually a prefix
         self.__thewaves = []  # 2D matrix, i = channel #, j = wave #
-        self.__channels = 0
-        self.__channel = ChannelContainer()
-        self.__thewaveset = WaveSetContainer(self.__thewaves)
-        self.__thewaveset.new("All", select=True, quiet=True)
-        self.__thewaveset.new("Set1", select=False, quiet=True)
-        self.__thewaveset.new("Set2", select=False, quiet=True)
-        self.__thewaveset.new("SetX", select=False, quiet=True)
-
-        # self.waves = 0
-        # self.chanNum = 0
-        # self.wavenum = 0
-        # self.wave_names_mock(channels=2, waves=5)
-        # self.wave_names_search()
-        # sself.print_details()
+        self.__channel_container = ChannelContainer()
+        self.__waveset_container = WaveSetContainer(self.__thewaves)
+        self.__waveset_container.new("All", select=True, quiet=True)
+        self.__waveset_container.new("Set1", select=False, quiet=True)
+        self.__waveset_container.new("Set2", select=False, quiet=True)
+        self.__waveset_container.new("SetX", select=False, quiet=True)
+        self.__chanselect = 0
+        self.__waveselect = 0
+        # self.print_details()
 
     @property
     def name(self):
@@ -44,14 +40,68 @@ class WavePrefix(object):
     @name.setter
     def name(self, name):
         error("cannot rename WavePrefix objects")
+        
+    @property
+    def channel_container(self):
+        return self.__channel_container
 
     @property
-    def channel(self):
-        return self.__channel
+    def waveset_container(self):
+        return self.__waveset_container
 
     @property
-    def waveset(self):
-        return self.__thewaveset
+    def numchannels(self):
+        if not self.__thewaves:
+            return 0
+        return len(self.__thewaves)
+    
+    @property
+    def chanlist(self):
+        if not self.__thewaves:
+            return []
+        clist = []
+        channels = len(self.__thewaves)
+        for i in range(0, channels):
+            c = chan_char(i)
+            clist.append(c)
+        return clist
+    
+    @property
+    def numwaves(self):
+        if not self.__thewaves:
+            return 0
+        minWaves = 99999
+        maxWaves = 0
+        nlist = []
+        for row in self.__thewaves:
+            count = len(row)
+            minWaves = min(minWaves, count)
+            maxWaves = max(maxWaves, count)
+            nlist.append(count)
+        if minWaves == maxWaves:
+            return minWaves
+        return nlist
+    
+    @property
+    def select(self):
+        return [self.__chanselect, self.__waveselect]
+    
+    @select.setter
+    def select(self, chan_wave):
+        chan = chan_wave[0]
+        wave = chan_wave[1]
+        if chan >= 0 and chan < self.numchannels:
+            self.__chanselect = chan
+        else:
+            error("channel # out of range: " + str(chan))
+            return False
+        nwaves = len(self.__thewaves[chan])
+        if wave >= 0 and wave < nwaves:
+            self.__waveselect = wave
+        else:
+            error("wave # out of range: " + str(wave))
+            return False
+        return True
 
     @property
     def thewaves(self):
@@ -98,7 +148,7 @@ class WavePrefixContainer(Container):
             if len(olist) > 0:
                 p.thewaves.append(olist)
                 foundsomething = True
-                history(prefix + ", Ch " + cc + ", waves = " + str(len(olist)))
+                history(prefix + ", Ch " + cc + ", waves=" + str(len(olist)))
             else:
                 break  # no more channels
         if not foundsomething:  # try without chan
@@ -106,14 +156,13 @@ class WavePrefixContainer(Container):
             if len(olist) > 0:
                 p.thewaves.append(olist)
                 foundsomething = True
-                history(prefix + ", Ch " + cc + ", waves = " + str(len(olist)))
+                history(prefix + ", Ch " + cc + ", waves=" + str(len(olist)))
         if not foundsomething:
-            error("failed to find waves beginning with " + quotes(prefix))
+            alert("failed to find waves beginning with " + quotes(prefix))
             return None
-        print(len(p.thewaves))
-        for row in p.thewaves:
-            print(str(len(row)))
         self.add(p)
+        # print("channels=" + str(p.numchannels))
+        # print("waves=" + str(p.numwaves))
         return p
 
     def rename(self, name, newname):  # override, do not call super
