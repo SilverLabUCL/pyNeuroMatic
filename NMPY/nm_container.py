@@ -18,11 +18,11 @@ class Container(object):
     Container (i.e. list) for NM objects
     Children: ExperimentContainer, FolderContainer, ChannelContainer,
     WaveContainer, WavePrefixContainer, WaveSetContainer
-    
+
     Each stored object must have a unique name. The name can start with the
-    same prefix (e.g. "NMExp") but this is optional. Use names_next to 
+    same prefix (e.g. "NMExp") but this is optional. Use names_next to
     create unique names with the given prefix (e.g. "NMExp0", "NMExp1", etc.)
-    
+
     One object is selected/activated at a given time. This object can be
     accessed via get/select functions.
     """
@@ -32,9 +32,10 @@ class Container(object):
         self.__objects = []  # the container of NM objects
         self.__object_select = None  # selected item of container
         self.__date = str(datetime.datetime.now())
+        self.__count_from = 0
 
     @property
-    def prefix(self):
+    def prefix(self):  # see name_next()
         return self.__prefix
 
     @prefix.setter
@@ -47,17 +48,17 @@ class Container(object):
         return True
 
     @property
-    def name(self):
-        if self.__object_select:
-            return self.__object_select.name  # name of selected object
-        return "None"
+    def count_from(self):  # see name_next()
+        return self.__count_from
 
-    @name.setter
-    def name(self, name):
-        error("use rename function instead")
+    @count_from.setter
+    def count_from(self, count_from):
+        count_from = round(count_from)
+        if count_from >= 0:
+            self.__count_from = count_from
 
     @property
-    def items(self):
+    def count(self):
         """Number of objects stored in Container"""
         return len(self.__objects)
 
@@ -73,7 +74,7 @@ class Container(object):
     @property
     def date(self):
         return self.__date
-    
+
     def object_new(self, name):  # child class should override this function
         return object  # change object to Experiment, Folder, Wave, etc.
 
@@ -81,13 +82,16 @@ class Container(object):
         return isinstance(obj, object)  # change object to Experiment, etc.
 
     def __type(self):
-        if self.__objects:
-            return self.__objects[0].__class__.__name__
-        return "None"
+        if not self.__objects:
+            return "None"
+        return self.__objects[0].__class__.__name__
 
     def __tname(self, name):
-        return self.__type() + " " + quotes(name)  # object type + name
-    
+        t = self.__type()
+        if t == "None":
+            return t
+        return t + " " + quotes(name)  # object type + name
+
     def name_next(self):
         """Get next default object name based on prefix."""
         if self.__prefix:
@@ -95,7 +99,7 @@ class Container(object):
         else:
             prefix = "None"
         n = 10 + len(self.__objects)
-        for i in range(0, n):
+        for i in range(self.__count_from, n):
             name = prefix + str(i)
             if not self.exists(name):
                 return name
@@ -116,8 +120,16 @@ class Container(object):
         """Get the container (list) of all objects"""
         return self.__objects
 
+    @property
+    def select(self):
+        if self.__object_select:
+            return self.__object_select.name  # name of selected object
+        return "None"
+
+    @select.setter
     def select(self, name):
         """Select object in Container"""
+        quiet = False
         if not name_ok(name):
             return error("bad name " + quotes(name))
         if not self.__objects:
@@ -125,7 +137,8 @@ class Container(object):
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 self.__object_select = o
-                history("selected " + self.__tname(name))
+                if not quiet:
+                    history("selected " + self.__tname(name))
                 return True
         error("failed to find " + self.__tname(name))
         print("acceptable names: " + str(self.names))
@@ -142,7 +155,7 @@ class Container(object):
                 return True
         return False
 
-    def add(self, obj, select=True):
+    def add(self, obj, select=True, quiet=False):
         """Add object to Container."""
         if not self.instance_ok(obj):
             return error("encountered bad Container")
@@ -154,12 +167,14 @@ class Container(object):
             self.__objects.append(obj)
         if select or not self.__object_select:
             self.__object_select = obj
-            history("added/selected " + self.__tname(obj.name))
+            if not quiet:
+                history("added/selected " + self.__tname(obj.name))
             return True
-        history("added " + self.__tname(obj.name))
+        if not quiet:
+            history("added " + self.__tname(obj.name))
         return True
 
-    def new(self, name="", select=True):
+    def new(self, name="", select=True, quiet=False):
         """
         Create a new object and add to container.
 
@@ -182,26 +197,29 @@ class Container(object):
         self.__objects.append(o)
         if select or not self.__object_select:
             self.__object_select = o
-            history("created/selected " + self.__tname(name))
+            if not quiet:
+                history("created/selected " + self.__tname(name))
             return o
-        history("created " + self.__tname(name))
+        if not quiet:
+            history("created " + self.__tname(name))
         return o
 
-    def rename(self, name, newname):
+    def rename(self, name, newname, quiet=False):
         o = self.get(name)
         if not o:
             return False
         if not name_ok(newname):
             return error("bad newname " + quotes(newname))
         if self.exists(newname):
-            error(self.__tname(newname) + " already exists")
+            error("name " + quotes(newname) + " is already used")
             return False
         o.name = newname
-        history("renamed " + self.__tname(name) +
-                " to " + quotes(newname))
+        if not quiet:
+            history("renamed " + self.__tname(name) +
+                    " to " + quotes(newname))
         return True
 
-    def duplicate(self, name, newname, select=False):
+    def duplicate(self, name, newname, select=False, quiet=False):
         """
         Copy an object.
 
@@ -224,11 +242,12 @@ class Container(object):
         if c is not None:
             c.name = newname
             self.__objects.append(c)
-            history("copied " + self.__tname(name) +
-                    " to " + quotes(newname))
+            if not quiet:
+                history("copied " + self.__tname(name) +
+                        " to " + quotes(newname))
         return c
 
-    def kill(self, name):
+    def kill(self, name, quiet=False):
         """
         Kill an object.
 
@@ -243,11 +262,12 @@ class Container(object):
             return False
         selected = o is self.__object_select
         self.__objects.remove(o)
-        history("killed " + self.__tname(name))
+        if not quiet:
+            history("killed " + self.__tname(name))
         if selected and len(self.__objects) > 0:
             self.__object_select = self.__objects[0]
-            history("selected " +
-                    self.__tname(self.__object_select.name))
+            if not quiet:
+                history("selected " + self.__tname(self.__object_select.name))
         return True
 
     def open_(self, path):

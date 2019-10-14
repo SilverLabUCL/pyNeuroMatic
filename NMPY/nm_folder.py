@@ -26,13 +26,10 @@ class Folder(object):
     @property
     def name(self):
         return self.__name
-
+    
     @name.setter
     def name(self, name):
-        if not name_ok(name):
-            return error("bad name " + quotes(name))
-        self.__name = name
-        return True
+        error("use folder rename function")
 
     @property
     def wave(self):

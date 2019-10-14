@@ -25,13 +25,10 @@ class Wave(object):
     @property
     def name(self):
         return self.__name
-
+    
     @name.setter
     def name(self, name):
-        if not name_ok(name):
-            return error("bad name " + quotes(name))
-        self.__name = name
-        return True
+        error("use wave rename function")
 
     @property
     def data(self):
@@ -60,7 +57,7 @@ class WaveContainer(Container):
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Wave)
 
-    def make(self, prefix="", nchan=1, nwaves=5, points=10):
+    def make(self, prefix="", nchan=1, nwaves=5, points=10, noise=False):
         if nchan <= 0 or nwaves <= 0:
             return False
         if not prefix:
@@ -72,8 +69,8 @@ class WaveContainer(Container):
             cc = chan_char(i)
             for j in range(0, nwaves):
                 wname = prefix + cc + str(j)
-                w = self.new(wname)
-                if w:
+                w = self.new(wname, quiet=True)
+                if w and noise:
                     w.data = np.random.normal(mu, sigma, points)
                     # print(w.data)
         return True

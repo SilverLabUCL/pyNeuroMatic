@@ -15,11 +15,13 @@ def chan_char(chanNum):
         return c[chanNum]
     error("channel number must be in the range 0-25")
     return ''
-    
 
-def quotes(text):
+
+def quotes(text, single=True):
     if not text:
         text = ""
+    if single:
+        return "'" + text + "'"
     return "\"" + text + "\""
 
 
@@ -33,7 +35,7 @@ def remove_special_chars(text):
     return temp
 
 
-def name_ok(name, alert=True):
+def name_ok(name):
     ok = ["_"]  # list of symbols OK to include in names
     if not name:
         return False
@@ -45,44 +47,49 @@ def name_ok(name, alert=True):
 
 
 def exists(nm_obj_list, name):
-    if nm_obj_list and name_ok(name):
-        for o in nm_obj_list:
-            if name.casefold() == o.name.casefold():
-                return True
+    if not nm_obj_list or not name_ok(name):
+        return False
+    for o in nm_obj_list:
+        if name.casefold() == o.name.casefold():
+            return True
     return False
 
 
 def get_names(nm_obj_list):
+    if not nm_obj_list:
+        return []
     nlist = []
-    if nm_obj_list:
-        for o in nm_obj_list:
-            nlist.append(o.name)
+    for o in nm_obj_list:
+        nlist.append(o.name)
     return nlist
 
 
 def get_items(nm_obj_list, prefix, chan_char=""):
-    if nm_obj_list and name_ok(prefix):
-        olist = []
-        numchar = len(prefix)
-        for o in nm_obj_list:
-            if prefix.casefold() == o.name[:numchar].casefold():
-                if chan_char:
-                    if chan_char_exists(o.name[numchar:], chan_char):
-                        olist.append(o.name)
+    if not nm_obj_list or not name_ok(prefix) or not chan_char:
+        return []
+    olist = []
+    numchar = len(prefix)
+    for o in nm_obj_list:
+        if prefix.casefold() == o.name[:numchar].casefold():
+            if chan_char:
+                if chan_char_exists(o.name[numchar:], chan_char):
+                    olist.append(o)
                 else:
-                    olist.append(o.name)
-        return olist
-    return None
+                    pass
+            else:
+                olist.append(o)
+    return olist
 
 
 def chan_char_exists(text, chan_char):
-    if text and chan_char:
-        numchar = len(text)
-        for i in reversed(range(numchar)):  # search backwards
-            if text[i].isdigit():  # skip thru seq number
-                continue
-            if text[i] == chan_char:  # first char before seq #
-                return True
+    if not text or not chan_char or len(chan_char) > 1:
+        return False
+    numchar = len(text)
+    for i in reversed(range(numchar)):  # search backwards
+        if text[i].isdigit():  # skip thru seq number
+            continue
+        if text[i].casefold() == chan_char.casefold():  # first char before seq #
+            return True
     return False
 
 
@@ -92,7 +99,8 @@ def error(text):
     stack = inspect.stack()
     child = stack_get_class(stack)
     method = stack_get_method(stack)
-    print(Fore.RED + "ERROR." + child + "." + method + ": " + text + Style.RESET_ALL)
+    print(Fore.RED + "ERROR." + child + "." + method +
+          ": " + text + Fore.BLACK)
     return False
 
 
@@ -107,6 +115,8 @@ def history(text):
 
 
 def stack_get_class(stack, child=True):
+    if not stack:
+        return "None"
     class_tree = str(stack[1][0].f_locals["self"].__class__)
     class_tree = class_tree.replace("<class ", "")
     class_tree = class_tree.replace("\'", "")
@@ -120,5 +130,7 @@ def stack_get_class(stack, child=True):
 
 
 def stack_get_method(stack):
+    if not stack:
+        return "None"
     # return inspect.stack()[1][3]
     return stack[1][0].f_code.co_name

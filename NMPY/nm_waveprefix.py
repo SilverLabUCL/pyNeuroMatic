@@ -5,6 +5,7 @@ Copyright 2019 Jason Rothman
 """
 from nm_container import Container
 from nm_channel import ChannelContainer
+from nm_waveset import WaveSetContainer
 from nm_utilities import chan_char
 from nm_utilities import name_ok
 from nm_utilities import quotes
@@ -19,10 +20,16 @@ class WavePrefix(object):
     """
 
     def __init__(self, name):
-        self.__name = name
-        self.__channel = ChannelContainer()
-        self.__waves = []  # 2D matrix, i = channel #, j = wave #
+        self.__name = name  # name is actually a prefix
+        self.__thewaves = []  # 2D matrix, i = channel #, j = wave #
         self.__channels = 0
+        self.__channel = ChannelContainer()
+        self.__thewaveset = WaveSetContainer(self.__thewaves)
+        self.__thewaveset.new("All", select=True, quiet=True)
+        self.__thewaveset.new("Set1", select=False, quiet=True)
+        self.__thewaveset.new("Set2", select=False, quiet=True)
+        self.__thewaveset.new("SetX", select=False, quiet=True)
+
         # self.waves = 0
         # self.chanNum = 0
         # self.wavenum = 0
@@ -36,38 +43,21 @@ class WavePrefix(object):
 
     @name.setter
     def name(self, name):
-        if not name_ok(name):
-            return error("bad name " + quotes(name))
-        self.__name = name
-        return True
+        error("cannot rename WavePrefix objects")
 
     @property
     def channel(self):
         return self.__channel
 
     @property
-    def waves(self):
-        return self.__waves
+    def waveset(self):
+        return self.__thewaveset
 
-    @waves.setter
-    def waves(self, waves):
-        self.__waves = waves
+    @property
+    def thewaves(self):
+        return self.__thewaves
 
-    def wave_names_mock(self, nchan, nwaves):
-        if nchan == 0 or nwaves == 0:
-            return False
-        self.channels = nchan
-        self.waves = nwaves
-        for i in range(0, nchan):
-            cc = chan_char(i)
-            self.channel.new("Chan" + cc)
-            channel_wave_names = []
-            for j in range(0, nwaves):
-                channel_wave_names.append(self.name + cc + str(j))
-            self.wave_names.append(channel_wave_names)
-        return True
-
-    def print_details(self) -> None:
+    def details(self):
         print("WavePrefix = " + quotes(self.name))
         print("channels = " + str(self.channels))
         # print("waves = " + str(self.waves))
@@ -82,7 +72,7 @@ class WavePrefixContainer(Container):
     def __init__(self, wave_container):
         super().__init__()
         self.prefix = ""  # not used
-        self.__thewaves = wave_container.getAll()
+        self.__wave_container = wave_container
 
     def object_new(self, name):  # override, do not call super
         return WavePrefix(name)
@@ -91,7 +81,7 @@ class WavePrefixContainer(Container):
         return isinstance(obj, WavePrefix)
 
     def name_next(self):  # override, do not call super
-        error("WavePrefix objects do not have common names")
+        error("WavePrefix objects do not have names with a common prefix")
         return ""
 
     def new(self, name="", select=True):  # override, do not call super
@@ -101,31 +91,35 @@ class WavePrefixContainer(Container):
             return None
         p = WavePrefix(prefix)
         foundsomething = False
-        for i in range(0, 25):  # look for names with channel-seq format
+        thewaves = self.__wave_container.getAll()
+        for i in range(0, 25):  # try prefix+chan+seq format
             cc = chan_char(i)
-            olist = get_items(self.__thewaves, prefix, chan_char=cc)
+            olist = get_items(thewaves, prefix, chan_char=cc)
             if len(olist) > 0:
-                p.waves.append(olist)
+                p.thewaves.append(olist)
                 foundsomething = True
                 history(prefix + ", Ch " + cc + ", waves = " + str(len(olist)))
             else:
                 break  # no more channels
-        if not foundsomething:
-            olist = get_items(self.__thewaves, prefix)  # try without chanchar
+        if not foundsomething:  # try without chan
+            olist = get_items(thewaves, prefix)
             if len(olist) > 0:
-                p.waves.append(olist)
+                p.thewaves.append(olist)
                 foundsomething = True
                 history(prefix + ", Ch " + cc + ", waves = " + str(len(olist)))
-        if foundsomething:
-            self.add(p)
-            return p
-        error("failed to find waves beginning with " + quotes(prefix))
-        return None
-    
+        if not foundsomething:
+            error("failed to find waves beginning with " + quotes(prefix))
+            return None
+        print(len(p.thewaves))
+        for row in p.thewaves:
+            print(str(len(row)))
+        self.add(p)
+        return p
+
     def rename(self, name, newname):  # override, do not call super
         error("cannot rename WavePrefix objects")
         return False
-    
+
     def duplicate(self, name, newname, select=False):  # override
         error("cannot duplicate WavePrefix objects")
         return None  # not sued

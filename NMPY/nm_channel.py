@@ -6,7 +6,6 @@ Copyright 2019 Jason Rothman
 """
 import nm_configs as nmconfig
 from nm_container import Container
-from nm_waveset import WaveSetContainer
 from nm_utilities import name_ok
 from nm_utilities import quotes
 from nm_utilities import error
@@ -20,23 +19,16 @@ class Channel(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__waveset = WaveSetContainer()
-        self.__waveset.new("Set1")
-        self.__waveset.new("Set2")
-        self.__waveset.new("SetX")
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
 
     @property
     def name(self):
         return self.__name
-
+    
     @name.setter
     def name(self, name):
-        if not name_ok(name):
-            return error("bad name " + quotes(name))
-        self.__name = name
-        return True
+        error("cannot rename Channel object")
 
     @property
     def waveset(self):
@@ -73,4 +65,8 @@ class ChannelContainer(Container):
 
     def rename(self, name, newname):  # override, do not call super
         error("cannot rename Channel object")
+        return False
+
+    def kill(self, name, quiet=False):  # override, do not call super
+        error("cannot kill Channel object")
         return False
