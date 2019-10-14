@@ -93,6 +93,17 @@ def chan_char_exists(text, chan_char):
     return False
 
 
+def alert(text):
+    if not text:
+        return False
+    stack = inspect.stack()
+    child = stack_get_class(stack)
+    method = stack_get_method(stack)
+    print("ALERT." + child + "." + method +
+          ": " + text)
+    return False
+
+
 def error(text):
     if not text:
         return False

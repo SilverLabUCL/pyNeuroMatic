@@ -35,6 +35,10 @@ class Container(object):
         self.__count_from = 0
 
     @property
+    def date(self):
+        return self.__date
+
+    @property
     def prefix(self):  # see name_next()
         return self.__prefix
 
@@ -71,10 +75,6 @@ class Container(object):
                 nlist.append(o.name)
         return nlist
 
-    @property
-    def date(self):
-        return self.__date
-
     def object_new(self, name):  # child class should override this function
         return object  # change object to Experiment, Folder, Wave, etc.
 
@@ -91,19 +91,6 @@ class Container(object):
         if t == "None":
             return t
         return t + " " + quotes(name)  # object type + name
-
-    def name_next(self):
-        """Get next default object name based on prefix."""
-        if self.__prefix:
-            prefix = self.__prefix
-        else:
-            prefix = "None"
-        n = 10 + len(self.__objects)
-        for i in range(self.__count_from, n):
-            name = prefix + str(i)
-            if not self.exists(name):
-                return name
-        return prefix + "99999"
 
     def get(self, name=""):
         """Get object from Container"""
@@ -123,8 +110,8 @@ class Container(object):
     @property
     def select(self):
         if self.__object_select:
-            return self.__object_select.name  # name of selected object
-        return "None"
+            return self.__object_select
+        return None
 
     @select.setter
     def select(self, name):
@@ -144,17 +131,6 @@ class Container(object):
         print("acceptable names: " + str(self.names))
         return False
 
-    def exists(self, name):
-        """Check if object exists within container"""
-        if not self.__objects:
-            return False
-        if not name_ok(name):
-            return error("bad name " + quotes(name))
-        for o in self.__objects:
-            if name.casefold() == o.name.casefold():
-                return True
-        return False
-
     def add(self, obj, select=True, quiet=False):
         """Add object to Container."""
         if not self.instance_ok(obj):
@@ -172,6 +148,68 @@ class Container(object):
             return True
         if not quiet:
             history("added " + self.__tname(obj.name))
+        return True
+
+    def duplicate(self, name, newname, select=False, quiet=False):
+        """
+        Copy an object.
+
+        Args:
+            name: name of object to copy
+            newname: name of new object
+
+        Returns:
+            new object if successful, None otherwise
+        """
+        o = self.get(name)
+        if not o:
+            return False
+        if not name_ok(newname):
+            return error("bad newname " + quotes(newname))
+        if self.exists(newname):
+            error(self.__tname(newname) + " already exists")
+            return False
+        c = copy.deepcopy(o)
+        if c is not None:
+            c.name = newname
+            self.__objects.append(c)
+            if not quiet:
+                history("copied " + self.__tname(name) +
+                        " to " + quotes(newname))
+        return c
+
+    def exists(self, name):
+        """Check if object exists within container"""
+        if not self.__objects:
+            return False
+        if not name_ok(name):
+            return error("bad name " + quotes(name))
+        for o in self.__objects:
+            if name.casefold() == o.name.casefold():
+                return True
+        return False
+
+    def kill(self, name, quiet=False):
+        """
+        Kill an object.
+
+        Args:
+            name: name of object to kill
+
+        Returns:
+            True for success, False otherwise
+        """
+        o = self.get(name)
+        if not o:
+            return False
+        selected = o is self.__object_select
+        self.__objects.remove(o)
+        if not quiet:
+            history("killed " + self.__tname(name))
+        if selected and len(self.__objects) > 0:
+            self.__object_select = self.__objects[0]
+            if not quiet:
+                history("selected " + self.__tname(self.__object_select.name))
         return True
 
     def new(self, name="", select=True, quiet=False):
@@ -204,6 +242,19 @@ class Container(object):
             history("created " + self.__tname(name))
         return o
 
+    def name_next(self):
+        """Get next default object name based on prefix."""
+        if self.__prefix:
+            prefix = self.__prefix
+        else:
+            prefix = "None"
+        n = 10 + len(self.__objects)
+        for i in range(self.__count_from, n):
+            name = prefix + str(i)
+            if not self.exists(name):
+                return name
+        return prefix + "99999"
+
     def rename(self, name, newname, quiet=False):
         o = self.get(name)
         if not o:
@@ -217,57 +268,6 @@ class Container(object):
         if not quiet:
             history("renamed " + self.__tname(name) +
                     " to " + quotes(newname))
-        return True
-
-    def duplicate(self, name, newname, select=False, quiet=False):
-        """
-        Copy an object.
-
-        Args:
-            name: name of object to copy
-            newname: name of new object
-
-        Returns:
-            new object if successful, None otherwise
-        """
-        o = self.get(name)
-        if not o:
-            return False
-        if not name_ok(newname):
-            return error("bad newname " + quotes(newname))
-        if self.exists(newname):
-            error(self.__tname(newname) + " already exists")
-            return False
-        c = copy.deepcopy(o)
-        if c is not None:
-            c.name = newname
-            self.__objects.append(c)
-            if not quiet:
-                history("copied " + self.__tname(name) +
-                        " to " + quotes(newname))
-        return c
-
-    def kill(self, name, quiet=False):
-        """
-        Kill an object.
-
-        Args:
-            name: name of object to kill
-
-        Returns:
-            True for success, False otherwise
-        """
-        o = self.get(name)
-        if not o:
-            return False
-        selected = o is self.__object_select
-        self.__objects.remove(o)
-        if not quiet:
-            history("killed " + self.__tname(name))
-        if selected and len(self.__objects) > 0:
-            self.__object_select = self.__objects[0]
-            if not quiet:
-                history("selected " + self.__tname(self.__object_select.name))
         return True
 
     def open_(self, path):

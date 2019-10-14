@@ -18,7 +18,7 @@ class Experiment(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__folder = FolderContainer()
+        self.__folder_container = FolderContainer()
 
     @property
     def name(self):
@@ -29,8 +29,8 @@ class Experiment(object):
         error("use experiment rename function")
 
     @property
-    def folder(self):
-        return self.__folder
+    def folder_container(self):
+        return self.__folder_container
 
 
 class ExperimentContainer(Container):

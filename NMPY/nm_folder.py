@@ -20,8 +20,8 @@ class Folder(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__wave = WaveContainer()
-        self.__waveprefix = WavePrefixContainer(self.__wave)
+        self.__wave_container = WaveContainer()
+        self.__waveprefix_container = WavePrefixContainer(self.__wave_container)
 
     @property
     def name(self):
@@ -32,12 +32,16 @@ class Folder(object):
         error("use folder rename function")
 
     @property
-    def wave(self):
-        return self.__wave
+    def wave_container(self):
+        return self.__wave_container
+    
+    @property
+    def wavelist(self):
+        return self.__wave.names
 
     @property
-    def waveprefix(self):
-        return self.__waveprefix
+    def waveprefix_container(self):
+        return self.__waveprefix_container
 
 
 class FolderContainer(Container):

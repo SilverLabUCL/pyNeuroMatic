@@ -11,7 +11,7 @@ from nm_utilities import quotes
 from nm_utilities import error
 from nm_utilities import history
 
-nm = None  # holds NM Manager, accessed via console
+nm = None  # holds Manager, accessed via console
 
 
 class Manager(object):
@@ -31,8 +31,8 @@ class Manager(object):
 
     def wave_test(self):
         noise = True
-        self.wave.make(prefix="Record", nchan=2, nwaves=3, points=5, noise=noise)
-        self.wave.make(prefix="Wave", nchan=1, nwaves=4, points=5, noise=noise)
+        self.wave.make(prefix="Record", nchan=1, nwaves=3, points=5, noise=noise)
+        self.wave.make(prefix="Wave", nchan=3, nwaves=4, points=5, noise=noise)
         self.waveprefix.new("Record")
         self.waveprefix.new("Wave")
         self.waveprefix.new("Test")
@@ -43,19 +43,19 @@ class Manager(object):
 
     @property
     def experiment(self):
-        return self.__project.experiment  # container of Experiment objs
+        return self.__project.experiment_container
 
     @property
     def folder(self):
-        e = self.__project.experiment
-        if e.count == 0:
+        ec = self.__project.experiment_container
+        if ec.count == 0:
             history("no experiments")
             return None
-        s = e.get("SELECTED")
-        if not s:
+        exp = ec.get("SELECTED")
+        if not exp:
             history("no selected experiment")
             return None
-        return s.folder  # container of Folder objs in selected experiment
+        return exp.folder_container  # Folder objs in selected experiment
 
     @property
     def wave(self):
@@ -69,7 +69,7 @@ class Manager(object):
         if not s:
             history("no selected folder")
             return None
-        return s.wave  # container of Wave objs in seleted folder
+        return s.wave_container  # Wave objs in seleted folder
 
     @property
     def waveprefix(self):
@@ -83,7 +83,7 @@ class Manager(object):
         if not s:
             history("no selected folder")
             return None
-        return s.waveprefix  # container of WavePrefix objs in seleted folder
+        return s.waveprefix_container  # WavePrefix objs in seleted folder
 
     @property
     def waveset(self):
@@ -97,7 +97,7 @@ class Manager(object):
         if not s:
             history("no selected wave prefix")
             return None
-        return s.waveset  # container of WaveSet objs in selected waveprefix
+        return s.waveset_container  # WaveSet objs in selected waveprefix
 
     @property
     def channel(self):
@@ -111,25 +111,25 @@ class Manager(object):
         if not s:
             history("no selected wave prefix")
             return None
-        return s.channel  # container of Channel objs in selected waveprefix
+        return s.channel_container  # Channel objs in selected waveprefix
 
     @property
     def select(self):
         s = {}
-        if self.experiment:
-            e = self.experiment.select
+        if self.experiment.select:
+            e = self.experiment.select.name
         else:
             e = "None"
-        if self.folder:
-            f = self.folder.select
+        if self.folder.select:
+            f = self.folder.select.name
         else:
             f = "None"
-        if self.waveprefix:
-            p = self.waveprefix.select
+        if self.waveprefix.select:
+            p = self.waveprefix.select.name
         else:
             p = "None"
-        if self.channel:
-            c = self.channel.select
+        if self.channel.select:
+            c = self.channel.select.name
         else:
             c = "None"
         s['project'] = self.project.name
@@ -161,7 +161,7 @@ class Project(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__experiment = ExperimentContainer()
+        self.__experiment_container = ExperimentContainer()
         self.__date = str(datetime.datetime.now())
 
     @property
@@ -176,8 +176,8 @@ class Project(object):
         return True
 
     @property
-    def experiment(self):
-        return self.__experiment
+    def experiment_container(self):
+        return self.__experiment_container
 
     @property
     def date(self):
