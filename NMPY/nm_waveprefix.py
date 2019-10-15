@@ -50,6 +50,12 @@ class WavePrefix(object):
     @property
     def waveset_container(self):
         return self.__waveset_container
+    
+    @property
+    def waveset_select(self):
+        if self.__waveset_container:
+            return self.__waveset_container.select
+        return None
 
     @property
     def numchannels(self):
@@ -83,44 +89,36 @@ class WavePrefix(object):
 
     @channel_select.setter
     def channel_select(self, chan_char):  # e.g 'A'
-        if nmconfig.CHAN_LIST.count(chan_char) == 1:
+        if self.chanlist.count(chan_char) == 1:
             self.__chanselect = chan_char
+            history("selected channel " + chan_char)
             return True
         else:
-            error("unknown channel letter: " + chan_char)
+            error("bad channel select: " + chan_char)
             return False
 
     @property
     def select(self):
-        return [self.__chanselect, self.__waveselect]
-
-    @select.setter
-    def select(self, chan_wave_list):  # e.g ['A', 3]
-        chan_char = chan_wave_list[0]
-        wave = chan_wave_list[1]
-        clist = nmconfig.CHAN_LIST
-        if clist.count(chan_char) == 1:
-            self.__chanselect = chan_char
+        c = self.__chanselect
+        w = self.__waveselect
+        if self.__waveset_container and self.__waveset_container.select:
+            ws = self.__waveset_container.select.name
         else:
-            error("unknown channel letter: " + chan_char)
-            return False
-        chan_num = channel_num(chan_char)
-        # nwaves = len(self.__thewaves[chan])
-        nwaves = 0
-        if wave >= 0 and wave < nwaves:
-            self.__waveselect = wave
-        else:
-            error("wave # out of range: " + str(wave))
-            return False
-        return True
+            ws = "None"
+        s = {}
+        s['channel'] = c
+        s['wave'] = w
+        s['waveset'] = ws
+        return s
 
     @property
     def thewaves(self):
         return self.__thewaves
 
+    @property
     def details(self):
         print("WavePrefix = " + quotes(self.name))
-        print("channels = " + str(self.channels))
+        print("channels = " + str(self.numchannels))
         # print("waves = " + str(self.waves))
         # print("wave list = " + str(self.wave_names))
 
