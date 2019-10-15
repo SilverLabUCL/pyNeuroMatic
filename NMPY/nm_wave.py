@@ -5,7 +5,7 @@ Copyright 2019 Jason Rothman
 """
 import nm_configs as nmconfig
 from nm_container import Container
-from nm_utilities import chan_char
+from nm_utilities import channel_char
 from nm_utilities import name_ok
 from nm_utilities import quotes
 from nm_utilities import error
@@ -66,7 +66,7 @@ class WaveContainer(Container):
             return error("bad prefix " + quotes(prefix))
         mu, sigma = 0, 0.1  # mean and standard deviation
         for i in range(0, nchan):
-            cc = chan_char(i)
+            cc = channel_char(i)
             for j in range(0, nwaves):
                 wname = prefix + cc + str(j)
                 w = self.new(wname, quiet=True)

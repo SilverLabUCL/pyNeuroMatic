@@ -26,7 +26,7 @@ class Folder(object):
     @property
     def name(self):
         return self.__name
-    
+
     @name.setter
     def name(self, name):
         error("use folder rename function")
@@ -34,7 +34,7 @@ class Folder(object):
     @property
     def wave_container(self):
         return self.__wave_container
-    
+
     @property
     def wavelist(self):
         return self.__wave.names

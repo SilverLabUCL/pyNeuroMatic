@@ -9,7 +9,7 @@ from nm_container import Container
 from nm_utilities import name_ok
 from nm_utilities import quotes
 from nm_utilities import error
-from nm_utilities import chan_char
+from nm_utilities import channel_char
 
 
 class Channel(object):
@@ -58,7 +58,7 @@ class ChannelContainer(Container):
             prefix = "Chan"
         n = 10 + len(self.getAll())
         for i in range(0, n):
-            name = prefix + chan_char(i)
+            name = prefix + channel_char(i)
             if not self.exists(name):
                 return name
         return prefix + "Z"

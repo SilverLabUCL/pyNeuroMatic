@@ -3,10 +3,12 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import nm_configs as nmconfig
 from nm_container import Container
 from nm_channel import ChannelContainer
 from nm_waveset import WaveSetContainer
-from nm_utilities import chan_char
+from nm_utilities import channel_char
+from nm_utilities import channel_num
 from nm_utilities import name_ok
 from nm_utilities import quotes
 from nm_utilities import alert
@@ -29,7 +31,7 @@ class WavePrefix(object):
         self.__waveset_container.new("Set1", select=False, quiet=True)
         self.__waveset_container.new("Set2", select=False, quiet=True)
         self.__waveset_container.new("SetX", select=False, quiet=True)
-        self.__chanselect = 0
+        self.__chanselect = 'A'
         self.__waveselect = 0
         # self.print_details()
 
@@ -40,7 +42,7 @@ class WavePrefix(object):
     @name.setter
     def name(self, name):
         error("cannot rename WavePrefix objects")
-        
+
     @property
     def channel_container(self):
         return self.__channel_container
@@ -54,7 +56,7 @@ class WavePrefix(object):
         if not self.__thewaves:
             return 0
         return len(self.__thewaves)
-    
+
     @property
     def chanlist(self):
         if not self.__thewaves:
@@ -62,40 +64,49 @@ class WavePrefix(object):
         clist = []
         channels = len(self.__thewaves)
         for i in range(0, channels):
-            c = chan_char(i)
+            c = channel_char(i)
             clist.append(c)
         return clist
-    
+
     @property
-    def numwaves(self):
+    def numwaves(self):  # waves per channel
         if not self.__thewaves:
             return 0
-        minWaves = 99999
-        maxWaves = 0
         nlist = []
         for row in self.__thewaves:
-            count = len(row)
-            minWaves = min(minWaves, count)
-            maxWaves = max(maxWaves, count)
-            nlist.append(count)
-        if minWaves == maxWaves:
-            return minWaves
+            nlist.append(len(row))
         return nlist
-    
+
+    @property
+    def channel_select(self):
+        return self.__chanselect
+
+    @channel_select.setter
+    def channel_select(self, chan_char):  # e.g 'A'
+        if nmconfig.CHAN_LIST.count(chan_char) == 1:
+            self.__chanselect = chan_char
+            return True
+        else:
+            error("unknown channel letter: " + chan_char)
+            return False
+
     @property
     def select(self):
         return [self.__chanselect, self.__waveselect]
-    
+
     @select.setter
-    def select(self, chan_wave):
-        chan = chan_wave[0]
-        wave = chan_wave[1]
-        if chan >= 0 and chan < self.numchannels:
-            self.__chanselect = chan
+    def select(self, chan_wave_list):  # e.g ['A', 3]
+        chan_char = chan_wave_list[0]
+        wave = chan_wave_list[1]
+        clist = nmconfig.CHAN_LIST
+        if clist.count(chan_char) == 1:
+            self.__chanselect = chan_char
         else:
-            error("channel # out of range: " + str(chan))
+            error("unknown channel letter: " + chan_char)
             return False
-        nwaves = len(self.__thewaves[chan])
+        chan_num = channel_num(chan_char)
+        # nwaves = len(self.__thewaves[chan])
+        nwaves = 0
         if wave >= 0 and wave < nwaves:
             self.__waveselect = wave
         else:
@@ -143,7 +154,7 @@ class WavePrefixContainer(Container):
         foundsomething = False
         thewaves = self.__wave_container.getAll()
         for i in range(0, 25):  # try prefix+chan+seq format
-            cc = chan_char(i)
+            cc = channel_char(i)
             olist = get_items(thewaves, prefix, chan_char=cc)
             if len(olist) > 0:
                 p.thewaves.append(olist)

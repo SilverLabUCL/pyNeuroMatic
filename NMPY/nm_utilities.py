@@ -6,15 +6,23 @@ Copyright 2019 Jason Rothman
 """
 import inspect
 from colorama import Fore, Back, Style
+import nm_configs as nmconfig
 
 
-def chan_char(chanNum):
-    c = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
-         'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
-    if chanNum >= 0 and chanNum < 26:
-        return c[chanNum]
-    error("channel number must be in the range 0-25")
+def channel_char(chan_num):
+    clist = nmconfig.CHAN_LIST
+    if chan_num >= 0 and chan_num < len(clist):
+        return clist[chan_num]
     return ''
+
+
+def channel_num(chan_char):
+    clist = nmconfig.CHAN_LIST
+    try:
+        chan_num = clist.index(chan_char)
+        return chan_num
+    except ValueError:
+        return -1
 
 
 def quotes(text, single=True):
