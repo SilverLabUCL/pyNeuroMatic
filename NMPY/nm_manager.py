@@ -51,7 +51,7 @@ class Manager(object):
         if ec.count == 0:
             history("no experiments")
             return None
-        exp = ec.get("SELECTED")
+        exp = ec.get('selected')
         if not exp:
             history("no selected experiment")
             return None
@@ -65,7 +65,7 @@ class Manager(object):
         if f.count == 0:
             history("no folders")
             return None
-        s = f.get("SELECTED")
+        s = f.get('selected')
         if not s:
             history("no selected folder")
             return None
@@ -79,7 +79,7 @@ class Manager(object):
         if f.count == 0:
             history("no folders")
             return None
-        s = f.get("SELECTED")
+        s = f.get('selected')
         if not s:
             history("no selected folder")
             return None
@@ -93,7 +93,7 @@ class Manager(object):
         if p.count == 0:
             history("no wave prefixes")
             return None
-        s = p.get("SELECTED")
+        s = p.get('selected')
         if not s:
             history("no selected wave prefix")
             return None
@@ -107,7 +107,7 @@ class Manager(object):
         if p.count == 0:
             history("no wave prefixes")
             return None
-        s = p.get("SELECTED")
+        s = p.get('selected')
         if not s:
             history("no selected wave prefix")
             return None

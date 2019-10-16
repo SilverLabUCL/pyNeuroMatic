@@ -94,7 +94,7 @@ class Container(object):
 
     def get(self, name=""):
         """Get object from Container"""
-        if not name or name.casefold() == "SELECTED".casefold():
+        if not name or name.casefold() == 'selected':
             return self.__object_select
         for o in self.__objects:
             if name.casefold() == o.name.casefold():

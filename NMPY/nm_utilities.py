@@ -17,12 +17,11 @@ def channel_char(chan_num):
 
 
 def channel_num(chan_char):
-    clist = nmconfig.CHAN_LIST
-    try:
-        chan_num = clist.index(chan_char)
-        return chan_num
-    except ValueError:
-        return -1
+    if chan_char:
+        for i in range(0, len(nmconfig.CHAN_LIST)):
+            if chan_char.casefold() == nmconfig.CHAN_LIST[i].casefold():
+                return i
+    return -1
 
 
 def quotes(text, single=True):

@@ -25,7 +25,7 @@ class Channel(object):
     @property
     def name(self):
         return self.__name
-    
+
     @name.setter
     def name(self, name):
         error("cannot rename Channel object")

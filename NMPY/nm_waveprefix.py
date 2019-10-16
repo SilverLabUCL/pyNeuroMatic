@@ -44,13 +44,9 @@ class WavePrefix(object):
         error("cannot rename WavePrefix objects")
 
     @property
-    def channel_container(self):
-        return self.__channel_container
-
-    @property
     def waveset_container(self):
         return self.__waveset_container
-    
+
     @property
     def waveset_select(self):
         if self.__waveset_container:
@@ -58,44 +54,76 @@ class WavePrefix(object):
         return None
 
     @property
-    def numchannels(self):
+    def channel_container(self):
+        return self.__channel_container
+
+    @property
+    def channel_count(self):
         if not self.__thewaves:
             return 0
         return len(self.__thewaves)
 
-    @property
-    def chanlist(self):
-        if not self.__thewaves:
+    def channel_list(self, includeAll=False):
+        n = self.channel_count
+        if n == 0:
             return []
-        clist = []
-        channels = len(self.__thewaves)
-        for i in range(0, channels):
+        if includeAll and n > 1:
+            clist = ['All']
+        else:
+            clist = []
+        for i in range(0, n):
             c = channel_char(i)
             clist.append(c)
         return clist
 
-    @property
-    def numwaves(self):  # waves per channel
-        if not self.__thewaves:
-            return 0
-        nlist = []
-        for row in self.__thewaves:
-            nlist.append(len(row))
-        return nlist
+    def channel_ok(self, chan_char):
+        if not chan_char:
+            return False
+        if chan_char.casefold() == "all":
+            return True  # always ok
+        if self.channel_list().count(chan_char) == 1:
+            return True
+        return False
 
     @property
     def channel_select(self):
         return self.__chanselect
 
     @channel_select.setter
-    def channel_select(self, chan_char):  # e.g 'A'
-        if self.chanlist.count(chan_char) == 1:
+    def channel_select(self, chan_char):  # e.g 'A' or 'All'
+        if self.channel_ok(chan_char):
             self.__chanselect = chan_char
             history("selected channel " + chan_char)
             return True
-        else:
-            error("bad channel select: " + chan_char)
-            return False
+        error("bad channel select: " + chan_char)
+        return False
+
+    @property
+    def wave_count(self):  # waves per channel
+        if not self.__thewaves:
+            return [0]
+        nlist = []
+        for row in self.__thewaves:
+            nlist.append(len(row))
+        return nlist
+
+    def wave_ok(self, wave_num):
+        if wave_num >= 0 and wave_num < max(self.wave_count):
+            return True
+        return False
+
+    @property
+    def wave_select(self):
+        return self.__waveselect
+
+    @wave_select.setter
+    def wave_select(self, wave_num):
+        if self.wave_ok(wave_num):
+            self.__waveselect = wave_num
+            history("selected wave #" + str(wave_num))
+            return True
+        error("bad wave number: " + str(wave_num))
+        return False
 
     @property
     def select(self):
@@ -118,9 +146,27 @@ class WavePrefix(object):
     @property
     def details(self):
         print("WavePrefix = " + quotes(self.name))
-        print("channels = " + str(self.numchannels))
-        # print("waves = " + str(self.waves))
+        print("channels = " + str(self.channel_count))
+        print("waves = " + str(self.wave_count))
         # print("wave list = " + str(self.wave_names))
+
+    def wave_list(self, chan_char='selected', wave_num=-1):
+        if not chan_char or chan_char.casefold() == 'selected':
+            chan_char = self.__chanselect
+        if wave_num == -1:
+            wave_num = self.__waveselect
+        wlist = []
+        if chan_char.casefold() == 'all':
+            for chan in self.__thewaves:
+                if wave_num >= 0 and wave_num < len(chan):
+                    wlist.append(chan[wave_num])
+            return wlist
+        chan_num = channel_num(chan_char)
+        if chan_num >= 0 and chan_num < len(self.__thewaves):
+            chan = self.__thewaves[chan_num]
+            if wave_num >= 0 and wave_num < len(chan):
+                return chan[wave_num]
+        return []
 
 
 class WavePrefixContainer(Container):
@@ -170,8 +216,8 @@ class WavePrefixContainer(Container):
             alert("failed to find waves beginning with " + quotes(prefix))
             return None
         self.add(p)
-        # print("channels=" + str(p.numchannels))
-        # print("waves=" + str(p.numwaves))
+        # print("channels=" + str(p.channel_count))
+        # print("waves=" + str(p.wave_count))
         return p
 
     def rename(self, name, newname):  # override, do not call super
