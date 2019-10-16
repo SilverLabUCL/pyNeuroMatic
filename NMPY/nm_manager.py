@@ -86,20 +86,6 @@ class Manager(object):
         return s.waveprefix_container  # WavePrefix objs in seleted folder
 
     @property
-    def waveset(self):
-        p = self.waveprefix
-        if not p:
-            return None
-        if p.count == 0:
-            history("no wave prefixes")
-            return None
-        s = p.get('selected')
-        if not s:
-            history("no selected wave prefix")
-            return None
-        return s.waveset_container  # WaveSet objs in selected waveprefix
-
-    @property
     def channel(self):
         p = self.waveprefix
         if not p:
@@ -114,40 +100,73 @@ class Manager(object):
         return s.channel_container  # Channel objs in selected waveprefix
 
     @property
+    def waveset(self):
+        p = self.waveprefix
+        if not p:
+            return None
+        if p.count == 0:
+            history("no wave prefixes")
+            return None
+        s = p.get('selected')
+        if not s:
+            history("no selected wave prefix")
+            return None
+        return s.waveset_container  # WaveSet objs in selected waveprefix
+
+    @property
     def select(self):
         s = {}
+        exp = 'None'
+        folder = 'None'
+        prefix = 'None'
+        chan = 'None'
+        wave = 0
+        wset = 'All'
         if self.experiment.select:
-            e = self.experiment.select.name
-        else:
-            e = "None"
-        if self.folder.select:
-            f = self.folder.select.name
-        else:
-            f = "None"
-        if self.waveprefix.select:
-            p = self.waveprefix.select.name
-        else:
-            p = "None"
-        if self.channel.select:
-            c = self.channel.select.name
-        else:
-            c = "None"
-        s['project'] = self.project.name
-        s['experiment'] = e
-        s['folder'] = f
-        s['waveprefix'] = p
-        s['channel'] = c
-        s['waveset'] = "All"
+            exp = self.experiment.select
+            if self.folder.select:
+                folder = self.folder.select
+                if self.waveprefix.select:
+                    prefix = self.waveprefix.select
+                    chan = self.waveprefix.select.channel_select
+                    wave = self.waveprefix.select.wave_select
+                    if self.waveset.select:
+                        wset = self.waveset.select
+        s['project'] = self.project
+        s['experiment'] = exp
+        s['folder'] = folder
+        s['waveprefix'] = prefix
+        s['channel'] = chan
+        s['wave'] = wave
+        s['waveset'] = wset
         return s
 
-    def get_selected(self):
+    @property
+    def select_names(self):
         s = {}
-        s['project'] = self.project
-        s['experiment'] = self.experiment  # container
-        s['folder'] = self.folder  # container
-        s['waveprefix'] = self.waveprefix  # container
-        s['channel'] = self.channel  # container
-        s['waveset'] = None  # container
+        exp = 'None'
+        folder = 'None'
+        prefix = 'None'
+        chan = 'None'
+        wave = 0
+        wset = 'All'
+        if self.experiment.select:
+            exp = self.experiment.select.name
+            if self.folder.select:
+                folder = self.folder.select.name
+                if self.waveprefix.select:
+                    prefix = self.waveprefix.select.name
+                    chan = self.waveprefix.select.channel_select
+                    wave = self.waveprefix.select.wave_select
+                    if self.waveset.select:
+                        wset = self.waveset.select.name
+        s['project'] = self.project.name
+        s['experiment'] = exp
+        s['folder'] = folder
+        s['waveprefix'] = prefix
+        s['channel'] = chan
+        s['wave'] = wave
+        s['waveset'] = wset
         return s
 
     def stats(self, project, experiment, folder, waveprefix, channel, waveset):

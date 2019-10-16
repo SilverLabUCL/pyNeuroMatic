@@ -8,6 +8,7 @@ import nm_configs as nmconfig
 from nm_container import Container
 from nm_utilities import name_ok
 from nm_utilities import quotes
+from nm_utilities import alert
 from nm_utilities import error
 from nm_utilities import channel_char
 
@@ -49,6 +50,14 @@ class ChannelContainer(Container):
 
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Channel)
+
+    @property
+    def select(self):  # override, do not call super
+        return 'NOT USED. See nm.waveprefix.select.channel_select'
+
+    @select.setter
+    def select(self, name):
+        alert('NOT USED. See nm.waveprefix.select.channel_select')
 
     def name_next(self):  # override, do not call super
         """Get next default channel name."""

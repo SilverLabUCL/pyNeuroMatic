@@ -72,8 +72,8 @@ class WavePrefix(object):
         else:
             clist = []
         for i in range(0, n):
-            c = channel_char(i)
-            clist.append(c)
+            cc = channel_char(i)
+            clist.append(cc)
         return clist
 
     def channel_ok(self, chan_char):
@@ -203,6 +203,7 @@ class WavePrefixContainer(Container):
             if len(olist) > 0:
                 p.thewaves.append(olist)
                 foundsomething = True
+                p.channel_container.new(quiet=True)
                 history(prefix + ", Ch " + cc + ", waves=" + str(len(olist)))
             else:
                 break  # no more channels
@@ -211,6 +212,7 @@ class WavePrefixContainer(Container):
             if len(olist) > 0:
                 p.thewaves.append(olist)
                 foundsomething = True
+                p.channel_container.new(quiet=True)
                 history(prefix + ", Ch " + cc + ", waves=" + str(len(olist)))
         if not foundsomething:
             alert("failed to find waves beginning with " + quotes(prefix))
