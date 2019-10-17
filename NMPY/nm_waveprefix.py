@@ -24,9 +24,10 @@ class WavePrefix(object):
 
     def __init__(self, name):
         self.__name = name  # name is actually a prefix
-        self.__thewaves = []  # 2D matrix, i = channel #, j = wave #
+        self.__waves_all = []  # 2D matrix, i = channel #, j = wave #
+        self.__waves_selected = []  # 2D matrix, i = channel #, j = wave #
         self.__channel_container = ChannelContainer()
-        self.__waveset_container = WaveSetContainer(self.__thewaves)
+        self.__waveset_container = WaveSetContainer(self.__waves_all)
         self.__waveset_container.new("All", select=True, quiet=True)
         self.__waveset_container.new("Set1", select=False, quiet=True)
         self.__waveset_container.new("Set2", select=False, quiet=True)
@@ -59,9 +60,9 @@ class WavePrefix(object):
 
     @property
     def channel_count(self):
-        if not self.__thewaves:
+        if not self.__waves_all:
             return 0
-        return len(self.__thewaves)
+        return len(self.__waves_all)
 
     def channel_list(self, includeAll=False):
         n = self.channel_count
@@ -100,10 +101,10 @@ class WavePrefix(object):
 
     @property
     def wave_count(self):  # waves per channel
-        if not self.__thewaves:
+        if not self.__waves_all:
             return [0]
         nlist = []
-        for row in self.__thewaves:
+        for row in self.__waves_all:
             nlist.append(len(row))
         return nlist
 
@@ -141,7 +142,7 @@ class WavePrefix(object):
 
     @property
     def thewaves(self):
-        return self.__thewaves
+        return self.__waves_all
 
     @property
     def details(self):
@@ -157,13 +158,13 @@ class WavePrefix(object):
             wave_num = self.__waveselect
         wlist = []
         if chan_char.casefold() == 'all':
-            for chan in self.__thewaves:
+            for chan in self.__waves_all:
                 if wave_num >= 0 and wave_num < len(chan):
                     wlist.append(chan[wave_num])
             return wlist
         chan_num = channel_num(chan_char)
-        if chan_num >= 0 and chan_num < len(self.__thewaves):
-            chan = self.__thewaves[chan_num]
+        if chan_num >= 0 and chan_num < len(self.__waves_all):
+            chan = self.__waves_all[chan_num]
             if wave_num >= 0 and wave_num < len(chan):
                 return chan[wave_num]
         return []
@@ -171,12 +172,11 @@ class WavePrefix(object):
 
 class WavePrefixContainer(Container):
     """
-    Container for NM WavePrefixes
+    NM Container for WavePrefix objects
     """
 
     def __init__(self, wave_container):
-        super().__init__()
-        self.prefix = ""  # not used
+        super().__init__(prefix="")
         self.__wave_container = wave_container
 
     def object_new(self, name):  # override, do not call super
