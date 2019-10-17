@@ -6,6 +6,7 @@ Copyright 2019 Jason Rothman
 """
 import inspect
 from colorama import Fore, Back, Style
+
 import nm_configs as nmconfig
 
 

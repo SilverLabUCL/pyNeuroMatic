@@ -48,8 +48,7 @@ class WaveContainer(Container):
     Container for NM Experimnents
     """
     def __init__(self):
-        super().__init__()
-        self.prefix = nmconfig.WAVE_PREFIX
+        super().__init__(prefix=nmconfig.WAVE_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Wave(name)

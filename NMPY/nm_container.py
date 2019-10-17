@@ -6,6 +6,7 @@ Copyright 2019 Jason Rothman
 """
 import copy
 import datetime
+
 from nm_utilities import quotes
 from nm_utilities import name_ok
 from nm_utilities import error
@@ -14,25 +15,33 @@ from nm_utilities import history
 
 class Container(object):
     """
-    NM Container class
-    Container (i.e. list) for NM objects
-    Children: ExperimentContainer, FolderContainer, ChannelContainer,
-    WaveContainer, WavePrefixContainer, WaveSetContainer
-
+    A list container for NM objects, one of which is 'selected'.
+    
     Each stored object must have a unique name. The name can start with the
-    same prefix (e.g. "NMExp") but this is optional. Use names_next to
-    create unique names with the given prefix (e.g. "NMExp0", "NMExp1", etc.)
-
+    same prefix (e.g. "NMExp") but this is optional. Use name_next() to
+    create unique names in a sequence (e.g. "NMExp0", "NMExp1", etc.).
     One object is selected/activated at a given time. This object can be
-    accessed via get/select functions.
+    accessed via 'select' property.
+
+    Known Children:
+        ExperimentContainer, FolderContainer, WaveContainer,
+        WavePrefixContainer, ChannelContainer, WaveSetContainer
+
+    Attributes:
+        prefix (str): For creating object name via name_next(), name = prefix + seq #
+        __objects : list
+            List container of objects
+        __object_select : object
+            The selected object
+        
     """
 
-    def __init__(self):
-        self.__prefix = "NMObj"  # for creating default names (see names_next)
-        self.__objects = []  # the container of NM objects
-        self.__object_select = None  # selected item of container
+    def __init__(self, prefix="NMObj"):
+        self.__prefix = prefix  # used in name_next()
+        self.__objects = []  # container of NM objects
+        self.__object_select = None  # selected object
         self.__date = str(datetime.datetime.now())
-        self.__count_from = 0
+        self.__count_from = 0  # used in name_next()
 
     @property
     def date(self):

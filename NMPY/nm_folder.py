@@ -4,6 +4,7 @@ NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import h5py
+
 import nm_configs as nmconfig
 from nm_container import Container
 from nm_wave import WaveContainer
@@ -50,8 +51,7 @@ class FolderContainer(Container):
     """
 
     def __init__(self):
-        super().__init__()
-        self.prefix = nmconfig.FOLDER_PREFIX
+        super().__init__(prefix=nmconfig.FOLDER_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Folder(name)

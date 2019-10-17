@@ -42,8 +42,7 @@ class ChannelContainer(Container):
     """
 
     def __init__(self):
-        super().__init__()
-        self.prefix = nmconfig.CHAN_PREFIX
+        super().__init__(prefix=nmconfig.CHAN_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Channel(name)

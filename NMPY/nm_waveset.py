@@ -39,8 +39,7 @@ class WaveSetContainer(Container):
     """
 
     def __init__(self, thewaves):
-        super().__init__()
-        self.prefix = nmconfig.SET_PREFIX
+        super().__init__(prefix=nmconfig.SET_PREFIX)
         self.__thewaves = thewaves  # 2D matrix, i = channel #, j = wave #
         self.count_from = 1
 

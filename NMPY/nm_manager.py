@@ -4,6 +4,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import datetime
+
 import nm_configs as nmconfig
 from nm_experiment import ExperimentContainer
 from nm_utilities import name_ok
