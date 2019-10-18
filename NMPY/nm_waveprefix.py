@@ -24,10 +24,9 @@ class WavePrefix(object):
 
     def __init__(self, name):
         self.__name = name  # name is actually a prefix
-        self.__waves_all = []  # 2D matrix, i = channel #, j = wave #
-        self.__waves_selected = []  # 2D matrix, i = channel #, j = wave #
+        self.__waves_all = []  # 2D matrix, i = chan #, j = wave #
         self.__channel_container = ChannelContainer()
-        self.__waveset_container = WaveSetContainer(self.__waves_all)
+        self.__waveset_container = WaveSetContainer(self)
         self.__waveset_container.new("All", select=True, quiet=True)
         self.__waveset_container.new("Set1", select=False, quiet=True)
         self.__waveset_container.new("Set2", select=False, quiet=True)
@@ -108,7 +107,7 @@ class WavePrefix(object):
             nlist.append(len(row))
         return nlist
 
-    def wave_ok(self, wave_num):
+    def wave_num_ok(self, wave_num):
         if wave_num >= 0 and wave_num < max(self.wave_count):
             return True
         return False
@@ -119,7 +118,7 @@ class WavePrefix(object):
 
     @wave_select.setter
     def wave_select(self, wave_num):
-        if self.wave_ok(wave_num):
+        if self.wave_num_ok(wave_num):
             self.__waveselect = wave_num
             history("selected wave #" + str(wave_num))
             return True

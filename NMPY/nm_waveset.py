@@ -9,6 +9,7 @@ from nm_container import Container
 from nm_utilities import name_ok
 from nm_utilities import quotes
 from nm_utilities import error
+from nm_utilities import history
 
 
 class WaveSet(object):
@@ -18,7 +19,7 @@ class WaveSet(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__waveset = set()
+        self.__theset = set()
 
     @property
     def name(self):
@@ -29,8 +30,12 @@ class WaveSet(object):
         error("use waveset rename function")
 
     @property
-    def waveset(self):
-        return self.__waveset
+    def theset(self):
+        return self.__theset
+    
+    def add_wave(self, wave):
+        self.__theset.add(wave)
+        history("added " + wave.name + " to " + self.__name)
 
 
 class WaveSetContainer(Container):
@@ -38,31 +43,50 @@ class WaveSetContainer(Container):
     Container for NM WaveSet
     """
 
-    def __init__(self, thewaves):
+    def __init__(self, wave_prefix):
         super().__init__(prefix=nmconfig.SET_PREFIX)
-        self.__thewaves = thewaves  # 2D matrix, i = channel #, j = wave #
         self.count_from = 1
+        self.__wave_prefix = wave_prefix
+        self.__set_select = "All"
 
     def object_new(self, name):  # override, do not call super
         return WaveSet(name)
 
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, WaveSet)
+    
+    @property
+    def select(self):  # override, do not call super
+        return self.__set_select
 
+    @select.setter
+    def select(self, set_eq):
+        self.__set_select = set_eq
+        
     def rename(self, name, newname):  # override
-        o = self.get(name)
-        if not o:
+        s = self.get(name)
+        if not s:
             return False
-        if o.name.casefold() == "All".casefold():
+        if s.name.casefold() == "all":
             error("cannot rename 'All' set")
             return False
-        if o.name.casefold() == "SetX".casefold():
+        if s.name.casefold() == "setx":
             error("cannot rename SetX")
             return False
         return super().rename(name, newname)
 
-    def addWave(self, name, wavename):
-        o = self.get(name)
-        if not o:
+    def add(self, name, wave_num):
+        s = self.get(name)
+        if not s:
             return False
-        return False
+        if wave_num == -1:
+            wave_num = self.__wave_prefix.wave_select
+        for chan in self.__wave_prefix.thewaves:
+            if wave_num < 0 or wave_num >= len(chan):
+                return False
+            s.add_wave(chan[wave_num])
+        return True
+    
+    def getSelected(self):
+        return []
+
