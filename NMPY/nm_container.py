@@ -24,8 +24,8 @@ class Container(object):
     accessed via 'select' property.
 
     Known Children:
-        ExperimentContainer, FolderContainer, WaveContainer,
-        WavePrefixContainer, ChannelContainer, WaveSetContainer
+        ExperimentContainer, FolderContainer, DataContainer,
+        DataPrefixContainer, ChannelContainer, EpochSetContainer
 
     Attributes:
         prefix (str): For creating object name via name_next(), name = prefix + seq #
@@ -76,7 +76,7 @@ class Container(object):
         return len(self.__objects)
 
     @property
-    def names(self):
+    def name_list(self):
         """Get list of names of objects stored in Container"""
         nlist = []
         if self.__objects:
@@ -85,7 +85,7 @@ class Container(object):
         return nlist
 
     def object_new(self, name):  # child class should override this function
-        return object  # change object to Experiment, Folder, Wave, etc.
+        return object  # change object to Experiment, Folder, TimeSeries, etc.
 
     def instance_ok(self, obj):  # child class should override this function
         return isinstance(obj, object)  # change object to Experiment, etc.
@@ -143,7 +143,7 @@ class Container(object):
     def add(self, obj, select=True, quiet=False):
         """Add object to Container."""
         if not self.instance_ok(obj):
-            return error("encountered bad Container")
+            return error("encountered bad Container object")
         if not name_ok(obj.name):
             return error("bad name " + quotes(obj.name))
         if self.exists(obj.name):

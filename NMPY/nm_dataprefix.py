@@ -6,7 +6,7 @@ Copyright 2019 Jason Rothman
 import nm_configs as nmconfig
 from nm_container import Container
 from nm_channel import ChannelContainer
-from nm_waveset import WaveSetContainer
+from nm_epoch_set import EpochSetContainer
 from nm_utilities import channel_char
 from nm_utilities import channel_num
 from nm_utilities import name_ok
@@ -17,22 +17,21 @@ from nm_utilities import history
 from nm_utilities import get_items
 
 
-class WavePrefix(object):
+class DataPrefix(object):
     """
-    NM WavePrefix class
+    NM DataPrefix class
     """
 
     def __init__(self, name):
         self.__name = name  # name is actually a prefix
-        self.__waves_all = []  # 2D matrix, i = chan #, j = wave #
+        self.__thedata = []  # 2D list, i = chan #, j = seq #
         self.__channel_container = ChannelContainer()
-        self.__waveset_container = WaveSetContainer(self)
-        self.__waveset_container.new("All", select=True, quiet=True)
-        self.__waveset_container.new("Set1", select=False, quiet=True)
-        self.__waveset_container.new("Set2", select=False, quiet=True)
-        self.__waveset_container.new("SetX", select=False, quiet=True)
-        self.__chanselect = 'A'
-        self.__waveselect = 0
+        self.__eset_container = EpochSetContainer(self)
+        for s in nmconfig.ESETS_DEFAULT:
+            self.__eset_container.new(s, select=False, quiet=True)
+        self.__eset_container.select = "All"
+        self.__chan_select = 'A'
+        self.__epoch_select = 0
         # self.print_details()
 
     @property
@@ -41,16 +40,16 @@ class WavePrefix(object):
 
     @name.setter
     def name(self, name):
-        error("cannot rename WavePrefix objects")
+        error("cannot rename DataPrefix objects")
 
     @property
-    def waveset_container(self):
-        return self.__waveset_container
+    def eset_container(self):
+        return self.__eset_container
 
     @property
-    def waveset_select(self):
-        if self.__waveset_container:
-            return self.__waveset_container.select
+    def eset_select(self):
+        if self.__eset_container:
+            return self.__eset_container.select
         return None
 
     @property
@@ -59,9 +58,9 @@ class WavePrefix(object):
 
     @property
     def channel_count(self):
-        if not self.__waves_all:
+        if not self.__thedata:
             return 0
-        return len(self.__waves_all)
+        return len(self.__thedata)
 
     def channel_list(self, includeAll=False):
         n = self.channel_count
@@ -87,105 +86,102 @@ class WavePrefix(object):
 
     @property
     def channel_select(self):
-        return self.__chanselect
+        return self.__chan_select
 
     @channel_select.setter
     def channel_select(self, chan_char):  # e.g 'A' or 'All'
         if self.channel_ok(chan_char):
-            self.__chanselect = chan_char
+            self.__chan_select = chan_char
             history("selected channel " + chan_char)
             return True
         error("bad channel select: " + chan_char)
         return False
 
     @property
-    def wave_count(self):  # waves per channel
-        if not self.__waves_all:
+    def epoch_count(self):  # epochs per channel
+        if not self.__thedata:
             return [0]
-        nlist = []
-        for row in self.__waves_all:
-            nlist.append(len(row))
-        return nlist
+        elist = []
+        for chan in self.__thedata:
+            elist.append(len(chan))
+        return elist
 
-    def wave_num_ok(self, wave_num):
-        if wave_num >= 0 and wave_num < max(self.wave_count):
+    def epoch_ok(self, epoch):
+        if epoch >= 0 and epoch < max(self.epoch_count):
             return True
         return False
 
     @property
-    def wave_select(self):
-        return self.__waveselect
+    def epoch_select(self):
+        return self.__epoch_select
 
-    @wave_select.setter
-    def wave_select(self, wave_num):
-        if self.wave_num_ok(wave_num):
-            self.__waveselect = wave_num
-            history("selected wave #" + str(wave_num))
+    @epoch_select.setter
+    def epoch_select(self, epoch):
+        if self.epoch_ok(epoch):
+            self.__epoch_select = epoch
+            history("selected epoch #" + str(epoch))
             return True
-        error("bad wave number: " + str(wave_num))
+        error("bad epoch number: " + str(epoch))
         return False
 
     @property
     def select(self):
-        c = self.__chanselect
-        w = self.__waveselect
-        if self.__waveset_container and self.__waveset_container.select:
-            ws = self.__waveset_container.select.name
-        else:
-            ws = "None"
         s = {}
-        s['channel'] = c
-        s['wave'] = w
-        s['waveset'] = ws
+        s['channel'] = self.__chan_select
+        s['epoch'] = self.__epoch_select
+        if self.__eset_container and self.__eset_container.select:
+            s['eset'] = self.__eset_container.select.name
+        else:
+            s['eset'] = 'None'
         return s
 
     @property
-    def thewaves(self):
-        return self.__waves_all
+    def thedata(self):
+        return self.__thedata
 
     @property
     def details(self):
-        print("WavePrefix = " + quotes(self.name))
+        print("data prefix = " + quotes(self.name))
         print("channels = " + str(self.channel_count))
-        print("waves = " + str(self.wave_count))
-        # print("wave list = " + str(self.wave_names))
+        print("epochs = " + str(self.epoch_count))
+        # print("data list = " + str(self.data_names))
 
-    def wave_list(self, chan_char='selected', wave_num=-1):
+    def data_list(self, chan_char='selected', epoch=-1):
         if not chan_char or chan_char.casefold() == 'selected':
-            chan_char = self.__chanselect
-        if wave_num == -1:
-            wave_num = self.__waveselect
-        wlist = []
+            chan_char = self.__chan_select
+        if epoch == -1:
+            epoch = self.__epoch_select
+        dlist = []
         if chan_char.casefold() == 'all':
-            for chan in self.__waves_all:
-                if wave_num >= 0 and wave_num < len(chan):
-                    wlist.append(chan[wave_num])
-            return wlist
+            for chan in self.__thedata:
+                if epoch >= 0 and epoch < len(chan):
+                    dlist.append(chan[epoch])
+            return dlist
         chan_num = channel_num(chan_char)
-        if chan_num >= 0 and chan_num < len(self.__waves_all):
-            chan = self.__waves_all[chan_num]
-            if wave_num >= 0 and wave_num < len(chan):
-                return chan[wave_num]
+        if chan_num >= 0 and chan_num < len(self.__thedata):
+            chan = self.__thedata[chan_num]
+            if epoch >= 0 and epoch < len(chan):
+                return chan[epoch]
         return []
 
 
-class WavePrefixContainer(Container):
+class DataPrefixContainer(Container):
     """
-    NM Container for WavePrefix objects
+    NM Container for DataPrefix objects
     """
 
-    def __init__(self, wave_container):
+    def __init__(self, data_container):
         super().__init__(prefix="")
-        self.__wave_container = wave_container
+        self.__data_container = data_container
 
     def object_new(self, name):  # override, do not call super
-        return WavePrefix(name)
+        return DataPrefix(name)
 
     def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, WavePrefix)
+        return isinstance(obj, DataPrefix)
 
     def name_next(self):  # override, do not call super
-        error("WavePrefix objects do not have names with a common prefix")
+        error("DataPrefix objects do not have names with a common prefix")
         return ""
 
     def new(self, name="", select=True):  # override, do not call super
@@ -193,38 +189,38 @@ class WavePrefixContainer(Container):
         if not name_ok(prefix):
             error("bad prefix " + quotes(prefix))
             return None
-        p = WavePrefix(prefix)
+        p = DataPrefix(prefix)
         foundsomething = False
-        thewaves = self.__wave_container.getAll()
+        thedata = self.__data_container.getAll()
         for i in range(0, 25):  # try prefix+chan+seq format
             cc = channel_char(i)
-            olist = get_items(thewaves, prefix, chan_char=cc)
+            olist = get_items(thedata, prefix, chan_char=cc)
             if len(olist) > 0:
-                p.thewaves.append(olist)
+                p.thedata.append(olist)
                 foundsomething = True
                 p.channel_container.new(quiet=True)
-                history(prefix + ", Ch " + cc + ", waves=" + str(len(olist)))
+                history(prefix + ", Ch " + cc + ", epochs=" + str(len(olist)))
             else:
                 break  # no more channels
         if not foundsomething:  # try without chan
-            olist = get_items(thewaves, prefix)
+            olist = get_items(thedata, prefix)
             if len(olist) > 0:
-                p.thewaves.append(olist)
+                p.thedata.append(olist)
                 foundsomething = True
                 p.channel_container.new(quiet=True)
-                history(prefix + ", Ch " + cc + ", waves=" + str(len(olist)))
+                history(prefix + ", Ch " + cc + ", epochs=" + str(len(olist)))
         if not foundsomething:
-            alert("failed to find waves beginning with " + quotes(prefix))
+            alert("failed to find data beginning with " + quotes(prefix))
             return None
         self.add(p)
         # print("channels=" + str(p.channel_count))
-        # print("waves=" + str(p.wave_count))
+        # print("epochs=" + str(p.epoch_count))
         return p
 
     def rename(self, name, newname):  # override, do not call super
-        error("cannot rename WavePrefix objects")
+        error("cannot rename DataPrefix objects")
         return False
 
     def duplicate(self, name, newname, select=False):  # override
-        error("cannot duplicate WavePrefix objects")
+        error("cannot duplicate DataPrefix objects")
         return None  # not sued

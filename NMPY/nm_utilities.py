@@ -25,6 +25,19 @@ def channel_num(chan_char):
     return -1
 
 
+
+def chan_char_exists(text, chan_char):
+    if not text or not chan_char or len(chan_char) > 1:
+        return False
+    numchar = len(text)
+    for i in reversed(range(numchar)):  # search backwards
+        if text[i].isdigit():  # skip thru seq number
+            continue
+        if text[i].casefold() == chan_char.casefold():  # first char before seq #
+            return True
+    return False
+
+
 def quotes(text, single=True):
     if not text:
         text = ""
@@ -87,18 +100,6 @@ def get_items(nm_obj_list, prefix, chan_char=""):
             else:
                 olist.append(o)
     return olist
-
-
-def chan_char_exists(text, chan_char):
-    if not text or not chan_char or len(chan_char) > 1:
-        return False
-    numchar = len(text)
-    for i in reversed(range(numchar)):  # search backwards
-        if text[i].isdigit():  # skip thru seq number
-            continue
-        if text[i].casefold() == chan_char.casefold():  # first char before seq #
-            return True
-    return False
 
 
 def alert(text):

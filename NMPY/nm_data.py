@@ -12,64 +12,60 @@ from nm_utilities import error
 import numpy as np
 
 
-class Wave(object):
+class Data(object):
     """
-    NM Wave class
-    Include: wave properties (xstart, dx...) and wave notes
+    NM Data class
+    Include: time-series properties (xstart, dx...) and notes
     """
 
     def __init__(self, name):
         self.__name = name
-        self.__data = np.array([], dtype=np.float64)
+        self.__thedata = np.array([], dtype=np.float64)
 
     @property
     def name(self):
         return self.__name
-    
+
     @name.setter
     def name(self, name):
-        error("use wave rename function")
+        error("use data rename function")
 
     @property
-    def data(self):
-        return self.__data
+    def thedata(self):
+        return self.__thedata
 
-    @data.setter
-    def data(self, data):
-        self.__data = data
-
-    @property
-    def numwaves(self):
-        return len(self.__data)
+    @thedata.setter
+    def thedata(self, np_array):
+        self.__thedata = np_array
 
 
-class WaveContainer(Container):
+class DataContainer(Container):
     """
-    Container for NM Experimnents
+    Container for NM Data objects
     """
     def __init__(self):
-        super().__init__(prefix=nmconfig.WAVE_PREFIX)
+        super().__init__(prefix=nmconfig.DATA_PREFIX)
 
     def object_new(self, name):  # override, do not call super
-        return Wave(name)
+        return Data(name)
 
     def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, Wave)
+        return isinstance(obj, Data)
 
-    def make(self, prefix="", nchan=1, nwaves=5, points=10, noise=False):
-        if nchan <= 0 or nwaves <= 0:
+    def make(self, prefix="", channels=1, epochs=5, samples=10, noise=False):
+        if channels <= 0 or epochs <= 0:
             return False
         if not prefix:
             prefix = self.prefix
         if not name_ok(prefix):
             return error("bad prefix " + quotes(prefix))
         mu, sigma = 0, 0.1  # mean and standard deviation
-        for i in range(0, nchan):
+        for i in range(0, channels):
             cc = channel_char(i)
-            for j in range(0, nwaves):
-                wname = prefix + cc + str(j)
-                w = self.new(wname, quiet=True)
-                if w and noise:
-                    w.data = np.random.normal(mu, sigma, points)
+            for j in range(0, epochs):
+                name = prefix + cc + str(j)
+                ts = self.new(name, quiet=True)
+                if ts and noise:
+                    ts.thedata = np.random.normal(mu, sigma, samples)
                     # print(w.data)
         return True

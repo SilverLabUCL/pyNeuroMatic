@@ -31,10 +31,6 @@ class Channel(object):
     def name(self, name):
         error("cannot rename Channel object")
 
-    @property
-    def waveset(self):
-        return self.__waveset
-
 
 class ChannelContainer(Container):
     """
@@ -52,11 +48,11 @@ class ChannelContainer(Container):
 
     @property
     def select(self):  # override, do not call super
-        return 'NOT USED. See nm.waveprefix.select.channel_select'
+        return 'NOT USED. See nm.dataprefix.select.channel_select'
 
     @select.setter
     def select(self, name):
-        alert('NOT USED. See nm.waveprefix.select.channel_select')
+        alert('NOT USED. See nm.dataprefix.select.channel_select')
 
     def name_next(self):  # override, do not call super
         """Get next default channel name."""

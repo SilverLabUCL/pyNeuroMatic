@@ -28,15 +28,21 @@ class Manager(object):
         self.__project = Project(name)
         self.experiment.new()  # create default experiment
         self.folder.new()  # create default folder
-        self.wave_test()
+        self.data_test()
 
-    def wave_test(self):
-        noise = True
-        self.wave.make(prefix="Record", nchan=1, nwaves=3, points=5, noise=noise)
-        self.wave.make(prefix="Wave", nchan=3, nwaves=4, points=5, noise=noise)
-        self.waveprefix.new("Record")
-        self.waveprefix.new("Wave")
-        self.waveprefix.new("Test")
+    def data_test(self):
+        n = True
+        self.data.make(prefix="Record", channels=1, epochs=3, samples=5, noise=n)
+        self.data.make(prefix="Wave", channels=3, epochs=8, samples=5, noise=n)
+        self.dataprefix.new("Record")
+        self.dataprefix.new("Wave")
+        self.dataprefix.new("Test")
+        for i in range(0, 8, 2):
+            self.eset.add("Set1", i, quiet=False)
+        self.eset.add("SetX", 4, quiet=False)
+        # self.eset.select="Set1"
+        clist = self.eset.get_selected()
+        print(clist)
 
     @property
     def project(self):
@@ -44,11 +50,11 @@ class Manager(object):
 
     @property
     def experiment(self):
-        return self.__project.experiment_container
+        return self.__project.exp_container
 
     @property
     def folder(self):
-        ec = self.__project.experiment_container
+        ec = self.__project.exp_container
         if ec.count == 0:
             history("no experiments")
             return None
@@ -59,7 +65,7 @@ class Manager(object):
         return exp.folder_container  # Folder objs in selected experiment
 
     @property
-    def wave(self):
+    def data(self):
         f = self.folder
         if not f:
             return None
@@ -70,10 +76,10 @@ class Manager(object):
         if not s:
             history("no selected folder")
             return None
-        return s.wave_container  # Wave objs in seleted folder
+        return s.data_container  # Data objs in seleted folder
 
     @property
-    def waveprefix(self):
+    def dataprefix(self):
         f = self.folder
         if not f:
             return None
@@ -84,35 +90,35 @@ class Manager(object):
         if not s:
             history("no selected folder")
             return None
-        return s.waveprefix_container  # WavePrefix objs in seleted folder
+        return s.dataprefix_container  # DataPrefix objs in seleted folder
 
     @property
     def channel(self):
-        p = self.waveprefix
+        p = self.dataprefix
         if not p:
             return None
         if p.count == 0:
-            history("no wave prefixes")
+            history("no data prefixes")
             return None
         s = p.get('selected')
         if not s:
-            history("no selected wave prefix")
+            history("no selected data prefix")
             return None
-        return s.channel_container  # Channel objs in selected waveprefix
+        return s.channel_container  # Channel objs in selected dataprefix
 
     @property
-    def waveset(self):
-        p = self.waveprefix
+    def eset(self):  # epoch set
+        p = self.dataprefix
         if not p:
             return None
         if p.count == 0:
-            history("no wave prefixes")
+            history("no data prefixes")
             return None
         s = p.get('selected')
         if not s:
-            history("no selected wave prefix")
+            history("no selected data prefix")
             return None
-        return s.waveset_container  # WaveSet objs in selected waveprefix
+        return s.eset_container  # EpochSet objs in selected dataprefix
 
     @property
     def select(self):
@@ -121,25 +127,25 @@ class Manager(object):
         folder = 'None'
         prefix = 'None'
         chan = 'None'
-        wave = 0
-        wset = 'All'
+        epoch = 0
+        eset = 'All'
         if self.experiment.select:
             exp = self.experiment.select
             if self.folder.select:
                 folder = self.folder.select
-                if self.waveprefix.select:
-                    prefix = self.waveprefix.select
-                    chan = self.waveprefix.select.channel_select
-                    wave = self.waveprefix.select.wave_select
-                    if self.waveset.select:
-                        wset = self.waveset.select
+                if self.dataprefix.select:
+                    prefix = self.dataprefix.select
+                    chan = self.dataprefix.select.channel_select
+                    epoch = self.dataprefix.select.epoch_select
+                    if self.eset.select:
+                        eset = self.eset.select
         s['project'] = self.project
         s['experiment'] = exp
         s['folder'] = folder
-        s['waveprefix'] = prefix
+        s['dataprefix'] = prefix
         s['channel'] = chan
-        s['wave'] = wave
-        s['waveset'] = wset
+        s['epoch'] = epoch
+        s['eset'] = eset
         return s
 
     @property
@@ -149,29 +155,29 @@ class Manager(object):
         folder = 'None'
         prefix = 'None'
         chan = 'None'
-        wave = 0
-        wset = 'All'
+        epoch = 0
+        eset = 'All'
         if self.experiment.select:
             exp = self.experiment.select.name
             if self.folder.select:
                 folder = self.folder.select.name
-                if self.waveprefix.select:
-                    prefix = self.waveprefix.select.name
-                    chan = self.waveprefix.select.channel_select
-                    wave = self.waveprefix.select.wave_select
-                    if self.waveset.select:
-                        wset = self.waveset.select.name
+                if self.dataprefix.select:
+                    prefix = self.dataprefix.select.name
+                    chan = self.dataprefix.select.channel_select
+                    epoch = self.dataprefix.select.epoch_select
+                    if self.eset.select:
+                        eset = self.eset.select.name
         s['project'] = self.project.name
         s['experiment'] = exp
         s['folder'] = folder
-        s['waveprefix'] = prefix
+        s['dataprefix'] = prefix
         s['channel'] = chan
-        s['wave'] = wave
-        s['waveset'] = wset
+        s['epoch'] = epoch
+        s['eset'] = eset
         return s
 
-    def stats(self, project, experiment, folder, waveprefix, channel, waveset):
-        print(project, experiment, folder, waveprefix, channel, waveset)
+    def stats(self, project, experiment, folder, dataprefix, channel, eset):
+        print(project, experiment, folder, dataprefix, channel, eset)
 
 
 class Project(object):
@@ -181,7 +187,7 @@ class Project(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__experiment_container = ExperimentContainer()
+        self.__exp_container = ExperimentContainer()
         self.__date = str(datetime.datetime.now())
 
     @property
@@ -196,8 +202,8 @@ class Project(object):
         return True
 
     @property
-    def experiment_container(self):
-        return self.__experiment_container
+    def exp_container(self):
+        return self.__exp_container
 
     @property
     def date(self):
@@ -209,5 +215,5 @@ if __name__ == '__main__':
     # s = nm.selected_names
     # nm.stats(**s)
     # nm.exp.folder_new(name="NMFolder0")
-    # nm.exp.folder.waveprefix_new(prefix="Record")
+    # nm.exp.folder.dataprefix_new(prefix="Record")
     # nm.exp.folder_open_hdf5()

@@ -7,8 +7,8 @@ import h5py
 
 import nm_configs as nmconfig
 from nm_container import Container
-from nm_wave import WaveContainer
-from nm_waveprefix import WavePrefixContainer
+from nm_data import DataContainer
+from nm_dataprefix import DataPrefixContainer
 from nm_utilities import name_ok
 from nm_utilities import quotes
 from nm_utilities import error
@@ -21,8 +21,8 @@ class Folder(object):
 
     def __init__(self, name):
         self.__name = name
-        self.__wave_container = WaveContainer()
-        self.__waveprefix_container = WavePrefixContainer(self.__wave_container)
+        self.__data_container = DataContainer()
+        self.__dataprefix_container = DataPrefixContainer(self.__data_container)
 
     @property
     def name(self):
@@ -33,16 +33,16 @@ class Folder(object):
         error("use folder rename function")
 
     @property
-    def wave_container(self):
-        return self.__wave_container
+    def data_container(self):
+        return self.__data_container
 
     @property
-    def wavelist(self):
-        return self.__wave.names
+    def data_list(self):
+        return self.__data_container.name_list
 
     @property
-    def waveprefix_container(self):
-        return self.__waveprefix_container
+    def dataprefix_container(self):
+        return self.__dataprefix_container
 
 
 class FolderContainer(Container):
@@ -60,12 +60,12 @@ class FolderContainer(Container):
         return isinstance(obj, Folder)
 
     def open_hdf5(self):
-        wave_prefix = "Record"
+        dataprefix = "Record"
         with h5py.File('nmFolder0.hdf5', 'r') as f:
             #print(f.keys())
             data = []
             for k in f.keys():
-                if k[0:len(wave_prefix)] == wave_prefix:
+                if k[0:len(dataprefix)] == dataprefix:
                     print(k)
             # for name in f:
                 # print(name)
