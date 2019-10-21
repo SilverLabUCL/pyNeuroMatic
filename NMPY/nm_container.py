@@ -99,7 +99,8 @@ class Container(object):
         t = self.__type()
         if t == "None":
             return t
-        return t + " " + quotes(name)  # object type + name
+        #return t + " " + quotes(name)  # object type + name
+        return quotes(name)
 
     def get(self, name=""):
         """Get object from Container"""
@@ -109,7 +110,7 @@ class Container(object):
             if name.casefold() == o.name.casefold():
                 return o
         error("failed to find " + self.__tname(name))
-        print("acceptable names: " + str(self.names))
+        print("acceptable names: " + str(self.name_list))
         return None
 
     def getAll(self):
@@ -137,7 +138,7 @@ class Container(object):
                     history("selected " + self.__tname(name))
                 return True
         error("failed to find " + self.__tname(name))
-        print("acceptable names: " + str(self.names))
+        print("acceptable names: " + str(self.name_list))
         return False
 
     def add(self, obj, select=True, quiet=False):

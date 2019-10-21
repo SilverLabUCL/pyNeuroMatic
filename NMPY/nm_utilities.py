@@ -76,7 +76,7 @@ def exists(nm_obj_list, name):
     return False
 
 
-def get_names(nm_obj_list):
+def get_name_list(nm_obj_list):
     if not nm_obj_list:
         return []
     nlist = []
