@@ -5,6 +5,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import nm_configs as nmconfig
+from nm_container import NMObject
 from nm_container import Container
 from nm_utilities import name_ok
 from nm_utilities import quotes
@@ -13,23 +14,15 @@ from nm_utilities import error
 from nm_utilities import channel_char
 
 
-class Channel(object):
+class Channel(NMObject):
     """
     NM Channel class
     """
 
-    def __init__(self, name):
-        self.__name = name
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
-
-    @property
-    def name(self):
-        return self.__name
-
-    @name.setter
-    def name(self, name):
-        error("cannot rename Channel object")
 
 
 class ChannelContainer(Container):
@@ -37,11 +30,11 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self):
-        super().__init__(prefix=nmconfig.CHAN_PREFIX)
+    def __init__(self, parent):
+        super().__init__(parent, prefix=nmconfig.CHAN_PREFIX)
 
     def object_new(self, name):  # override, do not call super
-        return Channel(name)
+        return Channel(self.parent, name)
 
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Channel)

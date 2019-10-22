@@ -6,6 +6,7 @@ Copyright 2019 Jason Rothman
 import h5py
 
 import nm_configs as nmconfig
+from nm_container import NMObject
 from nm_container import Container
 from nm_data import DataContainer
 from nm_dataprefix import DataPrefixContainer
@@ -14,23 +15,16 @@ from nm_utilities import quotes
 from nm_utilities import error
 
 
-class Folder(object):
+class Folder(NMObject):
     """
     NM Folder class
     """
 
-    def __init__(self, name):
-        self.__name = name
-        self.__data_container = DataContainer()
-        self.__dataprefix_container = DataPrefixContainer(self.__data_container)
-
-    @property
-    def name(self):
-        return self.__name
-
-    @name.setter
-    def name(self, name):
-        error("use folder rename function")
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.__data_container = DataContainer(self)
+        self.__dataprefix_container = DataPrefixContainer(self,
+                                                        self.__data_container)
 
     @property
     def data_container(self):
@@ -50,11 +44,11 @@ class FolderContainer(Container):
     Container for NM Folders
     """
 
-    def __init__(self):
-        super().__init__(prefix=nmconfig.FOLDER_PREFIX)
+    def __init__(self, parent):
+        super().__init__(parent, prefix=nmconfig.FOLDER_PREFIX)
 
     def object_new(self, name):  # override, do not call super
-        return Folder(name)
+        return Folder(self.parent, name)
 
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Folder)

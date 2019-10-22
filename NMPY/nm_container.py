@@ -12,15 +12,58 @@ from nm_utilities import name_ok
 from nm_utilities import error
 from nm_utilities import history
 
+class NMObject(object):
+    """
+    NM objects to be stored in a 'Container' list (see below).
+    
+    Known Children:
+        Experiment, Folder, Data, DataPrefix, Channel, EpochSet
+    
+    Attributes:
+        parent (NMObject):
+        name (str):
+        date (str):
+    """
+
+    def __init__(self, parent, name):
+        self.__parent = parent
+        self.__name = name
+        self.__date = str(datetime.datetime.now())
+
+    @property
+    def parent(self):
+        return self.__parent
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def date(self):
+        return self.__date
+
+    @property
+    def path(self):
+        if not self.name:
+            return ""
+        thepath = self.name
+        p = self
+        for i in range(0, 20):  # loop thru parent ancestry
+            if not p.parent:
+                return thepath  # no more parents
+            p = p.parent
+            thepath = p.name + "." + thepath
+
 
 class Container(object):
     """
-    A list container for NM objects, one of which is 'selected'.
-    
-    Each stored object must have a unique name. The name can start with the
+    A list container for NMObject items (see above), 
+    one of which is 'selected'.
+
+    Each NMObject item must have a unique name. The name can start with the
     same prefix (e.g. "NMExp") but this is optional. Use name_next() to
     create unique names in a sequence (e.g. "NMExp0", "NMExp1", etc.).
-    One object is selected/activated at a given time. This object can be
+    One NMObject is selected/activated at a given time. This NMObject can be
     accessed via 'select' property.
 
     Known Children:
@@ -28,20 +71,24 @@ class Container(object):
         DataPrefixContainer, ChannelContainer, EpochSetContainer
 
     Attributes:
-        prefix (str): For creating object name via name_next(), name = prefix + seq #
+        prefix (str): For creating NMObject name via name_next(), name = prefix + seq #
         __objects : list
-            List container of objects
-        __object_select : object
-            The selected object
-        
+            List container of NMObject items
+        __object_select : NMObject
+            The selected NMObject    
     """
 
-    def __init__(self, prefix="NMObj"):
+    def __init__(self, parent, prefix="NMObj"):
+        self.__parent = parent
         self.__prefix = prefix  # used in name_next()
-        self.__objects = []  # container of NM objects
-        self.__object_select = None  # selected object
-        self.__date = str(datetime.datetime.now())
         self.__count_from = 0  # used in name_next()
+        self.__date = str(datetime.datetime.now())
+        self.__objects = []  # container of NMObject items
+        self.__object_select = None  # selected NMObject
+
+    @property
+    def parent(self):
+        return self.__parent
 
     @property
     def date(self):
@@ -72,12 +119,12 @@ class Container(object):
 
     @property
     def count(self):
-        """Number of objects stored in Container"""
+        """Number of NMObject items stored in Container"""
         return len(self.__objects)
 
     @property
     def name_list(self):
-        """Get list of names of objects stored in Container"""
+        """Get list of names of NMObject items in Container"""
         nlist = []
         if self.__objects:
             for o in self.__objects:
@@ -85,10 +132,10 @@ class Container(object):
         return nlist
 
     def object_new(self, name):  # child class should override this function
-        return object  # change object to Experiment, Folder, TimeSeries, etc.
+        return NMObject  # change NMObject to Experiment, Folder, TimeSeries, etc.
 
     def instance_ok(self, obj):  # child class should override this function
-        return isinstance(obj, object)  # change object to Experiment, etc.
+        return isinstance(obj, NMObject)  # change NMObject to Experiment, etc.
 
     def __type(self):
         if not self.__objects:
@@ -103,7 +150,7 @@ class Container(object):
         return quotes(name)
 
     def get(self, name=""):
-        """Get object from Container"""
+        """Get NMObject from Container"""
         if not name or name.casefold() == 'selected':
             return self.__object_select
         for o in self.__objects:
@@ -114,7 +161,7 @@ class Container(object):
         return None
 
     def getAll(self):
-        """Get the container (list) of all objects"""
+        """Get the container (list) of all NMObject items"""
         return self.__objects
 
     @property
@@ -125,7 +172,7 @@ class Container(object):
 
     @select.setter
     def select(self, name):
-        """Select object in Container"""
+        """Select NMObject in Container"""
         quiet = False
         if not name_ok(name):
             return error("bad name " + quotes(name))
@@ -142,7 +189,7 @@ class Container(object):
         return False
 
     def add(self, obj, select=True, quiet=False):
-        """Add object to Container."""
+        """Add NMObject to Container."""
         if not self.instance_ok(obj):
             return error("encountered bad Container object")
         if not name_ok(obj.name):
@@ -162,14 +209,14 @@ class Container(object):
 
     def duplicate(self, name, newname, select=False, quiet=False):
         """
-        Copy an object.
+        Copy NMObject.
 
         Args:
-            name: name of object to copy
-            newname: name of new object
+            name: name of NMObject to copy
+            newname: name of new NMObject
 
         Returns:
-            new object if successful, None otherwise
+            new NMObject if successful, None otherwise
         """
         o = self.get(name)
         if not o:
@@ -189,7 +236,7 @@ class Container(object):
         return c
 
     def exists(self, name):
-        """Check if object exists within container"""
+        """Check if NMObject exists within container"""
         if not self.__objects:
             return False
         if not name_ok(name):
@@ -201,10 +248,10 @@ class Container(object):
 
     def kill(self, name, quiet=False):
         """
-        Kill an object.
+        Kill NMObject.
 
         Args:
-            name: name of object to kill
+            name: name of NMObject to kill
 
         Returns:
             True for success, False otherwise
@@ -224,14 +271,14 @@ class Container(object):
 
     def new(self, name="", select=True, quiet=False):
         """
-        Create a new object and add to container.
+        Create a new NMObject and add to container.
 
         Args:
-            name: unique name of new object, pass "" for default
-            select: select this object
+            name: unique name of new NMObject, pass "" for default
+            select: select this NMObject
 
         Returns:
-            new object if successful, None otherwise
+            new NMObject if successful, None otherwise
         """
         if not name:
             name = self.name_next()
@@ -247,13 +294,15 @@ class Container(object):
             self.__object_select = o
             if not quiet:
                 history("created/selected " + self.__tname(name))
+                print(o.path)
             return o
         if not quiet:
             history("created " + self.__tname(name))
+            print(o.path)
         return o
 
     def name_next(self):
-        """Get next default object name based on prefix."""
+        """Get next default NMObject name based on prefix."""
         if self.__prefix:
             prefix = self.__prefix
         else:

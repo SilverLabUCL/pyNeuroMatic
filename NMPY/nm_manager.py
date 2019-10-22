@@ -6,6 +6,7 @@ Copyright 2019 Jason Rothman
 import datetime
 
 import nm_configs as nmconfig
+from nm_container import NMObject
 from nm_experiment import ExperimentContainer
 from nm_utilities import name_ok
 from nm_utilities import quotes
@@ -19,22 +20,40 @@ class Manager(object):
     """
     NM Manager class
     Main outer class that manages everything
+
+    Project
+        ExperimentContainer
+            Experiment
+                Folder Container
+                    Folder
+                        DataContainer
+                            Data
+                        DataPrefixContainer
+                            DataPrefix
+                                ChannelContainer
+                                    Channel
+                                EpochSetContainer
+                                    EpochSet
     """
     def __init__(self):
         self.project_new("NMProject")
 
     def project_new(self, name):
         """Create new project"""
-        self.__project = Project(name)
+        self.__project = Project(None, name)
         self.experiment.new()  # create default experiment
+        #self.experiment.new()  # create default experiment
         self.folder.new()  # create default folder
+        #self.folder.new()  # create default folder
         self.data_test()
 
     def data_test(self):
         n = True
         self.data.make(prefix="Record", channels=1, epochs=3, samples=5, noise=n)
-        self.data.make(prefix="Wave", channels=3, epochs=8, samples=5, noise=n)
         self.dataprefix.new("Record")
+        if True:
+            return None
+        self.data.make(prefix="Wave", channels=3, epochs=8, samples=5, noise=n)
         self.dataprefix.new("Wave")
         self.dataprefix.new("Test")
         for i in range(0, 8, 2):
@@ -180,22 +199,17 @@ class Manager(object):
         print(project, experiment, folder, dataprefix, channel, eset)
 
 
-class Project(object):
+class Project(NMObject):
     """
     NM Project class
     """
 
-    def __init__(self, name):
-        self.__name = name
-        self.__exp_container = ExperimentContainer()
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.__exp_container = ExperimentContainer(parent=self)
         self.__date = str(datetime.datetime.now())
 
-    @property
-    def name(self):
-        return self.__name
-
-    @name.setter
-    def name(self, name):
+    def rename(self, name):
         if not name_ok(name):
             return error("bad name " + quotes(name))
         self.__name = name
@@ -204,10 +218,6 @@ class Project(object):
     @property
     def exp_container(self):
         return self.__exp_container
-
-    @property
-    def date(self):
-        return self.__date
 
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import nm_configs as nmconfig
+from nm_container import NMObject
 from nm_container import Container
 from nm_channel import ChannelContainer
 from nm_epoch_set import EpochSetContainer
@@ -17,15 +18,15 @@ from nm_utilities import history
 from nm_utilities import get_items
 
 
-class DataPrefix(object):
+class DataPrefix(NMObject):
     """
     NM DataPrefix class
     """
 
-    def __init__(self, name):
-        self.__name = name  # name is actually a prefix
+    def __init__(self, parent, name):
+        super().__init__(parent, name)  # name is actually a prefix
         self.__thedata = []  # 2D list, i = chan #, j = seq #
-        self.__channel_container = ChannelContainer()
+        self.__channel_container = ChannelContainer(self)
         self.__eset_container = EpochSetContainer(self)
         for s in nmconfig.ESETS_DEFAULT:
             self.__eset_container.new(s, select=False, quiet=True)
@@ -33,14 +34,6 @@ class DataPrefix(object):
         self.__chan_select = 'A'
         self.__epoch_select = 0
         # self.print_details()
-
-    @property
-    def name(self):
-        return self.__name
-
-    @name.setter
-    def name(self, name):
-        error("cannot rename DataPrefix objects")
 
     @property
     def eset_container(self):
@@ -170,12 +163,12 @@ class DataPrefixContainer(Container):
     NM Container for DataPrefix objects
     """
 
-    def __init__(self, data_container):
-        super().__init__(prefix="")
+    def __init__(self, parent, data_container):
+        super().__init__(parent, prefix="")
         self.__data_container = data_container
 
     def object_new(self, name):  # override, do not call super
-        return DataPrefix(name)
+        return DataPrefix(self.parent, name)
 
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, DataPrefix)
@@ -189,7 +182,7 @@ class DataPrefixContainer(Container):
         if not name_ok(prefix):
             error("bad prefix " + quotes(prefix))
             return None
-        p = DataPrefix(prefix)
+        p = DataPrefix(self.parent, prefix)
         foundsomething = False
         thedata = self.__data_container.getAll()
         for i in range(0, 25):  # try prefix+chan+seq format
@@ -200,6 +193,7 @@ class DataPrefixContainer(Container):
                 foundsomething = True
                 p.channel_container.new(quiet=True)
                 history(prefix + ", Ch " + cc + ", epochs=" + str(len(olist)))
+                #print(self.path)
             else:
                 break  # no more channels
         if not foundsomething:  # try without chan

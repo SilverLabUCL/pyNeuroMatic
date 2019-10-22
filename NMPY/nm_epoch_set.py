@@ -5,6 +5,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import nm_configs as nmconfig
+from nm_container import NMObject
 from nm_container import Container
 from nm_utilities import channel_num
 from nm_utilities import name_ok
@@ -13,22 +14,14 @@ from nm_utilities import error
 from nm_utilities import history
 
 
-class EpochSet(object):
+class EpochSet(NMObject):
     """
     NM EpochSet class
     """
 
-    def __init__(self, name):
-        self.__name = name
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
         self.__theset = set()
-
-    @property
-    def name(self):
-        return self.__name
-
-    @name.setter
-    def name(self, name):
-        error("use EpochSet rename function")
 
     @property
     def theset(self):
@@ -40,14 +33,13 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, dataprefix):
-        super().__init__(prefix=nmconfig.ESET_PREFIX)
+    def __init__(self, parent):
+        super().__init__(parent, prefix=nmconfig.ESET_PREFIX)
         self.count_from = 1
-        self.__dataprefix = dataprefix
         # self.__set_select = "All"
 
     def object_new(self, name):  # override, do not call super
-        return EpochSet(name)
+        return EpochSet(self.parent, name)
 
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, EpochSet)
@@ -78,9 +70,9 @@ class EpochSetContainer(Container):
             return {}
         r = {'Set': name}
         if epoch == -1:
-            epoch = self.__dataprefix.epoch_select
+            epoch = self.parent.epoch_select
         dnames = []
-        for chan in self.__dataprefix.thedata:
+        for chan in self.parent.thedata:
             if epoch < 0 or epoch >= len(chan):
                 return []
             w = chan[epoch]
@@ -97,9 +89,9 @@ class EpochSetContainer(Container):
             return {}
         r = {'Set': name}
         if epoch == -1:
-            epoch = self.__dataprefix.epoch_select
+            epoch = self.parent.epoch_select
         dnames = []
-        for chan in self.__dataprefix.thedata:
+        for chan in self.parent.thedata:
             if epoch < 0 or epoch >= len(chan):
                 return []
             d = chan[epoch]
@@ -118,10 +110,10 @@ class EpochSetContainer(Container):
         return True
 
     def get_selected(self):
-        channels = len(self.__dataprefix.thedata)
-        cs = self.__dataprefix.channel_select
-        ss = self.__dataprefix.eset_select.name
-        eset = self.__dataprefix.eset_select.theset
+        channels = len(self.parent.thedata)
+        cs = self.parent.channel_select
+        ss = self.parent.eset_select.name
+        eset = self.parent.eset_select.theset
         setx = self.get("SetX").theset
         if ss.casefold() == "all":
             alldata = True
@@ -130,7 +122,7 @@ class EpochSetContainer(Container):
             eset = eset.difference(setx)
         if cs.casefold() == "all" and channels > 1:
             clist = []
-            for chan in self.__dataprefix.thedata:
+            for chan in self.parent.thedata:
                 dlist = []
                 for d in chan:
                     if alldata:
@@ -146,7 +138,7 @@ class EpochSetContainer(Container):
         else:
             cnum = channel_num(cs)
         if cnum >= 0 and cnum < channels:
-            chan = self.__dataprefix.thedata[cnum]
+            chan = self.parent.thedata[cnum]
             for d in chan:
                 if alldata:
                     if d not in setx:
