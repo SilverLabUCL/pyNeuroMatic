@@ -21,19 +21,20 @@ class Manager(object):
     NM Manager class
     Main outer class that manages everything
 
-    Project
-        ExperimentContainer
-            Experiment
-                Folder Container
-                    Folder
-                        DataContainer
-                            Data
-                        DataPrefixContainer
-                            DataPrefix
-                                ChannelContainer
-                                    Channel
-                                EpochSetContainer
-                                    EpochSet
+    NM ancestry tree:
+        Project
+            ExperimentContainer
+                Experiment (Exp0, Exp1...)
+                    Folder Container
+                        Folder (Folder0, Folder1...)
+                            DataContainer
+                                Data (Record0, Record1...)
+                            DataPrefixContainer
+                                DataPrefix ('Record', 'Wave')
+                                    ChannelContainer
+                                        Channel (ChanA, ChanB...)
+                                    EpochSetContainer
+                                        EpochSet (All, Set1, Set2...)
     """
     def __init__(self):
         self.project_new("NMProject")
