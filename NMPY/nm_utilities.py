@@ -25,7 +25,6 @@ def channel_num(chan_char):
     return -1
 
 
-
 def chan_char_exists(text, chan_char):
     if not text or not chan_char or len(chan_char) > 1:
         return False
@@ -86,14 +85,14 @@ def get_name_list(nm_obj_list):
 
 
 def get_items(nm_obj_list, prefix, chan_char=""):
-    if not nm_obj_list or not name_ok(prefix) or not chan_char:
+    if not nm_obj_list or not name_ok(prefix):
         return []
     olist = []
-    numchar = len(prefix)
+    i = len(prefix)
     for o in nm_obj_list:
-        if prefix.casefold() == o.name[:numchar].casefold():
+        if prefix.casefold() == o.name[:i].casefold():
             if chan_char:
-                if chan_char_exists(o.name[numchar:], chan_char):
+                if chan_char_exists(o.name[i:], chan_char):
                     olist.append(o)
                 else:
                     pass

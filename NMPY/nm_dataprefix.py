@@ -29,8 +29,11 @@ class DataPrefix(NMObject):
         self.__channel_container = ChannelContainer(self)
         self.__eset_container = EpochSetContainer(self)
         for s in nmconfig.ESETS_DEFAULT:
-            self.__eset_container.new(s, select=False, quiet=True)
-        self.__eset_container.select = "All"
+            if s.casefold() == 'all':
+                select = True
+            else:
+                select = False
+            self.__eset_container.new(s, select=select, quiet=True)
         self.__chan_select = 'A'
         self.__epoch_select = 0
         # self.print_details()
@@ -182,7 +185,11 @@ class DataPrefixContainer(Container):
         if not name_ok(prefix):
             error("bad prefix " + quotes(prefix))
             return None
-        p = DataPrefix(self.parent, prefix)
+        pexists = self.exists(name)
+        if pexists:
+            p = self.get(name)
+        else:
+            p = DataPrefix(self.parent, prefix)
         foundsomething = False
         thedata = self.__data_container.getAll()
         for i in range(0, 25):  # try prefix+chan+seq format
@@ -206,7 +213,11 @@ class DataPrefixContainer(Container):
         if not foundsomething:
             alert("failed to find data beginning with " + quotes(prefix))
             return None
-        self.add(p)
+        if pexists:
+            if select:
+                self.select = name
+        else:
+            self.add(p, select=select)
         # print("channels=" + str(p.channel_count))
         # print("epochs=" + str(p.epoch_count))
         return p

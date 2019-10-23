@@ -45,20 +45,22 @@ class DataContainer(Container):
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Data)
 
-    def make(self, prefix="", channels=1, epochs=5, samples=10, noise=False):
-        if channels <= 0 or epochs <= 0:
-            return False
+    def make(self, prefix="", channels=1, epochs=5, samples=10, noise=False,
+             select=True, quiet=False):
         if not prefix:
             prefix = self.prefix
         if not name_ok(prefix):
             return error("bad prefix " + quotes(prefix))
+        if channels <= 0 or epochs <= 0 or samples <= 0:
+            return False
         mu, sigma = 0, 0.1  # mean and standard deviation
         for i in range(0, channels):
             cc = channel_char(i)
             for j in range(0, epochs):
-                name = prefix + cc + str(j)
+                name = self.name_next(prefix=prefix + cc)
                 ts = self.new(name, quiet=True)
                 if ts and noise:
                     ts.thedata = np.random.normal(mu, sigma, samples)
-                    # print(w.data)
+        if select:
+            self.parent.dataprefix_container.new(prefix)
         return True

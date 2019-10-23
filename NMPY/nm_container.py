@@ -52,7 +52,7 @@ class NMObject(object):
             if not p.parent:
                 return thepath  # no more parents
             p = p.parent
-            thepath = p.name + "." + thepath
+            thepath = p.name + '.' + thepath
 
 
 class Container(object):
@@ -103,7 +103,7 @@ class Container(object):
         if not prefix:
             prefix = ""
         elif not name_ok(prefix):
-            return error("bad prefix " + quotes(prefix))
+            return error('bad prefix ' + quotes(prefix))
         self.__prefix = prefix
         return True
 
@@ -139,25 +139,25 @@ class Container(object):
 
     def __type(self):
         if not self.__objects:
-            return "None"
+            return 'None'
         return self.__objects[0].__class__.__name__
 
     def __tname(self, name):
         t = self.__type()
-        if t == "None":
+        if t == 'None':
             return t
         #return t + " " + quotes(name)  # object type + name
         return quotes(name)
 
-    def get(self, name=""):
+    def get(self, name='selected'):
         """Get NMObject from Container"""
         if not name or name.casefold() == 'selected':
             return self.__object_select
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 return o
-        error("failed to find " + self.__tname(name))
-        print("acceptable names: " + str(self.name_list))
+        error('failed to find ' + self.__tname(name))
+        print('acceptable names: ' + str(self.name_list))
         return None
 
     def getAll(self):
@@ -166,45 +166,43 @@ class Container(object):
 
     @property
     def select(self):
-        if self.__object_select:
-            return self.__object_select
-        return None
+        return self.__object_select
 
     @select.setter
     def select(self, name):
         """Select NMObject in Container"""
         quiet = False
         if not name_ok(name):
-            return error("bad name " + quotes(name))
+            return error('bad name ' + quotes(name))
         if not self.__objects:
             return False
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 self.__object_select = o
                 if not quiet:
-                    history("selected " + self.__tname(name))
+                    history('selected ' + self.__tname(name))
                 return True
-        error("failed to find " + self.__tname(name))
-        print("acceptable names: " + str(self.name_list))
+        error('failed to find ' + self.__tname(name))
+        print('acceptable names: ' + str(self.name_list))
         return False
 
-    def add(self, obj, select=True, quiet=False):
+    def add(self, nmobj, select=True, quiet=False):
         """Add NMObject to Container."""
-        if not self.instance_ok(obj):
-            return error("encountered bad Container object")
-        if not name_ok(obj.name):
-            return error("bad name " + quotes(obj.name))
-        if self.exists(obj.name):
+        if not self.instance_ok(nmobj):
+            return error('encountered bad Container object')
+        if not name_ok(nmobj.name):
+            return error('bad name ' + quotes(nmobj.name))
+        if self.exists(nmobj.name):
             pass  # nothing to do
         else:
-            self.__objects.append(obj)
+            self.__objects.append(nmobj)
         if select or not self.__object_select:
-            self.__object_select = obj
+            self.__object_select = nmobj
             if not quiet:
-                history("added/selected " + self.__tname(obj.name))
+                history('added/selected ' + self.__tname(nmobj.name))
             return True
         if not quiet:
-            history("added " + self.__tname(obj.name))
+            history('added ' + self.__tname(nmobj.name))
         return True
 
     def duplicate(self, name, newname, select=False, quiet=False):
@@ -222,25 +220,25 @@ class Container(object):
         if not o:
             return False
         if not name_ok(newname):
-            return error("bad newname " + quotes(newname))
+            return error('bad newname ' + quotes(newname))
         if self.exists(newname):
-            error(self.__tname(newname) + " already exists")
+            error(self.__tname(newname) + ' already exists')
             return False
         c = copy.deepcopy(o)
         if c is not None:
             c.name = newname
             self.__objects.append(c)
             if not quiet:
-                history("copied " + self.__tname(name) +
-                        " to " + quotes(newname))
+                history('copied ' + self.__tname(name) +
+                        ' to ' + quotes(newname))
         return c
 
     def exists(self, name):
         """Check if NMObject exists within container"""
+        if not name_ok(name):
+            return error('bad name ' + quotes(name))
         if not self.__objects:
             return False
-        if not name_ok(name):
-            return error("bad name " + quotes(name))
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 return True
@@ -262,11 +260,11 @@ class Container(object):
         selected = o is self.__object_select
         self.__objects.remove(o)
         if not quiet:
-            history("killed " + self.__tname(name))
+            history('killed ' + self.__tname(name))
         if selected and len(self.__objects) > 0:
             self.__object_select = self.__objects[0]
             if not quiet:
-                history("selected " + self.__tname(self.__object_select.name))
+                history('selected ' + self.__tname(self.__object_select.name))
         return True
 
     def new(self, name="", select=True, quiet=False):
@@ -283,50 +281,51 @@ class Container(object):
         if not name:
             name = self.name_next()
         elif not name_ok(name):
-            error("bad name " + quotes(name))
+            error('bad name ' + quotes(name))
             return None
         elif self.exists(name):
-            error(self.__tname(name) + " already exists")
+            error(self.__tname(name) + ' already exists')
             return None
         o = self.object_new(name)
         self.__objects.append(o)
         if select or not self.__object_select:
             self.__object_select = o
             if not quiet:
-                history("created/selected " + self.__tname(name))
+                history('created/selected ' + self.__tname(name))
                 print(o.path)
             return o
         if not quiet:
-            history("created " + self.__tname(name))
+            history('created ' + self.__tname(name))
             print(o.path)
         return o
 
-    def name_next(self):
+    def name_next(self, prefix='selected'):
         """Get next default NMObject name based on prefix."""
-        if self.__prefix:
-            prefix = self.__prefix
-        else:
-            prefix = "None"
+        if not prefix or prefix.casefold() == 'selected':
+            if self.__prefix:
+                prefix = self.__prefix
+            else:
+                prefix = 'None'
         n = 10 + len(self.__objects)
         for i in range(self.__count_from, n):
             name = prefix + str(i)
             if not self.exists(name):
                 return name
-        return prefix + "99999"
+        return prefix + '99999'
 
     def rename(self, name, newname, quiet=False):
         o = self.get(name)
         if not o:
             return False
         if not name_ok(newname):
-            return error("bad newname " + quotes(newname))
+            return error('bad newname ' + quotes(newname))
         if self.exists(newname):
-            error("name " + quotes(newname) + " is already used")
+            error('name ' + quotes(newname) + ' is already used')
             return False
         o.name = newname
         if not quiet:
-            history("renamed " + self.__tname(name) +
-                    " to " + quotes(newname))
+            history('renamed ' + self.__tname(name) +
+                    ' to ' + quotes(newname))
         return True
 
     def open_(self, path):

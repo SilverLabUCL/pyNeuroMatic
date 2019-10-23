@@ -23,8 +23,8 @@ class Folder(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self.__data_container = DataContainer(self)
-        self.__dataprefix_container = DataPrefixContainer(self,
-                                                        self.__data_container)
+        self.__dataprefix_container = DataPrefixContainer(
+                self, self.__data_container)
 
     @property
     def data_container(self):

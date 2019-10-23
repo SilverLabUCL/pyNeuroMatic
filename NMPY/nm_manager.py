@@ -50,12 +50,13 @@ class Manager(object):
 
     def data_test(self):
         n = True
-        self.data.make(prefix="Record", channels=1, epochs=3, samples=5, noise=n)
-        self.dataprefix.new("Record")
+        self.data.make(prefix="Record", channels=2, epochs=3, samples=5, 
+                       noise=n)
+        self.data.make(prefix="Record", channels=2, epochs=3, samples=5, 
+                       noise=n)
         if True:
             return None
         self.data.make(prefix="Wave", channels=3, epochs=8, samples=5, noise=n)
-        self.dataprefix.new("Wave")
         self.dataprefix.new("Test")
         for i in range(0, 8, 2):
             self.eset.add("Set1", i, quiet=False)
