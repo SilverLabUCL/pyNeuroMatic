@@ -9,6 +9,7 @@ import datetime
 
 from nm_utilities import quotes
 from nm_utilities import name_ok
+from nm_utilities import alert
 from nm_utilities import error
 from nm_utilities import history
 
@@ -43,9 +44,9 @@ class NMObject(object):
         return self.__date
 
     @property
-    def path(self):
+    def tree_path(self):
         if not self.name:
-            return ""
+            return ''
         thepath = self.name
         p = self
         for i in range(0, 20):  # loop thru parent ancestry
@@ -101,7 +102,7 @@ class Container(object):
     @prefix.setter
     def prefix(self, prefix):
         if not prefix:
-            prefix = ""
+            prefix = ''
         elif not name_ok(prefix):
             return error('bad prefix ' + quotes(prefix))
         self.__prefix = prefix
@@ -175,6 +176,7 @@ class Container(object):
         if not name_ok(name):
             return error('bad name ' + quotes(name))
         if not self.__objects:
+            alert('nothing to select')
             return False
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
@@ -189,7 +191,7 @@ class Container(object):
     def add(self, nmobj, select=True, quiet=False):
         """Add NMObject to Container."""
         if not self.instance_ok(nmobj):
-            return error('encountered bad Container object')
+            return error('bad NMObject')
         if not name_ok(nmobj.name):
             return error('bad name ' + quotes(nmobj.name))
         if self.exists(nmobj.name):
@@ -267,18 +269,18 @@ class Container(object):
                 history('selected ' + self.__tname(self.__object_select.name))
         return True
 
-    def new(self, name="", select=True, quiet=False):
+    def new(self, name='default', select=True, quiet=False):
         """
         Create a new NMObject and add to container.
 
         Args:
-            name: unique name of new NMObject, pass "" for default
+            name: unique name of new NMObject, pass 'default' for default
             select: select this NMObject
 
         Returns:
             new NMObject if successful, None otherwise
         """
-        if not name:
+        if not name or name.casefold() == 'default':
             name = self.name_next()
         elif not name_ok(name):
             error('bad name ' + quotes(name))
@@ -292,11 +294,11 @@ class Container(object):
             self.__object_select = o
             if not quiet:
                 history('created/selected ' + self.__tname(name))
-                print(o.path)
+                print('-->' + o.tree_path)
             return o
         if not quiet:
             history('created ' + self.__tname(name))
-            print(o.path)
+            print('-->' + o.tree_path)
         return o
 
     def name_next(self, prefix='selected'):
@@ -305,13 +307,28 @@ class Container(object):
             if self.__prefix:
                 prefix = self.__prefix
             else:
-                prefix = 'None'
+                return ''
+        if not name_ok(prefix):
+            error('bad prefix ' + quotes(prefix))
+            return ''
+        return prefix + str(self.name_next_seq(prefix))
+
+    def name_next_seq(self, prefix='selected'):
+        """Get next seq num of default NMObject name based on prefix."""
+        if not prefix or prefix.casefold() == 'selected':
+            if self.__prefix:
+                prefix = self.__prefix
+            else:
+                return 0
+        if not name_ok(prefix):
+            error('bad prefix ' + quotes(prefix))
+            return 0
         n = 10 + len(self.__objects)
         for i in range(self.__count_from, n):
             name = prefix + str(i)
             if not self.exists(name):
-                return name
-        return prefix + '99999'
+                return i
+        return 0
 
     def rename(self, name, newname, quiet=False):
         o = self.get(name)

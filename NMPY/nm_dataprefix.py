@@ -200,7 +200,6 @@ class DataPrefixContainer(Container):
                 foundsomething = True
                 p.channel_container.new(quiet=True)
                 history(prefix + ", Ch " + cc + ", epochs=" + str(len(olist)))
-                #print(self.path)
             else:
                 break  # no more channels
         if not foundsomething:  # try without chan
@@ -213,6 +212,7 @@ class DataPrefixContainer(Container):
         if not foundsomething:
             alert("failed to find data beginning with " + quotes(prefix))
             return None
+        print('-->' + p.tree_path)
         if pexists:
             if select:
                 self.select = name
