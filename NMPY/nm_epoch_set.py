@@ -33,8 +33,8 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent):
-        super().__init__(parent, prefix=nmconfig.ESET_PREFIX)
+    def __init__(self, parent, name):
+        super().__init__(parent, name, prefix=nmconfig.ESET_PREFIX)
         self.count_from = 1
         # self.__set_select = "All"
 

@@ -19,7 +19,7 @@ class Experiment(NMObject):
 
     def __init__(self, parent, name):
         super().__init__(parent, name)
-        self.__folder_container = FolderContainer(self)
+        self.__folder_container = FolderContainer(self, "NMFolders")
 
     @property
     def folder_container(self):
@@ -30,8 +30,8 @@ class ExperimentContainer(Container):
     """
     Container for NM Experimnents
     """
-    def __init__(self, parent):
-        super().__init__(parent, prefix=nmconfig.EXP_PREFIX)
+    def __init__(self, parent, name):
+        super().__init__(parent, name, prefix=nmconfig.EXP_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Experiment(self.parent, name)

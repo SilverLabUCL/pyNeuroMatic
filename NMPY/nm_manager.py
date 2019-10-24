@@ -37,7 +37,7 @@ class Manager(object):
                                     EpochSet (All, Set1, Set2...)
     """
     def __init__(self):
-        self.project_new("NMProject")
+        self.project_new('NMProject')
 
     def project_new(self, name):
         """Create new project"""
@@ -50,15 +50,17 @@ class Manager(object):
 
     def data_test(self):
         n = True
-        self.data.make(prefix="Record", channels=2, epochs=3, samples=5, 
+        self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
                        noise=n)
-        self.data.make(prefix="Record", channels=2, epochs=3, samples=5, 
+        if True:
+            return False
+        self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
                        noise=n)
-        self.data.make(prefix="Wave", channels=3, epochs=8, samples=5, noise=n)
-        self.dataprefix.new("Test")
+        self.data.make(prefix='Wave', channels=3, epochs=8, samples=5, noise=n)
+        self.dataprefix.new('Test')
         for i in range(0, 8, 2):
-            self.eset.add("Set1", i, quiet=False)
-        self.eset.add("SetX", 4, quiet=False)
+            self.eset.add('Set1', i, quiet=False)
+        self.eset.add('SetX', 4, quiet=False)
         # self.eset.select="Set1"
         clist = self.eset.get_selected()
         print(clist)
@@ -75,11 +77,11 @@ class Manager(object):
     def folder(self):
         ec = self.__project.exp_container
         if ec.count == 0:
-            history("no experiments")
+            history('no experiments')
             return None
         exp = ec.get('selected')
         if not exp:
-            history("no selected experiment")
+            history('no selected experiment')
             return None
         return exp.folder_container  # Folder objs in selected experiment
 
@@ -89,11 +91,11 @@ class Manager(object):
         if not f:
             return None
         if f.count == 0:
-            history("no folders")
+            history('no folders')
             return None
         s = f.get('selected')
         if not s:
-            history("no selected folder")
+            history('no selected folder')
             return None
         return s.data_container  # Data objs in seleted folder
 
@@ -103,11 +105,11 @@ class Manager(object):
         if not f:
             return None
         if f.count == 0:
-            history("no folders")
+            history('no folders')
             return None
         s = f.get('selected')
         if not s:
-            history("no selected folder")
+            history('no selected folder')
             return None
         return s.dataprefix_container  # DataPrefix objs in seleted folder
 
@@ -117,11 +119,11 @@ class Manager(object):
         if not p:
             return None
         if p.count == 0:
-            history("no data prefixes")
+            history('no data prefixes')
             return None
         s = p.get('selected')
         if not s:
-            history("no selected data prefix")
+            history('no selected data prefix')
             return None
         return s.channel_container  # Channel objs in selected dataprefix
 
@@ -131,11 +133,11 @@ class Manager(object):
         if not p:
             return None
         if p.count == 0:
-            history("no data prefixes")
+            history('no data prefixes')
             return None
         s = p.get('selected')
         if not s:
-            history("no selected data prefix")
+            history('no selected data prefix')
             return None
         return s.eset_container  # EpochSet objs in selected dataprefix
 
@@ -206,12 +208,12 @@ class Project(NMObject):
 
     def __init__(self, parent, name):
         super().__init__(parent, name)
-        self.__exp_container = ExperimentContainer(parent=self)
+        self.__exp_container = ExperimentContainer(self, 'NMExps')
         self.__date = str(datetime.datetime.now())
 
     def rename(self, name):
         if not name_ok(name):
-            return error("bad name " + quotes(name))
+            return error('bad name ' + quotes(name))
         self.__name = name
         return True
 

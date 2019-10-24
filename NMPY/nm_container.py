@@ -56,7 +56,7 @@ class NMObject(object):
             thepath = p.name + '.' + thepath
 
 
-class Container(object):
+class Container(NMObject):
     """
     A list container for NMObject items (see above), 
     one of which is 'selected'.
@@ -79,21 +79,12 @@ class Container(object):
             The selected NMObject    
     """
 
-    def __init__(self, parent, prefix="NMObj"):
-        self.__parent = parent
+    def __init__(self, parent, name, prefix="NMObj"):
+        super().__init__(parent, name)
         self.__prefix = prefix  # used in name_next()
         self.__count_from = 0  # used in name_next()
-        self.__date = str(datetime.datetime.now())
         self.__objects = []  # container of NMObject items
         self.__object_select = None  # selected NMObject
-
-    @property
-    def parent(self):
-        return self.__parent
-
-    @property
-    def date(self):
-        return self.__date
 
     @property
     def prefix(self):  # see name_next()
@@ -183,6 +174,7 @@ class Container(object):
                 self.__object_select = o
                 if not quiet:
                     history('selected ' + self.__tname(name))
+                    print('-->' + o.tree_path)
                 return True
         error('failed to find ' + self.__tname(name))
         print('acceptable names: ' + str(self.name_list))
@@ -293,12 +285,10 @@ class Container(object):
         if select or not self.__object_select:
             self.__object_select = o
             if not quiet:
-                history('created/selected ' + self.__tname(name))
-                print('-->' + o.tree_path)
+                history('created/selected --> ' + o.tree_path)
             return o
         if not quiet:
-            history('created ' + self.__tname(name))
-            print('-->' + o.tree_path)
+            history('created --> ' + o.tree_path)
         return o
 
     def name_next(self, prefix='selected'):

@@ -26,8 +26,8 @@ class DataPrefix(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)  # name is actually a prefix
         self.__thedata = []  # 2D list, i = chan #, j = seq #
-        self.__channel_container = ChannelContainer(self)
-        self.__eset_container = EpochSetContainer(self)
+        self.__channel_container = ChannelContainer(self, 'NMChannels')
+        self.__eset_container = EpochSetContainer(self, 'NMEpochSets')
         for s in nmconfig.ESETS_DEFAULT:
             if s.casefold() == 'all':
                 select = True
@@ -74,7 +74,7 @@ class DataPrefix(NMObject):
     def channel_ok(self, chan_char):
         if not chan_char:
             return False
-        if chan_char.casefold() == "all":
+        if chan_char.casefold() == 'all':
             return True  # always ok
         if self.channel_list().count(chan_char) == 1:
             return True
@@ -88,9 +88,9 @@ class DataPrefix(NMObject):
     def channel_select(self, chan_char):  # e.g 'A' or 'All'
         if self.channel_ok(chan_char):
             self.__chan_select = chan_char
-            history("selected channel " + chan_char)
+            history('selected channel ' + chan_char)
             return True
-        error("bad channel select: " + chan_char)
+        error('bad channel select: ' + chan_char)
         return False
 
     @property
@@ -115,9 +115,9 @@ class DataPrefix(NMObject):
     def epoch_select(self, epoch):
         if self.epoch_ok(epoch):
             self.__epoch_select = epoch
-            history("selected epoch #" + str(epoch))
+            history('selected epoch #' + str(epoch))
             return True
-        error("bad epoch number: " + str(epoch))
+        error('bad epoch number: ' + str(epoch))
         return False
 
     @property
@@ -137,9 +137,9 @@ class DataPrefix(NMObject):
 
     @property
     def details(self):
-        print("data prefix = " + quotes(self.name))
-        print("channels = " + str(self.channel_count))
-        print("epochs = " + str(self.epoch_count))
+        print('data prefix = ' + quotes(self.name))
+        print('channels = ' + str(self.channel_count))
+        print('epochs = ' + str(self.epoch_count))
         # print("data list = " + str(self.data_names))
 
     def data_list(self, chan_char='selected', epoch=-1):
@@ -166,8 +166,8 @@ class DataPrefixContainer(Container):
     NM Container for DataPrefix objects
     """
 
-    def __init__(self, parent, data_container):
-        super().__init__(parent, prefix="")
+    def __init__(self, parent, name, data_container):
+        super().__init__(parent, name, prefix="")
         self.__data_container = data_container
 
     def object_new(self, name):  # override, do not call super
@@ -180,10 +180,10 @@ class DataPrefixContainer(Container):
         error("DataPrefix objects do not have names with a common prefix")
         return ""
 
-    def new(self, name="", select=True):  # override, do not call super
+    def new(self, name="", select=True, quiet=False):  # override, do not call super
         prefix = name  # name is actually a prefix
         if not name_ok(prefix):
-            error("bad prefix " + quotes(prefix))
+            error('bad prefix ' + quotes(prefix))
             return None
         pexists = self.exists(name)
         if pexists:
@@ -192,6 +192,8 @@ class DataPrefixContainer(Container):
             p = DataPrefix(self.parent, prefix)
         foundsomething = False
         thedata = self.__data_container.getAll()
+        channels = []
+        epochs = []
         for i in range(0, 25):  # try prefix+chan+seq format
             cc = channel_char(i)
             olist = get_items(thedata, prefix, chan_char=cc)
@@ -199,7 +201,8 @@ class DataPrefixContainer(Container):
                 p.thedata.append(olist)
                 foundsomething = True
                 p.channel_container.new(quiet=True)
-                history(prefix + ", Ch " + cc + ", epochs=" + str(len(olist)))
+                channels.append(cc)
+                epochs.append(len(olist))
             else:
                 break  # no more channels
         if not foundsomething:  # try without chan
@@ -208,24 +211,28 @@ class DataPrefixContainer(Container):
                 p.thedata.append(olist)
                 foundsomething = True
                 p.channel_container.new(quiet=True)
-                history(prefix + ", Ch " + cc + ", epochs=" + str(len(olist)))
+                epochs.append(len(olist))
         if not foundsomething:
-            alert("failed to find data beginning with " + quotes(prefix))
+            alert('failed to find data beginning with ' + quotes(prefix))
             return None
-        print('-->' + p.tree_path)
         if pexists:
             if select:
                 self.select = name
         else:
-            self.add(p, select=select)
+            self.add(p, select=select, quiet=True)
         # print("channels=" + str(p.channel_count))
         # print("epochs=" + str(p.epoch_count))
+        if not quiet and len(epochs) > 0:
+            if len(channels) == 0:
+                history(p.tree_path + ', ' + str(epochs))
+            else:
+                history(p.tree_path + ', Ch ' + str(channels) + ', ' + str(epochs))
         return p
 
     def rename(self, name, newname):  # override, do not call super
-        error("cannot rename DataPrefix objects")
+        error('cannot rename DataPrefix objects')
         return False
 
     def duplicate(self, name, newname, select=False):  # override
-        error("cannot duplicate DataPrefix objects")
+        error('cannot duplicate DataPrefix objects')
         return None  # not sued

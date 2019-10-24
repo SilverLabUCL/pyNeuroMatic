@@ -30,8 +30,8 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self, parent):
-        super().__init__(parent, prefix=nmconfig.CHAN_PREFIX)
+    def __init__(self, parent, name):
+        super().__init__(parent, name, prefix=nmconfig.CHAN_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Channel(self.parent, name)

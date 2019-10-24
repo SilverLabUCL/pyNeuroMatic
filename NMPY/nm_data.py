@@ -39,8 +39,8 @@ class DataContainer(Container):
     """
     Container for NM Data objects
     """
-    def __init__(self, parent):
-        super().__init__(parent, prefix=nmconfig.DATA_PREFIX)
+    def __init__(self, parent, name):
+        super().__init__(parent, name, prefix=nmconfig.DATA_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Data(self.parent, name)
@@ -69,6 +69,7 @@ class DataContainer(Container):
             for j in range(ss, se):
                 name = prefix + cc + str(j)
                 ts = self.new(name, quiet=True)
+                tree_path = ts.parent.tree_path
                 if not ts:
                     alert("failed to create " + quotes(name))
                 if noise:
@@ -77,7 +78,9 @@ class DataContainer(Container):
                 else:
                     ts.thedata = np.zeros(samples)
             if not quiet:
-                history(prefix + ", Ch " + cc + ", #=" + str(ss) + '-' + str(se-1))
+                txt = tree_path + "." + prefix
+                txt += ", Ch " + cc + ", " + str(ss) + '-' + str(se-1)
+                history("created --> " + txt)
         if select:
             self.parent.dataprefix_container.new(prefix)
         return True
