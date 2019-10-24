@@ -21,20 +21,20 @@ class Manager(object):
     NM Manager class
     Main outer class that manages everything
 
-    NM ancestry tree:
+    NM object tree:
         Project
             ExperimentContainer
-                Experiment (Exp0, Exp1...)
+            Experiment (Exp0, Exp1...)
                     Folder Container
-                        Folder (Folder0, Folder1...)
+                    Folder (Folder0, Folder1...)
                             DataContainer
-                                Data (Record0, Record1...)
+                            Data (Record0, Record1...)
                             DataPrefixContainer
-                                DataPrefix ('Record', 'Wave')
+                            DataPrefix ('Record', 'Wave')
                                     ChannelContainer
-                                        Channel (ChanA, ChanB...)
+                                    Channel (ChanA, ChanB...)
                                     EpochSetContainer
-                                        EpochSet (All, Set1, Set2...)
+                                    EpochSet (All, Set1, Set2...)
     """
     def __init__(self):
         self.project_new("NMProject")
@@ -54,8 +54,6 @@ class Manager(object):
                        noise=n)
         self.data.make(prefix="Record", channels=2, epochs=3, samples=5, 
                        noise=n)
-        if True:
-            return None
         self.data.make(prefix="Wave", channels=3, epochs=8, samples=5, noise=n)
         self.dataprefix.new("Test")
         for i in range(0, 8, 2):

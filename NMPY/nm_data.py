@@ -11,6 +11,7 @@ from nm_utilities import name_ok
 from nm_utilities import quotes
 from nm_utilities import history
 from nm_utilities import error
+from nm_utilities import alert
 import numpy as np
 
 
@@ -57,27 +58,26 @@ class DataContainer(Container):
         if channels <= 0 or epochs <= 0 or samples <= 0:
             return False
         seq_start = []
-        for ci in range(0, channels):
-            sn = self.name_next_seq(prefix + channel_char(ci))
-            if sn >= 0:
-                seq_start.append(sn)
+        for ci in range(0, channels):  # look for existing data
+            si = self.name_next_seq(prefix + channel_char(ci))
+            if si >= 0:
+                seq_start.append(si)
         ss = max(seq_start)
-        ss = max(ss, 0)
+        se = ss + epochs
         for ci in range(0, channels):
-            seq = []
             cc = channel_char(ci)
-            for j in range(ss, ss+epochs):
+            for j in range(ss, se):
                 name = prefix + cc + str(j)
                 ts = self.new(name, quiet=True)
-                if ts:
-                    seq.append(j)
-                    if noise:
-                        ts.thedata = np.random.normal(noise_mu, noise_sigma, 
-                                                      samples)
-                    else:
-                        ts.thedata = np.zeros(samples)
+                if not ts:
+                    alert("failed to create " + quotes(name))
+                if noise:
+                    ts.thedata = np.random.normal(noise_mu, noise_sigma, 
+                                                  samples)
+                else:
+                    ts.thedata = np.zeros(samples)
             if not quiet:
-                history(prefix + ", Ch " + cc + ", #=" + str(seq))
+                history(prefix + ", Ch " + cc + ", #=" + str(ss) + '-' + str(se-1))
         if select:
             self.parent.dataprefix_container.new(prefix)
         return True
