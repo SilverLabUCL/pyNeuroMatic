@@ -180,16 +180,53 @@ class DataPrefixContainer(Container):
         error("DataPrefix objects do not have names with a common prefix")
         return ""
 
+    def select_setx(self, name, quiet=False):  # override, do not call super
+        if not name_ok(name):
+            return error('bad name ' + quotes(name))
+        if not self.getAll():
+            alert('nothing to select')
+            return False
+        for o in self.getAll():
+            if name.casefold() == o.name.casefold():
+                #self.select = o  # BAD >> CALLING ITSELF
+                if not quiet:
+                    history('selected --> ' + o.tree_path)
+                return True
+        p = self.new(name=name, quiet = quiet)
+        return p is not None
+
     def new(self, name="", select=True, quiet=False):  # override, do not call super
+        if not name:
+            return None
         prefix = name  # name is actually a prefix
         if not name_ok(prefix):
             error('bad prefix ' + quotes(prefix))
             return None
-        pexists = self.exists(name)
+        pexists = self.exists(prefix)
         if pexists:
-            p = self.get(name)
+            p = self.get(prefix)
         else:
             p = DataPrefix(self.parent, prefix)
+            self.add(p, select=select, quiet=True)
+        if select:
+            self.select_set(prefix, quiet=True)
+        if not quiet:
+            t = ''
+            if not pexists:
+                t = 'created'
+            if select:
+                if len(t) == 0:
+                    t = 'selected'
+                else:
+                    t += '/selected'
+                history(t + ' --> ' + p.tree_path)
+        self.search(p)
+        return p
+
+    def search(self, p, quiet=False):
+        if not p:
+            return False
+        prefix = p.name
         foundsomething = False
         thedata = self.__data_container.getAll()
         htxt = []
@@ -211,27 +248,11 @@ class DataPrefixContainer(Container):
                 p.channel_container.new(quiet=True)
                 htxt.append('n=' + str(len(olist)))
         if not foundsomething:
-            alert('failed to find data beginning with ' + quotes(prefix))
-            return None
-        if pexists:
-            if select:
-                self.select = name
-        else:
-            self.add(p, select=select, quiet=True)
-        # print("channels=" + str(p.channel_count))
-        # print("epochs=" + str(p.epoch_count))
+            alert('failed to find data with prefix name ' + quotes(prefix))
         if not quiet:
-            t = ''
-            if not pexists:
-                t = 'created'
-            if select:
-                if len(t) == 0:
-                    t = 'selected'
-                else:
-                    t += '/selected'
             for h in htxt:
-                history(t + ' --> ' + p.tree_path + ', ' + h)
-        return p
+                history(' --> ' + p.tree_path + ', ' + h)
+        return True
 
     def rename(self, name, newname):  # override, do not call super
         error('cannot rename DataPrefix objects')

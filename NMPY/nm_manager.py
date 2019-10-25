@@ -52,8 +52,8 @@ class Manager(object):
         n = True
         self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
                        noise=n)
-        self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
-                       noise=n)
+        #self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
+        #               noise=n)
         #self.data.make(prefix='Wave', channels=3, epochs=8, samples=5, noise=n)
         #self.dataprefix.new('Test')
         if True:

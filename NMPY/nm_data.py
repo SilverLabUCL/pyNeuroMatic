@@ -89,12 +89,9 @@ class DataContainer(Container):
                 else:
                     ts.thedata = np.zeros(samples)
             htxt.append("ch=" + cc + ", " + str(ss) + '-' + str(se-1))
-        if select:
-            self.parent.dataprefix_container.new(prefix, quiet=True)
         if not quiet:
-            t = 'created'
-            if select:
-                t += '/selected'
             for h in htxt:
-                history(t + ' --> ' + tree_path + "." + prefix + ', ' + h)
+                history('created --> ' + tree_path + "." + prefix + ', ' + h)
+        if select:
+            self.parent.dataprefix_container.new(prefix, quiet=quiet)
         return True

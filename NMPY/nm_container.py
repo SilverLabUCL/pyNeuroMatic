@@ -162,8 +162,10 @@ class Container(NMObject):
 
     @select.setter
     def select(self, name):
+        return self.select_set(name)
+    
+    def select_set(self, name, quiet=False):
         """Select NMObject in Container"""
-        quiet = False
         if not name_ok(name):
             return error('bad name ' + quotes(name))
         if not self.__objects:
