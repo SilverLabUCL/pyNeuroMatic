@@ -192,8 +192,7 @@ class DataPrefixContainer(Container):
             p = DataPrefix(self.parent, prefix)
         foundsomething = False
         thedata = self.__data_container.getAll()
-        channels = []
-        epochs = []
+        htxt = []
         for i in range(0, 25):  # try prefix+chan+seq format
             cc = channel_char(i)
             olist = get_items(thedata, prefix, chan_char=cc)
@@ -201,8 +200,7 @@ class DataPrefixContainer(Container):
                 p.thedata.append(olist)
                 foundsomething = True
                 p.channel_container.new(quiet=True)
-                channels.append(cc)
-                epochs.append(len(olist))
+                htxt.append('ch=' + cc + ', n=' + str(len(olist)))
             else:
                 break  # no more channels
         if not foundsomething:  # try without chan
@@ -211,7 +209,7 @@ class DataPrefixContainer(Container):
                 p.thedata.append(olist)
                 foundsomething = True
                 p.channel_container.new(quiet=True)
-                epochs.append(len(olist))
+                htxt.append('n=' + str(len(olist)))
         if not foundsomething:
             alert('failed to find data beginning with ' + quotes(prefix))
             return None
@@ -222,11 +220,17 @@ class DataPrefixContainer(Container):
             self.add(p, select=select, quiet=True)
         # print("channels=" + str(p.channel_count))
         # print("epochs=" + str(p.epoch_count))
-        if not quiet and len(epochs) > 0:
-            if len(channels) == 0:
-                history(p.tree_path + ', ' + str(epochs))
-            else:
-                history(p.tree_path + ', Ch ' + str(channels) + ', ' + str(epochs))
+        if not quiet:
+            t = ''
+            if not pexists:
+                t = 'created'
+            if select:
+                if len(t) == 0:
+                    t = 'selected'
+                else:
+                    t += '/selected'
+            for h in htxt:
+                history(t + ' --> ' + p.tree_path + ', ' + h)
         return p
 
     def rename(self, name, newname):  # override, do not call super

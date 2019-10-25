@@ -52,12 +52,12 @@ class Manager(object):
         n = True
         self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
                        noise=n)
-        if True:
-            return False
         self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
                        noise=n)
-        self.data.make(prefix='Wave', channels=3, epochs=8, samples=5, noise=n)
-        self.dataprefix.new('Test')
+        #self.data.make(prefix='Wave', channels=3, epochs=8, samples=5, noise=n)
+        #self.dataprefix.new('Test')
+        if True:
+            return False
         for i in range(0, 8, 2):
             self.eset.add('Set1', i, quiet=False)
         self.eset.add('SetX', 4, quiet=False)

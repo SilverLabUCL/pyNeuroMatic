@@ -107,8 +107,8 @@ def alert(text):
     stack = inspect.stack()
     child = stack_get_class(stack)
     method = stack_get_method(stack)
-    print("ALERT." + child + "." + method +
-          ": " + text)
+    print(Fore.RED + "ALERT." + child + "." + method +
+          ": " + text + Fore.BLACK)
     return False
 
 

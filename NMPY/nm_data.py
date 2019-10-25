@@ -48,6 +48,16 @@ class DataContainer(Container):
     def instance_ok(self, obj):  # override, do not call super
         return isinstance(obj, Data)
 
+    @property
+    def select(self):  # override
+        alert('Use nm.dataprefix.select')
+        return super().select
+
+    @select.setter
+    def select(self, name, quiet=False): # override, do not call super
+        alert('Use nm.dataprefix.select')
+        return False
+
     def make(self, prefix='default', channels=1, epochs=3, samples=10,
              noise=False, select=True, quiet=False):
         noise_mu, noise_sigma = 0, 0.1  # mean and standard deviation
@@ -64,6 +74,7 @@ class DataContainer(Container):
                 seq_start.append(si)
         ss = max(seq_start)
         se = ss + epochs
+        htxt = []
         for ci in range(0, channels):
             cc = channel_char(ci)
             for j in range(ss, se):
@@ -73,14 +84,17 @@ class DataContainer(Container):
                 if not ts:
                     alert("failed to create " + quotes(name))
                 if noise:
-                    ts.thedata = np.random.normal(noise_mu, noise_sigma, 
+                    ts.thedata = np.random.normal(noise_mu, noise_sigma,
                                                   samples)
                 else:
                     ts.thedata = np.zeros(samples)
-            if not quiet:
-                txt = tree_path + "." + prefix
-                txt += ", Ch " + cc + ", " + str(ss) + '-' + str(se-1)
-                history("created --> " + txt)
+            htxt.append("ch=" + cc + ", " + str(ss) + '-' + str(se-1))
         if select:
-            self.parent.dataprefix_container.new(prefix)
+            self.parent.dataprefix_container.new(prefix, quiet=True)
+        if not quiet:
+            t = 'created'
+            if select:
+                t += '/selected'
+            for h in htxt:
+                history(t + ' --> ' + tree_path + "." + prefix + ', ' + h)
         return True

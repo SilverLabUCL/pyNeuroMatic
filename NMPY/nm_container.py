@@ -173,8 +173,7 @@ class Container(NMObject):
             if name.casefold() == o.name.casefold():
                 self.__object_select = o
                 if not quiet:
-                    history('selected ' + self.__tname(name))
-                    print('-->' + o.tree_path)
+                    history('selected --> ' + o.tree_path)
                 return True
         error('failed to find ' + self.__tname(name))
         print('acceptable names: ' + str(self.name_list))
@@ -183,7 +182,7 @@ class Container(NMObject):
     def add(self, nmobj, select=True, quiet=False):
         """Add NMObject to Container."""
         if not self.instance_ok(nmobj):
-            return error('bad NMObject')
+            return error('bad ' + self.__type())
         if not name_ok(nmobj.name):
             return error('bad name ' + quotes(nmobj.name))
         if self.exists(nmobj.name):
