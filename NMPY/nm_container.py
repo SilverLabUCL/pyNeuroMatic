@@ -6,20 +6,21 @@ Copyright 2019 Jason Rothman
 """
 import copy
 import datetime
-
+import nm_configs as nmconfig
 from nm_utilities import quotes
 from nm_utilities import name_ok
 from nm_utilities import alert
 from nm_utilities import error
 from nm_utilities import history
 
+
 class NMObject(object):
     """
     NM objects to be stored in a 'Container' list (see below).
-    
+
     Known Children:
         Experiment, Folder, Data, DataPrefix, Channel, EpochSet
-    
+
     Attributes:
         parent (NMObject):
         name (str):
@@ -45,20 +46,33 @@ class NMObject(object):
 
     @property
     def tree_path(self):
+        if nmconfig.TREE_PATH_LONG:
+            skip = nmconfig.TREE_PATH_SKIP_CLASS
+            plist = self.tree_path_list(skipClass=skip)
+            return '.'.join(plist)
+        return self.name
+
+    def tree_path_list(self, skipClass=''):
         if not self.name:
-            return ''
-        thepath = self.name
+            return []
+        if self.__class__.__name__ == skipClass:
+            thepath = []
+        else:
+            thepath = [self.name]
         p = self
         for i in range(0, 20):  # loop thru parent ancestry
             if not p.parent:
                 return thepath  # no more parents
             p = p.parent
-            thepath = p.name + '.' + thepath
+            if p.__class__.__name__ == skipClass:
+                pass
+            else:
+                thepath.insert(0, p.name)
 
 
 class Container(NMObject):
     """
-    A list container for NMObject items (see above), 
+    A list container for NMObject items (see above),
     one of which is 'selected'.
 
     Each NMObject item must have a unique name. The name can start with the
@@ -163,8 +177,8 @@ class Container(NMObject):
     @select.setter
     def select(self, name):
         return self.select_set(name)
-    
-    def select_set(self, name, quiet=False):
+
+    def select_set(self, name, quiet=False, new=False):
         """Select NMObject in Container"""
         if not name_ok(name):
             return error('bad name ' + quotes(name))
@@ -175,10 +189,13 @@ class Container(NMObject):
             if name.casefold() == o.name.casefold():
                 self.__object_select = o
                 if not quiet:
-                    history('selected --> ' + o.tree_path)
+                    history('selected -> ' + o.tree_path)
                 return True
-        error('failed to find ' + self.__tname(name))
-        print('acceptable names: ' + str(self.name_list))
+        if new:
+            o = self.new(name=name, quiet=quiet)
+            return o is not None
+        alert('failed to find ' + self.__tname(name))
+        alert('acceptable names: ' + str(self.name_list))
         return False
 
     def add(self, nmobj, select=True, quiet=False):
@@ -286,10 +303,10 @@ class Container(NMObject):
         if select or not self.__object_select:
             self.__object_select = o
             if not quiet:
-                history('created/selected --> ' + o.tree_path)
+                history('created/selected -> ' + o.tree_path)
             return o
         if not quiet:
-            history('created --> ' + o.tree_path)
+            history('created -> ' + o.tree_path)
         return o
 
     def name_next(self, prefix='selected'):

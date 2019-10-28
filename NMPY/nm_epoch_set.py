@@ -56,31 +56,37 @@ class EpochSetContainer(Container):
         s = self.get(name)
         if not s:
             return False
-        if s.name.casefold() == "all":
+        if s.name.upper() == 'ALL':
             error("cannot rename 'All' set")
             return False
-        if s.name.casefold() == "setx":
+        if s.name.upper() == 'SETX':
             error("cannot rename SetX")
             return False
         return super().rename(name, newname)
 
-    def add(self, name, epoch, quiet=True):
+    def add(self, name, epoch_list, quiet=False):
         s = self.get(name)
         if not s:
             return {}
         r = {'Set': name}
-        if epoch == -1:
-            epoch = self.parent.epoch_select
         dnames = []
-        for chan in self.parent.thedata:
-            if epoch < 0 or epoch >= len(chan):
-                return []
-            w = chan[epoch]
-            s.theset.add(w)
-            dnames.append(w.name)
+        i = []
+        for e in epoch_list:
+            if e == -1:
+                e = self.parent.epoch_select
+            found_something = False
+            for chan in self.parent.thedata:
+                if e < 0 or e >= len(chan):
+                    continue
+                d = chan[e]
+                s.theset.add(d)
+                dnames.append(d.name)
+                found_something = True
+            if found_something:
+                i.append(str(e))
         r['added'] = dnames
         if not quiet:
-            print(r)
+            history(s.tree_path + ' -> ep=' + ', '.join(i))
         return r
 
     def remove(self, name, epoch, quiet=True):
@@ -109,40 +115,59 @@ class EpochSetContainer(Container):
         s.theset.clear()
         return True
 
-    def get_selected(self):
+    def get_selected(self, names=False):
         channels = len(self.parent.thedata)
         cs = self.parent.channel_select
+        all_chan = self.parent.all_channels
         ss = self.parent.eset_select.name
         eset = self.parent.eset_select.theset
-        setx = self.get("SetX").theset
-        if ss.casefold() == "all":
-            alldata = True
+        setx = self.get('SetX').theset
+        if channels == 0 or len(cs) == 0:
+            return []
+        if ss.upper() == 'ALL':
+            all_epochs = True
         else:
-            alldata = False
+            all_epochs = False
             eset = eset.difference(setx)
-        if cs.casefold() == "all" and channels > 1:
+        if all_chan and channels > 1:
             clist = []
             for chan in self.parent.thedata:
                 dlist = []
                 for d in chan:
-                    if alldata:
+                    if all_epochs:
                         if d not in setx:
-                            dlist.append(d)
+                            if names:
+                                dlist.append(d.name)
+                            else:
+                                dlist.append(d)
                     elif d in eset:
-                        dlist.append(d)
+                        if names:
+                            dlist.append(d.name)
+                        else:
+                            dlist.append(d)
                 clist.append(dlist)
             return clist
         dlist = []
+        cnum_list = []
         if channels == 1:
-            cnum = 0
+            cnum_list.append(0)
         else:
-            cnum = channel_num(cs)
-        if cnum >= 0 and cnum < channels:
-            chan = self.parent.thedata[cnum]
+            for c in cs:
+                cnum = channel_num(c)
+                if cnum >= 0 and cnum < channels:
+                    cnum_list.append(cnum)
+        for c in cnum_list:
+            chan = self.parent.thedata[c]
             for d in chan:
-                if alldata:
+                if all_epochs:
                     if d not in setx:
-                        dlist.append(d)
+                        if names:
+                            dlist.append(d.name)
+                        else:
+                            dlist.append(d)
                 elif d in eset:
-                    dlist.append(d)
+                    if names:
+                        dlist.append(d.name)
+                    else:
+                        dlist.append(d)
         return dlist

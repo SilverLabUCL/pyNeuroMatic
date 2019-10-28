@@ -29,12 +29,9 @@ class DataPrefix(NMObject):
         self.__channel_container = ChannelContainer(self, 'NMChannels')
         self.__eset_container = EpochSetContainer(self, 'NMEpochSets')
         for s in nmconfig.ESETS_DEFAULT:
-            if s.casefold() == 'all':
-                select = True
-            else:
-                select = False
+            select = s.upper() == 'ALL'
             self.__eset_container.new(s, select=select, quiet=True)
-        self.__chan_select = 'A'
+        self.__channel_select = ['A']
         self.__epoch_select = 0
         # self.print_details()
 
@@ -47,6 +44,10 @@ class DataPrefix(NMObject):
         if self.__eset_container:
             return self.__eset_container.select
         return None
+
+    @property
+    def data_select(self):
+        return self.eset_container.get_selected(names=True)
 
     @property
     def channel_container(self):
@@ -63,7 +64,7 @@ class DataPrefix(NMObject):
         if n == 0:
             return []
         if includeAll and n > 1:
-            clist = ['All']
+            clist = ['ALL']
         else:
             clist = []
         for i in range(0, n):
@@ -74,23 +75,38 @@ class DataPrefix(NMObject):
     def channel_ok(self, chan_char):
         if not chan_char:
             return False
-        if chan_char.casefold() == 'all':
+        if chan_char.upper() == 'ALL':
             return True  # always ok
-        if self.channel_list().count(chan_char) == 1:
-            return True
+        for c in self.channel_list():
+            if c.upper() == chan_char.upper():
+                return True
         return False
 
     @property
     def channel_select(self):
-        return self.__chan_select
+        return self.__channel_select
 
     @channel_select.setter
-    def channel_select(self, chan_char):  # e.g 'A' or 'All'
-        if self.channel_ok(chan_char):
-            self.__chan_select = chan_char
-            history('selected channel ' + chan_char)
-            return True
-        error('bad channel select: ' + chan_char)
+    def channel_select(self, chan_char_list):  # e.g 'A', 'ALL' or ['A', 'B']
+        if type(chan_char_list) is not list:
+            chan_char_list = [chan_char_list]
+        clist = []
+        for cc in chan_char_list:
+            if not self.channel_ok(cc):
+                error('bad channel: ' + cc)
+                return False
+            clist.append(cc.upper())
+        self.__channel_select = clist
+        history(self.tree_path + ' -> ch=' + str(clist))
+        return True
+
+    @property
+    def all_channels(self):
+        if not self.channel_select:
+            return False
+        for c in self.channel_select:
+            if c.upper() == 'ALL':
+                return True
         return False
 
     @property
@@ -115,7 +131,7 @@ class DataPrefix(NMObject):
     def epoch_select(self, epoch):
         if self.epoch_ok(epoch):
             self.__epoch_select = epoch
-            history('selected epoch #' + str(epoch))
+            history(self.tree_path + ' -> epoch=' + str(epoch))
             return True
         error('bad epoch number: ' + str(epoch))
         return False
@@ -123,7 +139,7 @@ class DataPrefix(NMObject):
     @property
     def select(self):
         s = {}
-        s['channel'] = self.__chan_select
+        s['channel'] = self.__channel_select
         s['epoch'] = self.__epoch_select
         if self.__eset_container and self.__eset_container.select:
             s['eset'] = self.__eset_container.select.name
@@ -142,23 +158,33 @@ class DataPrefix(NMObject):
         print('epochs = ' + str(self.epoch_count))
         # print("data list = " + str(self.data_names))
 
-    def data_list(self, chan_char='selected', epoch=-1):
-        if not chan_char or chan_char.casefold() == 'selected':
-            chan_char = self.__chan_select
+    def data_list(self, channel='selected', epoch=-1):
+        if type(channel) is not list:
+            channel = [channel]
+        for cc in channel:
+            if not cc or cc.lower() == 'selected':
+                channel = self.__channel_select
+                break
+        all_chan = False
+        for cc in channel:
+            if cc.upper() == 'ALL':
+                all_chan = True
+                break
         if epoch == -1:
             epoch = self.__epoch_select
         dlist = []
-        if chan_char.casefold() == 'all':
+        if all_chan:
             for chan in self.__thedata:
                 if epoch >= 0 and epoch < len(chan):
                     dlist.append(chan[epoch])
             return dlist
-        chan_num = channel_num(chan_char)
-        if chan_num >= 0 and chan_num < len(self.__thedata):
-            chan = self.__thedata[chan_num]
-            if epoch >= 0 and epoch < len(chan):
-                return chan[epoch]
-        return []
+        for cc in channel:
+            cn = channel_num(cc)
+            if cn >= 0 and cn < len(self.__thedata):
+                chan = self.__thedata[cn]
+                if epoch >= 0 and epoch < len(chan):
+                    dlist.append(chan[epoch])
+        return dlist
 
 
 class DataPrefixContainer(Container):
@@ -167,7 +193,7 @@ class DataPrefixContainer(Container):
     """
 
     def __init__(self, parent, name, data_container):
-        super().__init__(parent, name, prefix="")
+        super().__init__(parent, name, prefix='')
         self.__data_container = data_container
 
     def object_new(self, name):  # override, do not call super
@@ -177,25 +203,13 @@ class DataPrefixContainer(Container):
         return isinstance(obj, DataPrefix)
 
     def name_next(self):  # override, do not call super
-        error("DataPrefix objects do not have names with a common prefix")
-        return ""
+        error('DataPrefix objects do not have names with a common prefix')
+        return ''
 
-    def select_setx(self, name, quiet=False):  # override, do not call super
-        if not name_ok(name):
-            return error('bad name ' + quotes(name))
-        if not self.getAll():
-            alert('nothing to select')
-            return False
-        for o in self.getAll():
-            if name.casefold() == o.name.casefold():
-                #self.select = o  # BAD >> CALLING ITSELF
-                if not quiet:
-                    history('selected --> ' + o.tree_path)
-                return True
-        p = self.new(name=name, quiet = quiet)
-        return p is not None
+    def select_set(self, name, quiet=False, new=False):  # override
+        return super().select_set(name, quiet=quiet, new=True)
 
-    def new(self, name="", select=True, quiet=False):  # override, do not call super
+    def new(self, name='', select=True, quiet=False):  # override, dont call super
         if not name:
             return None
         prefix = name  # name is actually a prefix
@@ -219,7 +233,7 @@ class DataPrefixContainer(Container):
                     t = 'selected'
                 else:
                     t += '/selected'
-                history(t + ' --> ' + p.tree_path)
+                history(t + ' -> ' + p.tree_path)
         self.search(p)
         return p
 
@@ -248,10 +262,10 @@ class DataPrefixContainer(Container):
                 p.channel_container.new(quiet=True)
                 htxt.append('n=' + str(len(olist)))
         if not foundsomething:
-            alert('failed to find data with prefix name ' + quotes(prefix))
+            alert('failed to find data with prefix ' + quotes(prefix))
         if not quiet:
             for h in htxt:
-                history(' --> ' + p.tree_path + ', ' + h)
+                history('found -> ' + p.tree_path + ', ' + h)
         return True
 
     def rename(self, name, newname):  # override, do not call super

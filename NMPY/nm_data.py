@@ -88,10 +88,13 @@ class DataContainer(Container):
                                                   samples)
                 else:
                     ts.thedata = np.zeros(samples)
-            htxt.append("ch=" + cc + ", " + str(ss) + '-' + str(se-1))
+            htxt.append("ch=" + cc + ", ep=" + str(ss) + '-' + str(se-1))
         if not quiet:
             for h in htxt:
-                history('created --> ' + tree_path + "." + prefix + ', ' + h)
+                path = prefix
+                if nmconfig.TREE_PATH_LONG:
+                    path = tree_path + "." + path
+                history('created -> ' + path + ', ' + h)
         if select:
             self.parent.dataprefix_container.new(prefix, quiet=quiet)
         return True

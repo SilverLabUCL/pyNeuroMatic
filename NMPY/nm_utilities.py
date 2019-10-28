@@ -18,49 +18,49 @@ def channel_char(chan_num):
 
 
 def channel_num(chan_char):
-    if chan_char:
-        for i in range(0, len(nmconfig.CHAN_LIST)):
-            if chan_char.casefold() == nmconfig.CHAN_LIST[i].casefold():
-                return i
+    if not chan_char:
+        return -1
+    for i in range(0, len(nmconfig.CHAN_LIST)):
+        if nmconfig.CHAN_LIST[i].upper() == chan_char.upper():
+            return i
     return -1
 
 
 def chan_char_exists(text, chan_char):
     if not text or not chan_char or len(chan_char) > 1:
         return False
-    numchar = len(text)
-    for i in reversed(range(numchar)):  # search backwards
+    for i in reversed(range(len(text))):  # search backwards
         if text[i].isdigit():  # skip thru seq number
             continue
-        if text[i].casefold() == chan_char.casefold():  # first char before seq #
+        if text[i].upper() == chan_char.upper():  # first char before seq #
             return True
     return False
 
 
 def quotes(text, single=True):
     if not text:
-        text = ""
+        text = ''
     if single:
         return "'" + text + "'"
-    return "\"" + text + "\""
+    return '"' + text + '"'
 
 
 def remove_special_chars(text):
     if not text:
-        return ""
-    temp = ""
+        return ''
+    temp = ''
     for c in text:
-        if c.isalnum() or c == "_":
-            temp += c  # only alpha-numeric or "_"
+        if c.isalnum() or c == '_':
+            temp += c  # only alpha-numeric or '_'
     return temp
 
 
 def name_ok(name):
-    ok = ["_"]  # list of symbols OK to include in names
+    ok = ['_']  # list of symbols OK to include in names
     if not name:
         return False
     for c in ok:
-        name = name.replace(c, "")
+        name = name.replace(c, '')
     if name.isalnum():
         return True
     return False
@@ -84,7 +84,7 @@ def get_name_list(nm_obj_list):
     return nlist
 
 
-def get_items(nm_obj_list, prefix, chan_char=""):
+def get_items(nm_obj_list, prefix, chan_char=''):
     if not nm_obj_list or not name_ok(prefix):
         return []
     olist = []
@@ -107,8 +107,8 @@ def alert(text):
     stack = inspect.stack()
     child = stack_get_class(stack)
     method = stack_get_method(stack)
-    print(Fore.RED + "ALERT." + child + "." + method +
-          ": " + text + Fore.BLACK)
+    print(Fore.RED + 'ALERT.' + child + '.' + method + ': ' +
+          text + Fore.BLACK)
     return False
 
 
@@ -118,38 +118,35 @@ def error(text):
     stack = inspect.stack()
     child = stack_get_class(stack)
     method = stack_get_method(stack)
-    print(Fore.RED + "ERROR." + child + "." + method +
-          ": " + text + Fore.BLACK)
+    print(Fore.RED + 'ERROR.' + child + '.' + method + ': ' +
+          text + Fore.BLACK)
     return False
 
 
 def history(text):
-    if not text:
-        return False
     stack = inspect.stack()
     child = stack_get_class(stack)
     method = stack_get_method(stack)
-    print(child + "." + method + ": " + text)
-    return True
+    print(child + '.' + method + ': ' + text)
 
 
 def stack_get_class(stack, child=True):
     if not stack:
-        return "None"
-    class_tree = str(stack[1][0].f_locals["self"].__class__)
-    class_tree = class_tree.replace("<class ", "")
-    class_tree = class_tree.replace("\'", "")
-    class_tree = class_tree.replace(">", "")
-    class_tree = class_tree.split(".")
+        return 'None'
+    class_tree = str(stack[1][0].f_locals['self'].__class__)
+    class_tree = class_tree.replace('<class ', '')
+    class_tree = class_tree.replace("\'", '')
+    class_tree = class_tree.replace('>', '')
+    class_tree = class_tree.split('.')
     class_child = class_tree[0]
     class_parent = class_tree[1]
     if child:
         return class_child
-    return class_child + "." + class_parent
+    return class_child + '.' + class_parent
 
 
 def stack_get_method(stack):
     if not stack:
-        return "None"
+        return 'None'
     # return inspect.stack()[1][3]
     return stack[1][0].f_code.co_name
