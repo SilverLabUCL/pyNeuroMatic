@@ -82,19 +82,19 @@ class DataContainer(Container):
                 ts = self.new(name, quiet=True)
                 tree_path = ts.parent.tree_path
                 if not ts:
-                    alert("failed to create " + quotes(name))
+                    alert('failed to create ' + quotes(name))
                 if noise:
                     ts.thedata = np.random.normal(noise_mu, noise_sigma,
                                                   samples)
                 else:
                     ts.thedata = np.zeros(samples)
-            htxt.append("ch=" + cc + ", ep=" + str(ss) + '-' + str(se-1))
+            htxt.append('ch=' + cc + ', ep=' + str(ss) + '-' + str(se-1))
         if not quiet:
             for h in htxt:
                 path = prefix
                 if nmconfig.TREE_PATH_LONG:
                     path = tree_path + "." + path
-                history('created -> ' + path + ', ' + h)
+                history('created' + nmconfig.HD0 + path + ', ' + h)
         if select:
             self.parent.dataprefix_container.new(prefix, quiet=quiet)
         return True

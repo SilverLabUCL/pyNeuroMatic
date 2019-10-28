@@ -83,10 +83,10 @@ class EpochSetContainer(Container):
                 dnames.append(d.name)
                 found_something = True
             if found_something:
-                i.append(str(e))
+                i.append(e)
         r['added'] = dnames
         if not quiet:
-            history(s.tree_path + ' -> ep=' + ', '.join(i))
+            history(s.tree_path + nmconfig.HD0 + 'ep=' + str(i))
         return r
 
     def remove(self, name, epoch, quiet=True):
@@ -114,60 +114,3 @@ class EpochSetContainer(Container):
             return False
         s.theset.clear()
         return True
-
-    def get_selected(self, names=False):
-        channels = len(self.parent.thedata)
-        cs = self.parent.channel_select
-        all_chan = self.parent.all_channels
-        ss = self.parent.eset_select.name
-        eset = self.parent.eset_select.theset
-        setx = self.get('SetX').theset
-        if channels == 0 or len(cs) == 0:
-            return []
-        if ss.upper() == 'ALL':
-            all_epochs = True
-        else:
-            all_epochs = False
-            eset = eset.difference(setx)
-        if all_chan and channels > 1:
-            clist = []
-            for chan in self.parent.thedata:
-                dlist = []
-                for d in chan:
-                    if all_epochs:
-                        if d not in setx:
-                            if names:
-                                dlist.append(d.name)
-                            else:
-                                dlist.append(d)
-                    elif d in eset:
-                        if names:
-                            dlist.append(d.name)
-                        else:
-                            dlist.append(d)
-                clist.append(dlist)
-            return clist
-        dlist = []
-        cnum_list = []
-        if channels == 1:
-            cnum_list.append(0)
-        else:
-            for c in cs:
-                cnum = channel_num(c)
-                if cnum >= 0 and cnum < channels:
-                    cnum_list.append(cnum)
-        for c in cnum_list:
-            chan = self.parent.thedata[c]
-            for d in chan:
-                if all_epochs:
-                    if d not in setx:
-                        if names:
-                            dlist.append(d.name)
-                        else:
-                            dlist.append(d)
-                elif d in eset:
-                    if names:
-                        dlist.append(d.name)
-                    else:
-                        dlist.append(d)
-        return dlist

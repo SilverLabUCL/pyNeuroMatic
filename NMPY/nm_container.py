@@ -13,7 +13,6 @@ from nm_utilities import alert
 from nm_utilities import error
 from nm_utilities import history
 
-
 class NMObject(object):
     """
     NM objects to be stored in a 'Container' list (see below).
@@ -39,6 +38,11 @@ class NMObject(object):
     @property
     def name(self):
         return self.__name
+    
+    @name.setter
+    def name(self, name):
+        if name and name_ok(name):
+            self.__name = name
 
     @property
     def date(self):
@@ -189,7 +193,7 @@ class Container(NMObject):
             if name.casefold() == o.name.casefold():
                 self.__object_select = o
                 if not quiet:
-                    history('selected -> ' + o.tree_path)
+                    history('selected' + nmconfig.HD0 + o.tree_path)
                 return True
         if new:
             o = self.new(name=name, quiet=quiet)
@@ -303,10 +307,10 @@ class Container(NMObject):
         if select or not self.__object_select:
             self.__object_select = o
             if not quiet:
-                history('created/selected -> ' + o.tree_path)
+                history('created/selected' + nmconfig.HD0 + o.tree_path)
             return o
         if not quiet:
-            history('created -> ' + o.tree_path)
+            history('created' + nmconfig.HD0 + o.tree_path)
         return o
 
     def name_next(self, prefix='selected'):
@@ -347,10 +351,10 @@ class Container(NMObject):
         if self.exists(newname):
             error('name ' + quotes(newname) + ' is already used')
             return False
+        old_path = o.tree_path
         o.name = newname
         if not quiet:
-            history('renamed ' + self.__tname(name) +
-                    ' to ' + quotes(newname))
+            history('renamed' + nmconfig.HD0 + old_path + ' to ' + o.tree_path)
         return True
 
     def open_(self, path):

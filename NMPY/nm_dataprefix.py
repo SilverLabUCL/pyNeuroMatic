@@ -33,6 +33,7 @@ class DataPrefix(NMObject):
             self.__eset_container.new(s, select=select, quiet=True)
         self.__channel_select = ['A']
         self.__epoch_select = 0
+        self.__data_select = []
         # self.print_details()
 
     @property
@@ -44,10 +45,6 @@ class DataPrefix(NMObject):
         if self.__eset_container:
             return self.__eset_container.select
         return None
-
-    @property
-    def data_select(self):
-        return self.eset_container.get_selected(names=True)
 
     @property
     def channel_container(self):
@@ -97,7 +94,7 @@ class DataPrefix(NMObject):
                 return False
             clist.append(cc.upper())
         self.__channel_select = clist
-        history(self.tree_path + ' -> ch=' + str(clist))
+        history(self.tree_path + nmconfig.HD0 + 'ch=' + str(clist))
         return True
 
     @property
@@ -131,7 +128,7 @@ class DataPrefix(NMObject):
     def epoch_select(self, epoch):
         if self.epoch_ok(epoch):
             self.__epoch_select = epoch
-            history(self.tree_path + ' -> epoch=' + str(epoch))
+            history(self.tree_path + nmconfig.HD0 + 'epoch=' + str(epoch))
             return True
         error('bad epoch number: ' + str(epoch))
         return False
@@ -186,6 +183,67 @@ class DataPrefix(NMObject):
                     dlist.append(chan[epoch])
         return dlist
 
+    @property
+    def data_select(self):
+        self.__data_select = self.get_selected(names=True)
+        return self.__data_select
+
+    def get_selected(self, names=False):
+        channels = len(self.__thedata)
+        cs = self.__channel_select
+        ss = self.eset_select.name
+        eset = self.eset_select.theset
+        setx = self.eset_container.get('SetX').theset
+        if channels == 0 or len(cs) == 0:
+            return []
+        if ss.upper() == 'ALL':
+            all_epochs = True
+        else:
+            all_epochs = False
+            eset = eset.difference(setx)
+        if self.all_channels and channels > 1:
+            clist = []
+            for chan in self.__thedata:
+                dlist = []
+                for d in chan:
+                    if all_epochs:
+                        if d not in setx:
+                            if names:
+                                dlist.append(d.name)
+                            else:
+                                dlist.append(d)
+                    elif d in eset:
+                        if names:
+                            dlist.append(d.name)
+                        else:
+                            dlist.append(d)
+                clist.append(dlist)
+            return clist
+        dlist = []
+        cnum_list = []
+        if channels == 1:
+            cnum_list.append(0)
+        else:
+            for c in cs:
+                cnum = channel_num(c)
+                if cnum >= 0 and cnum < channels:
+                    cnum_list.append(cnum)
+        for c in cnum_list:
+            chan = self.__thedata[c]
+            for d in chan:
+                if all_epochs:
+                    if d not in setx:
+                        if names:
+                            dlist.append(d.name)
+                        else:
+                            dlist.append(d)
+                elif d in eset:
+                    if names:
+                        dlist.append(d.name)
+                    else:
+                        dlist.append(d)
+        return dlist
+
 
 class DataPrefixContainer(Container):
     """
@@ -233,7 +291,7 @@ class DataPrefixContainer(Container):
                     t = 'selected'
                 else:
                     t += '/selected'
-                history(t + ' -> ' + p.tree_path)
+                history(t + nmconfig.HD0 + p.tree_path)
         self.search(p)
         return p
 
@@ -265,7 +323,7 @@ class DataPrefixContainer(Container):
             alert('failed to find data with prefix ' + quotes(prefix))
         if not quiet:
             for h in htxt:
-                history('found -> ' + p.tree_path + ', ' + h)
+                history('found' + nmconfig.HD0 + p.tree_path + ', ' + h)
         return True
 
     def rename(self, name, newname):  # override, do not call super

@@ -3,6 +3,7 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import nm_configs as nmconfig
 from nm_project import Project
 from nm_utilities import name_ok
 from nm_utilities import quotes
@@ -44,7 +45,7 @@ class Manager(object):
             error('bad name ' + quotes(name))
             return None
         self.__project = Project(parent=None, name=name)
-        history('created -> ' + name)
+        history('created' + nmconfig.HD0 + name)
         self.experiment.new()  # create default experiment
         #self.experiment.new()  # create default experiment
         self.folder.new()  # create default folder
@@ -52,18 +53,19 @@ class Manager(object):
         self.data_test()
 
     def data_test(self):
-        n = True
+        noise = True
         self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
-                       noise=n)
+                       noise=noise)
         self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
-                       noise=n)
-        self.data.make(prefix='Wave', channels=3, epochs=8, samples=5, noise=n)
+                       noise=noise)
+        self.data.make(prefix='Wave', channels=3, epochs=8, samples=5, 
+                       noise=noise)
         # self.dataprefix.new('Test')
         self.eset.add('Set1', range(0, 8, 2))
         rdic = self.eset.add('SetX', [4])
         # print(rdic)
         # self.eset.select="Set1"
-        clist = self.eset.get_selected(names=True)
+        clist = self.dataprefix.select.data_select
         print(clist)
     
     @property
