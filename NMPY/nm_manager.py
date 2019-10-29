@@ -4,6 +4,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import nm_configs as nmconfig
+from nm_container import NMObject
 from nm_project import Project
 from nm_utilities import name_ok
 from nm_utilities import quotes
@@ -14,12 +15,13 @@ from nm_utilities import alert
 nm = None  # holds Manager, accessed via console
 
 
-class Manager(object):
+class Manager(NMObject):
     """
     NM Manager class
     Main outer class that manages everything
 
     NM object tree:
+        Manager
         Project
             ExperimentContainer
             Experiment (Exp0, Exp1...)
@@ -34,31 +36,18 @@ class Manager(object):
                                     EpochSetContainer
                                     EpochSet (All, Set1, Set2...)
     """
-    def __init__(self):
-        self.project_new('NMProject')
-
-    def project_new(self, name):
-        """Create new project"""
-        if not name or name.casefold() == 'default':
-            name = 'NMProject'
-        elif not name_ok(name):
-            error('bad name ' + quotes(name))
-            return None
-        self.__project = Project(parent=None, name=name)
-        history('created' + nmconfig.HD0 + name)
-        self.experiment.new()  # create default experiment
-        #self.experiment.new()  # create default experiment
-        self.folder.new()  # create default folder
-        #self.folder.new()  # create default folder
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.__project = self.project_new('NMProject')
         self.data_test()
 
     def data_test(self):
         noise = True
-        self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
+        self.data.make(prefix='Record', channels=2, epochs=3, samples=5,
                        noise=noise)
-        self.data.make(prefix='Record', channels=2, epochs=3, samples=5, 
+        self.data.make(prefix='Record', channels=2, epochs=3, samples=5,
                        noise=noise)
-        self.data.make(prefix='Wave', channels=3, epochs=8, samples=5, 
+        self.data.make(prefix='Wave', channels=3, epochs=8, samples=5,
                        noise=noise)
         # self.dataprefix.new('Test')
         self.eset.add('Set1', range(0, 8, 2))
@@ -67,7 +56,28 @@ class Manager(object):
         # self.eset.select="Set1"
         clist = self.dataprefix.select.data_select
         print(clist)
-    
+        
+    def input_test(self):
+        name = input("What's your name? ")
+        print("Nice to meet you " + name + "!")
+        age = input("Your age? ")
+        print("So, you are already " + age + " years old, " + name + "!")
+
+    def project_new(self, name):
+        """Create new project"""
+        if not name or name.casefold() == 'default':
+            name = 'NMProject'
+        elif not name_ok(name):
+            error('bad name ' + quotes(name))
+            return None
+        p = Project(self, name)
+        history('created' + nmconfig.HD0 + name)
+        if p:
+            e = p.exp_container.new()  # create default experiment
+            if e:
+                e.folder_container.new()  # create default folder
+        return p
+
     @property
     def project(self):
         if not self.__project:
@@ -244,15 +254,27 @@ class Manager(object):
         return ps.epoch_select == epoch
 
     @property
+    def data_select(self):
+        pc = self.dataprefix
+        if not pc:
+            return False
+        ps = pc.select
+        if not ps:
+            alert('there is no selected data prefix in folder ' +
+                  self.folder_select)
+            return False
+        return ps.data_select
+
+    @property
     def select(self):
         s = {}
         project = None
         exp = None
         folder = None
         prefix = None
+        chan = ''
         eset = None
         epoch = -1
-        chan = ''
         if self.project:
             project = self.project
             if self.experiment.select:
@@ -261,17 +283,17 @@ class Manager(object):
                     folder = self.folder.select
                     if self.dataprefix.select:
                         prefix = self.dataprefix.select
+                        chan = self.dataprefix.select.channel_select
                         if self.eset.select:
                             eset = self.eset.select
                         epoch = self.dataprefix.select.epoch_select
-                        chan = self.dataprefix.select.channel_select
         s['project'] = project
         s['experiment'] = exp
         s['folder'] = folder
         s['dataprefix'] = prefix
+        s['channel'] = chan
         s['eset'] = eset
         s['epoch'] = epoch
-        s['channel'] = chan
         return s
 
     @property
@@ -281,9 +303,9 @@ class Manager(object):
         exp = 'None'
         folder = 'None'
         prefix = 'None'
+        chan = 'None'
         eset = 'None'
         epoch = -1
-        chan = 'None'
         if self.project:
             project = self.project.name
             if self.experiment.select:
@@ -292,17 +314,17 @@ class Manager(object):
                     folder = self.folder.select.name
                     if self.dataprefix.select:
                         prefix = self.dataprefix.select.name
+                        chan = self.dataprefix.select.channel_select
                         if self.eset.select:
                             eset = self.eset.select.name
                         epoch = self.dataprefix.select.epoch_select
-                        chan = self.dataprefix.select.channel_select
         s['project'] = self.project.name
         s['experiment'] = exp
         s['folder'] = folder
         s['dataprefix'] = prefix
+        s['channel'] = chan
         s['eset'] = eset
         s['epoch'] = epoch
-        s['channel'] = chan
         return s
 
     def stats(self, project, experiment, folder, dataprefix, channel, eset):
@@ -310,7 +332,7 @@ class Manager(object):
 
 
 if __name__ == '__main__':
-    nm = Manager()
+    nm = Manager(None, 'NMManager')
     # s = nm.selected_names
     # nm.stats(**s)
     # nm.exp.folder_new(name="NMFolder0")

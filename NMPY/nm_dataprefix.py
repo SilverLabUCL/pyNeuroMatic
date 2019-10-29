@@ -28,14 +28,16 @@ class DataPrefix(NMObject):
         self.__thedata = []  # 2D list, i = chan #, j = seq #
         self.__channel_container = ChannelContainer(self, 'NMChannels')
         self.__eset_container = EpochSetContainer(self, 'NMEpochSets')
-        for s in nmconfig.ESETS_DEFAULT:
-            select = s.upper() == 'ALL'
-            self.__eset_container.new(s, select=select, quiet=True)
         self.__channel_select = ['A']
         self.__epoch_select = 0
         self.__data_select = []
-        # self.print_details()
-
+        self.eset_init()
+        #self.details()
+        
+    @property
+    def channel_container(self):
+        return self.__channel_container
+ 
     @property
     def eset_container(self):
         return self.__eset_container
@@ -46,18 +48,24 @@ class DataPrefix(NMObject):
             return self.__eset_container.select
         return None
 
-    @property
-    def channel_container(self):
-        return self.__channel_container
+    def eset_init(self):
+        if not nmconfig.ESETS_DEFAULT:
+            return []
+        r = []
+        for s in nmconfig.ESETS_DEFAULT:
+            select = s.upper() == 'ALL'
+            if self.__eset_container.new(s, select=select, quiet=True):
+                r.append(s)
+        if not self.__eset_container.select:
+            self.__eset_container.select = nmconfig.ESETS_DEFAULT[0]
+        return r
 
     @property
     def channel_count(self):
-        if not self.__thedata:
-            return 0
         return len(self.__thedata)
 
     def channel_list(self, includeAll=False):
-        n = self.channel_count
+        n = len(self.__thedata)
         if n == 0:
             return []
         if includeAll and n > 1:
@@ -81,6 +89,8 @@ class DataPrefix(NMObject):
 
     @property
     def channel_select(self):
+        if not self.__channel_select:
+            self.__channel_select = 'A'
         return self.__channel_select
 
     @channel_select.setter
@@ -137,11 +147,11 @@ class DataPrefix(NMObject):
     def select(self):
         s = {}
         s['channel'] = self.__channel_select
-        s['epoch'] = self.__epoch_select
         if self.__eset_container and self.__eset_container.select:
             s['eset'] = self.__eset_container.select.name
         else:
             s['eset'] = 'None'
+        s['epoch'] = self.__epoch_select
         return s
 
     @property
@@ -191,10 +201,10 @@ class DataPrefix(NMObject):
     def get_selected(self, names=False):
         channels = len(self.__thedata)
         cs = self.__channel_select
-        ss = self.eset_select.name
-        eset = self.eset_select.theset
+        ss = self.eset_container.select.name
+        eset = self.eset_container.select.theset
         setx = self.eset_container.get('SetX').theset
-        if channels == 0 or len(cs) == 0:
+        if channels == 0:
             return []
         if ss.upper() == 'ALL':
             all_epochs = True
