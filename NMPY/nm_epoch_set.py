@@ -4,14 +4,9 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import nm_configs as nmconfig
+import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
-from nm_utilities import channel_num
-from nm_utilities import name_ok
-from nm_utilities import quotes
-from nm_utilities import error
-from nm_utilities import history
 
 
 class EpochSet(NMObject):
@@ -34,9 +29,8 @@ class EpochSetContainer(Container):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, prefix=nmconfig.ESET_PREFIX)
-        self.count_from = 1
-        # self.__set_select = "All"
+        super().__init__(parent, name, nmc.ESET_PREFIX,
+             count_from=1)
 
     def object_new(self, name):  # override, do not call super
         return EpochSet(self.parent, name)
@@ -57,10 +51,10 @@ class EpochSetContainer(Container):
         if not s:
             return False
         if s.name.upper() == 'ALL':
-            error("cannot rename 'All' set")
+            self.error("cannot rename 'All' set")
             return False
         if s.name.upper() == 'SETX':
-            error("cannot rename SetX")
+            self.error("cannot rename SetX")
             return False
         return super().rename(name, newname)
 
@@ -86,7 +80,7 @@ class EpochSetContainer(Container):
                 i.append(e)
         r['added'] = dnames
         if not quiet:
-            history(s.tree_path + nmconfig.HD0 + 'ep=' + str(i))
+            self.history(s.tree_path + nmc.HD0 + 'ep=' + str(i))
         return r
 
     def remove(self, name, epoch, quiet=True):

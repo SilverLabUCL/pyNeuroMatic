@@ -3,16 +3,12 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import nm_configs as nmconfig
+import numpy as np
+
+import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
 from nm_utilities import channel_char
-from nm_utilities import name_ok
-from nm_utilities import quotes
-from nm_utilities import history
-from nm_utilities import error
-from nm_utilities import alert
-import numpy as np
 
 
 class Data(NMObject):
@@ -40,7 +36,7 @@ class DataContainer(Container):
     Container for NM Data objects
     """
     def __init__(self, parent, name):
-        super().__init__(parent, name, prefix=nmconfig.DATA_PREFIX)
+        super().__init__(parent, name, nmc.DATA_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Data(self.parent, name)
@@ -50,12 +46,12 @@ class DataContainer(Container):
 
     @property
     def select(self):  # override
-        alert('Use nm.dataprefix.select')
+        self.alert('Use nm.dataprefix.select')
         return super().select
 
     @select.setter
     def select(self, name, quiet=False): # override, do not call super
-        alert('Use nm.dataprefix.select')
+        self.alert('Use nm.dataprefix.select')
         return False
 
     def make(self, prefix='default', channels=1, epochs=3, samples=10,
@@ -63,8 +59,8 @@ class DataContainer(Container):
         noise_mu, noise_sigma = 0, 0.1  # mean and standard deviation
         if not prefix or prefix.casefold() == 'default':
             prefix = self.prefix
-        if not name_ok(prefix):
-            return error('bad prefix ' + quotes(prefix))
+        if not self.name_ok(prefix):
+            return self.error('bad prefix ' + self.quotes(prefix))
         if channels <= 0 or epochs <= 0 or samples <= 0:
             return False
         seq_start = []
@@ -82,7 +78,7 @@ class DataContainer(Container):
                 ts = self.new(name, quiet=True)
                 tree_path = ts.parent.tree_path
                 if not ts:
-                    alert('failed to create ' + quotes(name))
+                    self.alert('failed to create ' + self.quotes(name))
                 if noise:
                     ts.thedata = np.random.normal(noise_mu, noise_sigma,
                                                   samples)
@@ -92,9 +88,9 @@ class DataContainer(Container):
         if not quiet:
             for h in htxt:
                 path = prefix
-                if nmconfig.TREE_PATH_LONG:
+                if nmc.TREE_PATH_LONG:
                     path = tree_path + "." + path
-                history('created' + nmconfig.HD0 + path + ', ' + h)
+                self.history('created' + nmc.HD0 + path + ', ' + h)
         if select:
             self.parent.dataprefix_container.new(prefix, quiet=quiet)
         return True

@@ -4,14 +4,14 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+from colorama import Fore
 import copy
 import datetime
-import nm_configs as nmconfig
-from nm_utilities import quotes
-from nm_utilities import name_ok
-from nm_utilities import alert
-from nm_utilities import error
-from nm_utilities import history
+import inspect
+
+import nm_configs as nmc
+import nm_utilities as nmu
+
 
 class NMObject(object):
     """
@@ -41,7 +41,7 @@ class NMObject(object):
     
     @name.setter
     def name(self, name):
-        if name and name_ok(name):
+        if name and self.name_ok(name):
             self.__name = name
 
     @property
@@ -50,8 +50,8 @@ class NMObject(object):
 
     @property
     def tree_path(self):
-        if nmconfig.TREE_PATH_LONG:
-            skip = nmconfig.TREE_PATH_SKIP_CLASS
+        if nmc.TREE_PATH_LONG:
+            skip = nmc.TREE_PATH_SKIP_CLASS
             plist = self.tree_path_list(skipClass=skip)
             return '.'.join(plist)
         return self.name
@@ -72,6 +72,70 @@ class NMObject(object):
                 pass
             else:
                 thepath.insert(0, p.name)
+
+    def get_manager(self):
+        p = self
+        for i in range(0, 20):  # loop thru parent ancestry
+            if not p.parent:
+                return None  # no more parents
+            p = p.parent
+            if p.__class__.__name__ == 'Manager':
+                return p
+
+    @property
+    def gui(self):
+        m = self.get_manager()
+        if m:
+            return m.gui
+        return False
+
+    @staticmethod
+    def quotes(text, single=True):
+        if not text:
+            text = ''
+        if single:
+            return "'" + text + "'"
+        return '"' + text + '"'
+
+    @staticmethod
+    def name_ok(name):
+        ok = ['_']  # list of symbols OK to include in names
+        if not name:
+            return False
+        for c in ok:
+            name = name.replace(c, '')
+        if name.isalnum():
+            return True
+        return False
+
+    def alert(self, text):
+        if not text:
+            return False
+        stack = inspect.stack()
+        child = nmu.stack_get_class(stack)
+        method = nmu.stack_get_method(stack)
+        if self.gui:
+            pass  # to do
+        else:
+            print(Fore.RED + 'ALERT: ' + child + '.' + method + ': ' +
+                  text + Fore.BLACK)
+        return False
+
+    def history(self, text):
+        stack = inspect.stack()
+        child = nmu.stack_get_class(stack)
+        method = nmu.stack_get_method(stack)
+        print(child + '.' + method + ': ' + text)
+
+    def error(self, text):
+        if not text:
+            return False
+        stack = inspect.stack()
+        child = nmu.stack_get_class(stack)
+        method = nmu.stack_get_method(stack)
+        print(Fore.RED + 'ERROR.' + child + '.' + method + ': ' +
+              text + Fore.BLACK)
+        return False
 
 
 class Container(NMObject):
@@ -97,10 +161,10 @@ class Container(NMObject):
             The selected NMObject    
     """
 
-    def __init__(self, parent, name, prefix="NMObj"):
+    def __init__(self, parent, name, prefix="NMObj", count_from=0):
         super().__init__(parent, name)
         self.__prefix = prefix  # used in name_next()
-        self.__count_from = 0  # used in name_next()
+        self.__count_from = count_from  # used in name_next()
         self.__objects = []  # container of NMObject items
         self.__object_select = None  # selected NMObject
 
@@ -112,20 +176,10 @@ class Container(NMObject):
     def prefix(self, prefix):
         if not prefix:
             prefix = ''
-        elif not name_ok(prefix):
-            return error('bad prefix ' + quotes(prefix))
+        elif not self.name_ok(prefix):
+            return self.error('bad prefix ' + self.quotes(prefix))
         self.__prefix = prefix
         return True
-
-    @property
-    def count_from(self):  # see name_next()
-        return self.__count_from
-
-    @count_from.setter
-    def count_from(self, count_from):
-        count_from = round(count_from)
-        if count_from >= 0:
-            self.__count_from = count_from
 
     @property
     def count(self):
@@ -156,8 +210,8 @@ class Container(NMObject):
         t = self.__type()
         if t == 'None':
             return t
-        #return t + " " + quotes(name)  # object type + name
-        return quotes(name)
+        #return t + " " + self.quotes(name)  # object type + name
+        return self.quotes(name)
 
     def get(self, name='selected'):
         """Get NMObject from Container"""
@@ -166,7 +220,7 @@ class Container(NMObject):
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 return o
-        error('failed to find ' + self.__tname(name))
+        self.error('failed to find ' + self.__tname(name))
         print('acceptable names: ' + str(self.name_list))
         return None
 
@@ -184,30 +238,30 @@ class Container(NMObject):
 
     def select_set(self, name, quiet=False, new=False):
         """Select NMObject in Container"""
-        if not name_ok(name):
-            return error('bad name ' + quotes(name))
+        if not self.name_ok(name):
+            return self.error('bad name ' + self.quotes(name))
         if not self.__objects:
-            alert('nothing to select')
+            self.alert('nothing to select')
             return False
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 self.__object_select = o
                 if not quiet:
-                    history('selected' + nmconfig.HD0 + o.tree_path)
+                    self.history('selected' + nmc.HD0 + o.tree_path)
                 return True
         if new:
             o = self.new(name=name, quiet=quiet)
             return o is not None
-        alert('failed to find ' + self.__tname(name))
-        alert('acceptable names: ' + str(self.name_list))
+        self.alert('failed to find ' + self.__tname(name))
+        self.alert('acceptable names: ' + str(self.name_list))
         return False
 
     def add(self, nmobj, select=True, quiet=False):
         """Add NMObject to Container."""
         if not self.instance_ok(nmobj):
-            return error('bad ' + self.__type())
-        if not name_ok(nmobj.name):
-            return error('bad name ' + quotes(nmobj.name))
+            return self.error('bad ' + self.__type())
+        if not self.name_ok(nmobj.name):
+            return self.error('bad name ' + self.quotes(nmobj.name))
         if self.exists(nmobj.name):
             pass  # nothing to do
         else:
@@ -215,10 +269,10 @@ class Container(NMObject):
         if select or not self.__object_select:
             self.__object_select = nmobj
             if not quiet:
-                history('added/selected ' + self.__tname(nmobj.name))
+                self.history('added/selected ' + self.__tname(nmobj.name))
             return True
         if not quiet:
-            history('added ' + self.__tname(nmobj.name))
+            self.history('added ' + self.__tname(nmobj.name))
         return True
 
     def duplicate(self, name, newname, select=False, quiet=False):
@@ -235,24 +289,24 @@ class Container(NMObject):
         o = self.get(name)
         if not o:
             return False
-        if not name_ok(newname):
-            return error('bad newname ' + quotes(newname))
+        if not self.name_ok(newname):
+            return self.error('bad newname ' + self.quotes(newname))
         if self.exists(newname):
-            error(self.__tname(newname) + ' already exists')
+            self.error(self.__tname(newname) + ' already exists')
             return False
         c = copy.deepcopy(o)
         if c is not None:
             c.name = newname
             self.__objects.append(c)
             if not quiet:
-                history('copied ' + self.__tname(name) +
-                        ' to ' + quotes(newname))
+                self.history('copied ' + self.__tname(name) +
+                        ' to ' + self.quotes(newname))
         return c
 
     def exists(self, name):
         """Check if NMObject exists within container"""
-        if not name_ok(name):
-            return error('bad name ' + quotes(name))
+        if not self.name_ok(name):
+            return self.error('bad name ' + self.quotes(name))
         if not self.__objects:
             return False
         for o in self.__objects:
@@ -276,11 +330,11 @@ class Container(NMObject):
         selected = o is self.__object_select
         self.__objects.remove(o)
         if not quiet:
-            history('killed ' + self.__tname(name))
+            self.history('killed ' + self.__tname(name))
         if selected and len(self.__objects) > 0:
             self.__object_select = self.__objects[0]
             if not quiet:
-                history('selected ' + self.__tname(self.__object_select.name))
+                self.history('selected ' + self.__tname(self.__object_select.name))
         return True
 
     def new(self, name='default', select=True, quiet=False):
@@ -296,21 +350,21 @@ class Container(NMObject):
         """
         if not name or name.casefold() == 'default':
             name = self.name_next()
-        elif not name_ok(name):
-            error('bad name ' + quotes(name))
+        elif not self.name_ok(name):
+            self.error('bad name ' + self.quotes(name))
             return None
         elif self.exists(name):
-            error(self.__tname(name) + ' already exists')
+            self.error(self.__tname(name) + ' already exists')
             return None
         o = self.object_new(name)
         self.__objects.append(o)
         if select or not self.__object_select:
             self.__object_select = o
             if not quiet:
-                history('created/selected' + nmconfig.HD0 + o.tree_path)
+                self.history('created/selected' + nmc.HD0 + o.tree_path)
             return o
         if not quiet:
-            history('created' + nmconfig.HD0 + o.tree_path)
+            self.history('created' + nmc.HD0 + o.tree_path)
         return o
 
     def name_next(self, prefix='selected'):
@@ -320,8 +374,8 @@ class Container(NMObject):
                 prefix = self.__prefix
             else:
                 return ''
-        if not name_ok(prefix):
-            error('bad prefix ' + quotes(prefix))
+        if not self.name_ok(prefix):
+            self.error('bad prefix ' + self.quotes(prefix))
             return ''
         return prefix + str(self.name_next_seq(prefix))
 
@@ -332,8 +386,8 @@ class Container(NMObject):
                 prefix = self.__prefix
             else:
                 return 0
-        if not name_ok(prefix):
-            error('bad prefix ' + quotes(prefix))
+        if not self.name_ok(prefix):
+            self.error('bad prefix ' + self.quotes(prefix))
             return 0
         n = 10 + len(self.__objects)
         for i in range(self.__count_from, n):
@@ -346,19 +400,19 @@ class Container(NMObject):
         o = self.get(name)
         if not o:
             return False
-        if not name_ok(newname):
-            return error('bad newname ' + quotes(newname))
+        if not self.name_ok(newname):
+            return self.error('bad newname ' + self.quotes(newname))
         if self.exists(newname):
-            error('name ' + quotes(newname) + ' is already used')
+            self.error('name ' + self.quotes(newname) + ' is already used')
             return False
         old_path = o.tree_path
         o.name = newname
         if not quiet:
-            history('renamed' + nmconfig.HD0 + old_path + ' to ' + o.tree_path)
+            self.history('renamed' + nmc.HD0 + old_path + ' to ' + o.tree_path)
         return True
 
     def open_(self, path):
-        pass
+        pass  # to do
 
     def save(self, name):
-        pass
+        pass  # to do

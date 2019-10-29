@@ -4,14 +4,9 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import nm_configs as nmconfig
 from nm_container import NMObject
 from nm_container import Container
-from nm_utilities import name_ok
-from nm_utilities import quotes
-from nm_utilities import alert
-from nm_utilities import error
-from nm_utilities import channel_char
+import nm_utilities as nmu
 
 
 class Channel(NMObject):
@@ -31,7 +26,7 @@ class ChannelContainer(Container):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, prefix=nmconfig.CHAN_PREFIX)
+        super().__init__(parent, name, prefix='Chan')
 
     def object_new(self, name):  # override, do not call super
         return Channel(self.parent, name)
@@ -45,7 +40,7 @@ class ChannelContainer(Container):
 
     @select.setter
     def select(self, name):
-        alert('NOT USED. See nm.dataprefix.select.channel_select')
+        self.alert('NOT USED. See nm.dataprefix.select.channel_select')
 
     def name_next(self):  # override, do not call super
         """Get next default channel name."""
@@ -55,15 +50,15 @@ class ChannelContainer(Container):
             prefix = "Chan"
         n = 10 + len(self.getAll())
         for i in range(0, n):
-            name = prefix + channel_char(i)
+            name = prefix + nmu.channel_char(i)
             if not self.exists(name):
                 return name
         return prefix + "Z"
 
     def rename(self, name, newname):  # override, do not call super
-        error("cannot rename Channel object")
+        self.error("cannot rename Channel object")
         return False
 
     def kill(self, name, quiet=False):  # override, do not call super
-        error("cannot kill Channel object")
+        self.error("cannot kill Channel object")
         return False

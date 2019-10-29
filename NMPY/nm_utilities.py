@@ -7,11 +7,11 @@ Copyright 2019 Jason Rothman
 import inspect
 from colorama import Fore, Back, Style
 
-import nm_configs as nmconfig
+import nm_configs as nmc
 
 
 def channel_char(chan_num):
-    clist = nmconfig.CHAN_LIST
+    clist = nmc.CHAN_LIST
     if chan_num >= 0 and chan_num < len(clist):
         return clist[chan_num]
     return ''
@@ -20,8 +20,8 @@ def channel_char(chan_num):
 def channel_num(chan_char):
     if not chan_char:
         return -1
-    for i in range(0, len(nmconfig.CHAN_LIST)):
-        if nmconfig.CHAN_LIST[i].upper() == chan_char.upper():
+    for i in range(0, len(nmc.CHAN_LIST)):
+        if nmc.CHAN_LIST[i].upper() == chan_char.upper():
             return i
     return -1
 
@@ -55,19 +55,8 @@ def remove_special_chars(text):
     return temp
 
 
-def name_ok(name):
-    ok = ['_']  # list of symbols OK to include in names
-    if not name:
-        return False
-    for c in ok:
-        name = name.replace(c, '')
-    if name.isalnum():
-        return True
-    return False
-
-
 def exists(nm_obj_list, name):
-    if not nm_obj_list or not name_ok(name):
+    if not nm_obj_list or not name:
         return False
     for o in nm_obj_list:
         if name.casefold() == o.name.casefold():
@@ -85,7 +74,7 @@ def get_name_list(nm_obj_list):
 
 
 def get_items(nm_obj_list, prefix, chan_char=''):
-    if not nm_obj_list or not name_ok(prefix):
+    if not nm_obj_list or not prefix:
         return []
     olist = []
     i = len(prefix)
@@ -99,36 +88,6 @@ def get_items(nm_obj_list, prefix, chan_char=''):
             else:
                 olist.append(o)
     return olist
-
-
-def alert(text):
-    if not text:
-        return False
-    stack = inspect.stack()
-    child = stack_get_class(stack)
-    method = stack_get_method(stack)
-    print(Fore.RED + 'ALERT.' + child + '.' + method + ': ' +
-          text + Fore.BLACK)
-    return False
-
-
-def error(text):
-    if not text:
-        return False
-    stack = inspect.stack()
-    child = stack_get_class(stack)
-    method = stack_get_method(stack)
-    print(Fore.RED + 'ERROR.' + child + '.' + method + ': ' +
-          text + Fore.BLACK)
-    return False
-
-
-def history(text):
-    stack = inspect.stack()
-    child = stack_get_class(stack)
-    method = stack_get_method(stack)
-    print(child + '.' + method + ': ' + text)
-
 
 def stack_get_class(stack, child=True):
     if not stack:
@@ -150,3 +109,4 @@ def stack_get_method(stack):
         return 'None'
     # return inspect.stack()[1][3]
     return stack[1][0].f_code.co_name
+

@@ -5,9 +5,6 @@ Copyright 2019 Jason Rothman
 """
 from nm_container import NMObject
 from nm_experiment import ExperimentContainer
-from nm_utilities import name_ok
-from nm_utilities import quotes
-from nm_utilities import error
 
 
 class Project(NMObject):
@@ -20,8 +17,8 @@ class Project(NMObject):
         self.__exp_container = ExperimentContainer(self, 'NMExps')
 
     def rename(self, name):
-        if not name_ok(name):
-            return error('bad name ' + quotes(name))
+        if not self.name_ok(name):
+            return self.error('bad name ' + self.quotes(name))
         self.__name = name
         return True
 

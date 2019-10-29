@@ -3,14 +3,9 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import nm_configs as nmconfig
+import nm_configs as nmc
 from nm_container import NMObject
 from nm_project import Project
-from nm_utilities import name_ok
-from nm_utilities import quotes
-from nm_utilities import error
-from nm_utilities import history
-from nm_utilities import alert
 
 nm = None  # holds Manager, accessed via console
 
@@ -39,7 +34,9 @@ class Manager(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self.__project = self.project_new('NMProject')
+        self.__gui = nmc.GUI
         self.data_test()
+        # nm.exp.folder_open_hdf5()
 
     def data_test(self):
         noise = True
@@ -49,7 +46,7 @@ class Manager(NMObject):
                        noise=noise)
         self.data.make(prefix='Wave', channels=3, epochs=8, samples=5,
                        noise=noise)
-        # self.dataprefix.new('Test')
+        self.dataprefix.new('Test')
         self.eset.add('Set1', range(0, 8, 2))
         rdic = self.eset.add('SetX', [4])
         # print(rdic)
@@ -67,21 +64,29 @@ class Manager(NMObject):
         """Create new project"""
         if not name or name.casefold() == 'default':
             name = 'NMProject'
-        elif not name_ok(name):
-            error('bad name ' + quotes(name))
+        elif not self.name_ok(name):
+            self.error('bad name ' + self.quotes(name))
             return None
         p = Project(self, name)
-        history('created' + nmconfig.HD0 + name)
+        self.history('created' + nmc.HD0 + name)
         if p:
             e = p.exp_container.new()  # create default experiment
             if e:
                 e.folder_container.new()  # create default folder
         return p
+    
+    @property
+    def gui(self):  # override, do not call super
+        return self.__gui
+    
+    @gui.setter
+    def gui(self, on):
+        self.__gui = on
 
     @property
     def project(self):
         if not self.__project:
-            alert('there is no project')
+            self.alert('there is no project')
             return None
         return self.__project
 
@@ -91,7 +96,7 @@ class Manager(NMObject):
         if not p:
             return None
         if not p.exp_container:
-            alert('there are no experiments in project ' + p.name)
+            self.alert('there are no experiments in project ' + p.name)
             return None
         return p.exp_container
 
@@ -109,12 +114,12 @@ class Manager(NMObject):
             return None
         es = ec.select
         if not es:
-            alert('there is no selected experiment in project ' +
+            self.alert('there is no selected experiment in project ' +
                   self.project.name)
             return None
         fc = es.folder_container
         if not fc:
-            alert('there are no folders in experiment ' + es.name)
+            self.alert('there are no folders in experiment ' + es.name)
             return None
         return fc  # Folder list in selected experiment
 
@@ -132,12 +137,12 @@ class Manager(NMObject):
             return None
         fs = fc.select
         if not fs:
-            alert('there is no selected folder in experiment ' +
+            self.alert('there is no selected folder in experiment ' +
                   self.experiment_select)
             return None
         dc = fs.data_container
         if not dc:
-            alert('there is no data in folder ' + fs.name)
+            self.alert('there is no data in folder ' + fs.name)
             return None
         return dc  # Data list in selected folder
 
@@ -148,12 +153,12 @@ class Manager(NMObject):
             return None
         fs = fc.select
         if not fs:
-            alert('there is no selected folder in experiment ' +
+            self.alert('there is no selected folder in experiment ' +
                   self.experiment_select)
             return None
         pc = fs.dataprefix_container
         if not pc:
-            alert('there are no data prefixes in folder ' + fs.name)
+            self.alert('there are no data prefixes in folder ' + fs.name)
             return None
         return pc  # DataPrefix list in selected folder
 
@@ -171,12 +176,12 @@ class Manager(NMObject):
             return None
         ps = pc.select
         if not ps:
-            alert('there is no selected data prefix in folder ' +
+            self.alert('there is no selected data prefix in folder ' +
                   self.folder_select)
             return None
         cc = ps.channel_container
         if not cc:
-            alert('there are no channels for data prefix ' + ps.name)
+            self.alert('there are no channels for data prefix ' + ps.name)
             return None
         return cc  # Channel list in selected dataprefix
 
@@ -187,7 +192,7 @@ class Manager(NMObject):
             return 0
         ps = pc.select
         if not ps:
-            alert('there is no selected data prefix in folder ' +
+            self.alert('there is no selected data prefix in folder ' +
                   self.folder_select)
             return 0
         return ps.channel_select
@@ -199,7 +204,7 @@ class Manager(NMObject):
             return False
         ps = pc.select
         if not ps:
-            alert('there is no selected data prefix in folder ' +
+            self.alert('there is no selected data prefix in folder ' +
                   self.folder_select)
             return False
         ps.channel_select = chan_char_list
@@ -212,12 +217,12 @@ class Manager(NMObject):
             return None
         ps = pc.select
         if not ps:
-            alert('there is no selected data prefix in folder ' +
+            self.alert('there is no selected data prefix in folder ' +
                   self.folder_select)
             return None
         sc = ps.eset_container
         if not sc:
-            alert('there are no epoch sets for data prefix ' + ps.name)
+            self.alert('there are no epoch sets for data prefix ' + ps.name)
             return None
         return sc  # EpochSet list in selected dataprefix
 
@@ -235,7 +240,7 @@ class Manager(NMObject):
             return 0
         ps = pc.select
         if not ps:
-            alert('there is no selected data prefix in folder ' +
+            self.alert('there is no selected data prefix in folder ' +
                   self.folder_select)
             return 0
         return ps.epoch_select
@@ -247,7 +252,7 @@ class Manager(NMObject):
             return False
         ps = pc.select
         if not ps:
-            alert('there is no selected data prefix in folder ' +
+            self.alert('there is no selected data prefix in folder ' +
                   self.folder_select)
             return False
         ps.epoch_select = epoch
@@ -260,7 +265,7 @@ class Manager(NMObject):
             return False
         ps = pc.select
         if not ps:
-            alert('there is no selected data prefix in folder ' +
+            self.alert('there is no selected data prefix in folder ' +
                   self.folder_select)
             return False
         return ps.data_select
@@ -318,7 +323,7 @@ class Manager(NMObject):
                         if self.eset.select:
                             eset = self.eset.select.name
                         epoch = self.dataprefix.select.epoch_select
-        s['project'] = self.project.name
+        s['project'] = project
         s['experiment'] = exp
         s['folder'] = folder
         s['dataprefix'] = prefix
@@ -332,9 +337,4 @@ class Manager(NMObject):
 
 
 if __name__ == '__main__':
-    nm = Manager(None, 'NMManager')
-    # s = nm.selected_names
-    # nm.stats(**s)
-    # nm.exp.folder_new(name="NMFolder0")
-    # nm.exp.folder.dataprefix_new(prefix="Record")
-    # nm.exp.folder_open_hdf5()
+    nm = Manager(parent=None, name='NMManager')

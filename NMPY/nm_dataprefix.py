@@ -3,19 +3,12 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import nm_configs as nmconfig
+import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
 from nm_channel import ChannelContainer
 from nm_epoch_set import EpochSetContainer
-from nm_utilities import channel_char
-from nm_utilities import channel_num
-from nm_utilities import name_ok
-from nm_utilities import quotes
-from nm_utilities import alert
-from nm_utilities import error
-from nm_utilities import history
-from nm_utilities import get_items
+import nm_utilities as nmu
 
 
 class DataPrefix(NMObject):
@@ -49,15 +42,15 @@ class DataPrefix(NMObject):
         return None
 
     def eset_init(self):
-        if not nmconfig.ESETS_DEFAULT:
+        if not nmc.ESETS_DEFAULT:
             return []
         r = []
-        for s in nmconfig.ESETS_DEFAULT:
+        for s in nmc.ESETS_DEFAULT:
             select = s.upper() == 'ALL'
             if self.__eset_container.new(s, select=select, quiet=True):
                 r.append(s)
         if not self.__eset_container.select:
-            self.__eset_container.select = nmconfig.ESETS_DEFAULT[0]
+            self.__eset_container.select = nmc.ESETS_DEFAULT[0]
         return r
 
     @property
@@ -73,7 +66,7 @@ class DataPrefix(NMObject):
         else:
             clist = []
         for i in range(0, n):
-            cc = channel_char(i)
+            cc = nmu.channel_char(i)
             clist.append(cc)
         return clist
 
@@ -100,11 +93,11 @@ class DataPrefix(NMObject):
         clist = []
         for cc in chan_char_list:
             if not self.channel_ok(cc):
-                error('bad channel: ' + cc)
+                self.error('bad channel: ' + cc)
                 return False
             clist.append(cc.upper())
         self.__channel_select = clist
-        history(self.tree_path + nmconfig.HD0 + 'ch=' + str(clist))
+        self.history(self.tree_path + nmc.HD0 + 'ch=' + str(clist))
         return True
 
     @property
@@ -138,9 +131,9 @@ class DataPrefix(NMObject):
     def epoch_select(self, epoch):
         if self.epoch_ok(epoch):
             self.__epoch_select = epoch
-            history(self.tree_path + nmconfig.HD0 + 'epoch=' + str(epoch))
+            self.history(self.tree_path + nmc.HD0 + 'epoch=' + str(epoch))
             return True
-        error('bad epoch number: ' + str(epoch))
+        self.error('bad epoch number: ' + str(epoch))
         return False
 
     @property
@@ -160,7 +153,7 @@ class DataPrefix(NMObject):
 
     @property
     def details(self):
-        print('data prefix = ' + quotes(self.name))
+        print('data prefix = ' + self.quotes(self.name))
         print('channels = ' + str(self.channel_count))
         print('epochs = ' + str(self.epoch_count))
         # print("data list = " + str(self.data_names))
@@ -186,7 +179,7 @@ class DataPrefix(NMObject):
                     dlist.append(chan[epoch])
             return dlist
         for cc in channel:
-            cn = channel_num(cc)
+            cn = nmu.channel_num(cc)
             if cn >= 0 and cn < len(self.__thedata):
                 chan = self.__thedata[cn]
                 if epoch >= 0 and epoch < len(chan):
@@ -235,7 +228,7 @@ class DataPrefix(NMObject):
             cnum_list.append(0)
         else:
             for c in cs:
-                cnum = channel_num(c)
+                cnum = nmu.channel_num(c)
                 if cnum >= 0 and cnum < channels:
                     cnum_list.append(cnum)
         for c in cnum_list:
@@ -271,7 +264,7 @@ class DataPrefixContainer(Container):
         return isinstance(obj, DataPrefix)
 
     def name_next(self):  # override, do not call super
-        error('DataPrefix objects do not have names with a common prefix')
+        self.error('DataPrefix objects do not have names with a common prefix')
         return ''
 
     def select_set(self, name, quiet=False, new=False):  # override
@@ -281,8 +274,8 @@ class DataPrefixContainer(Container):
         if not name:
             return None
         prefix = name  # name is actually a prefix
-        if not name_ok(prefix):
-            error('bad prefix ' + quotes(prefix))
+        if not self.name_ok(prefix):
+            self.error('bad prefix ' + self.quotes(prefix))
             return None
         pexists = self.exists(prefix)
         if pexists:
@@ -301,7 +294,7 @@ class DataPrefixContainer(Container):
                     t = 'selected'
                 else:
                     t += '/selected'
-                history(t + nmconfig.HD0 + p.tree_path)
+                self.history(t + nmc.HD0 + p.tree_path)
         self.search(p)
         return p
 
@@ -313,8 +306,8 @@ class DataPrefixContainer(Container):
         thedata = self.__data_container.getAll()
         htxt = []
         for i in range(0, 25):  # try prefix+chan+seq format
-            cc = channel_char(i)
-            olist = get_items(thedata, prefix, chan_char=cc)
+            cc = nmu.channel_char(i)
+            olist = nmu.get_items(thedata, prefix, chan_char=cc)
             if len(olist) > 0:
                 p.thedata.append(olist)
                 foundsomething = True
@@ -323,23 +316,23 @@ class DataPrefixContainer(Container):
             else:
                 break  # no more channels
         if not foundsomething:  # try without chan
-            olist = get_items(thedata, prefix)
+            olist = nmu.get_items(thedata, prefix)
             if len(olist) > 0:
                 p.thedata.append(olist)
                 foundsomething = True
                 p.channel_container.new(quiet=True)
                 htxt.append('n=' + str(len(olist)))
         if not foundsomething:
-            alert('failed to find data with prefix ' + quotes(prefix))
+            self.alert('failed to find data with prefix ' + self.quotes(prefix))
         if not quiet:
             for h in htxt:
-                history('found' + nmconfig.HD0 + p.tree_path + ', ' + h)
+                self.history('found' + nmc.HD0 + p.tree_path + ', ' + h)
         return True
 
     def rename(self, name, newname):  # override, do not call super
-        error('cannot rename DataPrefix objects')
+        self.error('cannot rename DataPrefix objects')
         return False
 
     def duplicate(self, name, newname, select=False):  # override
-        error('cannot duplicate DataPrefix objects')
+        self.error('cannot duplicate DataPrefix objects')
         return None  # not sued
