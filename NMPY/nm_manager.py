@@ -58,12 +58,6 @@ class Manager(NMObject):
         #clist = self.dataprefix.select.data_select
         #print(clist)
 
-    def input_test(self):
-        name = input("What's your name? ")
-        print("Nice to meet you " + name + "!")
-        age = input("Your age? ")
-        print("So, you are already " + age + " years old, " + name + "!")
-
     def project_new(self, name):
         """Create new project"""
         if not name or name.casefold() == 'default':

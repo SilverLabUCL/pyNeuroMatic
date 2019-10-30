@@ -327,10 +327,6 @@ class Container(NMObject):
                              ' to ' + c.tree_path)
         return c
 
-    def exists(self, name):
-        """Check if NMObject exists within container"""
-        return self.which_item(name) != -1
-
     def which_item(self, name):
         """Find item # of NMObject in container"""
         if not self.__objects:
@@ -339,6 +335,10 @@ class Container(NMObject):
             if name.casefold() == self.__objects[i].name.casefold():
                 return i
         return -1
+
+    def exists(self, name):
+        """Check if NMObject exists within container"""
+        return self.which_item(name) != -1
 
     def kill(self, name, quiet=False):
         """
@@ -384,7 +384,7 @@ class Container(NMObject):
         Returns:
             new NMObject if successful, None otherwise
         """
-        if not name or name.casefold() == 'default':
+        if not name or name.lower() == 'default':
             name = self.name_next()
         elif not self.name_ok(name):
             self.error('bad name ' + self.quotes(name))
@@ -405,7 +405,7 @@ class Container(NMObject):
 
     def name_next(self, prefix='selected'):
         """Get next default NMObject name based on prefix."""
-        if not prefix or prefix.casefold() == 'selected':
+        if not prefix or prefix.lower() == 'selected':
             if self.__prefix:
                 prefix = self.__prefix
             else:
@@ -417,7 +417,7 @@ class Container(NMObject):
 
     def name_next_seq(self, prefix='selected'):
         """Get next seq num of default NMObject name based on prefix."""
-        if not prefix or prefix.casefold() == 'selected':
+        if not prefix or prefix.lower() == 'selected':
             if self.__prefix:
                 prefix = self.__prefix
             else:
