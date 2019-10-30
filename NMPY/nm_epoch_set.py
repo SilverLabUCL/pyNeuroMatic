@@ -80,7 +80,7 @@ class EpochSetContainer(Container):
                 i.append(e)
         r['added'] = dnames
         if not quiet:
-            self.history(s.tree_path + nmc.HD0 + 'ep=' + str(i))
+            self.history(s.tree_path + nmc.S0 + 'ep=' + str(i))
         return r
 
     def remove(self, name, epoch, quiet=True):

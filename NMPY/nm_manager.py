@@ -46,14 +46,18 @@ class Manager(NMObject):
                        noise=noise)
         self.data.make(prefix='Wave', channels=3, epochs=8, samples=5,
                        noise=noise)
-        self.dataprefix.new('Test')
-        self.eset.add('Set1', range(0, 8, 2))
-        rdic = self.eset.add('SetX', [4])
+        #self.dataprefix.new('Test')
+        #self.dataprefix.kill('Test')
+        self.folder.new()
+        self.folder.duplicate('NMFolder0', 'NMFolder1')
+        self.folder.duplicate('NMFolder0', 'NMFolder2')
+        #self.eset.add('Set1', range(0, 8, 2))
+        #rdic = self.eset.add('SetX', [4])
         # print(rdic)
         # self.eset.select="Set1"
-        clist = self.dataprefix.select.data_select
-        print(clist)
-        
+        #clist = self.dataprefix.select.data_select
+        #print(clist)
+
     def input_test(self):
         name = input("What's your name? ")
         print("Nice to meet you " + name + "!")
@@ -68,17 +72,17 @@ class Manager(NMObject):
             self.error('bad name ' + self.quotes(name))
             return None
         p = Project(self, name)
-        self.history('created' + nmc.HD0 + name)
+        self.history('created' + nmc.S0 + name)
         if p:
             e = p.exp_container.new()  # create default experiment
             if e:
                 e.folder_container.new()  # create default folder
         return p
-    
+
     @property
     def gui(self):  # override, do not call super
         return self.__gui
-    
+
     @gui.setter
     def gui(self, on):
         self.__gui = on
@@ -115,7 +119,7 @@ class Manager(NMObject):
         es = ec.select
         if not es:
             self.alert('there is no selected experiment in project ' +
-                  self.project.name)
+                       self.project.name)
             return None
         fc = es.folder_container
         if not fc:
@@ -138,7 +142,7 @@ class Manager(NMObject):
         fs = fc.select
         if not fs:
             self.alert('there is no selected folder in experiment ' +
-                  self.experiment_select)
+                       self.experiment_select)
             return None
         dc = fs.data_container
         if not dc:
@@ -154,7 +158,7 @@ class Manager(NMObject):
         fs = fc.select
         if not fs:
             self.alert('there is no selected folder in experiment ' +
-                  self.experiment_select)
+                       self.experiment_select)
             return None
         pc = fs.dataprefix_container
         if not pc:
@@ -177,7 +181,7 @@ class Manager(NMObject):
         ps = pc.select
         if not ps:
             self.alert('there is no selected data prefix in folder ' +
-                  self.folder_select)
+                       self.folder_select)
             return None
         cc = ps.channel_container
         if not cc:
@@ -193,7 +197,7 @@ class Manager(NMObject):
         ps = pc.select
         if not ps:
             self.alert('there is no selected data prefix in folder ' +
-                  self.folder_select)
+                       self.folder_select)
             return 0
         return ps.channel_select
 
@@ -205,7 +209,7 @@ class Manager(NMObject):
         ps = pc.select
         if not ps:
             self.alert('there is no selected data prefix in folder ' +
-                  self.folder_select)
+                       self.folder_select)
             return False
         ps.channel_select = chan_char_list
         return ps.channel_select == chan_char_list
@@ -218,7 +222,7 @@ class Manager(NMObject):
         ps = pc.select
         if not ps:
             self.alert('there is no selected data prefix in folder ' +
-                  self.folder_select)
+                       self.folder_select)
             return None
         sc = ps.eset_container
         if not sc:
@@ -241,7 +245,7 @@ class Manager(NMObject):
         ps = pc.select
         if not ps:
             self.alert('there is no selected data prefix in folder ' +
-                  self.folder_select)
+                       self.folder_select)
             return 0
         return ps.epoch_select
 
@@ -253,7 +257,7 @@ class Manager(NMObject):
         ps = pc.select
         if not ps:
             self.alert('there is no selected data prefix in folder ' +
-                  self.folder_select)
+                       self.folder_select)
             return False
         ps.epoch_select = epoch
         return ps.epoch_select == epoch
@@ -266,7 +270,7 @@ class Manager(NMObject):
         ps = pc.select
         if not ps:
             self.alert('there is no selected data prefix in folder ' +
-                  self.folder_select)
+                       self.folder_select)
             return False
         return ps.data_select
 

@@ -4,7 +4,6 @@ nmpy - NeuroMatic in Python
 NM utility functions
 Copyright 2019 Jason Rothman
 """
-import inspect
 from colorama import Fore, Back, Style
 
 import nm_configs as nmc
@@ -89,6 +88,15 @@ def get_items(nm_obj_list, prefix, chan_char=''):
                 olist.append(o)
     return olist
 
+
+def child_method(stack):
+    if not stack:
+        return ''
+    child = stack_get_class(stack)
+    method = stack_get_method(stack)
+    return child + '.' + method
+
+
 def stack_get_class(stack, child=True):
     if not stack:
         return 'None'
@@ -109,4 +117,3 @@ def stack_get_method(stack):
         return 'None'
     # return inspect.stack()[1][3]
     return stack[1][0].f_code.co_name
-

@@ -97,7 +97,7 @@ class DataPrefix(NMObject):
                 return False
             clist.append(cc.upper())
         self.__channel_select = clist
-        self.history(self.tree_path + nmc.HD0 + 'ch=' + str(clist))
+        self.history(self.tree_path + nmc.S0 + 'ch=' + str(clist))
         return True
 
     @property
@@ -131,7 +131,7 @@ class DataPrefix(NMObject):
     def epoch_select(self, epoch):
         if self.epoch_ok(epoch):
             self.__epoch_select = epoch
-            self.history(self.tree_path + nmc.HD0 + 'epoch=' + str(epoch))
+            self.history(self.tree_path + nmc.S0 + 'epoch=' + str(epoch))
             return True
         self.error('bad epoch number: ' + str(epoch))
         return False
@@ -294,7 +294,7 @@ class DataPrefixContainer(Container):
                     t = 'selected'
                 else:
                     t += '/selected'
-                self.history(t + nmc.HD0 + p.tree_path)
+                self.history(t + nmc.S0 + p.tree_path)
         self.search(p)
         return p
 
@@ -326,7 +326,7 @@ class DataPrefixContainer(Container):
             self.alert('failed to find data with prefix ' + self.quotes(prefix))
         if not quiet:
             for h in htxt:
-                self.history('found' + nmc.HD0 + p.tree_path + ', ' + h)
+                self.history('found' + nmc.S0 + p.tree_path + ', ' + h)
         return True
 
     def rename(self, name, newname):  # override, do not call super

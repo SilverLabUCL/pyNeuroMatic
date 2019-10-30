@@ -90,7 +90,7 @@ class DataContainer(Container):
                 path = prefix
                 if nmc.TREE_PATH_LONG:
                     path = tree_path + "." + path
-                self.history('created' + nmc.HD0 + path + ', ' + h)
+                self.history('created' + nmc.S0 + path + ', ' + h)
         if select:
             self.parent.dataprefix_container.new(prefix, quiet=quiet)
         return True
