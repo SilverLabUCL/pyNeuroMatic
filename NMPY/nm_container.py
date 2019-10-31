@@ -124,18 +124,24 @@ class NMObject(object):
                 print(txt)
         return False
 
-    def input_yesno(self, question='', title='nm'):
+    def input_yesno(self, question='', title='nm', quiet='False',
+                    cancel=False):
         if not question:
             return ''
         if self.gui:
             pass  # to do
         else:
-            txt = question + ' (y/n) '
+            if cancel:
+                txt = question + ' (y)es, (n)o, (c)ancel \n> '
+                ok = ['y', 'n', 'c']
+            else:
+                txt = question + ' (y)es, (n)o \n> '
+                ok = ['y', 'n']
             if title:
                 txt = title + ': ' + txt
             answer = input(txt)
             a = answer[:1].lower()
-            if a in ['y', 'n']:
+            if a in ok:
                 return a
         return ''
 
@@ -152,6 +158,14 @@ class NMObject(object):
                   text + Fore.BLACK)
         else:
             print('ERROR: ' + nmu.child_method(stack) + ': ' + text)
+        return False
+
+    def open_(self, disk_path):
+        self.alert("TO DO")
+        return False
+
+    def save(self, disk_path):
+        self.alert("TO DO")
         return False
 
 
@@ -354,8 +368,8 @@ class Container(NMObject):
         if not o:
             return False
         cname = o.__class__.__name__
-        yn = self.input_yesno('are you sure you want to kill ' + cname + ' ' +
-                              self.quotes(name) + '?')
+        yn = self.input_yesno('are you sure you want to kill ' + cname +
+                                    ' ' + self.quotes(name) + '?')
         if not yn == 'y':
             self.history('abort')
             return False
@@ -446,9 +460,3 @@ class Container(NMObject):
         if not quiet:
             self.history('renamed' + nmc.S0 + old_path + ' to ' + o.tree_path)
         return True
-
-    def open_(self, path):
-        pass  # to do
-
-    def save(self, name):
-        pass  # to do

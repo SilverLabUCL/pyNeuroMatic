@@ -33,7 +33,8 @@ class Manager(NMObject):
     """
     def __init__(self, parent, name):
         super().__init__(parent, name)
-        self.__project = self.project_new('NMProject')
+        self.__project = None
+        self.project_new('NMProject')
         self.__gui = nmc.GUI
         self.data_test()
         # nm.exp.folder_open_hdf5()
@@ -46,11 +47,11 @@ class Manager(NMObject):
                        noise=noise)
         self.data.make(prefix='Wave', channels=3, epochs=8, samples=5,
                        noise=noise)
-        #self.dataprefix.new('Test')
+        self.dataprefix.new('Test')
         #self.dataprefix.kill('Test')
-        self.folder.new()
-        self.folder.duplicate('NMFolder0', 'NMFolder1')
-        self.folder.duplicate('NMFolder0', 'NMFolder2')
+        #self.folder.new()
+        #self.folder.duplicate('NMFolder0', 'NMFolder1')
+        #self.folder.duplicate('NMFolder0', 'NMFolder2')
         #self.eset.add('Set1', range(0, 8, 2))
         #rdic = self.eset.add('SetX', [4])
         # print(rdic)
@@ -59,7 +60,15 @@ class Manager(NMObject):
         #print(clist)
 
     def project_new(self, name):
-        """Create new project"""
+        """Create a new NM project"""
+        if self.__project:
+            q = 'do you want to save changes to Project '
+            q += self.quotes(self.__project.name) + ' before closing it?'
+            yn = self.input_yesno(q, cancel=True)
+            if yn == 'y':
+                disk_path = "NOTHING"
+                if not self.__project.save(disk_path):
+                    return None
         if not name or name.casefold() == 'default':
             name = 'NMProject'
         elif not self.name_ok(name):
@@ -71,6 +80,7 @@ class Manager(NMObject):
             e = p.exp_container.new()  # create default experiment
             if e:
                 e.folder_container.new()  # create default folder
+        self.__project = p
         return p
 
     @property
