@@ -14,7 +14,7 @@ from nm_dataprefix import DataPrefixContainer
 
 class Folder(NMObject):
     """
-    NM Folder class
+    NM Data Folder class
     """
 
     def __init__(self, parent, name):

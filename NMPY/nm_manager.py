@@ -5,10 +5,10 @@ Copyright 2019 Jason Rothman
 """
 import nm_configs as nmc
 from nm_container import NMObject
-from nm_project import Project
+from nm_folder import FolderContainer
 
 nm = None  # holds Manager, accessed via console
-
+testing123 = 123
 
 class Manager(NMObject):
     """
@@ -18,18 +18,16 @@ class Manager(NMObject):
     NM object tree:
         Manager
         Project
-            ExperimentContainer
-            Experiment (Exp0, Exp1...)
-                    Folder Container
-                    Folder (Folder0, Folder1...)
-                            DataContainer
-                            Data (Record0, Record1...)
-                            DataPrefixContainer
-                            DataPrefix ('Record', 'Wave')
-                                    ChannelContainer
-                                    Channel (ChanA, ChanB...)
-                                    EpochSetContainer
-                                    EpochSet (All, Set1, Set2...)
+            FolderContainer
+            Folder (Folder0, Folder1...)
+                DataContainer
+                Data (Record0, Record1...)
+                DataPrefixContainer
+                DataPrefix ('Record', 'Wave')
+                    ChannelContainer
+                    Channel (ChanA, ChanB...)
+                    EpochSetContainer
+                    EpochSet (All, Set1, Set2...)
     """
     def __init__(self, parent, name):
         super().__init__(parent, name)
@@ -41,9 +39,9 @@ class Manager(NMObject):
 
     def data_test(self):
         noise = True
-        self.data.make(prefix='Record', channels=2, epochs=3, samples=5,
+        self.data.make(prefix='Data', channels=2, epochs=3, samples=5,
                        noise=noise)
-        self.data.make(prefix='Record', channels=2, epochs=3, samples=5,
+        self.data.make(prefix='Data', channels=2, epochs=3, samples=5,
                        noise=noise)
         self.data.make(prefix='Wave', channels=3, epochs=8, samples=5,
                        noise=noise)
@@ -58,12 +56,32 @@ class Manager(NMObject):
         # self.eset.select="Set1"
         #clist = self.dataprefix.select.data_select
         #print(clist)
+        
+    def get_manager(self):  # override, do not call super
+        return self
 
+    @property
+    def gui(self):  # override, do not call super
+        return self.__gui
+
+    @gui.setter
+    def gui(self, on):
+        self.__gui = on
+
+    def open_(self, disk_path):  # override, do not call super
+        self.alert("the NM manager cannot be opened or saved.")
+        return False
+
+    def save(self, disk_path):  # override, do not call super
+        self.alert("cannot save the NM Manager. Save project " +
+                   self.quotes(self.__project.name) + " instead.")
+        return False
+    
     def project_new(self, name):
-        """Create a new NM project"""
+        """Create a new project"""
         if self.__project:
-            q = 'do you want to save changes to Project '
-            q += self.quotes(self.__project.name) + ' before closing it?'
+            q = ('do you want to save project ' +
+            self.quotes(self.__project.name) + ' before creating a new one?')
             yn = self.input_yesno(q, cancel=True)
             if yn == 'y':
                 disk_path = "NOTHING"
@@ -77,19 +95,9 @@ class Manager(NMObject):
         p = Project(self, name)
         self.history('created' + nmc.S0 + name)
         if p:
-            e = p.exp_container.new()  # create default experiment
-            if e:
-                e.folder_container.new()  # create default folder
+            p.folder_container.new()  # create default folder
         self.__project = p
         return p
-
-    @property
-    def gui(self):  # override, do not call super
-        return self.__gui
-
-    @gui.setter
-    def gui(self, on):
-        self.__gui = on
 
     @property
     def project(self):
@@ -99,37 +107,14 @@ class Manager(NMObject):
         return self.__project
 
     @property
-    def experiment(self):
+    def folder(self):
         p = self.project
         if not p:
             return None
-        if not p.exp_container:
-            self.alert('there are no experiments in project ' + p.name)
+        if not p.folder_container:
+            self.alert('there are no folders in project ' + p.name)
             return None
-        return p.exp_container
-
-    @property
-    def experiment_select(self):
-        ec = self.experiment
-        if not ec or not ec.select:
-            return ''
-        return ec.select.tree_path
-
-    @property
-    def folder(self):
-        ec = self.experiment
-        if not ec:
-            return None
-        es = ec.select
-        if not es:
-            self.alert('there is no selected experiment in project ' +
-                       self.project.name)
-            return None
-        fc = es.folder_container
-        if not fc:
-            self.alert('there are no folders in experiment ' + es.name)
-            return None
-        return fc  # Folder list in selected experiment
+        return p.folder_container
 
     @property
     def folder_select(self):
@@ -145,8 +130,7 @@ class Manager(NMObject):
             return None
         fs = fc.select
         if not fs:
-            self.alert('there is no selected folder in experiment ' +
-                       self.experiment_select)
+            self.alert('there is no selected folder')
             return None
         dc = fs.data_container
         if not dc:
@@ -161,8 +145,7 @@ class Manager(NMObject):
             return None
         fs = fc.select
         if not fs:
-            self.alert('there is no selected folder in experiment ' +
-                       self.experiment_select)
+            self.alert('there is no selected folder')
             return None
         pc = fs.dataprefix_container
         if not pc:
@@ -282,7 +265,6 @@ class Manager(NMObject):
     def select(self):
         s = {}
         project = None
-        exp = None
         folder = None
         prefix = None
         chan = ''
@@ -290,18 +272,15 @@ class Manager(NMObject):
         epoch = -1
         if self.project:
             project = self.project
-            if self.experiment.select:
-                exp = self.experiment.select
-                if self.folder.select:
-                    folder = self.folder.select
-                    if self.dataprefix.select:
-                        prefix = self.dataprefix.select
-                        chan = self.dataprefix.select.channel_select
-                        if self.eset.select:
-                            eset = self.eset.select
-                        epoch = self.dataprefix.select.epoch_select
+            if self.folder.select:
+                folder = self.folder.select
+                if self.dataprefix.select:
+                    prefix = self.dataprefix.select
+                    chan = self.dataprefix.select.channel_select
+                    if self.eset.select:
+                        eset = self.eset.select
+                    epoch = self.dataprefix.select.epoch_select
         s['project'] = project
-        s['experiment'] = exp
         s['folder'] = folder
         s['dataprefix'] = prefix
         s['channel'] = chan
@@ -313,7 +292,6 @@ class Manager(NMObject):
     def select_names(self):
         s = {}
         project = 'None'
-        exp = 'None'
         folder = 'None'
         prefix = 'None'
         chan = 'None'
@@ -321,18 +299,15 @@ class Manager(NMObject):
         epoch = -1
         if self.project:
             project = self.project.name
-            if self.experiment.select:
-                exp = self.experiment.select.name
-                if self.folder.select:
-                    folder = self.folder.select.name
-                    if self.dataprefix.select:
-                        prefix = self.dataprefix.select.name
-                        chan = self.dataprefix.select.channel_select
-                        if self.eset.select:
-                            eset = self.eset.select.name
-                        epoch = self.dataprefix.select.epoch_select
+            if self.folder.select:
+                folder = self.folder.select.name
+                if self.dataprefix.select:
+                    prefix = self.dataprefix.select.name
+                    chan = self.dataprefix.select.channel_select
+                    if self.eset.select:
+                        eset = self.eset.select.name
+                    epoch = self.dataprefix.select.epoch_select
         s['project'] = project
-        s['experiment'] = exp
         s['folder'] = folder
         s['dataprefix'] = prefix
         s['channel'] = chan
@@ -340,8 +315,28 @@ class Manager(NMObject):
         s['epoch'] = epoch
         return s
 
-    def stats(self, project, experiment, folder, dataprefix, channel, eset):
-        print(project, experiment, folder, dataprefix, channel, eset)
+    def stats(self, select='default'):
+        print(select)
+
+
+class Project(NMObject):
+    """
+    NM Project class
+    """
+
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.__folder_container = FolderContainer(self, "NMFolders")
+
+    def rename(self, name):
+        if not self.name_ok(name):
+            return self.error('bad name ' + self.quotes(name))
+        self.__name = name
+        return True
+
+    @property
+    def folder_container(self):
+        return self.__folder_container
 
 
 if __name__ == '__main__':

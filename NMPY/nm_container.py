@@ -132,10 +132,10 @@ class NMObject(object):
             pass  # to do
         else:
             if cancel:
-                txt = question + ' (y)es, (n)o, (c)ancel \n> '
+                txt = question + '\n(y)es (n)o (c)ancel >> '
                 ok = ['y', 'n', 'c']
             else:
-                txt = question + ' (y)es, (n)o \n> '
+                txt = question + '\n(y)es, (n)o >> '
                 ok = ['y', 'n']
             if title:
                 txt = title + ': ' + txt

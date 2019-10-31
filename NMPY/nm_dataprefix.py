@@ -42,15 +42,15 @@ class DataPrefix(NMObject):
         return None
 
     def eset_init(self):
-        if not nmc.ESETS_DEFAULT:
+        if not nmc.ESETS_LIST:
             return []
         r = []
-        for s in nmc.ESETS_DEFAULT:
+        for s in nmc.ESETS_LIST:
             select = s.upper() == 'ALL'
             if self.__eset_container.new(s, select=select, quiet=True):
                 r.append(s)
         if not self.__eset_container.select:
-            self.__eset_container.select = nmc.ESETS_DEFAULT[0]
+            self.__eset_container.select = nmc.ESETS_LIST[0]
         return r
 
     @property
