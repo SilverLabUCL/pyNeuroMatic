@@ -4,9 +4,21 @@ nmpy - NeuroMatic in Python
 NM utility functions
 Copyright 2019 Jason Rothman
 """
+import inspect
 from colorama import Fore, Back, Style
 
 import nm_configs as nmc
+
+
+def name_ok(name):
+    ok = ['_']  # list of symbols OK to include in names
+    if not name:
+        return False
+    for c in ok:
+        name = name.replace(c, '')
+    if name.isalnum():
+        return True
+    return False
 
 
 def channel_char(chan_num):
@@ -54,15 +66,6 @@ def remove_special_chars(text):
     return temp
 
 
-def exists(nm_obj_list, name):
-    if not nm_obj_list or not name:
-        return False
-    for o in nm_obj_list:
-        if name.casefold() == o.name.casefold():
-            return True
-    return False
-
-
 def get_name_list(nm_obj_list):
     if not nm_obj_list:
         return []
@@ -87,6 +90,33 @@ def get_items(nm_obj_list, prefix, chan_char=''):
             else:
                 olist.append(o)
     return olist
+
+
+def alert(message, title='ALERT', red=True, tree=True):
+    if not message:
+        return False
+    if tree:
+        stack = inspect.stack()
+        if stack:
+            message = child_method(stack) + ': ' + message
+    if title:
+        message = title + ': ' + message
+    if red:
+        print(Fore.RED + message + Fore.BLACK)
+    else:
+        print(message)
+    return False
+
+
+def error(message, red=True, tree=True):
+    return alert(message, title="ERROR", red=red, tree=tree)
+
+
+def history(message):
+    stack = inspect.stack()
+    if stack:
+        message = child_method(stack) + ': ' + message
+    print(message)
 
 
 def child_method(stack):
@@ -117,3 +147,24 @@ def stack_get_method(stack):
         return 'None'
     # return inspect.stack()[1][3]
     return stack[1][0].f_code.co_name
+
+
+def input_yesno(self, question='', title='nm', quiet='False', cancel=False):
+    if not question:
+        return ''
+    if self.gui:
+        pass  # to do
+    else:
+        if cancel:
+            txt = question + '\n(y)es (n)o (c)ancel >> '
+            ok = ['y', 'n', 'c']
+        else:
+            txt = question + '\n(y)es, (n)o >> '
+            ok = ['y', 'n']
+        if title:
+            txt = title + ': ' + txt
+        answer = input(txt)
+        a = answer[:1].lower()
+        if a in ok:
+            return a
+    return ''

@@ -40,7 +40,7 @@ class ChannelContainer(Container):
 
     @select.setter
     def select(self, name):
-        self.alert('NOT USED. See nm.dataprefix.select.channel_select')
+        nmu.alert('NOT USED. See nm.dataprefix.select.channel_select')
 
     def name_next(self):  # override, do not call super
         """Get next default channel name."""
@@ -56,9 +56,9 @@ class ChannelContainer(Container):
         return prefix + "Z"
 
     def rename(self, name, newname):  # override, do not call super
-        self.error("cannot rename Channel object")
+        nmu.error("cannot rename Channel object")
         return False
 
     def kill(self, name, quiet=False):  # override, do not call super
-        self.error("cannot kill Channel object")
+        nmu.error("cannot kill Channel object")
         return False

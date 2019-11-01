@@ -10,6 +10,7 @@ from nm_container import NMObject
 from nm_container import Container
 from nm_data import DataContainer
 from nm_dataprefix import DataPrefixContainer
+import nm_utilities as nmu
 
 
 class Folder(NMObject):

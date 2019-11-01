@@ -51,10 +51,10 @@ class EpochSetContainer(Container):
         if not s:
             return False
         if s.name.upper() == 'ALL':
-            self.error("cannot rename 'All' set")
+            nmu.error("cannot rename 'All' set")
             return False
         if s.name.upper() == 'SETX':
-            self.error("cannot rename SetX")
+            nmu.error("cannot rename SetX")
             return False
         return super().rename(name, newname)
 
@@ -80,7 +80,7 @@ class EpochSetContainer(Container):
                 i.append(e)
         r['added'] = dnames
         if not quiet:
-            self.history(s.tree_path + nmc.S0 + 'ep=' + str(i))
+            nmu.history(s.tree_path + nmc.S0 + 'ep=' + str(i))
         return r
 
     def remove(self, name, epoch, quiet=True):

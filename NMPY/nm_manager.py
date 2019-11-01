@@ -6,11 +6,13 @@ Copyright 2019 Jason Rothman
 import nm_configs as nmc
 from nm_container import NMObject
 from nm_folder import FolderContainer
+from nm_stats import Stats
+import nm_utilities as nmu
 
 nm = None  # holds Manager, accessed via console
-testing123 = 123
 
-class Manager(NMObject):
+
+class Manager(object):
     """
     NM Manager class
     Main outer class that manages everything
@@ -29,12 +31,12 @@ class Manager(NMObject):
                     EpochSetContainer
                     EpochSet (All, Set1, Set2...)
     """
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
+    def __init__(self):
         self.__project = None
         self.project_new('NMProject')
         self.__gui = nmc.GUI
         self.data_test()
+        self.__stats = Stats(self)
         # nm.exp.folder_open_hdf5()
 
     def data_test(self):
@@ -56,44 +58,40 @@ class Manager(NMObject):
         # self.eset.select="Set1"
         #clist = self.dataprefix.select.data_select
         #print(clist)
-        
-    def get_manager(self):  # override, do not call super
-        return self
 
     @property
-    def gui(self):  # override, do not call super
+    def stats(self):
+        return self.__stats
+
+    @property
+    def gui(self):
         return self.__gui
 
     @gui.setter
     def gui(self, on):
         self.__gui = on
 
-    def open_(self, disk_path):  # override, do not call super
-        self.alert("the NM manager cannot be opened or saved.")
-        return False
-
-    def save(self, disk_path):  # override, do not call super
-        self.alert("cannot save the NM Manager. Save project " +
-                   self.quotes(self.__project.name) + " instead.")
-        return False
-    
     def project_new(self, name):
         """Create a new project"""
         if self.__project:
-            q = ('do you want to save project ' +
-            self.quotes(self.__project.name) + ' before creating a new one?')
-            yn = self.input_yesno(q, cancel=True)
-            if yn == 'y':
-                disk_path = "NOTHING"
-                if not self.__project.save(disk_path):
-                    return None
+            q = ('do you want to save ' + nmu.quotes(self.__project.name) +
+                 ' before creating a new project?')
+            ync = nmu.input_yesno(q, cancel=True)
+            if ync == 'y':
+                path = "NOWHERE"
+                if not self.__project.save(path):
+                    return None  # cancel
+            elif ync == 'n':
+                pass
+            else:
+                return None  # cancel
         if not name or name.casefold() == 'default':
             name = 'NMProject'
-        elif not self.name_ok(name):
-            self.error('bad name ' + self.quotes(name))
+        elif not nmu.name_ok(name):
+            nmu.error('bad name ' + nmu.quotes(name))
             return None
         p = Project(self, name)
-        self.history('created' + nmc.S0 + name)
+        nmu.history('created' + nmc.S0 + name)
         if p:
             p.folder_container.new()  # create default folder
         self.__project = p
@@ -102,7 +100,7 @@ class Manager(NMObject):
     @property
     def project(self):
         if not self.__project:
-            self.alert('there is no project')
+            nmu.alert('there is no project')
             return None
         return self.__project
 
@@ -112,7 +110,7 @@ class Manager(NMObject):
         if not p:
             return None
         if not p.folder_container:
-            self.alert('there are no folders in project ' + p.name)
+            nmu.alert('there are no folders in project ' + p.name)
             return None
         return p.folder_container
 
@@ -130,11 +128,11 @@ class Manager(NMObject):
             return None
         fs = fc.select
         if not fs:
-            self.alert('there is no selected folder')
+            nmu.alert('there is no selected folder')
             return None
         dc = fs.data_container
         if not dc:
-            self.alert('there is no data in folder ' + fs.name)
+            nmu.alert('there is no data in folder ' + fs.name)
             return None
         return dc  # Data list in selected folder
 
@@ -145,11 +143,11 @@ class Manager(NMObject):
             return None
         fs = fc.select
         if not fs:
-            self.alert('there is no selected folder')
+            nmu.alert('there is no selected folder')
             return None
         pc = fs.dataprefix_container
         if not pc:
-            self.alert('there are no data prefixes in folder ' + fs.name)
+            nmu.alert('there are no data prefixes in folder ' + fs.name)
             return None
         return pc  # DataPrefix list in selected folder
 
@@ -167,12 +165,12 @@ class Manager(NMObject):
             return None
         ps = pc.select
         if not ps:
-            self.alert('there is no selected data prefix in folder ' +
-                       self.folder_select)
+            fs = self.folder_select
+            nmu.alert('there is no selected data prefix in folder ' + fs)
             return None
         cc = ps.channel_container
         if not cc:
-            self.alert('there are no channels for data prefix ' + ps.name)
+            nmu.alert('there are no channels for data prefix ' + ps.name)
             return None
         return cc  # Channel list in selected dataprefix
 
@@ -183,8 +181,8 @@ class Manager(NMObject):
             return 0
         ps = pc.select
         if not ps:
-            self.alert('there is no selected data prefix in folder ' +
-                       self.folder_select)
+            fs = self.folder_select
+            nmu.alert('there is no selected data prefix in folder ' + fs)
             return 0
         return ps.channel_select
 
@@ -195,8 +193,8 @@ class Manager(NMObject):
             return False
         ps = pc.select
         if not ps:
-            self.alert('there is no selected data prefix in folder ' +
-                       self.folder_select)
+            fs = self.folder_select
+            nmu.alert('there is no selected data prefix in folder ' + fs)
             return False
         ps.channel_select = chan_char_list
         return ps.channel_select == chan_char_list
@@ -208,12 +206,12 @@ class Manager(NMObject):
             return None
         ps = pc.select
         if not ps:
-            self.alert('there is no selected data prefix in folder ' +
-                       self.folder_select)
+            fs = self.folder_select
+            nmu.alert('there is no selected data prefix in folder ' + fs)
             return None
         sc = ps.eset_container
         if not sc:
-            self.alert('there are no epoch sets for data prefix ' + ps.name)
+            nmu.alert('there are no epoch sets for data prefix ' + ps.name)
             return None
         return sc  # EpochSet list in selected dataprefix
 
@@ -231,8 +229,8 @@ class Manager(NMObject):
             return 0
         ps = pc.select
         if not ps:
-            self.alert('there is no selected data prefix in folder ' +
-                       self.folder_select)
+            fs = self.folder_select
+            nmu.alert('there is no selected data prefix in folder ' + fs)
             return 0
         return ps.epoch_select
 
@@ -243,8 +241,8 @@ class Manager(NMObject):
             return False
         ps = pc.select
         if not ps:
-            self.alert('there is no selected data prefix in folder ' +
-                       self.folder_select)
+            fs = self.folder_select
+            nmu.alert('there is no selected data prefix in folder ' + fs)
             return False
         ps.epoch_select = epoch
         return ps.epoch_select == epoch
@@ -256,8 +254,8 @@ class Manager(NMObject):
             return False
         ps = pc.select
         if not ps:
-            self.alert('there is no selected data prefix in folder ' +
-                       self.folder_select)
+            fs = self.folder_select
+            nmu.alert('there is no selected data prefix in folder ' + fs)
             return False
         return ps.data_select
 
@@ -315,9 +313,6 @@ class Manager(NMObject):
         s['epoch'] = epoch
         return s
 
-    def stats(self, select='default'):
-        print(select)
-
 
 class Project(NMObject):
     """
@@ -329,8 +324,8 @@ class Project(NMObject):
         self.__folder_container = FolderContainer(self, "NMFolders")
 
     def rename(self, name):
-        if not self.name_ok(name):
-            return self.error('bad name ' + self.quotes(name))
+        if not nmu.name_ok(name):
+            return nmu.error('bad name ' + nmu.quotes(name))
         self.__name = name
         return True
 
@@ -340,4 +335,4 @@ class Project(NMObject):
 
 
 if __name__ == '__main__':
-    nm = Manager(parent=None, name='NMManager')
+    nm = Manager()
