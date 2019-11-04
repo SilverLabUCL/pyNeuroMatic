@@ -49,9 +49,9 @@ class Manager(object):
                        noise=noise)
         self.dataprefix.new('Test')
         #self.dataprefix.kill('Test')
-        #self.folder.new()
+        self.folder.new()
         #self.folder.duplicate('NMFolder0', 'NMFolder1')
-        #self.folder.duplicate('NMFolder0', 'NMFolder2')
+        self.folder.duplicate('NMFolder0', 'NMFolder2')
         #self.eset.add('Set1', range(0, 8, 2))
         #rdic = self.eset.add('SetX', [4])
         # print(rdic)
@@ -313,6 +313,12 @@ class Manager(object):
         s['epoch'] = epoch
         return s
 
+    def directory(self):
+        if not self.project:
+            print('no project')
+            return None
+        return self.project.directory()
+
 
 class Project(NMObject):
     """
@@ -333,6 +339,17 @@ class Project(NMObject):
     def folder_container(self):
         return self.__folder_container
 
+    def directory(self):
+        if not self.folder_container:
+            print('no folder container')
+            return []
+        flist = self.folder_container.name_list
+        if len(flist) == 0:
+            print('no folders')
+            return []
+        for f in flist:
+            print(f)
+        return flist
 
 if __name__ == '__main__':
     nm = Manager()
