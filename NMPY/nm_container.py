@@ -9,7 +9,6 @@ import json
 from colorama import Fore
 import copy
 import datetime
-import inspect
 
 import nm_configs as nmc
 import nm_utilities as nmu
@@ -35,12 +34,10 @@ class NMObject(object):
 
     @property
     def parent(self):
-        """obj: parent of this NMObject"""
         return self.__parent
 
     @property
     def name(self):
-        """str: name of this NMObject"""
         return self.__name
 
     @name.setter
@@ -50,19 +47,17 @@ class NMObject(object):
 
     @property
     def date(self):
-        """str: creation date of this NMObject"""
         return self.__date
 
     @property
     def tree_path(self):
-        """str: parent tree-path of this NMObject"""
-        if not nmc.TREE_PATH_LONG:
-            return self.name
-        plist = self.tree_path_list(skipList=nmc.TREE_PATH_SKIP_LIST)
-        return '.'.join(plist)
+        if nmc.TREE_PATH_LONG:
+            skip = nmc.TREE_PATH_SKIP_LIST
+            plist = self.tree_path_list(skipList=skip)
+            return '.'.join(plist)
+        return self.name
 
     def tree_path_list(self, skipList=[]):
-        """list of str: parent tree-path of this NMObject"""
         if not self.name:
             return []
         thepath = [self.name]
@@ -72,16 +67,15 @@ class NMObject(object):
                 break  # no more parents
             p = p.parent
             if p.__class__.__name__ == 'Manager':
-                break  # finished, do not include Manager
+                break
             elif p.__class__.__name__ in skipList:
-                continue
+                pass
             else:
                 thepath.insert(0, p.name)
         return thepath
 
     @property
     def manager(self):
-        """obj: reference to NM manager"""
         p = self
         for i in range(0, 20):  # loop thru parent ancestry
             if not p.parent:
@@ -320,8 +314,9 @@ class Container(NMObject):
         if not o:
             return False
         cname = o.__class__.__name__
-        yn = nmu.input_yesno('are you sure you want to kill ' + cname +
-                                    ' ' + nmu.quotes(name) + '?')
+        q = 'are you sure you want to kill ' + cname + ' ' + nmu.quotes(name)
+        q += '?'
+        yn = nmu.input_yesno(q)
         if not yn == 'y':
             nmu.history('abort')
             return False

@@ -36,36 +36,19 @@ class Folder(NMObject):
     def dataprefix_container(self):
         return self.__dataprefix_container
 
-    def directory(self, data=True, data_prefix=True, quiet=False):
-        rlist = []
+    def directory(self, data=True, data_prefix=True):
+        r = {}
+        dlist = []
+        plist = []
         if data:
-            if not self.data_container:
-                if not quiet:
-                    print('no data container')
-            else:
+            if self.data_container:
                 dlist = self.data_container.name_list
-                if len(dlist) == 0:
-                    if not quiet:
-                        print('no data')
-                elif not quiet:
-                    for d in dlist:
-                        print(d)
-                rlist += dlist
+            r['data'] = dlist
         if data_prefix:
-            if not self.dataprefix_container:
-                if not quiet:
-                    print('no data-prefix container')
-            else:
+            if self.dataprefix_container:
                 plist = self.dataprefix_container.name_list
-                if len(plist) == 0:
-                    if not quiet:
-                        print('no data prefixes')
-                elif not quiet:
-                    for p in plist:
-                        print(p)
-                rlist += plist
-        return rlist
-
+            r['dataprefix'] = plist
+        return r
 
 class FolderContainer(Container):
     """

@@ -149,22 +149,20 @@ def stack_get_method(stack):
     return stack[1][0].f_code.co_name
 
 
-def input_yesno(self, question='', title='nm', quiet='False', cancel=False):
+def input_yesno(question, title='nm', cancel=False):
     if not question:
         return ''
-    if self.gui:
-        pass  # to do
+    txt = ''
+    if cancel:
+        txt = question + '\n(y)es (n)o (c)ancel >> '
+        ok = ['y', 'n', 'c']
     else:
-        if cancel:
-            txt = question + '\n(y)es (n)o (c)ancel >> '
-            ok = ['y', 'n', 'c']
-        else:
-            txt = question + '\n(y)es, (n)o >> '
-            ok = ['y', 'n']
-        if title:
-            txt = title + ': ' + txt
-        answer = input(txt)
-        a = answer[:1].lower()
-        if a in ok:
-            return a
+        txt = question + '\n(y)es, (n)o >> '
+        ok = ['y', 'n']
+    if title:
+        txt = title + ': ' + txt
+    answer = input(txt)
+    a = answer[:1].lower()
+    if a in ok:
+        return a
     return ''

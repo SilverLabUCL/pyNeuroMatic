@@ -52,6 +52,7 @@ class Manager(object):
         self.folder.new()
         #self.folder.duplicate('NMFolder0', 'NMFolder1')
         self.folder.duplicate('NMFolder0', 'NMFolder2')
+        self.folder.select='NMFolder2'
         #self.eset.add('Set1', range(0, 8, 2))
         #rdic = self.eset.add('SetX', [4])
         # print(rdic)
@@ -109,10 +110,17 @@ class Manager(object):
         p = self.project
         if not p:
             return None
-        if not p.folder_container:
+        fc = p.folder_container
+        if not fc:
             nmu.alert('there are no folders in project ' + p.name)
             return None
-        return p.folder_container
+        return fc
+    
+    @property
+    def folder_list(self):
+        if self.folder:
+            return self.folder.name_list
+        return []
 
     @property
     def folder_select(self):
@@ -134,7 +142,18 @@ class Manager(object):
         if not dc:
             nmu.alert('there is no data in folder ' + fs.name)
             return None
-        return dc  # Data list in selected folder
+        return dc  # Data container in selected folder
+    
+    @property
+    def data_list(self):
+        r = {}
+        fs = self.folder_select
+        if fs:
+            r['folder'] = fs
+            dc = self.data
+            if dc:
+                r['data'] = dc.name_list
+        return r
 
     @property
     def dataprefix(self):
@@ -149,7 +168,7 @@ class Manager(object):
         if not pc:
             nmu.alert('there are no data prefixes in folder ' + fs.name)
             return None
-        return pc  # DataPrefix list in selected folder
+        return pc  # DataPrefix container in selected folder
 
     @property
     def dataprefix_select(self):
@@ -157,6 +176,17 @@ class Manager(object):
         if not pc or not pc.select:
             return ''
         return pc.select.tree_path
+    
+    @property
+    def dataprefix_list(self):
+        r = {}
+        fs = self.folder_select
+        if fs:
+            r['folder'] = fs
+            pc = self.dataprefix
+            if pc:
+                r['dataprefix'] = pc.name_list
+        return r
 
     @property
     def channel(self):
@@ -198,6 +228,20 @@ class Manager(object):
             return False
         ps.channel_select = chan_char_list
         return ps.channel_select == chan_char_list
+    
+    @property
+    def channel_list(self):
+        r = {}
+        fs = self.folder_select
+        if fs:
+            r['folder'] = fs
+            pc = self.dataprefix
+            if pc:
+                ps = pc.select
+                if ps:
+                    r['dataprefix'] = ps.name
+                    r['channel'] = ps.channel_list()
+        return r
 
     @property
     def eset(self):  # epoch set
@@ -221,6 +265,22 @@ class Manager(object):
         if not sc or not sc.select:
             return ''
         return sc.select.tree_path
+
+    @property
+    def eset_List(self):  # epoch set list
+        r = {}
+        fs = self.folder_select
+        if fs:
+            r['folder'] = fs
+            pc = self.dataprefix
+            if pc:
+                ps = pc.select
+                if ps:
+                    r['dataprefix'] = ps.name
+                    sc = ps.eset_container
+                    if sc:
+                        r['eset'] = sc.name_list
+        return r
 
     @property
     def epoch_select(self):
@@ -338,18 +398,14 @@ class Project(NMObject):
     @property
     def folder_container(self):
         return self.__folder_container
-
+    
     def directory(self):
-        if not self.folder_container:
-            print('no folder container')
-            return []
-        flist = self.folder_container.name_list
-        if len(flist) == 0:
-            print('no folders')
-            return []
-        for f in flist:
-            print(f)
-        return flist
+        r = {}
+        flist = []
+        if self.folder_container:
+            flist = self.folder_container.name_list
+        r['folders'] = flist
+        return r
 
 if __name__ == '__main__':
     nm = Manager()
