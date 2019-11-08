@@ -92,15 +92,16 @@ def get_items(nm_obj_list, prefix, chan_char=''):
     return olist
 
 
-def alert(message, title='ALERT', red=True, tree=True):
+def alert(message, red=True, tree=True, quiet=False):
+    if quiet:
+        return False
     if not message:
         return False
     if tree:
         stack = inspect.stack()
         if stack:
             message = child_method(stack) + ': ' + message
-    if title:
-        message = title + ': ' + message
+    message = 'ALERT: ' + message
     if red:
         print(Fore.RED + message + Fore.BLACK)
     else:
@@ -108,15 +109,33 @@ def alert(message, title='ALERT', red=True, tree=True):
     return False
 
 
-def error(message, red=True, tree=True):
-    return alert(message, title="ERROR", red=red, tree=tree)
+def error(message, red=True, tree=True, quiet=False):
+    if quiet:
+        return False
+    if not message:
+        return False
+    if tree:
+        stack = inspect.stack()
+        if stack:
+            message = child_method(stack) + ': ' + message
+    message = 'ERROR: ' + message
+    if red:
+        print(Fore.RED + message + Fore.BLACK)
+    else:
+        print(message)
+    return False
 
 
-def history(message):
+def history(message, quiet=False):
+    if quiet:
+        return False
+    if not message:
+        return False
     stack = inspect.stack()
     if stack:
         message = child_method(stack) + ': ' + message
     print(message)
+    return True
 
 
 def child_method(stack):

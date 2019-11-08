@@ -72,7 +72,7 @@ class Manager(object):
     def gui(self, on):
         self.__gui = on
 
-    def project_new(self, name):
+    def project_new(self, name, quiet=False):
         """Create a new project"""
         if self.__project:
             q = ('do you want to save ' + nmu.quotes(self.__project.name) +
@@ -110,274 +110,213 @@ class Manager(object):
         p = self.project
         if not p:
             return None
-        fc = p.folder_container
-        if not fc:
-            nmu.alert('there are no folders in project ' + p.name)
-            return None
-        return fc
-    
+        return p.folder_container
+
     @property
     def folder_list(self):
-        if self.folder:
-            return self.folder.name_list
-        return []
+        fc = self.folder
+        if not fc:
+            return []
+        return fc.name_list
 
     @property
     def folder_select(self):
         fc = self.folder
-        if not fc or not fc.select:
-            return ''
-        return fc.select.tree_path
+        if not fc:
+            return None
+        if not fc.select:
+            nmu.alert('there is no selected folder in project ' +
+                      nmu.quotes(self.project.name))
+            return None
+        return fc.select
 
     @property
     def data(self):
-        fc = self.folder
-        if not fc:
-            return None
-        fs = fc.select
+        fs = self.folder_select
         if not fs:
-            nmu.alert('there is no selected folder')
             return None
-        dc = fs.data_container
-        if not dc:
-            nmu.alert('there is no data in folder ' + fs.name)
-            return None
-        return dc  # Data container in selected folder
-    
+        return fs.data_container
+
     @property
     def data_list(self):
         r = {}
         fs = self.folder_select
         if fs:
-            r['folder'] = fs
-            dc = self.data
-            if dc:
-                r['data'] = dc.name_list
+            r['folder'] = fs.name
+            r['data'] = fs.data_list
+        else:
+            r['folder'] = ''
+            r['data'] = []
         return r
 
     @property
     def dataprefix(self):
-        fc = self.folder
-        if not fc:
-            return None
-        fs = fc.select
+        fs = self.folder_select
         if not fs:
-            nmu.alert('there is no selected folder')
             return None
-        pc = fs.dataprefix_container
-        if not pc:
-            nmu.alert('there are no data prefixes in folder ' + fs.name)
-            return None
-        return pc  # DataPrefix container in selected folder
+        return fs.dataprefix_container
 
     @property
     def dataprefix_select(self):
         pc = self.dataprefix
-        if not pc or not pc.select:
-            return ''
-        return pc.select.tree_path
-    
+        if not pc:
+            return None
+        if not pc.select:
+            nmu.alert('there is no selected data prefix in folder ' +
+                      nmu.quotes(self.folder_select.name))
+            return None
+        return pc.select
+
     @property
     def dataprefix_list(self):
         r = {}
         fs = self.folder_select
         if fs:
-            r['folder'] = fs
-            pc = self.dataprefix
-            if pc:
-                r['dataprefix'] = pc.name_list
+            r['folder'] = fs.name
+            r['dataprefix'] = fs.dataprefix_list
+        else:
+            r['folder'] = ''
+            r['dataprefix'] = []
         return r
 
     @property
-    def channel(self):
-        pc = self.dataprefix
-        if not pc:
-            return None
-        ps = pc.select
-        if not ps:
-            fs = self.folder_select
-            nmu.alert('there is no selected data prefix in folder ' + fs)
-            return None
-        cc = ps.channel_container
-        if not cc:
-            nmu.alert('there are no channels for data prefix ' + ps.name)
-            return None
-        return cc  # Channel list in selected dataprefix
-
-    @property
     def channel_select(self):
-        pc = self.dataprefix
-        if not pc:
-            return 0
-        ps = pc.select
+        ps = self.dataprefix_select
         if not ps:
-            fs = self.folder_select
-            nmu.alert('there is no selected data prefix in folder ' + fs)
-            return 0
+            return []  # channel select is a list
         return ps.channel_select
 
     @channel_select.setter
     def channel_select(self, chan_char_list):  # e.g 'A', 'All' or ['A', 'B']
-        pc = self.dataprefix
-        if not pc:
-            return False
-        ps = pc.select
+        ps = self.dataprefix_select
         if not ps:
-            fs = self.folder_select
-            nmu.alert('there is no selected data prefix in folder ' + fs)
             return False
         ps.channel_select = chan_char_list
         return ps.channel_select == chan_char_list
-    
+
     @property
     def channel_list(self):
         r = {}
+        r['folder'] = ''
+        r['dataprefix'] = ''
+        r['channel'] = []
         fs = self.folder_select
         if fs:
-            r['folder'] = fs
-            pc = self.dataprefix
-            if pc:
-                ps = pc.select
-                if ps:
-                    r['dataprefix'] = ps.name
-                    r['channel'] = ps.channel_list()
+            r['folder'] = fs.name
+            ps = fs.dataprefix_container.select
+            if ps:
+                r['dataprefix'] = ps.name
+                r['channel'] = ps.channel_list()
         return r
 
     @property
     def eset(self):  # epoch set
-        pc = self.dataprefix
-        if not pc:
-            return None
-        ps = pc.select
+        ps = self.dataprefix_select
         if not ps:
-            fs = self.folder_select
-            nmu.alert('there is no selected data prefix in folder ' + fs)
             return None
-        sc = ps.eset_container
-        if not sc:
-            nmu.alert('there are no epoch sets for data prefix ' + ps.name)
-            return None
-        return sc  # EpochSet list in selected dataprefix
+        return ps.eset_container
 
     @property
     def eset_select(self):  # epoch set
         sc = self.eset
-        if not sc or not sc.select:
-            return ''
-        return sc.select.tree_path
+        if not sc:
+            return None
+        if not sc.select:
+            nmu.alert('there is no selected epoch set for data prefix ' +
+                      nmu.quotes(self.dataprefix_select.tree_path))
+            return None
+        return sc.select
 
     @property
-    def eset_List(self):  # epoch set list
+    def eset_list(self):  # epoch set
         r = {}
+        r['folder'] = ''
+        r['dataprefix'] = ''
+        r['eset'] = []
         fs = self.folder_select
         if fs:
-            r['folder'] = fs
-            pc = self.dataprefix
-            if pc:
-                ps = pc.select
-                if ps:
-                    r['dataprefix'] = ps.name
-                    sc = ps.eset_container
-                    if sc:
-                        r['eset'] = sc.name_list
+            r['folder'] = fs.name
+            ps = fs.dataprefix_container.select
+            if ps:
+                r['dataprefix'] = ps.name
+                r['eset'] = ps.eset_list
         return r
 
     @property
     def epoch_select(self):
-        pc = self.dataprefix
-        if not pc:
-            return 0
-        ps = pc.select
+        ps = self.dataprefix_select
         if not ps:
-            fs = self.folder_select
-            nmu.alert('there is no selected data prefix in folder ' + fs)
-            return 0
+            return -1
         return ps.epoch_select
 
     @epoch_select.setter
     def epoch_select(self, epoch):
-        pc = self.dataprefix
-        if not pc:
-            return False
-        ps = pc.select
+        ps = self.dataprefix_select
         if not ps:
-            fs = self.folder_select
-            nmu.alert('there is no selected data prefix in folder ' + fs)
             return False
         ps.epoch_select = epoch
         return ps.epoch_select == epoch
 
     @property
     def data_select(self):
-        pc = self.dataprefix
-        if not pc:
-            return False
-        ps = pc.select
+        ps = self.dataprefix_select
         if not ps:
-            fs = self.folder_select
-            nmu.alert('there is no selected data prefix in folder ' + fs)
             return False
         return ps.data_select
 
     @property
     def select(self):
         s = {}
-        project = None
-        folder = None
-        prefix = None
-        chan = ''
-        eset = None
-        epoch = -1
-        if self.project:
-            project = self.project
-            if self.folder.select:
-                folder = self.folder.select
-                if self.dataprefix.select:
-                    prefix = self.dataprefix.select
-                    chan = self.dataprefix.select.channel_select
-                    if self.eset.select:
-                        eset = self.eset.select
-                    epoch = self.dataprefix.select.epoch_select
-        s['project'] = project
-        s['folder'] = folder
-        s['dataprefix'] = prefix
-        s['channel'] = chan
-        s['eset'] = eset
-        s['epoch'] = epoch
+        s['project'] = None
+        s['folder'] = None
+        s['dataprefix'] = None
+        s['eset'] = None
+        s['channel'] = []
+        s['epoch'] = -1
+        if not self.__project:
+            return s
+        s['project'] = self.__project
+        fs = self.folder.select
+        if not fs:
+            return s
+        s['folder'] = fs
+        ps = self.dataprefix.select
+        if not ps:
+            return s
+        s['dataprefix'] = ps
+        ss = self.eset.select
+        if ss:
+            s['eset'] = ss
+        s['channel'] = ps.channel_select
+        s['epoch'] = ps.epoch_select
         return s
 
     @property
-    def select_names(self):
+    def select_tree(self):
         s = {}
-        project = 'None'
-        folder = 'None'
-        prefix = 'None'
-        chan = 'None'
-        eset = 'None'
-        epoch = -1
-        if self.project:
-            project = self.project.name
-            if self.folder.select:
-                folder = self.folder.select.name
-                if self.dataprefix.select:
-                    prefix = self.dataprefix.select.name
-                    chan = self.dataprefix.select.channel_select
-                    if self.eset.select:
-                        eset = self.eset.select.name
-                    epoch = self.dataprefix.select.epoch_select
-        s['project'] = project
-        s['folder'] = folder
-        s['dataprefix'] = prefix
-        s['channel'] = chan
-        s['eset'] = eset
-        s['epoch'] = epoch
+        s['project'] = ''
+        s['folder'] = ''
+        s['dataprefix'] = ''
+        s['eset'] = ''
+        s['channel'] = []
+        s['epoch'] = -1
+        if not self.__project:
+            return s
+        s['project'] = self.__project.name
+        fs = self.folder.select
+        if not fs:
+            return s
+        s['folder'] = fs.name
+        ps = self.dataprefix.select
+        if not ps:
+            return s
+        s['dataprefix'] = ps.name
+        ss = self.eset.select
+        if ss:
+            s['eset'] = ss.name
+        s['channel'] = ps.channel_select
+        s['epoch'] = ps.epoch_select
         return s
-
-    def directory(self):
-        if not self.project:
-            print('no project')
-            return None
-        return self.project.directory()
 
 
 class Project(NMObject):
@@ -389,23 +328,16 @@ class Project(NMObject):
         super().__init__(parent, name)
         self.__folder_container = FolderContainer(self, "NMFolders")
 
-    def rename(self, name):
+    def rename(self, name, quiet=False):
         if not nmu.name_ok(name):
-            return nmu.error('bad name ' + nmu.quotes(name))
+            return nmu.error('bad name ' + nmu.quotes(name), quiet=quiet)
         self.__name = name
         return True
 
     @property
     def folder_container(self):
         return self.__folder_container
-    
-    def directory(self):
-        r = {}
-        flist = []
-        if self.folder_container:
-            flist = self.folder_container.name_list
-        r['folders'] = flist
-        return r
+
 
 if __name__ == '__main__':
     nm = Manager()

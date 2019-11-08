@@ -21,8 +21,8 @@ class Folder(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self.__data_container = DataContainer(self, 'NMData')
-        self.__dataprefix_container = DataPrefixContainer(self,'NMDataPrefix',
-                                                          self.__data_container)
+        self.__dataprefix_container = DataPrefixContainer(
+                self, 'NMDataPrefix', self.__data_container)
 
     @property
     def data_container(self):
@@ -30,25 +30,20 @@ class Folder(NMObject):
 
     @property
     def data_list(self):
-        return self.__data_container.name_list
+        if self.__data_container:
+            return self.__data_container.name_list
+        return []
 
     @property
     def dataprefix_container(self):
         return self.__dataprefix_container
 
-    def directory(self, data=True, data_prefix=True):
-        r = {}
-        dlist = []
-        plist = []
-        if data:
-            if self.data_container:
-                dlist = self.data_container.name_list
-            r['data'] = dlist
-        if data_prefix:
-            if self.dataprefix_container:
-                plist = self.dataprefix_container.name_list
-            r['dataprefix'] = plist
-        return r
+    @property
+    def dataprefix_list(self):
+        if self.__dataprefix_container:
+            return self.__dataprefix_container.name_list
+        return []
+
 
 class FolderContainer(Container):
     """
