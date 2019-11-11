@@ -25,7 +25,7 @@ class DataPrefix(NMObject):
         self.__channel_select = ['A']
         self.__epoch_select = 0
         self.__data_select = []
-        self.eset_init()
+        self.__eset_init()
         # self.details()
 
     @property
@@ -53,6 +53,8 @@ class DataPrefix(NMObject):
         if not self.__eset_container.select:
             self.__eset_container.select = nmc.ESETS_LIST[0]
         return r
+
+    __eset_init = eset_init
 
     @property
     def channel_container(self):

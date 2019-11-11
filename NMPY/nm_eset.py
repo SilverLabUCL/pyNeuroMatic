@@ -7,6 +7,7 @@ Copyright 2019 Jason Rothman
 import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
+from nm_data import Data
 import nm_utilities as nmu
 
 
@@ -17,11 +18,45 @@ class EpochSet(NMObject):
 
     def __init__(self, parent, name):
         super().__init__(parent, name)
-        self.__theset = set()
+        self._theset = set()
 
     @property
-    def theset(self):
-        return self.__theset
+    def name_list(self):
+        if self.name.lower() == 'all':
+            return ['All']
+        n = []
+        for d in self._theset:
+            n.append(d.name)
+        n.sort()
+        return n
+
+    def contains(self, data):
+        return data in self._theset
+
+    def add(self, data):
+        if isinstance(data, Data):
+            self._theset.add(data)
+            return True
+        return False
+
+    def discard(self, data):
+        if isinstance(data, Data):
+            self._theset.discard(data)
+            return True
+        return False
+
+    def clear(self):
+        if self.name.lower() == 'all':
+            return False
+        self._theset.clear()
+        return True
+
+    def union(self, eset):
+        if type(eset) is not list:
+            eset = [eset]
+        for s in eset:
+            if isinstance(s, EpochSet):
+                self._theset = self._theset.union(s._theset)
 
 
 class EpochSetContainer(Container):
@@ -47,84 +82,140 @@ class EpochSetContainer(Container):
     #     self.__set_select = set_eq
 
     def rename(self, name, newname, quiet=False):  # override
-        s = self.get(name, quiet=quiet)
-        if not s:
-            return False
-        if s.name.upper() == 'ALL':
+        if name.lower() == 'all':
             nmu.error("cannot rename 'All' set", quiet=quiet)
             return False
-        if s.name.upper() == 'SETX':
-            nmu.error("cannot rename SetX", quiet=quiet)
+        if name.lower() == 'setx':
+            nmu.error('cannot rename SetX', quiet=quiet)
             return False
         return super().rename(name, newname, quiet=quiet)
 
-    def __add_remove(self, name, epoch_list, add=False, remove=False,
-                     quiet=False):
-        if not add and not remove:
-            return {}
-        if type(epoch_list) is not list:
-            epoch_list = [epoch_list]
+    def add_epoch(self, name, epoch, quiet=False):
         if len(self.parent.thedata) == 0:
-            a = 'no selected data for dataprefix ' + self.parent.tree_path
-            nmu.alert(a, quiet=quiet)
-            return {}
-        s = self.get(name, quiet=quiet)
-        if not s:
-            return {}
-        r = {'Set': name}
-        dnames = []
-        i = []
-        for e in epoch_list:
-            if e == -1:
-                e = self.parent.epoch_select
-            found_something = False
-            for chan in self.parent.thedata:
-                if e >= 0 and e < len(chan):
-                    d = chan[e]
-                    s.theset.add(d)
-                    dnames.append(d.name)
-                    found_something = True
-                else:
-                    nmu.alert('out of range epoch: ' + str(e))
-            if found_something:
-                i.append(e)
-        r['added'] = dnames
-        nmu.history(s.tree_path + nmc.S0 + 'ep=' + str(i), quiet=quiet)
-        return r
+            e = 'no selected data for dataprefix ' + self.parent.tree_path
+            nmu.error(e, quiet=quiet)
+            return False
+        if type(name) is not list:
+            if name.lower() == 'all':
+                name = self.name_list
+                name.remove('All')
+                name.remove('SetX')
+            else:
+                name = [name]
+        if len(name) == 0:
+            return False
+        if type(epoch) is not list:
+            epoch = [epoch]
+        for n in name:
+            if n.lower() == 'all':
+                nmu.alert("cannot edit 'All' set")
+                continue
+            s = self.get(n, quiet=quiet)
+            if not s:
+                continue
+            added = set()
+            oor = set()
+            for e in epoch:
+                if e == -1:
+                    e = self.parent.epoch_select
+                for chan in self.parent.thedata:
+                    if e >= 0 and e < len(chan):
+                        d = chan[e]
+                        if s.add(d):
+                            added.add(e)
+                    else:
+                        oor.add(e)
+            if len(added) > 0:
+                added = list(added)
+                added.sort()
+                h = 'added' + nmc.S0 + s.tree_path + ', ep=' + str(added)
+                nmu.history(h, quiet=quiet)
+            if len(oor) > 0:
+                oor = list(oor)
+                oor.sort()
+                h = ('out of range' + nmc.S0 + s.tree_path +
+                     ', ep=' + str(oor))
+                nmu.error(h, quiet=quiet)
+        return True
 
-    def add_epochs(self, name, epoch_list, quiet=False):
-        return self.__add_remove(name, epoch_list, add=True, quiet=quiet)
-
-    def remove_epochs(self, name, epoch_list, quiet=False):
-        if type(epoch_list) is not list:
-            epoch_list = [epoch_list]
-        s = self.get(name, queit=quiet)
-        if not s:
-            return {}
-        r = {'Set': name}
-        dnames = []
-        i = []
-        for e in epoch_list:
-            if e == -1:
-                e = self.parent.epoch_select
-            found_something = False
-            for chan in self.parent.thedata:
-                if e >= 0 and e < len(chan):
-                    d = chan[e]
-                    s.theset.discard(d)
-                    dnames.append(d.name)
-                    found_something = True
-                else:
-                    nmu.alert('out of range epoch: ' + str(e))
-            if found_something:
-                i.append(e)
-        r['removed'] = dnames
-        nmu.history(s.tree_path + nmc.S0 + 'ep=' + str(i), quiet=quiet)
-        return r
+    def remove_epoch(self, name, epoch, quiet=False):
+        if len(self.parent.thedata) == 0:
+            e = 'no selected data for dataprefix ' + self.parent.tree_path
+            nmu.alert(e, quiet=quiet)
+            return False
+        if type(name) is not list:
+            if name.lower() == 'all':
+                name = self.name_list
+                name.remove('All')
+                name.remove('SetX')
+            else:
+                name = [name]
+        if len(name) == 0:
+            return False
+        if type(epoch) is not list:
+            epoch = [epoch]
+        for n in name:
+            if n.lower() == 'all':
+                nmu.alert("cannot edit 'All' set")
+                continue
+            s = self.get(n, quiet=quiet)
+            if not s:
+                continue
+            removed = set()
+            nis = set()
+            oor = set()
+            for e in epoch:
+                if e == -1:
+                    e = self.parent.epoch_select
+                for chan in self.parent.thedata:
+                    if e >= 0 and e < len(chan):
+                        d = chan[e]
+                        if s.contains(d):
+                            if s.discard(d):
+                                removed.add(e)
+                        else:
+                            nis.add(e)
+                    else:
+                        oor.add(e)
+            if len(removed) > 0:
+                removed = list(removed)
+                removed.sort()
+                h = 'removed' + nmc.S0 + s.tree_path + ', ep=' + str(removed)
+                nmu.history(h, quiet=quiet)
+            if len(nis) > 0:
+                nis = list(nis)
+                nis.sort()
+                h = 'not in set' + nmc.S0 + s.tree_path + ', ep=' + str(nis)
+                nmu.error(h, quiet=quiet)
+            if len(oor) > 0:
+                oor = list(oor)
+                oor.sort()
+                h = 'out of range' + nmc.S0 + s.tree_path + ', ep=' + str(oor)
+                nmu.error(h, quiet=quiet)
+        return True
 
     def clear(self, name, quiet=False):
-        s = self.get(name, quiet=quiet)
-        if not s:
+        if type(name) is not list:
+            if name.lower() == 'all':
+                name = self.name_list
+                name.remove('All')
+                name.remove('SetX')
+            else:
+                name = [name]
+        if len(name) == 0:
             return False
-        s.theset.clear()
+        if not quiet:
+            n = ', '.join(name)
+            q = 'are you sure you want to clear ' + n + '?'
+            yn = nmu.input_yesno(q)
+            if not yn == 'y':
+                nmu.history('abort')
+                return False
+        for n in name:
+            if n.lower() == 'all':
+                nmu.error("cannot clear 'All' set", quiet=quiet)
+                continue
+            s = self.get(n, quiet=quiet)
+            if s and s.clear():
+                nmu.history('cleared' + nmc.S0 + s.tree_path, quiet=quiet)
         return True

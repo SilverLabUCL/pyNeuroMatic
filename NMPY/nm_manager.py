@@ -47,18 +47,30 @@ class Manager(object):
                        noise=noise)
         self.data.make(prefix='Wave', channels=3, epochs=8, samples=5,
                        noise=noise)
-        self.dataprefix.new('Test')
-        #self.dataprefix.kill('Test')
+        # self.dataprefix.new('Test')
+        # self.dataprefix.kill('Test')
         self.folder.new()
-        #self.folder.duplicate('NMFolder0', 'NMFolder1')
+        # self.folder.duplicate('NMFolder0', 'NMFolder1')
         self.folder.duplicate('NMFolder0', 'NMFolder2')
-        self.folder.select='NMFolder2'
-        #self.eset.add('Set1', range(0, 8, 2))
-        #rdic = self.eset.add('SetX', [4])
+        self.folder.select = 'NMFolder2'
+        # self.eset.add_epoch(['Set1', 'Set2', 'Set3'], [0,3,4,9,11])
+        # self.eset.add_epoch('Set1', [0])
+        # self.eset.remove_epoch('Set1', [3,4])
+        # self.eset.remove_epoch('Set1', [2])
+        s1 = self.eset.get('Set1')
+        s2 = self.eset.get('Set2')
+        self.eset.add_epoch('Set1', [0, 1, 2])
+        self.eset.add_epoch('Set2', [3])
+        print(s1.name_list)
+        print(s2.name_list)
+        s1.union(s2)
+        print(s1.name_list)
+        # self.eset.add('Set1', range(0, 8, 2))
+        # rdic = self.eset.add('SetX', [4])
         # print(rdic)
         # self.eset.select="Set1"
-        #clist = self.dataprefix.select.data_select
-        #print(clist)
+        # clist = self.dataprefix.select.data_select
+        # print(clist)
 
     @property
     def stats(self):

@@ -178,9 +178,9 @@ class Container(NMObject):
         for o in self.__objects:
             if name.casefold() == o.name.casefold():
                 return o
-        nmu.alert('failed to find ' + nmu.quotes(name) + ' in ' +
+        nmu.error('failed to find ' + nmu.quotes(name) + ' in ' +
                   self.tree_path, quiet=quiet)
-        nmu.alert('acceptable names: ' + str(self.name_list), quiet=quiet)
+        nmu.error('acceptable names: ' + str(self.name_list), quiet=quiet)
         return None
 
     def getAll(self):
@@ -328,16 +328,17 @@ class Container(NMObject):
         if not o:
             return False
         cname = o.__class__.__name__
-        q = 'are you sure you want to kill ' + cname + ' ' + nmu.quotes(name)
-        q += '?'
-        yn = nmu.input_yesno(q)
-        if not yn == 'y':
-            nmu.history('abort', quiet=quiet)
-            return False
+        path = o.tree_path
+        if not quiet:
+            q = ('are you sure you want to kill ' + cname + ' ' +
+                 nmu.quotes(name) + '?')
+            yn = nmu.input_yesno(q)
+            if not yn == 'y':
+                nmu.history('abort')
+                return False
         selected = o is self.__object_select
         if selected:
             i = self.which_item(name)
-        path = o.tree_path
         self.__objects.remove(o)
         nmu.history('killed' + nmc.S0 + path, quiet=quiet)
         items = len(self.__objects)
