@@ -19,6 +19,8 @@ class EpochSet(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self._theset = set()
+        self.__eq_list = []
+        self.__eq_lock = True
 
     @property
     def name_list(self):
@@ -29,6 +31,24 @@ class EpochSet(NMObject):
             n.append(d.name)
         n.sort()
         return n
+
+    @property
+    def eq_list(self):
+        return self.__eq_list
+
+    @eq_list.setter
+    def eq_list(self, eq_list):
+        if type(eq_list) is not list:
+            return False
+        self.__eq_list = eq_list
+
+    @property
+    def eq_lock(self):
+        return self.__eq_lock
+
+    @eq_lock.setter
+    def eq_lock(self, eq_lock):
+        self.__eq_lock = eq_lock
 
     def contains(self, data):
         return data in self._theset
@@ -193,6 +213,23 @@ class EpochSetContainer(Container):
                 h = 'out of range' + nmc.S0 + s.tree_path + ', ep=' + str(oor)
                 nmu.error(h, quiet=quiet)
         return True
+
+    def equation(self, name, eq_list, lock=True, quiet=False):
+        """eq_list=[Set1', '|', 'Set2']"""
+        if self.exists(name):
+            s = self.get(name, quiet=quiet)
+        else:
+            s = self.new(name, quiet=quiet)
+        for i in eq_list:  # check equation is OK
+            if i == '|' or i == '&':
+                continue
+            elif self.exists(i):
+                continue
+            else:
+                e = 'unrecognized set equation item: ' + i
+                nmu.error(e, quiet=quiet)
+                return False
+        s.eq_list = eq_list
 
     def clear(self, name, quiet=False):
         if type(name) is not list:
