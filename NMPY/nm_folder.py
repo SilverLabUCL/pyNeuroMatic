@@ -44,6 +44,13 @@ class Folder(NMObject):
             return self.__dataprefix_container.names
         return []
 
+    @property
+    def content(self):
+        c = self.key_tree
+        c.update(self.__data_container.key)
+        c.update(self.__dataprefix_container.key)
+        return c
+
 
 class FolderContainer(Container):
     """

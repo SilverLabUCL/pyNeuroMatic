@@ -43,7 +43,7 @@ class ChannelContainer(Container):
             prefix = self.prefix
         else:
             prefix = 'Chan'
-        n = 10 + len(self.get_all())
+        n = 10 + len(self.thecontainer())
         for i in range(0, n):
             name = prefix + nmu.channel_char(i)
             if not self.exists(name):

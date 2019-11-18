@@ -36,6 +36,15 @@ class Data(NMObject):
     def note_container(self):
         return self.__note_container
 
+    @property
+    def note_names(self):
+        return self.__note_container.names
+
+    @property
+    def content(self):
+        c = self.key_tree
+        c.update(self.__note_container.key)
+        return c
 
 class DataContainer(Container):
     """

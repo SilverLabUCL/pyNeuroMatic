@@ -32,3 +32,9 @@ class Project(NMObject):
         if self.__folder_container:
             return self.__folder_container.names
         return []
+
+    @property
+    def content(self):
+        c = self.key_tree
+        c.update(self.__folder_container.key)
+        return c

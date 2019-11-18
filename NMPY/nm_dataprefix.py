@@ -27,6 +27,13 @@ class DataPrefix(NMObject):
         self.__data_select = []
         self.__eset_init()
         # self.details()
+ 
+    @property
+    def content(self):
+        c = self.key_tree
+        c.update(self.__channel_container.key)
+        c.update(self.__eset_container.key)
+        return c
 
     @property
     def eset_container(self):
@@ -172,11 +179,11 @@ class DataPrefix(NMObject):
         print('epochs = ' + str(self.epoch_count))
         # print("data list = " + str(self.data_names))
 
-    def data_list(self, channel='selected', epoch=-1):
+    def data_list(self, channel='select', epoch=-1):
         if type(channel) is not list:
             channel = [channel]
         for cc in channel:
-            if not cc or cc.lower() == 'selected':
+            if not cc or cc.lower() == 'select':
                 channel = self.__channel_select
                 break
         all_chan = False
@@ -314,7 +321,7 @@ class DataPrefixContainer(Container):
             return False
         prefix = p.name
         foundsomething = False
-        thedata = self.__data_container.get_all()
+        thedata = self.__data_container.thecontainer()
         htxt = []
         for i in range(0, 25):  # try prefix+chan+seq format
             cc = nmu.channel_char(i)

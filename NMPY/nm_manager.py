@@ -17,12 +17,14 @@ class Manager(object):
     Main outer class that manages everything
 
     NM object tree:
-        Manager
+        Manager (root)
         Project
             FolderContainer
             Folder (Folder0, Folder1...)
                 DataContainer
                 Data (Record0, Record1...)
+                    NoteContainer
+                    Note (Note0, Note1, Note2...)
                 DataPrefixContainer
                 DataPrefix ('Record', 'Wave')
                     ChannelContainer
@@ -113,76 +115,62 @@ class Manager(object):
 
     @property
     def project(self):
-        if not self.__project:
-            nmu.alert('there is no project')
-            return None
-        return self.__project
+        if self.__project:
+            return self.__project
+        nmu.alert('there is no project')
+        return None
 
     @property
     def folder(self):
         p = self.project
-        if not p:
-            return None
-        return p.folder_container
+        if p:
+            return p.folder_container
+        return None
 
     @property
     def folder_names(self):
         fc = self.folder
-        if not fc:
-            return []
-        return fc.names
+        if fc:
+            return fc.names
+        return []
 
-    @property
     def __folder_select(self):
         fc = self.folder
-        if not fc:
-            return None
-        if not fc.select:
-            nmu.alert('there is no selected folder in project ' +
-                      nmu.quotes(self.project.name))
-            return None
-        return fc.select
+        if fc:
+            return fc.select
+        return None
 
     @property
     def folder_content(self):
-        fs = self.__folder_select
+        fs = self.__folder_select()
         if fs:
             return fs.content
-        r = {}
-        r['folder'] = ''
-        r['data'] = []
-        r['dataprefix'] = []
-        return r
+        return {}
 
     @property
     def data(self):
-        fs = self.__folder_select
-        if not fs:
-            return None
-        return fs.data_container
+        fs = self.__folder_select()
+        if fs:
+            return fs.data_container
+        return None
 
     @property
     def dataprefix(self):
-        fs = self.__folder_select
-        if not fs:
-            return None
-        return fs.dataprefix_container
+        fs = self.__folder_select()
+        if fs:
+            return fs.dataprefix_container
+        return None
 
-    @property
-    def dataprefix_select(self):
+    def __dataprefix_select(self):
         pc = self.dataprefix
-        if not pc:
-            return None
-        if not pc.select:
-            nmu.alert('there is no selected data prefix in folder ' +
-                      nmu.quotes(self.__folder_select.name))
-            return None
-        return pc.select
+        if pc:
+            return pc.select
+        return None
 
     @property
     def dataprefixes(self):
         r = {}
-        fs = self.__folder_select
+        fs = self.__folder_select()
         if fs:
             r['folder'] = fs.name
             r['dataprefix'] = fs.dataprefix_names
@@ -193,14 +181,14 @@ class Manager(object):
 
     @property
     def channel_select(self):
-        ps = self.dataprefix_select
+        ps = self.__dataprefix_select()
         if not ps:
             return []  # channel select is a list
         return ps.channel_select
 
     @channel_select.setter
     def channel_select(self, chan_char_list):  # e.g 'A', 'All' or ['A', 'B']
-        ps = self.dataprefix_select
+        ps = self.__dataprefix_select()
         if not ps:
             return False
         ps.channel_select = chan_char_list
@@ -212,7 +200,7 @@ class Manager(object):
         r['folder'] = ''
         r['dataprefix'] = ''
         r['channel'] = []
-        fs = self.__folder_select
+        fs = self.__folder_select()
         if fs:
             r['folder'] = fs.name
             ps = fs.dataprefix_container.select
@@ -223,7 +211,7 @@ class Manager(object):
 
     @property
     def eset(self):  # epoch set
-        ps = self.dataprefix_select
+        ps = self.__dataprefix_select()
         if not ps:
             return None
         return ps.eset_container
@@ -235,7 +223,7 @@ class Manager(object):
             return None
         if not sc.select:
             nmu.alert('there is no selected epoch set for data prefix ' +
-                      nmu.quotes(self.dataprefix_select.tree_path))
+                      nmu.quotes(self.__dataprefix_select().tree_path))
             return None
         return sc.select
 
@@ -245,7 +233,7 @@ class Manager(object):
         r['folder'] = ''
         r['dataprefix'] = ''
         r['eset'] = []
-        fs = self.__folder_select
+        fs = self.__folder_select()
         if fs:
             r['folder'] = fs.name
             ps = fs.dataprefix_container.select
@@ -256,14 +244,14 @@ class Manager(object):
 
     @property
     def epoch_select(self):
-        ps = self.dataprefix_select
+        ps = self.__dataprefix_select()
         if not ps:
             return -1
         return ps.epoch_select
 
     @epoch_select.setter
     def epoch_select(self, epoch):
-        ps = self.dataprefix_select
+        ps = self.__dataprefix_select()
         if not ps:
             return False
         ps.epoch_select = epoch
@@ -271,7 +259,7 @@ class Manager(object):
 
     @property
     def data_select(self):
-        ps = self.dataprefix_select
+        ps = self.__dataprefix_select()
         if not ps:
             return False
         return ps.data_select
