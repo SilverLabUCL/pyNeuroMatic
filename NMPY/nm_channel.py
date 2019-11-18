@@ -15,7 +15,7 @@ class Channel(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, rename=False)
+        super().__init__(parent, name, {'chan': name}, rename=False)
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
 
@@ -27,7 +27,7 @@ class ChannelContainer(Container):
     __select_alert = 'NOT USED. See nm.channel_select.'
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, prefix='Chan',
+        super().__init__(parent, name, {'chan': name}, prefix='Chan',
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False, kill=False)
 
@@ -43,7 +43,7 @@ class ChannelContainer(Container):
             prefix = self.prefix
         else:
             prefix = 'Chan'
-        n = 10 + len(self.getAll())
+        n = 10 + len(self.get_all())
         for i in range(0, n):
             name = prefix + nmu.channel_char(i)
             if not self.exists(name):

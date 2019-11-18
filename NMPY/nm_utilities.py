@@ -66,7 +66,7 @@ def remove_special_chars(text):
     return temp
 
 
-def get_name_list(nm_obj_list):
+def get_names(nm_obj_list):
     if not nm_obj_list:
         return []
     nlist = []

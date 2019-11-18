@@ -24,12 +24,13 @@ class NMObject(object):
         date (str):
     """
 
-    def __init__(self, parent, name, rename=True):
+    def __init__(self, parent, name, key, rename=True):
         self.__parent = parent
         if nmu.name_ok(name):
             self.__name = name
         else:
             self.__name = 'NMObject'
+        self.__key = key
         self.__rename = rename
         self.__date = str(datetime.datetime.now())
 
@@ -52,43 +53,55 @@ class NMObject(object):
         return False
 
     @property
+    def key(self):
+        return self.__key
+
+    @property
+    def key_tree(self):
+        p = self.parent
+        if p and isinstance(p, NMObject):
+            k = {}
+            k.update(p.key_tree)
+            k.update(self.key)
+            return k
+        return self.key
+
+    @property
     def date(self):
         return self.__date
 
     @property
     def tree_path(self):
         if nmc.TREE_PATH_LONG:
-            skip = nmc.TREE_PATH_SKIP_LIST
-            plist = self.tree_path_list(skipList=skip)
+            plist = self.tree_path_list()
             return '.'.join(plist)
         return self.name
 
-    def tree_path_list(self, skipList=[]):
-        if not self.name:
+    def tree_path_list(self, names=True, skip=nmc.TREE_PATH_SKIP):
+        if self.__class__.__name__ in skip:
             return []
-        thepath = [self.name]
-        p = self
-        for i in range(0, 20):  # loop thru parent ancestry
-            if not p.parent:
-                break  # no more parents
-            p = p.parent
-            if p.__class__.__name__ == 'Manager':
-                break
-            elif p.__class__.__name__ in skipList:
-                pass
+        p = self.parent
+        if p and isinstance(p, NMObject) and p.__class__.__name__ not in skip:
+            t = p.tree_path_list(names=names, skip=skip)
+            if names:
+                t.append(self.name)
             else:
-                thepath.insert(0, p.name)
-        return thepath
+                t.append(self)
+            return t
+        if names:
+            return [self.name]
+        return [self]
 
     @property
     def manager(self):
         p = self
         for i in range(0, 20):  # loop thru parent ancestry
-            if not p.parent:
-                return None  # no more parents
             p = p.parent
-            if p.__class__.__name__ == 'Manager':
+            if not p:
+                return None
+            if p.__class__.__name__ == 'Manager':  # cannot use isinstance
                 return p
+        return None
 
 
 class Container(NMObject):
@@ -114,10 +127,10 @@ class Container(NMObject):
             The selected NMObject    
     """
 
-    def __init__(self, parent, name, prefix='NMObj', seq_start=0,
+    def __init__(self, parent, name, key, prefix='NMObj', seq_start=0,
                  select_alert='', select_new=False, rename=True,
                  duplicate=True, kill=True):
-        super().__init__(parent, name)
+        super().__init__(parent, name, key)
         if not prefix:
             self.__prefix = ''
             seq_start = -1
@@ -145,13 +158,20 @@ class Container(NMObject):
         return len(self.__objects)
 
     @property
-    def name_list(self):
+    def names(self):
         """Get list of names of NMObject items in Container"""
         nlist = []
         if self.__objects:
             for o in self.__objects:
                 nlist.append(o.name)
         return nlist
+
+    @property
+    def key(self):
+        s = super().key
+        for k in s:
+            s[k] = self.names
+        return s
 
     def object_new(self, name):  # child class should override this function
         # and change NMObject to Folder, Data, DataPrefix, etc.
@@ -180,10 +200,10 @@ class Container(NMObject):
                 return o
         nmu.error('failed to find ' + nmu.quotes(name) + ' in ' +
                   self.tree_path, quiet=quiet)
-        nmu.error('acceptable names: ' + str(self.name_list), quiet=quiet)
+        nmu.error('acceptable names: ' + str(self.names), quiet=quiet)
         return None
 
-    def getAll(self):
+    def get_all(self):
         """Get the container (list) of all NMObject items"""
         return self.__objects
 

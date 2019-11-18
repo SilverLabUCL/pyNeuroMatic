@@ -4,8 +4,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import nm_configs as nmc
-from nm_container import NMObject
-from nm_folder import FolderContainer
+from nm_project import Project
 from nm_stats import Stats
 import nm_utilities as nmu
 
@@ -61,16 +60,17 @@ class Manager(object):
         s2 = self.eset.get('Set2')
         self.eset.add_epoch('Set1', [0, 1, 2])
         self.eset.add_epoch('Set2', [3])
-        # print(s1.name_list)
-        # print(s2.name_list)
+        # print(s1.names)
+        # print(s2.names)
         # s1.union(s2)
-        # print(s1.name_list)
+        # print(s1.names)
         self.eset.equation('Set3', ['Set1', '|', 'Set2'])
+        self.eset.select = 'Set1'
         # self.eset.add('Set1', range(0, 8, 2))
         # rdic = self.eset.add('SetX', [4])
         # print(rdic)
         # self.eset.select="Set1"
-        # clist = self.dataprefix.select.data_select
+        # clist = self.dataprefix.select.data_names
         # print(clist)
 
     @property
@@ -126,14 +126,14 @@ class Manager(object):
         return p.folder_container
 
     @property
-    def folder_list(self):
+    def folder_names(self):
         fc = self.folder
         if not fc:
             return []
-        return fc.name_list
+        return fc.names
 
     @property
-    def folder_select(self):
+    def __folder_select(self):
         fc = self.folder
         if not fc:
             return None
@@ -144,27 +144,26 @@ class Manager(object):
         return fc.select
 
     @property
+    def folder_content(self):
+        fs = self.__folder_select
+        if fs:
+            return fs.content
+        r = {}
+        r['folder'] = ''
+        r['data'] = []
+        r['dataprefix'] = []
+        return r
+
+    @property
     def data(self):
-        fs = self.folder_select
+        fs = self.__folder_select
         if not fs:
             return None
         return fs.data_container
 
     @property
-    def data_list(self):
-        r = {}
-        fs = self.folder_select
-        if fs:
-            r['folder'] = fs.name
-            r['data'] = fs.data_list
-        else:
-            r['folder'] = ''
-            r['data'] = []
-        return r
-
-    @property
     def dataprefix(self):
-        fs = self.folder_select
+        fs = self.__folder_select
         if not fs:
             return None
         return fs.dataprefix_container
@@ -176,17 +175,17 @@ class Manager(object):
             return None
         if not pc.select:
             nmu.alert('there is no selected data prefix in folder ' +
-                      nmu.quotes(self.folder_select.name))
+                      nmu.quotes(self.__folder_select.name))
             return None
         return pc.select
 
     @property
-    def dataprefix_list(self):
+    def dataprefixes(self):
         r = {}
-        fs = self.folder_select
+        fs = self.__folder_select
         if fs:
             r['folder'] = fs.name
-            r['dataprefix'] = fs.dataprefix_list
+            r['dataprefix'] = fs.dataprefix_names
         else:
             r['folder'] = ''
             r['dataprefix'] = []
@@ -213,7 +212,7 @@ class Manager(object):
         r['folder'] = ''
         r['dataprefix'] = ''
         r['channel'] = []
-        fs = self.folder_select
+        fs = self.__folder_select
         if fs:
             r['folder'] = fs.name
             ps = fs.dataprefix_container.select
@@ -246,7 +245,7 @@ class Manager(object):
         r['folder'] = ''
         r['dataprefix'] = ''
         r['eset'] = []
-        fs = self.folder_select
+        fs = self.__folder_select
         if fs:
             r['folder'] = fs.name
             ps = fs.dataprefix_container.select
@@ -330,26 +329,6 @@ class Manager(object):
         s['channel'] = ps.channel_select
         s['epoch'] = ps.epoch_select
         return s
-
-
-class Project(NMObject):
-    """
-    NM Project class
-    """
-
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.__folder_container = FolderContainer(self, "NMFolders")
-
-    def rename(self, name, quiet=False):
-        if not nmu.name_ok(name):
-            return nmu.error('bad name ' + nmu.quotes(name), quiet=quiet)
-        self.__name = name
-        return True
-
-    @property
-    def folder_container(self):
-        return self.__folder_container
 
 
 if __name__ == '__main__':

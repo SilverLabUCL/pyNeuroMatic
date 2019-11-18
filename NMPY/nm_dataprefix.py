@@ -18,7 +18,7 @@ class DataPrefix(NMObject):
 
     def __init__(self, parent, name):
         # name is the prefix
-        super().__init__(parent, name, rename=False)
+        super().__init__(parent, name, {'dataprefix': name}, rename=False)
         self.__thedata = []  # 2D list, i = chan #, j = seq #
         self.__channel_container = ChannelContainer(self, 'NMChannels')
         self.__eset_container = EpochSetContainer(self, 'NMEpochSets')
@@ -40,7 +40,7 @@ class DataPrefix(NMObject):
 
     @property
     def eset_list(self):
-        return self.__eset_container.name_list
+        return self.__eset_container.names
 
     def eset_init(self):
         if not nmc.ESETS_LIST:
@@ -202,8 +202,12 @@ class DataPrefix(NMObject):
 
     @property
     def data_select(self):
-        self.__data_select = self.get_selected(names=True)
+        self.__data_select = self.get_selected()  # update
         return self.__data_select
+
+    @property
+    def data_select_names(self):
+        return self.get_selected(names=True)
 
     def get_selected(self, names=False):
         channels = len(self.__thedata)
@@ -268,8 +272,8 @@ class DataPrefixContainer(Container):
     """
 
     def __init__(self, parent, name, data_container):
-        super().__init__(parent, name, prefix='', select_new=True,
-                         rename=False, duplicate=False)
+        super().__init__(parent, name, {'dataprefix': name}, prefix='',
+                         select_new=True, rename=False, duplicate=False)
         self.__data_container = data_container
 
     def object_new(self, name):  # override, do not call super
@@ -310,7 +314,7 @@ class DataPrefixContainer(Container):
             return False
         prefix = p.name
         foundsomething = False
-        thedata = self.__data_container.getAll()
+        thedata = self.__data_container.get_all()
         htxt = []
         for i in range(0, 25):  # try prefix+chan+seq format
             cc = nmu.channel_char(i)

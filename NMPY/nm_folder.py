@@ -19,7 +19,7 @@ class Folder(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name)
+        super().__init__(parent, name, {'folder': name})
         self.__data_container = DataContainer(self, 'NMData')
         self.__dataprefix_container = DataPrefixContainer(
                 self, 'NMDataPrefix', self.__data_container)
@@ -29,9 +29,9 @@ class Folder(NMObject):
         return self.__data_container
 
     @property
-    def data_list(self):
+    def data_names(self):
         if self.__data_container:
-            return self.__data_container.name_list
+            return self.__data_container.names
         return []
 
     @property
@@ -39,9 +39,9 @@ class Folder(NMObject):
         return self.__dataprefix_container
 
     @property
-    def dataprefix_list(self):
+    def dataprefix_names(self):
         if self.__dataprefix_container:
-            return self.__dataprefix_container.name_list
+            return self.__dataprefix_container.names
         return []
 
 
@@ -51,7 +51,7 @@ class FolderContainer(Container):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, nmc.FOLDER_PREFIX)
+        super().__init__(parent, name, {'folder': name}, nmc.FOLDER_PREFIX)
 
     def object_new(self, name):  # override, do not call super
         return Folder(self.parent, name)

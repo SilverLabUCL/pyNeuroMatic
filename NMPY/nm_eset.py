@@ -17,17 +17,21 @@ class EpochSet(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self._theset = set()
+        super().__init__(parent, name, {'eset': name})
+        self.__theset = set()
         self.__eq_list = []
         self.__eq_lock = True
 
     @property
-    def name_list(self):
+    def theset(self):
+        return self.__theset
+
+    @property
+    def data_names(self):
         if self.name.lower() == 'all':
             return ['All']
         n = []
-        for d in self._theset:
+        for d in self.__theset:
             n.append(d.name)
         n.sort()
         return n
@@ -38,9 +42,7 @@ class EpochSet(NMObject):
 
     @eq_list.setter
     def eq_list(self, eq_list):
-        if type(eq_list) is not list:
-            return False
-        self.__eq_list = eq_list
+        nmu.alert('see nm.eset.equation')
 
     @property
     def eq_lock(self):
@@ -51,24 +53,24 @@ class EpochSet(NMObject):
         self.__eq_lock = eq_lock
 
     def contains(self, data):
-        return data in self._theset
+        return data in self.__theset
 
     def add(self, data):
         if isinstance(data, Data):
-            self._theset.add(data)
+            self.__theset.add(data)
             return True
         return False
 
     def discard(self, data):
         if isinstance(data, Data):
-            self._theset.discard(data)
+            self.__theset.discard(data)
             return True
         return False
 
     def clear(self):
         if self.name.lower() == 'all':
             return False
-        self._theset.clear()
+        self.__theset.clear()
         return True
 
     def union(self, eset):
@@ -76,7 +78,7 @@ class EpochSet(NMObject):
             eset = [eset]
         for s in eset:
             if isinstance(s, EpochSet):
-                self._theset = self._theset.union(s._theset)
+                self.__theset = self.__theset.union(s.__theset)
 
 
 class EpochSetContainer(Container):
@@ -85,7 +87,8 @@ class EpochSetContainer(Container):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, nmc.ESET_PREFIX, seq_start=1)
+        super().__init__(parent, name, {'eset': name}, nmc.ESET_PREFIX,
+                         seq_start=1)
 
     def object_new(self, name):  # override, do not call super
         return EpochSet(self.parent, name)
@@ -117,7 +120,7 @@ class EpochSetContainer(Container):
             return False
         if type(name) is not list:
             if name.lower() == 'all':
-                name = self.name_list
+                name = self.names
                 name.remove('All')
                 name.remove('SetX')
             else:
@@ -165,7 +168,7 @@ class EpochSetContainer(Container):
             return False
         if type(name) is not list:
             if name.lower() == 'all':
-                name = self.name_list
+                name = self.names
                 name.remove('All')
                 name.remove('SetX')
             else:
@@ -234,7 +237,7 @@ class EpochSetContainer(Container):
     def clear(self, name, quiet=False):
         if type(name) is not list:
             if name.lower() == 'all':
-                name = self.name_list
+                name = self.names
                 name.remove('All')
                 name.remove('SetX')
             else:
