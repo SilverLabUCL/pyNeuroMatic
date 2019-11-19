@@ -21,7 +21,7 @@ class Data(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self.__thedata = np.array([])
-        self.__note_container = NoteContainer(self, 'NMNotes')
+        self.__note_container = NoteContainer(self)
         # self.__thedata = np.array([], dtype=np.float64)
 
     @property
@@ -37,12 +37,8 @@ class Data(NMObject):
         self.__thedata = np_array
 
     @property
-    def note_container(self):
+    def note(self):
         return self.__note_container
-
-    @property
-    def note_names(self):
-        return self.__note_container.names
 
     @property
     def content(self):
@@ -57,19 +53,16 @@ class DataContainer(Container):
     __select_alert = ('NOT USED. See nm.dataprefix.select, ' +
                       'nm.channel_select, nm.eset.select and nm.epoch_select.')
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name='NMDataContainer'):
         super().__init__(parent, name, nmc.DATA_PREFIX,
                          select_alert=self.__select_alert)
 
     @property
-    def key(self):
+    def key(self):  # override
         return {'data': self.names}
 
     def object_new(self, name):  # override, do not call super
         return Data(self.parent, name)
-
-    def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, Data)
 
     def make(self, prefix='default', channels=1, epochs=3, samples=10,
              noise=False, select=True, quiet=False):
@@ -111,5 +104,5 @@ class DataContainer(Container):
                 path = tree_path + "." + path
             nmu.history('created' + nmc.S0 + path + ', ' + h, quiet=quiet)
         if select:
-            self.parent.dataprefix_container.new(prefix, quiet=quiet)
+            self.parent.dataprefix.new(prefix, quiet=quiet)
         return True

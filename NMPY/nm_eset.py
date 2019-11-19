@@ -90,18 +90,15 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name='NMEpochSetContainer'):
         super().__init__(parent, name, nmc.ESET_PREFIX, seq_start=1)
 
     @property
-    def key(self):
+    def key(self):  # override
         return {'eset': self.names}
 
     def object_new(self, name):  # override, do not call super
         return EpochSet(self.parent, name)
-
-    def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, EpochSet)
 
     # @property
     # def select(self):  # override, do not call super

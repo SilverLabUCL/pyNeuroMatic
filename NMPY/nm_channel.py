@@ -28,32 +28,26 @@ class ChannelContainer(Container):
     """
     Container for NM Channel objects
     """
+    __prefix = ''  # no prefix, channel objects will be names 'A', 'B'...
     __select_alert = 'NOT USED. See nm.channel_select.'
 
-    def __init__(self, parent, name):
-        super().__init__(parent, name, prefix='Chan',
+    def __init__(self, parent, name='NMChannelContainer'):
+        super().__init__(parent, name, prefix=self.__prefix,
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False, kill=False)
 
     @property
-    def key(self):  # child class should override
-        return {'channel', self.names}
+    def key(self):  # override
+        return {'channel': self.names}
 
     def object_new(self, name):  # override, do not call super
         return Channel(self.parent, name)
 
-    def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, Channel)
-
     def name_default(self, quiet=False):  # override, do not call super
         """Get next default channel name."""
-        if self.prefix:
-            prefix = self.prefix
-        else:
-            prefix = 'Chan'
         n = 10 + len(self.thecontainer())
         for i in range(0, n):
-            name = prefix + nmu.channel_char(i)
+            name = self.prefix + nmu.channel_char(i)
             if not self.exists(name):
                 return name
         return ''

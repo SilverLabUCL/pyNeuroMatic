@@ -3,10 +3,8 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
-import nm_utilities as nmu
 
 
 class Note(NMObject):
@@ -37,20 +35,17 @@ class NoteContainer(Container):
     """
     __select_alert = ('NOT USED.')
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name='NMNoteContainer'):
         super().__init__(parent, name, prefix='Note',
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False)
 
     @property
-    def key(self):
+    def key(self):  # override
         return {'note': self.names}
 
     def object_new(self, name):  # override, do not call super
         return Note(self.parent, name)
-
-    def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, Note)
 
     def new(self, note='', select=True, quiet=False):  # override
         if not note:

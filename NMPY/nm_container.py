@@ -128,7 +128,7 @@ class Container(NMObject):
             The selected NMObject    
     """
 
-    def __init__(self, parent, name, prefix='NMObj', seq_start=0,
+    def __init__(self, parent, name='NMContainer', prefix='NMObj', seq_start=0,
                  select_alert='', select_new=False, rename=True,
                  duplicate=True, kill=True):
         super().__init__(parent, name)
@@ -158,10 +158,6 @@ class Container(NMObject):
     def object_new(self, name):  # child class should override
         # and change NMObject to Folder, Data, DataPrefix, etc.
         return NMObject(self.parent, name)
-
-    def instance_ok(self, obj):  # child class should override
-        # and change NMObject to Folder, Data, DataPrefix, etc.
-        return isinstance(obj, NMObject)
 
     @property
     def prefix(self):  # see name_default()
@@ -257,7 +253,7 @@ class Container(NMObject):
 
     def add(self, nmobj, select=True, quiet=False):
         """Add NMObject to Container."""
-        if not self.instance_ok(nmobj):
+        if not self.__isinstance(nmobj):
             e = 'encountered object not of type ' + self.__cname()
             nmu.error(e, quiet=quiet)
             return False
@@ -419,3 +415,6 @@ class Container(NMObject):
             o = self.object_new('nothing')
             self.__classname = o.__class__.__name__
         return self.__classname
+
+    def __isinstance(self, nmobj):
+        return nmobj.__class__.__name__ == self.__cname()

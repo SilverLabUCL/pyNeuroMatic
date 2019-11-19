@@ -20,33 +20,21 @@ class Folder(NMObject):
 
     def __init__(self, parent, name):
         super().__init__(parent, name)
-        self.__data_container = DataContainer(self, 'NMData')
-        self.__dataprefix_container = DataPrefixContainer(
-                self, 'NMDataPrefix', self.__data_container)
+        self.__data_container = DataContainer(self)
+        self.__dataprefix_container = DataPrefixContainer(self,
+                                                          self.__data_container)
 
     @property
     def key(self):
         return {'folder': self.name}
 
     @property
-    def data_container(self):
+    def data(self):
         return self.__data_container
 
     @property
-    def data_names(self):
-        if self.__data_container:
-            return self.__data_container.names
-        return []
-
-    @property
-    def dataprefix_container(self):
+    def dataprefix(self):
         return self.__dataprefix_container
-
-    @property
-    def dataprefix_names(self):
-        if self.__dataprefix_container:
-            return self.__dataprefix_container.names
-        return []
 
     @property
     def content(self):
@@ -61,21 +49,18 @@ class FolderContainer(Container):
     Container for NM Folders
     """
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name='NMFolderContainer'):
         super().__init__(parent, name, nmc.FOLDER_PREFIX)
 
     @property
-    def key(self):
+    def key(self):  # override
         return {'folder': self.names}
 
     def object_new(self, name):  # override, do not call super
         return Folder(self.parent, name)
 
-    def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, Folder)
-
     def open_hdf5(self):
-        dataprefix = "Record"
+        dataprefix = 'Record'
         with h5py.File('nmFolder0.hdf5', 'r') as f:
             #print(f.keys())
             data = []

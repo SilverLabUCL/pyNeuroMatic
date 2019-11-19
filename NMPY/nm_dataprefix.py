@@ -20,8 +20,8 @@ class DataPrefix(NMObject):
         # name is the prefix
         super().__init__(parent, name, rename=False)
         self.__thedata = []  # 2D list, i = chan #, j = seq #
-        self.__channel_container = ChannelContainer(self, 'NMChannels')
-        self.__eset_container = EpochSetContainer(self, 'NMEpochSets')
+        self.__channel_container = ChannelContainer(self)
+        self.__eset_container = EpochSetContainer(self)
         self.__channel_select = ['A']
         self.__epoch_select = 0
         self.__data_select = []
@@ -40,35 +40,7 @@ class DataPrefix(NMObject):
         return c
 
     @property
-    def eset_container(self):
-        return self.__eset_container
-
-    @property
-    def eset_select(self):
-        if self.__eset_container:
-            return self.__eset_container.select
-        return None
-
-    @property
-    def eset_list(self):
-        return self.__eset_container.names
-
-    def eset_init(self):
-        if not nmc.ESETS_LIST:
-            return []
-        r = []
-        for s in nmc.ESETS_LIST:
-            select = s.upper() == 'ALL'
-            if self.__eset_container.new(s, select=select, quiet=True):
-                r.append(s)
-        if not self.__eset_container.select:
-            self.__eset_container.select = nmc.ESETS_LIST[0]
-        return r
-
-    __eset_init = eset_init
-
-    @property
-    def channel_container(self):
+    def channel(self):
         return self.__channel_container
 
     @property
@@ -131,6 +103,30 @@ class DataPrefix(NMObject):
         return False
 
     @property
+    def eset(self):
+        return self.__eset_container
+
+    @property
+    def eset_select(self):
+        if self.__eset_container:
+            return self.__eset_container.select
+        return None
+
+    def eset_init(self):
+        if not nmc.ESETS_LIST:
+            return []
+        r = []
+        for s in nmc.ESETS_LIST:
+            select = s.upper() == 'ALL'
+            if self.__eset_container.new(s, select=select, quiet=True):
+                r.append(s)
+        if not self.__eset_container.select:
+            self.__eset_container.select = nmc.ESETS_LIST[0]
+        return r
+
+    __eset_init = eset_init
+
+    @property
     def epoch_count(self):  # epochs per channel
         if not self.__thedata:
             return [0]
@@ -160,17 +156,6 @@ class DataPrefix(NMObject):
             return True
         nmu.error('bad epoch number: ' + str(epoch), quiet=quiet)
         return False
-
-    @property
-    def select(self):
-        s = {}
-        s['channel'] = self.__channel_select
-        if self.__eset_container and self.__eset_container.select:
-            s['eset'] = self.__eset_container.select.name
-        else:
-            s['eset'] = 'None'
-        s['epoch'] = self.__epoch_select
-        return s
 
     @property
     def thedata(self):
@@ -223,9 +208,9 @@ class DataPrefix(NMObject):
     def get_selected(self, names=False):
         channels = len(self.__thedata)
         cs = self.__channel_select
-        ss = self.eset_container.select.name
-        eset = self.eset_container.select.theset
-        setx = self.eset_container.get('SetX').theset
+        ss = self.eset.select.name
+        eset = self.eset.select.theset
+        setx = self.eset.get('SetX').theset
         if channels == 0:
             return []
         if ss.upper() == 'ALL':
@@ -282,20 +267,17 @@ class DataPrefixContainer(Container):
     NM Container for DataPrefix objects
     """
 
-    def __init__(self, parent, name, data_container):
+    def __init__(self, parent, data_container, name='NMDataPrefixContainer'):
         super().__init__(parent, name, prefix='', select_new=True,
                          rename=False, duplicate=False)
         self.__data_container = data_container
 
     @property
-    def key(self):
+    def key(self):  # override
         return {'dataprefix': self.names}
 
     def object_new(self, name):  # override, do not call super
         return DataPrefix(self.parent, name)
-
-    def instance_ok(self, obj):  # override, do not call super
-        return isinstance(obj, DataPrefix)
 
     def new(self, name='', select=True, quiet=False):  # override, no super
         if not name:
@@ -337,7 +319,7 @@ class DataPrefixContainer(Container):
             if len(olist) > 0:
                 p.thedata.append(olist)
                 foundsomething = True
-                p.channel_container.new(quiet=True)
+                p.channel.new(quiet=True)
                 htxt.append('ch=' + cc + ', n=' + str(len(olist)))
             else:
                 break  # no more channels
@@ -346,7 +328,7 @@ class DataPrefixContainer(Container):
             if len(olist) > 0:
                 p.thedata.append(olist)
                 foundsomething = True
-                p.channel_container.new(quiet=True)
+                p.channel.new(quiet=True)
                 htxt.append('n=' + str(len(olist)))
         if not foundsomething:
             a = 'failed to find data with prefix ' + nmu.quotes(prefix)

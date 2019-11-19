@@ -16,7 +16,7 @@ class Manager(object):
     NM Manager class
     Main outer class that manages everything
 
-    NM object tree:
+    NM class tree:
         Manager (root)
         Project
             FolderContainer
@@ -26,9 +26,9 @@ class Manager(object):
                     NoteContainer
                     Note (Note0, Note1, Note2...)
                 DataPrefixContainer
-                DataPrefix ('Record', 'Wave')
+                DataPrefix (Record, Wave...)
                     ChannelContainer
-                    Channel (ChanA, ChanB...)
+                    Channel (A, B, C...)
                     EpochSetContainer
                     EpochSet (All, Set1, Set2...)
     """
@@ -110,7 +110,7 @@ class Manager(object):
         p = Project(self, name)
         nmu.history('created' + nmc.S0 + name)
         if p:
-            p.folder_container.new()  # create default folder
+            p.folder.new()  # create default folder
         self.__project = p
         return p
 
@@ -120,27 +120,28 @@ class Manager(object):
 
     @property
     def folder(self):
-        return self.project.folder_container
-
-    @property
-    def folder_names(self):
-        return self.folder.names
+        if self.__project:
+            return self.__project.folder
+        return None
 
     def __folder_select(self):
-        return self.folder.select
+        fc = self.folder
+        if fc:
+            return fc.select
+        return None
 
     @property
     def data(self):
         fs = self.__folder_select()
         if fs:
-            return fs.data_container
+            return fs.data
         return None
 
     @property
     def dataprefix(self):
         fs = self.__folder_select()
         if fs:
-            return fs.dataprefix_container
+            return fs.dataprefix
         return None
 
     def __dataprefix_select(self):
@@ -150,81 +151,58 @@ class Manager(object):
         return None
 
     @property
+    def channel(self):
+        ps = self.__dataprefix_select()
+        if ps:
+            return ps.channel
+        return None
+
+    @property
     def channel_select(self):
         ps = self.__dataprefix_select()
-        if not ps:
-            return []  # channel select is a list
-        return ps.channel_select
+        if ps:
+            return ps.channel_select
+        return []  # channel select is a list
 
     @channel_select.setter
     def channel_select(self, chan_char_list):  # e.g 'A', 'All' or ['A', 'B']
         ps = self.__dataprefix_select()
-        if not ps:
-            return False
-        ps.channel_select = chan_char_list
-        return ps.channel_select == chan_char_list
-
-    @property
-    def channel_list(self):
-        r = {}
-        r['folder'] = ''
-        r['dataprefix'] = ''
-        r['channel'] = []
-        fs = self.__folder_select()
-        if fs:
-            r['folder'] = fs.name
-            ps = fs.dataprefix_container.select
-            if ps:
-                r['dataprefix'] = ps.name
-                r['channel'] = ps.channel_list()
-        return r
+        if ps:
+            ps.channel_select = chan_char_list
+            return ps.channel_select == chan_char_list
+        return None
 
     @property
     def eset(self):  # epoch set
         ps = self.__dataprefix_select()
-        if not ps:
-            return None
-        return ps.eset_container
-
-    @property
-    def eset_list(self):  # epoch set
-        r = {}
-        r['folder'] = ''
-        r['dataprefix'] = ''
-        r['eset'] = []
-        fs = self.__folder_select()
-        if fs:
-            r['folder'] = fs.name
-            ps = fs.dataprefix_container.select
-            if ps:
-                r['dataprefix'] = ps.name
-                r['eset'] = ps.eset_list
-        return r
+        if ps:
+            return ps.eset
+        return None
 
     @property
     def epoch_select(self):
         ps = self.__dataprefix_select()
-        if not ps:
-            return -1
-        return ps.epoch_select
+        if ps:
+            return ps.epoch_select
+        return -1
 
     @epoch_select.setter
     def epoch_select(self, epoch):
         ps = self.__dataprefix_select()
-        if not ps:
-            return False
-        ps.epoch_select = epoch
-        return ps.epoch_select == epoch
+        if ps:
+            ps.epoch_select = epoch
+            return ps.epoch_select == epoch
+        return False
 
     @property
     def data_select(self):
         ps = self.__dataprefix_select()
-        if not ps:
-            return False
-        return ps.data_select
+        if ps:
+            return ps.data_select
+        return False
 
     @property
-    def select(self):
+    def select_tree(self):
         s = {}
         s['project'] = None
         s['folder'] = None
@@ -251,7 +229,7 @@ class Manager(object):
         return s
 
     @property
-    def select_tree(self):
+    def select_tree_names(self, names=True):
         s = {}
         s['project'] = ''
         s['folder'] = ''
