@@ -19,10 +19,14 @@ class Data(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'data': name})
+        super().__init__(parent, name)
         self.__thedata = np.array([])
         self.__note_container = NoteContainer(self, 'NMNotes')
         # self.__thedata = np.array([], dtype=np.float64)
+
+    @property
+    def key(self):
+        return {'data': self.name}
 
     @property
     def thedata(self):
@@ -54,8 +58,12 @@ class DataContainer(Container):
                       'nm.channel_select, nm.eset.select and nm.epoch_select.')
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'data': name}, nmc.DATA_PREFIX,
+        super().__init__(parent, name, nmc.DATA_PREFIX,
                          select_alert=self.__select_alert)
+
+    @property
+    def key(self):
+        return {'data': self.names}
 
     def object_new(self, name):  # override, do not call super
         return Data(self.parent, name)

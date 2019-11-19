@@ -18,7 +18,7 @@ class DataPrefix(NMObject):
 
     def __init__(self, parent, name):
         # name is the prefix
-        super().__init__(parent, name, {'dataprefix': name}, rename=False)
+        super().__init__(parent, name, rename=False)
         self.__thedata = []  # 2D list, i = chan #, j = seq #
         self.__channel_container = ChannelContainer(self, 'NMChannels')
         self.__eset_container = EpochSetContainer(self, 'NMEpochSets')
@@ -27,7 +27,11 @@ class DataPrefix(NMObject):
         self.__data_select = []
         self.__eset_init()
         # self.details()
- 
+
+    @property
+    def key(self):
+        return {'dataprefix': self.name}
+
     @property
     def content(self):
         c = self.key_tree
@@ -279,9 +283,13 @@ class DataPrefixContainer(Container):
     """
 
     def __init__(self, parent, name, data_container):
-        super().__init__(parent, name, {'dataprefix': name}, prefix='',
-                         select_new=True, rename=False, duplicate=False)
+        super().__init__(parent, name, prefix='', select_new=True,
+                         rename=False, duplicate=False)
         self.__data_container = data_container
+
+    @property
+    def key(self):
+        return {'dataprefix': self.names}
 
     def object_new(self, name):  # override, do not call super
         return DataPrefix(self.parent, name)

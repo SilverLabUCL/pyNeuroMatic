@@ -17,10 +17,14 @@ class EpochSet(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'eset': name})
+        super().__init__(parent, name)
         self.__theset = set()
         self.__eq_list = []
         self.__eq_lock = True
+
+    @property
+    def key(self):
+        return {'eset': self.name}
 
     @property
     def theset(self):
@@ -87,8 +91,11 @@ class EpochSetContainer(Container):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'eset': name}, nmc.ESET_PREFIX,
-                         seq_start=1)
+        super().__init__(parent, name, nmc.ESET_PREFIX, seq_start=1)
+
+    @property
+    def key(self):
+        return {'eset': self.names}
 
     def object_new(self, name):  # override, do not call super
         return EpochSet(self.parent, name)

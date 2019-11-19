@@ -15,8 +15,12 @@ class Note(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'note': name})
+        super().__init__(parent, name)
         self.__thenote = ''
+
+    @property
+    def key(self):
+        return {'note': self.name}
 
     @property
     def thenote(self):
@@ -34,9 +38,13 @@ class NoteContainer(Container):
     __select_alert = ('NOT USED.')
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'note': name}, prefix='Note',
+        super().__init__(parent, name, prefix='Note',
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False)
+
+    @property
+    def key(self):
+        return {'note': self.names}
 
     def object_new(self, name):  # override, do not call super
         return Note(self.parent, name)

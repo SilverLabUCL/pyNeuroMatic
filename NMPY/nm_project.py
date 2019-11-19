@@ -14,8 +14,12 @@ class Project(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'project': name})
+        super().__init__(parent, name)
         self.__folder_container = FolderContainer(self, "NMFolders")
+
+    @property
+    def key(self):
+        return {'project': self.name}
 
     def rename(self, name, quiet=False):
         if not nmu.name_ok(name):

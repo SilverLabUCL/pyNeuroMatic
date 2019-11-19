@@ -16,7 +16,7 @@ class NMObject(object):
     NM objects to be stored in a 'Container' list (see below).
 
     Known Children:
-        Experiment, Folder, Data, DataPrefix, Channel, EpochSet
+        Project, Folder, Data, DataPrefix, Channel, EpochSet, Note
 
     Attributes:
         parent (NMObject):
@@ -24,20 +24,20 @@ class NMObject(object):
         date (str):
     """
 
-    def __init__(self, parent, name, key, rename=True):
+    def __init__(self, parent, name, rename=True):
         self.__parent = parent
         if nmu.name_ok(name):
             self.__name = name
         else:
             self.__name = ''
             nmu.error('bad name ' + nmu.quotes(name))
-        if type(key) is dict:
-            self.__key = key
-        else:
-            self.__key = {}
-            nmu.error('key is not of type dictionary')
         self.__rename = rename
         self.__date = str(datetime.datetime.now())
+
+    @property
+    def key(self):  # child class should override
+        # and change nmobject to folder, data, dataprefix, etc.
+        return {'nmobject': self.name}
 
     @property
     def parent(self):
@@ -58,8 +58,8 @@ class NMObject(object):
         return False
 
     @property
-    def key(self):
-        return self.__key
+    def date(self):
+        return self.__date
 
     @property
     def key_tree(self):
@@ -70,10 +70,6 @@ class NMObject(object):
             k.update(self.key)
             return k
         return self.key
-
-    @property
-    def date(self):
-        return self.__date
 
     @property
     def tree_path(self):
@@ -132,10 +128,10 @@ class Container(NMObject):
             The selected NMObject    
     """
 
-    def __init__(self, parent, name, key, prefix='NMObj', seq_start=0,
+    def __init__(self, parent, name, prefix='NMObj', seq_start=0,
                  select_alert='', select_new=False, rename=True,
                  duplicate=True, kill=True):
-        super().__init__(parent, name, key)
+        super().__init__(parent, name)
         if not prefix:
             self.__prefix = ''
             seq_start = -1
@@ -155,6 +151,19 @@ class Container(NMObject):
         self.__classname = ''
 
     @property
+    def key(self):  # child class should override
+        # and change nmobject to folder, data, dataprefix, etc.
+        return {'nmobject', self.names}
+
+    def object_new(self, name):  # child class should override
+        # and change NMObject to Folder, Data, DataPrefix, etc.
+        return NMObject(self.parent, name)
+
+    def instance_ok(self, obj):  # child class should override
+        # and change NMObject to Folder, Data, DataPrefix, etc.
+        return isinstance(obj, NMObject)
+
+    @property
     def prefix(self):  # see name_default()
         return self.__prefix
 
@@ -171,27 +180,6 @@ class Container(NMObject):
             for o in self.__thecontainer:
                 nlist.append(o.name)
         return nlist
-
-    @property
-    def key(self):
-        s = super().key
-        for k in s:
-            s[k] = self.names
-        return s
-
-    def object_new(self, name):  # child class should override this function
-        # and change NMObject to Folder, Data, DataPrefix, etc.
-        return NMObject(self.parent, name)
-
-    def instance_ok(self, obj):  # child class should override this function
-        # and change NMObject to Folder, Data, DataPrefix, etc.
-        return isinstance(obj, NMObject)
-
-    def __cname(self):
-        if not self.__classname:
-            o = self.object_new('nothing')
-            self.__classname = o.__class__.__name__
-        return self.__classname
 
     def get(self, name='select', quiet=False):
         """Get NMObject from Container"""
@@ -425,3 +413,9 @@ class Container(NMObject):
         h = 'renamed' + nmc.S0 + old_path + ' to ' + o.tree_path
         nmu.history(h, quiet=quiet)
         return True
+
+    def __cname(self):
+        if not self.__classname:
+            o = self.object_new('nothing')
+            self.__classname = o.__class__.__name__
+        return self.__classname

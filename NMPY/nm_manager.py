@@ -68,6 +68,7 @@ class Manager(object):
         # print(s1.names)
         self.eset.equation('Set3', ['Set1', '|', 'Set2'])
         self.eset.select = 'Set1'
+        self.dataprefix.select.content
         # self.eset.add('Set1', range(0, 8, 2))
         # rdic = self.eset.add('SetX', [4])
         # print(rdic)
@@ -115,37 +116,18 @@ class Manager(object):
 
     @property
     def project(self):
-        if self.__project:
-            return self.__project
-        nmu.alert('there is no project')
-        return None
+        return self.__project
 
     @property
     def folder(self):
-        p = self.project
-        if p:
-            return p.folder_container
-        return None
+        return self.project.folder_container
 
     @property
     def folder_names(self):
-        fc = self.folder
-        if fc:
-            return fc.names
-        return []
+        return self.folder.names
 
     def __folder_select(self):
-        fc = self.folder
-        if fc:
-            return fc.select
-        return None
-
-    @property
-    def folder_content(self):
-        fs = self.__folder_select()
-        if fs:
-            return fs.content
-        return {}
+        return self.folder.select
 
     @property
     def data(self):
@@ -166,18 +148,6 @@ class Manager(object):
         if pc:
             return pc.select
         return None
-
-    @property
-    def dataprefixes(self):
-        r = {}
-        fs = self.__folder_select()
-        if fs:
-            r['folder'] = fs.name
-            r['dataprefix'] = fs.dataprefix_names
-        else:
-            r['folder'] = ''
-            r['dataprefix'] = []
-        return r
 
     @property
     def channel_select(self):
@@ -215,17 +185,6 @@ class Manager(object):
         if not ps:
             return None
         return ps.eset_container
-
-    @property
-    def eset_select(self):  # epoch set
-        sc = self.eset
-        if not sc:
-            return None
-        if not sc.select:
-            nmu.alert('there is no selected epoch set for data prefix ' +
-                      nmu.quotes(self.__dataprefix_select().tree_path))
-            return None
-        return sc.select
 
     @property
     def eset_list(self):  # epoch set

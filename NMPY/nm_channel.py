@@ -15,9 +15,13 @@ class Channel(NMObject):
     """
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'chan': name}, rename=False)
+        super().__init__(parent, name, rename=False)
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
+
+    @property
+    def key(self):
+        return {'channel': self.name}
 
 
 class ChannelContainer(Container):
@@ -27,9 +31,13 @@ class ChannelContainer(Container):
     __select_alert = 'NOT USED. See nm.channel_select.'
 
     def __init__(self, parent, name):
-        super().__init__(parent, name, {'chan': name}, prefix='Chan',
+        super().__init__(parent, name, prefix='Chan',
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False, kill=False)
+
+    @property
+    def key(self):  # child class should override
+        return {'channel', self.names}
 
     def object_new(self, name):  # override, do not call super
         return Channel(self.parent, name)
