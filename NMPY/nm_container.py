@@ -36,7 +36,7 @@ class NMObject(object):
 
     @property
     def key(self):  # child class should override
-        # and change nmobject to folder, data, dataprefix, etc.
+        # and change 'nmobject' to 'folder', 'data', etc.
         return {'nmobject': self.name}
 
     @property
