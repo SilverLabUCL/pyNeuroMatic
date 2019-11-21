@@ -63,7 +63,7 @@ class NMObject(object):
 
     @property
     def key_tree(self):
-        p = self.parent
+        p = self.__parent
         if p and isinstance(p, NMObject):
             k = {}
             k.update(p.key_tree)
@@ -81,7 +81,7 @@ class NMObject(object):
     def tree_path_list(self, names=True, skip=nmc.TREE_PATH_SKIP):
         if self.__class__.__name__ in skip:
             return []
-        p = self.parent
+        p = self.__parent
         if p and isinstance(p, NMObject) and p.__class__.__name__ not in skip:
             t = p.tree_path_list(names=names, skip=skip)
             if names:
@@ -94,7 +94,7 @@ class NMObject(object):
         return [self]
 
     @property
-    def manager(self):
+    def __manager(self):
         p = self
         for i in range(0, 20):  # loop thru parent ancestry
             p = p.parent
@@ -152,11 +152,18 @@ class Container(NMObject):
 
     @property
     def key(self):  # child class should override
-        # and change nmobject to folder, data, dataprefix, etc.
-        return {'nmobject', self.names}
+        # and change 'nmobject' to 'folder', etc
+        # and change 'select' to 'folder_select', etc
+        k = {'nmobject', self.names}
+        if self.select:
+            s = self.select.name
+        else:
+            s = ''
+        k.update({'select': s})
+        return k
 
     def object_new(self, name):  # child class should override
-        # and change NMObject to Folder, Data, DataPrefix, etc.
+        # and change NMObject to Folder, Data, DataPrefix, etc
         return NMObject(self.parent, name)
 
     @property
@@ -193,7 +200,7 @@ class Container(NMObject):
         nmu.error('acceptable names: ' + str(self.names), quiet=quiet)
         return None
 
-    def thecontainer(self):
+    def get_all(self):
         """Get the container (list) of all NMObject items"""
         return self.__thecontainer
 
@@ -303,6 +310,7 @@ class Container(NMObject):
         c = copy.deepcopy(o)
         if c:
             c.name = newname
+            c._NMObject__parent = self.parent  # reset parent reference
             self.__thecontainer.append(c)
             h = 'copied ' + o.tree_path + ' to ' + c.tree_path
             nmu.history(h, quiet=quiet)

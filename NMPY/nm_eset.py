@@ -23,7 +23,7 @@ class EpochSet(NMObject):
         self.__eq_lock = True
 
     @property
-    def key(self):
+    def key(self):  # override, no super
         return {'eset': self.name}
 
     @property
@@ -94,21 +94,27 @@ class EpochSetContainer(Container):
         super().__init__(parent, name, nmc.ESET_PREFIX, seq_start=1)
 
     @property
-    def key(self):  # override
-        return {'eset': self.names}
+    def key(self):  # override, no super
+        k = {'eset': self.names}
+        if self.select:
+            s = self.select.name
+        else:
+            s = ''
+        k.update({'eset_select': s})
+        return k
 
-    def object_new(self, name):  # override, do not call super
+    def object_new(self, name):  # override, no super
         return EpochSet(self.parent, name)
 
     # @property
-    # def select(self):  # override, do not call super
+    # def select(self):  # override, no super
     #     return self.__set_select
 
     # @select.setter
     # def select(self, set_eq):
     #     self.__set_select = set_eq
 
-    def rename(self, name, newname, quiet=False):  # override
+    def rename(self, name, newname, quiet=False):  # override, call super
         if name.lower() == 'all':
             nmu.error("cannot rename 'All' set", quiet=quiet)
             return False

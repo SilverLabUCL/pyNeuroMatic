@@ -23,21 +23,20 @@ class DataPrefix(NMObject):
         self.__channel_container = ChannelContainer(self)
         self.__eset_container = EpochSetContainer(self)
         self.__channel_select = ['A']
-        self.__epoch_select = 0
+        self.__epoch_select = [0]
         self.__data_select = []
         self.__eset_init()
         # self.details()
 
     @property
-    def key(self):
-        return {'dataprefix': self.name}
-
-    @property
-    def content(self):
-        c = self.key_tree
-        c.update(self.__channel_container.key)
-        c.update(self.__eset_container.key)
-        return c
+    def key(self):  # override, no super
+        k = {'dataprefix': self.name}
+        k.update(self.__channel_container.key)
+        k.update({'channel_select': self.channel_select})
+        k.update({'epochs': self.epoch_count})
+        k.update({'epoch_select': self.epoch_select})
+        k.update(self.__eset_container.key)
+        return k
 
     @property
     def channel(self):
@@ -63,7 +62,7 @@ class DataPrefix(NMObject):
     def channel_ok(self, chan_char):
         if not chan_char:
             return False
-        if chan_char.upper() == 'ALL':
+        if chan_char.lower() == 'all':
             return True  # always ok
         for c in self.channel_list():
             if c.upper() == chan_char.upper():
@@ -98,7 +97,7 @@ class DataPrefix(NMObject):
         if not self.channel_select:
             return False
         for c in self.channel_select:
-            if c.upper() == 'ALL':
+            if c.lower() == 'all':
                 return True
         return False
 
@@ -106,18 +105,12 @@ class DataPrefix(NMObject):
     def eset(self):
         return self.__eset_container
 
-    @property
-    def eset_select(self):
-        if self.__eset_container:
-            return self.__eset_container.select
-        return None
-
     def eset_init(self):
         if not nmc.ESETS_LIST:
             return []
         r = []
         for s in nmc.ESETS_LIST:
-            select = s.upper() == 'ALL'
+            select = s.lower() == 'all'
             if self.__eset_container.new(s, select=select, quiet=True):
                 r.append(s)
         if not self.__eset_container.select:
@@ -131,69 +124,92 @@ class DataPrefix(NMObject):
         if not self.__thedata:
             return [0]
         elist = []
-        for chan in self.__thedata:
-            elist.append(len(chan))
+        for cdata in self.__thedata:
+            elist.append(len(cdata))
         return elist
 
-    def epoch_ok(self, epoch):
-        if epoch >= 0 and epoch < max(self.epoch_count):
-            return True
-        return False
+    def epoch_ok(self, epoch_list):
+        if type(epoch_list) is not list:
+            epoch_list = [epoch_list]
+        emax = max(self.epoch_count)
+        for e in epoch_list:
+            if e >= 0 and e < emax:
+                continue
+            else:
+                return False
+        return True
 
     @property
     def epoch_select(self):
         return self.__epoch_select
 
     @epoch_select.setter
-    def epoch_select(self, epoch):
-        return self.epoch_select_set(epoch)
+    def epoch_select(self, epoch_list):
+        return self.epoch_select_set(epoch_list)
 
-    def epoch_select_set(self, epoch, quiet=False):
-        if self.epoch_ok(epoch):
-            self.__epoch_select = epoch
-            h = self.tree_path + nmc.S0 + 'epoch=' + str(epoch)
-            nmu.history(h, quiet=quiet)
-            return True
-        nmu.error('bad epoch number: ' + str(epoch), quiet=quiet)
-        return False
+    def epoch_select_set(self, epoch_list, quiet=False):
+        if type(epoch_list) is not list:
+            epoch_list = [epoch_list]
+        for e in epoch_list:
+            if not self.epoch_ok(e):
+                nmu.error('bad epoch: ' + str(e), quiet=quiet)
+                return False
+        self.__epoch_select = epoch_list
+        h = self.tree_path + nmc.S0 + 'epoch=' + str(epoch_list)
+        nmu.history(h, quiet=quiet)
+        return True
 
     @property
     def thedata(self):
         return self.__thedata
 
-    @property
-    def details(self):
-        print('data prefix = ' + nmu.quotes(self.name))
-        print('channels = ' + str(self.channel_count))
-        print('epochs = ' + str(self.epoch_count))
-        # print("data list = " + str(self.data_names))
-
-    def data_list(self, channel='select', epoch=-1):
-        if type(channel) is not list:
-            channel = [channel]
-        for cc in channel:
-            if not cc or cc.lower() == 'select':
-                channel = self.__channel_select
+    def data_list(self, chan_char_list=['select'], epoch_list=[-1],
+                  names=False, quiet=False):
+        if type(chan_char_list) is not list:
+            chan_char_list = [chan_char_list]
+        for cc in chan_char_list:
+            if cc.lower() == 'select':
+                chan_char_list = self.__channel_select
                 break
         all_chan = False
-        for cc in channel:
-            if cc.upper() == 'ALL':
+        for cc in chan_char_list:
+            if cc.lower() == 'all':
                 all_chan = True
                 break
-        if epoch == -1:
-            epoch = self.__epoch_select
+        if type(epoch_list) is not list:
+            epoch_list = [epoch_list]
+        for e in epoch_list:
+            if e == -1:
+                epoch_list = self.__epoch_select
         dlist = []
         if all_chan:
-            for chan in self.__thedata:
-                if epoch >= 0 and epoch < len(chan):
-                    dlist.append(chan[epoch])
+            for cdata in self.__thedata:
+                for e in epoch_list:
+                    if e >= 0 and e < len(cdata):
+                        if names:
+                            dlist.append(cdata[e].name)
+                        else:
+                            dlist.append(cdata[e])
+                    else:
+                        nmu.error('bad epoch: ' + str(e), quiet=quiet)
+                        return []
             return dlist
-        for cc in channel:
+        for cc in chan_char_list:
             cn = nmu.channel_num(cc)
             if cn >= 0 and cn < len(self.__thedata):
-                chan = self.__thedata[cn]
-                if epoch >= 0 and epoch < len(chan):
-                    dlist.append(chan[epoch])
+                cdata = self.__thedata[cn]
+                for e in epoch_list:
+                    if e >= 0 and e < len(cdata):
+                        if names:
+                            dlist.append(cdata[e].name)
+                        else:
+                            dlist.append(cdata[e])
+                    else:
+                        nmu.error('bad epoch: ' + str(e), quiet=quiet)
+                        return []
+            else:
+                nmu.error('bad channel: ' + cc, quiet=quiet)
+                return []
         return dlist
 
     @property
@@ -205,7 +221,7 @@ class DataPrefix(NMObject):
     def data_select_names(self):
         return self.get_selected(names=True)
 
-    def get_selected(self, names=False):
+    def get_selected(self, names=False, quiet=False):
         channels = len(self.__thedata)
         cs = self.__channel_select
         ss = self.eset.select.name
@@ -213,16 +229,16 @@ class DataPrefix(NMObject):
         setx = self.eset.get('SetX').theset
         if channels == 0:
             return []
-        if ss.upper() == 'ALL':
+        if ss.lower() == 'all':
             all_epochs = True
         else:
             all_epochs = False
             eset = eset.difference(setx)
         if self.all_channels and channels > 1:
             clist = []
-            for chan in self.__thedata:
+            for cdata in self.__thedata:
                 dlist = []
-                for d in chan:
+                for d in cdata:
                     if all_epochs:
                         if d not in setx:
                             if names:
@@ -273,10 +289,16 @@ class DataPrefixContainer(Container):
         self.__data_container = data_container
 
     @property
-    def key(self):  # override
-        return {'dataprefix': self.names}
+    def key(self):  # override, no super
+        k = {'dataprefix': self.names}
+        if self.select:
+            s = self.select.name
+        else:
+            s = ''
+        k.update({'dataprefix_select': s})
+        return k
 
-    def object_new(self, name):  # override, do not call super
+    def object_new(self, name):  # override, no super
         return DataPrefix(self.parent, name)
 
     def new(self, name='', select=True, quiet=False):  # override, no super
@@ -311,7 +333,7 @@ class DataPrefixContainer(Container):
             return False
         prefix = p.name
         foundsomething = False
-        thedata = self.__data_container.thecontainer()
+        thedata = self.__data_container.get_all()
         htxt = []
         for i in range(0, 25):  # try prefix+chan+seq format
             cc = nmu.channel_char(i)

@@ -58,17 +58,16 @@ class Manager(object):
         # self.eset.add_epoch('Set1', [0])
         # self.eset.remove_epoch('Set1', [3,4])
         # self.eset.remove_epoch('Set1', [2])
-        s1 = self.eset.get('Set1')
-        s2 = self.eset.get('Set2')
-        self.eset.add_epoch('Set1', [0, 1, 2])
-        self.eset.add_epoch('Set2', [3])
+        # s1 = self.eset.get('Set1')
+        # s2 = self.eset.get('Set2')
+        # self.eset.add_epoch('Set1', [0, 1, 2])
+        # self.eset.add_epoch('Set2', [3])
         # print(s1.names)
         # print(s2.names)
         # s1.union(s2)
         # print(s1.names)
-        self.eset.equation('Set3', ['Set1', '|', 'Set2'])
-        self.eset.select = 'Set1'
-        self.dataprefix.select.content
+        # self.eset.equation('Set3', ['Set1', '|', 'Set2'])
+        # self.eset.select = 'Set1'
         # self.eset.add('Set1', range(0, 8, 2))
         # rdic = self.eset.add('SetX', [4])
         # print(rdic)
@@ -184,14 +183,14 @@ class Manager(object):
         ps = self.__dataprefix_select()
         if ps:
             return ps.epoch_select
-        return -1
+        return [-1]
 
     @epoch_select.setter
-    def epoch_select(self, epoch):
+    def epoch_select(self, epoch_list):
         ps = self.__dataprefix_select()
         if ps:
-            ps.epoch_select = epoch
-            return ps.epoch_select == epoch
+            ps.epoch_select = epoch_list
+            return ps.epoch_select == epoch_list
         return False
 
     @property
@@ -202,7 +201,7 @@ class Manager(object):
         return False
 
     @property
-    def select_tree(self):
+    def select(self):
         s = {}
         s['project'] = None
         s['folder'] = None
@@ -229,7 +228,7 @@ class Manager(object):
         return s
 
     @property
-    def select_tree_names(self, names=True):
+    def select_names(self, names=True):
         s = {}
         s['project'] = ''
         s['folder'] = ''

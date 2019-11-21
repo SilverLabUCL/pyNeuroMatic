@@ -17,15 +17,11 @@ class Project(NMObject):
         self.__folder_container = FolderContainer(self)
 
     @property
-    def key(self):
-        return {'project': self.name}
+    def key(self):  # override, no super
+        k = {'project': self.name}
+        k.update(self.__folder_container.key)
+        return k
 
     @property
     def folder(self):
         return self.__folder_container
-
-    @property
-    def content(self):
-        c = self.key_tree
-        c.update(self.__folder_container.key)
-        return c

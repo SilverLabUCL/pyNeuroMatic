@@ -20,7 +20,7 @@ class Channel(NMObject):
         self.__transform = []
 
     @property
-    def key(self):
+    def key(self):  # override, no super
         return {'channel': self.name}
 
 
@@ -37,15 +37,15 @@ class ChannelContainer(Container):
                          duplicate=False, kill=False)
 
     @property
-    def key(self):  # override
+    def key(self):  # override, no super
         return {'channel': self.names}
 
-    def object_new(self, name):  # override, do not call super
+    def object_new(self, name):  # override, no super
         return Channel(self.parent, name)
 
-    def name_default(self, quiet=False):  # override, do not call super
+    def name_default(self, quiet=False):  # override, no super
         """Get next default channel name."""
-        n = 10 + len(self.thecontainer())
+        n = 10 + len(self.get_all())
         for i in range(0, n):
             name = self.prefix + nmu.channel_char(i)
             if not self.exists(name):

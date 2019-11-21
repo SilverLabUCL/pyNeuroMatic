@@ -25,8 +25,11 @@ class Folder(NMObject):
                                                           self.__data_container)
 
     @property
-    def key(self):
-        return {'folder': self.name}
+    def key(self):  # override, no super
+        k = {'folder': self.name}
+        # k.update(self.__data_container.key)
+        # k.update(self.__dataprefix_container.key)
+        return k
 
     @property
     def data(self):
@@ -35,13 +38,6 @@ class Folder(NMObject):
     @property
     def dataprefix(self):
         return self.__dataprefix_container
-
-    @property
-    def content(self):
-        c = self.key_tree
-        c.update(self.__data_container.key)
-        c.update(self.__dataprefix_container.key)
-        return c
 
 
 class FolderContainer(Container):
@@ -53,11 +49,18 @@ class FolderContainer(Container):
         super().__init__(parent, name, nmc.FOLDER_PREFIX)
 
     @property
-    def key(self):  # override
-        return {'folder': self.names}
+    def key(self):  # override, no super
+        k = {'folder': self.names}
+        if self.select:
+            s = self.select.name
+        else:
+            s = ''
+        k.update({'folder_select': s})
+        print(self.name + ', ' + self.select.name)
+        return k
 
-    def object_new(self, name):  # override, do not call super
-        return Folder(self.parent, name)
+    def object_new(self, name):  # override, no super
+        return Folder(self._NMObject__parent, name)
 
     def open_hdf5(self):
         dataprefix = 'Record'

@@ -25,8 +25,10 @@ class Data(NMObject):
         # self.__thedata = np.array([], dtype=np.float64)
 
     @property
-    def key(self):
-        return {'data': self.name}
+    def key(self):  # override, no super
+        k = {'data': self.name}
+        k.update(self.__note_container.key)
+        return k
 
     @property
     def thedata(self):
@@ -40,11 +42,6 @@ class Data(NMObject):
     def note(self):
         return self.__note_container
 
-    @property
-    def content(self):
-        c = self.key_tree
-        c.update(self.__note_container.key)
-        return c
 
 class DataContainer(Container):
     """
@@ -58,10 +55,10 @@ class DataContainer(Container):
                          select_alert=self.__select_alert)
 
     @property
-    def key(self):  # override
+    def key(self):  # override, no super
         return {'data': self.names}
 
-    def object_new(self, name):  # override, do not call super
+    def object_new(self, name):  # override, no super
         return Data(self.parent, name)
 
     def make(self, prefix='default', channels=1, epochs=3, samples=10,
