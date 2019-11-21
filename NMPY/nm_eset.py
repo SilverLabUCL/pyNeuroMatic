@@ -23,7 +23,7 @@ class EpochSet(NMObject):
         self.__eq_lock = True
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         return {'eset': self.name}
 
     @property
@@ -92,9 +92,10 @@ class EpochSetContainer(Container):
 
     def __init__(self, parent, name='NMEpochSetContainer'):
         super().__init__(parent, name, nmc.ESET_PREFIX, seq_start=1)
+        self.__parent = parent
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         k = {'eset': self.names}
         if self.select:
             s = self.select.name
@@ -104,7 +105,7 @@ class EpochSetContainer(Container):
         return k
 
     def object_new(self, name):  # override, no super
-        return EpochSet(self.parent, name)
+        return EpochSet(self.__parent, name)
 
     # @property
     # def select(self):  # override, no super
@@ -124,8 +125,9 @@ class EpochSetContainer(Container):
         return super().rename(name, newname, quiet=quiet)
 
     def add_epoch(self, name, epoch, quiet=False):
-        if len(self.parent.thedata) == 0:
-            e = 'no selected data for dataprefix ' + self.parent.tree_path
+        if len(self.__parent.thedata) == 0:
+            tp = self.__parent.tree_path(history=True)
+            e = 'no selected data for dataprefix ' + tp
             nmu.error(e, quiet=quiet)
             return False
         if type(name) is not list:
@@ -150,8 +152,8 @@ class EpochSetContainer(Container):
             oor = set()
             for e in epoch:
                 if e == -1:
-                    e = self.parent.epoch_select
-                for chan in self.parent.thedata:
+                    e = self.__parent.epoch_select
+                for chan in self.__parent.thedata:
                     if e >= 0 and e < len(chan):
                         d = chan[e]
                         if s.add(d):
@@ -161,19 +163,21 @@ class EpochSetContainer(Container):
             if len(added) > 0:
                 added = list(added)
                 added.sort()
-                h = 'added' + nmc.S0 + s.tree_path + ', ep=' + str(added)
+                h = ('added' + nmc.S0 + s.tree_path(history=True) +
+                     ', ep=' + str(added))
                 nmu.history(h, quiet=quiet)
             if len(oor) > 0:
                 oor = list(oor)
                 oor.sort()
-                h = ('out of range' + nmc.S0 + s.tree_path +
+                h = ('out of range' + nmc.S0 + s.tree_path(history=True) +
                      ', ep=' + str(oor))
                 nmu.error(h, quiet=quiet)
         return True
 
     def remove_epoch(self, name, epoch, quiet=False):
-        if len(self.parent.thedata) == 0:
-            e = 'no selected data for dataprefix ' + self.parent.tree_path
+        if len(self.__parent.thedata) == 0:
+            tp = self.__parent.tree_path(history=True)
+            e = 'no selected data for dataprefix ' + tp
             nmu.alert(e, quiet=quiet)
             return False
         if type(name) is not list:
@@ -199,8 +203,8 @@ class EpochSetContainer(Container):
             oor = set()
             for e in epoch:
                 if e == -1:
-                    e = self.parent.epoch_select
-                for chan in self.parent.thedata:
+                    e = self.__parent.epoch_select
+                for chan in self.__parent.thedata:
                     if e >= 0 and e < len(chan):
                         d = chan[e]
                         if s.contains(d):
@@ -210,20 +214,21 @@ class EpochSetContainer(Container):
                             nis.add(e)
                     else:
                         oor.add(e)
+            tp = s.tree_path(history=True)
             if len(removed) > 0:
                 removed = list(removed)
                 removed.sort()
-                h = 'removed' + nmc.S0 + s.tree_path + ', ep=' + str(removed)
+                h = 'removed' + nmc.S0 + tp + ', ep=' + str(removed)
                 nmu.history(h, quiet=quiet)
             if len(nis) > 0:
                 nis = list(nis)
                 nis.sort()
-                h = 'not in set' + nmc.S0 + s.tree_path + ', ep=' + str(nis)
+                h = 'not in set' + nmc.S0 + tp + ', ep=' + str(nis)
                 nmu.error(h, quiet=quiet)
             if len(oor) > 0:
                 oor = list(oor)
                 oor.sort()
-                h = 'out of range' + nmc.S0 + s.tree_path + ', ep=' + str(oor)
+                h = 'out of range' + nmc.S0 + tp + ', ep=' + str(oor)
                 nmu.error(h, quiet=quiet)
         return True
 
@@ -267,5 +272,6 @@ class EpochSetContainer(Container):
                 continue
             s = self.get(n, quiet=quiet)
             if s and s.clear():
-                nmu.history('cleared' + nmc.S0 + s.tree_path, quiet=quiet)
+                tp = s.tree_path(history=True)
+                nmu.history('cleared' + nmc.S0 + tp, quiet=quiet)
         return True

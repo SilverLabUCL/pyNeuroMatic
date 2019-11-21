@@ -20,7 +20,7 @@ class Channel(NMObject):
         self.__transform = []
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         return {'channel': self.name}
 
 
@@ -35,13 +35,14 @@ class ChannelContainer(Container):
         super().__init__(parent, name, prefix=self.__prefix,
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False, kill=False)
+        self.__parent = parent
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         return {'channel': self.names}
 
     def object_new(self, name):  # override, no super
-        return Channel(self.parent, name)
+        return Channel(self.__parent, name)
 
     def name_default(self, quiet=False):  # override, no super
         """Get next default channel name."""

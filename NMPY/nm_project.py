@@ -17,9 +17,9 @@ class Project(NMObject):
         self.__folder_container = FolderContainer(self)
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         k = {'project': self.name}
-        k.update(self.__folder_container.key)
+        k.update(self.__folder_container.content)
         return k
 
     @property

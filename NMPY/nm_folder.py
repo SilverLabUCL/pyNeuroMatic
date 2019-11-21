@@ -25,10 +25,10 @@ class Folder(NMObject):
                                                           self.__data_container)
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         k = {'folder': self.name}
-        # k.update(self.__data_container.key)
-        # k.update(self.__dataprefix_container.key)
+        k.update(self.__data_container.content)
+        k.update(self.__dataprefix_container.content)
         return k
 
     @property
@@ -49,7 +49,7 @@ class FolderContainer(Container):
         super().__init__(parent, name, nmc.FOLDER_PREFIX)
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         k = {'folder': self.names}
         if self.select:
             s = self.select.name

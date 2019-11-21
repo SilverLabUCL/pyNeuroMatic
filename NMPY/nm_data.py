@@ -25,9 +25,9 @@ class Data(NMObject):
         # self.__thedata = np.array([], dtype=np.float64)
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         k = {'data': self.name}
-        k.update(self.__note_container.key)
+        k.update(self.__note_container.content)
         return k
 
     @property
@@ -53,13 +53,14 @@ class DataContainer(Container):
     def __init__(self, parent, name='NMDataContainer'):
         super().__init__(parent, name, nmc.DATA_PREFIX,
                          select_alert=self.__select_alert)
+        self.__parent = parent
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         return {'data': self.names}
 
     def object_new(self, name):  # override, no super
-        return Data(self.parent, name)
+        return Data(self.__parent, name)
 
     def make(self, prefix='default', channels=1, epochs=3, samples=10,
              noise=False, select=True, quiet=False):
@@ -80,12 +81,13 @@ class DataContainer(Container):
         ss = max(seq_start)
         se = ss + epochs
         htxt = []
+        tree_path = ''
         for ci in range(0, channels):
             cc = nmu.channel_char(ci)
             for j in range(ss, se):
                 name = prefix + cc + str(j)
                 ts = self.new(name, quiet=True)
-                tree_path = ts.parent.tree_path
+                tree_path = self.__parent.tree_path(history=True)
                 if not ts:
                     a = 'failed to create ' + nmu.quotes(name)
                     nmu.alert(a, quiet=quiet)
@@ -97,9 +99,9 @@ class DataContainer(Container):
             htxt.append('ch=' + cc + ', ep=' + str(ss) + '-' + str(se-1))
         for h in htxt:
             path = prefix
-            if nmc.TREE_PATH_LONG:
+            if len(tree_path) > 0:
                 path = tree_path + "." + path
             nmu.history('created' + nmc.S0 + path + ', ' + h, quiet=quiet)
         if select:
-            self.parent.dataprefix.new(prefix, quiet=quiet)
+            self.__parent.dataprefix.new(prefix, quiet=quiet)
         return True

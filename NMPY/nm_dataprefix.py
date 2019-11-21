@@ -29,13 +29,13 @@ class DataPrefix(NMObject):
         # self.details()
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         k = {'dataprefix': self.name}
-        k.update(self.__channel_container.key)
+        k.update(self.__channel_container.content)
         k.update({'channel_select': self.channel_select})
         k.update({'epochs': self.epoch_count})
         k.update({'epoch_select': self.epoch_select})
-        k.update(self.__eset_container.key)
+        k.update(self.__eset_container.content)
         return k
 
     @property
@@ -88,7 +88,7 @@ class DataPrefix(NMObject):
                 return False
             clist.append(cc.upper())
         self.__channel_select = clist
-        h = self.tree_path + nmc.S0 + 'ch=' + str(clist)
+        h = self.tree_path(history=True) + nmc.S0 + 'ch=' + str(clist)
         nmu.history(h, quiet=quiet)
         return True
 
@@ -155,7 +155,7 @@ class DataPrefix(NMObject):
                 nmu.error('bad epoch: ' + str(e), quiet=quiet)
                 return False
         self.__epoch_select = epoch_list
-        h = self.tree_path + nmc.S0 + 'epoch=' + str(epoch_list)
+        h = self.tree_path(history=True) + nmc.S0 + 'epoch=' + str(epoch_list)
         nmu.history(h, quiet=quiet)
         return True
 
@@ -286,10 +286,11 @@ class DataPrefixContainer(Container):
     def __init__(self, parent, data_container, name='NMDataPrefixContainer'):
         super().__init__(parent, name, prefix='', select_new=True,
                          rename=False, duplicate=False)
+        self.__parent = parent
         self.__data_container = data_container
 
     @property
-    def key(self):  # override, no super
+    def content(self):  # override, no super
         k = {'dataprefix': self.names}
         if self.select:
             s = self.select.name
@@ -299,7 +300,7 @@ class DataPrefixContainer(Container):
         return k
 
     def object_new(self, name):  # override, no super
-        return DataPrefix(self.parent, name)
+        return DataPrefix(self.__parent, name)
 
     def new(self, name='', select=True, quiet=False):  # override, no super
         if not name:
@@ -312,7 +313,7 @@ class DataPrefixContainer(Container):
         if pexists:
             p = self.get(prefix, quiet=quiet)
         else:
-            p = DataPrefix(self.parent, prefix)
+            p = DataPrefix(self.__parent, prefix)
             self.add(p, select=select, quiet=True)
         if select:
             self.select_set(prefix, quiet=True)
@@ -324,7 +325,7 @@ class DataPrefixContainer(Container):
                 t = 'selected'
             else:
                 t += '/selected'
-        nmu.history(t + nmc.S0 + p.tree_path, quiet=quiet)
+        nmu.history(t + nmc.S0 + p.tree_path(history=True), quiet=quiet)
         self.search(p)
         return p
 
@@ -356,5 +357,6 @@ class DataPrefixContainer(Container):
             a = 'failed to find data with prefix ' + nmu.quotes(prefix)
             nmu.alert(a, quiet=quiet)
         for h in htxt:
-            nmu.history('found' + nmc.S0 + p.tree_path + ', ' + h, quiet=quiet)
+            tp = p.tree_path(history=True)
+            nmu.history('found' + nmc.S0 + tp + ', ' + h, quiet=quiet)
         return True

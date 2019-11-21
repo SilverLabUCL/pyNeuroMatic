@@ -35,13 +35,9 @@ class NMObject(object):
         self.__date = str(datetime.datetime.now())
 
     @property
-    def key(self):  # child class should override
+    def content(self):  # child class should override
         # and change 'nmobject' to 'folder', 'data', etc.
         return {'nmobject': self.name}
-
-    @property
-    def parent(self):
-        return self.__parent
 
     @property
     def name(self):
@@ -62,23 +58,24 @@ class NMObject(object):
         return self.__date
 
     @property
-    def key_tree(self):
+    def content_tree(self):
         p = self.__parent
         if p and isinstance(p, NMObject):
             k = {}
-            k.update(p.key_tree)
-            k.update(self.key)
+            k.update(p.content_tree)
+            k.update(self.content)
             return k
-        return self.key
+        return self.content
 
-    @property
-    def tree_path(self):
-        if nmc.TREE_PATH_LONG:
-            plist = self.tree_path_list()
+    def tree_path(self, history=False):
+        if history:  # create tree path for history
+            skip = nmc.HISTORY_TREE_PATH_SKIP
+        plist = self.tree_path_list(skip=skip)
+        if len(plist) > 0:
             return '.'.join(plist)
         return self.name
 
-    def tree_path_list(self, names=True, skip=nmc.TREE_PATH_SKIP):
+    def tree_path_list(self, names=True, skip=[]):
         if self.__class__.__name__ in skip:
             return []
         p = self.__parent
@@ -132,6 +129,7 @@ class Container(NMObject):
                  select_alert='', select_new=False, rename=True,
                  duplicate=True, kill=True):
         super().__init__(parent, name)
+        self.__parent = parent
         if not prefix:
             self.__prefix = ''
             seq_start = -1
@@ -151,7 +149,7 @@ class Container(NMObject):
         self.__classname = ''
 
     @property
-    def key(self):  # child class should override
+    def content(self):  # child class should override
         # and change 'nmobject' to 'folder', etc
         # and change 'select' to 'folder_select', etc
         k = {'nmobject', self.names}
@@ -164,7 +162,7 @@ class Container(NMObject):
 
     def object_new(self, name):  # child class should override
         # and change NMObject to Folder, Data, DataPrefix, etc
-        return NMObject(self.parent, name)
+        return NMObject(self.__parent, name)
 
     @property
     def prefix(self):  # see name_default()
@@ -187,7 +185,8 @@ class Container(NMObject):
     def get(self, name='select', quiet=False):
         """Get NMObject from Container"""
         if not self.__thecontainer:
-            nmu.alert('container ' + self.tree_path + ' is empty',
+            tp = self.tree_path(history=True)
+            nmu.alert('container ' + tp + ' is empty',
                       quiet=quiet)
             return None
         if not name or name.lower() == 'select':
@@ -195,8 +194,9 @@ class Container(NMObject):
         for o in self.__thecontainer:
             if name.casefold() == o.name.casefold():
                 return o
-        nmu.error('failed to find ' + nmu.quotes(name) + ' in ' +
-                  self.tree_path, quiet=quiet)
+        tp = self.tree_path(history=True)
+        nmu.error('failed to find ' + nmu.quotes(name) + ' in ' + tp,
+                  quiet=quiet)
         nmu.error('acceptable names: ' + str(self.names), quiet=quiet)
         return None
 
@@ -221,7 +221,8 @@ class Container(NMObject):
         o = self.get(name=name, quiet=quiet)
         if o:
             self.__select = o
-            nmu.history('selected' + nmc.S0 + o.tree_path, quiet=quiet)
+            tp = o.tree_path(history=True)
+            nmu.history('selected' + nmc.S0 + tp, quiet=quiet)
             return True
         if self.__select_new:
             o = self.new(name=name, quiet=quiet)
@@ -255,7 +256,8 @@ class Container(NMObject):
         if select or not self.__select:
             self.__select = o
             h += '/selected'
-        nmu.history(h + nmc.S0 + o.tree_path, quiet=quiet)
+        tp = o.tree_path(history=True)
+        nmu.history(h + nmc.S0 + tp, quiet=quiet)
         return o
 
     def add(self, nmobj, select=True, quiet=False):
@@ -275,7 +277,8 @@ class Container(NMObject):
         if select or not self.__select:
             self.__select = nmobj
             h += '/selected'
-        nmu.history(h + nmc.S0 + nmobj.tree_path, quiet=quiet)
+        tp = nmobj.tree_path(history=True)
+        nmu.history(h + nmc.S0 + tp, quiet=quiet)
         return True
 
     def duplicate(self, name, newname, select=False, quiet=False):
@@ -305,14 +308,17 @@ class Container(NMObject):
             return None
         oo = self.get(name=newname, quiet=True)
         if oo:
-            nmu.error(oo.tree_path + ' already exists', quiet=quiet)
+            tp = oo.tree_path(history=True)
+            nmu.error(tp + ' already exists', quiet=quiet)
             return None
         c = copy.deepcopy(o)
         if c:
             c.name = newname
-            c._NMObject__parent = self.parent  # reset parent reference
+            c._NMObject__parent = self.__parent  # reset parent reference
             self.__thecontainer.append(c)
-            h = 'copied ' + o.tree_path + ' to ' + c.tree_path
+            otp = o.tree_path(history=True)
+            ctp = c.tree_path(history=True)
+            h = 'copied ' + otp + ' to ' + ctp
             nmu.history(h, quiet=quiet)
         return c
 
@@ -346,7 +352,7 @@ class Container(NMObject):
         if not o:
             return False
         cname = o.__class__.__name__
-        path = o.tree_path
+        
         if not quiet:
             q = ('are you sure you want to kill ' + cname + ' ' +
                  nmu.quotes(name) + '?')
@@ -358,7 +364,8 @@ class Container(NMObject):
         if selected:
             i = self.which_item(name)
         self.__thecontainer.remove(o)
-        nmu.history('killed' + nmc.S0 + path, quiet=quiet)
+        tp = o.tree_path(history=True)
+        nmu.history('killed' + nmc.S0 + tp, quiet=quiet)
         items = len(self.__thecontainer)
         if selected and items > 0:
             i = max(i, 0)
@@ -412,9 +419,10 @@ class Container(NMObject):
             e = 'name ' + nmu.quotes(newname) + ' is already in use'
             nmu.error(e, quiet=quiet)
             return False
-        old_path = o.tree_path
+        old_tp = o.tree_path(history=True)
         o.name = newname
-        h = 'renamed' + nmc.S0 + old_path + ' to ' + o.tree_path
+        new_tp = o.tree_path(history=True)
+        h = 'renamed' + nmc.S0 + old_tp + ' to ' + new_tp
         nmu.history(h, quiet=quiet)
         return True
 
