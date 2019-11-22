@@ -70,6 +70,8 @@ class NMObject(object):
     def tree_path(self, history=False):
         if history:  # create tree path for history
             skip = nmc.HISTORY_TREE_PATH_SKIP
+        else:
+            skip = []
         plist = self.tree_path_list(skip=skip)
         if len(plist) > 0:
             return '.'.join(plist)

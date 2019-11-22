@@ -41,7 +41,7 @@ class Manager(object):
         # nm.exp.folder_open_hdf5()
 
     def data_test(self):
-        noise = True
+        noise = False
         self.data.make(prefix='Data', channels=2, epochs=3, samples=5,
                        noise=noise)
         self.data.make(prefix='Data', channels=2, epochs=3, samples=5,
@@ -74,10 +74,6 @@ class Manager(object):
         # self.eset.select="Set1"
         # clist = self.dataprefix.select.data_names
         # print(clist)
-
-    @property
-    def stats(self):
-        return self.__stats
 
     @property
     def gui(self):
@@ -253,6 +249,10 @@ class Manager(object):
         s['channel'] = ps.channel_select
         s['epoch'] = ps.epoch_select
         return s
+
+    @property
+    def stats(self):
+        return self.__stats
 
 
 if __name__ == '__main__':

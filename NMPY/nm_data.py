@@ -95,7 +95,8 @@ class DataContainer(Container):
                     ts.thedata = np.random.normal(noise_mu, noise_sigma,
                                                   samples)
                 else:
-                    ts.thedata = np.zeros(samples)
+                    # ts.thedata = np.zeros(samples)
+                    ts.thedata = np.empty(samples)
             htxt.append('ch=' + cc + ', ep=' + str(ss) + '-' + str(se-1))
         for h in htxt:
             path = prefix
