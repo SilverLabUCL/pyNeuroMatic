@@ -44,16 +44,16 @@ class Manager(object):
         noise = [0, 0.1]
         self.dataseries.make(prefix='Data', channels=2, epochs=3, samples=5,
                              noise=noise)
-        self.dataseries.make(prefix='Data', channels=2, epochs=3, samples=5,
-                             noise=noise)
-        self.dataseries.make(prefix='Wave', channels=3, epochs=8, samples=5,
-                             noise=noise)
+        # self.dataseries.make(prefix='Data', channels=2, epochs=3, samples=5,
+        #                      noise=noise)
+        # self.dataseries.make(prefix='Wave', channels=3, epochs=8, samples=5,
+        #                      noise=noise)
         # self.dataseries.new('Test')
         # self.dataseries.kill('Test')
-        self.folder.new()
+        # self.folder.new()
         # self.folder.duplicate('NMFolder0', 'NMFolder1')
-        self.folder.duplicate('NMFolder0', 'NMFolder2')
-        self.folder.select = 'NMFolder2'
+        # self.folder.duplicate('NMFolder0', 'NMFolder2')
+        # self.folder.select = 'NMFolder2'
         # self.eset.add_epoch(['Set1', 'Set2', 'Set3'], [0,3,4,9,11])
         # self.eset.add_epoch('Set1', [0])
         # self.eset.remove_epoch('Set1', [3,4])

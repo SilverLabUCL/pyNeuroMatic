@@ -47,6 +47,7 @@ class FolderContainer(Container):
 
     def __init__(self, parent, name='NMFolderContainer'):
         super().__init__(parent, name, nmc.FOLDER_PREFIX)
+        self.__parent = parent
 
     @property
     def content(self):  # override, no super
@@ -59,8 +60,10 @@ class FolderContainer(Container):
         print(self.name + ', ' + self.select.name)
         return k
 
-    def object_new(self, name):  # override, no super
-        return Folder(self._NMObject__parent, name)
+    def new(self, name='default', select=True, quiet=False, nmobj=None):
+        # override
+        o = Folder(self.__parent, 'temp')
+        return super().new(name=name, select=select, quiet=quiet, nmobj=o)
 
     def open_hdf5(self):
         dataseries = 'Record'

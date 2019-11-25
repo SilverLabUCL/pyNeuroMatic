@@ -300,10 +300,8 @@ class DataSeriesContainer(Container):
         k.update({'dataseries_select': s})
         return k
 
-    def object_new(self, name):  # override, no super
-        return DataSeries(self.__parent, name)
-
-    def new(self, name='', select=True, quiet=False):  # override, no super
+    def new(self, name='', select=True, quiet=False, nmobj=None):
+        # override, no super
         if not name:
             return None
         prefix = name  # name is actually a prefix
@@ -316,8 +314,8 @@ class DataSeriesContainer(Container):
         else:
             p = DataSeries(self.__parent, prefix)
             self.add(p, select=select, quiet=True)
-        if select:
-            self.select_set(prefix, quiet=True)
+        #if select:
+            #self.select_set(prefix, quiet=True)
         t = ''
         if not pexists:
             t = 'created'

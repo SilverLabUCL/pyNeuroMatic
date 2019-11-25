@@ -163,10 +163,6 @@ class Container(NMObject):
         k.update({'select': s})
         return k
 
-    def object_new(self, name):  # child class should override
-        # and change NMObject to Folder, Data, DataSeries, etc
-        return NMObject(self.__parent, name)
-
     @property
     def prefix(self):  # see name_default()
         return self.__prefix
@@ -232,7 +228,7 @@ class Container(NMObject):
             return o is not None
         return False
 
-    def new(self, name='default', select=True, quiet=False):
+    def new(self, name='default', select=True, quiet=False, nmobj=None):
         """
         Create a new NMObject and add to container.
 
@@ -253,7 +249,11 @@ class Container(NMObject):
         elif self.exists(name):
             nmu.error(nmu.quotes(name) + ' already exists', quiet=quiet)
             return None
-        o = self.object_new(name)
+        if isinstance(nmobj, NMObject):
+            o = nmobj
+            o._NMObject__name = name
+        else:
+            o = NMObject(self.__parent, name)
         self.__thecontainer.append(o)
         h = 'created'
         if select or not self.__select:
@@ -429,9 +429,9 @@ class Container(NMObject):
         return True
 
     def __cname(self):
-        if not self.__classname:
-            o = self.object_new('nothing')
-            self.__classname = o.__class__.__name__
+        #if not self.__classname and len(self.__thecontainer) > 0:
+            #o = self.__thecontainer[0]
+            #self.__classname = o.__class__.__name__
         return self.__classname
 
     def __isinstance(self, nmobj):

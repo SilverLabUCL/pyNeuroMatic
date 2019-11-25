@@ -45,13 +45,12 @@ class NoteContainer(Container):
     def content(self):  # override, no super
         return {'note': self.names}
 
-    def object_new(self, name):  # override, no super
-        return Note(self.__parent, name)
-
-    def new(self, note='', select=True, quiet=False):  # override, call super
+    def new(self, note='', select=True, quiet=False, nmobj=None):
+        # override
         if not note:
             return False
-        n = super().new()
+        o = Note(self.__parent, 'temp')
+        n = super().new(name='default', nmobj=o)
         n.thenote = note
         return n
     

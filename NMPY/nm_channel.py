@@ -40,9 +40,11 @@ class ChannelContainer(Container):
     @property
     def content(self):  # override, no super
         return {'channel': self.names}
-
-    def object_new(self, name):  # override, no super
-        return Channel(self.__parent, name)
+    
+    def new(self, name='default', select=True, quiet=False, nmobj=None):
+        # override
+        o = Channel(self.__parent, 'temp')
+        return super().new(name=name, select=select, quiet=quiet, nmobj=o)
 
     def name_default(self, quiet=False):  # override, no super
         """Get next default channel name."""
