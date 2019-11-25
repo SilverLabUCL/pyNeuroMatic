@@ -9,7 +9,7 @@ import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
 from nm_data import DataContainer
-from nm_dataprefix import DataPrefixContainer
+from nm_dataseries import DataSeriesContainer
 import nm_utilities as nmu
 
 
@@ -21,14 +21,14 @@ class Folder(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self.__data_container = DataContainer(self)
-        self.__dataprefix_container = DataPrefixContainer(self,
+        self.__dataseries_container = DataSeriesContainer(self,
                                                           self.__data_container)
 
     @property
     def content(self):  # override, no super
         k = {'folder': self.name}
         k.update(self.__data_container.content)
-        k.update(self.__dataprefix_container.content)
+        k.update(self.__dataseries_container.content)
         return k
 
     @property
@@ -36,8 +36,8 @@ class Folder(NMObject):
         return self.__data_container
 
     @property
-    def dataprefix(self):
-        return self.__dataprefix_container
+    def dataseries(self):
+        return self.__dataseries_container
 
 
 class FolderContainer(Container):
@@ -63,12 +63,12 @@ class FolderContainer(Container):
         return Folder(self._NMObject__parent, name)
 
     def open_hdf5(self):
-        dataprefix = 'Record'
+        dataseries = 'Record'
         with h5py.File('nmFolder0.hdf5', 'r') as f:
             #print(f.keys())
             data = []
             for k in f.keys():
-                if k[0:len(dataprefix)] == dataprefix:
+                if k[0:len(dataseries)] == dataseries:
                     print(k)
             # for name in f:
                 # print(name)

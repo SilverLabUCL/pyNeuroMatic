@@ -15,14 +15,19 @@ import nm_utilities as nmu
 class Data(NMObject):
     """
     NM Data class
-    Include: time-series properties (xstart, dx...) and notes
     """
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, xstart=0, xdelta=1, xlabel='', xunits='',
+                 ylabel='', yunits=''):
         super().__init__(parent, name)
         self.__thedata = np.array([])
         self.__note_container = NoteContainer(self)
-        # self.__thedata = np.array([], dtype=np.float64)
+        self.__xstart = xstart
+        self.__xdelta = xdelta
+        self.__xlabel = xlabel  # e.g. 'Time'
+        self.__xunits = xunits  # e.g. 'ms' for milliseconds
+        self.__ylabel = ylabel  # e.g. 'Membrane current'
+        self.__yunits = yunits  # e.g. 'nA' for nano-amperes
 
     @property
     def content(self):  # override, no super
@@ -42,12 +47,78 @@ class Data(NMObject):
     def note(self):
         return self.__note_container
 
+    @property
+    def xstart(self):
+        return self.__xstart
+
+    @xstart.setter
+    def xstart(self, xstart):
+        if np.isinf(xstart) or np.isnan(xstart):
+            return False
+        self.__xstart = xstart
+        return True
+
+    @property
+    def xdelta(self):
+        return self.__xdelta
+
+    @xdelta.setter
+    def xdelta(self, xdelta):
+        if np.isinf(xdelta) or np.isnan(xdelta):
+            return False
+        self.__xdelta = xdelta
+        return True
+
+    @property
+    def xlabel(self):
+        return self.__xlabel
+
+    @xlabel.setter
+    def xlabel(self, xlabel):
+        if isinstance(xlabel, str):
+            self.__xlabel = xlabel
+            return True
+        return False
+
+    @property
+    def xunits(self):
+        return self.__xunits
+
+    @xunits.setter
+    def xunits(self, xunits):
+        if isinstance(xunits, str):
+            self.__xunits = xunits
+            return True
+        return False
+
+    @property
+    def ylabel(self):
+        return self.__ylabel
+
+    @ylabel.setter
+    def ylabel(self, ylabel):
+        if isinstance(ylabel, str):
+            self.__ylabel = ylabel
+            return True
+        return False
+
+    @property
+    def yunits(self):
+        return self.__yunits
+
+    @yunits.setter
+    def yunits(self, yunits):
+        if isinstance(yunits, str):
+            self.__yunits = yunits
+            return True
+        return False
+
 
 class DataContainer(Container):
     """
     Container for NM Data objects
     """
-    __select_alert = ('NOT USED. See nm.dataprefix.select, ' +
+    __select_alert = ('NOT USED. See nm.dataseries.select, ' +
                       'nm.channel_select, nm.eset.select and nm.epoch_select.')
 
     def __init__(self, parent, name='NMDataContainer'):
@@ -61,48 +132,3 @@ class DataContainer(Container):
 
     def object_new(self, name):  # override, no super
         return Data(self.__parent, name)
-
-    def make(self, prefix='default', channels=1, epochs=3, samples=10,
-             noise=False, select=True, quiet=False):
-        noise_mu, noise_sigma = 0, 0.1  # mean and standard deviation
-        if not prefix or prefix.casefold() == 'default':
-            prefix = self.prefix
-        if not nmu.name_ok(prefix):
-            nmu.error('bad prefix ' + nmu.quotes(prefix), quiet=quiet)
-            return False
-        if channels <= 0 or epochs <= 0 or samples <= 0:
-            return False
-        seq_start = []
-        for ci in range(0, channels):  # look for existing data
-            cc = nmu.channel_char(ci)
-            si = self.name_next_seq(prefix + cc, quiet=quiet)
-            if si >= 0:
-                seq_start.append(si)
-        ss = max(seq_start)
-        se = ss + epochs
-        htxt = []
-        tree_path = ''
-        for ci in range(0, channels):
-            cc = nmu.channel_char(ci)
-            for j in range(ss, se):
-                name = prefix + cc + str(j)
-                ts = self.new(name, quiet=True)
-                tree_path = self.__parent.tree_path(history=True)
-                if not ts:
-                    a = 'failed to create ' + nmu.quotes(name)
-                    nmu.alert(a, quiet=quiet)
-                if noise:
-                    ts.thedata = np.random.normal(noise_mu, noise_sigma,
-                                                  samples)
-                else:
-                    # ts.thedata = np.zeros(samples)
-                    ts.thedata = np.empty(samples)
-            htxt.append('ch=' + cc + ', ep=' + str(ss) + '-' + str(se-1))
-        for h in htxt:
-            path = prefix
-            if len(tree_path) > 0:
-                path = tree_path + "." + path
-            nmu.history('created' + nmc.S0 + path + ', ' + h, quiet=quiet)
-        if select:
-            self.__parent.dataprefix.new(prefix, quiet=quiet)
-        return True

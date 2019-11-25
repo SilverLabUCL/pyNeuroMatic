@@ -127,7 +127,7 @@ class EpochSetContainer(Container):
     def add_epoch(self, name, epoch, quiet=False):
         if len(self.__parent.thedata) == 0:
             tp = self.__parent.tree_path(history=True)
-            e = 'no selected data for dataprefix ' + tp
+            e = 'no selected data for dataseries ' + tp
             nmu.error(e, quiet=quiet)
             return False
         if type(name) is not list:
@@ -177,7 +177,7 @@ class EpochSetContainer(Container):
     def remove_epoch(self, name, epoch, quiet=False):
         if len(self.__parent.thedata) == 0:
             tp = self.__parent.tree_path(history=True)
-            e = 'no selected data for dataprefix ' + tp
+            e = 'no selected data for dataseries ' + tp
             nmu.alert(e, quiet=quiet)
             return False
         if type(name) is not list:

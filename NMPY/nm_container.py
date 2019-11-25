@@ -16,7 +16,7 @@ class NMObject(object):
     NM objects to be stored in a 'Container' list (see below).
 
     Known Children:
-        Project, Folder, Data, DataPrefix, Channel, EpochSet, Note
+        Project, Folder, Data, DataSeries, Channel, EpochSet, Note
 
     Attributes:
         parent (NMObject):
@@ -117,14 +117,15 @@ class Container(NMObject):
 
     Known Children:
         ExperimentContainer, FolderContainer, DataContainer,
-        DataPrefixContainer, ChannelContainer, EpochSetContainer
+        DataSeriesContainer, ChannelContainer, EpochSetContainer
 
     Attributes:
-        prefix (str): For creating NMObject name via name_default(), name = prefix + seq #
+        prefix (str): For creating NMObject name via name_default(),
+        name = prefix + seq #
         __objects : list
             List container of NMObject items
         __object_select : NMObject
-            The selected NMObject    
+            The selected NMObject
     """
 
     def __init__(self, parent, name='NMContainer', prefix='NMObj', seq_start=0,
@@ -163,7 +164,7 @@ class Container(NMObject):
         return k
 
     def object_new(self, name):  # child class should override
-        # and change NMObject to Folder, Data, DataPrefix, etc
+        # and change NMObject to Folder, Data, DataSeries, etc
         return NMObject(self.__parent, name)
 
     @property
@@ -354,7 +355,6 @@ class Container(NMObject):
         if not o:
             return False
         cname = o.__class__.__name__
-        
         if not quiet:
             q = ('are you sure you want to kill ' + cname + ' ' +
                  nmu.quotes(name) + '?')

@@ -25,8 +25,8 @@ class Manager(object):
                 Data (Record0, Record1...)
                     NoteContainer
                     Note (Note0, Note1, Note2...)
-                DataPrefixContainer
-                DataPrefix (Record, Wave...)
+                DataSeriesContainer
+                DataSeries (Record, Wave...)
                     ChannelContainer
                     Channel (A, B, C...)
                     EpochSetContainer
@@ -41,15 +41,15 @@ class Manager(object):
         # nm.exp.folder_open_hdf5()
 
     def data_test(self):
-        noise = False
-        self.data.make(prefix='Data', channels=2, epochs=3, samples=5,
-                       noise=noise)
-        self.data.make(prefix='Data', channels=2, epochs=3, samples=5,
-                       noise=noise)
-        self.data.make(prefix='Wave', channels=3, epochs=8, samples=5,
-                       noise=noise)
-        # self.dataprefix.new('Test')
-        # self.dataprefix.kill('Test')
+        noise = [0, 0.1]
+        self.dataseries.make(prefix='Data', channels=2, epochs=3, samples=5,
+                             noise=noise)
+        self.dataseries.make(prefix='Data', channels=2, epochs=3, samples=5,
+                             noise=noise)
+        self.dataseries.make(prefix='Wave', channels=3, epochs=8, samples=5,
+                             noise=noise)
+        # self.dataseries.new('Test')
+        # self.dataseries.kill('Test')
         self.folder.new()
         # self.folder.duplicate('NMFolder0', 'NMFolder1')
         self.folder.duplicate('NMFolder0', 'NMFolder2')
@@ -72,7 +72,7 @@ class Manager(object):
         # rdic = self.eset.add('SetX', [4])
         # print(rdic)
         # self.eset.select="Set1"
-        # clist = self.dataprefix.select.data_names
+        # clist = self.dataseries.select.data_names
         # print(clist)
 
     @property
@@ -133,35 +133,35 @@ class Manager(object):
         return None
 
     @property
-    def dataprefix(self):
+    def dataseries(self):
         fs = self.__folder_select()
         if fs:
-            return fs.dataprefix
+            return fs.dataseries
         return None
 
-    def __dataprefix_select(self):
-        pc = self.dataprefix
+    def __dataseries_select(self):
+        pc = self.dataseries
         if pc:
             return pc.select
         return None
 
     @property
     def channel(self):
-        ps = self.__dataprefix_select()
+        ps = self.__dataseries_select()
         if ps:
             return ps.channel
         return None
 
     @property
     def channel_select(self):
-        ps = self.__dataprefix_select()
+        ps = self.__dataseries_select()
         if ps:
             return ps.channel_select
         return []  # channel select is a list
 
     @channel_select.setter
     def channel_select(self, chan_char_list):  # e.g 'A', 'All' or ['A', 'B']
-        ps = self.__dataprefix_select()
+        ps = self.__dataseries_select()
         if ps:
             ps.channel_select = chan_char_list
             return ps.channel_select == chan_char_list
@@ -169,21 +169,21 @@ class Manager(object):
 
     @property
     def eset(self):  # epoch set
-        ps = self.__dataprefix_select()
+        ps = self.__dataseries_select()
         if ps:
             return ps.eset
         return None
 
     @property
     def epoch_select(self):
-        ps = self.__dataprefix_select()
+        ps = self.__dataseries_select()
         if ps:
             return ps.epoch_select
         return [-1]
 
     @epoch_select.setter
     def epoch_select(self, epoch_list):
-        ps = self.__dataprefix_select()
+        ps = self.__dataseries_select()
         if ps:
             ps.epoch_select = epoch_list
             return ps.epoch_select == epoch_list
@@ -191,7 +191,7 @@ class Manager(object):
 
     @property
     def data_select(self):
-        ps = self.__dataprefix_select()
+        ps = self.__dataseries_select()
         if ps:
             return ps.data_select
         return False
@@ -201,7 +201,7 @@ class Manager(object):
         s = {}
         s['project'] = None
         s['folder'] = None
-        s['dataprefix'] = None
+        s['dataseries'] = None
         s['eset'] = None
         s['channel'] = []
         s['epoch'] = -1
@@ -212,10 +212,10 @@ class Manager(object):
         if not fs:
             return s
         s['folder'] = fs
-        ps = self.dataprefix.select
+        ps = self.dataseries.select
         if not ps:
             return s
-        s['dataprefix'] = ps
+        s['dataseries'] = ps
         ss = self.eset.select
         if ss:
             s['eset'] = ss
@@ -228,7 +228,7 @@ class Manager(object):
         s = {}
         s['project'] = ''
         s['folder'] = ''
-        s['dataprefix'] = ''
+        s['dataseries'] = ''
         s['eset'] = ''
         s['channel'] = []
         s['epoch'] = -1
@@ -239,10 +239,10 @@ class Manager(object):
         if not fs:
             return s
         s['folder'] = fs.name
-        ps = self.dataprefix.select
+        ps = self.dataseries.select
         if not ps:
             return s
-        s['dataprefix'] = ps.name
+        s['dataseries'] = ps.name
         ss = self.eset.select
         if ss:
             s['eset'] = ss.name

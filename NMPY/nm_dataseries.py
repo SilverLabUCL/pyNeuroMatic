@@ -3,6 +3,7 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import numpy as np
 import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
@@ -11,9 +12,9 @@ from nm_eset import EpochSetContainer
 import nm_utilities as nmu
 
 
-class DataPrefix(NMObject):
+class DataSeries(NMObject):
     """
-    NM DataPrefix class
+    NM DataSeries class
     """
 
     def __init__(self, parent, name):
@@ -30,7 +31,7 @@ class DataPrefix(NMObject):
 
     @property
     def content(self):  # override, no super
-        k = {'dataprefix': self.name}
+        k = {'dataseries': self.name}
         k.update(self.__channel_container.content)
         k.update({'channel_select': self.channel_select})
         k.update({'epochs': self.epoch_count})
@@ -278,12 +279,12 @@ class DataPrefix(NMObject):
         return dlist
 
 
-class DataPrefixContainer(Container):
+class DataSeriesContainer(Container):
     """
-    NM Container for DataPrefix objects
+    NM Container for DataSeries objects
     """
 
-    def __init__(self, parent, data_container, name='NMDataPrefixContainer'):
+    def __init__(self, parent, data_container, name='NMDataSeriesContainer'):
         super().__init__(parent, name, prefix='', select_new=True,
                          rename=False, duplicate=False)
         self.__parent = parent
@@ -291,16 +292,16 @@ class DataPrefixContainer(Container):
 
     @property
     def content(self):  # override, no super
-        k = {'dataprefix': self.names}
+        k = {'dataseries': self.names}
         if self.select:
             s = self.select.name
         else:
             s = ''
-        k.update({'dataprefix_select': s})
+        k.update({'dataseries_select': s})
         return k
 
     def object_new(self, name):  # override, no super
-        return DataPrefix(self.__parent, name)
+        return DataSeries(self.__parent, name)
 
     def new(self, name='', select=True, quiet=False):  # override, no super
         if not name:
@@ -313,7 +314,7 @@ class DataPrefixContainer(Container):
         if pexists:
             p = self.get(prefix, quiet=quiet)
         else:
-            p = DataPrefix(self.__parent, prefix)
+            p = DataSeries(self.__parent, prefix)
             self.add(p, select=select, quiet=True)
         if select:
             self.select_set(prefix, quiet=True)
@@ -359,4 +360,53 @@ class DataPrefixContainer(Container):
         for h in htxt:
             tp = p.tree_path(history=True)
             nmu.history('found' + nmc.S0 + tp + ', ' + h, quiet=quiet)
+        return True
+
+    def make(self, prefix='default', channels=1, epochs=3, samples=10,
+             fill_value=0, noise=[], xstart=0, xdelta=1, xlabel='',
+             xunits='', ylabel='', yunits='', select=True, quiet=False):
+        n_ok = False
+        if len(noise) == 2:
+            n_mean = noise[0]
+            n_stdv = abs(noise[1])
+            if not np.isinf(n_mean * n_stdv) and not np.isnan(n_mean * n_stdv):
+                n_ok = True
+        if not prefix or prefix.casefold() == 'default':
+            prefix = self.__data_container.prefix
+        if not nmu.name_ok(prefix):
+            nmu.error('bad prefix ' + nmu.quotes(prefix), quiet=quiet)
+            return False
+        if channels <= 0 or epochs <= 0 or samples <= 0:
+            return False
+        seq_start = []
+        for ci in range(0, channels):  # look for existing data
+            cc = nmu.channel_char(ci)
+            si = self.__data_container.name_next_seq(prefix + cc, quiet=quiet)
+            if si >= 0:
+                seq_start.append(si)
+        ss = max(seq_start)
+        se = ss + epochs
+        htxt = []
+        tree_path = ''
+        for ci in range(0, channels):
+            cc = nmu.channel_char(ci)
+            for j in range(ss, se):
+                name = prefix + cc + str(j)
+                ts = self.__data_container.new(name, quiet=True)
+                tree_path = self.__parent.tree_path(history=True)
+                if not ts:
+                    a = 'failed to create ' + nmu.quotes(name)
+                    nmu.alert(a, quiet=quiet)
+                if n_ok:
+                    ts.thedata = np.random.normal(n_mean, n_stdv, samples)
+                else:
+                    ts.thedata = np.full(samples, fill_value)
+            htxt.append('ch=' + cc + ', ep=' + str(ss) + '-' + str(se-1))
+        for h in htxt:
+            path = prefix
+            if len(tree_path) > 0:
+                path = tree_path + "." + path
+            nmu.history('created' + nmc.S0 + path + ', ' + h, quiet=quiet)
+        if select:
+            self.new(prefix, quiet=quiet)
         return True
