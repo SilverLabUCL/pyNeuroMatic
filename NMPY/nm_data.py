@@ -130,7 +130,6 @@ class DataContainer(Container):
     def content(self):  # override, no super
         return {'data': self.names}
 
-    def new(self, name='default', select=True, quiet=False, nmobj=None):
-        # override
+    def new(self, name='default', select=True, quiet=False):  # override
         o = Data(self.__parent, 'temp')
         return super().new(name=name, select=select, quiet=quiet, nmobj=o)

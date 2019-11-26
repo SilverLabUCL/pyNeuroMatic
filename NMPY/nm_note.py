@@ -45,8 +45,7 @@ class NoteContainer(Container):
     def content(self):  # override, no super
         return {'note': self.names}
 
-    def new(self, note='', select=True, quiet=False, nmobj=None):
-        # override
+    def new(self, note='', select=True, quiet=False):  # override
         if not note:
             return False
         o = Note(self.__parent, 'temp')

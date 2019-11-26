@@ -60,8 +60,7 @@ class FolderContainer(Container):
         print(self.name + ', ' + self.select.name)
         return k
 
-    def new(self, name='default', select=True, quiet=False, nmobj=None):
-        # override
+    def new(self, name='default', select=True, quiet=False):  # override
         o = Folder(self.__parent, 'temp')
         return super().new(name=name, select=select, quiet=quiet, nmobj=o)
 

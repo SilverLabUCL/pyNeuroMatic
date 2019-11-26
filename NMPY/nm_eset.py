@@ -104,8 +104,7 @@ class EpochSetContainer(Container):
         k.update({'eset_select': s})
         return k
 
-    def new(self, name='default', select=True, quiet=False, nmobj=None):
-        # override
+    def new(self, name='default', select=True, quiet=False):  # override
         o = EpochSet(self.__parent, 'temp')
         return super().new(name=name, select=select, quiet=quiet, nmobj=o)
 

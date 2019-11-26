@@ -300,9 +300,9 @@ class DataSeriesContainer(Container):
         k.update({'dataseries_select': s})
         return k
 
-    def new(self, name='', select=True, quiet=False, nmobj=None):
-        # override, no super
+    def new(self, name='', select=True, quiet=False):  # override, no super
         if not name:
+            nmu.error('must specify name', quiet=quiet)
             return None
         prefix = name  # name is actually a prefix
         if not nmu.name_ok(prefix):
