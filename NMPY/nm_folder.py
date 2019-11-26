@@ -46,7 +46,8 @@ class FolderContainer(Container):
     """
 
     def __init__(self, parent, name='NMFolderContainer'):
-        super().__init__(parent, name, nmc.FOLDER_PREFIX)
+        o = Folder(parent, 'temp')
+        super().__init__(parent, o, name=name, prefix=nmc.FOLDER_PREFIX)
         self.__parent = parent
 
     @property
@@ -60,7 +61,8 @@ class FolderContainer(Container):
         print(self.name + ', ' + self.select.name)
         return k
 
-    def new(self, name='default', select=True, quiet=False):  # override
+    def new(self, name='default', select=True, quiet=False, nmobj=None):
+        # override
         o = Folder(self.__parent, 'temp')
         return super().new(name=name, select=select, quiet=quiet, nmobj=o)
 

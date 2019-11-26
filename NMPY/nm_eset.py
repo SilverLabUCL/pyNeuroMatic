@@ -91,7 +91,9 @@ class EpochSetContainer(Container):
     """
 
     def __init__(self, parent, name='NMEpochSetContainer'):
-        super().__init__(parent, name, nmc.ESET_PREFIX, seq_start=1)
+        o = EpochSet(parent, 'temp')
+        super().__init__(parent, o, name=name, prefix=nmc.ESET_PREFIX,
+             seq_start=1)
         self.__parent = parent
 
     @property
@@ -104,7 +106,8 @@ class EpochSetContainer(Container):
         k.update({'eset_select': s})
         return k
 
-    def new(self, name='default', select=True, quiet=False):  # override
+    def new(self, name='default', select=True, quiet=False, nmobj=None):
+        # override
         o = EpochSet(self.__parent, 'temp')
         return super().new(name=name, select=select, quiet=quiet, nmobj=o)
 

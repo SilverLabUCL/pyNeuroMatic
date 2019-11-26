@@ -122,7 +122,8 @@ class DataContainer(Container):
                       'nm.channel_select, nm.eset.select and nm.epoch_select.')
 
     def __init__(self, parent, name='NMDataContainer'):
-        super().__init__(parent, name, nmc.DATA_PREFIX,
+        o = Data(parent, 'temp')
+        super().__init__(parent, o, name=name, prefix=nmc.DATA_PREFIX,
                          select_alert=self.__select_alert)
         self.__parent = parent
 
@@ -130,6 +131,7 @@ class DataContainer(Container):
     def content(self):  # override, no super
         return {'data': self.names}
 
-    def new(self, name='default', select=True, quiet=False):  # override
+    def new(self, name='default', select=True, quiet=False, nmobj=None):
+        # override
         o = Data(self.__parent, 'temp')
         return super().new(name=name, select=select, quiet=quiet, nmobj=o)

@@ -285,7 +285,8 @@ class DataSeriesContainer(Container):
     """
 
     def __init__(self, parent, data_container, name='NMDataSeriesContainer'):
-        super().__init__(parent, name, prefix='', select_new=True,
+        o = DataSeries(parent, 'temp')
+        super().__init__(parent, o, name=name, prefix='', select_new=True,
                          rename=False, duplicate=False)
         self.__parent = parent
         self.__data_container = data_container
@@ -300,7 +301,8 @@ class DataSeriesContainer(Container):
         k.update({'dataseries_select': s})
         return k
 
-    def new(self, name='', select=True, quiet=False):  # override, no super
+    def new(self, name='', select=True, quiet=False, nmobj=None):
+        # override, no super
         if not name:
             nmu.error('must specify name', quiet=quiet)
             return None

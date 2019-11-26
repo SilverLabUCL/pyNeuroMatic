@@ -128,11 +128,13 @@ class Container(NMObject):
             The selected NMObject
     """
 
-    def __init__(self, parent, name='NMContainer', prefix='NMObj', seq_start=0,
-                 select_alert='', select_new=False, rename=True,
+    def __init__(self, parent, nmobj, name='NMContainer', prefix='NMObj',
+                 seq_start=0, select_alert='', select_new=False, rename=True,
                  duplicate=True, kill=True):
         super().__init__(parent, name)
         self.__parent = parent
+        self.__nmobj = nmobj
+        self.__classname = nmobj.__class__.__name__
         if not prefix:
             self.__prefix = ''
             seq_start = -1
@@ -149,7 +151,6 @@ class Container(NMObject):
         self.__kill = kill
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
-        self.__classname = ''
 
     @property
     def content(self):  # child class should override
@@ -265,8 +266,8 @@ class Container(NMObject):
 
     def add(self, nmobj, select=True, quiet=False):
         """Add NMObject to Container."""
-        if not self.__isinstance(nmobj):
-            e = 'encountered object not of type ' + self.__cname()
+        if not nmobj.__class__.__name__ == self.__classname:
+            e = 'encountered object not of type ' + self.__classname
             nmu.error(e, quiet=quiet)
             return False
         if not nmu.name_ok(nmobj.name):
@@ -296,7 +297,7 @@ class Container(NMObject):
             new NMObject if successful, None otherwise
         """
         if not self.__duplicate:
-            nmu.error('cannot duplicate ' + self.__cname() +
+            nmu.error('cannot duplicate ' + self.__classname +
                       ' objects', quiet=quiet)
         o = self.get(name=name, quiet=quiet)
         if not o:
@@ -306,7 +307,7 @@ class Container(NMObject):
             if not newname:
                 return None
         elif not nmu.name_ok(newname):
-            e = 'bad ' + self.__cname() + ' name ' + nmu.quotes(newname)
+            e = 'bad ' + self.__classname + ' name ' + nmu.quotes(newname)
             nmu.error(e, quiet=quiet)
             return None
         oo = self.get(name=newname, quiet=True)
@@ -349,7 +350,7 @@ class Container(NMObject):
             True for success, False otherwise
         """
         if not self.__kill:
-            nmu.error('cannot kill ' + self.__cname() +
+            nmu.error('cannot kill ' + self.__classname +
                       ' objects', quiet=quiet)
         o = self.get(name, quiet=quiet)
         if not o:
@@ -378,7 +379,7 @@ class Container(NMObject):
     def name_default(self, quiet=False):
         """Get next default NMObject name based on prefix and sequence #."""
         if not self.__prefix or self.__seq_start < 0:
-            e = self.__cname() + ' objects do not have default names'
+            e = self.__classname + ' objects do not have default names'
             nmu.error(e, quiet=quiet)
             return ''
         i = self.name_next_seq(self.__prefix, quiet=quiet)
@@ -390,7 +391,7 @@ class Container(NMObject):
         """Get next seq num of default NMObject name based on prefix."""
         if not prefix or prefix.lower() == 'default':
             if not self.__prefix or self.__seq_start < 0:
-                e = self.__cname() + ' objects do not have default names'
+                e = self.__classname + ' objects do not have default names'
                 nmu.error(e, quiet=quiet)
                 return -1
             prefix = self.__prefix
@@ -409,7 +410,7 @@ class Container(NMObject):
 
     def rename(self, name, newname, quiet=False):
         if not self.__rename:
-            nmu.error('cannot rename ' + self.__cname() +
+            nmu.error('cannot rename ' + self.__classname +
                       ' objects', quiet=quiet)
         o = self.get(name, quiet=quiet)
         if not o:
@@ -427,12 +428,3 @@ class Container(NMObject):
         h = 'renamed' + nmc.S0 + old_tp + ' to ' + new_tp
         nmu.history(h, quiet=quiet)
         return True
-
-    def __cname(self):
-        #if not self.__classname and len(self.__thecontainer) > 0:
-            #o = self.__thecontainer[0]
-            #self.__classname = o.__class__.__name__
-        return self.__classname
-
-    def __isinstance(self, nmobj):
-        return nmobj.__class__.__name__ == self.__cname()

@@ -32,7 +32,8 @@ class ChannelContainer(Container):
     __select_alert = 'NOT USED. See nm.channel_select.'
 
     def __init__(self, parent, name='NMChannelContainer'):
-        super().__init__(parent, name, prefix=self.__prefix,
+        o = Channel(parent, 'temp')
+        super().__init__(parent, o, name=name, prefix=self.__prefix,
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False, kill=False)
         self.__parent = parent
@@ -41,7 +42,8 @@ class ChannelContainer(Container):
     def content(self):  # override, no super
         return {'channel': self.names}
     
-    def new(self, name='default', select=True, quiet=False):  # override
+    def new(self, name='default', select=True, quiet=False, nmobj=None):
+        # override
         o = Channel(self.__parent, 'temp')
         return super().new(name=name, select=select, quiet=quiet, nmobj=o)
 

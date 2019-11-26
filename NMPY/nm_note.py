@@ -36,7 +36,8 @@ class NoteContainer(Container):
     __select_alert = ('NOT USED.')
 
     def __init__(self, parent, name='NMNoteContainer'):
-        super().__init__(parent, name, prefix='Note',
+        o = Note(parent, 'temp')
+        super().__init__(parent, o, name=name, prefix='Note',
                          select_alert=self.__select_alert, rename=False,
                          duplicate=False)
         self.__parent = parent
@@ -45,7 +46,8 @@ class NoteContainer(Container):
     def content(self):  # override, no super
         return {'note': self.names}
 
-    def new(self, note='', select=True, quiet=False):  # override
+    def new(self, note='', select=True, quiet=False, nmobj=None):
+        # override
         if not note:
             return False
         o = Note(self.__parent, 'temp')
