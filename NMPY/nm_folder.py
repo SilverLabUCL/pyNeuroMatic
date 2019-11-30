@@ -21,8 +21,8 @@ class Folder(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self.__data_container = DataContainer(self)
-        self.__dataseries_container = DataSeriesContainer(self,
-                                                          self.__data_container)
+        c = DataSeriesContainer(self, self.__data_container)
+        self.__dataseries_container = c
 
     @property
     def content(self):  # override, no super
@@ -47,7 +47,7 @@ class FolderContainer(Container):
 
     def __init__(self, parent, name='NMFolderContainer'):
         o = Folder(parent, 'temp')
-        super().__init__(parent, o, name=name, prefix=nmc.FOLDER_PREFIX)
+        super().__init__(parent, name=name, nmobj=o, prefix=nmc.FOLDER_PREFIX)
         self.__parent = parent
 
     @property
@@ -61,10 +61,24 @@ class FolderContainer(Container):
         print(self.name + ', ' + self.select.name)
         return k
 
-    def new(self, name='default', select=True, quiet=False, nmobj=None):
-        # override
-        o = Folder(self.__parent, 'temp')
-        return super().new(name=name, select=select, quiet=quiet, nmobj=o)
+    def new(self, name='default', select=True, quiet=False):  # override
+        o = Folder(self.__parent, name)
+        return super().new(name=name, nmobj=o, select=select, quiet=quiet)
+
+    def add(self, folder, select=True, quiet=False):
+        if isinstance(folder, Folder):
+            name = folder.name
+            if self.exists(name):
+                nmu.error('Folder ' + nmu.quotes(name) + ' already exists',
+                          quiet=quiet)
+                return False
+            f = super().new(name=name, nmobj=folder, select=select,
+                            quiet=quiet)
+            return f is not None
+        else:
+            nmu.error('argument ' + nmu.quotes(folder) + ' is not a Folder',
+                      quiet=quiet)
+        return False
 
     def open_hdf5(self):
         dataseries = 'Record'

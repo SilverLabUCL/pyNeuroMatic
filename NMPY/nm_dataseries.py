@@ -11,15 +11,18 @@ from nm_channel import ChannelContainer
 from nm_eset import EpochSetContainer
 import nm_utilities as nmu
 
+XDIMS = {'xstart': 0, 'xdelta': 1, 'xlabel': '', 'xunits': ''}
+YDIMS = {'ylabel': [''], 'yunits': ['']}
+
 
 class DataSeries(NMObject):
     """
     NM DataSeries class
     """
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, xdims=XDIMS, ydims=YDIMS):
         # name is the prefix
-        super().__init__(parent, name, rename=False)
+        super().__init__(parent, name)
         self.__thedata = []  # 2D list, i = chan #, j = seq #
         self.__channel_container = ChannelContainer(self)
         self.__eset_container = EpochSetContainer(self)
@@ -27,7 +30,13 @@ class DataSeries(NMObject):
         self.__epoch_select = [0]
         self.__data_select = []
         self.__eset_init()
-        # self.details()
+        self.__xstart = xdims['xstart']
+        self.__xdelta = xdims['xdelta']
+        self.__xlabel = xdims['xlabel']  # e.g. 'Time'
+        self.__xunits = xdims['xunits']  # e.g. 'ms' for milliseconds
+        self.__ylabel = ydims['ylabel']  # e.g. 'Membrane current'
+        self.__yunits = ydims['yunits']  # e.g. 'nA' for nano-amperes
+        self._NMObject__rename = False
 
     @property
     def content(self):  # override, no super
@@ -107,15 +116,15 @@ class DataSeries(NMObject):
         return self.__eset_container
 
     def eset_init(self):
-        if not nmc.ESETS_LIST:
+        if not nmc.ESET_LIST:
             return []
         r = []
-        for s in nmc.ESETS_LIST:
+        for s in nmc.ESET_LIST:
             select = s.lower() == 'all'
             if self.__eset_container.new(s, select=select, quiet=True):
                 r.append(s)
         if not self.__eset_container.select:
-            self.__eset_container.select = nmc.ESETS_LIST[0]
+            self.__eset_container.select = nmc.ESET_LIST[0]
         return r
 
     __eset_init = eset_init
@@ -286,10 +295,11 @@ class DataSeriesContainer(Container):
 
     def __init__(self, parent, data_container, name='NMDataSeriesContainer'):
         o = DataSeries(parent, 'temp')
-        super().__init__(parent, o, name=name, prefix='', select_new=True,
-                         rename=False, duplicate=False)
+        super().__init__(parent, name=name, nmobj=o, prefix='')
         self.__parent = parent
         self.__data_container = data_container
+        self._Container__rename = False
+        self._Container__duplicate = False
 
     @property
     def content(self):  # override, no super
@@ -301,87 +311,75 @@ class DataSeriesContainer(Container):
         k.update({'dataseries_select': s})
         return k
 
-    def new(self, name='', select=True, quiet=False, nmobj=None):
-        # override, no super
-        if not name:
-            nmu.error('must specify name', quiet=quiet)
-            return None
-        prefix = name  # name is actually a prefix
-        if not nmu.name_ok(prefix):
-            nmu.error('bad prefix ' + nmu.quotes(prefix), quiet=quiet)
-            return None
-        pexists = self.exists(prefix)
-        if pexists:
-            p = self.get(prefix, quiet=quiet)
-        else:
-            p = DataSeries(self.__parent, prefix)
-            self.add(p, select=select, quiet=True)
-        #if select:
-            #self.select_set(prefix, quiet=True)
-        t = ''
-        if not pexists:
-            t = 'created'
-        if select:
-            if len(t) == 0:
-                t = 'selected'
-            else:
-                t += '/selected'
-        nmu.history(t + nmc.S0 + p.tree_path(history=True), quiet=quiet)
-        self.search(p)
-        return p
+    def select_set(self, name, call_new=True, quiet=False):
+        # override, change default call_new to True
+        return super().select_set(name, call_new=call_new, quiet=quiet)
 
-    def search(self, p, quiet=False):
+    def new(self, name='', xdims=XDIMS, ydims=YDIMS, select=True,
+            quiet=False):
+        # override
+        # name is the data prefix name
+        o = DataSeries(self.__parent, name, xdims=XDIMS, ydims=YDIMS)
+        n = super().new(name=name, nmobj=o, select=select, quiet=quiet)
+        if n:
+            self.update(name=n.name, quiet=quiet)
+            return n
+        return None
+
+    def update(self, name='select', quiet=False):
+        # name is data prefix
+        p = self.get(name=name, quiet=quiet)
         if not p:
             return False
-        prefix = p.name
+        name = p.name
         foundsomething = False
         thedata = self.__data_container.get_all()
         htxt = []
-        for i in range(0, 25):  # try prefix+chan+seq format
+        for i in range(0, 25):
             cc = nmu.channel_char(i)
-            olist = nmu.get_items(thedata, prefix, chan_char=cc)
+            olist = nmu.get_items(thedata, name, chan_char=cc)
             if len(olist) > 0:
                 p.thedata.append(olist)
                 foundsomething = True
-                p.channel.new(quiet=True)
+                p.channel.new(name=cc, quiet=True)
                 htxt.append('ch=' + cc + ', n=' + str(len(olist)))
             else:
                 break  # no more channels
-        if not foundsomething:  # try without chan
-            olist = nmu.get_items(thedata, prefix)
-            if len(olist) > 0:
-                p.thedata.append(olist)
-                foundsomething = True
-                p.channel.new(quiet=True)
-                htxt.append('n=' + str(len(olist)))
         if not foundsomething:
-            a = 'failed to find data with prefix ' + nmu.quotes(prefix)
+            a = 'failed to find data with prefix name ' + nmu.quotes(name)
             nmu.alert(a, quiet=quiet)
         for h in htxt:
             tp = p.tree_path(history=True)
             nmu.history('found' + nmc.S0 + tp + ', ' + h, quiet=quiet)
         return True
 
-    def make(self, prefix='default', channels=1, epochs=3, samples=10,
-             fill_value=0, noise=[], xstart=0, xdelta=1, xlabel='',
-             xunits='', ylabel='', yunits='', select=True, quiet=False):
-        n_ok = False
+    def make(self, name='default', channels=1, epochs=3, samples=10,
+             fill_value=0, noise=[], xdims=XDIMS, ydims=YDIMS,
+             select=True, quiet=False):
+        # name is data prefix
+        add_noise = False
         if len(noise) == 2:
             n_mean = noise[0]
             n_stdv = abs(noise[1])
             if not np.isinf(n_mean * n_stdv) and not np.isnan(n_mean * n_stdv):
-                n_ok = True
-        if not prefix or prefix.casefold() == 'default':
-            prefix = self.__data_container.prefix
-        if not nmu.name_ok(prefix):
-            nmu.error('bad prefix ' + nmu.quotes(prefix), quiet=quiet)
+                add_noise = True
+        if not name or name.casefold() == 'default':
+            name = self.__data_container.prefix
+        if not nmu.name_ok(name):
+            nmu.error('bad data prefix name ' + nmu.quotes(name), quiet=quiet)
+            return False
+        p = self.get(name=name, quiet=True)
+        if p and p.channel_count != channels:
+            e = ('data series ' + nmu.quotes(name) + ' already exists, and ' +
+                 'requires channels=' + str(p.channel_count))
+            nmu.error(e, quiet=quiet)
             return False
         if channels <= 0 or epochs <= 0 or samples <= 0:
             return False
         seq_start = []
         for ci in range(0, channels):  # look for existing data
             cc = nmu.channel_char(ci)
-            si = self.__data_container.name_next_seq(prefix + cc, quiet=quiet)
+            si = self.__data_container.name_next_seq(name + cc, quiet=quiet)
             if si >= 0:
                 seq_start.append(si)
         ss = max(seq_start)
@@ -391,22 +389,25 @@ class DataSeriesContainer(Container):
         for ci in range(0, channels):
             cc = nmu.channel_char(ci)
             for j in range(ss, se):
-                name = prefix + cc + str(j)
-                ts = self.__data_container.new(name, quiet=True)
+                name2 = name + cc + str(j)
+                ts = self.__data_container.new(name2, quiet=True)
                 tree_path = self.__parent.tree_path(history=True)
                 if not ts:
-                    a = 'failed to create ' + nmu.quotes(name)
+                    a = 'failed to create ' + nmu.quotes(name2)
                     nmu.alert(a, quiet=quiet)
-                if n_ok:
+                if add_noise:
                     ts.thedata = np.random.normal(n_mean, n_stdv, samples)
                 else:
                     ts.thedata = np.full(samples, fill_value)
             htxt.append('ch=' + cc + ', ep=' + str(ss) + '-' + str(se-1))
         for h in htxt:
-            path = prefix
+            path = name
             if len(tree_path) > 0:
                 path = tree_path + "." + path
             nmu.history('created' + nmc.S0 + path + ', ' + h, quiet=quiet)
         if select:
-            self.new(prefix, quiet=quiet)
+            if p:
+                self.update(name=name, quiet=quiet)
+            else:
+                self.new(name=name, select=True, quiet=quiet)
         return True

@@ -92,8 +92,7 @@ class EpochSetContainer(Container):
 
     def __init__(self, parent, name='NMEpochSetContainer'):
         o = EpochSet(parent, 'temp')
-        super().__init__(parent, o, name=name, prefix=nmc.ESET_PREFIX,
-             seq_start=1)
+        super().__init__(parent, name=name, nmobj=o, prefix=nmc.ESET_PREFIX)
         self.__parent = parent
 
     @property
@@ -106,11 +105,6 @@ class EpochSetContainer(Container):
         k.update({'eset_select': s})
         return k
 
-    def new(self, name='default', select=True, quiet=False, nmobj=None):
-        # override
-        o = EpochSet(self.__parent, 'temp')
-        return super().new(name=name, select=select, quiet=quiet, nmobj=o)
-
     # @property
     # def select(self):  # override, no super
     #     return self.__set_select
@@ -118,6 +112,10 @@ class EpochSetContainer(Container):
     # @select.setter
     # def select(self, set_eq):
     #     self.__set_select = set_eq
+
+    def new(self, name='default', select=True, quiet=False):  # override
+        o = EpochSet(self.__parent, name)
+        return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     def rename(self, name, newname, quiet=False):  # override, call super
         if name.lower() == 'all':
@@ -127,6 +125,14 @@ class EpochSetContainer(Container):
             nmu.error('cannot rename SetX', quiet=quiet)
             return False
         return super().rename(name, newname, quiet=quiet)
+
+    def name_default(self, first=1, quiet=False):
+        # override, change default first to 1
+        return super().name_default(first=first, quiet=quiet)
+
+    def name_next_seq(self, prefix='default', first=1, quiet=False):
+        # override, change default first to 1
+        return super().name_next_seq(prefix=prefix, first=first, quiet=quiet)
 
     def add_epoch(self, name, epoch, quiet=False):
         if len(self.__parent.thedata) == 0:

@@ -42,11 +42,11 @@ class Manager(object):
 
     def data_test(self):
         noise = [0, 0.1]
-        self.dataseries.make(prefix='Data', channels=2, epochs=3, samples=5,
+        self.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
                              noise=noise)
-        # self.dataseries.make(prefix='Data', channels=2, epochs=3, samples=5,
-        #                      noise=noise)
-        # self.dataseries.make(prefix='Wave', channels=3, epochs=8, samples=5,
+        self.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
+                             noise=noise)
+        # self.dataseries.make(name='Wave', channels=3, epochs=8, samples=5,
         #                      noise=noise)
         # self.dataseries.new('Test')
         # self.dataseries.kill('Test')
