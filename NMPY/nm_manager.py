@@ -6,6 +6,7 @@ Copyright 2019 Jason Rothman
 import nm_configs as nmc
 from nm_project import Project
 from nm_stats import Stats
+from nm_testing import Test
 import nm_utilities as nmu
 
 nm = None  # holds Manager, accessed via console
@@ -33,57 +34,42 @@ class Manager(object):
                     EpochSet (All, Set1, Set2...)
     """
     def __init__(self):
+        self.__configs = nmc.Configs()
+        self.__stats = Stats(self)
+        self.__test = Test(self, self.__fxns)
         self.__project = None
         self.project_new('NMProject')
-        self.__gui = nmc.GUI
-        self.data_test()
-        self.__stats = Stats(self)
-        # nm.exp.folder_open_hdf5()
+        self.__test.container()
+        # self.__test.project()
+        # self.__test.folder()
+        # self.__test.data()
 
-    def data_test(self):
-        noise = [0, 0.1]
-        self.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
-                             noise=noise)
-        self.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
-                             noise=noise)
-        # self.dataseries.make(name='Wave', channels=3, epochs=8, samples=5,
-        #                      noise=noise)
-        # self.dataseries.new('Test')
-        # self.dataseries.kill('Test')
-        # self.folder.new()
-        # self.folder.duplicate('NMFolder0', 'NMFolder1')
-        # self.folder.duplicate('NMFolder0', 'NMFolder2')
-        # self.folder.select = 'NMFolder2'
-        # self.eset.add_epoch(['Set1', 'Set2', 'Set3'], [0,3,4,9,11])
-        # self.eset.add_epoch('Set1', [0])
-        # self.eset.remove_epoch('Set1', [3,4])
-        # self.eset.remove_epoch('Set1', [2])
-        # s1 = self.eset.get('Set1')
-        # s2 = self.eset.get('Set2')
-        # self.eset.add_epoch('Set1', [0, 1, 2])
-        # self.eset.add_epoch('Set2', [3])
-        # print(s1.names)
-        # print(s2.names)
-        # s1.union(s2)
-        # print(s1.names)
-        # self.eset.equation('Set3', ['Set1', '|', 'Set2'])
-        # self.eset.select = 'Set1'
-        # self.eset.add('Set1', range(0, 8, 2))
-        # rdic = self.eset.add('SetX', [4])
-        # print(rdic)
-        # self.eset.select="Set1"
-        # clist = self.dataseries.select.data_names
-        # print(clist)
+    def __quiet(self, quiet=False):
+        if self.configs.quiet:  # manager config quiet overrides
+            return True
+        return quiet
+
+    def __alert(self, message, quiet=False, frame=2):
+        quiet = self.__quiet(quiet)
+        return nmu.alert(message, quiet=quiet, frame=frame)
+
+    def __error(self, message, quiet=False, frame=2):
+        quiet = self.__quiet(quiet)
+        return nmu.error(message, quiet=quiet, frame=frame)
+
+    def __history(self, message, quiet=False, frame=2):
+        quiet = self.__quiet(quiet)
+        return nmu.history(message, quiet=quiet, frame=frame)
 
     @property
-    def gui(self):
-        return self.__gui
+    def __fxns(self):
+        f = {'quiet': self.__quiet}
+        f.update({'alert': self.__alert})
+        f.update({'error': self.__error})
+        f.update({'history': self.__history})
+        return f
 
-    @gui.setter
-    def gui(self, on):
-        self.__gui = on
-
-    def project_new(self, name, quiet=False):
+    def project_new(self, name, quiet=nmc.QUIET):
         """Create a new project"""
         if self.__project:
             q = ('do you want to save ' + nmu.quotes(self.__project.name) +
@@ -97,14 +83,14 @@ class Manager(object):
                 pass
             else:
                 return None  # cancel
-        if not name or name.casefold() == 'default':
+        if not name or name.lower() == 'default':
             name = 'NMProject'
         elif not nmu.name_ok(name):
-            nmu.error('bad name ' + nmu.quotes(name))
+            self.__error('bad name ' + nmu.quotes(name), quiet=quiet)
             return None
-        p = Project(self, name)
-        nmu.history('created' + nmc.S0 + name)
-        if p:
+        p = Project(self, self, name, self.__fxns)
+        self.__history('created' + nmc.S0 + name, quiet=quiet)
+        if p and p.folder:
             p.folder.new()  # create default folder
         self.__project = p
         return p
@@ -251,8 +237,16 @@ class Manager(object):
         return s
 
     @property
+    def configs(self):
+        return self.__configs
+
+    @property
     def stats(self):
         return self.__stats
+
+    @property
+    def test(self):
+        return self.__test
 
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
 import nm_utilities as nmu
@@ -14,14 +15,18 @@ class Channel(NMObject):
     NM Channel class
     """
 
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
+    def __init__(self, manager, parent, name, fxns):
+        super().__init__(manager, parent, name, fxns, rename=False)
+        self.__fxns = fxns
+        self.__quiet = fxns['quiet']
+        self.__alert = fxns['alert']
+        self.__error = fxns['error']
+        self.__history = fxns['history']
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
-        self._NMObject__rename = False
 
-    @property
-    def content(self):  # override, no super
+    @property  # override, no super
+    def content(self):
         return {'channel': self.name}
 
 
@@ -30,46 +35,40 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self, parent, name='NMChannelContainer'):
-        o = Channel(parent, 'temp')
-        super().__init__(parent, name=name, nmobj=o, prefix='')
+    def __init__(self, manager, parent, name, fxns):
+        o = Channel(manager, parent, 'temp', fxns)
+        super().__init__(manager, parent, name, fxns, nmobj=o, prefix='',
+                         rename=False, duplicate=False, kill=False)
         # NO PREFIX, Channel names are 'A', 'B'...
+        self.__manager = manager
         self.__parent = parent
-        self._Container__rename = False
-        self._Container__duplicate = False
-        self._Container__kill = False
+        self.__fxns = fxns
+        self.__quiet = fxns['quiet']
+        self.__alert = fxns['alert']
+        self.__error = fxns['error']
+        self.__history = fxns['history']
 
-    @property
-    def content(self):  # override, no super
-        return {'channel': self.names}
+    @property  # override, no super
+    def content(self):
+        return {'channels': self.names}
 
-    """
-    @property
-    def select(self):
-        nmu.alert('NOT USED. See nm.channel_select.')
-        return super().select
-
-    @select.setter
-    def select(self, name):
-        nmu.alert('NOT USED. See nm.channel_select.')
-        return self.select_set(name)
-    """
-
-    def new(self, name='default', select=True, quiet=False):  # override
-        o = Channel(self.__parent, name)
+    # override
+    def new(self, name='default', select=True, quiet=nmc.QUIET):
+        o = Channel(self.__manager, self.__parent, name, self.__fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
-    def name_default(self, first=0, quiet=False):  # override, no super
+    # override, no super
+    def name_next(self, first=0, quiet=nmc.QUIET):
         i = self.name_next_seq(first=first, quiet=quiet)
         if i >= 0:
             return str(i)
         return ''
 
-    def name_next_seq(self, prefix='', first=0, quiet=False):
-        # override, no super
+    # override, no super
+    def name_next_seq(self, prefix='', first=0, quiet=nmc.QUIET):
         # NO PREFIX, Channel names are 'A', 'B'...
         first = 0  # enforce
-        n = 10 + len(self.get_all())
+        n = 10 + self.count
         for i in range(first, n):
             # name = self.prefix + nmu.channel_char(i)
             name = nmu.channel_char(i)

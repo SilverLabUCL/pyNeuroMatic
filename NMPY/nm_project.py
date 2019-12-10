@@ -5,6 +5,7 @@ Copyright 2019 Jason Rothman
 """
 from nm_container import NMObject
 from nm_folder import FolderContainer
+import nm_utilities as nmu
 
 
 class Project(NMObject):
@@ -12,12 +13,18 @@ class Project(NMObject):
     NM Project class
     """
 
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.__folder_container = FolderContainer(self)
+    def __init__(self, manager, parent, name, fxns):
+        super().__init__(manager, parent, name, fxns)
+        self.__fxns = fxns
+        self.__quiet = fxns['quiet']
+        self.__alert = fxns['alert']
+        self.__error = fxns['error']
+        self.__history = fxns['history']
+        f = FolderContainer(manager, self, 'NMFolderContainer', fxns)
+        self.__folder_container = f
 
-    @property
-    def content(self):  # override, no super
+    @property  # override, no super
+    def content(self):
         k = {'project': self.name}
         k.update(self.__folder_container.content)
         return k

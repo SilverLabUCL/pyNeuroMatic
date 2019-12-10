@@ -4,6 +4,7 @@ nmpy - NeuroMatic in Python
 NM utility functions
 Copyright 2019 Jason Rothman
 """
+import math
 import inspect
 from colorama import Fore, Back, Style
 
@@ -19,6 +20,21 @@ def name_ok(name):
     if name.isalnum():
         return True
     return False
+
+
+def num_ok(number, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
+           no_zero=False):
+    if no_inf and math.isinf(number):
+        return False
+    if no_nan and math.isnan(number):
+        return False
+    if no_neg and number < 0:
+        return False
+    if no_pos and number > 0:
+        return False
+    if no_zero and number == 0:
+        return False
+    return True
 
 
 def channel_char(chan_num):
@@ -92,7 +108,7 @@ def get_items(nm_obj_list, prefix, chan_char=''):
     return olist
 
 
-def alert(message, red=True, tree=True, quiet=False):
+def alert(message, red=True, tree=True, quiet=False, frame=1):
     if quiet:
         return False
     if not message:
@@ -100,7 +116,7 @@ def alert(message, red=True, tree=True, quiet=False):
     if tree:
         stack = inspect.stack()
         if stack:
-            message = child_method(stack) + ': ' + message
+            message = get_class_method(stack, frame=frame) + ': ' + message
     message = 'ALERT: ' + message
     if red:
         print(Fore.RED + message + Fore.BLACK)
@@ -109,7 +125,7 @@ def alert(message, red=True, tree=True, quiet=False):
     return False
 
 
-def error(message, red=True, tree=True, quiet=False):
+def error(message, red=True, tree=True, quiet=False, frame=1):
     if quiet:
         return False
     if not message:
@@ -117,7 +133,7 @@ def error(message, red=True, tree=True, quiet=False):
     if tree:
         stack = inspect.stack()
         if stack:
-            message = child_method(stack) + ': ' + message
+            message = get_class_method(stack, frame=frame) + ': ' + message
     message = 'ERROR: ' + message
     if red:
         print(Fore.RED + message + Fore.BLACK)
@@ -126,46 +142,63 @@ def error(message, red=True, tree=True, quiet=False):
     return False
 
 
-def history(message, quiet=False):
+def history(message, quiet=False, frame=1):
     if quiet:
         return False
     if not message:
         return False
     stack = inspect.stack()
     if stack:
-        message = child_method(stack) + ': ' + message
+        message = get_class_method(stack, frame=frame) + ': ' + message
     print(message)
     return True
 
 
-def child_method(stack):
+def get_class_method(stack, nm=True, parent=False, child=True, frame=1):
     if not stack:
         return ''
-    child = stack_get_class(stack)
-    method = stack_get_method(stack)
-    return child + '.' + method
+    cm = []
+    if nm:
+        cm.append('NM')
+    child = get_class(stack, parent=parent, child=child, frame=frame)
+    method = get_method(stack, frame=frame)
+    if child:
+        cm.append(child)
+    if method:
+        cm.append(method)
+    return '.'.join(cm)
 
 
-def stack_get_class(stack, child=True):
-    if not stack:
-        return 'None'
-    class_tree = str(stack[1][0].f_locals['self'].__class__)
+def get_class(stack, parent=True, child=True, frame=1):
+    if len(stack) <= 1 or len(stack[0]) == 0:
+        return ''
+    f = stack[frame][0]
+    if not inspect.isframe(f):
+        return ''
+    if 'self' not in f.f_locals:
+        return ''
+    class_tree = str(stack[frame][0].f_locals['self'].__class__)
     class_tree = class_tree.replace('<class ', '')
     class_tree = class_tree.replace("\'", '')
     class_tree = class_tree.replace('>', '')
     class_tree = class_tree.split('.')
-    class_child = class_tree[0]
-    class_parent = class_tree[1]
+    class_parent = class_tree[0]
+    class_child = class_tree[1]
+    if parent and child:
+        return class_parent + '.' + class_child
+    if parent:
+        return class_parent
     if child:
         return class_child
-    return class_child + '.' + class_parent
+    return ''
 
 
-def stack_get_method(stack):
-    if not stack:
-        return 'None'
-    # return inspect.stack()[1][3]
-    return stack[1][0].f_code.co_name
+def get_method(stack, frame=1):
+    if len(stack) <= 1 or len(stack[0]) == 0:
+        return ''
+    if not inspect.isframe(stack[frame][0]):
+        return ''
+    return stack[frame][0].f_code.co_name
 
 
 def input_yesno(question, title='nm', cancel=False):
@@ -173,10 +206,10 @@ def input_yesno(question, title='nm', cancel=False):
         return ''
     txt = ''
     if cancel:
-        txt = question + '\n(y)es (n)o (c)ancel >> '
+        txt = question + '\n(y)es (n)o (c)ancel: '
         ok = ['y', 'n', 'c']
     else:
-        txt = question + '\n(y)es, (n)o >> '
+        txt = question + '\n(y)es, (n)o: '
         ok = ['y', 'n']
     if title:
         txt = title + ': ' + txt
@@ -185,3 +218,12 @@ def input_yesno(question, title='nm', cancel=False):
     if a in ok:
         return a
     return ''
+
+
+def input_default(prompt, default=''):
+    if default:
+        txt = prompt + ' [' + default + ']: '
+    else:
+        txt = prompt + ':'
+    a = input(txt) or default
+    return a

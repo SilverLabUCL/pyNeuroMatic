@@ -16,14 +16,19 @@ class EpochSet(NMObject):
     NM EpochSet class
     """
 
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
+    def __init__(self, manager, parent, name, fxns):
+        super().__init__(manager, parent, name, fxns)
+        self.__fxns = fxns
+        self.__quiet = fxns['quiet']
+        self.__alert = fxns['alert']
+        self.__error = fxns['error']
+        self.__history = fxns['history']
         self.__theset = set()
         self.__eq_list = []
         self.__eq_lock = True
 
-    @property
-    def content(self):  # override, no super
+    @property  # override, no super
+    def content(self):
         return {'eset': self.name}
 
     @property
@@ -46,7 +51,7 @@ class EpochSet(NMObject):
 
     @eq_list.setter
     def eq_list(self, eq_list):
-        nmu.alert('see nm.eset.equation')
+        self.__alert('see nm.eset.equation')
 
     @property
     def eq_lock(self):
@@ -90,14 +95,21 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name='NMEpochSetContainer'):
-        o = EpochSet(parent, 'temp')
-        super().__init__(parent, name=name, nmobj=o, prefix=nmc.ESET_PREFIX)
+    def __init__(self, manager, parent, name, fxns):
+        o = EpochSet(manager, parent, 'temp', fxns)
+        super().__init__(manager, parent, name, fxns, nmobj=o,
+                         prefix=nmc.ESET_PREFIX)
+        self.__manager = manager
         self.__parent = parent
+        self.__fxns = fxns
+        self.__quiet = fxns['quiet']
+        self.__alert = fxns['alert']
+        self.__error = fxns['error']
+        self.__history = fxns['history']
 
-    @property
-    def content(self):  # override, no super
-        k = {'eset': self.names}
+    @property  # override, no super
+    def content(self):
+        k = {'esets': self.names}
         if self.select:
             s = self.select.name
         else:
@@ -105,40 +117,42 @@ class EpochSetContainer(Container):
         k.update({'eset_select': s})
         return k
 
-    # @property
-    # def select(self):  # override, no super
+    # @property  # override, no super
+    # def select(self):
     #     return self.__set_select
 
     # @select.setter
     # def select(self, set_eq):
     #     self.__set_select = set_eq
 
-    def new(self, name='default', select=True, quiet=False):  # override
-        o = EpochSet(self.__parent, name)
+    # override
+    def new(self, name='default', select=True, quiet=nmc.QUIET):
+        o = EpochSet(self.__manager, self.__parent, name, self.__fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
-    def rename(self, name, newname, quiet=False):  # override, call super
+    # override
+    def rename(self, name, newname, quiet=nmc.QUIET):
         if name.lower() == 'all':
-            nmu.error("cannot rename 'All' set", quiet=quiet)
+            self.__error("cannot rename 'All' set", quiet=quiet)
             return False
         if name.lower() == 'setx':
-            nmu.error('cannot rename SetX', quiet=quiet)
+            self.__error('cannot rename SetX', quiet=quiet)
             return False
         return super().rename(name, newname, quiet=quiet)
 
-    def name_default(self, first=1, quiet=False):
-        # override, change default first to 1
-        return super().name_default(first=first, quiet=quiet)
+    # override, change default first to 1
+    def name_next(self, first=1, quiet=nmc.QUIET):
+        return super().name_next(first=first, quiet=quiet)
 
-    def name_next_seq(self, prefix='default', first=1, quiet=False):
-        # override, change default first to 1
+    # override, change default first to 1
+    def name_next_seq(self, prefix='default', first=1, quiet=nmc.QUIET):
         return super().name_next_seq(prefix=prefix, first=first, quiet=quiet)
 
-    def add_epoch(self, name, epoch, quiet=False):
+    def add_epoch(self, name, epoch, quiet=nmc.QUIET):
         if len(self.__parent.thedata) == 0:
             tp = self.__parent.tree_path(history=True)
             e = 'no selected data for dataseries ' + tp
-            nmu.error(e, quiet=quiet)
+            self.__error(e, quiet=quiet)
             return False
         if type(name) is not list:
             if name.lower() == 'all':
@@ -153,7 +167,7 @@ class EpochSetContainer(Container):
             epoch = [epoch]
         for n in name:
             if n.lower() == 'all':
-                nmu.alert("cannot edit 'All' set")
+                self.__alert("cannot edit 'All' set")
                 continue
             s = self.get(n, quiet=quiet)
             if not s:
@@ -175,20 +189,20 @@ class EpochSetContainer(Container):
                 added.sort()
                 h = ('added' + nmc.S0 + s.tree_path(history=True) +
                      ', ep=' + str(added))
-                nmu.history(h, quiet=quiet)
+                self.__history(h, quiet=quiet)
             if len(oor) > 0:
                 oor = list(oor)
                 oor.sort()
                 h = ('out of range' + nmc.S0 + s.tree_path(history=True) +
                      ', ep=' + str(oor))
-                nmu.error(h, quiet=quiet)
+                self.__error(h, quiet=quiet)
         return True
 
-    def remove_epoch(self, name, epoch, quiet=False):
+    def remove_epoch(self, name, epoch, quiet=nmc.QUIET):
         if len(self.__parent.thedata) == 0:
             tp = self.__parent.tree_path(history=True)
             e = 'no selected data for dataseries ' + tp
-            nmu.alert(e, quiet=quiet)
+            self.__alert(e, quiet=quiet)
             return False
         if type(name) is not list:
             if name.lower() == 'all':
@@ -203,7 +217,7 @@ class EpochSetContainer(Container):
             epoch = [epoch]
         for n in name:
             if n.lower() == 'all':
-                nmu.alert("cannot edit 'All' set")
+                self.__alert("cannot edit 'All' set")
                 continue
             s = self.get(n, quiet=quiet)
             if not s:
@@ -229,20 +243,20 @@ class EpochSetContainer(Container):
                 removed = list(removed)
                 removed.sort()
                 h = 'removed' + nmc.S0 + tp + ', ep=' + str(removed)
-                nmu.history(h, quiet=quiet)
+                self.__history(h, quiet=quiet)
             if len(nis) > 0:
                 nis = list(nis)
                 nis.sort()
                 h = 'not in set' + nmc.S0 + tp + ', ep=' + str(nis)
-                nmu.error(h, quiet=quiet)
+                self.__error(h, quiet=quiet)
             if len(oor) > 0:
                 oor = list(oor)
                 oor.sort()
                 h = 'out of range' + nmc.S0 + tp + ', ep=' + str(oor)
-                nmu.error(h, quiet=quiet)
+                self.__error(h, quiet=quiet)
         return True
 
-    def equation(self, name, eq_list, lock=True, quiet=False):
+    def equation(self, name, eq_list, lock=True, quiet=nmc.QUIET):
         """eq_list=[Set1', '|', 'Set2']"""
         if self.exists(name):
             s = self.get(name, quiet=quiet)
@@ -255,11 +269,11 @@ class EpochSetContainer(Container):
                 continue
             else:
                 e = 'unrecognized set equation item: ' + i
-                nmu.error(e, quiet=quiet)
+                self.__error(e, quiet=quiet)
                 return False
         s.eq_list = eq_list
 
-    def clear(self, name, quiet=False):
+    def clear(self, name, quiet=nmc.QUIET):
         if type(name) is not list:
             if name.lower() == 'all':
                 name = self.names
@@ -274,14 +288,14 @@ class EpochSetContainer(Container):
             q = 'are you sure you want to clear ' + n + '?'
             yn = nmu.input_yesno(q)
             if not yn == 'y':
-                nmu.history('abort')
+                self.__history('abort')
                 return False
         for n in name:
             if n.lower() == 'all':
-                nmu.error("cannot clear 'All' set", quiet=quiet)
+                self.__error("cannot clear 'All' set", quiet=quiet)
                 continue
             s = self.get(n, quiet=quiet)
             if s and s.clear():
                 tp = s.tree_path(history=True)
-                nmu.history('cleared' + nmc.S0 + tp, quiet=quiet)
+                self.__history('cleared' + nmc.S0 + tp, quiet=quiet)
         return True

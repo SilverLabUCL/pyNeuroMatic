@@ -18,11 +18,17 @@ class Folder(NMObject):
     NM Data Folder class
     """
 
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.__data_container = DataContainer(self)
-        c = DataSeriesContainer(self, self.__data_container)
-        self.__dataseries_container = c
+    def __init__(self, manager, parent, name, fxns):
+        super().__init__(manager, parent, name, fxns)
+        self.__fxns = fxns
+        self.__quiet = fxns['quiet']
+        self.__alert = fxns['alert']
+        self.__error = fxns['error']
+        self.__history = fxns['history']
+        d = DataContainer(manager, self, 'NMDataContainer', fxns)
+        self.__data_container = d
+        s = DataSeriesContainer(manager, self, 'NMDataSeriesContainer', fxns)
+        self.__dataseries_container = s
 
     @property
     def content(self):  # override, no super
@@ -45,40 +51,45 @@ class FolderContainer(Container):
     Container for NM Folders
     """
 
-    def __init__(self, parent, name='NMFolderContainer'):
-        o = Folder(parent, 'temp')
-        super().__init__(parent, name=name, nmobj=o, prefix=nmc.FOLDER_PREFIX)
+    def __init__(self, manager, parent, name, fxns):
+        o = Folder(manager, parent, 'temp', fxns)
+        super().__init__(manager, parent, name, fxns, nmobj=o,
+                         prefix=nmc.FOLDER_PREFIX)
+        self.__manager = manager
         self.__parent = parent
+        self.__fxns = fxns
+        self.__quiet = fxns['quiet']
+        self.__alert = fxns['alert']
+        self.__error = fxns['error']
+        self.__history = fxns['history']
 
-    @property
-    def content(self):  # override, no super
-        k = {'folder': self.names}
+    @property  # override, no super
+    def content(self):
+        k = {'folders': self.names}
         if self.select:
             s = self.select.name
         else:
             s = ''
         k.update({'folder_select': s})
-        print(self.name + ', ' + self.select.name)
         return k
 
-    def new(self, name='default', select=True, quiet=False):  # override
-        o = Folder(self.__parent, name)
+    # override
+    def new(self, name='default', select=True, quiet=nmc.QUIET):
+        o = Folder(self.__manager, self.__parent, name, self.__fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
-    def add(self, folder, select=True, quiet=False):
-        if isinstance(folder, Folder):
-            name = folder.name
-            if self.exists(name):
-                nmu.error('Folder ' + nmu.quotes(name) + ' already exists',
-                          quiet=quiet)
-                return False
-            f = super().new(name=name, nmobj=folder, select=select,
-                            quiet=quiet)
-            return f is not None
-        else:
-            nmu.error('argument ' + nmu.quotes(folder) + ' is not a Folder',
+    def add(self, folder, select=True, quiet=nmc.QUIET):
+        if not isinstance(folder, Folder):
+            self.__error('argument ' + nmu.quotes(folder) + ' is not a Folder',
                       quiet=quiet)
-        return False
+            return False
+        name = folder.name
+        if self.exists(name):
+            self.__error('Folder ' + nmu.quotes(name) + ' already exists',
+                      quiet=quiet)
+            return False
+        f = super().new(name=name, nmobj=folder, select=select, quiet=quiet)
+        return f is not None
 
     def open_hdf5(self):
         dataseries = 'Record'
