@@ -24,55 +24,63 @@ class Test(object):
         self.__history = fxns['history']
 
     def container(self):
-        self.__history('start...')
         nm = self.__manager
         nm.configs.quiet = False
-        c = Container(nm, nm.project, 'NMContainerTest', self.__fxns,
-                      prefix='NMTest', rename=True, duplicate=True, kill=False)
-        o = c.get('NMTest0')
+        self.__history('start...')
+        c = Container(nm, nm.project, 'ContainerTest', self.__fxns,
+                      prefix='Test', rename=True, duplicate=True)
+        o = c.new()
+        newname = o.name
+        c.new(newname)
+        newname = 'Test1'
+        c.new(newname)
+        c.new(select=False)
+        print('select=' + c.select.name)
+        c.select = 'Test'
+        c.select = 'Test1'
+        c.prefix = 'Testing'
         c.new()
-        c.new()
-        c.new()
-        c.select = 'NMTest'
-        c.select = 'NMTest1'
-        c.prefix = 'NMTesting'
-        c.new()
-        c.rename('select', 'NMTestX')
-        c.rename('NMTestX', 'NMTestXX')
-        o = c.get('NMTest2')
-        o.name = 'NMTest22'
+        c.rename('select', 'TestX')
+        c.rename('TestX', 'TestXX')
+        o = c.get('Test2')
+        if o:
+            o.name = 'Test22'
         print('count=' + str(c.count))
-        print(c.item_num('NMTESTXX'))
-        n = 'NMTest22'
+        print(c.item_num('TESTXX'))
+        n = 'Test22'
         if c.exists(n):
             print(n + ' exists')
         else:
             print(n + ' does not exist')
-        c.duplicate('NMTest22', 'NMTest2')
-        c.duplicate('NMTest22', 'NMTest2')
-        c.kill('NMTest22')
+        c.duplicate('Test22', 'Test2')
+        c.duplicate('Test22', 'Test2')
+        c.kill('Test22')
         print(c.content)
+        c.kill(all_=True)
         return True
 
     def project(self):
-        self.__history('start...')
         nm = self.__manager
+        nm.configs.quiet = False
+        self.__history('start...')
         print(nm.project.content)
-        nm.project_new('NMProjectNew')
+        nm.project_new('ProjectNew$')
+        nm.project_new('ProjectNew')
         return True
 
     def folder(self):
-        self.__history('start...')
         nm = self.__manager
+        nm.configs.quiet = False
+        self.__history('start...')
         noise = [0, 0.1]
         dims = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',
                 'ylabel': ['Vmem', 'Icmd'], 'yunits': ['mV', 'pA']}
-        nm.folder.new(name='NMFolderTest')
+        nm.folder.new('FolderTest')
         nm.dataseries.make(name='Data', channels=3, epochs=3, samples=5,
                            noise=noise, dims=dims)
         print(nm.folder.select.content_tree)
-        f = Folder(nm.project, 'NMFolderTest')
+        f = Folder(nm, nm.project, 'FolderTest', self.__fxns)
         nm.folder.add(f)
         nm.folder.new()
         nm.folder.rename('select', 'FolderNew1')
@@ -81,12 +89,15 @@ class Test(object):
         return True
 
     def data(self):
-        self.__history('start...')
         nm = self.__manager
+        nm.configs.quiet = False
+        self.__history('start...')
         noise = [0, 0.1]
         dims = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',
                 'ylabel': ['Vmem', 'Icmd'], 'yunits': ['mV', 'pA']}
+        if not nm.folder.select or not nm.dataseries:
+            return False
         nm.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
                            noise=noise, dims=dims)
         nm.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
@@ -102,9 +113,9 @@ class Test(object):
         # self.dataseries.new('Test')
         # self.dataseries.kill('Test')
         # self.folder.new()
-        # self.folder.duplicate('NMFolder0', 'NMFolder1')
-        # self.folder.duplicate('NMFolder0', 'NMFolder2')
-        # self.folder.select = 'NMFolder2'
+        # self.folder.duplicate('Folder0', 'Folder1')
+        # self.folder.duplicate('Folder0', 'Folder2')
+        # self.folder.select = 'Folder2'
         # self.eset.add_epoch(['Set1', 'Set2', 'Set3'], [0,3,4,9,11])
         # self.eset.add_epoch('Set1', [0])
         # self.eset.remove_epoch('Set1', [3,4])

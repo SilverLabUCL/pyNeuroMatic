@@ -36,9 +36,8 @@ class ChannelContainer(Container):
     """
 
     def __init__(self, manager, parent, name, fxns):
-        o = Channel(manager, parent, 'temp', fxns)
-        super().__init__(manager, parent, name, fxns, nmobj=o, prefix='',
-                         rename=False, duplicate=False, kill=False)
+        super().__init__(manager, parent, name, fxns, type_='Channel',
+                         prefix='', rename=False, duplicate=False)
         # NO PREFIX, Channel names are 'A', 'B'...
         self.__manager = manager
         self.__parent = parent
@@ -61,17 +60,21 @@ class ChannelContainer(Container):
     def name_next(self, first=0, quiet=nmc.QUIET):
         i = self.name_next_seq(first=first, quiet=quiet)
         if i >= 0:
-            return str(i)
+            return nmu.channel_char(i)
         return ''
 
     # override, no super
-    def name_next_seq(self, prefix='', first=0, quiet=nmc.QUIET):
+    def name_next_seq(self, first=0, quiet=nmc.QUIET):
         # NO PREFIX, Channel names are 'A', 'B'...
+        if not isinstance(first, int):
+            first = 0
+        if not isinstance(quiet, bool):
+            quiet = nmc.QUIET
         first = 0  # enforce
         n = 10 + self.count
         for i in range(first, n):
             # name = self.prefix + nmu.channel_char(i)
             name = nmu.channel_char(i)
-            if self.exists(name):
+            if not self.exists(name):
                 return i
         return -1

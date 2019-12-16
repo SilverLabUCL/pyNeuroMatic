@@ -31,7 +31,7 @@ class Data(NMObject):
         self.__history = fxns['history']
         self.make(samples=samples, fill_value=fill_value, dtype=dtype,
                   noise=noise)
-        n = NoteContainer(manager, self, 'NMNoteContainer', fxns)
+        n = NoteContainer(manager, self, 'Notes', fxns)
         self.__note_container = n
         self.__xdata = None
         self.__xstart = 0
@@ -50,16 +50,11 @@ class Data(NMObject):
 
     @property
     def data(self):
-        folder = self.__parent
-        return folder.data
+        return self.__parent.data
 
     @property
     def thedata(self):
         return self.__thedata
-
-    @thedata.setter
-    def thedata(self, np_array):
-        self.__thedata = np_array
 
     @thedata.setter
     def thedata(self, np_array):
@@ -173,14 +168,17 @@ class Data(NMObject):
 
     def make(self, samples=0, fill_value=0, dtype=DTYPE, noise=[],
              quiet=nmc.QUIET):
-        if not nmu.num_ok(samples, no_neg=True):
-            self.__error('bad samples argument: ' + str(samples), quiet=quiet)
+        tp = self.tree_path(history=True)
+        if not nmu.number_ok(samples, no_neg=True):
+            e = 'bad samples argument: ' + str(samples)
+            self.__error(e, tp=tp, quiet=quiet)
             return False
         if isinstance(noise, list) and len(noise) == 2:
             n_mean = noise[0]
             n_stdv = noise[1]
-            if not nmu.num_ok(n_mean) or not nmu.num_ok(n_stdv, no_neg=True):
-                self.__error('bad noise argument: ' + str(noise), quiet=quiet)
+            if not nmu.number_ok(n_mean) or not nmu.number_ok(n_stdv, no_neg=True):
+                e = 'bad noise argument: ' + str(noise)
+                self.__error(e, tp=tp, quiet=quiet)
                 return False
             self.__thedata = np.random.normal(n_mean, n_stdv, samples)
         else:
@@ -196,8 +194,7 @@ class DataContainer(Container):
                       'nm.channel_select, nm.eset.select and nm.epoch_select.')
 
     def __init__(self, manager, parent, name, fxns):
-        o = Data(manager, parent, 'temp', fxns)
-        super().__init__(manager, parent, name, fxns, nmobj=o,
+        super().__init__(manager, parent, name, fxns, type_='Data',
                          prefix=nmc.DATA_PREFIX)
         self.__manager = manager
         self.__parent = parent

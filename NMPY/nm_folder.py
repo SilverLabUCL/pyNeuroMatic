@@ -25,9 +25,9 @@ class Folder(NMObject):
         self.__alert = fxns['alert']
         self.__error = fxns['error']
         self.__history = fxns['history']
-        d = DataContainer(manager, self, 'NMDataContainer', fxns)
+        d = DataContainer(manager, self, 'Data', fxns)
         self.__data_container = d
-        s = DataSeriesContainer(manager, self, 'NMDataSeriesContainer', fxns)
+        s = DataSeriesContainer(manager, self, 'DataSeries', fxns)
         self.__dataseries_container = s
 
     @property
@@ -52,8 +52,7 @@ class FolderContainer(Container):
     """
 
     def __init__(self, manager, parent, name, fxns):
-        o = Folder(manager, parent, 'temp', fxns)
-        super().__init__(manager, parent, name, fxns, nmobj=o,
+        super().__init__(manager, parent, name, fxns, type_='Folder',
                          prefix=nmc.FOLDER_PREFIX)
         self.__manager = manager
         self.__parent = parent
@@ -79,17 +78,26 @@ class FolderContainer(Container):
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     def add(self, folder, select=True, quiet=nmc.QUIET):
+        tp = self.tree_path(history=True)
         if not isinstance(folder, Folder):
-            self.__error('argument ' + nmu.quotes(folder) + ' is not a Folder',
-                      quiet=quiet)
+            e = 'folder arg: expected type Folder'
+            self.__error(e, tp=tp, quiet=quiet)
             return False
+        if not isinstance(select, bool):
+            select = True
+        if not isinstance(quiet, bool):
+            quiet = nmc.QUIET
         name = folder.name
-        if self.exists(name):
-            self.__error('Folder ' + nmu.quotes(name) + ' already exists',
-                      quiet=quiet)
+        if not name or not nmu.name_ok(name):
+            e = 'bad folder name: ' + nmu.quotes(name)
+            self.__error(e, tp=tp, quiet=quiet)
             return False
-        f = super().new(name=name, nmobj=folder, select=select, quiet=quiet)
-        return f is not None
+        if self.exists(name):
+            e = nmu.quotes(name) + ' already exists'
+            self.__error(e, tp=tp, quiet=quiet)
+            return False
+        super().new(name=name, nmobj=folder, select=select, quiet=quiet)
+        return self.exists(name)
 
     def open_hdf5(self):
         dataseries = 'Record'

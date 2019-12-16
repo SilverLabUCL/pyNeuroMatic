@@ -96,8 +96,7 @@ class EpochSetContainer(Container):
     """
 
     def __init__(self, manager, parent, name, fxns):
-        o = EpochSet(manager, parent, 'temp', fxns)
-        super().__init__(manager, parent, name, fxns, nmobj=o,
+        super().__init__(manager, parent, name, fxns, type_='EpochSet',
                          prefix=nmc.ESET_PREFIX)
         self.__manager = manager
         self.__parent = parent
@@ -288,7 +287,7 @@ class EpochSetContainer(Container):
             q = 'are you sure you want to clear ' + n + '?'
             yn = nmu.input_yesno(q)
             if not yn == 'y':
-                self.__history('abort')
+                self.__history('cancel')
                 return False
         for n in name:
             if n.lower() == 'all':

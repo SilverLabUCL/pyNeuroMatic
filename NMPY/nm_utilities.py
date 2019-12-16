@@ -7,23 +7,37 @@ Copyright 2019 Jason Rothman
 import math
 import inspect
 from colorama import Fore, Back, Style
-
 import nm_configs as nmc
 
 
 def name_ok(name):
     ok = ['_']  # list of symbols OK to include in names
-    if not name:
+    if not isinstance(name, str):
         return False
+    if len(name) == 0:
+        return True  # empty string is OK
     for c in ok:
         name = name.replace(c, '')
+    if len(name) == 0:
+        return False
     if name.isalnum():
         return True
     return False
 
 
-def num_ok(number, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
-           no_zero=False):
+def names_ok(name_list):
+    if not isinstance(name_list, list):
+        name_list = [name_list]
+    for n in name_list:
+        if not name_ok(n):
+            return False
+    return True
+
+
+def number_ok(number, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
+              no_zero=False):
+    if not isinstance(number, int) and not isinstance(number, float):
+        return False
     if no_inf and math.isinf(number):
         return False
     if no_nan and math.isnan(number):
@@ -37,31 +51,15 @@ def num_ok(number, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
     return True
 
 
-def channel_char(chan_num):
-    clist = nmc.CHAN_LIST
-    if chan_num >= 0 and chan_num < len(clist):
-        return clist[chan_num]
-    return ''
-
-
-def channel_num(chan_char):
-    if not chan_char:
-        return -1
-    for i in range(0, len(nmc.CHAN_LIST)):
-        if nmc.CHAN_LIST[i].upper() == chan_char.upper():
-            return i
-    return -1
-
-
-def chan_char_exists(text, chan_char):
-    if not text or not chan_char or len(chan_char) > 1:
-        return False
-    for i in reversed(range(len(text))):  # search backwards
-        if text[i].isdigit():  # skip thru seq number
-            continue
-        if text[i].upper() == chan_char.upper():  # first char before seq #
-            return True
-    return False
+def numbers_ok(num_list, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
+               no_zero=False):
+    if not isinstance(num_list, list):
+        num_list = [num_list]
+    for i in num_list:
+        if not number_ok(i, no_inf=no_inf, no_nan=no_nan, no_neg=no_neg,
+                         no_pos=no_pos, no_zero=no_zero):
+            return False
+    return True
 
 
 def quotes(text, single=True):
@@ -73,7 +71,7 @@ def quotes(text, single=True):
 
 
 def remove_special_chars(text):
-    if not text:
+    if not text or not isinstance(text, str):
         return ''
     temp = ''
     for c in text:
@@ -82,95 +80,132 @@ def remove_special_chars(text):
     return temp
 
 
-def get_names(nm_obj_list):
-    if not nm_obj_list:
-        return []
-    nlist = []
-    for o in nm_obj_list:
-        nlist.append(o.name)
-    return nlist
-
-
-def get_items(nm_obj_list, prefix, chan_char=''):
-    if not nm_obj_list or not prefix:
-        return []
-    olist = []
-    i = len(prefix)
-    for o in nm_obj_list:
-        if prefix.casefold() == o.name[:i].casefold():
-            if chan_char:
-                if chan_char_exists(o.name[i:], chan_char):
-                    olist.append(o)
-                else:
-                    pass
+def int_list_to_seq_str(int_list, space=True):
+    # e.g. [0,1,5,6,7,12,19,20,21,22,24] -> 0,1,5-7,12,19-22,24
+    if not int_list or not isinstance(int_list, list):
+        return ''
+    for i in int_list:
+        if not isinstance(i, int):
+            return ''
+    if len(int_list) == 1:
+        return str(int_list[0])
+    imin = min(int_list)
+    imax = max(int_list)
+    seq_started = False
+    sfirst = int_list[0]
+    slist = []
+    for i in range(imin, imax + 1):  # [0,1,2,3,4,5,6,7,8]
+        if i in int_list:
+            if seq_started:
+                if i == imax:  # last integer
+                    if sfirst + 1 == i:
+                        slist.append(str(sfirst))
+                        slist.append(str(i))
+                    else:
+                        slist.append(str(sfirst) + '-' + str(i))
             else:
-                olist.append(o)
-    return olist
+                if i == imax:  # last integer
+                    slist.append(str(i))
+                else:
+                    sfirst = i
+                    seq_started = True
+        elif seq_started:
+            slast = i - 1
+            if sfirst == slast:
+                slist.append(str(sfirst))
+            elif sfirst + 1 == slast:
+                slist.append(str(sfirst))
+                slist.append(str(slast))
+            else:
+                slist.append(str(sfirst) + '-' + str(slast))
+            seq_started = False
+    if space:
+        return ', '.join(slist)
+    return ','.join(slist)
 
 
-def alert(message, red=True, tree=True, quiet=False, frame=1):
-    if quiet:
+def channel_char(chan_num):
+    if not number_ok(chan_num, no_neg=True):
+        return ''
+    clist = nmc.CHAN_LIST
+    if chan_num >= 0 and chan_num < len(clist):
+        return clist[chan_num]
+    return ''
+
+
+def channel_num(chan_char):
+    if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
+        return -1
+    clist = nmc.CHAN_LIST
+    for i in range(0, len(clist)):
+        if clist[i].lower() == chan_char.lower():
+            return i
+    return -1
+
+
+def channel_char_exists(text, chan_char):
+    if not text or not isinstance(text, str):
         return False
-    if not message:
+    if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return False
-    if tree:
-        stack = inspect.stack()
-        if stack:
-            message = get_class_method(stack, frame=frame) + ': ' + message
-    message = 'ALERT: ' + message
-    if red:
-        print(Fore.RED + message + Fore.BLACK)
-    else:
-        print(message)
+    for i in reversed(range(len(text))):  # search backwards, chan char at end
+        if text[i].isdigit():  # skip thru seq number
+            continue
+        if text[i].lower() == chan_char.lower():  # first char before seq #
+            return True
+        return False  # check only last character
     return False
 
 
-def error(message, red=True, tree=True, quiet=False, frame=1):
+def alert(message, title='ALERT', tp='', frame=2, red=True,
+          quiet=False):
+    return history(message, title=title, tp=tp, frame=frame,
+                   red=red, quiet=quiet)
+
+
+def error(message, title='ERROR', tp='', frame=2, red=True,
+          quiet=False):
+    return history(message, title=title, tp=tp, frame=frame,
+                   red=red, quiet=quiet)
+
+
+def history(message, title='', tp='', frame=1, red=False, quiet=False):
     if quiet:
-        return False
-    if not message:
-        return False
-    if tree:
-        stack = inspect.stack()
-        if stack:
-            message = get_class_method(stack, frame=frame) + ': ' + message
-    message = 'ERROR: ' + message
-    if red:
-        print(Fore.RED + message + Fore.BLACK)
+        return ''
+    if tp.lower() == 'none':
+        path = ''
     else:
-        print(message)
-    return False
+        path = get_tree_path(inspect.stack(), tp=tp, frame=frame)
+    if path:
+        h = path + ': ' + message
+    else:
+        h = message
+    if title:
+        h = title + ': ' + h
+    if not quiet:
+        if red:
+            print(Fore.RED + h + Fore.BLACK)
+        else:
+            print(h)
+    return h
 
 
-def history(message, quiet=False, frame=1):
-    if quiet:
-        return False
-    if not message:
-        return False
-    stack = inspect.stack()
-    if stack:
-        message = get_class_method(stack, frame=frame) + ': ' + message
-    print(message)
-    return True
-
-
-def get_class_method(stack, nm=True, parent=False, child=True, frame=1):
+def get_tree_path(stack, tp='', frame=1):
     if not stack:
         return ''
-    cm = []
-    if nm:
-        cm.append('NM')
-    child = get_class(stack, parent=parent, child=child, frame=frame)
     method = get_method(stack, frame=frame)
-    if child:
-        cm.append(child)
+    if not tp:
+        tp = get_class(stack, frame=frame)
+    path = ['nm']
+    if tp:
+        path.append(tp)
     if method:
-        cm.append(method)
-    return '.'.join(cm)
+        path.append(method)
+    return '.'.join(path)
 
 
-def get_class(stack, parent=True, child=True, frame=1):
-    if len(stack) <= 1 or len(stack[0]) == 0:
+def get_class(stack, frame=1, module=False):
+    if len(stack) <= frame or len(stack[0]) == 0:
         return ''
     f = stack[frame][0]
     if not inspect.isframe(f):
@@ -182,41 +217,43 @@ def get_class(stack, parent=True, child=True, frame=1):
     class_tree = class_tree.replace("\'", '')
     class_tree = class_tree.replace('>', '')
     class_tree = class_tree.split('.')
-    class_parent = class_tree[0]
-    class_child = class_tree[1]
-    if parent and child:
-        return class_parent + '.' + class_child
-    if parent:
-        return class_parent
-    if child:
-        return class_child
-    return ''
+    m = class_tree[0]
+    c = class_tree[1]
+    if module:
+        return m + '.' + c
+    return c
 
 
 def get_method(stack, frame=1):
-    if len(stack) <= 1 or len(stack[0]) == 0:
+    if len(stack) <= frame or len(stack[0]) == 0:
         return ''
-    if not inspect.isframe(stack[frame][0]):
+    f = stack[frame][0]
+    if not inspect.isframe(f):
         return ''
-    return stack[frame][0].f_code.co_name
+    return f.f_code.co_name
 
 
-def input_yesno(question, title='nm', cancel=False):
-    if not question:
+def input_yesno(prompt, title='', tp='', frame=1, cancel=False):
+    if not prompt:
         return ''
-    txt = ''
     if cancel:
-        txt = question + '\n(y)es (n)o (c)ancel: '
-        ok = ['y', 'n', 'c']
+        txt = prompt + '\n' + '(y)es (n)o (c)ancel: '
+        ok = ['y', 'yes', 'n', 'no', 'c', 'cancel']
     else:
-        txt = question + '\n(y)es, (n)o: '
-        ok = ['y', 'n']
+        txt = prompt + '\n' + '(y)es, (n)o: '
+        ok = ['y', 'yes', 'n', 'no']
+    if tp.lower() == 'none':
+        path = ''
+    else:
+        path = get_tree_path(inspect.stack(), tp=tp, frame=frame)
+    if path:
+        txt = path + ': ' + txt
     if title:
         txt = title + ': ' + txt
     answer = input(txt)
-    a = answer[:1].lower()
+    a = answer.lower()
     if a in ok:
-        return a
+        return a[:1]
     return ''
 
 

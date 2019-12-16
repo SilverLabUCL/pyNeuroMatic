@@ -42,9 +42,8 @@ class NoteContainer(Container):
     """
 
     def __init__(self, manager, parent, name, fxns):
-        o = Note(manager, parent, 'temp', fxns)
-        super().__init__(manager, parent, name, fxns, nmobj=o, prefix='Note',
-                         rename=False, duplicate=False)
+        super().__init__(manager, parent, name, fxns, type_='Note',
+                         prefix='Note', rename=False, duplicate=False)
         self.__parent = parent
         self.__fxns = fxns
         self.__quiet = fxns['quiet']
@@ -58,9 +57,9 @@ class NoteContainer(Container):
 
     # override
     def new(self, note='', select=True, quiet=nmc.QUIET):
-        if not note:
+        if not isinstance(note, str):
             return None
-        o = Note(self.__parent, 'temp', fxns)  # will be renamed
+        o = Note(self.__parent, 'temp', self.__fxns)  # will be renamed
         n = super().new(name='default', nmobj=o, select=select, quiet=quiet)
         if n:
             n.thenote = note

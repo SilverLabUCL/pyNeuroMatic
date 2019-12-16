@@ -3,6 +3,7 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+PROJECT_NAME = 'NMProject'
 FOLDER_PREFIX = 'NMFolder'
 DATA_PREFIX = 'Data'
 ESET_PREFIX = 'Set'

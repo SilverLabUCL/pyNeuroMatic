@@ -20,7 +20,7 @@ class Project(NMObject):
         self.__alert = fxns['alert']
         self.__error = fxns['error']
         self.__history = fxns['history']
-        f = FolderContainer(manager, self, 'NMFolderContainer', fxns)
+        f = FolderContainer(manager, self, 'Folders', fxns)
         self.__folder_container = f
 
     @property  # override, no super

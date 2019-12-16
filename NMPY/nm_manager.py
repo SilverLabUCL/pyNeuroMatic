@@ -15,7 +15,6 @@ nm = None  # holds Manager, accessed via console
 class Manager(object):
     """
     NM Manager class
-    Main outer class that manages everything
 
     NM class tree:
         Manager (root)
@@ -33,13 +32,14 @@ class Manager(object):
                     EpochSetContainer
                     EpochSet (All, Set1, Set2...)
     """
-    def __init__(self):
+    def __init__(self, quiet=False):
         self.__configs = nmc.Configs()
-        self.__stats = Stats(self)
+        self.__stats = Stats(self, self.__fxns)
         self.__test = Test(self, self.__fxns)
         self.__project = None
-        self.project_new('NMProject')
-        self.__test.container()
+        self.__configs.quiet = quiet
+        self.project_new(quiet=quiet)
+        # self.__test.container()
         # self.__test.project()
         # self.__test.folder()
         # self.__test.data()
@@ -49,17 +49,20 @@ class Manager(object):
             return True
         return quiet
 
-    def __alert(self, message, quiet=False, frame=2):
+    def __alert(self, message, tp='', quiet=False, frame=3):
         quiet = self.__quiet(quiet)
-        return nmu.alert(message, quiet=quiet, frame=frame)
+        return nmu.alert(message, tp=tp, quiet=quiet,
+                         frame=frame)
 
-    def __error(self, message, quiet=False, frame=2):
+    def __error(self, message, tp='', quiet=False, frame=3):
         quiet = self.__quiet(quiet)
-        return nmu.error(message, quiet=quiet, frame=frame)
+        return nmu.error(message, tp=tp, quiet=quiet,
+                         frame=frame)
 
-    def __history(self, message, quiet=False, frame=2):
+    def __history(self, message, tp='', quiet=False, frame=2):
         quiet = self.__quiet(quiet)
-        return nmu.history(message, quiet=quiet, frame=frame)
+        return nmu.history(message, tp=tp, quiet=quiet,
+                           frame=frame)
 
     @property
     def __fxns(self):
@@ -69,10 +72,21 @@ class Manager(object):
         f.update({'history': self.__history})
         return f
 
-    def project_new(self, name, quiet=nmc.QUIET):
+    def project_new(self, name='default', new_folder=True, quiet=nmc.QUIET):
         """Create a new project"""
+        if not isinstance(new_folder, bool):
+            new_folder = True
+        if not isinstance(quiet, bool):
+            quiet = nmc.QUIET
+        if not nmu.name_ok(name) or name.lower() == 'select':
+            e = 'name arg: bad string value ' + nmu.quotes(name)
+            self.__error(e, quiet=quiet)
+            return None
+        if not name or name.lower() == 'default':
+            name = nmc.PROJECT_NAME
         if self.__project:
-            q = ('do you want to save ' + nmu.quotes(self.__project.name) +
+            n = nmu.quotes(self.__project.name)
+            q = ('do you want to save ' + n +
                  ' before creating a new project?')
             ync = nmu.input_yesno(q, cancel=True)
             if ync == 'y':
@@ -82,16 +96,12 @@ class Manager(object):
             elif ync == 'n':
                 pass
             else:
+                self.__history('cancel', quiet=quiet)
                 return None  # cancel
-        if not name or name.lower() == 'default':
-            name = 'NMProject'
-        elif not nmu.name_ok(name):
-            self.__error('bad name ' + nmu.quotes(name), quiet=quiet)
-            return None
         p = Project(self, self, name, self.__fxns)
-        self.__history('created' + nmc.S0 + name, quiet=quiet)
-        if p and p.folder:
-            p.folder.new()  # create default folder
+        self.__history('created ' + nmu.quotes(name), quiet=quiet)
+        if new_folder and p and p.folder:
+            p.folder.new(quiet=quiet)  # create default folder
         self.__project = p
         return p
 
