@@ -15,19 +15,43 @@ class Channel(NMObject):
     NM Channel class
     """
 
-    def __init__(self, manager, parent, name, fxns):
-        super().__init__(manager, parent, name, fxns, rename=False)
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
+    def __init__(self, parent, name, fxns):
+        super().__init__(parent, name, fxns, rename=False)
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
 
-    @property  # override, no super
+    @property
+    def __history(self):
+        return self._NMObject__history
+
+    @property
+    def __tp(self):
+        return self.tree_path(history=True)
+
+    # override
+    @property
+    def parameters(self):
+        k = super().parameters
+        k.update({'graphXY': self.__graphXY})
+        k.update({'transform': self.__transform})
+        return k
+
+    # override, no super
+    @property
     def content(self):
         return {'channel': self.name}
+
+    # override
+    def copy(self, channel, copy_name=True, quiet=nmc.QUIET):
+        name = self.name
+        if not super().copy(channel, copy_name=copy_name, quiet=True):
+            return False
+        self.__graphXY = channel._Channel__graphXY
+        self.__transform = channel._Channel__transform
+        h = ('copied Channel ' + nmu.quotes(channel.name) + ' to ' +
+             nmu.quotes(name))
+        self.__history(h, tp=self.__tp, quiet=quiet)
+        return True
 
 
 class ChannelContainer(Container):
@@ -35,25 +59,30 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self, manager, parent, name, fxns):
-        super().__init__(manager, parent, name, fxns, type_='Channel',
-                         prefix='', rename=False, duplicate=False)
+    def __init__(self, parent, name, fxns):
+        t = Channel(parent, 'empty', fxns).__class__.__name__
+        super().__init__(parent, name, fxns, type_=t, prefix='', rename=False,
+                         duplicate=False)
         # NO PREFIX, Channel names are 'A', 'B'...
-        self.__manager = manager
-        self.__parent = parent
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
 
-    @property  # override, no super
+    @property
+    def __parent(self):
+        return self._NMObject__parent
+
+    @property
+    def __fxns(self):
+        return self._NMObject__fxns
+
+    # override, no super
+    @property
     def content(self):
         return {'channels': self.names}
 
     # override
     def new(self, name='default', select=True, quiet=nmc.QUIET):
-        o = Channel(self.__manager, self.__parent, name, self.__fxns)
+        if not name or name.lower() == 'default':
+            name = self.name_next(quiet=quiet)
+        o = Channel(self.__parent, name, self.__fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override, no super

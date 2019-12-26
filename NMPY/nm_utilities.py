@@ -63,11 +63,11 @@ def numbers_ok(num_list, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
 
 
 def quotes(text, single=True):
-    if not text:
-        text = ''
+    if not isinstance(text, str):
+        text = str(text)
     if single:
-        return "'" + text + "'"
-    return '"' + text + '"'
+        return "'" + str(text) + "'"
+    return '"' + str(text) + '"'
 
 
 def remove_special_chars(text):
@@ -157,21 +157,7 @@ def channel_char_exists(text, chan_char):
     return False
 
 
-def alert(message, title='ALERT', tp='', frame=2, red=True,
-          quiet=False):
-    return history(message, title=title, tp=tp, frame=frame,
-                   red=red, quiet=quiet)
-
-
-def error(message, title='ERROR', tp='', frame=2, red=True,
-          quiet=False):
-    return history(message, title=title, tp=tp, frame=frame,
-                   red=red, quiet=quiet)
-
-
 def history(message, title='', tp='', frame=1, red=False, quiet=False):
-    if quiet:
-        return ''
     if tp.lower() == 'none':
         path = ''
     else:

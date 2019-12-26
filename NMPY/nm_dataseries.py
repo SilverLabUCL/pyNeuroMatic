@@ -20,26 +20,59 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, manager, parent, name, fxns):
+    def __init__(self, parent, name, fxns):
         # name is data-series prefix
-        super().__init__(manager, parent, name, fxns, rename=False)
-        self.__parent = parent
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
-        self.__thedata = []  # 2D list, i = chan #, j = seq #
-        cc = ChannelContainer(manager, self, 'Channels', fxns)
+        super().__init__(parent, name, fxns, rename=False)
+        cc = ChannelContainer(self, 'Channels', fxns)
         self.__channel_container = cc
-        ec = EpochSetContainer(manager, self, 'EpochSets', fxns)
+        ec = EpochSetContainer(self, 'EpochSets', fxns)
         self.__eset_container = ec
+        self.__thedata = []  # 2D list, i = chan #, j = epoch #
         self.__channel_select = []
         self.__epoch_select = []
         self.__data_select = []
         self.__eset_init(quiet=True)
 
-    @property  # override, no super
+    @property
+    def __parent(self):
+        return self._NMObject__parent
+
+    @property
+    def __fxns(self):
+        return self._NMObject__fxns
+
+    @property
+    def __quiet(self):
+        return self._NMObject__quiet
+
+    @property
+    def __alert(self):
+        return self._NMObject__alert
+
+    @property
+    def __error(self):
+        return self._NMObject__error
+
+    @property
+    def __history(self):
+        return self._NMObject__history
+
+    @property
+    def __tp(self):
+        return self.tree_path(history=True)
+
+    # override
+    @property
+    def parameters(self):
+        k = super().parameters
+        # k.update({'thedata': self.__thedata})
+        k.update({'channel_select': self.__channel_select})
+        k.update({'epoch_select': self.__epoch_select})
+        # k.update({'data_select': self.__data_select})
+        return k
+
+    # override, no super
+    @property
     def content(self):
         k = {'dataseries': self.name}
         k.update(self.__channel_container.content)
@@ -48,6 +81,37 @@ class DataSeries(NMObject):
         k.update({'epoch_select': self.epoch_select})
         k.update(self.__eset_container.content)
         return k
+
+    # override
+    def equal(self, dataseries, ignore_name=False, alert=False):
+        if not super().equal(dataseries, ignore_name=ignore_name, alert=alert):
+            return False
+        c = dataseries._DataSeries__channel_container
+        if not self.__channel_container.equal(c, alert=alert):
+            return False
+        c = dataseries._DataSeries__eset_container
+        return self.__eset_container.equal(c, alert=alert)
+
+    # override
+    def copy(self, dataseries, copy_name=True, quiet=nmc.QUIET):
+        name = self.name
+        if not super().copy(dataseries, copy_name=copy_name, quiet=True):
+            return False
+        c = dataseries._DataSeries__channel_container
+        if not self.__channel_container.copy(c, quiet=quiet):
+            return False
+        c = dataseries._DataSeries__eset_container
+        if not self.__eset_container.copy(c, quiet=quiet):
+            return False
+        self.__channel_select = list(dataseries._DataSeries__channel_select)
+        self.__epoch_select = list(dataseries._DataSeries__epoch_select)
+        # COPY thedata
+        # COPY data_select
+        # self.__data_select.clear()  # RESET
+        h = ('copied DataSeries ' + nmu.quotes(dataseries.name) + ' to ' +
+             nmu.quotes(name))
+        self.__history(h, tp=self.__tp, quiet=quiet)
+        return True
 
     @property
     def data(self):
@@ -94,18 +158,17 @@ class DataSeries(NMObject):
 
     @channel_select.setter
     def channel_select(self, chan_list):  # e.g 'A', 'ALL' or ['A', 'B']
-        tp = self.tree_path(history=True)
         if not isinstance(chan_list, list):
             chan_list = [chan_list]
         clist = []
         for c in chan_list:
             if not self.channel_ok(c):
                 e = 'bad channel: ' + nmu.quotes(c)
-                self.__error(e, tp=tp)
+                self.__error(e, tp=self.__tp)
                 return False
             clist.append(c.upper())
         self.__channel_select = clist
-        self.__history('channel = ' + str(clist), tp=tp)
+        self.__history('channel = ' + str(clist), tp=self.__tp)
         return True
 
     @property
@@ -174,15 +237,14 @@ class DataSeries(NMObject):
 
     @epoch_select.setter
     def epoch_select(self, epoch_list):
-        tp = self.tree_path(history=True)
         if not isinstance(epoch_list, list):
             epoch_list = [epoch_list]
         for e in epoch_list:
             if not self.epoch_ok(e):
-                self.__error('bad epoch: ' + str(e), tp=tp)
+                self.__error('bad epoch: ' + str(e), tp=self.__tp)
                 return False
         self.__epoch_select = epoch_list
-        self.__history('epoch = ' + str(epoch_list), tp=tp)
+        self.__history('epoch = ' + str(epoch_list), tp=self.__tp)
         return True
 
     @property
@@ -190,7 +252,6 @@ class DataSeries(NMObject):
         return self.__thedata
 
     def thedata_clear(self, quiet=nmc.QUIET):
-        tp = self.tree_path(history=True)
         if not isinstance(quiet, bool):
             quiet = nmc.QUIET
         if not quiet:
@@ -198,14 +259,13 @@ class DataSeries(NMObject):
                  'dataseries ' + nmu.quotes(self.name) + '?')
             yn = nmu.input_yesno(q)
             if not yn == 'y':
-                self.__history('cancel', tp=tp, quiet=quiet)
+                self.__history('cancel', tp=self.__tp, quiet=quiet)
                 return False
         self.__thedata = []
         return True
 
     def data_list(self, chan_list=['all'], epoch_list=[-2], names=False,
                   quiet=nmc.QUIET):
-        tp = self.tree_path(history=True)
         if not isinstance(quiet, bool):
             quiet = nmc.QUIET
         if chan_list == 'select':
@@ -216,7 +276,7 @@ class DataSeries(NMObject):
         for c in chan_list:
             if not self.channel_ok(c):
                 e = 'bad channel: ' + nmu.quotes(c)
-                self.__error(e, tp=tp, quiet=quiet)
+                self.__error(e, tp=self.__tp, quiet=quiet)
                 return []
             if c.lower() == 'all':
                 all_chan = True
@@ -226,7 +286,8 @@ class DataSeries(NMObject):
         all_epochs = False
         for ep in epoch_list:
             if not isinstance(ep, int):
-                self.__error('bad epoch: ' + str(ep), tp=tp, quiet=quiet)
+                e = 'bad epoch: ' + str(ep)
+                self.__error(e, tp=self.__tp, quiet=quiet)
                 return []
             if ep == -1:
                 epoch_list = self.__epoch_select
@@ -249,7 +310,7 @@ class DataSeries(NMObject):
                             dlist.append(cdata[ep])
                     else:
                         e = 'bad epoch: ' + str(ep)
-                        self.__error(e, tp=tp, quiet=quiet)
+                        self.__error(e, tp=self.__tp, quiet=quiet)
                         return []
             return dlist
         for c in chan_list:
@@ -266,11 +327,11 @@ class DataSeries(NMObject):
                             dlist.append(cdata[ep])
                     else:
                         e = 'bad epoch: ' + str(ep)
-                        self.__error(e, tp=tp, quiet=quiet)
+                        self.__error(e, tp=self.__tp, quiet=quiet)
                         return []
             else:
                 e = 'bad channel: ' + nmu.quotes(c)
-                self.__error(e, tp=tp, quiet=quiet)
+                self.__error(e, tp=self.__tp, quiet=quiet)
                 return []
         return dlist
 
@@ -405,8 +466,7 @@ class DataSeries(NMObject):
         n = []
         for xx in x:
             n.append(xx.name)
-        tp = self.tree_path(history=True)
-        self.__alert('encountered multiple xdata: ' + str(n), tp=tp)
+        self.__alert('encountered multiple xdata: ' + str(n), tp=self.__tp)
         return None
 
     @xdata.setter
@@ -427,8 +487,7 @@ class DataSeries(NMObject):
             return 0
         if len(x) == 1:
             return x[0]
-        tp = self.tree_path(history=True)
-        self.__alert('encountered multiple xstarts: ' + str(x), tp=tp)
+        self.__alert('encountered multiple xstarts: ' + str(x), tp=self.__tp)
         return 0
 
     @xstart.setter
@@ -451,8 +510,7 @@ class DataSeries(NMObject):
             return 1
         if len(x) == 1:
             return x[0]
-        tp = self.tree_path(history=True)
-        self.__alert('encountered multiple xdeltas: ' + str(x), tp=tp)
+        self.__alert('encountered multiple xdeltas: ' + str(x), tp=self.__tp)
         return 1
 
     @xdelta.setter
@@ -475,8 +533,7 @@ class DataSeries(NMObject):
             return ''
         if len(x) == 1:
             return x[0]
-        tp = self.tree_path(history=True)
-        self.__alert('encountered multiple xlabels: ' + str(x), tp=tp)
+        self.__alert('encountered multiple xlabels: ' + str(x), tp=self.__tp)
         return ''
 
     @xlabel.setter
@@ -499,8 +556,7 @@ class DataSeries(NMObject):
             return ''
         if len(x) == 1:
             return x[0]
-        tp = self.tree_path(history=True)
-        self.__alert('encountered multiple xunits: ' + str(x), tp=tp)
+        self.__alert('encountered multiple xunits: ' + str(x), tp=self.__tp)
         return ''
 
     @xunits.setter
@@ -514,7 +570,6 @@ class DataSeries(NMObject):
 
     @property
     def ylabel(self):
-        tp = self.tree_path(history=True)
         y = []
         for cdata in self.__thedata:
             i = 0
@@ -529,21 +584,20 @@ class DataSeries(NMObject):
             else:
                 a = ('ch=' + nmu.channel_char(i) + ', ' +
                      'encountered multiple ylabels: ' + str(yl))
-                self.__alert(a, tp=tp)
+                self.__alert(a, tp=self.__tp)
                 y.append('')
             i += 1
         return y
 
     @ylabel.setter
     def ylabel(self, ylabel):
-        tp = self.tree_path(history=True)
         if not isinstance(ylabel, list):
             ylabel = [ylabel]
         i = 0
         for y in ylabel:
             if not isinstance(y, str):
                 e = 'ylabel is not a string type: ' + nmu.quotes(y)
-                self.__alert(e, tp=tp)
+                self.__alert(e, tp=self.__tp)
                 return False
         for cdata in self.__thedata:
             if i >= len(ylabel):
@@ -555,16 +609,15 @@ class DataSeries(NMObject):
         return True
 
     def ylabel_set(self, chan_char, ylabel, quiet=nmc.QUIET):
-        tp = self.tree_path(history=True)
         if not isinstance(quiet, bool):
             quiet = nmc.QUIET
         if not isinstance(chan_char, str):
             e = 'bad channel: ' + nmu.quotes(chan_char)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return False
         if not isinstance(ylabel, str):
             e = 'bad ylabel: ' + nmu.quotes(ylabel)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return False
         cn = nmu.channel_num(chan_char)
         if cn >= 0 and cn < len(self.__thedata):
@@ -573,7 +626,7 @@ class DataSeries(NMObject):
                 d.ylabel = ylabel
             return True
         e = 'bad channel: ' + nmu.quotes(chan_char)
-        self.__error(e, tp=tp, quiet=quiet)
+        self.__error(e, tp=self.__tp, quiet=quiet)
         return False
 
     @property
@@ -590,10 +643,9 @@ class DataSeries(NMObject):
             elif len(yl) == 1:
                 y.append(yl[0])
             else:
-                tp = self.tree_path(history=True)
                 a = ('ch=' + nmu.channel_char(i) + ', ' +
                      'encountered multiple yunits: ' + str(yl))
-                self.__alert(a, tp=tp)
+                self.__alert(a, tp=self.__tp)
                 y.append('')
             i += 1
         return y
@@ -616,16 +668,15 @@ class DataSeries(NMObject):
         return True
 
     def yunits_set(self, chan_char, yunits, quiet=nmc.QUIET):
-        tp = self.tree_path(history=True)
         if not isinstance(quiet, bool):
             quiet = nmc.QUIET
         if not isinstance(chan_char, str):
             e = 'bad channel: ' + nmu.quotes(chan_char)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return False
         if not isinstance(yunits, str):
             e = 'bad yunits: ' + nmu.quotes(yunits)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return False
         cn = nmu.channel_num(chan_char)
         if cn >= 0 and cn < len(self.__thedata):
@@ -634,7 +685,7 @@ class DataSeries(NMObject):
                 d.yunits = yunits
             return True
         e = 'bad channel: ' + nmu.quotes(chan_char)
-        self.__error(e, tp=tp, quiet=quiet)
+        self.__error(e, tp=self.__tp, quiet=quiet)
         return False
 
 
@@ -643,18 +694,41 @@ class DataSeriesContainer(Container):
     NM Container for DataSeries objects
     """
 
-    def __init__(self, manager, parent, name, fxns):
-        super().__init__(manager, parent, name, fxns, type_='DataSeries',
-                         prefix='', rename=False, duplicate=False)
-        self.__manager = manager
-        self.__parent = parent
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
+    def __init__(self, parent, name, fxns):
+        t = DataSeries(parent, 'empty', fxns).__class__.__name__
+        super().__init__(parent, name, fxns, type_=t, prefix='', rename=False,
+                         duplicate=False)
 
-    @property  # override, no super
+    @property
+    def __parent(self):
+        return self._NMObject__parent
+
+    @property
+    def __fxns(self):
+        return self._NMObject__fxns
+
+    @property
+    def __quiet(self):
+        return self._NMObject__quiet
+
+    @property
+    def __alert(self):
+        return self._NMObject__alert
+
+    @property
+    def __error(self):
+        return self._NMObject__error
+
+    @property
+    def __history(self):
+        return self._NMObject__history
+
+    @property
+    def __tp(self):
+        return self.tree_path(history=True)
+
+    # override, no super
+    @property
     def content(self):
         k = {'dataseries': self.names}
         if self.select:
@@ -664,29 +738,28 @@ class DataSeriesContainer(Container):
         k.update({'dataseries_select': s})
         return k
 
-    @property
-    def data(self):
-        return self.__parent.data
-
     # override
     def new(self, name='', select=True, quiet=nmc.QUIET):
         # name is the data-series name
-        o = DataSeries(self.__manager, self.__parent, name, self.__fxns)
+        o = DataSeries(self.__parent, name, self.__fxns)
         ds = super().new(name=name, nmobj=o, select=select, quiet=quiet)
         if ds:
             self.update(name=ds.name, quiet=quiet)
             return ds
         return None
 
+    @property
+    def data(self):
+        return self.__parent.data
+
     def update(self, name='select', quiet=nmc.QUIET):
         # name is data-series prefix
-        tp = self.tree_path(history=True)
         if not isinstance(quiet, bool):
             quiet = nmc.QUIET
         if not self.exists(name):
             e = 'failed to find ' + nmu.quotes(name)
             e += '\n' + 'acceptable names: ' + str(self.names)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
         ds = self.get(name, quiet=quiet)
         if not ds:
             return False
@@ -706,10 +779,10 @@ class DataSeriesContainer(Container):
                 break  # no more channels
         if not foundsomething:
             a = 'failed to find data with prefix ' + nmu.quotes(ds.name)
-            self.__alert(a, tp=tp, quiet=quiet)
+            self.__alert(a, tp=self.__tp, quiet=quiet)
         for h in htxt:
             h = 'found data with prefix ' + nmu.quotes(ds.name) + ': ' + h
-            self.__history(h, tp=tp, quiet=quiet)
+            self.__history(h, tp=self.__tp, quiet=quiet)
         return True
 
     def __get_items(self, name, chan_char):
@@ -730,45 +803,49 @@ class DataSeriesContainer(Container):
     def make(self, name='default', channels=1, epochs=1, samples=0,
              fill_value=0, noise=[], dims={}, select=True, quiet=nmc.QUIET):
         # name is data-series prefix
-        tp = self.tree_path(history=True)
         if not isinstance(quiet, bool):
             quiet = nmc.QUIET
         if not nmu.name_ok(name):
             e = 'bad name arg: ' + nmu.quotes(name)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return None
         if not name or name.lower() == 'default':
             name = self.data.prefix
         if not nmu.number_ok(channels, no_neg=True, no_zero=True):
             e = 'bad channels argument: ' + str(channels)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return None
         if not nmu.number_ok(epochs, no_neg=True, no_zero=True):
             e = 'bad epochs argument: ' + str(epochs)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return None
         if not nmu.number_ok(samples, no_neg=True):
             e = 'bad samples argument: ' + str(samples)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return None
         ds = self.get(name, quiet=True)
-        if ds and ds.channel_count != channels:
+        if not ds:
+            ds = DataSeries(self.__parent, name, self.__fxns)
+            self._Container__thecontainer.append(ds)
+        elif ds.channel_count != channels:
             e = ('data series ' + nmu.quotes(name) + ' already exists, and ' +
                  'requires channels=' + str(ds.channel_count))
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return None
-        epoch_start = []
-        for ci in range(0, channels):  # look for existing data
-            c = nmu.channel_char(ci)
-            si = self.data.name_next_seq(name + c, quiet=quiet)
-            if si >= 0:
-                epoch_start.append(si)
-        e_bgn = max(epoch_start)
+        ds.thedata_clear(quiet=True)
+        epoch_bgn = []
+        for i in range(0, channels):
+            c = nmu.channel_char(i)
+            dlist = self.__get_items(ds.name, c)  # search for existing data
+            epoch_bgn.append(len(dlist))
+            ds.thedata.append(dlist)
+            ds.channel.new(name=c, quiet=True)
+        e_bgn = max(epoch_bgn)
         e_end = e_bgn + epochs
-        n = nmu.quotes(name)
-        for ci in range(0, channels):
-            c = nmu.channel_char(ci)
+        for i in range(0, channels):
+            c = nmu.channel_char(i)
             elist = []
+            dlist = []
             for j in range(e_bgn, e_end):
                 name2 = name + c + str(j)
                 d = self.data.new(name=name2, samples=samples,
@@ -776,18 +853,15 @@ class DataSeriesContainer(Container):
                                   quiet=True)
                 if d:
                     elist.append(j)
+                    dlist.append(d)
                 else:
                     a = 'failed to create ' + nmu.quotes(name2)
-                    self.__alert(a, tp=tp, quiet=quiet)
+                    self.__alert(a, tp=self.__tp, quiet=quiet)
+            ds.thedata[i].extend(dlist)
             h = nmu.int_list_to_seq_str(elist, space=False)
-            h = 'created ' + n + ', ' + 'ch=' + c + ', ep=' + h
-            self.__history(h, tp=tp, quiet=quiet)
-        if ds:
-            if select:
-                self.select = name
-            else:
-                self.update(name=name, quiet=quiet)
-        else:
-            ds = self.new(name=name, select=select, quiet=quiet)
+            h = 'created ' + nmu.quotes(name) + ', ' + 'ch=' + c + ', ep=' + h
+            self.__history(h, tp=self.__tp, quiet=quiet)
+        if select:
+            self.select = name
         ds.dims = dims
         return ds

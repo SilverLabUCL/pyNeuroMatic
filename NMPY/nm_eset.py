@@ -7,7 +7,6 @@ Copyright 2019 Jason Rothman
 import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
-from nm_data import Data
 import nm_utilities as nmu
 
 
@@ -16,20 +15,46 @@ class EpochSet(NMObject):
     NM EpochSet class
     """
 
-    def __init__(self, manager, parent, name, fxns):
-        super().__init__(manager, parent, name, fxns)
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
+    def __init__(self, parent, name, fxns):
+        super().__init__(parent, name, fxns)
         self.__theset = set()
         self.__eq_list = []
         self.__eq_lock = True
 
-    @property  # override, no super
+    @property
+    def __history(self):
+        return self._NMObject__history
+
+    @property
+    def __tp(self):
+        return self.tree_path(history=True)
+
+    # override
+    @property
+    def parameters(self):
+        k = super().parameters
+        # k.update({'theset': self.__theset})
+        k.update({'eq_list': self.__eq_list})
+        k.update({'eq_lock': self.__eq_lock})
+        return k
+
+    # override, no super
+    @property
     def content(self):
         return {'eset': self.name}
+
+    def copy(self, epochset, copy_name=True, quiet=nmc.QUIET):
+        name = self.name
+        if not super().copy(epochset, copy_name=copy_name, quiet=True):
+            return False
+        # COPY theset
+        # self.__theset.clear()  # RESET
+        self.__eq_list = list(epochset._EpochSet__eq_list)
+        self.__eq_lock = epochset._EpochSet__eq_lock
+        h = ('copied EpochSet ' + nmu.quotes(epochset.name) + ' to ' +
+             nmu.quotes(name))
+        self.__history(h, tp=self.__tp, quiet=quiet)
+        return True
 
     @property
     def theset(self):
@@ -65,13 +90,13 @@ class EpochSet(NMObject):
         return data in self.__theset
 
     def add(self, data):
-        if isinstance(data, Data):
+        if data.__class__.__name__ == 'Data':
             self.__theset.add(data)
             return True
         return False
 
     def discard(self, data):
-        if isinstance(data, Data):
+        if data.__class__.__name__ == 'Data':
             self.__theset.discard(data)
             return True
         return False
@@ -95,18 +120,36 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, manager, parent, name, fxns):
-        super().__init__(manager, parent, name, fxns, type_='EpochSet',
-                         prefix=nmc.ESET_PREFIX)
-        self.__manager = manager
-        self.__parent = parent
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
+    def __init__(self, parent, name, fxns):
+        t = EpochSet(parent, 'empty', fxns).__class__.__name__
+        super().__init__(parent, name, fxns, type_=t, prefix=nmc.ESET_PREFIX)
 
-    @property  # override, no super
+    @property
+    def __parent(self):
+        return self._NMObject__parent
+
+    @property
+    def __fxns(self):
+        return self._NMObject__fxns
+
+    @property
+    def __quiet(self):
+        return self._NMObject__quiet
+
+    @property
+    def __alert(self):
+        return self._NMObject__alert
+
+    @property
+    def __error(self):
+        return self._NMObject__error
+
+    @property
+    def __history(self):
+        return self._NMObject__history
+
+    # override, no super
+    @property
     def content(self):
         k = {'esets': self.names}
         if self.select:
@@ -126,7 +169,9 @@ class EpochSetContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmc.QUIET):
-        o = EpochSet(self.__manager, self.__parent, name, self.__fxns)
+        if not name or name.lower() == 'default':
+            name = self.name_next(quiet=quiet)
+        o = EpochSet(self.__parent, name, self.__fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override

@@ -18,24 +18,54 @@ class Folder(NMObject):
     NM Data Folder class
     """
 
-    def __init__(self, manager, parent, name, fxns):
-        super().__init__(manager, parent, name, fxns)
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
-        d = DataContainer(manager, self, 'Data', fxns)
+    def __init__(self, parent, name, fxns):
+        super().__init__(parent, name, fxns)
+        ds = DataSeriesContainer(self, 'DataSeries', fxns)
+        self.__dataseries_container = ds
+        d = DataContainer(self, 'Data', fxns, ds)
         self.__data_container = d
-        s = DataSeriesContainer(manager, self, 'DataSeries', fxns)
-        self.__dataseries_container = s
 
     @property
-    def content(self):  # override, no super
+    def __history(self):
+        return self._NMObject__history
+
+    @property
+    def __tp(self):
+        return self.tree_path(history=True)
+
+    # override, no super
+    @property
+    def content(self):
         k = {'folder': self.name}
         k.update(self.__data_container.content)
         k.update(self.__dataseries_container.content)
         return k
+
+    # override
+    def equal(self, folder, ignore_name=False, alert=False):
+        if not super().equal(folder, ignore_name=ignore_name, alert=alert):
+            return False
+        c = folder._Folder__data_container
+        if not self.__data_container.equal(c, alert=alert):
+            return False
+        c = folder._Folder__dataseries_container
+        return self.__dataseries_container.equal(c, alert=alert)
+
+    # override
+    def copy(self, folder, copy_name=True, quiet=nmc.QUIET):
+        name = self.name
+        if not super().copy(folder, copy_name=copy_name, quiet=True):
+            return False
+        c = folder._Folder__data_container
+        if not self.__data_container.copy(c, quiet=quiet):
+            return False
+        c = folder._Folder__dataseries_container
+        if not self.__dataseries_container.copy(c, quiet=quiet):
+            return False
+        h = ('copied Folder ' + nmu.quotes(folder.name) + ' to ' +
+             nmu.quotes(name))
+        self.__history(h, tp=self.__tp, quiet=quiet)
+        return True
 
     @property
     def data(self):
@@ -51,18 +81,40 @@ class FolderContainer(Container):
     Container for NM Folders
     """
 
-    def __init__(self, manager, parent, name, fxns):
-        super().__init__(manager, parent, name, fxns, type_='Folder',
-                         prefix=nmc.FOLDER_PREFIX)
-        self.__manager = manager
-        self.__parent = parent
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
+    def __init__(self, parent, name, fxns):
+        t = Folder(parent, 'empty', fxns).__class__.__name__
+        super().__init__(parent, name, fxns, type_=t, prefix=nmc.FOLDER_PREFIX)
 
-    @property  # override, no super
+    @property
+    def __parent(self):
+        return self._NMObject__parent
+
+    @property
+    def __fxns(self):
+        return self._NMObject__fxns
+
+    @property
+    def __quiet(self):
+        return self._NMObject__quiet
+
+    @property
+    def __alert(self):
+        return self._NMObject__alert
+
+    @property
+    def __error(self):
+        return self._NMObject__error
+
+    @property
+    def __history(self):
+        return self._NMObject__history
+
+    @property
+    def __tp(self):
+        return self.tree_path(history=True)
+
+    # override, no super
+    @property
     def content(self):
         k = {'folders': self.names}
         if self.select:
@@ -74,14 +126,15 @@ class FolderContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmc.QUIET):
-        o = Folder(self.__manager, self.__parent, name, self.__fxns)
+        if not name or name.lower() == 'default':
+            name = self.name_next(quiet=quiet)
+        o = Folder(self.__parent, name, self.__fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     def add(self, folder, select=True, quiet=nmc.QUIET):
-        tp = self.tree_path(history=True)
         if not isinstance(folder, Folder):
             e = 'folder arg: expected type Folder'
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return False
         if not isinstance(select, bool):
             select = True
@@ -90,11 +143,11 @@ class FolderContainer(Container):
         name = folder.name
         if not name or not nmu.name_ok(name):
             e = 'bad folder name: ' + nmu.quotes(name)
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return False
         if self.exists(name):
             e = nmu.quotes(name) + ' already exists'
-            self.__error(e, tp=tp, quiet=quiet)
+            self.__error(e, tp=self.__tp, quiet=quiet)
             return False
         super().new(name=name, nmobj=folder, select=select, quiet=quiet)
         return self.exists(name)

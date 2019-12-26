@@ -27,7 +27,7 @@ class Test(object):
         nm = self.__manager
         nm.configs.quiet = False
         self.__history('start...')
-        c = Container(nm, nm.project, 'ContainerTest', self.__fxns,
+        c = Container(nm.project, 'ContainerTest', self.__fxns,
                       prefix='Test', rename=True, duplicate=True)
         o = c.new()
         newname = o.name
@@ -80,12 +80,28 @@ class Test(object):
         nm.dataseries.make(name='Data', channels=3, epochs=3, samples=5,
                            noise=noise, dims=dims)
         print(nm.folder.select.content_tree)
-        f = Folder(nm, nm.project, 'FolderTest', self.__fxns)
+        nm.eset.add_epoch('Set1', [0, 1, 2])
+        dname = 'DataB0'
+        b0 = nm.data.get(dname)
+        print(b0.thedata)
+        s1 = nm.eset.get('Set1')
+        nm.data.kill(dname, ask=False)
+        print(nm.folder.select.content_tree)
+        for i in range(0, nm.dataseries.count):
+            ds = nm.dataseries.get(item_num=i)
+            for cdata in ds.thedata:
+                for d in cdata:
+                    if d.name.lower() == dname.lower():
+                        print('found in DataSeries: ' + d.name)
+        for d in s1.theset:
+            if d.name.lower() == dname.lower():
+                print('found in Set1: ' + d.name)
+        f = Folder(nm.project, 'FolderTest', self.__fxns)
         nm.folder.add(f)
         nm.folder.new()
         nm.folder.rename('select', 'FolderNew1')
         nm.folder.duplicate('select', 'FolderNew2')
-        nm.folder.kill('select')
+        #nm.folder.kill('select')
         return True
 
     def data(self):

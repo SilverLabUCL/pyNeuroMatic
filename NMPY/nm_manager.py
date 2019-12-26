@@ -34,11 +34,11 @@ class Manager(object):
     """
     def __init__(self, quiet=False):
         self.__configs = nmc.Configs()
-        self.__stats = Stats(self, self.__fxns)
+        self.__stats = Stats(self.__fxns)
         self.__test = Test(self, self.__fxns)
         self.__project = None
         self.__configs.quiet = quiet
-        self.project_new(quiet=quiet)
+        # self.project_new(quiet=quiet)
         # self.__test.container()
         # self.__test.project()
         # self.__test.folder()
@@ -49,20 +49,19 @@ class Manager(object):
             return True
         return quiet
 
-    def __alert(self, message, tp='', quiet=False, frame=3):
+    def __alert(self, message, tp='', quiet=False, frame=2):
         quiet = self.__quiet(quiet)
-        return nmu.alert(message, tp=tp, quiet=quiet,
-                         frame=frame)
+        return nmu.history(message, title='ALERT', tp=tp, frame=frame,
+                           red=True, quiet=quiet)
 
-    def __error(self, message, tp='', quiet=False, frame=3):
+    def __error(self, message, tp='', quiet=False, frame=2):
         quiet = self.__quiet(quiet)
-        return nmu.error(message, tp=tp, quiet=quiet,
-                         frame=frame)
+        return nmu.history(message, title='ERROR', tp=tp, frame=frame,
+                           red=True, quiet=quiet)
 
     def __history(self, message, tp='', quiet=False, frame=2):
         quiet = self.__quiet(quiet)
-        return nmu.history(message, tp=tp, quiet=quiet,
-                           frame=frame)
+        return nmu.history(message, tp=tp, frame=frame, quiet=quiet)
 
     @property
     def __fxns(self):
@@ -98,7 +97,7 @@ class Manager(object):
             else:
                 self.__history('cancel', quiet=quiet)
                 return None  # cancel
-        p = Project(self, self, name, self.__fxns)
+        p = Project(self, name, self.__fxns)
         self.__history('created ' + nmu.quotes(name), quiet=quiet)
         if new_folder and p and p.folder:
             p.folder.new(quiet=quiet)  # create default folder
