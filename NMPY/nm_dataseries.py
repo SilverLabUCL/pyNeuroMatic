@@ -385,7 +385,7 @@ class DataSeries(NMObject):
         if 'yunits' in dims.keys():
             self.yunits = dims['yunits']
 
-    def xdata_make(self, name, samples=0, dims=DIMS, quiet=nmp.QUIET):
+    def xdata_make(self, name, shape=[], dims=DIMS, quiet=nmp.QUIET):
         if not isinstance(dims, dict):
             dims = DIMS
         if not isinstance(quiet, bool):
@@ -397,10 +397,10 @@ class DataSeries(NMObject):
         if 'xunits' in dims.keys():  # switch x and y
             dims.update({'yunits': dims['xunits']})  # NOT DICT TYPE
             dims.update({'xunits': ''})
-        d = self.data.new(name=name, samples=samples, dims=dims, quiet=quiet)
+        d = self.data.new(name=name, shape=shape, dims=dims, quiet=quiet)
         if not d:
             return None
-        for i in range(0, samples):
+        for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
             d.thedata[i] = i
         self.xdata = d
         return d
@@ -631,7 +631,7 @@ class DataSeries(NMObject):
             self._history(h, tp=self._tp, quiet=quiet)
         return True
 
-    def make(self, channels=1, epochs=1, samples=0, fill_value=0, noise=[],
+    def make(self, channels=1, epochs=1, shape=[], fill_value=0, noise=[],
              dims={}, quiet=nmp.QUIET):
         n = self.name
         if not isinstance(quiet, bool):
@@ -644,8 +644,8 @@ class DataSeries(NMObject):
             e = 'bad epochs argument: ' + str(epochs)
             self._error(e, tp=self._tp, quiet=quiet)
             return False
-        if not nmu.number_ok(samples, no_neg=True):
-            e = 'bad samples argument: ' + str(samples)
+        if not nmu.number_ok(shape, no_neg=True):
+            e = 'bad shape argument: ' + str(shape)
             self._error(e, tp=self._tp, quiet=quiet)
             return False
         if self.channel_count > 0 and channels != self.channel_count:
@@ -669,7 +669,7 @@ class DataSeries(NMObject):
             dlist = []
             for j in range(e_bgn, e_end):
                 name2 = n + c + str(j)
-                d = self.data.new(name=name2, samples=samples,
+                d = self.data.new(name=name2, shape=shape,
                                   fill_value=fill_value, noise=noise,
                                   quiet=True)
                 if d:

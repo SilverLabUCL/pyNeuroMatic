@@ -13,7 +13,10 @@ import nm_preferences as nmp
 import nm_utilities as nmu
 
 DIMS = {'xstart': 0, 'xdelta': 1, 'xlabel': '', 'xunits': '', 'ylabel': '',
-        'yunits': '', 'dtype': np.float64}
+        'yunits': ''}
+
+NP_ORDER = 'C'
+NP_DTYPE = np.float64
 
 
 class Data(NMObject):
@@ -21,11 +24,11 @@ class Data(NMObject):
     NM Data class
     """
 
-    def __init__(self, parent, name, fxns={}, samples=-1, fill_value=np.nan,
+    def __init__(self, parent, name, fxns={}, shape=[], fill_value=np.nan,
                  noise=[], dims=DIMS):
         super().__init__(parent, name, fxns=fxns)
         self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
-        self.__ndarray = None  # NumPy N-dimensional array
+        self.__np_array = None  # NumPy N-dimensional array
         self.__xdata = None
         self.__xstart = 0
         self.__xdelta = 1
@@ -33,17 +36,14 @@ class Data(NMObject):
         self.__xunits = ''
         self.__ylabel = ''
         self.__yunits = ''
-        self.__dtype = np.float64
         self.__size = 0
         self._dims_set(dims, quiet=True)
-        if samples >= 0:
+        if shape:
             if isinstance(noise, list) and len(noise) == 2:
-                self.__make_np_array_random_normal(samples=samples,
-                                                   mean=noise[0],
+                self.__make_np_array_random_normal(shape, mean=noise[0],
                                                    stdv=noise[1])
             else:
-                self.__make_np_array(samples=samples, fill_value=fill_value,
-                                     dtype=self.__dtype)
+                self.__make_np_array(shape, fill_value=fill_value)
 
     # override
     @property
@@ -81,21 +81,20 @@ class Data(NMObject):
         self.__xunits = data._Data__xunits
         self.__ylabel = data._Data__ylabel
         self.__yunits = data._Data__yunits
-        # self.__dtype
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
-    def ndarray(self):
-        return self.__ndarray
+    def np_array(self):
+        return self.__np_array
 
-    @ndarray.setter
-    def ndarray(self, numpy_ndarray):
-        if not isinstance(numpy_ndarray, np.ndarray):
-            e = 'bad np_ndarray arg: expected type NumPy.ndarray'
+    @np_array.setter
+    def np_array(self, np_ndarray):
+        if not isinstance(np_ndarray, np.ndarray):
+            e = 'bad np_array arg: expected type NumPy.ndarray'
             self._error(e, tp=self._tp)
-        self.__ndarray = numpy_ndarray
+        self.__np_array = np_ndarray
 
     @property
     def note(self):
@@ -109,7 +108,6 @@ class Data(NMObject):
             d = {'xstart': self.xstart, 'xdelta': self.xdelta}
         d.update({'xlabel': self.xlabel, 'xunits': self.xunits})
         d.update({'ylabel': self.ylabel, 'yunits': self.yunits})
-        d.update({'dtype': self.__ndarray.dtype})
         return d
 
     @dims.setter
@@ -135,8 +133,6 @@ class Data(NMObject):
             self._ylabel_set(dims['ylabel'], quiet=quiet)
         if 'yunits' in dims.keys():
             self._yunits_set(dims['yunits'], quiet=quiet)
-        if 'dtype' in dims.keys():
-            self._dtype_set(dims['dtype'], quiet=quiet)
         return True
 
     @property
@@ -304,24 +300,10 @@ class Data(NMObject):
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
-    @property
-    def dtype(self):
-        return self.__dtype
-
-    @dtype.setter
-    def dtype(self, dtype):
-        return self._dtype_set(dtype)
-
-    def _dtype_set(self, dtype, quiet=nmp.QUIET):
-        # check dtype is OK
-        # change np array to new dtype ()
-        # arr = arr.astype('float64')
-        self.__dtype = dtype
-
-    def make_np_array_random_normal(self, samples=0, mean=0, stdv=1,
+    def make_np_array_random_normal(self, shape, mean=0, stdv=1,
                                     quiet=nmp.QUIET):
-        if not nmu.number_ok(samples, no_neg=True):
-            e = 'bad samples argument: ' + str(samples)
+        if not nmu.number_ok(shape, no_neg=True):
+            e = 'bad shape argument: ' + str(shape)
             self._error(e, tp=self._tp, quiet=quiet)
             return False
         if not nmu.number_ok(mean):
@@ -332,24 +314,24 @@ class Data(NMObject):
             e = 'bad stdv argument: ' + str(stdv)
             self._error(e, tp=self._tp, quiet=quiet)
             return False
-        self.__ndarray = np.random.normal(mean, stdv, samples)
+        self.__np_array = np.random.normal(mean, stdv, shape)
         # dtype = float64
-        n = ('created data array (numpy.random.normal): samples=' +
-             str(samples) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
+        n = ('created data array (numpy.random.normal): shape=' +
+             str(shape) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
         self.note.new(note=n, quiet=True)
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
     __make_np_array_random_normal = make_np_array_random_normal
 
-    def make_np_array(self, samples=0, fill_value=np.nan, dtype=np.float64,
-                      quiet=nmp.QUIET):
-        if not nmu.number_ok(samples, no_neg=True):
-            e = 'bad samples argument: ' + str(samples)
+    def make_np_array(self, shape, fill_value=np.nan, dtype=NP_DTYPE,
+                      order=NP_ORDER, quiet=nmp.QUIET):
+        if not nmu.number_ok(shape, no_neg=True):
+            e = 'bad shape argument: ' + str(shape)
             self._error(e, tp=self._tp, quiet=quiet)
             return False
-        self.__ndarray = np.full(samples, fill_value, dtype=dtype)
-        n = ('created data array (numpy.full): samples=' + str(samples) +
+        self.__np_array = np.full(shape, fill_value, dtype=dtype, order=order)
+        n = ('created numpy array (numpy.full): shape=' + str(shape) +
              ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
         self.note.new(note=n, quiet=True)
         self._history(n, tp=self._tp, quiet=quiet)
@@ -381,11 +363,11 @@ class DataContainer(Container):
         return {'data': self.names}
 
     # override
-    def new(self, name='default', samples=0, fill_value=np.nan, noise=[],
+    def new(self, name='default', shape=[], fill_value=np.nan, noise=[],
             dims=DIMS, select=True, quiet=nmp.QUIET):
         if not name or name.lower() == 'default':
             name = self.name_next(quiet=quiet)
-        o = Data(self._parent, name, self._fxns, samples=samples,
+        o = Data(self._parent, name, self._fxns, shape=shape,
                  fill_value=fill_value, noise=noise, dims=dims)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 

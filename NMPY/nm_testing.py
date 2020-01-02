@@ -77,7 +77,7 @@ class Test(object):
         nm.folder.new('FolderTest')
         ds = nm.dataseries.new(name='Data')
         if ds:
-            ds.make(channels=3, epochs=3, samples=5, noise=noise, dims=dims)
+            ds.make(channels=3, epochs=3, shape=5, noise=noise, dims=dims)
         print(nm.folder.select.content_tree)
         nm.eset.add_epoch('Set1', [0, 1, 2])
         dname = 'DataB0'
@@ -116,9 +116,9 @@ class Test(object):
             return False
         ds = nm.dataseries.new('Data')
         if ds:
-            ds.make(channels=2, epochs=3, samples=5, noise=noise, dims=dims)
-            ds.make(channels=2, epochs=3, samples=5, noise=noise, dims=dims)
-            x = ds.xdata_make(name='x_Wave', samples=5, dims=dims)
+            ds.make(channels=2, epochs=3, shape=5, noise=noise, dims=dims)
+            ds.make(channels=2, epochs=3, shape=5, noise=noise, dims=dims)
+            x = ds.xdata_make(name='x_Wave', shape=5, dims=dims)
         for i in range(0, len(x.thedata)):
             x.thedata[i] = i * 0.01
         nm.data.select = 'DataA0'

@@ -276,30 +276,28 @@ class Test(unittest.TestCase):
         parent = self
         name0 = 'RecordA0'
         name1 = 'RecordA1'
-        samples = 10
+        shape = [2, 2]
         fill_value = np.nan
         dtype = np.float64
         noise = [0, 1]
         dims0 = {'xstart': -10, 'xdelta': 0.01,
                  'xlabel': 'time', 'xunits': 'ms',
-                 'ylabel': 'Vmem', 'yunits': 'mV',
-                 'dtype': dtype}
+                 'ylabel': 'Vmem', 'yunits': 'mV'}
         dims1 = {'xstart': 10, 'xdelta': 0.05,
                  'xlabel': 'time', 'xunits': 's',
-                 'ylabel': 'Imem', 'yunits': 'pA',
-                 'dtype': dtype}
-        d0 = Data(parent, name0, fxns=nm._fxns, samples=samples,
+                 'ylabel': 'Imem', 'yunits': 'pA'}
+        d0 = Data(parent, name0, fxns=nm._fxns, shape=shape,
                   fill_value=fill_value, noise=noise, dims=dims0)
-        d1 = Data(parent, name1, fxns=nm._fxns, samples=samples,
+        d1 = Data(parent, name1, fxns=nm._fxns, shape=shape,
                   fill_value=fill_value, noise=noise, dims=dims1)
         d0.dims = dims0
         d0.dims = dims1
         self.assertEqual(d0.dims, dims1)
-        print(type(d0.ndarray))
-        print(isinstance(d0.ndarray, np.ndarray))
-        print(d0.ndarray)
-        d0.ndarray.clip(-1, 1, out=d0.ndarray)
-        print(d0.ndarray.flags)
+        print(type(d0.np_array))
+        print(isinstance(d0.np_array, np.ndarray))
+        print(d0.np_array)
+        d0.np_array.clip(-1, 1, out=d0.np_array)
+        print(d0.np_array.flags)
         # print(d0.parameters)
 
     def test_project(self):
@@ -317,10 +315,10 @@ class Test(unittest.TestCase):
         p1 = Project(parent, name1, fxns=nm._fxns)
         f = p0.folder.new()
         ds = f.dataseries.new('Record')
-        ds.make(channels=1, epochs=3, samples=5, noise=noise, dims=dims)
+        ds.make(channels=1, epochs=3, shape=5, noise=noise, dims=dims)
         f = p0.folder.new()
         ds = f.dataseries.new('Wave')
-        ds.make(channels=2, epochs=3, samples=5, noise=noise, dims=dims)
+        ds.make(channels=2, epochs=3, shape=5, noise=noise, dims=dims)
         # p1._copy(p0)
         # self.assertTrue(p1._equal(p0, alert=True))
         """
@@ -369,28 +367,25 @@ class Test(unittest.TestCase):
         self.assertFalse(nmu.name_ok('test?'))
         self.assertFalse(nmu.name_ok(None))
         self.assertFalse(nmu.name_ok(0))
-        self.assertFalse(nmu.name_ok(['test0', 'test1', 'test2']))
-
-    def test_names_ok(self):
-        self.assertTrue(nmu.names_ok('test'))
-        self.assertFalse(nmu.names_ok('*'))
-        self.assertFalse(nmu.names_ok(None))
-        self.assertFalse(nmu.names_ok(0))
-        self.assertTrue(nmu.names_ok(['test']))
-        self.assertTrue(nmu.names_ok(['test0', 'test1', 'test2']))
-        self.assertFalse(nmu.names_ok(['test0', 'test1', 'test2?']))
-        self.assertFalse(nmu.names_ok(['test0', 1, 'test2']))
+        self.assertTrue(nmu.name_ok(['test']))
+        self.assertTrue(nmu.name_ok(['test0', 'test1', 'test2']))
+        self.assertFalse(nmu.name_ok(['test0', 'test1', 'test2?']))
+        self.assertFalse(nmu.name_ok(['test0', 1, 'test2']))
 
     def test_number_ok(self):
+        self.assertFalse(nmu.number_ok(None))
+        self.assertFalse(nmu.number_ok(False))
+        self.assertFalse(nmu.number_ok(complex(1, -1)))
         self.assertTrue(nmu.number_ok(0))
         self.assertTrue(nmu.number_ok(-5))
         self.assertTrue(nmu.number_ok(1.34))
-        self.assertTrue(nmu.number_ok(float('inf'), no_inf=False))
-        self.assertTrue(nmu.number_ok(float('-inf'), no_inf=False))
-        self.assertTrue(nmu.number_ok(float('nan'), no_nan=False))
+        self.assertFalse(nmu.number_ok(1.34, only_integer=True))
         self.assertFalse(nmu.number_ok(float('inf')))
         self.assertFalse(nmu.number_ok(float('-inf')))
         self.assertFalse(nmu.number_ok(float('nan')))
+        self.assertTrue(nmu.number_ok(float('inf'), no_inf=False))
+        self.assertTrue(nmu.number_ok(float('-inf'), no_inf=False))
+        self.assertTrue(nmu.number_ok(float('nan'), no_nan=False))
         self.assertTrue(nmu.number_ok(0, no_neg=True))
         self.assertTrue(nmu.number_ok(1.34, no_neg=True))
         self.assertFalse(nmu.number_ok(-1.34, no_neg=True))
@@ -400,29 +395,17 @@ class Test(unittest.TestCase):
         self.assertFalse(nmu.number_ok(0, no_zero=True))
         self.assertTrue(nmu.number_ok(1.34, no_zero=True))
         self.assertTrue(nmu.number_ok(-1.34, no_zero=True))
-        self.assertFalse(nmu.number_ok(None))
-        self.assertFalse(nmu.number_ok([0]))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34]))
-
-    def test_numbers_ok(self):
-        self.assertTrue(nmu.numbers_ok(0))
-        self.assertTrue(nmu.numbers_ok(-5))
-        self.assertTrue(nmu.numbers_ok(1.34))
-        self.assertTrue(nmu.numbers_ok(float('inf'), no_inf=False))
-        self.assertTrue(nmu.numbers_ok(float('-inf'), no_inf=False))
-        self.assertTrue(nmu.numbers_ok(float('nan'), no_nan=False))
-        self.assertFalse(nmu.numbers_ok(float('inf')))
-        self.assertFalse(nmu.numbers_ok(float('-inf')))
-        self.assertFalse(nmu.numbers_ok(float('nan')))
-        self.assertTrue(nmu.numbers_ok([0, 3, 4], no_neg=True))
-        self.assertFalse(nmu.numbers_ok([-1, 3, 4], no_neg=True))
-        self.assertFalse(nmu.numbers_ok([0, 3, 4], no_pos=True))
-        self.assertTrue(nmu.numbers_ok([0, -3, -4], no_pos=True))
-        self.assertFalse(nmu.numbers_ok([0, 3, 4], no_zero=True))
-        self.assertTrue(nmu.numbers_ok([-4, 4], no_zero=True))
-        self.assertFalse(nmu.numbers_ok(None))
-        self.assertTrue(nmu.numbers_ok([0, -5, 1.34]))
-        self.assertFalse(nmu.numbers_ok([0, -5, 1.34, 'test']))
+        self.assertTrue(nmu.number_ok([0]))
+        self.assertTrue(nmu.number_ok([0, -5, 1.34]))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34], only_integer=True))
+        self.assertTrue(nmu.number_ok([0, 3, 4], no_neg=True))
+        self.assertFalse(nmu.number_ok([-1, 3, 4], no_neg=True))
+        self.assertFalse(nmu.number_ok([0, 3, 4], no_pos=True))
+        self.assertTrue(nmu.number_ok([0, -3, -4], no_pos=True))
+        self.assertFalse(nmu.number_ok([0, 3, 4], no_zero=True))
+        self.assertTrue(nmu.number_ok([-4, 4], no_zero=True))
+        self.assertTrue(nmu.number_ok([0, -5, 1.34]))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, 'test']))
 
     def test_remove_special_chars(self):
         self.assertEqual(nmu.remove_special_chars('test*'), 'test')

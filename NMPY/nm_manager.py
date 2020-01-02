@@ -43,7 +43,7 @@ class Manager(object):
         self.__stats = Stats(self._fxns)
         self.__test = Test(self, self._fxns)
         self._history('created ' + nmu.quotes(name), quiet=quiet)
-        # self.project_new(quiet=quiet)
+        self.project_new(quiet=quiet)
         # self.__test.container()
         # self.__test.project()
         # self.__test.folder()

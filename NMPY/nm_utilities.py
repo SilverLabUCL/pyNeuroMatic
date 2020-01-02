@@ -13,52 +13,42 @@ import nm_preferences as nmp
 
 def name_ok(name):
     ok = ['_']  # list of symbols OK to include in names
-    if not isinstance(name, str):
-        return False
-    if len(name) == 0:
-        return True  # empty string is OK
-    for c in ok:
-        name = name.replace(c, '')
-    if len(name) == 0:
-        return False
-    if name.isalnum():
-        return True
-    return False
-
-
-def names_ok(name_list):
-    if not isinstance(name_list, list):
-        name_list = [name_list]
-    for n in name_list:
-        if not name_ok(n):
+    if not isinstance(name, list):
+        name = [name]
+    for n in name:
+        if not isinstance(n, str):
+            return False
+        if len(n) == 0:
+            continue  # empty string is OK
+        for c in ok:
+            n = n.replace(c, '')
+        if len(n) == 0:
+            return False
+        if not n.isalnum():
             return False
     return True
 
 
-def number_ok(number, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
-              no_zero=False):
-    if not isinstance(number, int) and not isinstance(number, float):
-        return False
-    if no_inf and math.isinf(number):
-        return False
-    if no_nan and math.isnan(number):
-        return False
-    if no_neg and number < 0:
-        return False
-    if no_pos and number > 0:
-        return False
-    if no_zero and number == 0:
-        return False
-    return True
-
-
-def numbers_ok(num_list, no_inf=True, no_nan=True, no_neg=False, no_pos=False,
-               no_zero=False):
-    if not isinstance(num_list, list):
-        num_list = [num_list]
-    for i in num_list:
-        if not number_ok(i, no_inf=no_inf, no_nan=no_nan, no_neg=no_neg,
-                         no_pos=no_pos, no_zero=no_zero):
+def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
+              no_nan=True, no_neg=False, no_pos=False, no_zero=False):
+    if not isinstance(number, list):
+        number = [number]
+    for i in number:
+        if only_integer and not isinstance(i, int):
+            return False
+        if no_boolean and isinstance(i, bool):
+            return False
+        if not isinstance(i, int) and not isinstance(i, float):
+            return False
+        if no_inf and math.isinf(i):
+            return False
+        if no_nan and math.isnan(i):
+            return False
+        if no_neg and i < 0:
+            return False
+        if no_pos and i > 0:
+            return False
+        if no_zero and i == 0:
             return False
     return True
 
@@ -126,6 +116,8 @@ def int_list_to_seq_str(int_list, space=True):
 
 
 def channel_char(chan_num):
+    if not isinstance(chan_num, int) and not isinstance(chan_num, float):
+        return ''
     if not number_ok(chan_num, no_neg=True):
         return ''
     clist = nmp.CHAN_LIST
