@@ -3,10 +3,10 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import nm_configs as nmc
 from nm_container import NMObject
 from nm_container import Container
 from nm_folder import Folder
+import nm_preferences as nmp
 import nm_utilities as nmu
 
 
@@ -16,18 +16,15 @@ class Test(object):
     """
 
     def __init__(self, manager, fxns):
-        self.__manager = manager
-        self.__fxns = fxns
-        self.__quiet = fxns['quiet']
-        self.__alert = fxns['alert']
-        self.__error = fxns['error']
-        self.__history = fxns['history']
+        self._manager = manager
+        self._fxns = fxns
+        self._history = fxns['history']
 
     def container(self):
-        nm = self.__manager
+        nm = self._manager
         nm.configs.quiet = False
-        self.__history('start...')
-        c = Container(nm.project, 'ContainerTest', self.__fxns,
+        self._history('start...')
+        c = Container(nm.project, 'ContainerTest', self._fxns,
                       prefix='Test', rename=True, duplicate=True)
         o = c.new()
         newname = o.name
@@ -60,25 +57,27 @@ class Test(object):
         return True
 
     def project(self):
-        nm = self.__manager
+        nm = self._manager
         nm.configs.quiet = False
-        self.__history('start...')
+        self._history('start...')
         print(nm.project.content)
         nm.project_new('ProjectNew$')
         nm.project_new('ProjectNew')
         return True
 
     def folder(self):
-        nm = self.__manager
+        nm = self._manager
         nm.configs.quiet = False
-        self.__history('start...')
+        self._history('start...')
         noise = [0, 0.1]
         dims = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',
-                'ylabel': ['Vmem', 'Icmd'], 'yunits': ['mV', 'pA']}
+                'ylabel': {'A': 'Vmem', 'B': 'Icmd'},
+                'yunits': {'A': 'mV', 'B': 'pA'}}
         nm.folder.new('FolderTest')
-        nm.dataseries.make(name='Data', channels=3, epochs=3, samples=5,
-                           noise=noise, dims=dims)
+        ds = nm.dataseries.new(name='Data')
+        if ds:
+            ds.make(channels=3, epochs=3, samples=5, noise=noise, dims=dims)
         print(nm.folder.select.content_tree)
         nm.eset.add_epoch('Set1', [0, 1, 2])
         dname = 'DataB0'
@@ -96,7 +95,7 @@ class Test(object):
         for d in s1.theset:
             if d.name.lower() == dname.lower():
                 print('found in Set1: ' + d.name)
-        f = Folder(nm.project, 'FolderTest', self.__fxns)
+        f = Folder(nm.project, 'FolderTest', self._fxns)
         nm.folder.add(f)
         nm.folder.new()
         nm.folder.rename('select', 'FolderNew1')
@@ -105,23 +104,21 @@ class Test(object):
         return True
 
     def data(self):
-        nm = self.__manager
+        nm = self._manager
         nm.configs.quiet = False
-        self.__history('start...')
+        self._history('start...')
         noise = [0, 0.1]
         dims = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',
-                'ylabel': ['Vmem', 'Icmd'], 'yunits': ['mV', 'pA']}
+                'ylabel': {'A': 'Vmem', 'B': 'Icmd'},
+                'yunits': {'A': 'mV', 'B': 'pA'}}
         if not nm.folder.select or not nm.dataseries:
             return False
-        nm.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
-                           noise=noise, dims=dims)
-        nm.dataseries.make(name='Data', channels=2, epochs=3, samples=5,
-                           noise=noise, dims=dims)
-        # self.dataseries.make(name='Wave', channels=3, epochs=8, samples=5,
-        #                     noise=noise)
-        x = nm.dataseries.select.xdata_make(name='x_Wave', samples=5,
-                                            dims=dims)
+        ds = nm.dataseries.new('Data')
+        if ds:
+            ds.make(channels=2, epochs=3, samples=5, noise=noise, dims=dims)
+            ds.make(channels=2, epochs=3, samples=5, noise=noise, dims=dims)
+            x = ds.xdata_make(name='x_Wave', samples=5, dims=dims)
         for i in range(0, len(x.thedata)):
             x.thedata[i] = i * 0.01
         nm.data.select = 'DataA0'

@@ -7,80 +7,81 @@ Created on Sun Dec 15 09:23:07 2019
 """
 import inspect
 import unittest
-from nm_container import NMObject
-from nm_container import Container
+import numpy as np
+
 from nm_channel import Channel
 from nm_channel import ChannelContainer
+from nm_container import NMObject
+from nm_container import Container
+from nm_data import Data
+from nm_data import DataContainer
+from nm_dataseries import DataSeries
+from nm_dataseries import DataSeriesContainer
 from nm_manager import Manager
 from nm_project import Project
 import nm_utilities as nmu
 
+nm = Manager(quiet=True)
 BADNAME = 'b&dn@me!'
 
 
 class Test(unittest.TestCase):
 
     def test_nmobject(self):
-        quiet = True
-        nm = Manager(quiet=quiet)
+        nm.configs.quiet = True
         parent = self
-        n0 = 'object0'
-        n1 = 'object1'
-        fxns = nm._Manager__fxns
-        badfxns = nm._Manager__fxns
-        badfxns.update({'test': None})
+        name0 = 'object0'
+        name1 = 'object1'
         with self.assertRaises(ValueError):
-            o0 = NMObject(parent, None, fxns, rename=True)
+            o0 = NMObject(parent, None, fxns=nm._fxns, rename=True)
         with self.assertRaises(ValueError):
-            o0 = NMObject(parent, BADNAME, fxns, rename=True)
-        with self.assertRaises(ValueError):
-            o0 = NMObject(parent, n0, badfxns, rename=True)
-        o0 = NMObject(parent, n0, fxns, rename=True)
-        o1 = NMObject(parent, n1, fxns, rename=False)
-        self.assertEqual(o0.name, n0)
-        self.assertEqual(o1.name, n1)
+            o0 = NMObject(parent, BADNAME, fxns=nm._fxns, rename=True)
+        # with self.assertRaises(ValueError):
+        #    o0 = NMObject(parent, name0, badfxns, rename=True)
+        o0 = NMObject(parent, name0, fxns=nm._fxns, rename=True)
+        o1 = NMObject(parent, name1, fxns=nm._fxns, rename=False)
+        self.assertEqual(o0.name, name0)
+        self.assertEqual(o1.name, name1)
         # parameters()
         k = list(o0.parameters.keys())
-        self.assertEqual(k, ['name', 'rename', 'date', 'source'])
+        self.assertEqual(k, ['name', 'rename', 'date', 'modified', 'source'])
         # name()
         o0.name = 'select'  # bad
-        self.assertEqual(o0.name, n0)
+        self.assertEqual(o0.name, name0)
         o0.name = 'default'  # bad
-        self.assertEqual(o0.name, n0)
+        self.assertEqual(o0.name, name0)
         o0.name = BADNAME
-        self.assertEqual(o0.name, n0)
-        o0.name = n1  # ok
-        self.assertEqual(o0.name, n1)
-        o1.name = n0  # cannot rename
-        self.assertEqual(o1.name, n1)
+        self.assertEqual(o0.name, name0)
+        o0.name = name1  # ok
+        self.assertEqual(o0.name, name1)
+        o1.name = name0  # cannot rename
+        self.assertEqual(o1.name, name1)
         # content()
-        self.assertEqual(o0.content, {'nmobject': n1})
-        self.assertEqual(o0.content_tree, {'nmobject': n1})
+        self.assertEqual(o0.content, {'nmobject': name1})
+        self.assertEqual(o0.content_tree, {'nmobject': name1})
         # tree_path()
-        self.assertEqual(o0.tree_path(), n1)
-        self.assertEqual(o0.tree_path_list(), [n1])
-        # equal()
-        self.assertFalse(o1.equal(None, alert=True))
-        self.assertFalse(o1.equal(nm, alert=True))
-        self.assertFalse(o1.equal(o0, alert=True))
-        self.assertFalse(o1.equal(o0, ignore_name=True, alert=True))
-        # copy()
-        o0.name = n0
-        self.assertFalse(o1.copy(None))
-        self.assertFalse(o1.copy(nm))
-        self.assertTrue(o1.copy(o0, copy_name=False))
-        self.assertFalse(o1.equal(o0, ignore_name=False, alert=True))
-        self.assertTrue(o1.equal(o0, ignore_name=True, alert=True))
-        self.assertTrue(o1.copy(o0, copy_name=True))
-        self.assertTrue(o1.equal(o0, alert=True))
+        self.assertEqual(o0.tree_path(), name1)
+        self.assertEqual(o0.tree_path_list(), [name1])
+        # _equal()
+        self.assertFalse(o1._equal(None, alert=True))
+        self.assertFalse(o1._equal(self, alert=True))
+        self.assertFalse(o1._equal(o0, alert=True))
+        self.assertFalse(o1._equal(o0, ignore_name=True, alert=True))
+        # _copy()
+        o0.name = name0
+        self.assertFalse(o1._copy(None))
+        self.assertFalse(o1._copy(self))
+        self.assertTrue(o1._copy(o0, copy_name=False))
+        self.assertFalse(o1._equal(o0, ignore_name=False, alert=True))
+        self.assertTrue(o1._equal(o0, ignore_name=True, alert=True))
+        self.assertTrue(o1._copy(o0, copy_name=True))
+        self.assertTrue(o1._equal(o0, alert=True))
 
     def test_container(self):
-        quiet = True
-        nm = Manager(quiet=quiet)
+        nm.configs.quiet = True
         parent = self
-        n0 = 'container0'
-        n1 = 'container1'
-        fxns = nm._Manager__fxns
+        name0 = 'container0'
+        name1 = 'container1'
         p0 = 'TestA'
         p1 = 'TestB'
         type_ = 'NMObject'
@@ -88,29 +89,29 @@ class Test(unittest.TestCase):
         for i in range(0, 6):
             n.append(p0 + str(i))
         with self.assertRaises(ValueError):
-            c0 = Container(parent, n0, fxns, None, p0, rename=True,
-                           duplicate=True)
+            c0 = Container(parent, name0, fxns=nm._fxns, type_=None, prefix=p0,
+                           rename=True, duplicate=True)
         with self.assertRaises(ValueError):
-            c0 = Container(parent, n0, fxns, BADNAME, p0, rename=True,
-                           duplicate=True)
+            c0 = Container(parent, name0, fxns=nm._fxns, type_=BADNAME,
+                           prefix=p0, rename=True, duplicate=True)
         with self.assertRaises(ValueError):
-            c0 = Container(parent, n0, fxns, type_, None, rename=True,
-                           duplicate=True)
+            c0 = Container(parent, name0, fxns=nm._fxns, type_=type_,
+                           prefix=None, rename=True, duplicate=True)
         with self.assertRaises(ValueError):
-            c0 = Container(parent, n0, fxns, type_, BADNAME, rename=True,
-                           duplicate=True)
-        c0 = Container(parent, n0, fxns, type_, p0, rename=True,
-                       duplicate=True)
-        c1 = Container(parent, n1, fxns, type_, p1, rename=False,
-                       duplicate=False)
-        self.assertEqual(c0.name, n0)
-        self.assertEqual(c1.name, n1)
+            c0 = Container(parent, name0, fxns=nm._fxns, type_=type_,
+                           prefix=BADNAME, rename=True, duplicate=True)
+        c0 = Container(parent, name0, fxns=nm._fxns, type_=type_, prefix=p0,
+                       rename=True, duplicate=True)
+        c1 = Container(parent, name1, fxns=nm._fxns, type_=type_, prefix=p1,
+                       rename=False, duplicate=False)
+        self.assertEqual(c0.name, name0)
+        self.assertEqual(c1.name, name1)
         self.assertEqual(c0.prefix, p0)
         self.assertEqual(c1.prefix, p1)
         # parameters()
         k = list(c0.parameters.keys())
-        self.assertEqual(k, ['name', 'rename', 'date', 'source', 'type',
-                             'prefix', 'duplicate'])
+        self.assertEqual(k, ['name', 'rename', 'date', 'modified', 'source',
+                             'type', 'prefix', 'duplicate'])
         # prefix()
         c0.prefix = 'select'  # bad
         self.assertEqual(c0.prefix, p0)
@@ -146,7 +147,7 @@ class Test(unittest.TestCase):
         o = c0.new(n[2])
         self.assertEqual(o.name, n[2])
         # skip n[3]
-        o = NMObject(parent, n[4], fxns, rename=True)
+        o = NMObject(parent, n[4], fxns=nm._fxns, rename=True)
         o = c0.new(name=n[4], nmobj=o)
         self.assertEqual(o.name, n[4])
         o = c0.new()
@@ -158,8 +159,6 @@ class Test(unittest.TestCase):
         # names()
         self.assertEqual(c0.names, [n[0], n[1], n[2], n[4], n[5]])
         # content()
-        print(c0.content)
-        print(c0.content_tree)
         c = c0.content
         self.assertEqual(list(c.keys()), ['nmobjects', 'select'])
         self.assertEqual(c['nmobjects'], c0.names)
@@ -169,8 +168,8 @@ class Test(unittest.TestCase):
         self.assertEqual(c['nmobjects'], c0.names)
         self.assertEqual(c['select'], c0.get().name)
         # tree_path()
-        self.assertEqual(c0.tree_path(), n0)
-        self.assertEqual(c0.tree_path_list(), [n0])
+        self.assertEqual(c0.tree_path(), name0)
+        self.assertEqual(c0.tree_path_list(), [name0])
         # item_num()
         self.assertEqual(c0.item_num(n[0]), 0)
         self.assertEqual(c0.item_num(n[1]), 1)
@@ -222,7 +221,7 @@ class Test(unittest.TestCase):
         c0.select = BADNAME
         self.assertEqual(c0.select.name, s)
         c0.select = n[3]  # does not exist
-        if quiet:
+        if nm.configs.quiet:
             self.assertEqual(c0.select.name, s)
         c0.select = n[0]  # ok
         self.assertEqual(c0.select.name, n[0])
@@ -247,18 +246,18 @@ class Test(unittest.TestCase):
         self.assertIsNone(c0.duplicate(BADNAME, 'default'))
         o = c0.get(n[0])
         oc = c0.duplicate(n[0], 'default')
-        self.assertFalse(o.equal(oc, alert=True))
-        self.assertTrue(o.equal(oc, ignore_name=True, alert=True))
+        self.assertFalse(o._equal(oc, alert=True))
+        self.assertTrue(o._equal(oc, ignore_name=True, alert=True))
         self.assertIsNone(c1.duplicate('select', 'default'))  # cannot dup.
-        # equal()
-        self.assertFalse(c0.equal(c1, alert=True))
-        self.assertFalse(c0.equal(c1, ignore_name=True, alert=True))
-        # copy()
-        c1.copy(c0, copy_name=False)
-        self.assertFalse(c1.equal(c0, alert=True))
-        self.assertFalse(c1.equal(c0, ignore_name=True, alert=True))
-        c1.copy(c0, copy_name=False, clear_before_copy=True)
-        self.assertTrue(c1.equal(c0, ignore_name=True, alert=True))
+        # _equal()
+        self.assertFalse(c0._equal(c1, alert=True))
+        self.assertFalse(c0._equal(c1, ignore_name=True, alert=True))
+        # _copy()
+        c1._copy(c0, copy_name=False)
+        self.assertFalse(c1._equal(c0, alert=True))
+        self.assertFalse(c1._equal(c0, ignore_name=True, alert=True))
+        c1._copy(c0, copy_name=False, clear_before_copy=True)
+        self.assertTrue(c1._equal(c0, ignore_name=True, alert=True))
         # Kill()
         self.assertFalse(c0.kill(name=None, ask=False))  # bad
         self.assertFalse(c0.kill(name='', ask=False))  # bad
@@ -272,56 +271,88 @@ class Test(unittest.TestCase):
         self.assertEqual(c1.count, 0)
         self.assertIsNone(c1.select)
 
-    def test_project(self):
-        quiet = False
-        nm = Manager(quiet=quiet)
+    def test_data(self):
+        nm.configs.quiet = False
         parent = self
-        n0 = 'Project0'
-        n1 = 'Project1'
-        fxns = nm._Manager__fxns
+        name0 = 'RecordA0'
+        name1 = 'RecordA1'
+        samples = 10
+        fill_value = np.nan
+        dtype = np.float64
+        noise = [0, 1]
+        dims0 = {'xstart': -10, 'xdelta': 0.01,
+                 'xlabel': 'time', 'xunits': 'ms',
+                 'ylabel': 'Vmem', 'yunits': 'mV',
+                 'dtype': dtype}
+        dims1 = {'xstart': 10, 'xdelta': 0.05,
+                 'xlabel': 'time', 'xunits': 's',
+                 'ylabel': 'Imem', 'yunits': 'pA',
+                 'dtype': dtype}
+        d0 = Data(parent, name0, fxns=nm._fxns, samples=samples,
+                  fill_value=fill_value, noise=noise, dims=dims0)
+        d1 = Data(parent, name1, fxns=nm._fxns, samples=samples,
+                  fill_value=fill_value, noise=noise, dims=dims1)
+        d0.dims = dims0
+        d0.dims = dims1
+        self.assertEqual(d0.dims, dims1)
+        print(type(d0.ndarray))
+        print(isinstance(d0.ndarray, np.ndarray))
+        print(d0.ndarray)
+        d0.ndarray.clip(-1, 1, out=d0.ndarray)
+        print(d0.ndarray.flags)
+        # print(d0.parameters)
+
+    def test_project(self):
+        nm.configs.quiet = True
+        parent = self
+        name0 = 'Project0'
+        name1 = 'Project1'
         noise = [0, 0.1]
         dims = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',
-                'ylabel': ['Vmem', 'Icmd'], 'yunits': ['mV', 'pA']}
-        p0 = Project(parent, n0, fxns)
+                'ylabel': {'A': 'Vmem', 'B': 'Icmd'},
+                'yunits': {'A': 'mV', 'B': 'pA'}}
+        """
+        p0 = Project(parent, name0, fxns=nm._fxns)
+        p1 = Project(parent, name1, fxns=nm._fxns)
         f = p0.folder.new()
-        f.dataseries.make(name='Record', channels=1, epochs=3, samples=5,
-                          noise=noise, dims=dims)
+        ds = f.dataseries.new('Record')
+        ds.make(channels=1, epochs=3, samples=5, noise=noise, dims=dims)
         f = p0.folder.new()
-        f.dataseries.make(name='Wave', channels=2, epochs=3, samples=5,
-                          noise=noise, dims=dims)
-        p1 = Project(parent, n1, fxns)
-        # p1.copy(p0)
-        # self.assertTrue(p1.equal(p0, alert=True))
+        ds = f.dataseries.new('Wave')
+        ds.make(channels=2, epochs=3, samples=5, noise=noise, dims=dims)
+        # p1._copy(p0)
+        # self.assertTrue(p1._equal(p0, alert=True))
+        """
 
     def test_channel(self):
-        quiet = True
-        nm = Manager(quiet=quiet)
+        nm.configs.quiet = True
         parent = self
-        n0 = 'A'
-        n1 = 'B'
-        fxns = nm._Manager__fxns
-        o0 = Channel(parent, n0, fxns)
-        o0.name = n1  # rename = False
-        self.assertNotEqual(o0.name, n1)
-        o1 = Channel(parent, n1, fxns)
-        o1.copy(o0)
-        self.assertTrue(o1.equal(o0, alert=True))
+        name0 = 'A'
+        name1 = 'B'
+        """
+        o0 = Channel(parent, name0, fxns=nm._fxns)
+        o0.name = name1  # rename = False
+        self.assertNotEqual(o0.name, name1)
+        o1 = Channel(parent, name1, fxns=nm._fxns)
+        o1._copy(o0)
+        self.assertTrue(o1._equal(o0, alert=True))
+        """
 
     def test_channel_container(self):
-        quiet = True
-        nm = Manager(quiet=quiet)
+        nm.configs.quiet = True
         parent = self
-        n0 = 'ChannelContainer0'
-        n1 = 'ChannelContainer1'
-        fxns = nm._Manager__fxns
-        c0 = ChannelContainer(parent, n0, fxns)
+        name0 = 'ChannelContainer0'
+        name1 = 'ChannelContainer1'
+        """
+        c0 = ChannelContainer(parent, name0, fxns=nm._fxns)
         c0.new()
         c0.new()
         c0.new()
-        c1 = ChannelContainer(parent, n1, fxns)
-        c1.copy(c0)
-        self.assertTrue(c1.equal(c0, alert=True))
+        c1 = ChannelContainer(parent, name1, fxns=nm._fxns)
+        c1._copy(c0)
+        self.assertTrue(c1._equal(c0, alert=True))
+        """
 
     def test_name_ok(self):
         self.assertTrue(nmu.name_ok('test'))

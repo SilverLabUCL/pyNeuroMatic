@@ -7,7 +7,8 @@ Copyright 2019 Jason Rothman
 import math
 import inspect
 from colorama import Fore, Back, Style
-import nm_configs as nmc
+
+import nm_preferences as nmp
 
 
 def name_ok(name):
@@ -127,7 +128,7 @@ def int_list_to_seq_str(int_list, space=True):
 def channel_char(chan_num):
     if not number_ok(chan_num, no_neg=True):
         return ''
-    clist = nmc.CHAN_LIST
+    clist = nmp.CHAN_LIST
     if chan_num >= 0 and chan_num < len(clist):
         return clist[chan_num]
     return ''
@@ -136,7 +137,7 @@ def channel_char(chan_num):
 def channel_num(chan_char):
     if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return -1
-    clist = nmc.CHAN_LIST
+    clist = nmp.CHAN_LIST
     for i in range(0, len(clist)):
         if clist[i].lower() == chan_char.lower():
             return i

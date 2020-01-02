@@ -5,7 +5,7 @@ Created on Fri Nov  1 08:22:44 2019
 
 @author: jason
 """
-import nm_configs as nmc
+import nm_preferences as nmp
 import nm_utilities as nmu
 
 
@@ -16,7 +16,7 @@ class Stats(object):
 
     def __init__(self, fxns):
         if list(fxns.keys()) == ['quiet', 'alert', 'error', 'history']:
-            self.__fxns = fxns
+            self._fxns = fxns
         else:
             e = 'bad fxn arg:  ' + str(fxns)
             raise ValueError(e)
@@ -26,20 +26,20 @@ class Stats(object):
         self.x1 = 5
 
     @property
-    def __quiet(self):
-        return self.__fxns['quiet']
+    def _quiet(self):
+        return self._fxns['quiet']
 
     @property
-    def __alert(self):
-        return self.__fxns['alert']
+    def _alert(self):
+        return self._fxns['alert']
 
     @property
-    def __error(self):
-        return self.__fxns['error']
+    def _error(self):
+        return self._fxns['error']
 
     @property
-    def __history(self):
-        return self.__fxns['history']
+    def _history(self):
+        return self._fxns['history']
 
     def max_(self, select='default'):
         print(select)
