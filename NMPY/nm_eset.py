@@ -23,6 +23,13 @@ class EpochSet(NMObject):
 
     # override
     @property
+    def _bad_names(self):
+        bn = super()._bad_names
+        bn.remove('all')
+        return bn
+
+    # override
+    @property
     def parameters(self):
         k = super().parameters
         # k.update({'theset': self.__theset})
@@ -116,6 +123,13 @@ class EpochSetContainer(Container):
         t = EpochSet(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t,
                          prefix=nmp.ESET_PREFIX)
+
+    # override
+    @property
+    def _bad_names(self):  # names not allowed
+        bn = super()._bad_names
+        bn.remove('all')
+        return bn
 
     # override, no super
     @property

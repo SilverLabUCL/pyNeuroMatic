@@ -17,6 +17,7 @@ DIMS = {'xstart': 0, 'xdelta': 1, 'xlabel': '', 'xunits': '', 'ylabel': '',
 
 NP_ORDER = 'C'
 NP_DTYPE = np.float64
+NP_FILL_VALUE = np.nan
 
 
 class Data(NMObject):
@@ -24,8 +25,8 @@ class Data(NMObject):
     NM Data class
     """
 
-    def __init__(self, parent, name, fxns={}, shape=[], fill_value=np.nan,
-                 noise=[], dims=DIMS):
+    def __init__(self, parent, name, fxns={}, shape=[],
+                 fill_value=NP_FILL_VALUE, dims=DIMS):
         super().__init__(parent, name, fxns=fxns)
         self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__np_array = None  # NumPy N-dimensional array
@@ -39,11 +40,7 @@ class Data(NMObject):
         self.__size = 0
         self._dims_set(dims, quiet=True)
         if shape:
-            if isinstance(noise, list) and len(noise) == 2:
-                self.__make_np_array_random_normal(shape, mean=noise[0],
-                                                   stdv=noise[1])
-            else:
-                self.__make_np_array(shape, fill_value=fill_value)
+            self.__make_np_array(shape, fill_value=fill_value)
 
     # override
     @property
@@ -81,6 +78,7 @@ class Data(NMObject):
         self.__xunits = data._Data__xunits
         self.__ylabel = data._Data__ylabel
         self.__yunits = data._Data__yunits
+        self._modified()
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -95,6 +93,7 @@ class Data(NMObject):
             e = 'bad np_array arg: expected type NumPy.ndarray'
             self._error(e, tp=self._tp)
         self.__np_array = np_ndarray
+        self._modified()
 
     @property
     def note(self):
@@ -156,6 +155,7 @@ class Data(NMObject):
         else:
             old = 'None'
         self.__xdata = xdata
+        self._modified()
         n = ('changed xdata from ' + nmu.quotes(str(old)) + ' to ' +
              nmu.quotes(str(self.__xdata.name)))
         self.note.new(note=n, quiet=True)
@@ -179,6 +179,7 @@ class Data(NMObject):
             return True
         old = self.__xstart
         self.__xstart = xstart
+        self._modified()
         n = ('changed xstart from ' + nmu.quotes(str(old)) + ' to ' +
              nmu.quotes(str(self.__xstart)))
         self.note.new(note=n, quiet=True)
@@ -202,6 +203,7 @@ class Data(NMObject):
             return True
         old = self.__xdelta
         self.__xdelta = xdelta
+        self._modified()
         n = ('changed xdelta from ' + nmu.quotes(str(old)) + ' to ' +
              nmu.quotes(str(self.__xdelta)))
         self.note.new(note=n, quiet=True)
@@ -225,6 +227,7 @@ class Data(NMObject):
             return True
         old = self.__xlabel
         self.__xlabel = xlabel
+        self._modified()
         n = ('changed xlabel from ' + nmu.quotes(str(old)) + ' to ' +
              nmu.quotes(str(self.__xlabel)))
         self.note.new(note=n, quiet=True)
@@ -248,6 +251,7 @@ class Data(NMObject):
             return True
         old = self.__xunits
         self.__xunits = xunits
+        self._modified()
         n = ('changed xunits from ' + nmu.quotes(str(old)) + ' to ' +
              nmu.quotes(str(self.__xunits)))
         self.note.new(note=n, quiet=True)
@@ -271,6 +275,7 @@ class Data(NMObject):
             return True
         old = self.__ylabel
         self.__ylabel = ylabel
+        self._modified()
         n = ('changed ylabel from ' + nmu.quotes(str(old)) + ' to ' +
              nmu.quotes(str(self.__ylabel)))
         self.note.new(note=n, quiet=True)
@@ -294,6 +299,7 @@ class Data(NMObject):
             return True
         old = self.__yunits
         self.__yunits = yunits
+        self._modified()
         n = ('changed yunits from ' + nmu.quotes(str(old)) + ' to ' +
              nmu.quotes(str(self.__yunits)))
         self.note.new(note=n, quiet=True)
@@ -315,6 +321,7 @@ class Data(NMObject):
             self._error(e, tp=self._tp, quiet=quiet)
             return False
         self.__np_array = np.random.normal(mean, stdv, shape)
+        self._modified()
         # dtype = float64
         n = ('created data array (numpy.random.normal): shape=' +
              str(shape) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
@@ -331,6 +338,7 @@ class Data(NMObject):
             self._error(e, tp=self._tp, quiet=quiet)
             return False
         self.__np_array = np.full(shape, fill_value, dtype=dtype, order=order)
+        self._modified()
         n = ('created numpy array (numpy.full): shape=' + str(shape) +
              ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
         self.note.new(note=n, quiet=True)
@@ -374,16 +382,21 @@ class DataContainer(Container):
     # override
     def kill(self, name, all_=False, ask=True, quiet=nmp.QUIET):
         klist = super().kill(name=name, all_=all_, ask=ask, quiet=quiet)
+        dsc = self.__dataseries_container
         for d in klist:  # remove data refs from data series and sets
-            for i in range(0, self.__dataseries_container.count):
-                ds = self.__dataseries_container.get(item_num=i)
+            for i in range(0, dsc.count):
+                ds = dsc.get(item_num=i)
                 if not ds or not ds.thedata:
                     continue
                 for cdata in ds.thedata:
                     if d in cdata:
                         cdata.remove(d)
+                        dsc._modified()
+                        ds._modified()
                 for j in range(0, ds.eset.count):
                     s = ds.eset.get(item_num=j)
                     if d in s.theset:
                         s.discard(d)
+                        ds.eset._modified()
+                        s._modified()
         return klist
