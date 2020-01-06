@@ -12,16 +12,13 @@ from nm_eset import EpochSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 
-DIMS = {'xstart': 0, 'xdelta': 1, 'xlabel': '', 'xunits': '', 'ylabel': {},
-        'yunits': {}}
-
 
 class DataSeries(NMObject):
     """
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, dims=DIMS):
+    def __init__(self, parent, name, fxns={}, dims={}):
         # name is data-series prefix
         super().__init__(parent, name, fxns=fxns, rename=False)
         cc = ChannelContainer(self, 'Channels', fxns=fxns)
@@ -77,6 +74,10 @@ class DataSeries(NMObject):
     # override
     def _copy(self, dataseries, copy_name=True, quiet=nmp.QUIET):
         name = self.name
+        if not isinstance(dataseries, DataSeries):
+            e = nmu.type_error(dataseries, 'dataseries', 'DataSeries')
+            raise TypeError(e)
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(dataseries, copy_name=copy_name, quiet=True):
             return False
         c = dataseries._DataSeries__channel_container
@@ -175,8 +176,7 @@ class DataSeries(NMObject):
             eset_list = [eset_list]
         if not isinstance(select, bool):
             select = True
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         r = []
         init_select = select or not self.__eset_container.select
         for s in nmp.ESET_LIST:
@@ -278,8 +278,7 @@ class DataSeries(NMObject):
     def get_data(self, chan_list=['ALL'], epoch_list=[-2], quiet=nmp.QUIET):
         if not self.__thedata:
             return {}
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         clist = self._get_channel_list(chan_list=chan_list)
         if not clist:
             return {}
@@ -385,11 +384,10 @@ class DataSeries(NMObject):
         if 'yunits' in dims.keys():
             self.yunits = dims['yunits']
 
-    def xdata_make(self, name, shape=[], dims=DIMS, quiet=nmp.QUIET):
+    def xdata_make(self, name, shape=[], dims={}, quiet=nmp.QUIET):
         if not isinstance(dims, dict):
             dims = DIMS
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         dims.update({'xstart': 0, 'xdelta': 1})  # enforce
         if 'xlabel' in dims.keys():  # switch x and y
             dims.update({'ylabel': dims['xlabel']})  # NOT DICT TYPE
@@ -401,7 +399,7 @@ class DataSeries(NMObject):
         if not d:
             return None
         for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
-            d.thedata[i] = i
+            d.np_array[i] = i
         self.xdata = d
         return d
 
@@ -427,8 +425,7 @@ class DataSeries(NMObject):
         if xdata is None:
             pass  # ok
         elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
-            self._error('expected type Data', tp=self._tp)
-            return False
+            raise TypeError(nmu.type_error(xdata, 'xdata', 'Data'))
         for c, cdata in self.__thedata.items():
             for d in cdata:
                 d.xdata = xdata
@@ -608,8 +605,7 @@ class DataSeries(NMObject):
 
     def update(self, quiet=nmp.QUIET):
         n = self.name
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         foundsomething = False
         htxt = []
         self.__thedata = {}
@@ -631,11 +627,10 @@ class DataSeries(NMObject):
             self._history(h, tp=self._tp, quiet=quiet)
         return True
 
-    def make(self, channels=1, epochs=1, shape=[], fill_value=0, noise=[],
-             dims={}, quiet=nmp.QUIET):
+    def make(self, channels=1, epochs=1, shape=[], fill_value=0, dims={},
+             quiet=nmp.QUIET):
         n = self.name
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not nmu.number_ok(channels, no_neg=True, no_zero=True):
             e = 'bad channels argument: ' + str(channels)
             self._error(e, tp=self._tp, quiet=quiet)
@@ -660,7 +655,8 @@ class DataSeries(NMObject):
             dlist = self._get_items(c)  # search for existing data
             epoch_bgn.append(len(dlist))
             self.__thedata.update({c: dlist})
-            self.channel.new(name=c, quiet=True)
+            if not self.channel.exists(c):
+                self.channel.new(name=c, quiet=True)
         e_bgn = max(epoch_bgn)
         e_end = e_bgn + epochs
         for i in range(0, channels):
@@ -670,8 +666,7 @@ class DataSeries(NMObject):
             for j in range(e_bgn, e_end):
                 name2 = n + c + str(j)
                 d = self.data.new(name=name2, shape=shape,
-                                  fill_value=fill_value, noise=noise,
-                                  quiet=True)
+                                  fill_value=fill_value, quiet=True)
                 if d:
                     elist.append(j)
                     dlist.append(d)
@@ -713,7 +708,7 @@ class DataSeriesContainer(Container):
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
         # name is the data-series name
-        o = DataSeries(self._parent, name, self._fxns)
+        o = DataSeries(self._parent, 'tempname', self._fxns)
         ds = super().new(name=name, nmobj=o, select=select, quiet=quiet)
         if ds:
             ds.update(quiet=quiet)

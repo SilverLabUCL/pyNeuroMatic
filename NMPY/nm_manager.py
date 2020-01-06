@@ -35,6 +35,9 @@ class Manager(object):
                     EpochSet (All, Set1, Set2...)
     """
     def __init__(self, name='NeuroMatic Manager', quiet=nmp.QUIET):
+        if not isinstance(name, str):
+            name = 'NeuroMatic Manager'
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         self.__name = name
         self.__project = None
         self.__date = str(datetime.datetime.now())
@@ -44,8 +47,6 @@ class Manager(object):
         self.__test = Test(self, self._fxns)
         self._history('created ' + nmu.quotes(name), quiet=quiet)
         self.project_new(quiet=quiet)
-        # self.__test.container()
-        # self.__test.project()
         # self.__test.folder()
         # self.__test.data()
 
@@ -87,12 +88,11 @@ class Manager(object):
         """Create a new project"""
         if not isinstance(new_folder, bool):
             new_folder = True
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if not isinstance(name, str):
+            raise TypeError(nmu.type_error(name, 'name', 'string'))
         if not nmu.name_ok(name) or name.lower() == 'select':
-            e = 'name arg: bad string value ' + nmu.quotes(name)
-            self._error(e, quiet=quiet)
-            return None
+            raise ValueError('bad name:  ' + nmu.quotes(name))
         if not name or name.lower() == 'default':
             name = nmp.PROJECT_NAME
         if self.__project:

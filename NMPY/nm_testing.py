@@ -20,51 +20,6 @@ class Test(object):
         self._fxns = fxns
         self._history = fxns['history']
 
-    def container(self):
-        nm = self._manager
-        nm.configs.quiet = False
-        self._history('start...')
-        c = Container(nm.project, 'ContainerTest', self._fxns,
-                      prefix='Test', rename=True, duplicate=True)
-        o = c.new()
-        newname = o.name
-        c.new(newname)
-        newname = 'Test1'
-        c.new(newname)
-        c.new(select=False)
-        print('select=' + c.select.name)
-        c.select = 'Test'
-        c.select = 'Test1'
-        c.prefix = 'Testing'
-        c.new()
-        c.rename('select', 'TestX')
-        c.rename('TestX', 'TestXX')
-        o = c.get('Test2')
-        if o:
-            o.name = 'Test22'
-        print('count=' + str(c.count))
-        print(c.item_num('TESTXX'))
-        n = 'Test22'
-        if c.exists(n):
-            print(n + ' exists')
-        else:
-            print(n + ' does not exist')
-        c.duplicate('Test22', 'Test2')
-        c.duplicate('Test22', 'Test2')
-        c.kill('Test22')
-        print(c.content)
-        c.kill(all_=True)
-        return True
-
-    def project(self):
-        nm = self._manager
-        nm.configs.quiet = False
-        self._history('start...')
-        print(nm.project.content)
-        nm.project_new('ProjectNew$')
-        nm.project_new('ProjectNew')
-        return True
-
     def folder(self):
         nm = self._manager
         nm.configs.quiet = False
@@ -77,7 +32,7 @@ class Test(object):
         nm.folder.new('FolderTest')
         ds = nm.dataseries.new(name='Data')
         if ds:
-            ds.make(channels=3, epochs=3, shape=5, noise=noise, dims=dims)
+            ds.make(channels=3, epochs=3, shape=5, dims=dims)
         print(nm.folder.select.content_tree)
         nm.eset.add_epoch('Set1', [0, 1, 2])
         dname = 'DataB0'
@@ -116,11 +71,11 @@ class Test(object):
             return False
         ds = nm.dataseries.new('Data')
         if ds:
-            ds.make(channels=2, epochs=3, shape=5, noise=noise, dims=dims)
-            ds.make(channels=2, epochs=3, shape=5, noise=noise, dims=dims)
+            ds.make(channels=2, epochs=3, shape=5, dims=dims)
+            ds.make(channels=2, epochs=3, shape=5, dims=dims)
             x = ds.xdata_make(name='x_Wave', shape=5, dims=dims)
-        for i in range(0, len(x.thedata)):
-            x.thedata[i] = i * 0.01
+        for i in range(0, len(x.np_array)):
+            x.np_array[i] = i * 0.01
         nm.data.select = 'DataA0'
         nm.data.select.yunits = 'test'
         # self.dataseries.new('Test')

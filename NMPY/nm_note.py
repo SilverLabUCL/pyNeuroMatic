@@ -33,6 +33,9 @@ class Note(NMObject):
     # override
     def _copy(self, note, copy_name=True, quiet=nmp.QUIET):
         name = self.name
+        if not isinstance(note, Note):
+            raise TypeError(nmu.type_error(note, 'note', 'Note'))
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(note, copy_name=copy_name, quiet=True):
             return False
         self.__thenote = note._Note__thenote
@@ -68,6 +71,7 @@ class NoteContainer(Container):
     def new(self, note='', select=True, quiet=nmp.QUIET):
         if not isinstance(note, str):
             return None
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         name = self.name_next(quiet=quiet)
         o = Note(self._parent, name, self._fxns)
         n = super().new(name=name, nmobj=o, select=select, quiet=quiet)

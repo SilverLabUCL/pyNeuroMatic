@@ -44,6 +44,9 @@ class EpochSet(NMObject):
 
     def _copy(self, epochset, copy_name=True, quiet=nmp.QUIET):
         name = self.name
+        if not isinstance(epochset, EpochSet):
+            raise TypeError(nmu.type_error(epochset, 'epochset', 'EpochSet'))
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(epochset, copy_name=copy_name, quiet=True):
             return False
         # COPY theset
@@ -152,9 +155,7 @@ class EpochSetContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        if not name or name.lower() == 'default':
-            name = self.name_next(quiet=quiet)
-        o = EpochSet(self._parent, name, self._fxns)
+        o = EpochSet(self._parent, 'tempname', self._fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override
@@ -176,6 +177,7 @@ class EpochSetContainer(Container):
         return super().name_next_seq(prefix=prefix, first=first, quiet=quiet)
 
     def add_epoch(self, name, epoch, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if len(self._parent.thedata) == 0:
             tp = self._parent.tree_path(history=True)
             e = 'no selected data for dataseries ' + tp
@@ -226,6 +228,7 @@ class EpochSetContainer(Container):
         return True
 
     def remove_epoch(self, name, epoch, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if len(self._parent.thedata) == 0:
             tp = self._parent.tree_path(history=True)
             e = 'no selected data for dataseries ' + tp
@@ -285,6 +288,7 @@ class EpochSetContainer(Container):
 
     def equation(self, name, eq_list, lock=True, quiet=nmp.QUIET):
         """eq_list=[Set1', '|', 'Set2']"""
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if self.exists(name):
             s = self.get(name, quiet=quiet)
         else:
@@ -301,6 +305,7 @@ class EpochSetContainer(Container):
         s.eq_list = eq_list
 
     def clear(self, name, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if type(name) is not list:
             if name.lower() == 'all':
                 name = self.names

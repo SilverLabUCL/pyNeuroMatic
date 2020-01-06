@@ -46,6 +46,9 @@ class Folder(NMObject):
     # override
     def _copy(self, folder, copy_name=True, quiet=nmp.QUIET):
         name = self.name
+        if not isinstance(folder, Folder):
+            raise TypeError(nmu.type_error(folder, 'folder', 'Folder'))
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(folder, copy_name=copy_name, quiet=True):
             return False
         c = folder._Folder__data_container
@@ -91,20 +94,15 @@ class FolderContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        if not name or name.lower() == 'default':
-            name = self.name_next(quiet=quiet)
-        o = Folder(self._parent, name, self._fxns)
+        o = Folder(self._parent, 'tempname', self._fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     def add(self, folder, select=True, quiet=nmp.QUIET):
         if not isinstance(folder, Folder):
-            e = 'folder arg: expected type Folder'
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
+            raise TypeError(nmu.type_error(folder, 'folder', 'Folder'))
         if not isinstance(select, bool):
             select = True
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         name = folder.name
         if not name or not nmu.name_ok(name):
             e = 'bad folder name: ' + nmu.quotes(name)

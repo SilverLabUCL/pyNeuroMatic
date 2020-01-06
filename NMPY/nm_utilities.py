@@ -10,10 +10,16 @@ from colorama import Fore, Back, Style
 
 import nm_preferences as nmp
 
+DIM_LIST = ['xdata', 'xstart', 'xdelta', 'xlabel', 'xunits', 'ylabel',
+            'yunits']
+
 
 def name_ok(name):
     ok = ['_']  # list of symbols OK to include in names
-    if not isinstance(name, list):
+    if isinstance(name, list):
+        if not name:
+            return False
+    else:
         name = [name]
     for n in name:
         if not isinstance(n, str):
@@ -31,7 +37,10 @@ def name_ok(name):
 
 def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
               no_nan=True, no_neg=False, no_pos=False, no_zero=False):
-    if not isinstance(number, list):
+    if isinstance(number, list):
+        if not number:
+            return False
+    else:
         number = [number]
     for i in number:
         if only_integer and not isinstance(i, int):
@@ -148,6 +157,17 @@ def channel_char_exists(text, chan_char):
             return True
         return False  # check only last character
     return False
+
+
+def check_bool(var_bool, default_value):
+    if not isinstance(var_bool, bool):
+        return default_value
+    return var_bool
+
+
+def type_error(object, varName, varType):
+    return ('bad ' + varName + ':  expected ' + varType + ', got ' +
+            str(type(object)))
 
 
 def history(message, title='', tp='', frame=1, red=False, quiet=False):

@@ -36,6 +36,9 @@ class Channel(NMObject):
     # override
     def _copy(self, channel, copy_name=True, quiet=nmp.QUIET):
         name = self.name
+        if not isinstance(channel, Channel):
+            raise TypeError(nmu.type_error(channel, 'channel', 'Channel'))
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(channel, copy_name=copy_name, quiet=True):
             return False
         self.__graphXY = channel._Channel__graphXY
@@ -64,9 +67,7 @@ class ChannelContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        if not name or name.lower() == 'default':
-            name = self.name_next(quiet=quiet)
-        o = Channel(self._parent, name, self._fxns)
+        o = Channel(self._parent, 'tempname', self._fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override, no super
@@ -81,8 +82,7 @@ class ChannelContainer(Container):
         # NO PREFIX, Channel names are 'A', 'B'...
         if not isinstance(first, int):
             first = 0
-        if not isinstance(quiet, bool):
-            quiet = nmp.QUIET
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         first = 0  # enforce
         n = 10 + self.count
         for i in range(first, n):

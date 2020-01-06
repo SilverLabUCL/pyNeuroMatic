@@ -23,42 +23,63 @@ import nm_utilities as nmu
 
 nm = Manager(quiet=True)
 BADNAME = 'b&dn@me!'
-BADNAMES = [None, BADNAME, 'select', 'default', 'all']
 
 
 class Test(unittest.TestCase):
 
     def test_nmobject(self):
-        nm.configs.quiet = True
+        nm.configs.quiet = False
         parent = self
         name0 = 'object0'
         name1 = 'object1'
+        badtypes = [True, 1, float('nan'), [], {}, set(), None, self]
+        badnames = ['select', 'default', 'all']  # may need updating
         param_list = ['name', 'rename', 'date', 'modified', 'source']
-        # update param_list if new parameters are added
-        for bn in BADNAMES + ['']:
+        # param_list may need updating
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                o0 = NMObject(parent, b, fxns=nm._fxns, rename=True)
+        for b in badnames + ['', BADNAME]:
             with self.assertRaises(ValueError):
-                o0 = NMObject(parent, bn, fxns=nm._fxns, rename=True)
+                o0 = NMObject(parent, b, fxns=nm._fxns, rename=True)
         o0 = NMObject(parent, name0, fxns=nm._fxns, rename=True)
         o1 = NMObject(parent, name1, fxns=nm._fxns, rename=False)
         self.assertEqual(o0.name, name0)
         self.assertEqual(o1.name, name1)
+        # name_ok(()
+        for b in badtypes:
+            self.assertFalse(o1.name_ok(b))
+        for b in badnames + [BADNAME]:
+            self.assertFalse(o1.name_ok(b))
+        for b in badnames:
+            self.assertTrue(o1.name_ok(b, ok=badnames))
+        good = [name0, name1, '']
+        for g in good:
+            self.assertTrue(o1.name_ok(g))
+        # _bad_names()
+        self.assertEqual(badnames, o1._bad_names)  # check if list changes
         # parameters()
         plist = list(o0.parameters.keys())
-        self.assertEqual(plist, param_list)
-        # name()
-        for bn in BADNAMES + ['']:
+        self.assertEqual(plist, param_list)  # check if list changes
+        # _name_set()
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                o0._name_set(b)
+        for b in badnames + ['', BADNAME]:
             with self.assertRaises(ValueError):
-                o0.name = bn
-        o0.name = name1  # ok
-        self.assertEqual(o0.name, name1)
+                o0._name_set(b)
+        good = ['test', name0]
+        for g in good:
+            self.assertTrue(o0._name_set(g))
+            self.assertEqual(g, o0.name)
         with self.assertRaises(RuntimeError):
-            o1.name = name0  # rename = False
+            o1._name_set(name0)  # rename = False
         # content()
-        self.assertEqual(o0.content, {'nmobject': name1})
-        self.assertEqual(o0.content_tree, {'nmobject': name1})
+        self.assertEqual(o0.content, {'nmobject': o0.name})
+        self.assertEqual(o0.content_tree, {'nmobject': o0.name})
         # tree_path()
-        self.assertEqual(o0.tree_path(), name1)
-        self.assertEqual(o0.tree_path_list(), [name1])
+        self.assertEqual(o0.tree_path(), o0.name)
+        self.assertEqual(o0.tree_path_list(), [o0.name])
         # _equal()
         self.assertFalse(o1._equal(None, alert=True))
         self.assertFalse(o1._equal(self, alert=True))
@@ -66,10 +87,9 @@ class Test(unittest.TestCase):
         self.assertFalse(o1._equal(o0, ignore_name=True, alert=True))
         # _copy()
         o0.name = name0
-        with self.assertRaises(TypeError):
-            o1._copy(None)
-        with self.assertRaises(TypeError):
-            o1._copy(self)
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                o1._copy(b)
         self.assertTrue(o1._copy(o0, copy_name=False))
         self.assertFalse(o1._equal(o0, ignore_name=False, alert=True))
         self.assertTrue(o1._equal(o0, ignore_name=True, alert=True))
@@ -84,25 +104,30 @@ class Test(unittest.TestCase):
         p0 = 'TestA'
         p1 = 'TestB'
         type_ = 'NMObject'
-        # update param_list if new parameters are added
-        param_list = ['name', 'rename', 'date', 'modified', 'source', 'type',
-                      'prefix', 'duplicate']
+        badtypes = [True, 1, float('nan'), [], {}, set(), None, self]
+        badnames = ['select', 'default', 'all']  # may need updating
+        param_list = ['name', 'rename', 'date', 'modified', 'source']
+        param_list += ['type', 'prefix', 'duplicate']
+        # param_list may need updating
         n = []
         for i in range(0, 6):
             n.append(p0 + str(i))
-        with self.assertRaises(ValueError):
-            c0 = Container(parent, name0, fxns=nm._fxns, type_=None, prefix=p0,
-                           rename=True, duplicate=True)
-        with self.assertRaises(ValueError):
-            c0 = Container(parent, name0, fxns=nm._fxns, type_=BADNAME,
-                           prefix=p0, rename=True, duplicate=True)
-        with self.assertRaises(ValueError):
-            c0 = Container(parent, name0, fxns=nm._fxns, type_='',
-                           prefix=p0, rename=True, duplicate=True)
-        for bn in BADNAMES:
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                c0 = Container(parent, name0, fxns=nm._fxns, type_=b,
+                               prefix=p0, rename=True, duplicate=True)
+        for b in [BADNAME, '']:
+            with self.assertRaises(ValueError):
+                c0 = Container(parent, name0, fxns=nm._fxns, type_=b,
+                               prefix=p0, rename=True, duplicate=True)
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                c0 = Container(parent, name0, fxns=nm._fxns, type_=type_,
+                               prefix=b, rename=True, duplicate=True)
+        for b in badnames + [BADNAME]:
             with self.assertRaises(ValueError):
                 c0 = Container(parent, name0, fxns=nm._fxns, type_=type_,
-                               prefix=bn, rename=True, duplicate=True)
+                               prefix=b, rename=True, duplicate=True)
         c0 = Container(parent, name0, fxns=nm._fxns, type_=type_, prefix='',
                        rename=True, duplicate=True)
         c0 = Container(parent, name0, fxns=nm._fxns, type_=type_, prefix=p0,
@@ -117,33 +142,37 @@ class Test(unittest.TestCase):
         plist = list(c0.parameters.keys())
         self.assertEqual(plist, param_list)
         # prefix()
-        for bn in BADNAMES:
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                c0._prefix_set(b)
+        for b in badnames + [BADNAME]:
             with self.assertRaises(ValueError):
-                c0.prefix = bn
-        c0.prefix = p1 # ok
+                c0._prefix_set(b)
+        self.assertTrue(c0._prefix_set(p1))
         self.assertEqual(c0.prefix, p1)
         with self.assertRaises(RuntimeError):
             c1.prefix = p0  # rename = False
         self.assertEqual(c1.prefix, p1)
-        c0.prefix = p0  # reset to original
+        c0.prefix = p0  # reset
         # name_next()
         self.assertEqual(c0.name_next(), n[0])
         self.assertEqual(c0.name_next_seq(), 0)
         # new()
-        with self.assertRaises(ValueError):
-            c0.new(None)
-        with self.assertRaises(ValueError):
-            c0.new(BADNAME)
-        with self.assertRaises(ValueError):
-            c0.new('select')
-        with self.assertRaises(TypeError):
-            c0.new(nmobj=self)
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                c0.new(b)
+        for b in badnames + [BADNAME]:
+            if b.lower() == 'default':
+                continue  # 'default' is ok
+            with self.assertRaises(ValueError):
+                c0.new(b)
         o = c0.new('default')  # ok
         self.assertIsInstance(o, NMObject)
         self.assertEqual(o.name, n[0])
+        self.assertEqual(c0.select, o)
         self.assertEqual(c0.select.name, n[0])
         with self.assertRaises(RuntimeError):
-            c0.new(n[0])  # already exists  
+            c0.new(n[0])  # already exists
         self.assertEqual(c0.name_next(), n[1])
         self.assertEqual(c0.name_next_seq(), 1)
         o = c0.new(select=False)
@@ -178,26 +207,42 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.tree_path(), name0)
         self.assertEqual(c0.tree_path_list(), [name0])
         # item_num()
+        for b in badtypes:
+            self.assertEqual(c0.item_num(b), -1)
+        for b in badnames + [BADNAME]:
+            if b.lower() == 'select':
+                continue  # 'select' is ok
+            self.assertEqual(c0.item_num(b), -1)
         self.assertEqual(c0.item_num(n[0]), 0)
         self.assertEqual(c0.item_num(n[1]), 1)
         self.assertEqual(c0.item_num(n[2]), 2)
         self.assertEqual(c0.item_num(n[3]), -1)  # skipped
         self.assertEqual(c0.item_num(n[4]), 3)
         self.assertEqual(c0.item_num(n[5]), 4)
+        self.assertEqual(c0.item_num('select'), 4)
         # exists()
+        for b in badtypes:
+            self.assertFalse(c0.exists(b))
+        for b in badnames + [BADNAME]:
+            if b.lower() == 'select':
+                continue  # 'select' is ok
+            self.assertFalse(c0.exists(b))
         self.assertTrue(c0.exists(n[0]))
         self.assertTrue(c0.exists(n[1]))
         self.assertTrue(c0.exists(n[2]))
         self.assertFalse(c0.exists(n[3]))  # skipped
         self.assertTrue(c0.exists(n[4]))
         self.assertTrue(c0.exists(n[5]))
+        self.assertTrue(c0.exists('select'))
         # get()
-        with self.assertRaises(ValueError):
-            c0.get(None)
-        with self.assertRaises(ValueError):
-            c0.get(BADNAME)
-        with self.assertRaises(ValueError):
-            c0.get('default')
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                c0.get(b)
+        for b in badnames + [BADNAME]:
+            if b.lower() == 'select':
+                continue  # 'select' is ok
+            with self.assertRaises(ValueError):
+                c0.get(b)
         self.assertIsNone(c0.get(''))
         self.assertEqual(c0.get('select'), c0.select)
         self.assertIsInstance(c0.get(n[0]), NMObject)
@@ -211,14 +256,15 @@ class Test(unittest.TestCase):
         self.assertIsInstance(c0.get(item_num=2), NMObject)
         self.assertIsInstance(c0.get(item_num=3), NMObject)
         self.assertIsInstance(c0.get(item_num=4), NMObject)
-        with self.assertRaises(TypeError):
-            c0.get(item_num=float('inf'))
-        with self.assertRaises(TypeError):
-            c0.get(item_num=3.0)
-        with self.assertRaises(IndexError):
-            c0.get(item_num=5)
+        self.assertIsNone(c0.get(item_num=-1))
+        for b in [3.14, float('inf'), float('nan'), [1, 2, 3], {}]:
+            with self.assertRaises(TypeError):
+                c0.get(item_num=b)
+        for b in [5, 10, 100]:
+            with self.assertRaises(IndexError):
+                c0.get(item_num=b)
         # get_items()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             olist0 = c0.get_items(names=[n[0], n[1], n[2], None])
         with self.assertRaises(ValueError):
             olist0 = c0.get_items(names=[n[0], n[1], n[2], BADNAME])
@@ -235,7 +281,7 @@ class Test(unittest.TestCase):
         self.assertEqual(len(olist0), c0.count-1)
         # select()
         sname = c0.select.name
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             c0.select = None
         with self.assertRaises(ValueError):
             c0.select = BADNAME
@@ -249,13 +295,13 @@ class Test(unittest.TestCase):
         c0.select = n[0]  # ok
         self.assertEqual(c0.select.name, n[0])
         # rename()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             c0.rename(None, n[3])
         with self.assertRaises(ValueError):
             c0.rename(BADNAME, n[3])
         with self.assertRaises(ValueError):
             c0.rename('default', n[3])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             c0.rename(n[4], None)
         with self.assertRaises(ValueError):
             c0.rename(n[4], BADNAME)
@@ -277,13 +323,13 @@ class Test(unittest.TestCase):
         self.assertEqual(o.name, n[3])
         self.assertTrue(c0.rename(n[5], n[4]))
         # duplicate()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             c0.duplicate(None, 'default')
         with self.assertRaises(ValueError):
             c0.duplicate(BADNAME, 'default')
         with self.assertRaises(ValueError):
             c0.duplicate('default', 'default')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             c0.duplicate(n[0], None)
         with self.assertRaises(ValueError):
             c0.duplicate(n[0], BADNAME)
@@ -314,7 +360,7 @@ class Test(unittest.TestCase):
         c1._copy(c0, copy_name=False, clear_before_copy=True)
         self.assertTrue(c1._equal(c0, ignore_name=True, alert=True))
         # Kill()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             c0.kill(name=None, confirm=False)
         with self.assertRaises(ValueError):
             c0.kill(name=BADNAME, confirm=False)
@@ -340,28 +386,104 @@ class Test(unittest.TestCase):
         parent = self
         name0 = 'RecordA0'
         name1 = 'RecordA1'
-        shape = [3, 3]
+        shape = [5]  # test different shapes
         dims0 = {'xstart': 10, 'xdelta': 0.01,
                  'xlabel': 'time', 'xunits': 'ms',
                  'ylabel': 'Vmem', 'yunits': 'mV'}
         dims1 = {'xstart': -10, 'xdelta': 0.05,
                  'xlabel': 'time', 'xunits': 's',
                  'ylabel': 'Imem', 'yunits': 'pA'}
-        with self.assertRaises(ValueError):
-            d0 = Data(parent, None)
-        with self.assertRaises(ValueError):
-            d0 = Data(parent, BADNAME)
-        with self.assertRaises(ValueError):
-            d0 = Data(parent, 'select')
-        with self.assertRaises(ValueError):
-            d0 = Data(parent, 'default')
+        xdims = {'xstart': 0, 'xdelta': 1,
+                 'xlabel': 'sample', 'xunits': '',
+                 'ylabel': 'time', 'yunits': 's'}
         d0 = Data(parent, name0, fxns=nm._fxns, shape=shape,
                   fill_value=np.nan, dims=dims0)
         d1 = Data(parent, name1, fxns=nm._fxns, shape=shape,
                   fill_value=0, dims=dims1)
-        d0.dims = dims0
-        d0.dims = dims1
-        self.assertEqual(d0.dims, dims1)
+        xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=shape,
+                     fill_value=0, dims=xdims)
+        self.assertEqual(d0.dims, dims0)
+        self.assertEqual(d1.dims, dims1)
+        # dims()
+        dimlist = ['xdata', 'xstart', 'xdelta', 'xlabel', 'xunits', 'ylabel',
+                   'yunits']
+        self.assertEqual(dimlist, nmu.DIM_LIST)
+        bad = [None, [], 'test', 1.0, self]
+        for b in bad:
+            with self.assertRaises(TypeError):
+                d0._dims_set(b)
+        bad = {'xstart': 10, 'xd': 0.01}
+        with self.assertRaises(KeyError):
+            d0.dims = bad
+        self.assertTrue(d0._dims_set(dims1))
+        self.assertEqual(dims1, d0.dims)
+        # _xdata_set()
+        bad = [[], {}, 'test', 1.0, self]
+        for b in bad:
+            with self.assertRaises(TypeError):
+                d0._xdata_set(b)
+        good = [None, xdata]
+        for g in good:
+            self.assertTrue(d0._xdata_set(g))
+            self.assertEqual(g, d0.xdata)
+        # _xstart_set()
+        bad = [self, 'start', [], {}]
+        for b in bad:
+            with self.assertRaises(TypeError):
+                d0._xstart_set(b)
+        bad = [float('inf'), float('nan')]
+        for b in bad:
+            with self.assertRaises(ValueError):
+                d0._xstart_set(b)
+        good = [-100, 0, 100]
+        for g in good:
+            self.assertTrue(d0._xstart_set(g))
+            self.assertEqual(g, d0.xstart)
+        # _xdelta_set()
+        bad = [self, 'start', [], {}]
+        for b in bad:
+            with self.assertRaises(TypeError):
+                d0._xdelta_set(b)
+        bad = [float('inf'), float('nan'), 0]
+        for b in bad:
+            with self.assertRaises(ValueError):
+                d0._xdelta_set(b)
+        good = [-100, 1, 100]
+        for g in good:
+            self.assertTrue(d0._xdelta_set(g))
+            self.assertEqual(g, d0.xdelta)
+        # _xlabel_set()
+        # _xunits_set()
+        # _ylabel_set()
+        # _yunits_set()
+        bad = [self, float('inf'), 1, [], {}]
+        for b in bad:
+            with self.assertRaises(TypeError):
+                d0._xlabel_set(b)
+            with self.assertRaises(TypeError):
+                d0._xunits_set(b)
+            with self.assertRaises(TypeError):
+                d0._ylabel_set(b)
+            with self.assertRaises(TypeError):
+                d0._yunits_set(b)
+        good_list = ['test', '', BADNAME]
+        for s in good_list:
+            self.assertTrue(d0._xlabel_set(s))
+            self.assertTrue(d0._xunits_set(s))
+            self.assertTrue(d0._ylabel_set(s))
+            self.assertTrue(d0._yunits_set(s))
+            self.assertEqual(s, d0.xlabel)
+            self.assertEqual(s, d0.xunits)
+            self.assertEqual(s, d0.ylabel)
+            self.assertEqual(s, d0.yunits)
+        # _np_array_set()
+        bad = [self, 'test', float('inf'), 1, [], {}]
+        for b in bad:
+            with self.assertRaises(TypeError):
+                d0._np_array_set(b)
+        nparray = np.full(shape, 0)
+        self.assertTrue(d0._np_array_set(nparray))
+        # self.assertEqual(nparray, d0.np_array)
         # print(type(d0.np_array))
         # print(isinstance(d0.np_array, np.ndarray))
         # print(d0.np_array)
@@ -384,10 +506,10 @@ class Test(unittest.TestCase):
         p1 = Project(parent, name1, fxns=nm._fxns)
         f = p0.folder.new()
         ds = f.dataseries.new('Record')
-        ds.make(channels=1, epochs=3, shape=5, noise=noise, dims=dims)
+        ds.make(channels=1, epochs=3, shape=5, dims=dims)
         f = p0.folder.new()
         ds = f.dataseries.new('Wave')
-        ds.make(channels=2, epochs=3, shape=5, noise=noise, dims=dims)
+        ds.make(channels=2, epochs=3, shape=5, dims=dims)
         # p1._copy(p0)
         # self.assertTrue(p1._equal(p0, alert=True))
         """

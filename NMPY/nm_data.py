@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 nmpy - NeuroMatic in Python
@@ -12,9 +13,6 @@ from nm_note import NoteContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 
-DIMS = {'xstart': 0, 'xdelta': 1, 'xlabel': '', 'xunits': '', 'ylabel': '',
-        'yunits': ''}
-
 NP_ORDER = 'C'
 NP_DTYPE = np.float64
 NP_FILL_VALUE = np.nan
@@ -26,7 +24,7 @@ class Data(NMObject):
     """
 
     def __init__(self, parent, name, fxns={}, shape=[],
-                 fill_value=NP_FILL_VALUE, dims=DIMS):
+                 fill_value=NP_FILL_VALUE, dims={}):
         super().__init__(parent, name, fxns=fxns)
         self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__np_array = None  # NumPy N-dimensional array
@@ -40,7 +38,7 @@ class Data(NMObject):
         self.__size = 0
         self._dims_set(dims, quiet=True)
         if shape:
-            self.__make_np_array(shape, fill_value=fill_value)
+            self.__np_array_make(shape, fill_value=fill_value)
 
     # override
     @property
@@ -66,6 +64,9 @@ class Data(NMObject):
     # override
     def _copy(self, data, copy_name=True, quiet=nmp.QUIET):
         name = self.name
+        if not isinstance(data, Data):
+            raise TypeError(nmu.type_error(data, 'data', 'Data'))
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(data, copy_name=copy_name, quiet=True):
             return False
         c = data._Data__note_container
@@ -82,18 +83,6 @@ class Data(NMObject):
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
-
-    @property
-    def np_array(self):
-        return self.__np_array
-
-    @np_array.setter
-    def np_array(self, np_ndarray):
-        if not isinstance(np_ndarray, np.ndarray):
-            e = 'bad np_array arg: expected type NumPy.ndarray'
-            self._error(e, tp=self._tp)
-        self.__np_array = np_ndarray
-        self._modified()
 
     @property
     def note(self):
@@ -115,22 +104,26 @@ class Data(NMObject):
 
     def _dims_set(self, dims, quiet=nmp.QUIET):
         if not isinstance(dims, dict):
-            e = 'bad dims arg: expected a dictionary of dimensions'
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
-        if 'xdata' in dims.keys():
+            e = nmu.type_error(dims, 'dims', 'dictionary of dimensions')
+            raise TypeError(e)
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        for k in dims.keys():
+            if k not in nmu.DIM_LIST:
+                raise KeyError('unknown dimension key: ' + k)
+        k = dims.keys()
+        if 'xdata' in k:
             self._xdata_set(dims['xdata'], quiet=quiet)
-        if 'xstart' in dims.keys():
+        if 'xstart' in k:
             self._xstart_set(dims['xstart'], quiet=quiet)
-        if 'xdelta' in dims.keys():
+        if 'xdelta' in k:
             self._xdelta_set(dims['xdelta'], quiet=quiet)
-        if 'xlabel' in dims.keys():
+        if 'xlabel' in k:
             self._xlabel_set(dims['xlabel'], quiet=quiet)
-        if 'xunits' in dims.keys():
+        if 'xunits' in k:
             self._xunits_set(dims['xunits'], quiet=quiet)
-        if 'ylabel' in dims.keys():
+        if 'ylabel' in k:
             self._ylabel_set(dims['ylabel'], quiet=quiet)
-        if 'yunits' in dims.keys():
+        if 'yunits' in k:
             self._yunits_set(dims['yunits'], quiet=quiet)
         return True
 
@@ -143,11 +136,11 @@ class Data(NMObject):
         return self._xdata_set(xdata)
 
     def _xdata_set(self, xdata, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if xdata is None:
             pass  # ok
         elif not isinstance(xdata, Data):
-            self._error('expected type Data', tp=self._tp)
-            return False
+            raise TypeError(nmu.type_error(xdata, 'xdata', 'Data'))
         if xdata == self.__xdata:
             return True
         if self.__xdata:
@@ -171,10 +164,11 @@ class Data(NMObject):
         return self._xstart_set(xstart)
 
     def _xstart_set(self, xstart, quiet=nmp.QUIET):
-        if np.isinf(xstart) or np.isnan(xstart):
-            e = 'xstart: bad value: ' + str(xstart)
-            self._error(e, tp=self._tp)
-            return False
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if not isinstance(xstart, float) and not isinstance(xstart, int):
+            raise TypeError(nmu.type_error(xstart, 'xstart', 'number'))
+        if not nmu.number_ok(xstart):
+            raise ValueError('bad xstart: ' + str(xstart))
         if xstart == self.__xstart:
             return True
         old = self.__xstart
@@ -195,10 +189,11 @@ class Data(NMObject):
         return self._xdelta_set(xdelta)
 
     def _xdelta_set(self, xdelta, quiet=nmp.QUIET):
-        if np.isinf(xdelta) or np.isnan(xdelta):
-            e = 'xdelta: bad value: ' + str(xdelta)
-            self._error(e, tp=self._tp)
-            return False
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if not isinstance(xdelta, float) and not isinstance(xdelta, int):
+            raise TypeError(nmu.type_error(xdelta, 'xdelta', 'number'))
+        if not nmu.number_ok(xdelta, no_zero=True):
+            raise ValueError('bad xdelta: ' + str(xdelta))
         if xdelta == self.__xdelta:
             return True
         old = self.__xdelta
@@ -219,10 +214,9 @@ class Data(NMObject):
         return self._xlabel_set(xlabel)
 
     def _xlabel_set(self, xlabel, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xlabel, str):
-            e = 'bad xlabel: expected string'
-            self._error(e, tp=self._tp)
-            return False
+            raise TypeError(nmu.type_error(xlabel, 'xlabel', 'string'))
         if xlabel == self.__xlabel:
             return True
         old = self.__xlabel
@@ -243,10 +237,9 @@ class Data(NMObject):
         return self._xunits_set(xunits)
 
     def _xunits_set(self, xunits, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xunits, str):
-            e = 'bad xunits: expected string'
-            self._error(e, tp=self._tp)
-            return False
+            raise TypeError(nmu.type_error(xunits, 'xunits', 'string'))
         if xunits == self.__xunits:
             return True
         old = self.__xunits
@@ -267,10 +260,9 @@ class Data(NMObject):
         return self._ylabel_set(ylabel)
 
     def _ylabel_set(self, ylabel, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(ylabel, str):
-            e = 'bad ylabel: expected string'
-            self._error(e, tp=self._tp)
-            return False
+            raise TypeError(nmu.type_error(ylabel, 'ylabel', 'string'))
         if ylabel == self.__ylabel:
             return True
         old = self.__ylabel
@@ -291,10 +283,9 @@ class Data(NMObject):
         return self._yunits_set(yunits)
 
     def _yunits_set(self, yunits, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(yunits, str):
-            e = 'bad yunits: expected string'
-            self._error(e, tp=self._tp)
-            return False
+            raise TypeError(nmu.type_error(yunits, 'yunits', 'string'))
         if yunits == self.__yunits:
             return True
         old = self.__yunits
@@ -306,20 +297,37 @@ class Data(NMObject):
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
-    def make_np_array_random_normal(self, shape, mean=0, stdv=1,
+    @property
+    def np_array(self):
+        return self.__np_array
+
+    @np_array.setter
+    def np_array(self, np_ndarray):
+        return self._np_array_set(np_ndarray)
+
+    def _np_array_set(self, np_ndarray, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if not isinstance(np_ndarray, np.ndarray):
+            e = nmu.type_error(np_ndarray, 'np_ndarray', 'numpy.ndarray')
+            raise TypeError(e)
+        old = self.__np_array
+        self.__np_array = np_ndarray
+        self._modified()
+        n = ('changed np_array from ' + nmu.quotes(str(old)) + ' to ' +
+             nmu.quotes(str(self.__np_array)))
+        self.note.new(note=n, quiet=True)
+        self._history(n, tp=self._tp, quiet=quiet)
+        return True
+
+    def np_array_make_random_normal(self, shape, mean=0, stdv=1,
                                     quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not nmu.number_ok(shape, no_neg=True):
-            e = 'bad shape argument: ' + str(shape)
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
+            raise ValueError('bad shape: ' + str(shape))
         if not nmu.number_ok(mean):
-            e = 'bad mean argument: ' + str(mean)
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
+            raise ValueError('bad mean: ' + str(mean))
         if not nmu.number_ok(stdv, no_neg=True):
-            e = 'bad stdv argument: ' + str(stdv)
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
+            raise ValueError('bad stdv: ' + str(stdv))
         self.__np_array = np.random.normal(mean, stdv, shape)
         self._modified()
         # dtype = float64
@@ -329,14 +337,13 @@ class Data(NMObject):
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
-    __make_np_array_random_normal = make_np_array_random_normal
+    __np_array_make_random_normal = np_array_make_random_normal
 
-    def make_np_array(self, shape, fill_value=np.nan, dtype=NP_DTYPE,
+    def np_array_make(self, shape, fill_value=NP_FILL_VALUE, dtype=NP_DTYPE,
                       order=NP_ORDER, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not nmu.number_ok(shape, no_neg=True):
-            e = 'bad shape argument: ' + str(shape)
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
+            raise ValueError('bad shape: ' + str(shape))
         self.__np_array = np.full(shape, fill_value, dtype=dtype, order=order)
         self._modified()
         n = ('created numpy array (numpy.full): shape=' + str(shape) +
@@ -345,7 +352,7 @@ class Data(NMObject):
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
-    __make_np_array = make_np_array
+    __np_array_make = np_array_make
 
 
 class DataContainer(Container):
@@ -361,9 +368,6 @@ class DataContainer(Container):
                          prefix=nmp.DATA_PREFIX)
         if isinstance(dataseries_container, DataSeriesContainer):
             self.__dataseries_container = dataseries_container
-        else:
-            e = 'dataseries_container arg: expected DataSeriesContainer type'
-            raise TypeError(e)
 
     # override, no super
     @property
@@ -371,17 +375,17 @@ class DataContainer(Container):
         return {'data': self.names}
 
     # override
-    def new(self, name='default', shape=[], fill_value=np.nan, noise=[],
-            dims=DIMS, select=True, quiet=nmp.QUIET):
-        if not name or name.lower() == 'default':
-            name = self.name_next(quiet=quiet)
-        o = Data(self._parent, name, self._fxns, shape=shape,
-                 fill_value=fill_value, noise=noise, dims=dims)
+    def new(self, name='default', shape=[], fill_value=np.nan, dims={},
+            select=True, quiet=nmp.QUIET):
+        o = Data(self._parent, 'tempname', self._fxns, shape=shape,
+                 fill_value=fill_value, dims=dims)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override
     def kill(self, name, all_=False, ask=True, quiet=nmp.QUIET):
         klist = super().kill(name=name, all_=all_, ask=ask, quiet=quiet)
+        if not self.__dataseries_container:
+            return klist
         dsc = self.__dataseries_container
         for d in klist:  # remove data refs from data series and sets
             for i in range(0, dsc.count):
@@ -391,12 +395,12 @@ class DataContainer(Container):
                 for cdata in ds.thedata:
                     if d in cdata:
                         cdata.remove(d)
-                        dsc._modified()
                         ds._modified()
+                        dsc._modified()
                 for j in range(0, ds.eset.count):
                     s = ds.eset.get(item_num=j)
                     if d in s.theset:
                         s.discard(d)
-                        ds.eset._modified()
                         s._modified()
+                        ds.eset._modified()
         return klist
