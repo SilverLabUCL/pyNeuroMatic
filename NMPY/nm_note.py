@@ -34,7 +34,7 @@ class Note(NMObject):
     def _copy(self, note, copy_name=True, quiet=nmp.QUIET):
         name = self.name
         if not isinstance(note, Note):
-            raise TypeError(nmu.type_error(note, 'note', 'Note'))
+            raise TypeError(nmu.type_error(note, 'Note'))
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(note, copy_name=copy_name, quiet=True):
             return False

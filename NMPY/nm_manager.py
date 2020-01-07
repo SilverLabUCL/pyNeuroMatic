@@ -51,6 +51,7 @@ class Manager(object):
         # self.__test.data()
 
     def _quiet(self, quiet=False):
+        quiet = nmu.check_bool(quiet, False)
         if self.configs.quiet:  # manager config quiet overrides
             return True
         return quiet
@@ -86,11 +87,10 @@ class Manager(object):
 
     def project_new(self, name='default', new_folder=True, quiet=nmp.QUIET):
         """Create a new project"""
-        if not isinstance(new_folder, bool):
-            new_folder = True
+        new_folder = nmu.check_bool(new_folder, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'name', 'string'))
+            raise TypeError(nmu.type_error(name, 'string'))
         if not nmu.name_ok(name) or name.lower() == 'select':
             raise ValueError('bad name:  ' + nmu.quotes(name))
         if not name or name.lower() == 'default':
@@ -232,6 +232,7 @@ class Manager(object):
 
     @property
     def select_names(self, names=True):
+        names = nmu.check_bool(names, True)
         s = {}
         s['project'] = ''
         s['folder'] = ''

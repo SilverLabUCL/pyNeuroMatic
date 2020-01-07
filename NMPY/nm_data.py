@@ -65,7 +65,7 @@ class Data(NMObject):
     def _copy(self, data, copy_name=True, quiet=nmp.QUIET):
         name = self.name
         if not isinstance(data, Data):
-            raise TypeError(nmu.type_error(data, 'data', 'Data'))
+            raise TypeError(nmu.type_error(data, 'Data'))
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(data, copy_name=copy_name, quiet=True):
             return False
@@ -104,7 +104,7 @@ class Data(NMObject):
 
     def _dims_set(self, dims, quiet=nmp.QUIET):
         if not isinstance(dims, dict):
-            e = nmu.type_error(dims, 'dims', 'dictionary of dimensions')
+            e = nmu.type_error(dims, 'dictionary of dimensions')
             raise TypeError(e)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         for k in dims.keys():
@@ -140,7 +140,7 @@ class Data(NMObject):
         if xdata is None:
             pass  # ok
         elif not isinstance(xdata, Data):
-            raise TypeError(nmu.type_error(xdata, 'xdata', 'Data'))
+            raise TypeError(nmu.type_error(xdata, 'Data'))
         if xdata == self.__xdata:
             return True
         if self.__xdata:
@@ -149,10 +149,9 @@ class Data(NMObject):
             old = 'None'
         self.__xdata = xdata
         self._modified()
-        n = ('changed xdata from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__xdata.name)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('xdata', old, self.__xdata.name)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -166,7 +165,7 @@ class Data(NMObject):
     def _xstart_set(self, xstart, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xstart, float) and not isinstance(xstart, int):
-            raise TypeError(nmu.type_error(xstart, 'xstart', 'number'))
+            raise TypeError(nmu.type_error(xstart, 'number'))
         if not nmu.number_ok(xstart):
             raise ValueError('bad xstart: ' + str(xstart))
         if xstart == self.__xstart:
@@ -174,10 +173,9 @@ class Data(NMObject):
         old = self.__xstart
         self.__xstart = xstart
         self._modified()
-        n = ('changed xstart from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__xstart)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('xstart', old, self.__xstart)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -191,7 +189,7 @@ class Data(NMObject):
     def _xdelta_set(self, xdelta, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xdelta, float) and not isinstance(xdelta, int):
-            raise TypeError(nmu.type_error(xdelta, 'xdelta', 'number'))
+            raise TypeError(nmu.type_error(xdelta, 'number'))
         if not nmu.number_ok(xdelta, no_zero=True):
             raise ValueError('bad xdelta: ' + str(xdelta))
         if xdelta == self.__xdelta:
@@ -199,10 +197,9 @@ class Data(NMObject):
         old = self.__xdelta
         self.__xdelta = xdelta
         self._modified()
-        n = ('changed xdelta from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__xdelta)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('xdelta', old, self.__xdelta)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -216,16 +213,15 @@ class Data(NMObject):
     def _xlabel_set(self, xlabel, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xlabel, str):
-            raise TypeError(nmu.type_error(xlabel, 'xlabel', 'string'))
+            raise TypeError(nmu.type_error(xlabel, 'string'))
         if xlabel == self.__xlabel:
             return True
         old = self.__xlabel
         self.__xlabel = xlabel
         self._modified()
-        n = ('changed xlabel from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__xlabel)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('xlabel', old, self.__xlabel)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -239,16 +235,15 @@ class Data(NMObject):
     def _xunits_set(self, xunits, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xunits, str):
-            raise TypeError(nmu.type_error(xunits, 'xunits', 'string'))
+            raise TypeError(nmu.type_error(xunits, 'string'))
         if xunits == self.__xunits:
             return True
         old = self.__xunits
         self.__xunits = xunits
         self._modified()
-        n = ('changed xunits from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__xunits)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('xunits', old, self.__xunits)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -262,16 +257,15 @@ class Data(NMObject):
     def _ylabel_set(self, ylabel, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(ylabel, str):
-            raise TypeError(nmu.type_error(ylabel, 'ylabel', 'string'))
+            raise TypeError(nmu.type_error(ylabel, 'string'))
         if ylabel == self.__ylabel:
             return True
         old = self.__ylabel
         self.__ylabel = ylabel
         self._modified()
-        n = ('changed ylabel from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__ylabel)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('ylabel', old, self.__ylabel)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -285,16 +279,15 @@ class Data(NMObject):
     def _yunits_set(self, yunits, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(yunits, str):
-            raise TypeError(nmu.type_error(yunits, 'yunits', 'string'))
+            raise TypeError(nmu.type_error(yunits, 'string'))
         if yunits == self.__yunits:
             return True
         old = self.__yunits
         self.__yunits = yunits
         self._modified()
-        n = ('changed yunits from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__yunits)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('yunits', old, self.__yunits)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -308,15 +301,14 @@ class Data(NMObject):
     def _np_array_set(self, np_ndarray, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(np_ndarray, np.ndarray):
-            e = nmu.type_error(np_ndarray, 'np_ndarray', 'numpy.ndarray')
+            e = nmu.type_error(np_ndarray, 'numpy.ndarray')
             raise TypeError(e)
         old = self.__np_array
         self.__np_array = np_ndarray
         self._modified()
-        n = ('changed np_array from ' + nmu.quotes(str(old)) + ' to ' +
-             nmu.quotes(str(self.__np_array)))
-        self.note.new(note=n, quiet=True)
-        self._history(n, tp=self._tp, quiet=quiet)
+        h = nmu.history_change('np_array', old, self.__np_array)
+        self.note.new(note=h, quiet=True)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     def np_array_make_random_normal(self, shape, mean=0, stdv=1,

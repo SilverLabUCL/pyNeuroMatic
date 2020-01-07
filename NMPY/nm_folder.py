@@ -47,7 +47,7 @@ class Folder(NMObject):
     def _copy(self, folder, copy_name=True, quiet=nmp.QUIET):
         name = self.name
         if not isinstance(folder, Folder):
-            raise TypeError(nmu.type_error(folder, 'folder', 'Folder'))
+            raise TypeError(nmu.type_error(folder, 'Folder'))
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(folder, copy_name=copy_name, quiet=True):
             return False
@@ -99,9 +99,8 @@ class FolderContainer(Container):
 
     def add(self, folder, select=True, quiet=nmp.QUIET):
         if not isinstance(folder, Folder):
-            raise TypeError(nmu.type_error(folder, 'folder', 'Folder'))
-        if not isinstance(select, bool):
-            select = True
+            raise TypeError(nmu.type_error(folder, 'Folder'))
+        select = nmu.check_bool(select, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         name = folder.name
         if not name or not nmu.name_ok(name):

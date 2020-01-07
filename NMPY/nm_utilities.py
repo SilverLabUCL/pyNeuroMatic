@@ -37,6 +37,13 @@ def name_ok(name):
 
 def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
               no_nan=True, no_neg=False, no_pos=False, no_zero=False):
+    only_integer = check_bool(only_integer, False)
+    no_boolean = check_bool(no_boolean, True)
+    no_inf = check_bool(no_inf, True)
+    no_nan = check_bool(no_nan, True)
+    no_neg = check_bool(no_neg, False)
+    no_pos = check_bool(no_pos, False)
+    no_zero = check_bool(no_zero, False)
     if isinstance(number, list):
         if not number:
             return False
@@ -63,6 +70,7 @@ def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
 
 
 def quotes(text, single=True):
+    single = check_bool(single, True)
     if not isinstance(text, str):
         text = str(text)
     if single:
@@ -82,6 +90,7 @@ def remove_special_chars(text):
 
 def int_list_to_seq_str(int_list, space=True):
     # e.g. [0,1,5,6,7,12,19,20,21,22,24] -> 0,1,5-7,12,19-22,24
+    space = check_bool(space, True)
     if not int_list or not isinstance(int_list, list):
         return ''
     for i in int_list:
@@ -165,12 +174,36 @@ def check_bool(var_bool, default_value):
     return var_bool
 
 
-def type_error(object, varName, varType):
-    return ('bad ' + varName + ':  expected ' + varType + ', got ' +
-            str(type(object)))
+def type_error(object, varType):
+    callers_local_vars = inspect.currentframe().f_back.f_locals.items()
+    var_names = [var_name for var_name, var_val in callers_local_vars if
+                 var_val is object]
+    count = len(var_names)  # may be multiple variables with same value
+    if count > 0:
+        vname = var_names[0]  # take first name
+    else:
+        vname = 'FAILEDTOFINDVARIABLENAME'
+    got = str(type(object))
+    got = got.replace('<class ', '').replace('>', '').replace("'", "")
+    return 'bad ' + vname + ': expected ' + varType + ', but got ' + got
+
+
+def history_change(var_name, from_value, to_value):
+    if isinstance(from_value, str):
+        old = from_value
+    else:
+        old = str(from_value)
+    if isinstance(to_value, str):
+        new = to_value
+    else:
+        new = str(to_value)
+    return ('changed ' + var_name + ' from ' + quotes(old) + ' to ' +
+            quotes(new))
 
 
 def history(message, title='', tp='', frame=1, red=False, quiet=False):
+    red = check_bool(red, False)
+    quiet = check_bool(quiet, False)
     if tp.lower() == 'none':
         path = ''
     else:
@@ -204,6 +237,7 @@ def get_tree_path(stack, tp='', frame=1):
 
 
 def get_class(stack, frame=1, module=False):
+    module = check_bool(module, False)
     if len(stack) <= frame or len(stack[0]) == 0:
         return ''
     f = stack[frame][0]
@@ -233,6 +267,7 @@ def get_method(stack, frame=1):
 
 
 def input_yesno(prompt, title='', tp='', frame=1, cancel=False):
+    cancel = check_bool(cancel, False)
     if not prompt:
         return ''
     if cancel:
@@ -254,12 +289,3 @@ def input_yesno(prompt, title='', tp='', frame=1, cancel=False):
     if a in ok:
         return a[:1]
     return ''
-
-
-def input_default(prompt, default=''):
-    if default:
-        txt = prompt + ' [' + default + ']: '
-    else:
-        txt = prompt + ':'
-    a = input(txt) or default
-    return a

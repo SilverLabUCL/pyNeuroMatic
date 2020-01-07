@@ -25,6 +25,10 @@ nm = Manager(quiet=True)
 BADNAME = 'b&dn@me!'
 
 
+def test_type_error(a, b, c, got):
+    return nmu.type_error(c, got)
+
+
 class Test(unittest.TestCase):
 
     def test_nmobject(self):
@@ -95,6 +99,7 @@ class Test(unittest.TestCase):
         self.assertTrue(o1._equal(o0, ignore_name=True, alert=True))
         self.assertTrue(o1._copy(o0, copy_name=True))
         self.assertTrue(o1._equal(o0, alert=True))
+        
 
     def test_container(self):
         nm.configs.quiet = True
@@ -647,8 +652,19 @@ class Test(unittest.TestCase):
         self.assertFalse(nmu.channel_char_exists('A', 'B'))
         self.assertFalse(nmu.channel_char_exists('taste', 'A'))
 
+    def test_type_error(self):
+        e = test_type_error(self, self, self, 'NMObject')
+        e2 = "bad a: expected NMObject, but got __main__.Test"
+        self.assertEqual(e, e2)
+        # print(e)
+        a = True
+        e = nmu.type_error(a, 'NMObject')
+        e2 = "bad a: expected NMObject, but got bool"
+        self.assertEqual(e, e2)
+        # print(e)
+
     def test_history(self):
-        quiet=True
+        quiet = True
         r = 'nm.Test.test_history: test'
         self.assertEqual(nmu.history('test', quiet=quiet), r)
         tp = 'one.two.three'

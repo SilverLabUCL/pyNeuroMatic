@@ -45,7 +45,7 @@ class EpochSet(NMObject):
     def _copy(self, epochset, copy_name=True, quiet=nmp.QUIET):
         name = self.name
         if not isinstance(epochset, EpochSet):
-            raise TypeError(nmu.type_error(epochset, 'epochset', 'EpochSet'))
+            raise TypeError(nmu.type_error(epochset, 'EpochSet'))
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(epochset, copy_name=copy_name, quiet=True):
             return False

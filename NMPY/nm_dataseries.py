@@ -75,7 +75,7 @@ class DataSeries(NMObject):
     def _copy(self, dataseries, copy_name=True, quiet=nmp.QUIET):
         name = self.name
         if not isinstance(dataseries, DataSeries):
-            e = nmu.type_error(dataseries, 'dataseries', 'DataSeries')
+            e = nmu.type_error(dataseries, 'DataSeries')
             raise TypeError(e)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(dataseries, copy_name=copy_name, quiet=True):
@@ -174,8 +174,7 @@ class DataSeries(NMObject):
             return []
         if not isinstance(eset_list, list):
             eset_list = [eset_list]
-        if not isinstance(select, bool):
-            select = True
+        select = nmu.check_bool(select, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         r = []
         init_select = select or not self.__eset_container.select
@@ -425,7 +424,7 @@ class DataSeries(NMObject):
         if xdata is None:
             pass  # ok
         elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
-            raise TypeError(nmu.type_error(xdata, 'xdata', 'Data'))
+            raise TypeError(nmu.type_error(xdata, 'Data'))
         for c, cdata in self.__thedata.items():
             for d in cdata:
                 d.xdata = xdata

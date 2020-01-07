@@ -37,7 +37,7 @@ class Channel(NMObject):
     def _copy(self, channel, copy_name=True, quiet=nmp.QUIET):
         name = self.name
         if not isinstance(channel, Channel):
-            raise TypeError(nmu.type_error(channel, 'channel', 'Channel'))
+            raise TypeError(nmu.type_error(channel, 'Channel'))
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(channel, copy_name=copy_name, quiet=True):
             return False
