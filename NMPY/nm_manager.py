@@ -47,7 +47,7 @@ class Manager(object):
         self.__test = Test(self, self._fxns)
         self._history('created ' + nmu.quotes(name), quiet=quiet)
         self.project_new(quiet=quiet)
-        # self.__test.folder()
+        self.__test.folder()
         # self.__test.data()
 
     def _quiet(self, quiet=False):

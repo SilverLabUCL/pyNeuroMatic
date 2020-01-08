@@ -81,8 +81,4 @@ class NoteContainer(Container):
         return None
 
     def notes_all(self):
-        notes = []
-        for i in range(0, self.count):
-            n = self.get(item_num=i)
-            notes.append(n.thenote)
-        return notes
+        return self.get_items(names='all')

@@ -393,11 +393,7 @@ class Container(NMObject):
     @property
     def names(self):
         """Get list of names of NMObject items in Container"""
-        nlist = []
-        if self.__thecontainer:
-            for o in self.__thecontainer:
-                nlist.append(o.name)
-        return nlist
+        return [o.name for o in self.__thecontainer]
 
     @property
     def count(self):
@@ -722,8 +718,7 @@ class Container(NMObject):
                 if not yn == 'y':
                     self._history('cancel', tp=self._tp, quiet=quiet)
                     return []
-            for o in self.__thecontainer:
-                klist.append(o)
+            klist = [o for o in self.__thecontainer]
             self.__thecontainer.clear()
             self.__select = None
             self._modified()

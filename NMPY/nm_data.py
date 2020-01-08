@@ -374,8 +374,9 @@ class DataContainer(Container):
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override
-    def kill(self, name, all_=False, ask=True, quiet=nmp.QUIET):
-        klist = super().kill(name=name, all_=all_, ask=ask, quiet=quiet)
+    def kill(self, name, all_=False, confirm=True, quiet=nmp.QUIET):
+        klist = super().kill(name=name, all_=all_, confirm=confirm,
+                             quiet=quiet)
         if not self.__dataseries_container:
             return klist
         dsc = self.__dataseries_container
@@ -384,7 +385,7 @@ class DataContainer(Container):
                 ds = dsc.get(item_num=i)
                 if not ds or not ds.thedata:
                     continue
-                for cdata in ds.thedata:
+                for c, cdata in ds.thedata.items():
                     if d in cdata:
                         cdata.remove(d)
                         ds._modified()

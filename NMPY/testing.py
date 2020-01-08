@@ -32,7 +32,7 @@ def test_type_error(a, b, c, got):
 class Test(unittest.TestCase):
 
     def test_nmobject(self):
-        nm.configs.quiet = False
+        nm.configs.quiet = True
         parent = self
         name0 = 'object0'
         name1 = 'object1'
@@ -102,7 +102,7 @@ class Test(unittest.TestCase):
         
 
     def test_container(self):
-        nm.configs.quiet = True
+        nm.configs.quiet = False
         parent = self
         name0 = 'container0'
         name1 = 'container1'
@@ -114,9 +114,7 @@ class Test(unittest.TestCase):
         param_list = ['name', 'rename', 'date', 'modified', 'source']
         param_list += ['type', 'prefix', 'duplicate']
         # param_list may need updating
-        n = []
-        for i in range(0, 6):
-            n.append(p0 + str(i))
+        n = [p0 + str(i) for i in range(0, 6)]
         for b in badtypes:
             with self.assertRaises(TypeError):
                 c0 = Container(parent, name0, fxns=nm._fxns, type_=b,

@@ -37,13 +37,13 @@ class Test(object):
         nm.eset.add_epoch('Set1', [0, 1, 2])
         dname = 'DataB0'
         b0 = nm.data.get(dname)
-        print(b0.thedata)
+        print(b0.np_array)
         s1 = nm.eset.get('Set1')
-        nm.data.kill(dname, ask=False)
+        nm.data.kill(dname, confirm=False)
         print(nm.folder.select.content_tree)
         for i in range(0, nm.dataseries.count):
             ds = nm.dataseries.get(item_num=i)
-            for cdata in ds.thedata:
+            for c, cdata in ds.thedata.items():
                 for d in cdata:
                     if d.name.lower() == dname.lower():
                         print('found in DataSeries: ' + d.name)

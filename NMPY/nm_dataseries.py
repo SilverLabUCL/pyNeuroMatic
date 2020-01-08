@@ -101,6 +101,10 @@ class DataSeries(NMObject):
         return self._parent.data
 
     @property
+    def thedata(self):
+        return self.__thedata
+
+    @property
     def channel(self):
         return self.__channel_container
 
@@ -114,10 +118,7 @@ class DataSeries(NMObject):
     def channel_list(self):
         if not self.__thedata:
             return []
-        clist = []
-        for c in self.__thedata.keys():
-            clist.append(c.upper())  # force UPPER
-        return clist
+        return [c.upper() for c in self.__thedata.keys()]  # force UPPER
 
     def channel_ok(self, chan_list):
         if not isinstance(chan_list, list):
@@ -145,9 +146,7 @@ class DataSeries(NMObject):
             return self.__channel_select
         if not isinstance(self.__channel_select, list):
             self.__channel_select = [self.__channel_select]
-        clist = []
-        for c in self.__channel_select:
-            clist.append(c.upper())  # force UPPER
+        clist = [c.upper() for c in self.__channel_select]  # force UPPER
         self.__channel_select = clist
         return self.__channel_select
 
@@ -221,11 +220,8 @@ class DataSeries(NMObject):
             return self.__epoch_select
         if not isinstance(self.__epoch_select, list):
             self.__epoch_select = [self.__epoch_select]
-        elist = []
-        for e in self.__epoch_select:
-            if isinstance(e, int):
-                elist.append(e)
-        self.__epoch_select = elist
+        self.__epoch_select = [e for e in self.__epoch_select if
+                               isinstance(e, int)]
         return self.__epoch_select
 
     @epoch_select.setter
@@ -255,12 +251,7 @@ class DataSeries(NMObject):
                 clist = self.channel_select
                 break
             clist.append(c)
-        chan_list = clist
-        clist = []
-        for c in chan_list:
-            if self.channel_ok(c):
-                clist.append(c)
-        return clist
+        return [c for c in clist if self.channel_ok(c)]
 
     def get_data_names(self, chan_list=['ALL'], epoch_list=[-2],
                        quiet=nmp.QUIET):
@@ -268,9 +259,7 @@ class DataSeries(NMObject):
                           quiet=quiet)
         n = {}
         for c, cdata in d.items():
-            nlist = []
-            for d in cdata:
-                nlist.append(d.name)
+            nlist = [d.name for d in cdata]
             n.update({c: nlist})
         return n
 
@@ -320,9 +309,7 @@ class DataSeries(NMObject):
         d = self.data_select
         n = {}
         for c, cdata in d.items():
-            nlist = []
-            for d in cdata:
-                nlist.append(d.name)
+            nlist = [d.name for d in cdata]
             n.update({c: nlist})
         return n
 
@@ -413,9 +400,7 @@ class DataSeries(NMObject):
             return None
         if len(x) == 1:
             return x[0]
-        n = []
-        for xx in x:
-            n.append(xx.name)
+        n = [xx.name for xx in x]
         self._alert('encountered multiple xdata: ' + str(n), tp=self._tp)
         return None
 
