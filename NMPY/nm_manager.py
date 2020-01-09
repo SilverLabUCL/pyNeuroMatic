@@ -34,9 +34,11 @@ class Manager(object):
                     EpochSetContainer
                     EpochSet (All, Set1, Set2...)
     """
-    def __init__(self, name='NeuroMatic Manager', quiet=nmp.QUIET):
+    def __init__(self, name='NeuroMatic Manager', new_project=True,
+                 quiet=nmp.QUIET):
         if not isinstance(name, str):
             name = 'NeuroMatic Manager'
+        new_project = nmu.check_bool(new_project, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         self.__name = name
         self.__project = None
@@ -46,8 +48,9 @@ class Manager(object):
         self.__stats = Stats(self._fxns)
         self.__test = Test(self, self._fxns)
         self._history('created ' + nmu.quotes(name), quiet=quiet)
-        self.project_new(quiet=quiet)
-        self.__test.folder()
+        if new_project:
+            self.project_new(quiet=quiet)
+        # self.__test.folder()
         # self.__test.data()
 
     def _quiet(self, quiet=False):
@@ -79,8 +82,7 @@ class Manager(object):
         return f
 
     @property
-    def parameters(self):  # child class should override
-        # and add class parameters
+    def parameters(self):
         k = {'name': self.__name}
         k.update({'date': self.__date})
         return k

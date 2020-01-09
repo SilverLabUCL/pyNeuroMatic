@@ -21,7 +21,7 @@ from nm_manager import Manager
 from nm_project import Project
 import nm_utilities as nmu
 
-nm = Manager(quiet=True)
+nm = Manager(new_project=False, quiet=True)
 BADNAME = 'b&dn@me!'
 
 

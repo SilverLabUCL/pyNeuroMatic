@@ -49,12 +49,9 @@ class NMObject(object):
             return False
         if not isinstance(ok, list):
             ok = [ok]
-        bad = []
-        for n in self._bad_names:
-            if n and isinstance(n, str):
-                bad.append(n.lower())
+        bad = [n.lower() for n in self._bad_names]
         for n in ok:
-            if n and isinstance(n, str):
+            if n.lower() in bad:
                 bad.remove(n.lower())
         return name.lower() not in bad
 
@@ -792,8 +789,7 @@ class Container(NMObject):
             name = o.name.lower()
             istr = name.replace(prefix.lower(), '')
             if str.isdigit(istr):
-                i = int(istr)
-                elist.append(i)
+                elist.append(int(istr))
         if len(elist) == 0:
             return 0
         i = max(elist)
