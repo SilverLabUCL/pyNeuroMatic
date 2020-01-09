@@ -255,6 +255,9 @@ class NMObject(object):
 
 class Container(NMObject):
     """
+    class collections.abc.MutableSequence
+    class collections.abc.MutableMapping (implement this?)
+    
     A list container for NMObject items (above), one of which is assigned to
     'select'.
 
@@ -265,8 +268,8 @@ class Container(NMObject):
     accessed via 'select' property.
 
     Known Children:
-        ExperimentContainer, FolderContainer, DataContainer,
-        DataSeriesContainer, ChannelContainer, EpochSetContainer
+        FolderContainer, DataContainer, NoteContainer, DataSeriesContainer,
+        ChannelContainer, EpochSetContainer
 
     Attributes:
         prefix (str): For creating NMObject name via name_next(),
