@@ -102,7 +102,7 @@ class Test(unittest.TestCase):
         
 
     def test_container(self):
-        nm.configs.quiet = False
+        nm.configs.quiet = True
         parent = self
         name0 = 'container0'
         name1 = 'container1'
