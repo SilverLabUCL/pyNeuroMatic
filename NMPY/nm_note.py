@@ -81,4 +81,4 @@ class NoteContainer(Container):
         return None
 
     def notes_all(self):
-        return self.get_items(names='all')
+        return self.getitems(names='all')

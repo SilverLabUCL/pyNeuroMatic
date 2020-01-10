@@ -147,9 +147,8 @@ def channel_char(chan_num):
 def channel_num(chan_char):
     if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return -1
-    clist = nmp.CHAN_LIST
-    for i in range(0, len(clist)):
-        if clist[i].lower() == chan_char.lower():
+    for i, c in enumerate(nmp.CHAN_LIST):
+        if chan_char.lower() == c.lower():
             return i
     return -1
 

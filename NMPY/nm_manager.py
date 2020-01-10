@@ -36,18 +36,19 @@ class Manager(object):
     """
     def __init__(self, name='NeuroMatic Manager', new_project=True,
                  quiet=nmp.QUIET):
-        if not isinstance(name, str):
-            name = 'NeuroMatic Manager'
         new_project = nmu.check_bool(new_project, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
-        self.__name = name
+        if isinstance(name, str):
+            self.__name = name
+        else:
+            self.__name = 'NeuroMatic Manager'
         self.__project = None
         self.__date = str(datetime.datetime.now())
         self.__configs = nmp.Configs()
         self.__configs.quiet = quiet
         self.__stats = Stats(self._fxns)
         self.__test = Test(self, self._fxns)
-        self._history('created ' + nmu.quotes(name), quiet=quiet)
+        self._history('created ' + nmu.quotes(self.__name), quiet=quiet)
         if new_project:
             self.project_new(quiet=quiet)
         # self.__test.folder()

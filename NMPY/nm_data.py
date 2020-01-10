@@ -28,14 +28,9 @@ class Data(NMObject):
         super().__init__(parent, name, fxns=fxns)
         self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__np_array = None  # NumPy N-dimensional array
-        self.__xdata = None
-        self.__xstart = 0
-        self.__xdelta = 1
-        self.__xlabel = ''
-        self.__xunits = ''
-        self.__ylabel = ''
-        self.__yunits = ''
-        self.__size = 0
+        self.__dims = {'xdata': None, 'xstart': 0, 'xdelta': 1, 'xlabel': '',
+                       'xunits': '', 'ylabel': '', 'yunits': ''}
+        # self.__size = 0
         self._dims_set(dims, quiet=True)
         if shape:
             self.__np_array_make(shape, fill_value=fill_value)
@@ -72,13 +67,7 @@ class Data(NMObject):
         c = data._Data__note_container
         if not self.__note_container._copy(c, quiet=True):
             return False
-        self.__xdata = data._Data__xdata
-        self.__xstart = data._Data__xstart
-        self.__xdelta = data._Data__xdelta
-        self.__xlabel = data._Data__xlabel
-        self.__xunits = data._Data__xunits
-        self.__ylabel = data._Data__ylabel
-        self.__yunits = data._Data__yunits
+        self.dims = data.dims
         self._modified()
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=self._tp, quiet=quiet)
@@ -90,12 +79,17 @@ class Data(NMObject):
 
     @property
     def dims(self):
-        if self.__xdata:
-            d = {'xdata': self.__xdata.name}
+        k = self.__dims.keys()
+        d = {}
+        if 'xdata' in k and isinstance(self.__dims['xdata'], Data):
+            d.update({'xdata': self.__dims['xdata']})
         else:
-            d = {'xstart': self.xstart, 'xdelta': self.xdelta}
-        d.update({'xlabel': self.xlabel, 'xunits': self.xunits})
-        d.update({'ylabel': self.ylabel, 'yunits': self.yunits})
+            d.update({'xstart': self.xstart})
+            d.update({'xdelta': self.xdelta})
+        d.update({'xlabel': self.xlabel})
+        d.update({'xunits': self.xunits})
+        d.update({'ylabel': self.ylabel})
+        d.update({'yunits': self.yunits})
         return d
 
     @dims.setter
@@ -129,7 +123,9 @@ class Data(NMObject):
 
     @property
     def xdata(self):
-        return self.__xdata
+        if 'xdata' in self.__dims.keys():
+            return self.__dims['xdata']
+        return None
 
     @xdata.setter
     def xdata(self, xdata):
@@ -141,22 +137,29 @@ class Data(NMObject):
             pass  # ok
         elif not isinstance(xdata, Data):
             raise TypeError(nmu.type_error(xdata, 'Data'))
-        if xdata == self.__xdata:
+        old = self.xdata
+        if xdata == old:
             return True
-        if self.__xdata:
-            old = self.__xdata.name
-        else:
-            old = 'None'
-        self.__xdata = xdata
+        self.__dims['xdata'] = xdata
         self._modified()
-        h = nmu.history_change('xdata', old, self.__xdata.name)
+        if old:
+            oldname = old.name
+        else:
+            oldname = 'None'
+        if xdata:
+            newname = xdata.name
+        else:
+            newname = 'None'
+        h = nmu.history_change('xdata', oldname, newname)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
     def xstart(self):
-        return self.__xstart
+        if 'xstart' in self.__dims.keys():
+            return self.__dims['xstart']
+        return 0
 
     @xstart.setter
     def xstart(self, xstart):
@@ -168,19 +171,26 @@ class Data(NMObject):
             raise TypeError(nmu.type_error(xstart, 'number'))
         if not nmu.number_ok(xstart):
             raise ValueError('bad xstart: ' + str(xstart))
-        if xstart == self.__xstart:
+        old = self.xstart
+        if xstart == old:
             return True
-        old = self.__xstart
-        self.__xstart = xstart
+        self.__dims['xstart'] = xstart
+        k = self.__dims.keys()
         self._modified()
-        h = nmu.history_change('xstart', old, self.__xstart)
+        h = nmu.history_change('xstart', old, xstart)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
+        if 'xwave' in k:
+            self._xdata_set(None, quiet=quiet)
+        if 'xdelta' not in k:
+            self._xdelta_set(1, quiet=quiet)
         return True
 
     @property
     def xdelta(self):
-        return self.__xdelta
+        if 'xdelta' in self.__dims.keys():
+            return self.__dims['xdelta']
+        return 1
 
     @xdelta.setter
     def xdelta(self, xdelta):
@@ -192,19 +202,31 @@ class Data(NMObject):
             raise TypeError(nmu.type_error(xdelta, 'number'))
         if not nmu.number_ok(xdelta, no_zero=True):
             raise ValueError('bad xdelta: ' + str(xdelta))
-        if xdelta == self.__xdelta:
+        old = self.xdelta
+        if xdelta == old:
             return True
-        old = self.__xdelta
-        self.__xdelta = xdelta
+        self.__dims['xdelta'] = xdelta
+        k = self.__dims.keys()
         self._modified()
-        h = nmu.history_change('xdelta', old, self.__xdelta)
+        h = nmu.history_change('xdelta', old, xdelta)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
+        if 'xwave' in k:
+            self._xdata_set(None, quiet=quiet)
+        if 'xstart' not in k:
+            self._xstart_set(0, quiet=quiet)
         return True
 
     @property
     def xlabel(self):
-        return self.__xlabel
+        k = self.__dims.keys()
+        if 'xwave' in k:
+            xwave = self.__dims['xwave']
+            if isinstance(xwave, Data):
+                return xwave.ylabel  # for xwave, y is x
+        if 'xlabel' in k:
+            return self.__dims['xlabel']
+        return ''
 
     @xlabel.setter
     def xlabel(self, xlabel):
@@ -214,19 +236,31 @@ class Data(NMObject):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xlabel, str):
             raise TypeError(nmu.type_error(xlabel, 'string'))
-        if xlabel == self.__xlabel:
+        old = self.xlabel
+        if xlabel == old:
             return True
-        old = self.__xlabel
-        self.__xlabel = xlabel
+        if 'xwave' in self.__dims.keys():
+            xwave = self.__dims['xwave']
+            if isinstance(xwave, Data):
+                # for xwave, y is x
+                return xwave._ylabel_set(xlabel, quiet=quiet)
+        self.__dims['xlabel'] = xlabel
         self._modified()
-        h = nmu.history_change('xlabel', old, self.__xlabel)
+        h = nmu.history_change('xlabel', old, xlabel)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
     def xunits(self):
-        return self.__xunits
+        k = self.__dims.keys()
+        if 'xwave' in k:
+            xwave = self.__dims['xwave']
+            if isinstance(xwave, Data):
+                return xwave.yunits  # for xwave, y is x
+        if 'xunits' in k:
+            return self.__dims['xunits']
+        return ''
 
     @xunits.setter
     def xunits(self, xunits):
@@ -236,19 +270,26 @@ class Data(NMObject):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xunits, str):
             raise TypeError(nmu.type_error(xunits, 'string'))
-        if xunits == self.__xunits:
+        old = self.xunits
+        if xunits == old:
             return True
-        old = self.__xunits
-        self.__xunits = xunits
+        if 'xwave' in self.__dims.keys():
+            xwave = self.__dims['xwave']
+            if isinstance(xwave, Data):
+                # for xwave, y is x
+                return xwave._yunits_set(xunits, quiet=quiet)
+        self.__dims['xunits'] = xunits
         self._modified()
-        h = nmu.history_change('xunits', old, self.__xunits)
+        h = nmu.history_change('xunits', old, xunits)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
     def ylabel(self):
-        return self.__ylabel
+        if 'ylabel' in self.__dims.keys():
+            return self.__dims['ylabel']
+        return ''
 
     @ylabel.setter
     def ylabel(self, ylabel):
@@ -258,19 +299,21 @@ class Data(NMObject):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(ylabel, str):
             raise TypeError(nmu.type_error(ylabel, 'string'))
-        if ylabel == self.__ylabel:
+        old = self.ylabel
+        if ylabel == old:
             return True
-        old = self.__ylabel
-        self.__ylabel = ylabel
+        self.__dims['ylabel'] = ylabel
         self._modified()
-        h = nmu.history_change('ylabel', old, self.__ylabel)
+        h = nmu.history_change('ylabel', old, ylabel)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
     def yunits(self):
-        return self.__yunits
+        if 'yunits' in self.__dims.keys():
+            return self.__dims['yunits']
+        return ''
 
     @yunits.setter
     def yunits(self, yunits):
@@ -280,12 +323,12 @@ class Data(NMObject):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(yunits, str):
             raise TypeError(nmu.type_error(yunits, 'string'))
-        if yunits == self.__yunits:
+        old = self.yunits
+        if yunits == old:
             return True
-        old = self.__yunits
-        self.__yunits = yunits
+        self.__dims['yunits'] = yunits
         self._modified()
-        h = nmu.history_change('yunits', old, self.__yunits)
+        h = nmu.history_change('yunits', old, yunits)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -369,7 +412,7 @@ class DataContainer(Container):
     # override
     def new(self, name='default', shape=[], fill_value=np.nan, dims={},
             select=True, quiet=nmp.QUIET):
-        o = Data(self._parent, 'tempname', self._fxns, shape=shape,
+        o = Data(self._parent, 'temp', self._fxns, shape=shape,
                  fill_value=fill_value, dims=dims)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
@@ -382,7 +425,7 @@ class DataContainer(Container):
         dsc = self.__dataseries_container
         for d in klist:  # remove data refs from data series and sets
             for i in range(0, dsc.count):
-                ds = dsc.get(item_num=i)
+                ds = dsc.getitem(index=i)
                 if not ds or not ds.thedata:
                     continue
                 for c, cdata in ds.thedata.items():
@@ -391,7 +434,7 @@ class DataContainer(Container):
                         ds._modified()
                         dsc._modified()
                 for j in range(0, ds.eset.count):
-                    s = ds.eset.get(item_num=j)
+                    s = ds.eset.getitem(index=j)
                     if d in s.theset:
                         s.discard(d)
                         s._modified()

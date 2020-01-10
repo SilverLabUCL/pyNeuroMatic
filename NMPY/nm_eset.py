@@ -152,7 +152,7 @@ class EpochSetContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = EpochSet(self._parent, 'tempname', self._fxns)
+        o = EpochSet(self._parent, 'temp', self._fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override
@@ -195,7 +195,7 @@ class EpochSetContainer(Container):
             if n.lower() == 'all':
                 self._alert("cannot edit 'All' set")
                 continue
-            s = self.get(n, quiet=quiet)
+            s = self.getitem(n, quiet=quiet)
             if not s:
                 continue
             added = set()
@@ -244,7 +244,7 @@ class EpochSetContainer(Container):
             if n.lower() == 'all':
                 self._alert("cannot edit 'All' set")
                 continue
-            s = self.get(n, quiet=quiet)
+            s = self.getitem(n, quiet=quiet)
             if not s:
                 continue
             removed = set()
@@ -284,7 +284,7 @@ class EpochSetContainer(Container):
         """eq_list=[Set1', '|', 'Set2']"""
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if self.exists(name):
-            s = self.get(name, quiet=quiet)
+            s = self.getitem(name, quiet=quiet)
         else:
             s = self.new(name, quiet=quiet)
         for i in eq_list:  # check equation is OK
@@ -320,7 +320,7 @@ class EpochSetContainer(Container):
             if n.lower() == 'all':
                 self._error("cannot clear 'All' set", quiet=quiet)
                 continue
-            s = self.get(n, quiet=quiet)
+            s = self.getitem(n, quiet=quiet)
             if s and s.clear():
                 self._history('cleared' + nmp.S0 + s._tp, quiet=quiet)
         return True

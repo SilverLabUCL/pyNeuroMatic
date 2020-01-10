@@ -329,9 +329,8 @@ class Container(NMObject):
                      str(container.count))
                 self._alert(a, tp=self._tp)
             return False
-        for i in range(0, self.count):
-            s = self.__get(item_num=i, quiet=True)
-            o = container._Container__get(item_num=i, quiet=True)  # mangled
+        for i, s in enumerate(self.__thecontainer):
+            o = container._Container__getitem(index=i, quiet=True)  # mangled
             if not s._equal(o, alert=alert):
                 return False
         return True
@@ -358,7 +357,7 @@ class Container(NMObject):
                 return False
         if container.select and container.select.name:
             select = container.select.name
-            self.__select = self.__get(select, quiet=True)
+            self.__select = self.__getitem(select, quiet=True)
         else:
             self.__select = None
         self._modified()
@@ -392,15 +391,15 @@ class Container(NMObject):
 
     @property
     def names(self):
-        """Get list of names of NMObject items in Container"""
+        """Get list of names of NMObject items in container"""
         return [o.name for o in self.__thecontainer]
 
     @property
     def count(self):
-        """Number of NMObject items stored in Container"""
+        """Number of NMObject items stored in container"""
         return len(self.__thecontainer)
 
-    def item_num(self, name):
+    def index(self, name):
         """Find item # of NMObject in container"""
         if not isinstance(name, str):
             return -1
@@ -411,35 +410,35 @@ class Container(NMObject):
                 name = self.__select.name
             else:
                 return -1
-        for i in range(0, len(self.__thecontainer)):
-            if name.lower() == self.__thecontainer[i].name.lower():
+        for i, o in enumerate(self.__thecontainer):
+            if name.lower() == o.name.lower():
                 return i
         return -1
 
-    __item_num = item_num
+    __index = index
 
     def exists(self, name):
         """Check if NMObject exists within container"""
-        return self.__item_num(name) >= 0
+        return self.__index(name) >= 0
 
     __exists = exists
 
-    def get(self, name='', item_num=-1, quiet=nmp.QUIET):
+    def getitem(self, name='', index=-1, quiet=nmp.QUIET):
         """Get NMObject from Container"""
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(name, str):
             raise TypeError(nmu.type_error(name, 'string'))
         if not self.name_ok(name, ok='select'):
             raise ValueError('bad name:  ' + nmu.quotes(name))
-        if not isinstance(item_num, int):
-            raise TypeError(nmu.type_error(item_num, 'integer'))
-        if item_num < 0:
-            pass  # ok, do not use item_num
-        elif item_num >= 0 and item_num < len(self.__thecontainer):
-            return self.__thecontainer[item_num]
+        if not isinstance(index, int):
+            raise TypeError(nmu.type_error(index, 'integer'))
+        if index < 0:
+            pass  # ok, do not use index
+        elif index >= 0 and index < len(self.__thecontainer):
+            return self.__thecontainer[index]
         else:
-            e = 'bad item_num:  expected 0-' + str(len(self.__thecontainer)-1)
-            raise IndexError(e + ', got  ' + str(item_num))
+            e = 'bad index:  expected 0-' + str(len(self.__thecontainer)-1)
+            raise IndexError(e + ', got  ' + str(index))
         if not name:
             return None
         if name.lower() == 'select':
@@ -451,15 +450,15 @@ class Container(NMObject):
         self._error(e, tp=self._tp, quiet=quiet)
         return None
 
-    __get = get
+    __getitem = getitem
 
-    def get_items(self, names=[], item_nums=[], quiet=nmp.QUIET):
+    def getitems(self, names=[], indexes=[], quiet=nmp.QUIET):
         """Get a list of NMObjects from Container"""
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(names, list):
             names = [names]
-        if not isinstance(item_nums, list):
-            item_nums = [item_nums]
+        if not isinstance(indexes, list):
+            indexes = [indexes]
         olist = []
         if len(names) == 1 and names[0].lower() == 'all':
             get_all = True
@@ -483,15 +482,15 @@ class Container(NMObject):
                         olist.append(o)
         if get_all:
             return olist
-        for item_num in item_nums:
-            if not isinstance(item_num, int):
-                raise TypeError(nmu.type_error(item_num, 'integer'))
-            if item_num >= 0 and item_num < len(self.__thecontainer):
-                o = self.__thecontainer[item_num]
+        for index in indexes:
+            if not isinstance(index, int):
+                raise TypeError(nmu.type_error(index, 'integer'))
+            if index >= 0 and index < len(self.__thecontainer):
+                o = self.__thecontainer[index]
                 if o not in olist:
                     olist.append(o)
             else:
-                raise IndexError('item_num out of range:  ' + str(item_num))
+                raise IndexError('index out of range:  ' + str(index))
         return olist
 
     def _exists_error(self, name):
@@ -519,7 +518,7 @@ class Container(NMObject):
             # return self.__select  # already selected
         if self.__exists(name):
             old = self.__select
-            o = self.__get(name)
+            o = self.__getitem(name)
             self.__select = o
             self._modified()
             h = Container.__select_history(old, self.__select)
@@ -617,7 +616,7 @@ class Container(NMObject):
             e = self._exists_error(name)
             self._error(e, tp=self._tp, quiet=quiet)
             return ''
-        o = self.__get(name, quiet=quiet)
+        o = self.__getitem(name, quiet=quiet)
         if not o:
             return ''
         if not isinstance(newname, str):
@@ -663,7 +662,7 @@ class Container(NMObject):
             e = self._exists_error(name)
             self._error(e, tp=self._tp, quiet=quiet)
             return None
-        o = self.__get(name, quiet=quiet)
+        o = self.__getitem(name, quiet=quiet)
         if not o:
             return None
         if not isinstance(newname, str):
@@ -734,7 +733,7 @@ class Container(NMObject):
             e = self._exists_error(name)
             self._error(e, tp=self._tp, quiet=quiet)
             return []
-        o = self.__get(name, quiet=quiet)
+        o = self.__getitem(name, quiet=quiet)
         if not o:
             return []
         if confirm and not self._quiet(quiet):
@@ -745,7 +744,7 @@ class Container(NMObject):
                 return []
         select_next = o is self.__select  # killing select, so need new one
         if select_next:
-            i = self.__item_num(o.name)
+            i = self.__index(o.name)
         klist.append(o)
         self.__thecontainer.remove(o)
         h = 'killed ' + nmu.quotes(o.name)

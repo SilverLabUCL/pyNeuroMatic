@@ -36,13 +36,13 @@ class Test(object):
         print(nm.folder.select.content_tree)
         nm.eset.add_epoch('Set1', [0, 1, 2])
         dname = 'DataB0'
-        b0 = nm.data.get(dname)
+        b0 = nm.data.getitem(dname)
         print(b0.np_array)
-        s1 = nm.eset.get('Set1')
+        s1 = nm.eset.getitem('Set1')
         nm.data.kill(dname, confirm=False)
         print(nm.folder.select.content_tree)
         for i in range(0, nm.dataseries.count):
-            ds = nm.dataseries.get(item_num=i)
+            ds = nm.dataseries.getitem(index=i)
             for c, cdata in ds.thedata.items():
                 for d in cdata:
                     if d.name.lower() == dname.lower():
@@ -88,8 +88,8 @@ class Test(object):
         # self.eset.add_epoch('Set1', [0])
         # self.eset.remove_epoch('Set1', [3,4])
         # self.eset.remove_epoch('Set1', [2])
-        # s1 = self.eset.get('Set1')
-        # s2 = self.eset.get('Set2')
+        # s1 = self.eset.getitem('Set1')
+        # s2 = self.eset.getitem('Set2')
         # self.eset.add_epoch('Set1', [0, 1, 2])
         # self.eset.add_epoch('Set2', [3])
         # print(s1.names)

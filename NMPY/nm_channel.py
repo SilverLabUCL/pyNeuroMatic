@@ -67,25 +67,22 @@ class ChannelContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = Channel(self._parent, 'tempname', self._fxns)
+        o = Channel(self._parent, 'temp', self._fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override, no super
-    def name_next(self, first=0, quiet=nmp.QUIET):
-        i = self.name_next_seq(first=first, quiet=quiet)
+    def name_next(self, quiet=nmp.QUIET):
+        i = self.name_next_seq(quiet=quiet)
         if i >= 0:
             return nmu.channel_char(i)
         return ''
 
     # override, no super
-    def name_next_seq(self, first=0, quiet=nmp.QUIET):
+    def name_next_seq(self, quiet=nmp.QUIET):
         # NO PREFIX, Channel names are 'A', 'B'...
-        if not isinstance(first, int):
-            first = 0
         quiet = nmu.check_bool(quiet, nmp.QUIET)
-        first = 0  # enforce
         n = 10 + self.count
-        for i in range(first, n):
+        for i in range(0, n):
             # name = self.prefix + nmu.channel_char(i)
             name = nmu.channel_char(i)
             if not self.exists(name):

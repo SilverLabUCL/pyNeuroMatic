@@ -324,7 +324,7 @@ class DataSeries(NMObject):
             return {}
         sname = self.eset.select.name
         eset = self.eset.select.theset
-        sx = self.eset.get('SetX')
+        sx = self.eset.getitem('SetX')
         if sx:
             setx = sx.theset
         else:
@@ -573,13 +573,12 @@ class DataSeries(NMObject):
                     d.yunits = yunits
         return True
 
-    def _get_items(self, chan_char):
-        n = self.name
+    def _getitems(self, chan_char):
         thedata = self.data._Container__thecontainer  # mangled
         dlist = []
-        i = len(n)
+        i = len(self.name)
         for o in thedata:
-            if o.name[:i].casefold() == n.casefold():
+            if o.name[:i].casefold() == self.name.casefold():
                 if chan_char:
                     if nmu.channel_char_exists(o.name[i:], chan_char):
                         dlist.append(o)
@@ -588,14 +587,13 @@ class DataSeries(NMObject):
         return dlist
 
     def update(self, quiet=nmp.QUIET):
-        n = self.name
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         foundsomething = False
         htxt = []
         self.__thedata = {}
         for i in range(0, 25):
             c = nmu.channel_char(i)
-            olist = self._get_items(c)
+            olist = self._getitems(c)
             if len(olist) > 0:
                 self.__thedata.append(olist)
                 foundsomething = True
@@ -604,16 +602,15 @@ class DataSeries(NMObject):
             else:
                 break  # no more channels
         if not foundsomething:
-            a = 'failed to find data with prefix ' + nmu.quotes(n)
+            a = 'failed to find data with prefix ' + nmu.quotes(self.name)
             self._alert(a, tp=self._tp, quiet=quiet)
         for h in htxt:
-            h = 'found data with prefix ' + nmu.quotes(n) + ': ' + h
+            h = 'found data with prefix ' + nmu.quotes(self.name) + ': ' + h
             self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     def make(self, channels=1, epochs=1, shape=[], fill_value=0, dims={},
              quiet=nmp.QUIET):
-        n = self.name
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not nmu.number_ok(channels, no_neg=True, no_zero=True):
             e = 'bad channels argument: ' + str(channels)
@@ -628,7 +625,7 @@ class DataSeries(NMObject):
             self._error(e, tp=self._tp, quiet=quiet)
             return False
         if self.channel_count > 0 and channels != self.channel_count:
-            e = ('data series ' + nmu.quotes(n) +
+            e = ('data series ' + nmu.quotes(self.name) +
                  'requires channels=' + str(self.channel_count))
             self._error(e, tp=self._tp, quiet=quiet)
             return False
@@ -636,7 +633,7 @@ class DataSeries(NMObject):
         epoch_bgn = []
         for i in range(0, channels):
             c = nmu.channel_char(i)
-            dlist = self._get_items(c)  # search for existing data
+            dlist = self._getitems(c)  # search for existing data
             epoch_bgn.append(len(dlist))
             self.__thedata.update({c: dlist})
             if not self.channel.exists(c):
@@ -648,7 +645,7 @@ class DataSeries(NMObject):
             elist = []
             dlist = []
             for j in range(e_bgn, e_end):
-                name2 = n + c + str(j)
+                name2 = self.name + c + str(j)
                 d = self.data.new(name=name2, shape=shape,
                                   fill_value=fill_value, quiet=True)
                 if d:
@@ -660,7 +657,7 @@ class DataSeries(NMObject):
             dlist2 = self.__thedata[c]
             dlist2.extend(dlist)
             self.__thedata[c] = dlist2
-            h = ('created ' + nmu.quotes(n) + ', ' + 'ch=' + c +
+            h = ('created ' + nmu.quotes(self.name) + ', ' + 'ch=' + c +
                  ', ep=' + nmu.int_list_to_seq_str(elist, space=False))
             self._history(h, tp=self._tp, quiet=quiet)
         if dims:
@@ -692,7 +689,7 @@ class DataSeriesContainer(Container):
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
         # name is the data-series name
-        o = DataSeries(self._parent, 'tempname', self._fxns)
+        o = DataSeries(self._parent, 'temp', self._fxns)
         ds = super().new(name=name, nmobj=o, select=select, quiet=quiet)
         if ds:
             ds.update(quiet=quiet)

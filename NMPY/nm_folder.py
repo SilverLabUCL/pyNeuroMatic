@@ -94,7 +94,7 @@ class FolderContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = Folder(self._parent, 'tempname', self._fxns)
+        o = Folder(self._parent, 'temp', self._fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     def add(self, folder, select=True, quiet=nmp.QUIET):
