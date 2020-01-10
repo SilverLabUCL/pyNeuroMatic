@@ -13,6 +13,7 @@ from nm_channel import Channel
 from nm_channel import ChannelContainer
 from nm_container import NMObject
 from nm_container import Container
+from nm_container2 import Container2
 from nm_data import Data
 from nm_data import DataContainer
 from nm_dataseries import DataSeries
@@ -99,9 +100,27 @@ class Test(unittest.TestCase):
         self.assertTrue(o1._equal(o0, ignore_name=True, alert=True))
         self.assertTrue(o1._copy(o0, copy_name=True))
         self.assertTrue(o1._equal(o0, alert=True))
-        
+
+    def test_container2(self):
+        c = Container2()
+        parent = self
+        name0 = 'object0'
+        name1 = 'object1'
+        o0 = NMObject(parent, name0, fxns=nm._fxns, rename=True)
+        o1 = NMObject(parent, name1, fxns=nm._fxns, rename=False)
+        c[name0] = o0
+        c[name1] = o1
+        for n, o in c.items():
+            print(n, o)
+        print('test' in c)
+        print(name0 in c)
+        print(len(c))
+        print(list(c.keys()))
+        print(list(c.values()))
 
     def test_container(self):
+        if True:
+            return
         nm.configs.quiet = True
         parent = self
         name0 = 'container0'
@@ -385,6 +404,8 @@ class Test(unittest.TestCase):
         self.assertIsNone(c1.select)
 
     def test_data(self):
+        if True:
+            return
         nm.configs.quiet = True
         parent = self
         name0 = 'RecordA0'
