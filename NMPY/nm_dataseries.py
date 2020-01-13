@@ -18,7 +18,7 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, dims={}):
+    def __init__(self, parent, name, fxns={}):
         # name is data-series prefix
         super().__init__(parent, name, fxns=fxns, rename=False)
         cc = ChannelContainer(self, 'Channels', fxns=fxns)
@@ -26,18 +26,11 @@ class DataSeries(NMObject):
         ec = EpochSetContainer(self, 'EpochSets', fxns=fxns)
         self.__eset_container = ec
         self.__thedata = {}  # dict, {channel: data-list}
+        self.__dims = {}
         self.__data_select = {}  # dict, {channel: data-list}
         self.__channel_select = []
         self.__epoch_select = []
         self.__eset_init(quiet=True)
-        self.__xdata = None
-        self.__xstart = 0
-        self.__xdelta = 1
-        self.__xlabel = ''
-        self.__xunits = ''
-        self.__ylabel = {}
-        self.__yunits = {}
-        self.dims = dims
 
     # override
     @property
@@ -103,6 +96,339 @@ class DataSeries(NMObject):
     @property
     def thedata(self):
         return self.__thedata
+
+    @property
+    def dims(self):
+        if not self.__dims:
+            self.__dims = self._dims_of_thedata
+        return self.__dims
+
+    @dims.setter
+    def dims(self, dims):
+        k = dims.keys()
+        if 'xdata' in k:
+            self.xdata = dims['xdata']
+        if 'xstart' in k:
+            self.xstart = dims['xstart']
+        if 'xdelta' in k:
+            self.xdelta = dims['xdelta']
+        if 'xlabel' in k:
+            self.xlabel = dims['xlabel']
+        if 'xunits' in k:
+            self.xunits = dims['xunits']
+        if 'ylabel' in k:
+            self.ylabel = dims['ylabel']
+        if 'yunits' in k:
+            self.yunits = dims['yunits']
+
+    def _dims_of_thedata(self):
+        xdata = []
+        xstart = []
+        xdelta = []
+        xlabel = []
+        xunits = []
+        ylabel = {}
+        yunits = {}
+        for c, cdata in self.__thedata.items():
+            yl = []
+            yu = []
+            for d in cdata:
+                if d.xdata not in xdata:
+                    xdata.append(d.xdata)
+                if d.xstart not in xstart:
+                    xstart.append(d.xstart)
+                if d.xdelta not in xdelta:
+                    xdelta.append(d.xdelta)
+                if d.xlabel not in xlabel:
+                    xlabel.append(d.xlabel)
+                if d.xunits not in xunits:
+                    xunits.append(d.xunits)
+                if d.ylabel not in yl:
+                    yl.append(d.ylabel)
+                if d.yunits not in yu:
+                    yu.append(d.yunits)
+            ylabel.update({c: yl})
+            yunits.update({c: yu})
+        dims = {'xdata': xdata}
+        dims.update({'xstart': xstart, 'xdelta': xdelta})
+        dims.update({'xlabel': xlabel, 'xunits': xunits})
+        dims.update({'ylabel': ylabel, 'yunits': yunits})
+        return dims
+
+    def xdata_make(self, name, shape=[], dims={}, quiet=nmp.QUIET):
+        if not isinstance(dims, dict):
+            dims = {'xdata': None, 'xstart': 0, 'xdelta': 1, 'xlabel': '',
+                    'xunits': '', 'ylabel': '', 'yunits': ''}
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        dims.update({'xstart': 0, 'xdelta': 1})  # enforce
+        if 'xlabel' in dims.keys():  # switch x and y
+            dims.update({'ylabel': dims['xlabel']})  # NOT DICT TYPE
+            dims.update({'xlabel': ''})
+        if 'xunits' in dims.keys():  # switch x and y
+            dims.update({'yunits': dims['xunits']})  # NOT DICT TYPE
+            dims.update({'xunits': ''})
+        d = self.data.new(name=name, shape=shape, dims=dims, quiet=quiet)
+        if not d:
+            return None
+        for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
+            d.np_array[i] = i
+        self.xdata = d
+        return d
+
+    @property
+    def xdata(self):
+        k = 'xdata'
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        self.__dims = self._dims_of_thedata()
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        return None
+
+    @xdata.setter
+    def xdata(self, xdata):
+        if xdata is None:
+            pass  # ok
+        elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
+            raise TypeError(nmu.type_error(xdata, 'Data'))
+        self._xdata_of_thedata = xdata
+        return True
+
+    def _xdata_set(self, xdata, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if xdata is None:
+            pass  # ok
+        elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
+            raise TypeError(nmu.type_error(xdata, 'Data'))
+        self._xdata_of_thedata = xdata
+        return True
+
+    @property
+    def _xdata_of_thedata(self):
+        x = []
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                if d.xdata not in x:
+                    x.append(d.xdata)
+        return x
+
+    @_xdata_of_thedata.setter
+    def _xdata_of_thedata(self, xdata, quiet=nmp.QUIET):
+        if xdata is None:
+            pass  # ok
+        elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
+            raise TypeError(nmu.type_error(xdata, 'Data'))
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                d._xdata_set(alert=False, quiet=quiet)
+        return True
+
+    @property
+    def xstart(self):
+        k = 'xstart'
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        self.__dims = self._dims_of_thedata()
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        return 0
+
+    @xstart.setter
+    def xstart(self, xstart):
+        if np.isinf(xstart) or np.isnan(xstart):
+            return False
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                d.xstart = xstart
+        return True
+
+    @property
+    def _xstart_of_thedata(self):
+        x = []
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                if d.xstart not in x:
+                    x.append(d.xstart)
+        return x
+
+    @property
+    def xdelta(self):
+        k = 'xdelta'
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        self.__dims = self._dims_of_thedata()
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        return 1
+
+    @xdelta.setter
+    def xdelta(self, xdelta):
+        if np.isinf(xdelta) or np.isnan(xdelta):
+            return False
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                d.xdelta = xdelta
+        return True
+
+    @property
+    def _xdelta_of_thedata(self):
+        x = []
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                if d.xdelta not in x:
+                    x.append(d.xdelta)
+        return x
+
+    @property
+    def xlabel(self):
+        k = 'xlabel'
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        self.__dims = self._dims_of_thedata()
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        return ''
+
+    @xlabel.setter
+    def xlabel(self, xlabel):
+        if not isinstance(xlabel, str):
+            return False
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                d.xlabel = xlabel
+        return True
+
+    @property
+    def _xlabel_of_thedata(self):
+        x = []
+        xlower = []
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                if d.xlabel.lower() not in xlower:
+                    x.append(d.xlabel)
+                    xlower.append(d.xlabel.lower())
+        return x
+
+    @property
+    def xunits(self):
+        k = 'xunits'
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        self.__dims = self._dims_of_thedata()
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        return ''
+
+    @xunits.setter
+    def xunits(self, xunits):
+        if not isinstance(xunits, str):
+            return False
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                d.xunits = xunits
+        return True
+
+    @property
+    def _xunits_of_thedata(self):
+        x = []
+        xlower = []
+        for c, cdata in self.__thedata.items():
+            for d in cdata:
+                if d.xunits.lower() not in xlower:
+                    x.append(d.xunits)
+                    xlower.append(d.xunits.lower())
+        return x
+
+    @property
+    def ylabel(self):
+        k = 'ylabel'
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        self.__dims = self._dims_of_thedata()
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        return ''
+
+    @ylabel.setter
+    def ylabel(self, chan_ylabel):
+        if isinstance(chan_ylabel, str):
+            chan_ylabel = {'A': chan_ylabel}
+        elif not isinstance(chan_ylabel, dict):
+            e = 'chan_ylabel is not a dictionary'
+            self._error(e, tp=self._tp)
+            return False
+        for c, ylabel in chan_ylabel.items():
+            if not isinstance(ylabel, str):
+                e = 'ylabel is not a string type: ' + nmu.quotes(ylabel)
+                self._error(e, tp=self._tp)
+            # elif c not in self.__thedata.keys():
+            elif c not in nmp.CHAN_LIST:
+                e = 'bad channel: ' + nmu.quotes(c)
+                self._error(e, tp=self._tp)
+            if c in self.__thedata.keys():
+                cdata = self.__thedata[c]
+                for d in cdata:
+                    d.ylabel = ylabel
+        return True
+
+    @property
+    def _ylabel_of_thedata(self):
+        yy = {}
+        for c, cdata in self.__thedata.items():
+            y = []
+            ylower = []
+            for d in cdata:
+                if d.ylabel.lower() not in ylower:
+                    y.append(d.ylabel)
+                    ylower.append(d.ylabel.lower())
+            yy.update({c: y})
+        return yy
+
+    @property
+    def yunits(self):
+        k = 'yunits'
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        self.__dims = self._dims_of_thedata()
+        if k in self.__dims.keys():
+            return self.__dims[k]
+        return ''
+
+    @yunits.setter
+    def yunits(self, chan_yunits):
+        if isinstance(chan_yunits, str):
+            chan_yunits = {'A': chan_yunits}
+        elif not isinstance(chan_yunits, dict):
+            e = 'chan_yunits is not a dictionary'
+            self._error(e, tp=self._tp)
+            return False
+        for c, yunits in chan_yunits.items():
+            if not isinstance(yunits, str):
+                e = 'yunits is not a string type: ' + nmu.quotes(yunits)
+                self._error(e, tp=self._tp)
+            # elif c not in self.__thedata.keys():
+            elif c not in nmp.CHAN_LIST:
+                e = 'bad channel: ' + nmu.quotes(c)
+                self._error(e, tp=self._tp)
+            if c in self.__thedata.keys():
+                cdata = self.__thedata[c]
+                for d in cdata:
+                    d.yunits = yunits
+        return True
+
+    @property
+    def _yunits_of_thedata(self):
+        yy = {}
+        for c, cdata in self.__thedata.items():
+            y = []
+            ylower = []
+            for d in cdata:
+                if d.yunits.lower() not in ylower:
+                    y.append(d.yunits)
+                    ylower.append(d.yunits.lower())
+            yy.update({c: y})
+        return yy
 
     @property
     def channel(self):
@@ -341,237 +667,6 @@ class DataSeries(NMObject):
                     dlist.append(d)
             dd.update({c: dlist})
         return dd
-
-    @property
-    def dims(self):
-        xd = self.xdata
-        if xd:
-            d = {'xdata': xd.name}
-        else:
-            d = {'xstart': self.xstart, 'xdelta': self.xdelta}
-        d.update({'xlabel': self.xlabel, 'xunits': self.xunits})
-        d.update({'ylabel': self.ylabel, 'yunits': self.yunits})
-        return d
-
-    @dims.setter
-    def dims(self, dims):
-        if 'xdata' in dims.keys():
-            self.xdata = dims['xdata']
-        if 'xstart' in dims.keys():
-            self.xstart = dims['xstart']
-        if 'xdelta' in dims.keys():
-            self.xdelta = dims['xdelta']
-        if 'xlabel' in dims.keys():
-            self.xlabel = dims['xlabel']
-        if 'xunits' in dims.keys():
-            self.xunits = dims['xunits']
-        if 'ylabel' in dims.keys():
-            self.ylabel = dims['ylabel']
-        if 'yunits' in dims.keys():
-            self.yunits = dims['yunits']
-
-    def xdata_make(self, name, shape=[], dims={}, quiet=nmp.QUIET):
-        if not isinstance(dims, dict):
-            dims = DIMS
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        dims.update({'xstart': 0, 'xdelta': 1})  # enforce
-        if 'xlabel' in dims.keys():  # switch x and y
-            dims.update({'ylabel': dims['xlabel']})  # NOT DICT TYPE
-            dims.update({'xlabel': ''})
-        if 'xunits' in dims.keys():  # switch x and y
-            dims.update({'yunits': dims['xunits']})  # NOT DICT TYPE
-            dims.update({'xunits': ''})
-        d = self.data.new(name=name, shape=shape, dims=dims, quiet=quiet)
-        if not d:
-            return None
-        for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
-            d.np_array[i] = i
-        self.xdata = d
-        return d
-
-    @property
-    def xdata(self):
-        x = set()
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                x.add(d.xdata)
-        x = list(x)
-        if len(x) == 0:
-            return None
-        if len(x) == 1:
-            return x[0]
-        n = [xx.name for xx in x]
-        self._alert('encountered multiple xdata: ' + str(n), tp=self._tp)
-        return None
-
-    @xdata.setter
-    def xdata(self, xdata):
-        if xdata is None:
-            pass  # ok
-        elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
-            raise TypeError(nmu.type_error(xdata, 'Data'))
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xdata = xdata
-        return True
-
-    @property
-    def xstart(self):
-        x = set()
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                x.add(d.xstart)
-        x = list(x)
-        if len(x) == 0:
-            return 0
-        if len(x) == 1:
-            return x[0]
-        self._alert('encountered multiple xstarts: ' + str(x), tp=self._tp)
-        return 0
-
-    @xstart.setter
-    def xstart(self, xstart):
-        if np.isinf(xstart) or np.isnan(xstart):
-            return False
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xstart = xstart
-        return True
-
-    @property
-    def xdelta(self):
-        x = set()
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                x.add(d.xdelta)
-        x = list(x)
-        if len(x) == 0:
-            return 1
-        if len(x) == 1:
-            return x[0]
-        self._alert('encountered multiple xdeltas: ' + str(x), tp=self._tp)
-        return 1
-
-    @xdelta.setter
-    def xdelta(self, xdelta):
-        if np.isinf(xdelta) or np.isnan(xdelta):
-            return False
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xdelta = xdelta
-        return True
-
-    @property
-    def xlabel(self):
-        x = set()
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                x.add(d.xlabel)
-        x = list(x)
-        if len(x) == 0:
-            return ''
-        if len(x) == 1:
-            return x[0]
-        self._alert('encountered multiple xlabels: ' + str(x), tp=self._tp)
-        return ''
-
-    @xlabel.setter
-    def xlabel(self, xlabel):
-        if not isinstance(xlabel, str):
-            return False
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xlabel = xlabel
-        return True
-
-    @property
-    def xunits(self):
-        x = set()
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                x.add(d.xunits)
-        x = list(x)
-        if len(x) == 0:
-            return ''
-        if len(x) == 1:
-            return x[0]
-        self._alert('encountered multiple xunits: ' + str(x), tp=self._tp)
-        return ''
-
-    @xunits.setter
-    def xunits(self, xunits):
-        if not isinstance(xunits, str):
-            return False
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xunits = xunits
-        return True
-
-    @property
-    def ylabel(self):
-        y = {}
-        for c, cdata in self.__thedata.items():
-            yset = set()
-            YSET = set()
-            for d in cdata:
-                if d.ylabel.upper() not in YSET:
-                    yset.add(d.ylabel)
-                    YSET.add(d.ylabel.upper)
-            ylist = list(yset)
-            y.update({c: ylist.sort()})
-        return y
-
-    @ylabel.setter
-    def ylabel(self, chan_ylabel):
-        if not isinstance(chan_ylabel, dict):
-            e = 'chan_ylabel is not a dictionary'
-            self._error(e, tp=self._tp)
-            return False
-        for c, ylabel in chan_ylabel.items():
-            if not isinstance(ylabel, str):
-                e = 'ylabel is not a string type: ' + nmu.quotes(ylabel)
-                self._error(e, tp=self._tp)
-            elif c not in self.__thedata.keys():
-                e = 'bad channel: ' + nmu.quotes(c)
-                self._error(e, tp=self._tp)
-            else:
-                cdata = self.__thedata[c]
-                for d in cdata:
-                    d.ylabel = ylabel
-        return True
-
-    @property
-    def yunits(self):
-        y = {}
-        for c, cdata in self.__thedata.items():
-            yset = set()
-            YSET = set()
-            for d in cdata:
-                if d.yunits.upper() not in YSET:
-                    yset.add(d.yunits)
-                    YSET.add(d.yunits.upper())
-            ylist = list(yset)
-            y.update({c: ylist.sort()})
-        return y
-
-    @yunits.setter
-    def yunits(self, chan_yunits):
-        if not isinstance(chan_yunits, dict):
-            e = 'chan_yunits is not a dictionary'
-            self._error(e, tp=self._tp)
-            return False
-        for c, yunits in chan_yunits.items():
-            if not isinstance(yunits, str):
-                e = 'yunits is not a string type: ' + nmu.quotes(yunits)
-                self._error(e, tp=self._tp)
-            elif c not in self.__thedata.keys():
-                e = 'bad channel: ' + nmu.quotes(c)
-                self._error(e, tp=self._tp)
-            else:
-                cdata = self.__thedata[c]
-                for d in cdata:
-                    d.yunits = yunits
-        return True
 
     def _getitems(self, chan_char):
         thedata = self.data._Container__thecontainer  # mangled

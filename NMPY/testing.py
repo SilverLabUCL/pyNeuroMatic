@@ -402,12 +402,16 @@ class Test(unittest.TestCase):
         xdims = {'xstart': 0, 'xdelta': 1,
                  'xlabel': 'sample', 'xunits': '',
                  'ylabel': 't', 'yunits': 'seconds'}
+        ds = DataSeries(parent, 'Record', fxns=nm._fxns)
         d0 = Data(parent, name0, fxns=nm._fxns, shape=shape,
-                  fill_value=np.nan, dims=dims0)
+                  fill_value=np.nan, dims=dims1, dataseries=ds)
         d1 = Data(parent, name1, fxns=nm._fxns, shape=shape,
-                  fill_value=0, dims=dims1)
+                  fill_value=0, dims=dims1, dataseries=ds)
         xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=shape,
                      fill_value=0, dims=xdims)
+        """
+        dims0.update({'xdata': None})
+        dims1.update({'xdata': None})
         self.assertEqual(d0.dims, dims0)
         self.assertEqual(d1.dims, dims1)
         # dims()
@@ -432,6 +436,7 @@ class Test(unittest.TestCase):
         for g in good:
             self.assertTrue(d0._xdata_set(g))
             self.assertEqual(g, d0.xdata)
+        d0._xstart_set(-22)
         # _xstart_set()
         bad = [self, 'start', [], {}]
         for b in bad:
@@ -496,6 +501,7 @@ class Test(unittest.TestCase):
         # d0.np_array.clip(-1, 1, out=d0.np_array)
         # print(d0.np_array.flags)
         # print(d0.parameters)
+        """
 
     def test_project(self):
         nm.configs.quiet = True

@@ -8,6 +8,7 @@ import numpy as np
 
 from nm_container import NMObject
 from nm_container import Container
+from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
 from nm_note import NoteContainer
 import nm_preferences as nmp
@@ -24,14 +25,20 @@ class Data(NMObject):
     """
 
     def __init__(self, parent, name, fxns={}, shape=[],
-                 fill_value=NP_FILL_VALUE, dims={}):
+                 fill_value=NP_FILL_VALUE, dims={}, dataseries={}):
         super().__init__(parent, name, fxns=fxns)
         self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__np_array = None  # NumPy N-dimensional array
         self.__dims = {'xdata': None, 'xstart': 0, 'xdelta': 1, 'xlabel': '',
                        'xunits': '', 'ylabel': '', 'yunits': ''}
+        self.__dataseries = {}
+        if dataseries and isinstance(dataseries, dict):
+            for ds, c in dataseries.items():
+                if isinstance(ds, DataSeries) and c in nmp.CHAN_LIST:
+                    self.__dataseries.update({ds: c})
         # self.__size = 0
-        self._dims_set(dims, quiet=True)
+        if dims:
+            self._dims_set(dims, quiet=True)
         if shape:
             self.__np_array_make(shape, fill_value=fill_value)
 
@@ -77,30 +84,58 @@ class Data(NMObject):
     def note(self):
         return self.__note_container
 
+    def _add_dataseries(self, dataseries, chan_char):
+        if not isinstance(dataseries, DataSeries):
+            raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
+        if chan_char not in nmp.CHAN_LIST:
+            raise ValueError('bad chan_char: ' + chan_char)
+        self.__dataseries.update({dataseries: chan_char})
+        return True
+
+    def _remove_dataseries(self, dataseries):
+        if not isinstance(dataseries, DataSeries):
+            raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
+        if dataseries in self.__dataseries:
+            del self.__dataseries[dataseries]
+        return True
+
+    def _dataseries_alert(self):
+        count = len(self.__dataseries)
+        if count == 0:
+            return ''
+        if count == 1:
+            if not isinstance(self.__dataseries[0], DataSeries):
+                return ''
+            dsn = nmu.quotes(self.__dataseries[0].name)
+            return ('dims are superceded by those of data-series ' + dsn + '.'
+                    + '\n' + 'do you want to continue?')
+        dsn = [d.name for d in self.__dataseries if isinstance(d, DataSeries)]
+        return ('dims are superceded by those of the following data-series: ' +
+                str(dsn) + '.' + '\n' + 'do you want to continue?')
+
     @property
     def dims(self):
-        k = self.__dims.keys()
         d = {}
-        if 'xdata' in k and isinstance(self.__dims['xdata'], Data):
-            d.update({'xdata': self.__dims['xdata']})
-        else:
-            d.update({'xstart': self.xstart})
-            d.update({'xdelta': self.xdelta})
-        d.update({'xlabel': self.xlabel})
-        d.update({'xunits': self.xunits})
-        d.update({'ylabel': self.ylabel})
-        d.update({'yunits': self.yunits})
+        d.update({'xdata': self.xdata})
+        d.update({'xstart': self.xstart, 'xdelta': self.xdelta})
+        d.update({'xlabel': self.xlabel, 'xunits': self.xunits})
+        d.update({'ylabel': self.ylabel, 'yunits': self.yunits})
         return d
 
     @dims.setter
     def dims(self, dims):
         return self._dims_set(dims)
 
-    def _dims_set(self, dims, quiet=nmp.QUIET):
+    def _dims_set(self, dims, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if not isinstance(dims, dict):
             e = nmu.type_error(dims, 'dictionary of dimensions')
             raise TypeError(e)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         for k in dims.keys():
             if k not in nmu.DIM_LIST:
                 raise KeyError('unknown dimension key: ' + k)
@@ -131,8 +166,13 @@ class Data(NMObject):
     def xdata(self, xdata):
         return self._xdata_set(xdata)
 
-    def _xdata_set(self, xdata, quiet=nmp.QUIET):
+    def _xdata_set(self, xdata, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if xdata is None:
             pass  # ok
         elif not isinstance(xdata, Data):
@@ -155,6 +195,13 @@ class Data(NMObject):
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
+    def _xdata_alert(self):
+        if not isinstance(self.xdata, Data):
+            return ''
+        xn = nmu.quotes(self.xdata.name)
+        return ('x-dims are superceded by xdata ' + xn + '.' + '\n' +
+                'do you want to continue?')
+
     @property
     def xstart(self):
         if 'xstart' in self.__dims.keys():
@@ -165,8 +212,17 @@ class Data(NMObject):
     def xstart(self, xstart):
         return self._xstart_set(xstart)
 
-    def _xstart_set(self, xstart, quiet=nmp.QUIET):
+    def _xstart_set(self, xstart, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
+        if self.xdata and alert:
+            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if not isinstance(xstart, float) and not isinstance(xstart, int):
             raise TypeError(nmu.type_error(xstart, 'number'))
         if not nmu.number_ok(xstart):
@@ -175,15 +231,10 @@ class Data(NMObject):
         if xstart == old:
             return True
         self.__dims['xstart'] = xstart
-        k = self.__dims.keys()
         self._modified()
         h = nmu.history_change('xstart', old, xstart)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
-        if 'xwave' in k:
-            self._xdata_set(None, quiet=quiet)
-        if 'xdelta' not in k:
-            self._xdelta_set(1, quiet=quiet)
         return True
 
     @property
@@ -196,8 +247,17 @@ class Data(NMObject):
     def xdelta(self, xdelta):
         return self._xdelta_set(xdelta)
 
-    def _xdelta_set(self, xdelta, quiet=nmp.QUIET):
+    def _xdelta_set(self, xdelta, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
+        if self.xdata and alert:
+            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if not isinstance(xdelta, float) and not isinstance(xdelta, int):
             raise TypeError(nmu.type_error(xdelta, 'number'))
         if not nmu.number_ok(xdelta, no_zero=True):
@@ -206,25 +266,15 @@ class Data(NMObject):
         if xdelta == old:
             return True
         self.__dims['xdelta'] = xdelta
-        k = self.__dims.keys()
         self._modified()
         h = nmu.history_change('xdelta', old, xdelta)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
-        if 'xwave' in k:
-            self._xdata_set(None, quiet=quiet)
-        if 'xstart' not in k:
-            self._xstart_set(0, quiet=quiet)
         return True
 
     @property
     def xlabel(self):
-        k = self.__dims.keys()
-        if 'xwave' in k:
-            xwave = self.__dims['xwave']
-            if isinstance(xwave, Data):
-                return xwave.ylabel  # for xwave, y is x
-        if 'xlabel' in k:
+        if 'xlabel' in self.__dims.keys():
             return self.__dims['xlabel']
         return ''
 
@@ -232,18 +282,22 @@ class Data(NMObject):
     def xlabel(self, xlabel):
         return self._xlabel_set(xlabel)
 
-    def _xlabel_set(self, xlabel, quiet=nmp.QUIET):
+    def _xlabel_set(self, xlabel, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
+        if self.xdata and alert:
+            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if not isinstance(xlabel, str):
             raise TypeError(nmu.type_error(xlabel, 'string'))
         old = self.xlabel
         if xlabel == old:
             return True
-        if 'xwave' in self.__dims.keys():
-            xwave = self.__dims['xwave']
-            if isinstance(xwave, Data):
-                # for xwave, y is x
-                return xwave._ylabel_set(xlabel, quiet=quiet)
         self.__dims['xlabel'] = xlabel
         self._modified()
         h = nmu.history_change('xlabel', old, xlabel)
@@ -253,12 +307,7 @@ class Data(NMObject):
 
     @property
     def xunits(self):
-        k = self.__dims.keys()
-        if 'xwave' in k:
-            xwave = self.__dims['xwave']
-            if isinstance(xwave, Data):
-                return xwave.yunits  # for xwave, y is x
-        if 'xunits' in k:
+        if 'xunits' in self.__dims.keys():
             return self.__dims['xunits']
         return ''
 
@@ -266,18 +315,22 @@ class Data(NMObject):
     def xunits(self, xunits):
         return self._xunits_set(xunits)
 
-    def _xunits_set(self, xunits, quiet=nmp.QUIET):
+    def _xunits_set(self, xunits, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
+        if self.xdata and alert:
+            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if not isinstance(xunits, str):
             raise TypeError(nmu.type_error(xunits, 'string'))
         old = self.xunits
         if xunits == old:
             return True
-        if 'xwave' in self.__dims.keys():
-            xwave = self.__dims['xwave']
-            if isinstance(xwave, Data):
-                # for xwave, y is x
-                return xwave._yunits_set(xunits, quiet=quiet)
         self.__dims['xunits'] = xunits
         self._modified()
         h = nmu.history_change('xunits', old, xunits)
@@ -295,8 +348,13 @@ class Data(NMObject):
     def ylabel(self, ylabel):
         return self._ylabel_set(ylabel)
 
-    def _ylabel_set(self, ylabel, quiet=nmp.QUIET):
+    def _ylabel_set(self, ylabel, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if not isinstance(ylabel, str):
             raise TypeError(nmu.type_error(ylabel, 'string'))
         old = self.ylabel
@@ -319,8 +377,13 @@ class Data(NMObject):
     def yunits(self, yunits):
         return self._yunits_set(yunits)
 
-    def _yunits_set(self, yunits, quiet=nmp.QUIET):
+    def _yunits_set(self, yunits, alert=True, quiet=nmp.QUIET):
+        alert = nmu.check_bool(alert, True)
         quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.__dataseries and alert:
+            if nmu.input_yesno(self._dataseries_alert(), tp=self._tp) == 'n':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
         if not isinstance(yunits, str):
             raise TypeError(nmu.type_error(yunits, 'string'))
         old = self.yunits

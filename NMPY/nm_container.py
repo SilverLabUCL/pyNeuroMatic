@@ -506,7 +506,7 @@ class Container(NMObject):
     def select(self, name):
         return self._select_set(name)
 
-    def _select_set(self, name, quiet=nmp.QUIET):
+    def _select_set(self, name, failure_alert=True, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(name, str):
             raise TypeError(nmu.type_error(name, 'string'))
@@ -524,7 +524,7 @@ class Container(NMObject):
             h = Container.__select_history(old, self.__select)
             self._history(h, tp=self._tp, quiet=quiet)
             return o
-        if not self._quiet():
+        if failure_alert:
             q = ('failed to find ' + nmu.quotes(name) + '.' + '\n' +
                  'do you want to create a new ' + self._type +
                  ' named ' + nmu.quotes(name) + '?')
