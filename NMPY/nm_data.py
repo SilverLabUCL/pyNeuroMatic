@@ -115,8 +115,7 @@ class Data(NMObject):
 
     @property
     def dims(self):
-        d = {}
-        d.update({'xdata': self.xdata})
+        d = {'xdata': self.xdata}
         d.update({'xstart': self.xstart, 'xdelta': self.xdelta})
         d.update({'xlabel': self.xlabel, 'xunits': self.xunits})
         d.update({'ylabel': self.ylabel, 'yunits': self.yunits})

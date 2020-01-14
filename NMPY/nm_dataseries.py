@@ -91,7 +91,10 @@ class DataSeries(NMObject):
 
     @property
     def data(self):
-        return self._parent.data
+        # cannot import Folder class
+        if self._parent.__class__.__name__ == 'Folder':
+            return self._parent.data
+        return None
 
     @property
     def thedata(self):
@@ -102,24 +105,6 @@ class DataSeries(NMObject):
         if not self.__dims:
             self.__dims = self._dims_of_thedata
         return self.__dims
-
-    @dims.setter
-    def dims(self, dims):
-        k = dims.keys()
-        if 'xdata' in k:
-            self.xdata = dims['xdata']
-        if 'xstart' in k:
-            self.xstart = dims['xstart']
-        if 'xdelta' in k:
-            self.xdelta = dims['xdelta']
-        if 'xlabel' in k:
-            self.xlabel = dims['xlabel']
-        if 'xunits' in k:
-            self.xunits = dims['xunits']
-        if 'ylabel' in k:
-            self.ylabel = dims['ylabel']
-        if 'yunits' in k:
-            self.yunits = dims['yunits']
 
     def _dims_of_thedata(self):
         xdata = []
@@ -155,25 +140,34 @@ class DataSeries(NMObject):
         dims.update({'ylabel': ylabel, 'yunits': yunits})
         return dims
 
-    def xdata_make(self, name, shape=[], dims={}, quiet=nmp.QUIET):
-        if not isinstance(dims, dict):
-            dims = {'xdata': None, 'xstart': 0, 'xdelta': 1, 'xlabel': '',
-                    'xunits': '', 'ylabel': '', 'yunits': ''}
+    @dims.setter
+    def dims(self, dims):
+        return self._dims_set(dims)
+
+    def _dims_set(self, dims, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
-        dims.update({'xstart': 0, 'xdelta': 1})  # enforce
-        if 'xlabel' in dims.keys():  # switch x and y
-            dims.update({'ylabel': dims['xlabel']})  # NOT DICT TYPE
-            dims.update({'xlabel': ''})
-        if 'xunits' in dims.keys():  # switch x and y
-            dims.update({'yunits': dims['xunits']})  # NOT DICT TYPE
-            dims.update({'xunits': ''})
-        d = self.data.new(name=name, shape=shape, dims=dims, quiet=quiet)
-        if not d:
-            return None
-        for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
-            d.np_array[i] = i
-        self.xdata = d
-        return d
+        if not isinstance(dims, dict):
+            e = nmu.type_error(dims, 'dictionary of dimensions')
+            raise TypeError(e)
+        for k in dims.keys():
+            if k not in nmu.DIM_LIST:
+                raise KeyError('unknown dimension key: ' + k)
+        k = dims.keys()
+        if 'xdata' in k:
+            self._xdata_set(dims['xdata'], quiet=quiet)
+        if 'xstart' in k:
+            self._xstart_set(dims['xstart'], quiet=quiet)
+        if 'xdelta' in k:
+            self._xdelta_set(dims['xdelta'], quiet=quiet)
+        if 'xlabel' in k:
+            self._xlabel_set(dims['xlabel'], quiet=quiet)
+        if 'xunits' in k:
+            self._xunits_set(dims['xunits'], quiet=quiet)
+        if 'ylabel' in k:
+            self._ylabel_set(dims['ylabel'], quiet=quiet)
+        if 'yunits' in k:
+            self._yunits_set(dims['yunits'], quiet=quiet)
+        return True
 
     @property
     def xdata(self):
@@ -187,41 +181,24 @@ class DataSeries(NMObject):
 
     @xdata.setter
     def xdata(self, xdata):
-        if xdata is None:
-            pass  # ok
-        elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
-            raise TypeError(nmu.type_error(xdata, 'Data'))
-        self._xdata_of_thedata = xdata
-        return True
+        return self._xdata_set(xdata)
 
-    def _xdata_set(self, xdata, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
+    def _xdata_set(self, xdata, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if xdata is None:
             pass  # ok
         elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
             raise TypeError(nmu.type_error(xdata, 'Data'))
-        self._xdata_of_thedata = xdata
-        return True
-
-    @property
-    def _xdata_of_thedata(self):
-        x = []
+        old = self.xdata
+        # if xdata == old:
+        #    return True
         for c, cdata in self.__thedata.items():
             for d in cdata:
-                if d.xdata not in x:
-                    x.append(d.xdata)
-        return x
-
-    @_xdata_of_thedata.setter
-    def _xdata_of_thedata(self, xdata, quiet=nmp.QUIET):
-        if xdata is None:
-            pass  # ok
-        elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
-            raise TypeError(nmu.type_error(xdata, 'Data'))
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d._xdata_set(alert=False, quiet=quiet)
+                d._xdata_set(xdata, alert=False, quiet=True)
+        self.__dims = {}  # reset
+        new = self.xdata
+        h = nmu.history_change('xdata', old, new)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
@@ -236,21 +213,18 @@ class DataSeries(NMObject):
 
     @xstart.setter
     def xstart(self, xstart):
-        if np.isinf(xstart) or np.isnan(xstart):
-            return False
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xstart = xstart
-        return True
+        return self._xstart_set(xstart)
 
-    @property
-    def _xstart_of_thedata(self):
-        x = []
+    def _xstart_set(self, xstart, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if not isinstance(xstart, float) and not isinstance(xstart, int):
+            raise TypeError(nmu.type_error(xstart, 'number'))
+        if not nmu.number_ok(xstart):
+            raise ValueError('bad xstart: ' + str(xstart))
         for c, cdata in self.__thedata.items():
             for d in cdata:
-                if d.xstart not in x:
-                    x.append(d.xstart)
-        return x
+                d._xstart_set(xstart, alert=False, quiet=True)
+        return True
 
     @property
     def xdelta(self):
@@ -264,21 +238,16 @@ class DataSeries(NMObject):
 
     @xdelta.setter
     def xdelta(self, xdelta):
+        return self._xdelta_set(xdelta)
+
+    def _xdelta_set(self, xdelta, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if np.isinf(xdelta) or np.isnan(xdelta):
             return False
         for c, cdata in self.__thedata.items():
             for d in cdata:
                 d.xdelta = xdelta
         return True
-
-    @property
-    def _xdelta_of_thedata(self):
-        x = []
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                if d.xdelta not in x:
-                    x.append(d.xdelta)
-        return x
 
     @property
     def xlabel(self):
@@ -292,23 +261,16 @@ class DataSeries(NMObject):
 
     @xlabel.setter
     def xlabel(self, xlabel):
+        return self._xlabel_set(xlabel)
+
+    def _xlabel_set(self, xlabel, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xlabel, str):
             return False
         for c, cdata in self.__thedata.items():
             for d in cdata:
                 d.xlabel = xlabel
         return True
-
-    @property
-    def _xlabel_of_thedata(self):
-        x = []
-        xlower = []
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                if d.xlabel.lower() not in xlower:
-                    x.append(d.xlabel)
-                    xlower.append(d.xlabel.lower())
-        return x
 
     @property
     def xunits(self):
@@ -322,23 +284,16 @@ class DataSeries(NMObject):
 
     @xunits.setter
     def xunits(self, xunits):
+        return self._xunits_set(xunits)
+
+    def _xunits_set(self, xunits, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xunits, str):
             return False
         for c, cdata in self.__thedata.items():
             for d in cdata:
                 d.xunits = xunits
         return True
-
-    @property
-    def _xunits_of_thedata(self):
-        x = []
-        xlower = []
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                if d.xunits.lower() not in xlower:
-                    x.append(d.xunits)
-                    xlower.append(d.xunits.lower())
-        return x
 
     @property
     def ylabel(self):
@@ -352,6 +307,10 @@ class DataSeries(NMObject):
 
     @ylabel.setter
     def ylabel(self, chan_ylabel):
+        return self._ylabel_set(chan_ylabel)
+
+    def _ylabel_set(self, chan_ylabel, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if isinstance(chan_ylabel, str):
             chan_ylabel = {'A': chan_ylabel}
         elif not isinstance(chan_ylabel, dict):
@@ -397,6 +356,10 @@ class DataSeries(NMObject):
 
     @yunits.setter
     def yunits(self, chan_yunits):
+        return self._yunits_set(chan_yunits)
+
+    def _yunits_set(self, chan_yunits, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if isinstance(chan_yunits, str):
             chan_yunits = {'A': chan_yunits}
         elif not isinstance(chan_yunits, dict):
@@ -416,19 +379,6 @@ class DataSeries(NMObject):
                 for d in cdata:
                     d.yunits = yunits
         return True
-
-    @property
-    def _yunits_of_thedata(self):
-        yy = {}
-        for c, cdata in self.__thedata.items():
-            y = []
-            ylower = []
-            for d in cdata:
-                if d.yunits.lower() not in ylower:
-                    y.append(d.yunits)
-                    ylower.append(d.yunits.lower())
-            yy.update({c: y})
-        return yy
 
     @property
     def channel(self):
@@ -758,6 +708,26 @@ class DataSeries(NMObject):
         if dims:
             self.dims = dims
         return True
+
+    def xdata_make(self, name, shape=[], dims={}, quiet=nmp.QUIET):
+        if not isinstance(dims, dict):
+            dims = {'xdata': None, 'xstart': 0, 'xdelta': 1, 'xlabel': '',
+                    'xunits': '', 'ylabel': '', 'yunits': ''}
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        dims.update({'xstart': 0, 'xdelta': 1})  # enforce
+        if 'xlabel' in dims.keys():  # switch x and y
+            dims.update({'ylabel': dims['xlabel']})  # NOT DICT TYPE
+            dims.update({'xlabel': ''})
+        if 'xunits' in dims.keys():  # switch x and y
+            dims.update({'yunits': dims['xunits']})  # NOT DICT TYPE
+            dims.update({'xunits': ''})
+        d = self.data.new(name=name, shape=shape, dims=dims, quiet=quiet)
+        if not d:
+            return None
+        for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
+            d.np_array[i] = i
+        self.xdata = d
+        return d
 
 
 class DataSeriesContainer(Container):
