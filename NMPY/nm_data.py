@@ -181,6 +181,10 @@ class Data(NMObject):
             return True
         self.__dims['xdata'] = xdata
         self._modified()
+        if 'xdata' in self.__dims.keys():
+            old = self.__dims['xdata']
+        else:
+            old = None
         if old:
             oldname = old.name
         else:
@@ -226,12 +230,16 @@ class Data(NMObject):
             raise TypeError(nmu.type_error(xstart, 'number'))
         if not nmu.number_ok(xstart):
             raise ValueError('bad xstart: ' + str(xstart))
-        old = self.xstart
+        k = 'xstart'
+        if k in self.__dims.keys():
+            old = self.__dims[k]
+        else:
+            old = 0
         if xstart == old:
             return True
-        self.__dims['xstart'] = xstart
+        self.__dims[k] = xstart
         self._modified()
-        h = nmu.history_change('xstart', old, xstart)
+        h = nmu.history_change(k, old, xstart)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -261,12 +269,16 @@ class Data(NMObject):
             raise TypeError(nmu.type_error(xdelta, 'number'))
         if not nmu.number_ok(xdelta, no_zero=True):
             raise ValueError('bad xdelta: ' + str(xdelta))
-        old = self.xdelta
+        k = 'xdelta'
+        if k in self.__dims.keys():
+            old = self.__dims[k]
+        else:
+            old = 1
         if xdelta == old:
             return True
-        self.__dims['xdelta'] = xdelta
+        self.__dims[k] = xdelta
         self._modified()
-        h = nmu.history_change('xdelta', old, xdelta)
+        h = nmu.history_change(k, old, xdelta)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -294,12 +306,16 @@ class Data(NMObject):
                 return False
         if not isinstance(xlabel, str):
             raise TypeError(nmu.type_error(xlabel, 'string'))
-        old = self.xlabel
+        k = 'xlabel'
+        if k in self.__dims.keys():
+            old = self.__dims[k]
+        else:
+            old = ''
         if xlabel == old:
             return True
-        self.__dims['xlabel'] = xlabel
+        self.__dims[k] = xlabel
         self._modified()
-        h = nmu.history_change('xlabel', old, xlabel)
+        h = nmu.history_change(k, old, xlabel)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -327,12 +343,16 @@ class Data(NMObject):
                 return False
         if not isinstance(xunits, str):
             raise TypeError(nmu.type_error(xunits, 'string'))
-        old = self.xunits
+        k = 'xunits'
+        if k in self.__dims.keys():
+            old = self.__dims[k]
+        else:
+            old = ''
         if xunits == old:
             return True
-        self.__dims['xunits'] = xunits
+        self.__dims[k] = xunits
         self._modified()
-        h = nmu.history_change('xunits', old, xunits)
+        h = nmu.history_change(k, old, xunits)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -356,12 +376,16 @@ class Data(NMObject):
                 return False
         if not isinstance(ylabel, str):
             raise TypeError(nmu.type_error(ylabel, 'string'))
-        old = self.ylabel
+        k = 'ylabel'
+        if k in self.__dims.keys():
+            old = self.__dims[k]
+        else:
+            old = ''
         if ylabel == old:
             return True
-        self.__dims['ylabel'] = ylabel
+        self.__dims[k] = ylabel
         self._modified()
-        h = nmu.history_change('ylabel', old, ylabel)
+        h = nmu.history_change(k, old, ylabel)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -385,12 +409,16 @@ class Data(NMObject):
                 return False
         if not isinstance(yunits, str):
             raise TypeError(nmu.type_error(yunits, 'string'))
-        old = self.yunits
+        k = 'yunits'
+        if k in self.__dims.keys():
+            old = self.__dims[k]
+        else:
+            old = ''
         if yunits == old:
             return True
-        self.__dims['yunits'] = yunits
+        self.__dims[k] = yunits
         self._modified()
-        h = nmu.history_change('yunits', old, yunits)
+        h = nmu.history_change(k, old, yunits)
         self.note.new(note=h, quiet=True)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
