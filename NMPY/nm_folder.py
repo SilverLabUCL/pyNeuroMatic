@@ -48,7 +48,6 @@ class Folder(NMObject):
         name = self.name
         if not isinstance(folder, Folder):
             raise TypeError(nmu.type_error(folder, 'Folder'))
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(folder, copy_name=copy_name, quiet=True):
             return False
         c = folder._Folder__data_container

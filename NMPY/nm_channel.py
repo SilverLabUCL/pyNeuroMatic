@@ -38,7 +38,6 @@ class Channel(NMObject):
         name = self.name
         if not isinstance(channel, Channel):
             raise TypeError(nmu.type_error(channel, 'Channel'))
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(channel, copy_name=copy_name, quiet=True):
             return False
         self.__graphXY = channel._Channel__graphXY

@@ -30,7 +30,6 @@ class Project(NMObject):
         name = self.name
         if not isinstance(project, Project):
             raise TypeError(nmu.type_error(project, 'Project'))
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(project, copy_name=copy_name, quiet=True):
             return False
         c = project._Project__folder_container

@@ -6,10 +6,12 @@ Copyright 2019 Jason Rothman
 """
 import numpy as np
 
+from nm_container import NMObject
 from nm_container import Container
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
 from nm_dimensions import Dimensions
+from nm_dimensions import XDimensions
 from nm_note import NoteContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -19,13 +21,13 @@ NP_DTYPE = np.float64
 NP_FILL_VALUE = np.nan
 
 
-class Data(Dimensions):
+class Data(NMObject):
     """
     NM Data class
     """
 
     def __init__(self, parent, name, fxns={}, shape=[],
-                 fill_value=NP_FILL_VALUE, dims={}, dataseries={}):
+                 fill_value=NP_FILL_VALUE, xdims={}, ydims={}, dataseries={}):
         super().__init__(parent, name, fxns=fxns)
         self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__np_array = None  # NumPy N-dimensional array
@@ -37,15 +39,22 @@ class Data(Dimensions):
         # self.__size = 0
         if shape:
             self.__np_array_make(shape, fill_value=fill_value)
-        if dims:
-            self._dims_set(dims, quiet=True)
+        self.__x = XDimensions(self, 'XDims', fxns=fxns,
+                               notes=self._note_container)
+        self.__y = Dimensions(self, 'YDims', fxns=fxns,
+                              notes=self._note_container)
+        if xdims:
+            self.__x._dims_set(xdims, alert=False, quiet=True)
+        if ydims:
+            self.__y._dims_set(ydims, alert=False, quiet=True)
 
     # override
-    # @property
-    # def parameters(self):
-    #     k = super().parameters
-    #     k.update(self.dims)
-    #     return k
+    @property
+    def parameters(self):
+         k = super().parameters
+         k.update({'xdims': self.__x.dims})
+         k.update({'ydims': self.__y.dims})
+         return k
 
     # override, no super
     @property
@@ -69,14 +78,14 @@ class Data(Dimensions):
         name = self.name
         if not isinstance(data, Data):
             raise TypeError(nmu.type_error(data, 'Data'))
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(data, copy_name=copy_name, quiet=True):
             return False
         c = data._Data__note_container
         if self._note_container:
             if not self._note_container._copy(c, quiet=True):
                 return False
-        self.dims = data.dims
+        self.__x.dims = data.x.dims
+        self.__y.dims = data.y.dims
         self._modified()
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=self._tp, quiet=quiet)
@@ -112,6 +121,14 @@ class Data(Dimensions):
                 str(dsn) + '.' + '\n' + 'do you want to continue?')
 
     @property
+    def x(self):
+        return self.__x
+
+    @property
+    def y(self):
+        return self.__y
+
+    @property
     def np_array(self):
         return self.__np_array
 
@@ -120,7 +137,6 @@ class Data(Dimensions):
         return self._np_array_set(np_ndarray)
 
     def _np_array_set(self, np_ndarray, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(np_ndarray, np.ndarray):
             e = nmu.type_error(np_ndarray, 'numpy.ndarray')
             raise TypeError(e)
@@ -128,7 +144,7 @@ class Data(Dimensions):
         self.__np_array = np_ndarray
         self._modified()
         h = nmu.history_change('np_array', old, self.__np_array)
-        self._note_new(h)
+        self._note_container.new(h)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
@@ -146,7 +162,7 @@ class Data(Dimensions):
         # dtype = float64
         n = ('created data array (numpy.random.normal): shape=' +
              str(shape) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
-        self._note_new(n)
+        self._note_container.new(n)
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
@@ -161,7 +177,7 @@ class Data(Dimensions):
         self._modified()
         n = ('created numpy array (numpy.full): shape=' + str(shape) +
              ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
-        self._note_new(n)
+        self._note_container.new(n)
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
@@ -188,10 +204,10 @@ class DataContainer(Container):
         return {'data': self.names}
 
     # override
-    def new(self, name='default', shape=[], fill_value=np.nan, dims={},
-            select=True, quiet=nmp.QUIET):
+    def new(self, name='default', shape=[], fill_value=np.nan, xdims={},
+            ydims={}, select=True, quiet=nmp.QUIET):
         o = Data(self._parent, 'temp', self._fxns, shape=shape,
-                 fill_value=fill_value, dims=dims)
+                 fill_value=fill_value, xdims=xdims, ydims=ydims)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override

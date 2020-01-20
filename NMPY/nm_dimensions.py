@@ -10,26 +10,22 @@ from nm_note import NoteContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 
-DIMS_LIST = ['xdata', 'xstart', 'xdelta', 'xlabel', 'xunits', 'ylabel',
-             'yunits']
-
+DIM_LIST = ['label', 'units', 'master'] + ['xdata', 'start', 'delta']
 
 class Dimensions(NMObject):
     """
     NM Dimensions class
     """
 
-    def __init__(self, parent, name, fxns={}, rename=True):
-        super().__init__(parent, name, fxns=fxns, rename=rename)
-        self._note_container = None
-        self.__dims_master = None  # e.g. DataSeries
-        self.__xdata = None
-        self.__xstart = 0
-        self.__xdelta = 1
-        self.__xlabel = ''
-        self.__xunits = ''
-        self.__ylabel = ''
-        self.__yunits = ''
+    def __init__(self, parent, name, fxns={}, notes=None):
+        super().__init__(parent, name, fxns=fxns)
+        if isinstance(notes, NoteContainer):
+            self._note_container = notes
+        else:
+            self._note_container = None
+        self._label = ''
+        self._units = ''
+        self._master = None  # e.g. DataSeries
 
     # override
     @property
@@ -38,51 +34,55 @@ class Dimensions(NMObject):
         k.update(self.dims)
         return k
 
+    # override, no super
     @property
-    def dims_master(self):
-        return self.__dims_master
+    def content(self):
+        return {'dimension': self.name}
 
-    @dims_master.setter
-    def dims_master(self, dimensions):
-        return self._dims_master_set(dimensions)
+    def _note_new(self, note, quiet=True):
+        if isinstance(self._note_container, NoteContainer):
+            return self._note_container.new(note=note, quiet=quiet)
+        return None
 
-    def __dims_master_alert(self):
-        if not isinstance(self.__dims_master, Dimensions):
-            return 'dims are unlocked'
-        a = 'dims are locked to master ' + nmu.quotes(self.__dims_master.name)
-        return a
+    def _master_lock(self, alert=True, tp=''):
+        if isinstance(self._master, Dimensions):
+            if alert:
+                a = ('dims are locked to master ' +
+                     nmu.quotes(self._master.tree_path()))
+                self._alert(a, tp=tp, frame=3)
+            return True
+        return False
 
-    def _dims_master_set(self, dimensions, quiet=nmp.QUIET):
+    @property
+    def master(self):
+        return self._master
+
+    @master.setter
+    def master(self, dimensions):
+        return self._master_set(dimensions)
+
+    def _master_set(self, dimensions, quiet=nmp.QUIET):
         if dimensions is None:
             pass  # ok
         elif not isinstance(dimensions, Dimensions):
             raise TypeError(nmu.type_error(dimensions, 'Dimensions'))
-        old = self.__dims_master
+        old = self._master
         if old == dimensions:
             return True
-        self.__dims_master = dimensions
+        self._master = dimensions
         self._modified()
-        if old:
-            oldname = old.name
-        else:
-            oldname = 'None'
-        if dimensions:
-            newname = dimensions.name
-        else:
-            newname = 'None'
-        h = nmu.history_change('dims_master', oldname, newname)
+        h = nmu.history_change('master', old, dimensions)
         self._note_new(h)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
     def dims(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.dims
-        d = {'xdata': self.__xdata}
-        d.update({'xstart': self.__xstart, 'xdelta': self.__xdelta})
-        d.update({'xlabel': self.__xlabel, 'xunits': self.__xunits})
-        d.update({'ylabel': self.__ylabel, 'yunits': self.__yunits})
+        if isinstance(self._master, Dimensions):
+            d = self._master.dims
+            d.update({'master': self._master})
+        else:
+            d = {'label': self._label, 'units': self._units, 'master': None}
         return d
 
     @dims.setter
@@ -90,65 +90,146 @@ class Dimensions(NMObject):
         return self._dims_set(dims)
 
     def _dims_set(self, dims, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self._master_lock(alert=alert, tp=self._tp):
+            return False
         if not isinstance(dims, dict):
             e = nmu.type_error(dims, 'dimensions dictionary')
             raise TypeError(e)
         keys = dims.keys()
         for k in keys:
-            if k not in DIMS_LIST:
+            if k not in DIM_LIST:
                 raise KeyError('unknown dimensions key: ' + k)
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
-            return False
-        if 'xdata' in keys:
-            self._xdata_set(dims['xdata'], quiet=quiet)
-        if 'xstart' in keys:
-            self._xstart_set(dims['xstart'], quiet=quiet)
-        if 'xdelta' in keys:
-            self._xdelta_set(dims['xdelta'], quiet=quiet)
-        if 'xlabel' in keys:
-            self._xlabel_set(dims['xlabel'], quiet=quiet)
-        if 'xunits' in keys:
-            self._xunits_set(dims['xunits'], quiet=quiet)
-        if 'ylabel' in keys:
-            self._ylabel_set(dims['ylabel'], quiet=quiet)
-        if 'yunits' in keys:
-            self._yunits_set(dims['yunits'], quiet=quiet)
+        if 'label' in keys:
+            self._label_set(dims['label'], alert=alert, quiet=quiet)
+        if 'units' in keys:
+            self._units_set(dims['units'], alert=alert, quiet=quiet)
+        if 'master' in keys:
+            self._master_set(dims['master'], quiet=quiet)
         return True
 
-    def _note_new(self, note, quiet=True):
-        if isinstance(self._note_container, NoteContainer):
-            return self._note_container.new(note=note, quiet=quiet)
-        return None
+    @property
+    def label(self):
+        if isinstance(self._master, Dimensions):
+            return self._master.label
+        return self._label
+
+    @label.setter
+    def label(self, label):
+        return self._label_set(label)
+
+    def _label_set(self, label, alert=True, quiet=nmp.QUIET):
+        if self._master_lock(alert=alert, tp=self._tp):
+            return False
+        if not isinstance(label, str):
+            raise TypeError(nmu.type_error(label, 'string'))
+        old = self._label
+        if label == old:
+            return True
+        self._label = label
+        self._modified()
+        h = nmu.history_change('label', old, label)
+        self._note_new(h)
+        self._history(h, tp=self._tp, quiet=quiet)
+        return True
+
+    @property
+    def units(self):
+        if isinstance(self._master, Dimensions):
+            return self._master.units
+        return self._units
+
+    @units.setter
+    def units(self, units):
+        return self._units_set(units)
+
+    def _units_set(self, units, alert=True, quiet=nmp.QUIET):
+        if self._master_lock(alert=alert, tp=self._tp):
+            return False
+        if not isinstance(units, str):
+            raise TypeError(nmu.type_error(units, 'string'))
+        old = self._units
+        if units == old:
+            return True
+        self._units = units
+        self._modified()
+        h = nmu.history_change('units', old, units)
+        self._note_new(h)
+        self._history(h, tp=self._tp, quiet=quiet)
+        return True
+
+
+class XDimensions(Dimensions):
+    """
+    NM XDimensions class
+    """
+
+    def __init__(self, parent, name, fxns={}, notes=None):
+        super().__init__(parent, name, fxns=fxns, notes=notes)
+        self._xdata = None
+        self._start = 0
+        self._delta = 1
+
+    # override
+    def _master_set(self, xdimensions, quiet=nmp.QUIET):
+        if xdimensions is None:
+            pass  # ok
+        elif not isinstance(xdimensions, XDimensions):
+            raise TypeError(nmu.type_error(xdimensions, 'XDimensions'))
+        return super()._master_set(xdimensions, quiet=quiet)
+
+    # override, no super
+    @property
+    def dims(self):
+        if isinstance(self._master, XDimensions):
+            d = self._master.dims
+            d.update({'master': self._master})
+        else:
+            d = {'xdata': self._xdata}
+            d.update({'start': self._start, 'delta': self._delta})
+            d.update({'label': self._label, 'units': self._units})
+            d.update({'master': None})
+        return d
+
+    # override
+    def _dims_set(self, dims, alert=True, quiet=nmp.QUIET):
+        if self._master_lock(alert=alert, tp=self._tp):
+            return False
+        if not isinstance(dims, dict):
+            e = nmu.type_error(dims, 'dimensions dictionary')
+            raise TypeError(e)
+        keys = dims.keys()
+        for k in keys:
+            if k not in DIM_LIST:
+                raise KeyError('unknown dimensions key: ' + k)
+        if 'xdata' in keys:
+            self._xdata_set(dims['xdata'], alert=alert, quiet=quiet)
+        if 'start' in keys:
+            self._start_set(dims['start'], alert=alert, quiet=quiet)
+        if 'delta' in keys:
+            self._delta_set(dims['delta'], alert=alert, quiet=quiet)
+        return super()._dims_set( dims=dims, alert=alert, quiet=quiet)
 
     @property
     def xdata(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.xdata
-        return self.__xdata
+        if isinstance(self._master, XDimensions):
+            return self._master.xdata
+        return self._xdata
 
     @xdata.setter
     def xdata(self, xdata):
         return self._xdata_set(xdata)
 
     def _xdata_set(self, xdata, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self._master_lock(alert=alert, tp=self._tp):
+            return False
         if xdata is None:
             pass  # ok
         elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
             raise TypeError(nmu.type_error(xdata, 'Data'))
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
-            return False
-        old = self.__xdata
+        old = self._xdata
         if xdata == old:
             return True
-        self.__xdata = xdata
+        self._xdata = xdata
         self._modified()
         if old:
             oldname = old.name
@@ -163,6 +244,15 @@ class Dimensions(NMObject):
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
+    def _xdata_lock(self, alert=True, tp=''):
+        if self.xdata.__class__.__name__ == 'Data':
+            if alert:
+                a = ('x-dims are locked to xdata ' +
+                     nmu.quotes(self._master.tree_path()))
+                self._alert(a, tp=tp, frame=3)
+            return True
+        return False
+    
     def _xdata_alert(self):
         if self.xdata.__class__.__name__ == 'Data':
             xn = nmu.quotes(self.xdata.name)
@@ -171,195 +261,75 @@ class Dimensions(NMObject):
         return ''
 
     @property
-    def xstart(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.xstart
-        return self.__xstart
+    def start(self):
+        if isinstance(self._master, XDimensions):
+            return self._master.start
+        return self._start
 
-    @xstart.setter
-    def xstart(self, xstart):
-        return self._xstart_set(xstart)
+    @start.setter
+    def start(self, start):
+        return self._start_set(start)
 
-    def _xstart_set(self, xstart, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if self.xdata and alert:
-            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
-                self._history('cancel', tp=self._tp, quiet=quiet)
-                return False
-        if not isinstance(xstart, float) and not isinstance(xstart, int):
-            raise TypeError(nmu.type_error(xstart, 'number'))
-        if not nmu.number_ok(xstart):
-            raise ValueError('bad xstart: ' + str(xstart))
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
+    def _start_set(self, start, alert=True, quiet=nmp.QUIET):
+        if self._master_lock(alert=alert, tp=self._tp):
             return False
-        old = self.__xstart
-        if xstart == old:
+        if self._xdata_lock(alert=alert, tp=self._tp):
+            return False
+        if not isinstance(start, float) and not isinstance(start, int):
+            raise TypeError(nmu.type_error(start, 'number'))
+        if not nmu.number_ok(start):
+            raise ValueError('bad start: ' + str(start))
+        old = self._start
+        if start == old:
             return True
-        self.__xstart = xstart
+        self._start = start
         self._modified()
-        h = nmu.history_change('xstart', old, xstart)
+        h = nmu.history_change('start', old, start)
         self._note_new(h)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     @property
-    def xdelta(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.xdelta
-        return self.__xdelta
+    def delta(self):
+        if isinstance(self._master, XDimensions):
+            return self._master.delta
+        return self._delta
 
-    @xdelta.setter
-    def xdelta(self, xdelta):
-        return self._xdelta_set(xdelta)
+    @delta.setter
+    def delta(self, delta):
+        return self._delta_set(delta)
 
-    def _xdelta_set(self, xdelta, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if self.xdata and alert:
-            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
-                self._history('cancel', tp=self._tp, quiet=quiet)
-                return False
-        if not isinstance(xdelta, float) and not isinstance(xdelta, int):
-            raise TypeError(nmu.type_error(xdelta, 'number'))
-        if not nmu.number_ok(xdelta):
-            raise ValueError('bad xdelta: ' + str(xdelta))
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
+    def _delta_set(self, delta, alert=True, quiet=nmp.QUIET):
+        if self._master_lock(alert=alert, tp=self._tp):
             return False
-        old = self.__xdelta
-        if xdelta == old:
+        if self._xdata_lock(alert=alert, tp=self._tp):
+            return False
+        if not isinstance(delta, float) and not isinstance(delta, int):
+            raise TypeError(nmu.type_error(delta, 'number'))
+        if not nmu.number_ok(delta):
+            raise ValueError('bad delta: ' + str(delta))
+        old = self._delta
+        if delta == old:
             return True
-        self.__xdelta = xdelta
+        self._delta = delta
         self._modified()
-        h = nmu.history_change('xdelta', old, xdelta)
+        h = nmu.history_change('delta', old, delta)
         self._note_new(h)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
-    @property
-    def xlabel(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.xlabel
-        return self.__xlabel
-
-    @xlabel.setter
-    def xlabel(self, xlabel):
-        return self._xlabel_set(xlabel)
-
-    def _xlabel_set(self, xlabel, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if self.xdata and alert:
-            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
-                self._history('cancel', tp=self._tp, quiet=quiet)
-                return False
-        if not isinstance(xlabel, str):
-            raise TypeError(nmu.type_error(xlabel, 'string'))
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
+    # override
+    def _label_set(self, label, alert=True, quiet=nmp.QUIET):
+        if self._master_lock(alert=alert, tp=self._tp):
             return False
-        old = self.__xlabel
-        if xlabel == old:
-            return True
-        self.__xlabel = xlabel
-        self._modified()
-        h = nmu.history_change('xlabel', old, xlabel)
-        self._note_new(h)
-        self._history(h, tp=self._tp, quiet=quiet)
-        return True
-
-    @property
-    def xunits(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.xunits
-        return self.__xunits
-
-    @xunits.setter
-    def xunits(self, xunits):
-        return self._xunits_set(xunits)
-
-    def _xunits_set(self, xunits, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if self.xdata and alert:
-            if nmu.input_yesno(self._xdata_alert(), tp=self._tp) == 'n':
-                self._history('cancel', tp=self._tp, quiet=quiet)
-                return False
-        if not isinstance(xunits, str):
-            raise TypeError(nmu.type_error(xunits, 'string'))
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
+        if self._xdata_lock(alert=alert, tp=self._tp):
             return False
-        old = self.__xunits
-        if xunits == old:
-            return True
-        self.__xunits = xunits
-        self._modified()
-        h = nmu.history_change('xunits', old, xunits)
-        self._note_new(h)
-        self._history(h, tp=self._tp, quiet=quiet)
-        return True
+        return super()._label_set(label=label, alert=alert, quiet=quiet)
 
-    @property
-    def ylabel(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.ylabel
-        return self.__ylabel
-
-    @ylabel.setter
-    def ylabel(self, ylabel):
-        return self._ylabel_set(ylabel)
-
-    def _ylabel_set(self, ylabel, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if not isinstance(ylabel, str):
-            raise TypeError(nmu.type_error(ylabel, 'string'))
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
+    # override
+    def _units_set(self, units, alert=True, quiet=nmp.QUIET):
+        if self._master_lock(alert=alert, tp=self._tp):
             return False
-        old = self.__ylabel
-        if ylabel == old:
-            return True
-        self.__ylabel = ylabel
-        self._modified()
-        h = nmu.history_change('ylabel', old, ylabel)
-        self._note_new(h)
-        self._history(h, tp=self._tp, quiet=quiet)
-        return True
-
-    @property
-    def yunits(self):
-        if isinstance(self.__dims_master, Dimensions):
-            return self.__dims_master.yunits
-        return self.__yunits
-
-    @yunits.setter
-    def yunits(self, yunits):
-        return self._yunits_set(yunits)
-
-    def _yunits_set(self, yunits, alert=True, quiet=nmp.QUIET):
-        alert = nmu.check_bool(alert, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if not isinstance(yunits, str):
-            raise TypeError(nmu.type_error(yunits, 'string'))
-        if isinstance(self.__dims_master, Dimensions):
-            if alert:
-                self._alert(self.__dims_master_alert, tp=self._tp)
+        if self._xdata_lock(alert=alert, tp=self._tp):
             return False
-        old = self.__yunits
-        if yunits == old:
-            return True
-        self.__yunits = yunits
-        self._modified()
-        h = nmu.history_change('yunits', old, yunits)
-        self._note_new(h)
-        self._history(h, tp=self._tp, quiet=quiet)
-        return True
+        return super()._units_set(units=units, alert=alert, quiet=quiet)

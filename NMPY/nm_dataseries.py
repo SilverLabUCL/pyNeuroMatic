@@ -9,6 +9,7 @@ from nm_container import NMObject
 from nm_container import Container
 from nm_channel import ChannelContainer
 from nm_dimensions import Dimensions
+from nm_dimensions import XDimensions
 from nm_eset import EpochSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -75,7 +76,6 @@ class DataSeries(NMObject):
         if not isinstance(dataseries, DataSeries):
             e = nmu.type_error(dataseries, 'DataSeries')
             raise TypeError(e)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not super()._copy(dataseries, copy_name=copy_name, quiet=True):
             return False
         c = dataseries._DataSeries__channel_container
@@ -161,7 +161,6 @@ class DataSeries(NMObject):
         return self._dims_set(dims)
 
     def _dims_set(self, dims, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(dims, dict):
             e = nmu.type_error(dims, 'dimensions dictionary')
             raise TypeError(e)
@@ -200,7 +199,6 @@ class DataSeries(NMObject):
         return self._xdata_set(xdata)
 
     def _xdata_set(self, xdata, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if xdata is None:
             pass  # ok
         elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
@@ -232,7 +230,6 @@ class DataSeries(NMObject):
         return self._xstart_set(xstart)
 
     def _xstart_set(self, xstart, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xstart, float) and not isinstance(xstart, int):
             raise TypeError(nmu.type_error(xstart, 'number'))
         if not nmu.number_ok(xstart):
@@ -257,7 +254,6 @@ class DataSeries(NMObject):
         return self._xdelta_set(xdelta)
 
     def _xdelta_set(self, xdelta, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if np.isinf(xdelta) or np.isnan(xdelta):
             return False
         for c, cdata in self.__thedata.items():
@@ -280,7 +276,6 @@ class DataSeries(NMObject):
         return self._xlabel_set(xlabel)
 
     def _xlabel_set(self, xlabel, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xlabel, str):
             return False
         for c, cdata in self.__thedata.items():
@@ -303,7 +298,6 @@ class DataSeries(NMObject):
         return self._xunits_set(xunits)
 
     def _xunits_set(self, xunits, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(xunits, str):
             return False
         for c, cdata in self.__thedata.items():
@@ -326,7 +320,6 @@ class DataSeries(NMObject):
         return self._ylabel_set(chan_ylabel)
 
     def _ylabel_set(self, chan_ylabel, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if isinstance(chan_ylabel, str):
             chan_ylabel = {'A': chan_ylabel}
         elif not isinstance(chan_ylabel, dict):
@@ -375,7 +368,6 @@ class DataSeries(NMObject):
         return self._yunits_set(chan_yunits)
 
     def _yunits_set(self, chan_yunits, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if isinstance(chan_yunits, str):
             chan_yunits = {'A': chan_yunits}
         elif not isinstance(chan_yunits, dict):

@@ -393,22 +393,25 @@ class Test(unittest.TestCase):
         name0 = 'RecordA0'
         name1 = 'RecordA1'
         shape = [5]  # test different shapes
-        dims0 = {'xstart': 10, 'xdelta': 0.01,
-                 'xlabel': 'time', 'xunits': 'ms',
-                 'ylabel': 'Vmem', 'yunits': 'mV'}
-        dims1 = {'xstart': -10, 'xdelta': 0.05,
-                 'xlabel': 'time', 'xunits': 's',
-                 'ylabel': 'Imem', 'yunits': 'pA'}
-        xdims = {'xstart': 0, 'xdelta': 1,
-                 'xlabel': 'sample', 'xunits': '',
-                 'ylabel': 't', 'yunits': 'seconds'}
+        xdims0 = {'start': 10, 'delta': 0.01,
+                 'label': 'time', 'units': 'ms'}
+        ydims0 = {'label': 'Vmem', 'units': 'mV'}
+        xdims1 = {'start': -10, 'delta': 0.05,
+                 'label': 'time', 'units': 's'}
+        ydims1 = {'label': 'Imem', 'units': 'pA'}
+        xdims_x = {'start': 0, 'delta': 1,
+                 'label': 'sample', 'units': ''}
+        ydims_x = {'label': 't', 'units': 'seconds'}
         ds = DataSeries(parent, 'Record', fxns=nm._fxns)
         d0 = Data(parent, name0, fxns=nm._fxns, shape=shape,
-                  fill_value=np.nan, dims=dims1, dataseries=ds)
+                  fill_value=np.nan, xdims=xdims0, ydims=ydims0, dataseries=ds)
         d1 = Data(parent, name1, fxns=nm._fxns, shape=shape,
-                  fill_value=0, dims=dims1, dataseries=ds)
+                  fill_value=0, xdims=xdims1, ydims=ydims1, dataseries=ds)
         xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=shape,
-                     fill_value=0, dims=xdims)
+                     fill_value=0, xdims=xdims_x, ydims=ydims_x)
+        d0.x.master = d1.x
+        print(d0.parameters)
+        d0.x.delta = 2
         """
         dims0.update({'xdata': None})
         dims1.update({'xdata': None})
