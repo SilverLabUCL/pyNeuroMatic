@@ -10,9 +10,6 @@ from colorama import Fore, Back, Style
 
 import nm_preferences as nmp
 
-DIM_LIST = ['xdata', 'xstart', 'xdelta', 'xlabel', 'xunits', 'ylabel',
-            'yunits']
-
 
 def name_ok(name):
     ok = ['_']  # list of symbols OK to include in names

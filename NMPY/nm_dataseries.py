@@ -8,6 +8,7 @@ import numpy as np
 from nm_container import NMObject
 from nm_container import Container
 from nm_channel import ChannelContainer
+from nm_dimensions import Dimensions
 from nm_eset import EpochSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -18,7 +19,7 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, dims={}):
         # name is data-series prefix
         super().__init__(parent, name, fxns=fxns, rename=False)
         cc = ChannelContainer(self, 'Channels', fxns=fxns)
@@ -26,7 +27,11 @@ class DataSeries(NMObject):
         ec = EpochSetContainer(self, 'EpochSets', fxns=fxns)
         self.__eset_container = ec
         self.__thedata = {}  # dict, {channel: data-list}
-        self.__dims = {}
+        if dims:
+            self._dims_set(dims, quiet=True)
+        else:
+            self.__dims = {}
+        self.__dims_master_on = True
         self.__data_select = {}  # dict, {channel: data-list}
         self.__channel_select = []
         self.__epoch_select = []
@@ -101,10 +106,21 @@ class DataSeries(NMObject):
         return self.__thedata
 
     @property
+    def dims_master_on(self):
+        return self.__dims_master_on
+
+    @dims_master_on.setter
+    def dims_master_on(self, on):
+        on = nmu.check_bool(on, True)
+        self.__dims_master_on = on
+        return on
+
+    # override
+    @property
     def dims(self):
-        if not self.__dims:
-            self.__dims = self._dims_of_thedata
-        return self.__dims
+        if self.__dims_master_on:
+            return self.__dims
+        return self._dims_of_thedata
 
     def _dims_of_thedata(self):
         xdata = []
@@ -147,11 +163,11 @@ class DataSeries(NMObject):
     def _dims_set(self, dims, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not isinstance(dims, dict):
-            e = nmu.type_error(dims, 'dictionary of dimensions')
+            e = nmu.type_error(dims, 'dimensions dictionary')
             raise TypeError(e)
         for k in dims.keys():
             if k not in nmu.DIM_LIST:
-                raise KeyError('unknown dimension key: ' + k)
+                raise KeyError('unknown dimensions key: ' + k)
         k = dims.keys()
         if 'xdata' in k:
             self._xdata_set(dims['xdata'], quiet=quiet)
