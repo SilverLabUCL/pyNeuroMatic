@@ -20,7 +20,7 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, dims={}):
+    def __init__(self, parent, name, fxns={}, xdims={}, ydims={}):
         # name is data-series prefix
         super().__init__(parent, name, fxns=fxns, rename=False)
         cc = ChannelContainer(self, 'Channels', fxns=fxns)
@@ -28,10 +28,12 @@ class DataSeries(NMObject):
         ec = EpochSetContainer(self, 'EpochSets', fxns=fxns)
         self.__eset_container = ec
         self.__thedata = {}  # dict, {channel: data-list}
-        if dims:
-            self._dims_set(dims, quiet=True)
-        else:
-            self.__dims = {}
+        self.__x = {'default': XDimensions(self, 'XDims_all', fxns=fxns)}
+        self.__y = {'default': Dimensions(self, 'YDims_all', fxns=fxns)}
+        if xdims:
+            pass
+        if ydims:
+            pass
         self.__dims_master_on = True
         self.__data_select = {}  # dict, {channel: data-list}
         self.__channel_select = []

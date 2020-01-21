@@ -44,17 +44,17 @@ class Data(NMObject):
         self.__y = Dimensions(self, 'YDims', fxns=fxns,
                               notes=self._note_container)
         if xdims:
-            self.__x._dims_set(xdims, alert=False, quiet=True)
+            self.__x._dims_set(xdims, quiet=True)
         if ydims:
-            self.__y._dims_set(ydims, alert=False, quiet=True)
+            self.__y._dims_set(ydims, quiet=True)
 
     # override
     @property
     def parameters(self):
-         k = super().parameters
-         k.update({'xdims': self.__x.dims})
-         k.update({'ydims': self.__y.dims})
-         return k
+        k = super().parameters
+        k.update({'xdims': self.__x.dims})
+        k.update({'ydims': self.__y.dims})
+        return k
 
     # override, no super
     @property

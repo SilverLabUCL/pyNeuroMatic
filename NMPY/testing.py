@@ -394,13 +394,13 @@ class Test(unittest.TestCase):
         name1 = 'RecordA1'
         shape = [5]  # test different shapes
         xdims0 = {'start': 10, 'delta': 0.01,
-                 'label': 'time', 'units': 'ms'}
+                  'label': 'time', 'units': 'ms'}
         ydims0 = {'label': 'Vmem', 'units': 'mV'}
         xdims1 = {'start': -10, 'delta': 0.05,
-                 'label': 'time', 'units': 's'}
+                  'label': 'time', 'units': 's'}
         ydims1 = {'label': 'Imem', 'units': 'pA'}
         xdims_x = {'start': 0, 'delta': 1,
-                 'label': 'sample', 'units': ''}
+                   'label': 'sample', 'units': ''}
         ydims_x = {'label': 't', 'units': 'seconds'}
         ds = DataSeries(parent, 'Record', fxns=nm._fxns)
         d0 = Data(parent, name0, fxns=nm._fxns, shape=shape,
