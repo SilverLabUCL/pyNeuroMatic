@@ -6,6 +6,7 @@ Copyright 2019 Jason Rothman
 """
 from nm_container import NMObject
 from nm_container import Container
+import nm_dimensions as nmd
 import nm_preferences as nmp
 import nm_utilities as nmu
 
@@ -15,8 +16,14 @@ class Channel(NMObject):
     NM Channel class
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, xdims={}, ydims={}):
         super().__init__(parent, name, fxns=fxns, rename=False)
+        self.__x = nmd.XDimensions(self, 'XDims', fxns=fxns, notes=None)
+        self.__y = nmd.Dimensions(self, 'YDims', fxns=fxns, notes=None)
+        if xdims:
+            self.__x._dims_set(xdims, quiet=True)
+        if ydims:
+            self.__y._dims_set(ydims, quiet=True)
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
 
@@ -46,6 +53,14 @@ class Channel(NMObject):
              nmu.quotes(name))
         self._history(h, tp=self._tp, quiet=quiet)
         return True
+
+    @property
+    def x(self):
+        return self.__x
+
+    @property
+    def y(self):
+        return self.__y
 
 
 class ChannelContainer(Container):

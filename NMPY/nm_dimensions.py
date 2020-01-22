@@ -11,7 +11,7 @@ import nm_preferences as nmp
 import nm_utilities as nmu
 # cannot import Data class
 
-DIM_LIST = ['label', 'units', 'master', 'offset'] + ['start', 'delta', 'xdata']
+DIM_LIST = ['offset', 'start', 'delta', 'label', 'units', 'master', 'xdata']
 
 
 class Dimensions(NMObject):
@@ -85,8 +85,9 @@ class Dimensions(NMObject):
             d = self._master.dims
             d.update({'master': self._master})
         else:
-            d = {'offset': self._offset, 'label': self._label}
-            d.update({'units': self._units, 'master': None})
+            d = {'offset': self._offset}
+            d.update({'label': self._label, 'units': self._units})
+            d.update({'master': None})
         return d
 
     @dims.setter
@@ -198,9 +199,9 @@ class XDimensions(Dimensions):
 
     def __init__(self, parent, name, fxns={}, notes=None):
         super().__init__(parent, name, fxns=fxns, notes=notes)
-        self._xdata = None
         self._start = 0
         self._delta = 1
+        self._xdata = None
 
     # override
     def _master_set(self, xdimensions, quiet=nmp.QUIET):
@@ -217,10 +218,16 @@ class XDimensions(Dimensions):
             d = self._master.dims
             d.update({'master': self._master})
         else:
-            d = {'xdata': self._xdata}
-            d.update({'start': self._start, 'delta': self._delta})
-            d.update({'label': self._label, 'units': self._units})
-            d.update({'master': None})
+            if self._xdata.__class__.__name__ == 'Data':
+                d = {'offset': self._offset, 'xdata': self._xdata}
+                d.update({'start': self.start, 'delta': self.delta})
+                d.update({'label': self.label, 'units': self.units})
+                d.update({'master': None})
+            else:
+                d = {'offset': self._offset}
+                d.update({'start': self.start, 'delta': self.delta})
+                d.update({'label': self.label, 'units': self.units})
+                d.update({'xdata': None, 'master': None})
         return d
 
     # override, no super
@@ -242,7 +249,7 @@ class XDimensions(Dimensions):
             return True  # master is on, skip the rest
         if 'xdata' in keys:
             self._xdata_set(dims['xdata'], quiet=quiet)
-        if self.xdata.__class__.__name__ == 'Data':
+        if self._xdata.__class__.__name__ == 'Data':
             return True  # xdata is on, skip the rest
         if 'label' in keys:
             self._label_set(dims['label'], quiet=quiet)
@@ -290,7 +297,7 @@ class XDimensions(Dimensions):
         return True
 
     def _xdata_lock(self, tp='', quiet=nmp.QUIET):
-        if self.xdata.__class__.__name__ == 'Data':
+        if self._xdata.__class__.__name__ == 'Data':
             if not quiet:
                 e = ('x-dims are locked to xdata ' +
                      nmu.quotes(self._master.tree_path()))
@@ -302,7 +309,7 @@ class XDimensions(Dimensions):
     def start(self):
         if isinstance(self._master, XDimensions):
             return self._master.start
-        if self.xdata.__class__.__name__ == 'Data':
+        if self._xdata.__class__.__name__ == 'Data':
             return 0
         return self._start
 
@@ -333,7 +340,7 @@ class XDimensions(Dimensions):
     def delta(self):
         if isinstance(self._master, XDimensions):
             return self._master.delta
-        if self.xdata.__class__.__name__ == 'Data':
+        if self._xdata.__class__.__name__ == 'Data':
             return 1
         return self._delta
 
@@ -365,7 +372,7 @@ class XDimensions(Dimensions):
     def label(self):
         if isinstance(self._master, Dimensions):
             return self._master.label
-        if self.xdata.__class__.__name__ == 'Data':
+        if self._xdata.__class__.__name__ == 'Data':
             return 'sample'
         return self._label
 
@@ -382,7 +389,7 @@ class XDimensions(Dimensions):
     def units(self):
         if isinstance(self._master, Dimensions):
             return self._master.units
-        if self.xdata.__class__.__name__ == 'Data':
+        if self._xdata.__class__.__name__ == 'Data':
             return '#'
         return self._units
 

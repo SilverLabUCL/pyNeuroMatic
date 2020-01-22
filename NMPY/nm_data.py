@@ -10,8 +10,7 @@ from nm_container import NMObject
 from nm_container import Container
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
-from nm_dimensions import Dimensions
-from nm_dimensions import XDimensions
+import nm_dimensions as nmd
 from nm_note import NoteContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -39,10 +38,10 @@ class Data(NMObject):
         # self.__size = 0
         if shape:
             self.__np_array_make(shape, fill_value=fill_value)
-        self.__x = XDimensions(self, 'XDims', fxns=fxns,
-                               notes=self._note_container)
-        self.__y = Dimensions(self, 'YDims', fxns=fxns,
-                              notes=self._note_container)
+        self.__x = nmd.XDimensions(self, 'XDims', fxns=fxns,
+                                   notes=self._note_container)
+        self.__y = nmd.Dimensions(self, 'YDims', fxns=fxns,
+                                  notes=self._note_container)
         if xdims:
             self.__x._dims_set(xdims, quiet=True)
         if ydims:

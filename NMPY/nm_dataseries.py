@@ -8,8 +8,7 @@ import numpy as np
 from nm_container import NMObject
 from nm_container import Container
 from nm_channel import ChannelContainer
-from nm_dimensions import Dimensions
-from nm_dimensions import XDimensions
+import nm_dimensions as nmd
 from nm_eset import EpochSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -28,8 +27,8 @@ class DataSeries(NMObject):
         ec = EpochSetContainer(self, 'EpochSets', fxns=fxns)
         self.__eset_container = ec
         self.__thedata = {}  # dict, {channel: data-list}
-        self.__x = {'default': XDimensions(self, 'XDims_all', fxns=fxns)}
-        self.__y = {'default': Dimensions(self, 'YDims_all', fxns=fxns)}
+        self.__x = {'default': nmd.XDimensions(self, 'XDims_all', fxns=fxns)}
+        self.__y = {'default': nmd.Dimensions(self, 'YDims_all', fxns=fxns)}
         if xdims:
             pass
         if ydims:
@@ -166,23 +165,24 @@ class DataSeries(NMObject):
         if not isinstance(dims, dict):
             e = nmu.type_error(dims, 'dimensions dictionary')
             raise TypeError(e)
-        for k in dims.keys():
-            if k not in nmu.DIM_LIST:
+        keys = dims.keys()
+        for k in keys:
+            if k not in nmd.DIM_LIST + ['channel']:
                 raise KeyError('unknown dimensions key: ' + k)
-        k = dims.keys()
-        if 'xdata' in k:
+        
+        if 'xdata' in keys:
             self._xdata_set(dims['xdata'], quiet=quiet)
-        if 'xstart' in k:
+        if 'xstart' in keys:
             self._xstart_set(dims['xstart'], quiet=quiet)
-        if 'xdelta' in k:
+        if 'xdelta' in keys:
             self._xdelta_set(dims['xdelta'], quiet=quiet)
-        if 'xlabel' in k:
+        if 'xlabel' in keys:
             self._xlabel_set(dims['xlabel'], quiet=quiet)
-        if 'xunits' in k:
+        if 'xunits' in keys:
             self._xunits_set(dims['xunits'], quiet=quiet)
-        if 'ylabel' in k:
+        if 'ylabel' in keys:
             self._ylabel_set(dims['ylabel'], quiet=quiet)
-        if 'yunits' in k:
+        if 'yunits' in keys:
             self._yunits_set(dims['yunits'], quiet=quiet)
         return True
 

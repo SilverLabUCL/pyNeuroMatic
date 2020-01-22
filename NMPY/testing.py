@@ -412,6 +412,8 @@ class Test(unittest.TestCase):
         d0.x.master = d1.x
         print(d0.parameters)
         d0.x.delta = 2
+        d0.x.offset = -12
+        d0.y.offset = 23
         """
         dims0.update({'xdata': None})
         dims1.update({'xdata': None})
