@@ -414,6 +414,8 @@ class Test(unittest.TestCase):
         d0.x.delta = 2
         d0.x.offset = -12
         d0.y.offset = 23
+        print(d0.content)
+        print(d0.notes.thenotes)
         """
         dims0.update({'xdata': None})
         dims1.update({'xdata': None})

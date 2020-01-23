@@ -79,5 +79,9 @@ class NoteContainer(Container):
             return n
         return None
 
-    def notes_all(self):
-        return self.getitems(names='all')
+    @property
+    def thenotes(self):
+        notes = []
+        for n in self.getitems(names='all'):
+            notes.append(n.thenote)
+        return notes

@@ -120,6 +120,10 @@ class Data(NMObject):
                 str(dsn) + '.' + '\n' + 'do you want to continue?')
 
     @property
+    def notes(self):
+        return self._note_container
+
+    @property
     def x(self):
         return self.__x
 
