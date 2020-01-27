@@ -10,7 +10,7 @@ from nm_container import NMObject
 from nm_container import Container
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
-import nm_dimensions as nmd
+import nm_dimension as nmd
 from nm_note import NoteContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -38,10 +38,10 @@ class Data(NMObject):
         # self.__size = 0
         if shape:
             self.__np_array_make(shape, fill_value=fill_value)
-        self.__x = nmd.XDimensions(self, 'XDims', fxns=fxns,
-                                   notes=self._note_container)
-        self.__y = nmd.Dimensions(self, 'YDims', fxns=fxns,
+        self.__x = nmd.XDimension(self, 'xdim', fxns=fxns,
                                   notes=self._note_container)
+        self.__y = nmd.Dimension(self, 'ydim', fxns=fxns,
+                                 notes=self._note_container)
         if xdims:
             self.__x._dims_set(xdims, quiet=True)
         if ydims:
@@ -83,8 +83,8 @@ class Data(NMObject):
         if self._note_container:
             if not self._note_container._copy(c, quiet=True):
                 return False
-        self.__x.dims = data.x.dims
-        self.__y.dims = data.y.dims
+        self.__x._copy(data.x)
+        self.__y._copy(data.y)
         self._modified()
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=self._tp, quiet=quiet)

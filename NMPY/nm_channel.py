@@ -6,7 +6,7 @@ Copyright 2019 Jason Rothman
 """
 from nm_container import NMObject
 from nm_container import Container
-import nm_dimensions as nmd
+import nm_dimension as nmd
 import nm_preferences as nmp
 import nm_utilities as nmu
 
@@ -18,8 +18,8 @@ class Channel(NMObject):
 
     def __init__(self, parent, name, fxns={}, xdims={}, ydims={}):
         super().__init__(parent, name, fxns=fxns, rename=False)
-        self.__x = nmd.XDimensions(self, 'XDims', fxns=fxns, notes=None)
-        self.__y = nmd.Dimensions(self, 'YDims', fxns=fxns, notes=None)
+        self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, notes=None)
+        self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, notes=None)
         if xdims:
             self.__x._dims_set(xdims, quiet=True)
         if ydims:
@@ -47,6 +47,8 @@ class Channel(NMObject):
             raise TypeError(nmu.type_error(channel, 'Channel'))
         if not super()._copy(channel, copy_name=copy_name, quiet=True):
             return False
+        self.__x._copy(channel.x)
+        self.__y._copy(channel.y)
         self.__graphXY = channel._Channel__graphXY
         self.__transform = channel._Channel__transform
         h = ('copied Channel ' + nmu.quotes(channel.name) + ' to ' +

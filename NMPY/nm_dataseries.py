@@ -8,7 +8,7 @@ import numpy as np
 from nm_container import NMObject
 from nm_container import Container
 from nm_channel import ChannelContainer
-import nm_dimensions as nmd
+import nm_dimension as nmd
 from nm_eset import EpochSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -27,8 +27,8 @@ class DataSeries(NMObject):
         ec = EpochSetContainer(self, 'EpochSets', fxns=fxns)
         self.__eset_container = ec
         self.__thedata = {}  # dict, {channel: data-list}
-        self.__x = {'default': nmd.XDimensions(self, 'XDims_all', fxns=fxns)}
-        self.__y = {'default': nmd.Dimensions(self, 'YDims_all', fxns=fxns)}
+        self.__x = {'default': nmd.XDimension(self, 'xdim', fxns=fxns)}
+        self.__y = {'default': nmd.Dimension(self, 'ydim', fxns=fxns)}
         if xdims:
             pass
         if ydims:

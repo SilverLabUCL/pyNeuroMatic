@@ -32,13 +32,13 @@ class Note(NMObject):
 
     # override
     def _copy(self, note, copy_name=True, quiet=nmp.QUIET):
-        name = self.name
         if not isinstance(note, Note):
             raise TypeError(nmu.type_error(note, 'Note'))
         if not super()._copy(note, copy_name=copy_name, quiet=True):
             return False
         self.__thenote = note._Note__thenote
-        h = 'copied Note ' + nmu.quotes(note.name) + ' to ' + nmu.quotes(name)
+        h = ('copied Note ' + nmu.quotes(note.name) + ' to ' +
+             nmu.quotes(self.name))
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 

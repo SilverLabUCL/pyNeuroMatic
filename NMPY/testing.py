@@ -17,7 +17,9 @@ from nm_data import Data
 from nm_data import DataContainer
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
+import nm_dimension as nmd
 from nm_manager import Manager
+from nm_note import NoteContainer
 from nm_project import Project
 import nm_utilities as nmu
 
@@ -40,8 +42,6 @@ class Test(unittest.TestCase):
         name1 = 'object1'
         badtypes = [True, 1, float('nan'), [], {}, set(), None, self]
         badnames = ['select', 'default', 'all']  # may need updating
-        param_list = ['name', 'rename', 'date', 'modified', 'source']
-        # param_list may need updating
         for b in badtypes:
             with self.assertRaises(TypeError):
                 o0 = NMObject(parent, b, fxns=nm._fxns, rename=True)
@@ -65,6 +65,8 @@ class Test(unittest.TestCase):
         # _bad_names()
         self.assertEqual(badnames, o1._bad_names)  # check if list changes
         # parameters()
+        param_list = ['name', 'rename', 'date', 'modified', 'source']
+        # param_list may need updating
         plist = list(o0.parameters.keys())
         self.assertEqual(plist, param_list)  # check if list changes
         # _name_set()
@@ -387,8 +389,92 @@ class Test(unittest.TestCase):
         self.assertEqual(c1.count, 0)
         self.assertIsNone(c1.select)
 
-    def test_data(self):
+    def test_dimension(self):
         nm.configs.quiet = False
+        parent = self
+        notes = NoteContainer(parent, 'Notes', fxns=nm._fxns)
+        ydims0 = {'label': 'Vmem', 'units': 'mV'}
+        xdims0 = {'start': 10, 'delta': 0.01, 'label': 'time', 'units': 'ms'}
+        ydims1 = {'label': 'Imem', 'units': 'pA'}
+        xdims1 = {'start': -10, 'delta': 0.2, 'label': 't', 'units': 'seconds'}
+        xy = {'label': 'time interval', 'units': 'usec'}
+        xx = {'start': 0, 'delta': 1, 'label': 'sample', 'units': '#'}
+        y0 = nmd.Dimension(parent, 'ydim0', fxns=nm._fxns, notes=notes,
+                           dims=ydims0)
+        x0 = nmd.XDimension(parent, 'xdim0', fxns=nm._fxns, notes=notes,
+                            dims=xdims0)
+        y1 = nmd.Dimension(parent, 'ydim1', fxns=nm._fxns, notes=notes,
+                           dims=ydims1)
+        x1 = nmd.XDimension(parent, 'xdim1', fxns=nm._fxns, notes=notes,
+                            dims=xdims1)
+        xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=[10],
+                     fill_value=0, xdims=xx, ydims=xy)
+        dims = y0.dims
+        for k in ydims0.keys():
+            self.assertEqual(ydims0[k], dims[k])
+        self.assertIsNone(dims['master'])
+        dims = x0.dims
+        for k in xdims0.keys():
+            self.assertEqual(xdims0[k], dims[k])
+        self.assertIsNone(dims['xdata'])
+        self.assertIsNone(dims['master'])
+        # parameters()
+        # master()
+        self.assertIsNone(y1.master)
+        self.assertIsNone(x1.master)
+        self.assertFalse(y1._master_lock)
+        self.assertFalse(x1._master_lock)
+        self.assertTrue(y1._master_set(None))  # ok
+        self.assertTrue(x1._master_set(None))  # ok
+        badtypes = [True, 1, float('nan'), [], {}, set(), self, x0]
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                y1._master_set(b)
+        badtypes = [True, 1, float('nan'), [], {}, set(), self, y0]
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                x1._master_set(b)
+        with self.assertRaises(ValueError):
+            self.assertTrue(y1._master_set(y1))
+        with self.assertRaises(ValueError):
+            self.assertTrue(x1._master_set(x1))
+        self.assertTrue(y1._master_set(y0))
+        self.assertTrue(x1._master_set(x0))
+        dims = y1.dims
+        for k in ydims0.keys():  # y0 is master
+            self.assertEqual(ydims0[k], dims[k])
+        self.assertEqual(dims['master'], y0)
+        self.assertEqual(y1.master, y0)
+        self.assertTrue(y1._master_lock)
+        dims = x1.dims
+        for k in xdims0.keys():  # x0 is master
+            self.assertEqual(xdims0[k], dims[k])
+        self.assertEqual(dims['master'], x0)
+        self.assertEqual(x1.master, x0)
+        self.assertTrue(x1._master_lock)
+        self.assertTrue(y1._dims_set(ydims0))  # ok, but nothing changes
+        self.assertTrue(y1._offset_set(5.5))  # offset free from master
+        self.assertFalse(y1._label_set('test'))
+        self.assertFalse(y1._units_set('test'))
+        self.assertTrue(x1._dims_set(xdims0))  # ok, but nothing changes
+        self.assertTrue(x1._offset_set(5.5))  # offset free from master
+        self.assertFalse(x1._label_set('test'))
+        self.assertFalse(x1._units_set('test'))
+        self.assertFalse(x1._start_set(5.5))
+        self.assertFalse(x1._delta_set(5.5))
+        self.assertFalse(x1._xdata_set(xdata))
+        # dims()
+        # offset()
+        # label()
+        # units()
+        # start()
+        # delta()
+        # xdata()
+        
+        
+
+    def test_data(self):
+        nm.configs.quiet = True
         parent = self
         name0 = 'RecordA0'
         name1 = 'RecordA1'
@@ -410,12 +496,12 @@ class Test(unittest.TestCase):
         xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=shape,
                      fill_value=0, xdims=xdims_x, ydims=ydims_x)
         d0.x.master = d1.x
-        print(d0.parameters)
+        # print(d0.parameters)
         d0.x.delta = 2
         d0.x.offset = -12
         d0.y.offset = 23
-        print(d0.content)
-        print(d0.notes.thenotes)
+        # print(d0.content)
+        # print(d0.notes.thenotes)
         """
         dims0.update({'xdata': None})
         dims1.update({'xdata': None})
