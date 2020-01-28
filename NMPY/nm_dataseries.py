@@ -38,6 +38,7 @@ class DataSeries(NMObject):
         self.__channel_select = []
         self.__epoch_select = []
         self.__eset_init(quiet=True)
+        self._param_list += ['channel_select', 'epoch_select']
 
     # override
     @property

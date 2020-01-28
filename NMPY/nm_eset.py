@@ -20,6 +20,7 @@ class EpochSet(NMObject):
         self.__theset = set()
         self.__eq_list = []
         self.__eq_lock = True
+        self._param_list += ['eq_list', 'eq_lock']
 
     # override
     @property

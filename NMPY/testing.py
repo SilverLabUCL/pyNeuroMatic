@@ -65,10 +65,8 @@ class Test(unittest.TestCase):
         # _bad_names()
         self.assertEqual(badnames, o1._bad_names)  # check if list changes
         # parameters()
-        param_list = ['name', 'rename', 'date', 'modified', 'source']
-        # param_list may need updating
-        plist = list(o0.parameters.keys())
-        self.assertEqual(plist, param_list)  # check if list changes
+        self.assertTrue(o0._param_test())
+        self.assertTrue(o1._param_test())
         # _name_set()
         for b in badtypes:
             with self.assertRaises(TypeError):
@@ -147,8 +145,8 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.prefix, p0)
         self.assertEqual(c1.prefix, p1)
         # parameters()
-        plist = list(c0.parameters.keys())
-        self.assertEqual(plist, param_list)
+        self.assertTrue(c0._param_test())
+        self.assertTrue(c1._param_test())
         # prefix()
         for b in badtypes:
             with self.assertRaises(TypeError):
@@ -390,35 +388,42 @@ class Test(unittest.TestCase):
         self.assertIsNone(c1.select)
 
     def test_dimension(self):
+        if False:
+            return
         nm.configs.quiet = False
         parent = self
         notes = NoteContainer(parent, 'Notes', fxns=nm._fxns)
-        ydims0 = {'label': 'Vmem', 'units': 'mV'}
-        xdims0 = {'start': 10, 'delta': 0.01, 'label': 'time', 'units': 'ms'}
-        ydims1 = {'label': 'Imem', 'units': 'pA'}
-        xdims1 = {'start': -10, 'delta': 0.2, 'label': 't', 'units': 'seconds'}
-        xy = {'label': 'time interval', 'units': 'usec'}
-        xx = {'start': 0, 'delta': 1, 'label': 'sample', 'units': '#'}
+        ydim0 = {'label': 'Vmem', 'units': 'mV', 'offset': 0}
+        xdim0 = {'offset': 0, 'start': 10, 'delta': 0.01, 'label': 'time',
+                 'units': 'ms'}
+        ydim1 = {'label': 'Imem', 'units': 'pA', 'offset': 0}
+        xdim1 = {'offset': 0, 'start': -10, 'delta': 0.2, 'label': 't',
+                 'units': 'seconds'}
+        xy = {'label': 'time interval', 'units': 'usec', 'offset': 0}
+        xx = {'offset': 0, 'start': 0, 'delta': 1, 'label': 'sample',
+              'units': '#'}
         y0 = nmd.Dimension(parent, 'ydim0', fxns=nm._fxns, notes=notes,
-                           dims=ydims0)
+                           dim=ydim0)
         x0 = nmd.XDimension(parent, 'xdim0', fxns=nm._fxns, notes=notes,
-                            dims=xdims0)
+                            dim=xdim0)
         y1 = nmd.Dimension(parent, 'ydim1', fxns=nm._fxns, notes=notes,
-                           dims=ydims1)
+                           dim=ydim1)
         x1 = nmd.XDimension(parent, 'xdim1', fxns=nm._fxns, notes=notes,
-                            dims=xdims1)
+                            dim=xdim1)
         xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=[10],
-                     fill_value=0, xdims=xx, ydims=xy)
-        dims = y0.dims
-        for k in ydims0.keys():
-            self.assertEqual(ydims0[k], dims[k])
-        self.assertIsNone(dims['master'])
-        dims = x0.dims
-        for k in xdims0.keys():
-            self.assertEqual(xdims0[k], dims[k])
-        self.assertIsNone(dims['xdata'])
-        self.assertIsNone(dims['master'])
+                     fill_value=0, xdim=xx, ydim=xy)
+        dim = y0.dim
+        for k in ydim0.keys():
+            self.assertEqual(ydim0[k], dim[k])
+        self.assertIsNone(dim['master'])
+        dim = x0.dim
+        for k in xdim0.keys():
+            self.assertEqual(xdim0[k], dim[k])
+        self.assertIsNone(dim['xdata'])
+        self.assertIsNone(dim['master'])
         # parameters()
+        self.assertTrue(y0._param_test())
+        self.assertTrue(x0._param_test())
         # master()
         self.assertIsNone(y1.master)
         self.assertIsNone(x1.master)
@@ -440,38 +445,102 @@ class Test(unittest.TestCase):
             self.assertTrue(x1._master_set(x1))
         self.assertTrue(y1._master_set(y0))
         self.assertTrue(x1._master_set(x0))
-        dims = y1.dims
-        for k in ydims0.keys():  # y0 is master
-            self.assertEqual(ydims0[k], dims[k])
-        self.assertEqual(dims['master'], y0)
+        dim = y1.dim
+        for k in ydim0.keys():  # y0 is master
+            self.assertEqual(ydim0[k], dim[k])
+        self.assertEqual(dim['master'], y0)
         self.assertEqual(y1.master, y0)
         self.assertTrue(y1._master_lock)
-        dims = x1.dims
-        for k in xdims0.keys():  # x0 is master
-            self.assertEqual(xdims0[k], dims[k])
-        self.assertEqual(dims['master'], x0)
+        dim = x1.dim
+        for k in xdim0.keys():  # x0 is master
+            self.assertEqual(xdim0[k], dim[k])
+        self.assertEqual(dim['master'], x0)
         self.assertEqual(x1.master, x0)
         self.assertTrue(x1._master_lock)
-        self.assertTrue(y1._dims_set(ydims0))  # ok, but nothing changes
+        self.assertTrue(y1._dim_set(ydim0))  # ok, but nothing changes
         self.assertTrue(y1._offset_set(5.5))  # offset free from master
         self.assertFalse(y1._label_set('test'))
         self.assertFalse(y1._units_set('test'))
-        self.assertTrue(x1._dims_set(xdims0))  # ok, but nothing changes
+        self.assertTrue(x1._dim_set(xdim0))  # ok, but nothing changes
         self.assertTrue(x1._offset_set(5.5))  # offset free from master
         self.assertFalse(x1._label_set('test'))
         self.assertFalse(x1._units_set('test'))
         self.assertFalse(x1._start_set(5.5))
         self.assertFalse(x1._delta_set(5.5))
         self.assertFalse(x1._xdata_set(xdata))
-        # dims()
+        # dim()
+        badtypes = [None, True, 1, float('nan'), [], set(), self, y0]
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                y0._dim_set(b)
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                x0._dim_set(b)
+        bad_dim = {'label': 'Vmem', 'units': 'mV', 'test': 0}
+        with self.assertRaises(KeyError):
+            y0._dim_set(bad_dim)
+        with self.assertRaises(KeyError):
+            y0._dim_set(xdim0)
+        with self.assertRaises(KeyError):
+            x0._dim_set(bad_dim)
+        self.assertTrue(y0._dim_set(ydim0))
+        self.assertTrue(x0._dim_set(xdim0))
         # offset()
+        badtypes = [True, [], {}, set(), self, x0]
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                y0._offset_set(b)
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                x0._offset_set(b)
+        badvalues = [float('nan'), float('inf')]
+        for b in badvalues:
+            with self.assertRaises(ValueError):
+                y0._offset_set(b)
+        for b in badvalues:
+            with self.assertRaises(ValueError):
+                x0._offset_set(b)
+        self.assertTrue(y0._offset_set(5.5))
+        self.assertEqual(y0._offset, 5.5)
+        self.assertTrue(x0._offset_set(5.5))
+        self.assertEqual(x0._offset, 5.5)
+        self.assertTrue(y1._offset_set(5.5))  # offset is free from master
+        self.assertEqual(y1._offset, 5.5)
+        self.assertTrue(x1._offset_set(5.5))
+        self.assertEqual(x1._offset, 5.5)
         # label()
+        badtypes = [True, float('nan'), 1, [], {}, set(), self]
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                y0._label_set(b)
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                x0._label_set(b)
+        self.assertTrue(y0._label_set(None))
+        self.assertTrue(x0._label_set(None))
+        self.assertTrue(y0._label_set(''))
+        self.assertTrue(x0._label_set(''))
+        self.assertFalse(y1._label_set(''))  # masster is on
+        self.assertFalse(x1._label_set(''))  # masster is on
         # units()
+        badtypes = [True, float('nan'), 1, [], {}, set(), self]
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                y0._units_set(b)
+        for b in badtypes:
+            with self.assertRaises(TypeError):
+                x0._units_set(b)
+        self.assertTrue(y0._units_set(None))
+        self.assertTrue(x0._units_set(None))
+        self.assertTrue(y0._units_set(''))
+        self.assertTrue(x0._units_set(''))
+        self.assertFalse(y1._units_set(''))  # masster is on
+        self.assertFalse(x1._units_set(''))  # masster is on
         # start()
         # delta()
         # xdata()
-        
-        
+        # equal()
+        # copy()
 
     def test_data(self):
         nm.configs.quiet = True
@@ -479,22 +548,22 @@ class Test(unittest.TestCase):
         name0 = 'RecordA0'
         name1 = 'RecordA1'
         shape = [5]  # test different shapes
-        xdims0 = {'start': 10, 'delta': 0.01,
-                  'label': 'time', 'units': 'ms'}
-        ydims0 = {'label': 'Vmem', 'units': 'mV'}
-        xdims1 = {'start': -10, 'delta': 0.05,
-                  'label': 'time', 'units': 's'}
-        ydims1 = {'label': 'Imem', 'units': 'pA'}
-        xdims_x = {'start': 0, 'delta': 1,
-                   'label': 'sample', 'units': ''}
-        ydims_x = {'label': 't', 'units': 'seconds'}
+        xdim0 = {'start': 10, 'delta': 0.01,
+                 'label': 'time', 'units': 'ms'}
+        ydim0 = {'label': 'Vmem', 'units': 'mV'}
+        xdim1 = {'start': -10, 'delta': 0.05,
+                 'label': 'time', 'units': 's'}
+        ydim1 = {'label': 'Imem', 'units': 'pA'}
+        xdim_x = {'start': 0, 'delta': 1,
+                  'label': 'sample', 'units': ''}
+        ydim_x = {'label': 't', 'units': 'seconds'}
         ds = DataSeries(parent, 'Record', fxns=nm._fxns)
         d0 = Data(parent, name0, fxns=nm._fxns, shape=shape,
-                  fill_value=np.nan, xdims=xdims0, ydims=ydims0, dataseries=ds)
+                  fill_value=np.nan, xdim=xdim0, ydim=ydim0, dataseries=ds)
         d1 = Data(parent, name1, fxns=nm._fxns, shape=shape,
-                  fill_value=0, xdims=xdims1, ydims=ydims1, dataseries=ds)
+                  fill_value=0, xdim=xdim1, ydim=ydim1, dataseries=ds)
         xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=shape,
-                     fill_value=0, xdims=xdims_x, ydims=ydims_x)
+                     fill_value=0, xdim=xdim_x, ydim=ydim_x)
         d0.x.master = d1.x
         # print(d0.parameters)
         d0.x.delta = 2
@@ -503,23 +572,23 @@ class Test(unittest.TestCase):
         # print(d0.content)
         # print(d0.notes.thenotes)
         """
-        dims0.update({'xdata': None})
-        dims1.update({'xdata': None})
-        self.assertEqual(d0.dims, dims0)
-        self.assertEqual(d1.dims, dims1)
-        # dims()
+        dim0.update({'xdata': None})
+        dim1.update({'xdata': None})
+        self.assertEqual(d0.dim, dim0)
+        self.assertEqual(d1.dim, dim1)
+        # dim()
         dimlist = ['xdata', 'xstart', 'xdelta', 'xlabel', 'xunits', 'ylabel',
                    'yunits']
         self.assertEqual(dimlist, nmu.DIM_LIST)
         bad = [None, [], 'test', 1.0, self]
         for b in bad:
             with self.assertRaises(TypeError):
-                d0._dims_set(b)
+                d0._dim_set(b)
         bad = {'xstart': 10, 'xd': 0.01}
         with self.assertRaises(KeyError):
-            d0.dims = bad
-        self.assertTrue(d0._dims_set(dims1))
-        self.assertEqual(dims1, d0.dims)
+            d0.dim = bad
+        self.assertTrue(d0._dim_set(dim1))
+        self.assertEqual(dim1, d0.dim)
         # _xdata_set()
         bad = [[], {}, 'test', 1.0, self]
         for b in bad:
@@ -602,7 +671,7 @@ class Test(unittest.TestCase):
         name0 = 'Project0'
         name1 = 'Project1'
         noise = [0, 0.1]
-        dims = {'xstart': -10, 'xdelta': 0.01,
+        dim = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',
                 'ylabel': {'A': 'Vmem', 'B': 'Icmd'},
                 'yunits': {'A': 'mV', 'B': 'pA'}}
@@ -611,10 +680,10 @@ class Test(unittest.TestCase):
         p1 = Project(parent, name1, fxns=nm._fxns)
         f = p0.folder.new()
         ds = f.dataseries.new('Record')
-        ds.make(channels=1, epochs=3, shape=5, dims=dims)
+        ds.make(channels=1, epochs=3, shape=5, dim=dim)
         f = p0.folder.new()
         ds = f.dataseries.new('Wave')
-        ds.make(channels=2, epochs=3, shape=5, dims=dims)
+        ds.make(channels=2, epochs=3, shape=5, dim=dim)
         # p1._copy(p0)
         # self.assertTrue(p1._equal(p0, alert=True))
         """

@@ -17,6 +17,7 @@ class Note(NMObject):
     def __init__(self, parent, name, fxns={}):
         super().__init__(parent, name, fxns=fxns, rename=False)
         self.__thenote = ''
+        self._param_list += ['thenote']
 
     # override
     @property

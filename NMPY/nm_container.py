@@ -43,6 +43,7 @@ class NMObject(object):
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
         self.__source = self.tree_path()
+        self._param_list = ['name', 'rename', 'date', 'modified', 'source']
 
     def name_ok(self, name, ok=[]):
         if not nmu.name_ok(name):
@@ -87,12 +88,26 @@ class NMObject(object):
     @property
     def parameters(self):  # child class should override
         # and add class parameters
-        k = {'name': self.__name}
-        k.update({'rename': self._rename})
-        k.update({'date': self.__date})
-        k.update({'modified': self.__modified})
-        k.update({'source': self.__source})
-        return k
+        p = {'name': self.__name}
+        p.update({'rename': self._rename})
+        p.update({'date': self.__date})
+        p.update({'modified': self.__modified})
+        p.update({'source': self.__source})
+        return p
+
+    def _param_test(self, quiet=nmp.QUIET):
+        pkeys = self.parameters.keys()
+        for k in pkeys:
+            if k not in self._param_list:
+                e = 'missing parameter ' + nmu.quotes(k)
+                self._error(e, tp=self._tp, quiet=quiet)
+                return False
+        for k in self._param_list:
+            if k not in pkeys:
+                e = 'missing parameter ' + nmu.quotes(k)
+                self._error(e, tp=self._tp, quiet=quiet)
+                return False
+        return True
 
     @property
     def content(self):  # child class should override
@@ -109,7 +124,7 @@ class NMObject(object):
         return self.content
 
     def _modified(self):
-        self.__modified = str(datetime.datetime.now()) 
+        self.__modified = str(datetime.datetime.now())
         if self._parent and isinstance(self._parent, NMObject):  # tree-path
             self._parent._modified()
 
@@ -288,8 +303,10 @@ class Container(NMObject):
         if not self.name_ok(prefix):
             raise ValueError('bad prefix:  ' + nmu.quotes(prefix))
         self.__prefix = prefix
+        self._duplicate = duplicate
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
+        self._param_list += ['type', 'prefix', 'duplicate']
 
     # override
     @property

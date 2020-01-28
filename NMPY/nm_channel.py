@@ -26,6 +26,7 @@ class Channel(NMObject):
             self.__y._dims_set(ydims, quiet=True)
         self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         self.__transform = []
+        self._param_list += ['graphXY', 'transform']
 
     # override
     @property

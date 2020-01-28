@@ -26,7 +26,7 @@ class Data(NMObject):
     """
 
     def __init__(self, parent, name, fxns={}, shape=[],
-                 fill_value=NP_FILL_VALUE, xdims={}, ydims={}, dataseries={}):
+                 fill_value=NP_FILL_VALUE, xdim={}, ydim={}, dataseries={}):
         super().__init__(parent, name, fxns=fxns)
         self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__np_array = None  # NumPy N-dimensional array
@@ -42,17 +42,17 @@ class Data(NMObject):
                                   notes=self._note_container)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns,
                                  notes=self._note_container)
-        if xdims:
-            self.__x._dims_set(xdims, quiet=True)
-        if ydims:
-            self.__y._dims_set(ydims, quiet=True)
+        if xdim:
+            self.__x._dim_set(xdim, quiet=True)
+        if ydim:
+            self.__y._dim_set(ydim, quiet=True)
 
     # override
     @property
     def parameters(self):
         k = super().parameters
-        k.update({'xdims': self.__x.dims})
-        k.update({'ydims': self.__y.dims})
+        k.update({'xdim': self.__x.dim})
+        k.update({'ydim': self.__y.dim})
         return k
 
     # override, no super
@@ -113,10 +113,10 @@ class Data(NMObject):
             if not isinstance(self.__dataseries[0], DataSeries):
                 return ''
             dsn = nmu.quotes(self.__dataseries[0].name)
-            return ('dims are superceded by those of data-series ' + dsn + '.'
+            return ('dimensions are superceded by those of data-series ' + dsn + '.'
                     + '\n' + 'do you want to continue?')
         dsn = [d.name for d in self.__dataseries if isinstance(d, DataSeries)]
-        return ('dims are superceded by those of the following data-series: ' +
+        return ('dimensions are superceded by those of the following data-series: ' +
                 str(dsn) + '.' + '\n' + 'do you want to continue?')
 
     @property
@@ -207,10 +207,10 @@ class DataContainer(Container):
         return {'data': self.names}
 
     # override
-    def new(self, name='default', shape=[], fill_value=np.nan, xdims={},
-            ydims={}, select=True, quiet=nmp.QUIET):
+    def new(self, name='default', shape=[], fill_value=np.nan, xdim={},
+            ydim={}, select=True, quiet=nmp.QUIET):
         o = Data(self._parent, 'temp', self._fxns, shape=shape,
-                 fill_value=fill_value, xdims=xdims, ydims=ydims)
+                 fill_value=fill_value, xdim=xdim, ydim=ydim)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override
