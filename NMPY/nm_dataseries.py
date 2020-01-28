@@ -74,10 +74,11 @@ class DataSeries(NMObject):
 
     # override
     def _copy(self, dataseries, copy_name=True, quiet=nmp.QUIET):
-        name = self.name
         if not isinstance(dataseries, DataSeries):
             e = nmu.type_error(dataseries, 'DataSeries')
             raise TypeError(e)
+        name = self.name
+        tp = self._tp
         if not super()._copy(dataseries, copy_name=copy_name, quiet=True):
             return False
         c = dataseries._DataSeries__channel_container
@@ -93,7 +94,7 @@ class DataSeries(NMObject):
         # self.__data_select.clear()  # RESET
         h = ('copied DataSeries ' + nmu.quotes(dataseries.name) + ' to ' +
              nmu.quotes(name))
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     @property

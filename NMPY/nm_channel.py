@@ -43,9 +43,10 @@ class Channel(NMObject):
 
     # override
     def _copy(self, channel, copy_name=True, quiet=nmp.QUIET):
-        name = self.name
         if not isinstance(channel, Channel):
             raise TypeError(nmu.type_error(channel, 'Channel'))
+        name = self.name
+        tp = self._tp
         if not super()._copy(channel, copy_name=copy_name, quiet=True):
             return False
         self.__x._copy(channel.x)
@@ -54,7 +55,7 @@ class Channel(NMObject):
         self.__transform = channel._Channel__transform
         h = ('copied Channel ' + nmu.quotes(channel.name) + ' to ' +
              nmu.quotes(name))
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     @property

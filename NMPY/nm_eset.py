@@ -44,9 +44,10 @@ class EpochSet(NMObject):
         return {'eset': self.name}
 
     def _copy(self, epochset, copy_name=True, quiet=nmp.QUIET):
-        name = self.name
         if not isinstance(epochset, EpochSet):
             raise TypeError(nmu.type_error(epochset, 'EpochSet'))
+        name = self.name
+        tp = self._tp
         if not super()._copy(epochset, copy_name=copy_name, quiet=True):
             return False
         # COPY theset
@@ -55,7 +56,7 @@ class EpochSet(NMObject):
         self.__eq_lock = epochset._EpochSet__eq_lock
         h = ('copied EpochSet ' + nmu.quotes(epochset.name) + ' to ' +
              nmu.quotes(name))
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     @property
@@ -225,7 +226,7 @@ class EpochSetContainer(Container):
     def remove_epoch(self, name, epoch, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         if len(self._parent.thedata) == 0:
-            tp = self._parent.tree_path(history=True)
+            tp = self._parent.treepath(history=True)
             e = 'no selected data for dataseries ' + tp
             self._alert(e, quiet=quiet)
             return False

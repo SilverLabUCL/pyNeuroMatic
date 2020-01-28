@@ -45,9 +45,10 @@ class Folder(NMObject):
 
     # override
     def _copy(self, folder, copy_name=True, quiet=nmp.QUIET):
-        name = self.name
         if not isinstance(folder, Folder):
             raise TypeError(nmu.type_error(folder, 'Folder'))
+        name = self.name
+        tp = self._tp
         if not super()._copy(folder, copy_name=copy_name, quiet=True):
             return False
         c = folder._Folder__data_container
@@ -58,7 +59,7 @@ class Folder(NMObject):
             return False
         h = ('copied Folder ' + nmu.quotes(folder.name) + ' to ' +
              nmu.quotes(name))
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     @property

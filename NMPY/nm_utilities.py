@@ -203,7 +203,7 @@ def history(message, title='', tp='', frame=1, red=False, quiet=False):
     if tp.lower() == 'none':
         path = ''
     else:
-        path = get_tree_path(inspect.stack(), tp=tp, frame=frame)
+        path = get_treepath(inspect.stack(), tp=tp, frame=frame)
     if path:
         h = path + ': ' + message
     else:
@@ -218,7 +218,7 @@ def history(message, title='', tp='', frame=1, red=False, quiet=False):
     return h
 
 
-def get_tree_path(stack, tp='', frame=1):
+def get_treepath(stack, tp='', frame=1):
     if not stack:
         return ''
     method = get_method(stack, frame=frame)
@@ -275,7 +275,7 @@ def input_yesno(prompt, title='', tp='', frame=1, cancel=False):
     if tp.lower() == 'none':
         path = ''
     else:
-        path = get_tree_path(inspect.stack(), tp=tp, frame=frame)
+        path = get_treepath(inspect.stack(), tp=tp, frame=frame)
     if path:
         txt = path + ': ' + txt
     if title:

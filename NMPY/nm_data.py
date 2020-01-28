@@ -25,8 +25,8 @@ class Data(NMObject):
     NM Data class
     """
 
-    def __init__(self, parent, name, fxns={}, shape=[],
-                 fill_value=NP_FILL_VALUE, xdim={}, ydim={}, dataseries={}):
+    def __init__(self, parent, name, fxns={}, np_array=None, xdim={}, ydim={},
+                 dataseries={}):
         super().__init__(parent, name, fxns=fxns)
         self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__np_array = None  # NumPy N-dimensional array
@@ -36,16 +36,16 @@ class Data(NMObject):
                 if isinstance(ds, DataSeries) and c in nmp.CHAN_LIST:
                     self.__dataseries.update({ds: c})
         # self.__size = 0
-        if shape:
-            self.__np_array_make(shape, fill_value=fill_value)
+        if np_array is None:
+            pass
+        elif isinstance(np_array, np.ndarray):
+            self.__np_array = np_array
+        else:
+            raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
         self.__x = nmd.XDimension(self, 'xdim', fxns=fxns,
-                                  notes=self._note_container)
+                                  notes=self._note_container, dim=xdim)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns,
-                                 notes=self._note_container)
-        if xdim:
-            self.__x._dim_set(xdim, quiet=True)
-        if ydim:
-            self.__y._dim_set(ydim, quiet=True)
+                                 notes=self._note_container, dim=ydim)
 
     # override
     @property
@@ -74,20 +74,21 @@ class Data(NMObject):
 
     # override
     def _copy(self, data, copy_name=True, quiet=nmp.QUIET):
-        name = self.name
         if not isinstance(data, Data):
             raise TypeError(nmu.type_error(data, 'Data'))
+        name = self.name
+        tp = self._tp
         if not super()._copy(data, copy_name=copy_name, quiet=True):
             return False
         c = data._Data__note_container
         if self._note_container:
             if not self._note_container._copy(c, quiet=True):
                 return False
-        self.__x._copy(data.x)
-        self.__y._copy(data.y)
+        self.__x._copy(data.x, quiet=True)
+        self.__y._copy(data.y, quiet=True)
         self._modified()
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     def _add_dataseries(self, dataseries, chan_char):
@@ -207,10 +208,10 @@ class DataContainer(Container):
         return {'data': self.names}
 
     # override
-    def new(self, name='default', shape=[], fill_value=np.nan, xdim={},
-            ydim={}, select=True, quiet=nmp.QUIET):
-        o = Data(self._parent, 'temp', self._fxns, shape=shape,
-                 fill_value=fill_value, xdim=xdim, ydim=ydim)
+    def new(self, name='default', np_array=None, xdim={}, ydim={},
+            dataseries={}, select=True, quiet=nmp.QUIET):
+        o = Data(self._parent, 'temp', self._fxns, np_array=np_array,
+                 xdim=xdim, ydim=ydim)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override

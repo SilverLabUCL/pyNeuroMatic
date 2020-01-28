@@ -15,8 +15,8 @@ class NMObject(object):
     """
     NM objects to be stored in a 'Container' list (see below).
 
-    Known Children:
-        Project, Folder, Data, DataSeries, Channel, EpochSet, Note
+    Known children:
+        Channel, Data, DataSeries, Dimension, EpochSet, Folder, Note, Project
 
     Attributes:
         parent (NMObject):
@@ -42,7 +42,7 @@ class NMObject(object):
         self._rename = rename
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
-        self.__source = self.tree_path()
+        self.__source = self.treepath()
         self._param_list = ['name', 'rename', 'date', 'modified', 'source']
 
     def name_ok(self, name, ok=[]):
@@ -130,22 +130,22 @@ class NMObject(object):
 
     @property
     def _tp(self):  # used with history()
-        return self.tree_path(for_history=True)
+        return self.treepath(for_history=True)
 
-    def tree_path(self, for_history=False):
+    def treepath(self, for_history=False):
         for_history = nmu.check_bool(for_history, False)
         if for_history:  # create tree path for history
-            skip = nmp.HISTORY_TREE_PATH_SKIP
+            skip = nmp.HISTORY_TREEPATH_SKIP
         else:
             skip = []
-        plist = self.tree_path_list(skip=skip)
+        plist = self.treepath_list(skip=skip)
         if len(plist) > 0:
             tp = '.'.join(plist)
         else:
             tp = self.__name
         return tp
 
-    def tree_path_list(self, names=True, skip=[]):
+    def treepath_list(self, names=True, skip=[]):
         names = nmu.check_bool(names, True)
         if not isinstance(skip, list):
             skip = []
@@ -153,7 +153,7 @@ class NMObject(object):
             return []
         p = self._parent
         if p and isinstance(p, NMObject) and p.__class__.__name__ not in skip:
-            t = p.tree_path_list(names=names, skip=skip)
+            t = p.treepath_list(names=names, skip=skip)
             if names:
                 t.append(self.__name)
             else:
@@ -202,6 +202,7 @@ class NMObject(object):
             raise TypeError(nmu.type_error(nmobj, 'NMObject'))
         # self._parent = nmobj._parent  # skip parent?
         name = self.__name
+        tp = self._tp
         if copy_name:
             self.__name = nmobj.name
         self._fxns = nmobj._fxns
@@ -211,7 +212,7 @@ class NMObject(object):
         self._modified()
         h = ('copied ' + self._cname + ' ' + nmu.quotes(nmobj.name) + ' to ' +
              nmu.quotes(name))
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     def save(self, path='', quiet=nmp.QUIET):
@@ -352,9 +353,10 @@ class Container(NMObject):
         if not isinstance(container, Container):
             e = nmu.type_error(container, 'Container')
             raise TypeError(e)
+        name = self.name
+        tp = self._tp
         if not super()._copy(container, copy_name=copy_name, quiet=True):
             return False
-        n = self.name
         self._type = container._type
         self.__prefix = container._Container__prefix  # mangled
         self._duplicate = container._duplicate
@@ -371,8 +373,8 @@ class Container(NMObject):
             self.__select = None
         self._modified()
         h = ('copied Container ' + nmu.quotes(container.name) + ' to ' +
-             nmu.quotes(n))
-        self._history(h, tp=self._tp, quiet=quiet)
+             nmu.quotes(name))
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     @property

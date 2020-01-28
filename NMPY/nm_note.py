@@ -35,12 +35,14 @@ class Note(NMObject):
     def _copy(self, note, copy_name=True, quiet=nmp.QUIET):
         if not isinstance(note, Note):
             raise TypeError(nmu.type_error(note, 'Note'))
+        name = self.name
+        tp = self._tp
         if not super()._copy(note, copy_name=copy_name, quiet=True):
             return False
         self.__thenote = note._Note__thenote
         h = ('copied Note ' + nmu.quotes(note.name) + ' to ' +
-             nmu.quotes(self.name))
-        self._history(h, tp=self._tp, quiet=quiet)
+             nmu.quotes(name))
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     @property
