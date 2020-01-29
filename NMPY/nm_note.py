@@ -82,9 +82,11 @@ class NoteContainer(Container):
             return n
         return None
 
-    @property
-    def thenotes(self):
+    def thenotes(self, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
         notes = []
+        self._history('', tp=self._tp, quiet=quiet)
         for n in self.getitems(names='all'):
             notes.append(n.thenote)
+            self._history(n.thenote, tp='none', quiet=quiet)
         return notes

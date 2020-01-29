@@ -755,13 +755,7 @@ class DataSeriesContainer(Container):
     # override, no super
     @property
     def content(self):
-        k = {'dataseries': self.names}
-        if self.select:
-            s = self.select.name
-        else:
-            s = ''
-        k.update({'dataseries_select': s})
-        return k
+        return {'dataseries': self.names}
 
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):

@@ -84,13 +84,7 @@ class FolderContainer(Container):
     # override, no super
     @property
     def content(self):
-        k = {'folders': self.names}
-        if self.select:
-            s = self.select.name
-        else:
-            s = ''
-        k.update({'folder_select': s})
-        return k
+        return {'folders': self.names}
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):

@@ -268,7 +268,7 @@ class Container(NMObject):
     """
     class collections.abc.MutableSequence
     class collections.abc.MutableMapping (implement this?)
-    
+
     A list container for NMObject items (above), one of which is assigned to
     'select'.
 
@@ -307,7 +307,7 @@ class Container(NMObject):
         self._duplicate = duplicate
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
-        self._param_list += ['type', 'prefix', 'duplicate']
+        self._param_list += ['type', 'prefix', 'duplicate', 'select']
 
     # override
     @property
@@ -316,20 +316,18 @@ class Container(NMObject):
         k.update({'type': self._type})
         k.update({'prefix': self.__prefix})
         k.update({'duplicate': self._duplicate})
+        if self.__select:
+            k.update({'select': self.__select.name})
+            # need name for equal() to work
+        else:
+            k.update({'select': ''})
         return k
 
     # override
     @property
     def content(self):  # child class should override
-        # and change 'nmobject' to 'folder', etc
-        # and change 'select' to 'folder_select', etc
-        k = {'nmobjects': self.names}
-        if self.select:
-            s = self.select.name
-        else:
-            s = ''
-        k.update({'select': s})
-        return k
+        # and change 'nmobjects' to 'folders', etc
+        return {'nmobjects': self.names}
 
     # override
     def _equal(self, container, ignore_name=False, alert=False):
@@ -367,8 +365,8 @@ class Container(NMObject):
             if not o1 or not o1._copy(o0, quiet=True):
                 return False
         if container.select and container.select.name:
-            select = container.select.name
-            self.__select = self.__getitem(select, quiet=True)
+            sname = container.select.name
+            self.__select = self.__getitem(sname, quiet=True)
         else:
             self.__select = None
         self._modified()

@@ -204,13 +204,11 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.names, [n[0], n[1], n[2], n[4], n[5]])
         # content()
         c = c0.content
-        self.assertEqual(list(c.keys()), ['nmobjects', 'select'])
+        self.assertEqual(list(c.keys()), ['nmobjects'])
         self.assertEqual(c['nmobjects'], c0.names)
-        self.assertEqual(c['select'], c0.getitem('select').name)
         c = c0.content_tree
-        self.assertEqual(list(c.keys()), ['nmobjects', 'select'])
+        self.assertEqual(list(c.keys()), ['nmobjects'])
         self.assertEqual(c['nmobjects'], c0.names)
-        self.assertEqual(c['select'], c0.getitem('select').name)
         # treepath()
         self.assertEqual(c0.treepath(), name0)
         self.assertEqual(c0.treepath_list(), [name0])
@@ -421,8 +419,7 @@ class Test(unittest.TestCase):
                            dim=ydim1)
         x1 = nmd.XDimension(parent, 'xdim1', fxns=nm._fxns, notes=notes,
                             dim=xdim1)
-        xdata = Data(parent, 'xdata', fxns=nm._fxns, shape=[10],
-                     fill_value=0, xdim=xx, ydim=xy)
+        xdata = Data(parent, 'xdata', fxns=nm._fxns, xdim=xx, ydim=xy)
         dim = y0.dim
         for k in ydim0.keys():
             self.assertEqual(ydim0[k], dim[k])
@@ -665,13 +662,11 @@ class Test(unittest.TestCase):
                   ydim=ydim1, dataseries=ds)
         xdata = Data(parent, 'xdata', fxns=nm._fxns, np_array=None, xdim=xx,
                      ydim=xy)
-        d0.x.master = d1.x
-        # print(d0.parameters)
-        d0.x.delta = 2
-        d0.x.offset = -12
-        d0.y.offset = 23
-        # print(d0.content)
-        # print(d0.notes.thenotes)
+        # parameters()
+        self.assertTrue(d0._param_test())
+        self.assertTrue(d1._param_test())
+        # content()
+        print(d0.content)
         """
         dim0.update({'xdata': None})
         dim1.update({'xdata': None})

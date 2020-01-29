@@ -25,11 +25,11 @@ class Data(NMObject):
     NM Data class
     """
 
-    def __init__(self, parent, name, fxns={}, np_array=None, xdim={}, ydim={},
-                 dataseries={}):
+    def __init__(self, parent, name, fxns={}, np_array=None, xdim={},
+                 ydim={}, dataseries={}):
         super().__init__(parent, name, fxns=fxns)
         self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
-        self.__np_array = None  # NumPy N-dimensional array
+        self.__np_array = None  # NumPy N-dimensional array (ndarray)
         self.__dataseries = {}
         if dataseries and isinstance(dataseries, dict):
             for ds, c in dataseries.items():
@@ -46,6 +46,7 @@ class Data(NMObject):
                                   notes=self._note_container, dim=xdim)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns,
                                  notes=self._note_container, dim=ydim)
+        self._param_list += ['xdim', 'ydim', 'dataseries']
 
     # override
     @property
@@ -53,6 +54,7 @@ class Data(NMObject):
         k = super().parameters
         k.update({'xdim': self.__x.dim})
         k.update({'ydim': self.__y.dim})
+        k.update({'dataseries': self.__dataseries})
         return k
 
     # override, no super
@@ -68,8 +70,13 @@ class Data(NMObject):
         if not super()._equal(data, ignore_name=ignore_name, alert=alert):
             return False
         if self._note_container:
-            return self._note_container._equal(data._Data__note_container,
-                                               alert=alert)
+            if not self._note_container._equal(data._Data__note_container,
+                                               alert=alert):
+                return False
+        if not self.__x._equal(data.x):
+            return False
+        if not self.__y._equal(data.y):
+            return False
         return True
 
     # override
@@ -84,8 +91,10 @@ class Data(NMObject):
         if self._note_container:
             if not self._note_container._copy(c, quiet=True):
                 return False
-        self.__x._copy(data.x, quiet=True)
-        self.__y._copy(data.y, quiet=True)
+        if not self.__x._copy(data.x, quiet=True):
+            return False
+        if not self.__y._copy(data.y, quiet=True):
+            return False
         self._modified()
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=tp, quiet=quiet)
@@ -137,15 +146,14 @@ class Data(NMObject):
         return self.__np_array
 
     @np_array.setter
-    def np_array(self, np_ndarray):
-        return self._np_array_set(np_ndarray)
+    def np_array(self, np_array):
+        return self._np_array_set(np_array)
 
-    def _np_array_set(self, np_ndarray, quiet=nmp.QUIET):
-        if not isinstance(np_ndarray, np.ndarray):
-            e = nmu.type_error(np_ndarray, 'numpy.ndarray')
-            raise TypeError(e)
+    def _np_array_set(self, np_array, quiet=nmp.QUIET):
+        if not isinstance(np_array, np.ndarray):
+            raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
         old = self.__np_array
-        self.__np_array = np_ndarray
+        self.__np_array = np_array
         self._modified()
         h = nmu.history_change('np_array', old, self.__np_array)
         self._note_container.new(h)
@@ -170,8 +178,6 @@ class Data(NMObject):
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
-    __np_array_make_random_normal = np_array_make_random_normal
-
     def np_array_make(self, shape, fill_value=NP_FILL_VALUE, dtype=NP_DTYPE,
                       order=NP_ORDER, quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
@@ -185,15 +191,11 @@ class Data(NMObject):
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
-    __np_array_make = np_array_make
-
 
 class DataContainer(Container):
     """
     Container for NM Data objects
     """
-    __select_alert = ('NOT USED. See nm.dataseries.select, ' +
-                      'nm.channel_select, nm.eset.select and nm.epoch_select.')
 
     def __init__(self, parent, name, fxns={}, dataseries_container=None):
         t = Data(parent, 'empty').__class__.__name__

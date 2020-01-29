@@ -135,13 +135,7 @@ class EpochSetContainer(Container):
     # override, no super
     @property
     def content(self):
-        k = {'esets': self.names}
-        if self.select:
-            s = self.select.name
-        else:
-            s = ''
-        k.update({'eset_select': s})
-        return k
+        return {'esets': self.names}
 
     # @property  # override, no super
     # def select(self):
