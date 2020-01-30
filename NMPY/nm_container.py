@@ -166,7 +166,7 @@ class NMObject(object):
     def _equal(self, nmobj, ignore_name=False, alert=False):
         if nmobj.__class__.__name__ != self._cname:
             if alert:
-                a = ('object type mismatch: ' + self._cname + ' vs ' +
+                a = ('unequal object types: ' + self._cname + ' vs ' +
                      nmobj.__class__.__name__)
                 self._alert(a, tp=self._tp)
             return False
@@ -184,15 +184,15 @@ class NMObject(object):
             if k == 'name':
                 if not ignore_name and op[k] != sp[k]:
                     if alert:
-                        a = (nmu.quotes(k) + ' mismatch: ' + nmu.quotes(sp[k])
-                             + ' vs ' + nmu.quotes(op[k]))
+                        a = ('unequal ' + nmu.quotes(k) + ': ' +
+                             nmu.quotes(sp[k]) + ' vs ' + nmu.quotes(op[k]))
                         self._alert(a, tp=self._tp)
                     return False
                 continue
             if op[k] != sp[k]:
                 if alert:
-                    a = (nmu.quotes(k) + ' mismatch: ' + str(sp[k]) + ' vs ' +
-                         str(op[k]))
+                    a = ('unequal ' + nmu.quotes(k) + ': ' + str(sp[k]) +
+                         ' vs ' + str(op[k]))
                     self._alert(a, tp=self._tp)
                 return False
         return True
@@ -335,7 +335,7 @@ class Container(NMObject):
             return False
         if container.count != self.count:
             if alert:
-                a = ('container count mismatch: ' + str(self.count) + ' vs ' +
+                a = ('unequal container count: ' + str(self.count) + ' vs ' +
                      str(container.count))
                 self._alert(a, tp=self._tp)
             return False

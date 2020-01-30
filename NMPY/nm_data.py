@@ -23,22 +23,18 @@ NP_FILL_VALUE = np.nan
 class Data(NMObject):
     """
     NM Data class
+    
+    np_array: NumPy N-dimensional array (ndarray)
     """
 
     def __init__(self, parent, name, fxns={}, np_array=None, xdim={},
                  ydim={}, dataseries={}):
         super().__init__(parent, name, fxns=fxns)
         self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
-        self.__np_array = None  # NumPy N-dimensional array (ndarray)
-        self.__dataseries = {}
-        if dataseries and isinstance(dataseries, dict):
-            for ds, c in dataseries.items():
-                if isinstance(ds, DataSeries) and c in nmp.CHAN_LIST:
-                    self.__dataseries.update({ds: c})
-        # self.__size = 0
         if np_array is None:
-            pass
+            self.__np_array = None
         elif isinstance(np_array, np.ndarray):
+            # self.__np_array = np_array.copy()  # COPY ARRAY?
             self.__np_array = np_array
         else:
             raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
@@ -46,6 +42,12 @@ class Data(NMObject):
                                   notes=self._note_container, dim=xdim)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns,
                                  notes=self._note_container, dim=ydim)
+        self.__dataseries = {}
+        if dataseries and isinstance(dataseries, dict):
+            for ds, c in dataseries.items():
+                if isinstance(ds, DataSeries) and c in nmp.CHAN_LIST:
+                    self.__dataseries.update({ds: c})
+        # self.__size = 0
         self._param_list += ['xdim', 'ydim', 'dataseries']
 
     # override
@@ -69,14 +71,19 @@ class Data(NMObject):
     def _equal(self, data, ignore_name=False, alert=False):
         if not super()._equal(data, ignore_name=ignore_name, alert=alert):
             return False
+        if not np.array_equal(self.__np_array, data.np_array):
+            if alert:
+                self._alert('unequal np_array', tp=self._tp)
+            return False
         if self._note_container:
-            if not self._note_container._equal(data._Data__note_container,
+            if not self._note_container._equal(data._note_container,
                                                alert=alert):
                 return False
         if not self.__x._equal(data.x):
             return False
         if not self.__y._equal(data.y):
             return False
+        # self.__dataseries?
         return True
 
     # override
@@ -87,7 +94,8 @@ class Data(NMObject):
         tp = self._tp
         if not super()._copy(data, copy_name=copy_name, quiet=True):
             return False
-        c = data._Data__note_container
+        self.__np_array = data.np_array.copy()
+        c = data._note_container
         if self._note_container:
             if not self._note_container._copy(c, quiet=True):
                 return False
@@ -95,6 +103,7 @@ class Data(NMObject):
             return False
         if not self.__y._copy(data.y, quiet=True):
             return False
+        # self.__dataseries?
         self._modified()
         h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
         self._history(h, tp=tp, quiet=quiet)

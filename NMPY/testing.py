@@ -604,16 +604,16 @@ class Test(unittest.TestCase):
         self.assertEqual(x0._xdata, None)
         self.assertFalse(x1._xdata_set(xdata))  # master is on
         # equal()
-        self.assertFalse(y0._equal(x0, ignore_name=True, alert=True))
-        self.assertFalse(y0._equal(y1, ignore_name=True, alert=True))
+        for b in badtype + ['test', x0, y1]:
+            self.assertFalse(y0._equal(b, ignore_name=True, alert=True))
         self.assertTrue(y0._equal(y0, ignore_name=False, alert=True))
         self.assertTrue(y1._master_set(None))
         self.assertEqual(y1._master, None)
         self.assertTrue(y0._dim_set(ydim0))
         self.assertTrue(y1._dim_set(ydim0))
         self.assertTrue(y0._equal(y1, ignore_name=True, alert=True))
-        self.assertFalse(x0._equal(y0, ignore_name=True, alert=True))
-        self.assertFalse(x0._equal(x1, ignore_name=True, alert=True))
+        for b in badtype + ['test', y0, x1]:
+            self.assertFalse(x0._equal(b, ignore_name=True, alert=True))
         self.assertTrue(x0._equal(x0, ignore_name=False, alert=True))
         self.assertTrue(x1._master_set(None))
         self.assertEqual(x1._master, None)
@@ -641,7 +641,7 @@ class Test(unittest.TestCase):
         name0 = 'RecordA0'
         name1 = 'RecordA1'
         shape = [5]  # test different shapes
-        ydim0 = {'label': 'Vmem', 'units': 'mV', 'offset': 0}
+        ydim0 = {'units': 'mV', 'offset': 0, 'label': 'Vmem'}
         xdim0 = {'offset': 0, 'start': 10, 'delta': 0.01, 'label': 'time',
                  'units': 'ms'}
         ydim1 = {'label': 'Imem', 'units': 'pA', 'offset': 0}
@@ -650,101 +650,38 @@ class Test(unittest.TestCase):
         xy = {'label': 'time interval', 'units': 'usec', 'offset': 0}
         xx = {'offset': 0, 'start': 0, 'delta': 1, 'label': 'sample',
               'units': '#'}
-        badtype = [True, 1, 3.1, float('nan'), [], {}, set(), self]
+        nparray0 = np.full([5], 0, dtype=np.float64, order='C')
+        nparray1 = np.full([5], 0, dtype=np.float64, order='C')
+        nparrayx = np.full([6], 0, dtype=np.float64, order='C')
+        badtype = [True, 1, 3.1, float('nan'), 'test', [], {}, set(), self]
         ds = DataSeries(parent, 'Record', fxns=nm._fxns)
-        for b in badtype + ['test']:
+        for b in badtype:
             with self.assertRaises(TypeError):
                 d0 = Data(parent, name0, fxns=nm._fxns, np_array=b, xdim=xdim0,
                           ydim=ydim0, dataseries=ds)
-        d0 = Data(parent, name0, fxns=nm._fxns, np_array=None, xdim=xdim0,
+        d0 = Data(parent, name0, fxns=nm._fxns, np_array=nparray0, xdim=xdim0,
                   ydim=ydim0, dataseries=ds)
-        d1 = Data(parent, name1, fxns=nm._fxns, np_array=None, xdim=xdim1,
+        d1 = Data(parent, name1, fxns=nm._fxns, np_array=nparray1, xdim=xdim1,
                   ydim=ydim1, dataseries=ds)
-        xdata = Data(parent, 'xdata', fxns=nm._fxns, np_array=None, xdim=xx,
-                     ydim=xy)
+        xdata = Data(parent, 'xdata', fxns=nm._fxns, np_array=nparrayx,
+                     xdim=xx, ydim=xy)
         # parameters()
         self.assertTrue(d0._param_test())
-        self.assertTrue(d1._param_test())
         # content()
-        print(d0.content)
+        self.assertEqual(list(d0.content.keys()), ['data', 'notes'])
+        # equal()
+        for b in badtype:
+            self.assertFalse(d0._equal(b, ignore_name=True, alert=True))
+        self.assertFalse(d0._equal(d1, ignore_name=True, alert=True))
+        d00 = Data(parent, name0, fxns=nm._fxns, np_array=nparray0, xdim=xdim0,
+                  ydim=ydim0, dataseries=ds)
+        self.assertTrue(d0._equal(d00, ignore_name=False, alert=True))
+        # copy()
+        # add_dataseries()
+        # remove_dataseries()
+        # np_array()
+        
         """
-        dim0.update({'xdata': None})
-        dim1.update({'xdata': None})
-        self.assertEqual(d0.dim, dim0)
-        self.assertEqual(d1.dim, dim1)
-        # dim()
-        dimlist = ['xdata', 'xstart', 'xdelta', 'xlabel', 'xunits', 'ylabel',
-                   'yunits']
-        self.assertEqual(dimlist, nmu.DIM_LIST)
-        bad = [None, [], 'test', 1.0, self]
-        for b in bad:
-            with self.assertRaises(TypeError):
-                d0._dim_set(b)
-        bad = {'xstart': 10, 'xd': 0.01}
-        with self.assertRaises(KeyError):
-            d0.dim = bad
-        self.assertTrue(d0._dim_set(dim1))
-        self.assertEqual(dim1, d0.dim)
-        # _xdata_set()
-        bad = [[], {}, 'test', 1.0, self]
-        for b in bad:
-            with self.assertRaises(TypeError):
-                d0._xdata_set(b)
-        good = [None, xdata]
-        for g in good:
-            self.assertTrue(d0._xdata_set(g))
-            self.assertEqual(g, d0.xdata)
-        d0._xstart_set(-22)
-        # _xstart_set()
-        bad = [self, 'start', [], {}]
-        for b in bad:
-            with self.assertRaises(TypeError):
-                d0._xstart_set(b)
-        bad = [float('inf'), float('nan')]
-        for b in bad:
-            with self.assertRaises(ValueError):
-                d0._xstart_set(b)
-        good = [-100, 0, 100]
-        for g in good:
-            self.assertTrue(d0._xstart_set(g))
-            self.assertEqual(g, d0.xstart)
-        # _xdelta_set()
-        bad = [self, 'start', [], {}]
-        for b in bad:
-            with self.assertRaises(TypeError):
-                d0._xdelta_set(b)
-        bad = [float('inf'), float('nan'), 0]
-        for b in bad:
-            with self.assertRaises(ValueError):
-                d0._xdelta_set(b)
-        good = [-100, 1, 100]
-        for g in good:
-            self.assertTrue(d0._xdelta_set(g))
-            self.assertEqual(g, d0.xdelta)
-        # _xlabel_set()
-        # _xunits_set()
-        # _ylabel_set()
-        # _yunits_set()
-        bad = [self, float('inf'), 1, [], {}]
-        for b in bad:
-            with self.assertRaises(TypeError):
-                d0._xlabel_set(b)
-            with self.assertRaises(TypeError):
-                d0._xunits_set(b)
-            with self.assertRaises(TypeError):
-                d0._ylabel_set(b)
-            with self.assertRaises(TypeError):
-                d0._yunits_set(b)
-        good_list = ['test', '', BADNAME]
-        for s in good_list:
-            self.assertTrue(d0._xlabel_set(s))
-            self.assertTrue(d0._xunits_set(s))
-            self.assertTrue(d0._ylabel_set(s))
-            self.assertTrue(d0._yunits_set(s))
-            self.assertEqual(s, d0.xlabel)
-            self.assertEqual(s, d0.xunits)
-            self.assertEqual(s, d0.ylabel)
-            self.assertEqual(s, d0.yunits)
         # _np_array_set()
         bad = [self, 'test', float('inf'), 1, [], {}]
         for b in bad:
