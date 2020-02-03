@@ -365,8 +365,7 @@ class Container(NMObject):
             if not o1 or not o1._copy(o0, quiet=True):
                 return False
         if container.select and container.select.name:
-            sname = container.select.name
-            self.__select = self.__getitem(sname, quiet=True)
+            self.__select = self.__getitem(container.select.name, quiet=True)
         else:
             self.__select = None
         self._modified()

@@ -69,12 +69,37 @@ class Data(NMObject):
 
     # override
     def _equal(self, data, ignore_name=False, alert=False):
+        if not data:
+            return False
         if not super()._equal(data, ignore_name=ignore_name, alert=alert):
             return False
-        if not np.array_equal(self.__np_array, data.np_array):
+        if self.__np_array is None and data.np_array is not None:
             if alert:
-                self._alert('unequal np_array', tp=self._tp)
+                self._alert('unequal np_array NoneType', tp=self._tp)
             return False
+        if self.__np_array is not None and data.np_array is None:
+            if alert:
+                self._alert('unequal np_array NoneType', tp=self._tp)
+            return False
+        if self.__np_array.dtype != data.np_array.dtype:
+            if alert:
+                self._alert('unequal np_array dtype', tp=self._tp)
+            return False
+        if self.__np_array.shape != data.np_array.shape:
+            if alert:
+                self._alert('unequal np_array shape', tp=self._tp)
+            return False
+        if self.__np_array.nbytes != data.np_array.nbytes:
+            if alert:
+                self._alert('unequal np_array nbytes', tp=self._tp)
+            return False
+        if not np.array_equal(self.__np_array, data.np_array):
+            # array_equal returns false if both arrays filled with NANs
+            if not np.allclose(self.__np_array, data.np_array, rtol=0, atol=0,
+                               equal_nan=True):
+                if alert:
+                    self._alert('unequal np_array', tp=self._tp)
+                return False
         if self._note_container:
             if not self._note_container._equal(data._note_container,
                                                alert=alert):
@@ -95,9 +120,9 @@ class Data(NMObject):
         if not super()._copy(data, copy_name=copy_name, quiet=True):
             return False
         self.__np_array = data.np_array.copy()
-        c = data._note_container
         if self._note_container:
-            if not self._note_container._copy(c, quiet=True):
+            if not self._note_container._copy(data._note_container,
+                                              quiet=True):
                 return False
         if not self.__x._copy(data.x, quiet=True):
             return False

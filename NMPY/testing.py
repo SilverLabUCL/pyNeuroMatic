@@ -650,9 +650,9 @@ class Test(unittest.TestCase):
         xy = {'label': 'time interval', 'units': 'usec', 'offset': 0}
         xx = {'offset': 0, 'start': 0, 'delta': 1, 'label': 'sample',
               'units': '#'}
-        nparray0 = np.full([5], 0, dtype=np.float64, order='C')
-        nparray1 = np.full([5], 0, dtype=np.float64, order='C')
-        nparrayx = np.full([6], 0, dtype=np.float64, order='C')
+        nparray0 = np.full([5], np.nan, dtype=np.float64, order='C')
+        nparray1 = np.full([5], np.nan, dtype=np.float64, order='C')
+        nparrayx = np.full([6], np.nan, dtype=np.float64, order='C')
         badtype = [True, 1, 3.1, float('nan'), 'test', [], {}, set(), self]
         ds = DataSeries(parent, 'Record', fxns=nm._fxns)
         for b in badtype:
@@ -673,10 +673,41 @@ class Test(unittest.TestCase):
         for b in badtype:
             self.assertFalse(d0._equal(b, ignore_name=True, alert=True))
         self.assertFalse(d0._equal(d1, ignore_name=True, alert=True))
-        d00 = Data(parent, name0, fxns=nm._fxns, np_array=nparray0, xdim=xdim0,
-                  ydim=ydim0, dataseries=ds)
+        d00 = Data(parent, name0, fxns=nm._fxns, xdim=xdim0, np_array=nparray0,
+                   ydim=ydim0, dataseries=ds)
         self.assertTrue(d0._equal(d00, ignore_name=False, alert=True))
+        self.assertTrue(d0._equal(d00, ignore_name=False, alert=True))
+        nparray00 = np.full([5], np.nan, dtype=np.float64, order='F')
+        d00 = Data(parent, name0, fxns=nm._fxns, xdim=xdim0,
+                   np_array=nparray00, ydim=ydim0, dataseries=ds)
+        self.assertTrue(d0._equal(d00, ignore_name=False, alert=True))
+        nparray0[2] = 5
+        self.assertFalse(d0._equal(d00, ignore_name=False, alert=True))
+        d00 = Data(parent, name0, fxns=nm._fxns, xdim=xdim0, np_array=None,
+                   ydim=ydim0, dataseries=ds)
+        self.assertFalse(d0._equal(d00, ignore_name=False, alert=True))
+        self.assertFalse(d00._equal(d0, ignore_name=False, alert=True))
+        nparray00 = np.full([5, 2], np.nan, dtype=np.float64, order='C')
+        d00 = Data(parent, name0, fxns=nm._fxns, xdim=xdim0,
+                   np_array=nparray00, ydim=ydim0, dataseries=ds)
+        self.assertFalse(d0._equal(d00, ignore_name=False, alert=True))
+        nparray00 = np.full([5], 0, dtype=np.int32, order='C')
+        d00 = Data(parent, name0, fxns=nm._fxns, xdim=xdim0,
+                   np_array=nparray00, ydim=ydim0, dataseries=ds)
+        self.assertFalse(d0._equal(d00, ignore_name=False, alert=True))
+        nparray00 = np.full([5], 0, dtype=np.float64, order='F')
+        d00 = Data(parent, name0, fxns=nm._fxns, xdim=xdim0,
+                   np_array=nparray00, ydim=ydim0, dataseries=ds)
+        self.assertFalse(d0._equal(d00, ignore_name=False, alert=True))
         # copy()
+        for b in badtype + [None]:
+            with self.assertRaises(TypeError):
+                d00._copy(b)
+        self.assertTrue(d0._copy(d1))
+        d0.notes.thenotes()
+        d00.notes.thenotes()
+        self.assertTrue(d0._equal(d1, ignore_name=False, alert=True))
+        
         # add_dataseries()
         # remove_dataseries()
         # np_array()
