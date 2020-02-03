@@ -20,10 +20,10 @@ class Folder(NMObject):
 
     def __init__(self, parent, name, fxns={}):
         super().__init__(parent, name, fxns=fxns)
-        ds = DataSeriesContainer(self, 'DataSeries', fxns=fxns)
-        self.__dataseries_container = ds
-        d = DataContainer(self, 'Data', fxns=fxns, dataseries_container=ds)
-        self.__data_container = d
+        dsc = DataSeriesContainer(self, 'DataSeries', fxns=fxns)
+        self.__dataseries_container = dsc
+        dc = DataContainer(self, 'Data', fxns=fxns, dataseries_container=dsc)
+        self.__data_container = dc
 
     # override, no super
     @property
@@ -43,24 +43,12 @@ class Folder(NMObject):
         c = folder._Folder__dataseries_container
         return self.__dataseries_container._equal(c, alert=alert)
 
-    # override
-    def _copy(self, folder, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(folder, Folder):
-            raise TypeError(nmu.type_error(folder, 'Folder'))
-        name = self.name
-        tp = self._tp
-        if not super()._copy(folder, copy_name=copy_name, quiet=True):
-            return False
-        c = folder._Folder__data_container
-        if not self.__data_container._copy(c, quiet=True):
-            return False
-        c = folder._Folder__dataseries_container
-        if not self.__dataseries_container._copy(c, quiet=True):
-            return False
-        h = ('copied Folder ' + nmu.quotes(folder.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
+    # override, no super
+    def copy(self):
+        f = Folder(self._parent, self.name, fxns=self._fxns)
+        f._Folder__dataseries_container = self.__dataseries_container.copy()
+        f._Folder__data_container = self.__data_container.copy()
+        return f
 
     @property
     def data(self):
@@ -85,6 +73,12 @@ class FolderContainer(Container):
     @property
     def content(self):
         return {'folders': self.names}
+
+    # override
+    def copy(self):
+        c = FolderContainer(self._parent, self.name, fxns=self._fxns)
+        super.copy(container=c)
+        return c
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):

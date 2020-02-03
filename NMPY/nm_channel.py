@@ -16,24 +16,24 @@ class Channel(NMObject):
     NM Channel class
     """
 
-    def __init__(self, parent, name, fxns={}, xdims={}, ydims={}):
+    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}):
         super().__init__(parent, name, fxns=fxns, rename=False)
         self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, notes=None)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, notes=None)
-        if xdims:
-            self.__x._dims_set(xdims, quiet=True)
-        if ydims:
-            self.__y._dims_set(ydims, quiet=True)
-        self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
-        self.__transform = []
-        self._param_list += ['graphXY', 'transform']
+        if xdim:
+            self.__x._dim_set(xdim, quiet=True)
+        if ydim:
+            self.__y._dim_set(ydim, quiet=True)
+        # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
+        # self.__transform = []
+        # self._param_list += ['graphXY', 'transform']
 
     # override
     @property
     def parameters(self):
         k = super().parameters
-        k.update({'graphXY': self.__graphXY})
-        k.update({'transform': self.__transform})
+        # k.update({'graphXY': self.__graphXY})
+        # k.update({'transform': self.__transform})
         return k
 
     # override, no super
@@ -41,22 +41,10 @@ class Channel(NMObject):
     def content(self):
         return {'channel': self.name}
 
-    # override
-    def _copy(self, channel, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(channel, Channel):
-            raise TypeError(nmu.type_error(channel, 'Channel'))
-        name = self.name
-        tp = self._tp
-        if not super()._copy(channel, copy_name=copy_name, quiet=True):
-            return False
-        self.__x._copy(channel.x)
-        self.__y._copy(channel.y)
-        self.__graphXY = channel._Channel__graphXY
-        self.__transform = channel._Channel__transform
-        h = ('copied Channel ' + nmu.quotes(channel.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
+    # override, no super
+    def copy(self):
+        return Channel(self._parent, self.name, fxns=self._fxns,
+                       xdim=self.__x.dim, ydim=self.__y.dim)
 
     @property
     def x(self):
@@ -82,6 +70,12 @@ class ChannelContainer(Container):
     @property
     def content(self):
         return {'channels': self.names}
+
+    # override
+    def copy(self):
+        c = ChannelContainer(self._parent, self.__name, self._fxns)
+        super.copy(container=c)
+        return c
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):

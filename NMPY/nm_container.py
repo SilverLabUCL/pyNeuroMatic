@@ -25,7 +25,6 @@ class NMObject(object):
         rename (bool)
         date (str):
         modified (str):
-        source (str)
     """
 
     def __init__(self, parent, name, fxns={}, rename=True):
@@ -42,8 +41,7 @@ class NMObject(object):
         self._rename = rename
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
-        self.__source = self.treepath()
-        self._param_list = ['name', 'rename', 'date', 'modified', 'source']
+        self._param_list = ['name', 'rename', 'date', 'modified']
 
     def name_ok(self, name, ok=[]):
         if not nmu.name_ok(name):
@@ -92,7 +90,6 @@ class NMObject(object):
         p.update({'rename': self._rename})
         p.update({'date': self.__date})
         p.update({'modified': self.__modified})
-        p.update({'source': self.__source})
         return p
 
     def _param_test(self, quiet=nmp.QUIET):
@@ -170,6 +167,8 @@ class NMObject(object):
                      nmobj.__class__.__name__)
                 self._alert(a, tp=self._tp)
             return False
+        if self == nmobj:
+            return True
         sp = self.parameters
         op = nmobj.parameters
         if op.keys() != sp.keys():
@@ -179,8 +178,6 @@ class NMObject(object):
                 continue  # ignore, will be different
             if k == 'modified':
                 continue  # ignore, will be different
-            if k == 'source':
-                continue  # ignore, can be different
             if k == 'name':
                 if not ignore_name and op[k] != sp[k]:
                     if alert:
@@ -208,13 +205,16 @@ class NMObject(object):
         self._fxns = nmobj._fxns
         self._rename = nmobj._rename
         # self.__date = nmobj._NMObject__date  # skip date
-        self.__source = nmobj._NMObject__source  # mangled
         self._modified()
         h = ('copied ' + self._cname + ' ' + nmu.quotes(nmobj.name) + ' to ' +
              nmu.quotes(name))
         self._history(h, tp=tp, quiet=quiet)
         return True
 
+    def copy(self):
+        return NMObject(self._parent, self.__name, fxns=self._fxns,
+                        rename=self._rename)
+        
     def save(self, path='', quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         self._alert('under construction')
@@ -373,6 +373,22 @@ class Container(NMObject):
              nmu.quotes(name))
         self._history(h, tp=tp, quiet=quiet)
         return True
+
+    def copy(self, container=None):
+        if container is None:
+            c = Container(self._parent, self.name, self._fxns,
+                          type_=self._type, prefix=self.__prefix,
+                          rename=self._rename, duplicate=self._duplicate)
+        elif isinstance(container, Container):
+            c = container
+        else:
+            raise TypeError(nmu.type_error(container, 'Container'))
+        for o in self.__thecontainer:
+            if o:
+                c._Container__thecontainer.append(o.copy())
+        if self.__select and self.__select.name:
+            c._select_set(self.__select.name, quiet=True)
+        return c
 
     @property
     def prefix(self):  # see name_next()
@@ -683,9 +699,11 @@ class Container(NMObject):
         # c = copy.deepcopy(o) NOT WORKING
         # TypeError: can't pickle Context objects
         # c = copy.copy(o)
-        c = NMObject(self._parent, newname, self._fxns, rename=self._rename)
-        if not c._copy(o, copy_name=False, quiet=True):
+        # c = NMObject(self._parent, newname, self._fxns, rename=self._rename)
+        c = o.copy()
+        if not c:
             return None
+        c._name_set(newname, quiet=True)
         # c._parent = self._parent  # reset parent reference
         self.__thecontainer.append(c)
         old = nmu.quotes(o.name)

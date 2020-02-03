@@ -134,6 +134,16 @@ class Data(NMObject):
         self._history(h, tp=tp, quiet=quiet)
         return True
 
+    # override, no super
+    def copy(self):
+        if self.__np_array is None:
+            c = None
+        else:
+            c = self.__np_array.copy()
+        return Data(self._parent, self.name, fxns=self._fxns, np_array=c,
+                    xdim=self.__x.dim, ydim=self.__y.dim,
+                    dataseries=self.__dataseries)
+
     def _add_dataseries(self, dataseries, chan_char):
         if not isinstance(dataseries, DataSeries):
             raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
@@ -235,13 +245,25 @@ class DataContainer(Container):
         t = Data(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t,
                          prefix=nmp.DATA_PREFIX)
-        if isinstance(dataseries_container, DataSeriesContainer):
+        if dataseries_container is None:
+            self.__dataseries_container = None
+        elif isinstance(dataseries_container, DataSeriesContainer):
             self.__dataseries_container = dataseries_container
+        else:
+            e = nmu.type_error(dataseries_container, 'DataSeriesContainer')
+            raise TypeError(e)
 
     # override, no super
     @property
     def content(self):
         return {'data': self.names}
+
+    # override
+    def copy(self):
+        c = DataContainer(self._parent, self.name, fxns=self._fxns,
+                          dataseries_container=self.__dataseries_container)
+        super.copy(container=c)
+        return c
 
     # override
     def new(self, name='default', np_array=None, xdim={}, ydim={},

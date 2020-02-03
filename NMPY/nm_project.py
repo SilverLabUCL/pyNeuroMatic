@@ -25,28 +25,17 @@ class Project(NMObject):
         k.update(self.__folder_container.content)
         return k
 
-    # override
-    def _copy(self, project, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(project, Project):
-            raise TypeError(nmu.type_error(project, 'Project'))
-        name = self.name
-        tp = self._tp
-        if not super()._copy(project, copy_name=copy_name, quiet=True):
-            return False
-        c = project._Project__folder_container
-        if not self.__folder_container._copy(c, quiet=True):
-            return False
-        h = ('copied Project ' + nmu.quotes(project.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
+    # override, no super
+    def copy(self):
+        p = Project(self._parent, self.name, fxns=self._fxns)
+        p.folder = self.__folder_container.copy()
+        return p
 
     # override
     def _equal(self, project, ignore_name=False, alert=False):
         if not super()._equal(project, ignore_name=ignore_name, alert=alert):
             return False
-        c = project._Project__folder_container
-        return self.__folder_container._equal(c, alert=alert)
+        return self.__folder_container._equal(project.folder, alert=alert)
 
     @property
     def folder(self):

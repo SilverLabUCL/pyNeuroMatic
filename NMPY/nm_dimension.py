@@ -20,7 +20,7 @@ class Dimension(NMObject):
     def __init__(self, parent, name, fxns={}, notes=None, dim={}):
         super().__init__(parent, name, fxns=fxns)
         if notes is None:
-            pass  # ok
+            self._note_container = None
         elif isinstance(notes, NoteContainer):
             self._note_container = notes
         else:
@@ -46,19 +46,10 @@ class Dimension(NMObject):
     def content(self):
         return {'dimension': self.name}
 
-    # override
-    def _copy(self, dimension, copy_name=True, quiet=nmp.QUIET):
-        if dimension.__class__.__name__ != self._cname:
-            raise TypeError(nmu.type_error(dimension, self._cname))
-        name = self.name
-        tp = self._tp
-        if not super()._copy(dimension, copy_name=copy_name, quiet=True):
-            return False
-        self._dim_set(dimension.dim, quiet=True)
-        h = ('copied Dimension ' + nmu.quotes(dimension.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
+    # override, no super
+    def copy(self):
+        return Dimension(self._parent, self.name, fxns=self._fxns,
+                         notes=self._note_container, dim=self.dim)
 
     def _note_new(self, note, quiet=True):
         if isinstance(self._note_container, NoteContainer):
@@ -247,6 +238,11 @@ class XDimension(Dimension):
     @property
     def content(self):
         return {'xdimension': self.name}
+
+    # override, no super
+    def copy(self):
+        return XDimension(self._parent, self.name, fxns=self._fxns,
+                         notes=self._note_container, dim=self.dim)
 
     @property
     def xdata(self):
