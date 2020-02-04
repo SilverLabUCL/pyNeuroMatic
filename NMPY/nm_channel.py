@@ -18,12 +18,8 @@ class Channel(NMObject):
 
     def __init__(self, parent, name, fxns={}, xdim={}, ydim={}):
         super().__init__(parent, name, fxns=fxns, rename=False)
-        self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, notes=None)
-        self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, notes=None)
-        if xdim:
-            self.__x._dim_set(xdim, quiet=True)
-        if ydim:
-            self.__y._dim_set(ydim, quiet=True)
+        self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, dim=xdim)
+        self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim)
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         # self.__transform = []
         # self._param_list += ['graphXY', 'transform']
@@ -74,7 +70,7 @@ class ChannelContainer(Container):
     # override
     def copy(self):
         c = ChannelContainer(self._parent, self.__name, self._fxns)
-        super.copy(container=c)
+        super().copy(container=c)
         return c
 
     # override

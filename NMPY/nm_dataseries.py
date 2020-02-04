@@ -758,6 +758,12 @@ class DataSeriesContainer(Container):
         return {'dataseries': self.names}
 
     # override
+    def copy(self):
+        c = DataSeriesContainer(self._parent, self.name, fxns=self._fxns)
+        super().copy(container=c)
+        return c
+
+    # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
         # name is the data-series name
         o = DataSeries(self._parent, 'temp', self._fxns)

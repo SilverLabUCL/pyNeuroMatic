@@ -17,12 +17,12 @@ class Dimension(NMObject):
     NM Dimension class
     """
 
-    def __init__(self, parent, name, fxns={}, notes=None, dim={}):
+    def __init__(self, parent, name, fxns={}, dim={}, notes=None):
         super().__init__(parent, name, fxns=fxns)
         if notes is None:
             self._note_container = None
         elif isinstance(notes, NoteContainer):
-            self._note_container = notes
+            self._note_container = notes  # reference to notes container
         else:
             raise TypeError(nmu.type_error(notes, 'NoteContainer'))
         self._offset = 0  # not to be controlled by master
@@ -48,8 +48,8 @@ class Dimension(NMObject):
 
     # override, no super
     def copy(self):
-        return Dimension(self._parent, self.name, fxns=self._fxns,
-                         notes=self._note_container, dim=self.dim)
+        return Dimension(self._parent, self.name, self._fxns, dim=self.dim,
+                         notes=self._note_container)
 
     def _note_new(self, note, quiet=True):
         if isinstance(self._note_container, NoteContainer):
@@ -224,7 +224,7 @@ class XDimension(Dimension):
     NM XDimension class
     """
 
-    def __init__(self, parent, name, fxns={}, notes=None, dim={}):
+    def __init__(self, parent, name, fxns={}, dim={}, notes=None):
         super().__init__(parent, name, fxns=fxns, notes=notes)
         self._start = 0
         self._delta = 1
@@ -241,8 +241,8 @@ class XDimension(Dimension):
 
     # override, no super
     def copy(self):
-        return XDimension(self._parent, self.name, fxns=self._fxns,
-                         notes=self._note_container, dim=self.dim)
+        return XDimension(self._parent, self.name, self._fxns, dim=self.dim,
+                          notes=self._note_container)
 
     @property
     def xdata(self):

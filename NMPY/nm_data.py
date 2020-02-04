@@ -23,14 +23,13 @@ NP_FILL_VALUE = np.nan
 class Data(NMObject):
     """
     NM Data class
-    
+
     np_array: NumPy N-dimensional array (ndarray)
     """
 
     def __init__(self, parent, name, fxns={}, np_array=None, xdim={},
-                 ydim={}, dataseries={}):
+                 ydim={}, notes=None, dataseries={}):
         super().__init__(parent, name, fxns=fxns)
-        self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
         if np_array is None:
             self.__np_array = None
         elif isinstance(np_array, np.ndarray):
@@ -38,16 +37,21 @@ class Data(NMObject):
             self.__np_array = np_array
         else:
             raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
-        self.__x = nmd.XDimension(self, 'xdim', fxns=fxns,
-                                  notes=self._note_container, dim=xdim)
-        self.__y = nmd.Dimension(self, 'ydim', fxns=fxns,
-                                 notes=self._note_container, dim=ydim)
+        if notes is None:
+            self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
+        elif isinstance(notes, NoteContainer):
+            self._note_container = notes
+        else:
+            raise TypeError(nmu.type_error(notes, 'NoteContainer'))
+        self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, dim=xdim,
+                                  notes=self._note_container)
+        self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim,
+                                 notes=self._note_container)
         self.__dataseries = {}
         if dataseries and isinstance(dataseries, dict):
             for ds, c in dataseries.items():
                 if isinstance(ds, DataSeries) and c in nmp.CHAN_LIST:
                     self.__dataseries.update({ds: c})
-        # self.__size = 0
         self._param_list += ['xdim', 'ydim', 'dataseries']
 
     # override
@@ -111,38 +115,19 @@ class Data(NMObject):
         # self.__dataseries?
         return True
 
-    # override
-    def _copy(self, data, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(data, Data):
-            raise TypeError(nmu.type_error(data, 'Data'))
-        name = self.name
-        tp = self._tp
-        if not super()._copy(data, copy_name=copy_name, quiet=True):
-            return False
-        self.__np_array = data.np_array.copy()
-        if self._note_container:
-            if not self._note_container._copy(data._note_container,
-                                              quiet=True):
-                return False
-        if not self.__x._copy(data.x, quiet=True):
-            return False
-        if not self.__y._copy(data.y, quiet=True):
-            return False
-        # self.__dataseries?
-        self._modified()
-        h = 'copied Data ' + nmu.quotes(data.name) + ' to ' + nmu.quotes(name)
-        self._history(h, tp=tp, quiet=quiet)
-        return True
-
     # override, no super
     def copy(self):
         if self.__np_array is None:
             c = None
         else:
             c = self.__np_array.copy()
-        return Data(self._parent, self.name, fxns=self._fxns, np_array=c,
-                    xdim=self.__x.dim, ydim=self.__y.dim,
-                    dataseries=self.__dataseries)
+        notes = self._note_container.copy()
+        notes.off = True  # want copy of old notes, not new ones
+        d = Data(self._parent, self.name, fxns=self._fxns, np_array=c,
+                 xdim=self.__x.dim, ydim=self.__y.dim, notes=notes,
+                 dataseries=self.__dataseries)
+        notes.off = False
+        return d
 
     def _add_dataseries(self, dataseries, chan_char):
         if not isinstance(dataseries, DataSeries):
@@ -262,7 +247,7 @@ class DataContainer(Container):
     def copy(self):
         c = DataContainer(self._parent, self.name, fxns=self._fxns,
                           dataseries_container=self.__dataseries_container)
-        super.copy(container=c)
+        super().copy(container=c)
         return c
 
     # override

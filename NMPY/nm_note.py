@@ -14,9 +14,12 @@ class Note(NMObject):
     NM Note class
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, thenote=''):
         super().__init__(parent, name, fxns=fxns, rename=False)
-        self.__thenote = ''
+        if isinstance(thenote, str):
+            self.__thenote = thenote
+        else:
+            raise TypeError(nmu.type_error(thenote, 'string'))
         self._param_list += ['thenote']
 
     # override
@@ -32,18 +35,9 @@ class Note(NMObject):
         return {'note': self.name}
 
     # override
-    def _copy(self, note, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(note, Note):
-            raise TypeError(nmu.type_error(note, 'Note'))
-        name = self.name
-        tp = self._tp
-        if not super()._copy(note, copy_name=copy_name, quiet=True):
-            return False
-        self.__thenote = note._Note__thenote
-        h = ('copied Note ' + nmu.quotes(note.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
+    def copy(self):
+        return Note(self._parent, self.name, fxns=self._fxns,
+                    thenote=self.__thenote)
 
     @property
     def thenote(self):
@@ -63,6 +57,16 @@ class NoteContainer(Container):
         t = Note(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t, prefix='Note',
                          rename=False, duplicate=False)
+        self.__off = False
+
+    @property
+    def off(self):
+        return self.__off
+
+    @off.setter
+    def off(self, off):
+        self.__off = nmu.check_bool(off, False)
+        return self.__off
 
     # override, no super
     @property
@@ -70,10 +74,19 @@ class NoteContainer(Container):
         return {'notes': self.names}
 
     # override
-    def new(self, note='', select=True, quiet=nmp.QUIET):
+    def copy(self):
+        c = NoteContainer(self._parent, self.name, fxns=self._fxns)
+        super().copy(container=c)
+        return c
+
+    # override
+    def new(self, note='', select=True, quiet=True):
+        # notes should be quiet
+        if self.__off:
+            return None
         if not isinstance(note, str):
             return None
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        quiet = nmu.check_bool(quiet, True)
         name = self.name_next(quiet=quiet)
         o = Note(self._parent, name, self._fxns)
         n = super().new(name=name, nmobj=o, select=select, quiet=quiet)

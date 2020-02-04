@@ -59,6 +59,11 @@ class EpochSet(NMObject):
         self._history(h, tp=tp, quiet=quiet)
         return True
 
+    # override
+    def EpochSet(self):
+        c = EpochSet(self._parent, self.name, fxns=self._fxns)
+        return c
+
     @property
     def theset(self):
         return self.__theset
@@ -136,6 +141,12 @@ class EpochSetContainer(Container):
     @property
     def content(self):
         return {'esets': self.names}
+
+    # override
+    def copy(self):
+        c = EpochSetContainer(self._parent, self.name, fxns=self._fxns)
+        super().copy(container=c)
+        return c
 
     # @property  # override, no super
     # def select(self):

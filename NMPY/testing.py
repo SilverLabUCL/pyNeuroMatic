@@ -420,16 +420,16 @@ class Test(unittest.TestCase):
         badtype = [True, 1, 3.1, float('nan'), [], {}, set(), self]
         for b in badtype + [label]:
             with self.assertRaises(TypeError):
-                y0 = nmd.Dimension(parent, 'ydim0', fxns=nm._fxns, notes=b,
-                                   dim=ydim0)
-        y0 = nmd.Dimension(parent, 'ydim0', fxns=nm._fxns, notes=notes,
-                           dim=ydim0)
-        x0 = nmd.XDimension(parent, 'xdim0', fxns=nm._fxns, notes=notes,
-                            dim=xdim0)
-        y1 = nmd.Dimension(parent, 'ydim1', fxns=nm._fxns, notes=notes,
-                           dim=ydim1)
-        x1 = nmd.XDimension(parent, 'xdim1', fxns=nm._fxns, notes=notes,
-                            dim=xdim1)
+                y0 = nmd.Dimension(parent, 'ydim0', fxns=nm._fxns, dim=ydim0,
+                                   notes=b)
+        y0 = nmd.Dimension(parent, 'ydim0', fxns=nm._fxns, dim=ydim0,
+                           notes=notes)
+        x0 = nmd.XDimension(parent, 'xdim0', fxns=nm._fxns, dim=xdim0,
+                            notes=notes)
+        y1 = nmd.Dimension(parent, 'ydim1', fxns=nm._fxns, dim=ydim1,
+                           notes=notes)
+        x1 = nmd.XDimension(parent, 'xdim1', fxns=nm._fxns, dim=xdim1,
+                            notes=notes)
         xdata = Data(parent, 'xdata', fxns=nm._fxns, xdim=xx, ydim=xy)
         dim = y0.dim
         for k in ydim0.keys():
@@ -704,8 +704,10 @@ class Test(unittest.TestCase):
                    np_array=nparray00, ydim=ydim0, dataseries=ds)
         self.assertFalse(d0._equal(d00, ignore_name=False, alert=True))
         # copy()
+        d0.notes.new('test')
         cd0 = d0.copy()
-        self.assertTrue(d0._equal(cd0))
+        self.assertTrue(d0._equal(cd0, alert=True))
+        
         # add_dataseries()
         # remove_dataseries()
         # np_array()

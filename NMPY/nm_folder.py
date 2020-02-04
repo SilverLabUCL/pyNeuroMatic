@@ -18,12 +18,25 @@ class Folder(NMObject):
     NM Data Folder class
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, dataseries_container=None,
+                 data_container=None):
         super().__init__(parent, name, fxns=fxns)
-        dsc = DataSeriesContainer(self, 'DataSeries', fxns=fxns)
-        self.__dataseries_container = dsc
-        dc = DataContainer(self, 'Data', fxns=fxns, dataseries_container=dsc)
-        self.__data_container = dc
+        if dataseries_container is None:
+            dsc = DataSeriesContainer(self, 'DataSeries', fxns=fxns)
+            self.__dataseries_container = dsc
+        elif isinstance(dataseries_container, DataSeriesContainer):
+            dataseries_container = DataSeriesContainer
+        else:
+            e = nmu.type_error(dataseries_container, 'DataSeriesContainer')
+            raise TypeError(e)
+        if data_container is None:
+            self.__data_container = DataContainer(self, 'Data', fxns=fxns,
+                                                  dataseries_container=dsc)
+        elif isinstance(data_container, DataContainer):
+            self.__data_container = data_container
+        else:
+            e = nmu.type_error(data_container, 'DataContainer')
+            raise TypeError(e)
 
     # override, no super
     @property
@@ -45,10 +58,9 @@ class Folder(NMObject):
 
     # override, no super
     def copy(self):
-        f = Folder(self._parent, self.name, fxns=self._fxns)
-        f._Folder__dataseries_container = self.__dataseries_container.copy()
-        f._Folder__data_container = self.__data_container.copy()
-        return f
+        return Folder(self._parent, self.name, fxns=self._fxns,
+                   dataseries_container=self.__dataseries_container.copy(),
+                   data_container=self.__data_container.copy())
 
     @property
     def data(self):
@@ -77,7 +89,7 @@ class FolderContainer(Container):
     # override
     def copy(self):
         c = FolderContainer(self._parent, self.name, fxns=self._fxns)
-        super.copy(container=c)
+        super().copy(container=c)
         return c
 
     # override
