@@ -34,7 +34,7 @@ class Note(NMObject):
     def content(self):
         return {'note': self.name}
 
-    # override
+    # override, no super
     def copy(self):
         return Note(self._parent, self.name, fxns=self._fxns,
                     thenote=self.__thenote)

@@ -194,23 +194,6 @@ class NMObject(object):
                 return False
         return True
 
-    def _copy(self, nmobj, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(nmobj, NMObject):
-            raise TypeError(nmu.type_error(nmobj, 'NMObject'))
-        # self._parent = nmobj._parent  # skip parent?
-        name = self.__name
-        tp = self._tp
-        if copy_name:
-            self.__name = nmobj.name
-        self._fxns = nmobj._fxns
-        self._rename = nmobj._rename
-        # self.__date = nmobj._NMObject__date  # skip date
-        self._modified()
-        h = ('copied ' + self._cname + ' ' + nmu.quotes(nmobj.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
-
     def copy(self):
         return NMObject(self._parent, self.__name, fxns=self._fxns,
                         rename=self._rename)
@@ -345,35 +328,6 @@ class Container(NMObject):
                 return False
         return True
 
-    # override
-    def _copy(self, container, copy_name=True, clear_before_copy=False,
-              quiet=nmp.QUIET):
-        if not isinstance(container, Container):
-            e = nmu.type_error(container, 'Container')
-            raise TypeError(e)
-        name = self.name
-        tp = self._tp
-        if not super()._copy(container, copy_name=copy_name, quiet=True):
-            return False
-        self._type = container._type
-        self.__prefix = container._Container__prefix  # mangled
-        self._duplicate = container._duplicate
-        if clear_before_copy:
-            self.__thecontainer.clear()
-        for o0 in container._Container__thecontainer:
-            o1 = self.new(o0.name, quiet=True)
-            if not o1 or not o1._copy(o0, quiet=True):
-                return False
-        if container.select and container.select.name:
-            self.__select = self.__getitem(container.select.name, quiet=True)
-        else:
-            self.__select = None
-        self._modified()
-        h = ('copied Container ' + nmu.quotes(container.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
-
     def copy(self, container=None):
         if container is None:
             c = Container(self._parent, self.name, self._fxns,
@@ -387,7 +341,7 @@ class Container(NMObject):
             if o:
                 c._Container__thecontainer.append(o.copy())
         if self.__select and self.__select.name:
-            c._select_set(self.__select.name, quiet=True)
+            c._Container__select = self.__select
         return c
 
     @property

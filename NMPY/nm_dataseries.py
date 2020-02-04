@@ -19,19 +19,32 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, xdims={}, ydims={}):
+    def __init__(self, parent, name, fxns={}, xdim={}, ydim={},
+                 channel_container=None, eset_container=None):
         # name is data-series prefix
         super().__init__(parent, name, fxns=fxns, rename=False)
-        cc = ChannelContainer(self, 'Channels', fxns=fxns)
-        self.__channel_container = cc
-        ec = EpochSetContainer(self, 'EpochSets', fxns=fxns)
-        self.__eset_container = ec
+        if channel_container is None:
+            self.__channel_container = ChannelContainer(self, 'Channels',
+                                                        fxns=fxns)
+        elif isinstance(channel_container, ChannelContainer):
+            self.__channel_container = channel_container
+        else:
+            e = nmu.type_error(channel_container, 'ChannelContainer')
+            raise TypeError(e)
+        if eset_container is None:
+            self.__eset_container = EpochSetContainer(self, 'EpochSets',
+                                                      fxns=fxns)
+        elif isinstance(eset_container, EpochSetContainer):
+            self.__eset_container = eset_container
+        else:
+            e = nmu.type_error(eset_container, 'EpochSetContainer')
+            raise TypeError(e)
         self.__thedata = {}  # dict, {channel: data-list}
         self.__x = {'default': nmd.XDimension(self, 'xdim', fxns=fxns)}
         self.__y = {'default': nmd.Dimension(self, 'ydim', fxns=fxns)}
-        if xdims:
+        if xdim:
             pass
-        if ydims:
+        if ydim:
             pass
         self.__dims_master_on = True
         self.__data_select = {}  # dict, {channel: data-list}
@@ -72,30 +85,17 @@ class DataSeries(NMObject):
         c = dataseries._DataSeries__eset_container
         return self.__eset_container._equal(c, alert=alert)
 
-    # override
-    def _copy(self, dataseries, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(dataseries, DataSeries):
-            e = nmu.type_error(dataseries, 'DataSeries')
-            raise TypeError(e)
-        name = self.name
-        tp = self._tp
-        if not super()._copy(dataseries, copy_name=copy_name, quiet=True):
-            return False
-        c = dataseries._DataSeries__channel_container
-        if not self.__channel_container._copy(c, quiet=True):
-            return False
-        c = dataseries._DataSeries__eset_container
-        if not self.__eset_container._copy(c, quiet=True):
-            return False
-        self.__channel_select = list(dataseries._DataSeries__channel_select)
-        self.__epoch_select = list(dataseries._DataSeries__epoch_select)
-        # COPY thedata
-        # COPY data_select
-        # self.__data_select.clear()  # RESET
-        h = ('copied DataSeries ' + nmu.quotes(dataseries.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
+    # override, no super
+    def copy(self):
+        c = DataSeries(self._parent, self.name, fxns=self._fxns,
+                       xdim=self.__x, ydim=self.__y,
+                       channel_container=self.__channel_container.copy(),
+                       eset_container=self.__eset_container.copy())
+        # self.__dims_master_on
+        # self.__data_select = {}
+        # self.__channel_select = []
+        # self.__epoch_select = []
+        return c
 
     @property
     def data(self):

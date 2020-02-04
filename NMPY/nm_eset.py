@@ -15,11 +15,22 @@ class EpochSet(NMObject):
     NM EpochSet class
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, theset=None, eq_list=[],
+                 eq_lock=True):
         super().__init__(parent, name, fxns=fxns)
-        self.__theset = set()
-        self.__eq_list = []
-        self.__eq_lock = True
+        if theset is None:
+            self.__theset = set()
+        elif isinstance(theset, set):
+            self.__theset = theset
+        else:
+            raise TypeError(nmu.type_error(theset, 'set'))
+        if not eq_list:
+            self.__eq_list = []
+        elif isinstance(eq_list, list):
+            self.__eq_list = eq_list
+        else:
+            raise TypeError(nmu.type_error(eq_list, 'list'))
+        self.__eq_lock = nmu.check_bool(eq_lock, True)
         self._param_list += ['eq_list', 'eq_lock']
 
     # override
@@ -43,25 +54,12 @@ class EpochSet(NMObject):
     def content(self):
         return {'eset': self.name}
 
-    def _copy(self, epochset, copy_name=True, quiet=nmp.QUIET):
-        if not isinstance(epochset, EpochSet):
-            raise TypeError(nmu.type_error(epochset, 'EpochSet'))
-        name = self.name
-        tp = self._tp
-        if not super()._copy(epochset, copy_name=copy_name, quiet=True):
-            return False
-        # COPY theset
-        # self.__theset.clear()  # RESET
-        self.__eq_list = list(epochset._EpochSet__eq_list)
-        self.__eq_lock = epochset._EpochSet__eq_lock
-        h = ('copied EpochSet ' + nmu.quotes(epochset.name) + ' to ' +
-             nmu.quotes(name))
-        self._history(h, tp=tp, quiet=quiet)
-        return True
-
-    # override
-    def EpochSet(self):
-        c = EpochSet(self._parent, self.name, fxns=self._fxns)
+    # override, no super
+    def copy(self):
+        c = EpochSet(self._parent, self.name, fxns=self._fxns,
+                     theset=self.__theset.copy(),
+                     eq_list=self.__eq_list.copy(),
+                     eq_lock=self.__eq_lock)
         return c
 
     @property
