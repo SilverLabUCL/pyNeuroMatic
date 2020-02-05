@@ -19,6 +19,7 @@ from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
 import nm_dimension as nmd
 from nm_manager import Manager
+from nm_note import Note
 from nm_note import NoteContainer
 from nm_project import Project
 import nm_utilities as nmu
@@ -94,6 +95,7 @@ class Test(unittest.TestCase):
         self.assertFalse(o1._equal(o0, alert=True))
         self.assertFalse(o1._equal(o0, ignore_name=True, alert=True))
         self.assertTrue(o1._equal(o1, alert=True))
+        # copy()
         c = o0.copy()
         p0 = o0.parameters
         pc = c.parameters
@@ -104,9 +106,9 @@ class Test(unittest.TestCase):
         self.assertEqual(p0['rename'], pc['rename'])
         self.assertNotEqual(p0['date'], pc['date'])  # different
         self.assertNotEqual(p0['modified'], pc['modified'])  # different
-        
+
     def test_container(self):
-        on = True
+        on = False
         if not on:
             return
         nm.configs.quiet = False
@@ -137,6 +139,7 @@ class Test(unittest.TestCase):
                                prefix=b, rename=True, duplicate=True)
         c0 = Container(parent, name0, fxns=nm._fxns, type_=type_, prefix='',
                        rename=True, duplicate=True)
+        self.assertEqual(c0.prefix, '')
         c0 = Container(parent, name0, fxns=nm._fxns, type_=type_, prefix=p0,
                        rename=True, duplicate=True)
         c1 = Container(parent, name1, fxns=nm._fxns, type_=type_, prefix=p1,
@@ -357,11 +360,32 @@ class Test(unittest.TestCase):
         self.assertFalse(c0._equal(c1, alert=True))
         self.assertFalse(c0._equal(c1, ignore_name=True, alert=True))
         # copy()
-        # c1._copy(c0, copy_name=False)
-        # self.assertFalse(c1._equal(c0, alert=True))
-        # self.assertFalse(c1._equal(c0, ignore_name=True, alert=True))
-        # c1._copy(c0, copy_name=False, clear_before_copy=True)
-        # self.assertTrue(c1._equal(c0, ignore_name=True, alert=True))
+        c = c0.copy()
+        self.assertTrue(c0._equal(c, alert=True))
+        self.assertEqual(c0._parent, c._parent)
+        self.assertEqual(c0._fxns, c._fxns)
+        p0 = c0.parameters
+        pc = c.parameters
+        self.assertEqual(p0['name'], pc['name'])
+        self.assertEqual(p0['rename'], pc['rename'])
+        self.assertNotEqual(p0['date'], pc['date'])  # different
+        self.assertNotEqual(p0['modified'], pc['modified'])  # different
+        self.assertEqual(p0['type'], pc['type'])
+        self.assertEqual(p0['prefix'], pc['prefix'])
+        self.assertEqual(p0['duplicate'], pc['duplicate'])
+        self.assertEqual(p0['select'], pc['select'])
+        for i in range(0, c0.count):
+            o0 = c0.getitem(index=i)
+            oc = c.getitem(index=i)
+            self.assertTrue(o0._equal(oc, alert=True))
+            self.assertEqual(o0._parent, oc._parent)
+            self.assertEqual(o0._fxns, oc._fxns)
+            p0 = o0.parameters
+            pc = oc.parameters
+            self.assertEqual(p0['name'], pc['name'])
+            self.assertEqual(p0['rename'], pc['rename'])
+            self.assertNotEqual(p0['date'], pc['date'])  # different
+            self.assertNotEqual(p0['modified'], pc['modified'])  # different
         # Kill()
         with self.assertRaises(TypeError):
             c0.kill(name=None, confirm=False)
@@ -383,6 +407,18 @@ class Test(unittest.TestCase):
         self.assertEqual(len(klist), len(names))
         self.assertEqual(c1.count, 0)
         self.assertIsNone(c1.select)
+
+    def test_note(self):
+        on = True
+        if not on:
+            return
+        nm.configs.quiet = False
+        parent = self
+        n0 = Note(parent, 'Note0', fxns=nm._fxns, thenote='test0')
+        n1 = Note(parent, 'Note0', fxns=nm._fxns, thenote='test1')
+        # parameters()
+        # content()
+        # copy
 
     def test_dimension(self):
         on = False
@@ -707,7 +743,7 @@ class Test(unittest.TestCase):
         nparray = np.full(shape, 0)
         self.assertTrue(d0._np_array_set(nparray))
         # self.assertEqual(nparray, d0.np_array)
-        # print(type(d0.np_array))
+        # print(type(d0.np_arrayn))
         # print(isinstance(d0.np_array, np.ndarray))
         # print(d0.np_array)
         # d0.np_array.clip(-1, 1, out=d0.np_array)

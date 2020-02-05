@@ -42,6 +42,8 @@ class NMObject(object):
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
         self._param_list = ['name', 'rename', 'date', 'modified']
+        # param_list should match those listed in parameters()
+        # see param_test()
 
     def name_ok(self, name, ok=[]):
         if not nmu.name_ok(name):
