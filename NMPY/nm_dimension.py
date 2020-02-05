@@ -51,9 +51,9 @@ class Dimension(NMObject):
         return Dimension(self._parent, self.name, self._fxns, dim=self.dim,
                          notes=self._note_container)
 
-    def _note_new(self, note, quiet=True):
+    def _note_new(self, thenote, quiet=True):
         if isinstance(self._note_container, NoteContainer):
-            return self._note_container.new(note=note, quiet=quiet)
+            return self._note_container.new(thenote, quiet=quiet)
         return None
 
     @property

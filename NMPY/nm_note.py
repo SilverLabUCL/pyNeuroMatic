@@ -5,7 +5,6 @@ Copyright 2019 Jason Rothman
 """
 from nm_container import NMObject
 from nm_container import Container
-import nm_preferences as nmp
 import nm_utilities as nmu
 
 
@@ -16,10 +15,7 @@ class Note(NMObject):
 
     def __init__(self, parent, name, fxns={}, thenote=''):
         super().__init__(parent, name, fxns=fxns, rename=False)
-        if isinstance(thenote, str):
-            self.__thenote = thenote
-        else:
-            raise TypeError(nmu.type_error(thenote, 'string'))
+        self._thenote_set(thenote)
         self._param_list += ['thenote']
 
     # override
@@ -44,9 +40,17 @@ class Note(NMObject):
         return self.__thenote
 
     @thenote.setter
-    def thenote(self, note):
-        self.__thenote = note
+    def thenote(self, thenote):
+        return self._thenote_set(thenote)
 
+    def _thenote_set(self, thenote):
+        if not thenote:
+            self.__thenote = ''
+        elif isinstance(thenote, str):
+            self.__thenote = thenote
+        else:
+            self.__thenote = str(thenote)
+        return True
 
 class NoteContainer(Container):
     """
@@ -80,23 +84,15 @@ class NoteContainer(Container):
         return c
 
     # override
-    def new(self, note='', select=True, quiet=True):
+    def new(self, thenote='', select=True, quiet=True):
         # notes should be quiet
         if self.__off:
             return None
-        if not isinstance(note, str):
-            return None
-        quiet = nmu.check_bool(quiet, True)
-        name = self.name_next(quiet=quiet)
-        o = Note(self._parent, name, self._fxns)
-        n = super().new(name=name, nmobj=o, select=select, quiet=quiet)
-        if n:
-            n.thenote = note
-            return n
-        return None
+        o = Note(self._parent, name='temp', fxns=self._fxns, thenote=thenote)
+        return super().new(name='default', nmobj=o, select=select, quiet=quiet)
 
-    def thenotes(self, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
+    def thenotes(self, quiet=True):
+        quiet = nmu.check_bool(quiet, True)
         notes = []
         self._history('', tp=self._tp, quiet=quiet)
         for n in self.getitems(names='all'):
