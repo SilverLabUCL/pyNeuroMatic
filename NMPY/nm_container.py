@@ -199,7 +199,7 @@ class NMObject(object):
     def copy(self):
         return NMObject(self._parent, self.__name, fxns=self._fxns,
                         rename=self._rename)
-        
+
     def save(self, path='', quiet=nmp.QUIET):
         quiet = nmu.check_bool(quiet, nmp.QUIET)
         self._alert('under construction')
