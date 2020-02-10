@@ -52,6 +52,7 @@ class Note(NMObject):
             self.__thenote = str(thenote)
         return True
 
+
 class NoteContainer(Container):
     """
     Container for NM Note objects
@@ -92,7 +93,6 @@ class NoteContainer(Container):
         return super().new(name='default', nmobj=o, select=select, quiet=quiet)
 
     def thenotes(self, quiet=True):
-        quiet = nmu.check_bool(quiet, True)
         notes = []
         self._history('', tp=self._tp, quiet=quiet)
         for n in self.getitems(names='all'):

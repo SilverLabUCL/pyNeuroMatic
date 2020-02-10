@@ -19,6 +19,10 @@ class Dimension(NMObject):
 
     def __init__(self, parent, name, fxns={}, dim={}, notes=None):
         super().__init__(parent, name, fxns=fxns)
+        if dim is None:
+            dim = {}
+        elif not isinstance(dim, dict):
+            raise TypeError(nmu.type_error(dim, 'dict'))
         if notes is None:
             self._note_container = None
         elif isinstance(notes, NoteContainer):
@@ -31,7 +35,7 @@ class Dimension(NMObject):
         self._master = None  # e.g. DataSeries
         self._dim_list = ['offset', 'label', 'units', 'master']
         self._param_list += self._dim_list
-        if dim and isinstance(dim, dict):
+        if dim:
             self._dim_set(dim, quiet=True)
 
     # override
@@ -125,8 +129,6 @@ class Dimension(NMObject):
         if 'master' in keys:
             if not self._master_set(dim['master'], quiet=quiet):
                 return False
-        if self._master_lock:
-            return True  # master is on, skip anything else
         if 'label' in keys:
             if not self._label_set(dim['label'], quiet=quiet):
                 return False
@@ -226,6 +228,10 @@ class XDimension(Dimension):
 
     def __init__(self, parent, name, fxns={}, dim={}, notes=None):
         super().__init__(parent, name, fxns=fxns, notes=notes)
+        if dim is None:
+            dim = {}
+        elif not isinstance(dim, dict):
+            raise TypeError(nmu.type_error(dim, 'dict'))
         self._start = 0
         self._delta = 1
         self._xdata = None
@@ -325,13 +331,9 @@ class XDimension(Dimension):
         if 'master' in keys:
             if not self._master_set(dim['master'], quiet=quiet):
                 return False
-        if self._master_lock:
-            return True  # master is on, skip anything else
         if 'xdata' in keys:
             if not self._xdata_set(dim['xdata'], quiet=quiet):
                 return False
-        if self._xdata_lock:
-            return True  # xdata is on, skip anything else
         if 'label' in keys:
             if not self._label_set(dim['label'], quiet=quiet):
                 return False

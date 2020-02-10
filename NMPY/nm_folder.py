@@ -47,8 +47,8 @@ class Folder(NMObject):
         return k
 
     # override
-    def _equal(self, folder, ignore_name=False, alert=False):
-        if not super()._equal(folder, ignore_name=ignore_name, alert=alert):
+    def _equal(self, folder, alert=False):
+        if not super()._equal(folder, alert=alert):
             return False
         c = folder._Folder__data_container
         if not self.__data_container._equal(c, alert=alert):
@@ -59,8 +59,8 @@ class Folder(NMObject):
     # override, no super
     def copy(self):
         return Folder(self._parent, self.name, fxns=self._fxns,
-                   dataseries_container=self.__dataseries_container.copy(),
-                   data_container=self.__data_container.copy())
+                      dataseries_container=self.__dataseries_container.copy(),
+                      data_container=self.__data_container.copy())
 
     @property
     def data(self):
@@ -101,7 +101,6 @@ class FolderContainer(Container):
         if not isinstance(folder, Folder):
             raise TypeError(nmu.type_error(folder, 'Folder'))
         select = nmu.check_bool(select, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         name = folder.name
         if not name or not nmu.name_ok(name):
             e = 'bad folder name: ' + nmu.quotes(name)

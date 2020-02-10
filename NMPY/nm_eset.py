@@ -178,7 +178,6 @@ class EpochSetContainer(Container):
         return super().name_next_seq(prefix=prefix, first=first, quiet=quiet)
 
     def add_epoch(self, name, epoch, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if len(self._parent.thedata) == 0:
             tp = self._parent._tp
             e = 'no selected data for dataseries ' + tp
@@ -227,7 +226,6 @@ class EpochSetContainer(Container):
         return True
 
     def remove_epoch(self, name, epoch, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if len(self._parent.thedata) == 0:
             tp = self._parent.treepath(history=True)
             e = 'no selected data for dataseries ' + tp
@@ -286,7 +284,6 @@ class EpochSetContainer(Container):
 
     def equation(self, name, eq_list, lock=True, quiet=nmp.QUIET):
         """eq_list=[Set1', '|', 'Set2']"""
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if self.exists(name):
             s = self.getitem(name, quiet=quiet)
         else:
@@ -303,7 +300,6 @@ class EpochSetContainer(Container):
         s.eq_list = eq_list
 
     def clear(self, name, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if type(name) is not list:
             if name.lower() == 'all':
                 name = self.names

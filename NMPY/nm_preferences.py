@@ -13,6 +13,7 @@ CHAN_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
 HISTORY_TREEPATH_SKIP = ['Project']
 QUIET = False
 GUI = False
+NAN_EQ_NAN = True  # in Python nan != nan, use this flag so nan == nan
 S0 = ' -> '
 
 

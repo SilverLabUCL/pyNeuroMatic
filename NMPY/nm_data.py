@@ -48,10 +48,27 @@ class Data(NMObject):
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim,
                                  notes=self._note_container)
         self.__dataseries = {}
-        if dataseries and isinstance(dataseries, dict):
+        if dataseries is None:
+            pass
+        elif isinstance(dataseries, dict):
             for ds, c in dataseries.items():
-                if isinstance(ds, DataSeries) and c in nmp.CHAN_LIST:
-                    self.__dataseries.update({ds: c})
+                if ds is None:
+                    pass
+                elif isinstance(ds, DataSeries):
+                    if c is None:
+                        pass
+                    elif isinstance(c, str):
+                        if c in ds.channel_list:
+                            self.__dataseries.update({ds: c})
+                        else:
+                            e = 'unknown dataseries channel: ' + c
+                            raise ValueError(e)
+                    else:
+                        raise TypeError(nmu.type_error(c, 'string'))
+                else:
+                    raise TypeError(nmu.type_error(ds, 'DataSeries'))
+        else:
+            raise TypeError(nmu.type_error(dataseries, 'dict'))
         self._param_list += ['xdim', 'ydim', 'dataseries']
 
     # override
@@ -60,7 +77,8 @@ class Data(NMObject):
         k = super().parameters
         k.update({'xdim': self.__x.dim})
         k.update({'ydim': self.__y.dim})
-        k.update({'dataseries': self.__dataseries})
+        k.update({'dataseries': self._dataseries_str()})
+        # need dataseries name for equal() to work
         return k
 
     # override, no super
@@ -72,10 +90,8 @@ class Data(NMObject):
         return k
 
     # override
-    def _equal(self, data, ignore_name=False, alert=False):
-        if not data:
-            return False
-        if not super()._equal(data, ignore_name=ignore_name, alert=alert):
+    def _equal(self, data, alert=False):
+        if not super()._equal(data, alert=alert):
             return False
         if self.__np_array is None and data.np_array is not None:
             if alert:
@@ -99,34 +115,41 @@ class Data(NMObject):
             return False
         if not np.array_equal(self.__np_array, data.np_array):
             # array_equal returns false if both arrays filled with NANs
-            if not np.allclose(self.__np_array, data.np_array, rtol=0, atol=0,
-                               equal_nan=True):
-                if alert:
-                    self._alert('unequal np_array', tp=self._tp)
-                return False
+            if nmp.NAN_EQ_NAN:
+                if not np.allclose(self.__np_array, data.np_array, rtol=0,
+                                   atol=0, equal_nan=True):
+                    if alert:
+                        self._alert('unequal np_array', tp=self._tp)
+                    return False
         if self._note_container:
             if not self._note_container._equal(data._note_container,
                                                alert=alert):
                 return False
-        if not self.__x._equal(data.x):
-            return False
-        if not self.__y._equal(data.y):
-            return False
-        # self.__dataseries?
+        # if not self.__x._equal(data.x):
+        #     return False
+        # if not self.__y._equal(data.y):
+        #     return False
+        # self.__dataseries
         return True
 
     # override, no super
     def copy(self):
         if self.__np_array is None:
-            c = None
+            npa = None
         else:
-            c = self.__np_array.copy()
+            npa = self.__np_array.copy()
         notes = self._note_container.copy()
         notes.off = True  # want copy of old notes, not new ones
-        d = Data(self._parent, self.name, fxns=self._fxns, np_array=c,
+        d = Data(self._parent, self.name, fxns=self._fxns, np_array=npa,
                  xdim=self.__x.dim, ydim=self.__y.dim, notes=notes,
                  dataseries=self.__dataseries)
         notes.off = False
+        return d
+
+    def _dataseries_str(self):
+        d = {}
+        for ds, c in self.__dataseries.items():
+            d.update({ds.name: c})
         return d
 
     def _add_dataseries(self, dataseries, chan_char):
@@ -179,19 +202,39 @@ class Data(NMObject):
         return self._np_array_set(np_array)
 
     def _np_array_set(self, np_array, quiet=nmp.QUIET):
-        if not isinstance(np_array, np.ndarray):
+        if np_array is None:
+            pass  # ok
+        elif not isinstance(np_array, np.ndarray):
             raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
-        old = self.__np_array
+        if self.__np_array is None:
+            old = None
+        else:
+            old = self.__np_array.__array_interface__['data'][0]
         self.__np_array = np_array
         self._modified()
-        h = nmu.history_change('np_array', old, self.__np_array)
+        if self.__np_array is None:
+            new = None
+        else:
+            new = self.__np_array.__array_interface__['data'][0]
+        h = nmu.history_change('np_array reference', old, new)
         self._note_container.new(h)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
+    def np_array_make(self, shape, fill_value=NP_FILL_VALUE, dtype=NP_DTYPE,
+                      order=NP_ORDER, quiet=nmp.QUIET):
+        if not nmu.number_ok(shape, no_neg=True):
+            raise ValueError('bad shape: ' + str(shape))
+        self.__np_array = np.full(shape, fill_value, dtype=dtype, order=order)
+        self._modified()
+        n = ('created numpy array (numpy.full): shape=' + str(shape) +
+             ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
+        self._note_container.new(n)
+        self._history(n, tp=self._tp, quiet=quiet)
+        return True
+
     def np_array_make_random_normal(self, shape, mean=0, stdv=1,
                                     quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not nmu.number_ok(shape, no_neg=True):
             raise ValueError('bad shape: ' + str(shape))
         if not nmu.number_ok(mean):
@@ -203,19 +246,6 @@ class Data(NMObject):
         # dtype = float64
         n = ('created data array (numpy.random.normal): shape=' +
              str(shape) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
-        self._note_container.new(n)
-        self._history(n, tp=self._tp, quiet=quiet)
-        return True
-
-    def np_array_make(self, shape, fill_value=NP_FILL_VALUE, dtype=NP_DTYPE,
-                      order=NP_ORDER, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if not nmu.number_ok(shape, no_neg=True):
-            raise ValueError('bad shape: ' + str(shape))
-        self.__np_array = np.full(shape, fill_value, dtype=dtype, order=order)
-        self._modified()
-        n = ('created numpy array (numpy.full): shape=' + str(shape) +
-             ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
         self._note_container.new(n)
         self._history(n, tp=self._tp, quiet=quiet)
         return True

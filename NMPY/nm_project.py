@@ -38,8 +38,8 @@ class Project(NMObject):
                        folder_container=self.__folder_container.copy())
 
     # override
-    def _equal(self, project, ignore_name=False, alert=False):
-        if not super()._equal(project, ignore_name=ignore_name, alert=alert):
+    def _equal(self, project, alert=False):
+        if not super()._equal(project, alert=alert):
             return False
         return self.__folder_container._equal(project.folder, alert=alert)
 

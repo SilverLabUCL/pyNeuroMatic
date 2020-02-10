@@ -75,9 +75,8 @@ class DataSeries(NMObject):
         return k
 
     # override
-    def _equal(self, dataseries, ignore_name=False, alert=False):
-        if not super()._equal(dataseries, ignore_name=ignore_name,
-                              alert=alert):
+    def _equal(self, dataseries, alert=False):
+        if not super()._equal(dataseries, alert=alert):
             return False
         c = dataseries._DataSeries__channel_container
         if not self.__channel_container._equal(c, alert=alert):
@@ -462,7 +461,6 @@ class DataSeries(NMObject):
         if not isinstance(eset_list, list):
             eset_list = [eset_list]
         select = nmu.check_bool(select, True)
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         r = []
         init_select = select or not self.__eset_container.select
         for s in nmp.ESET_LIST:
@@ -554,7 +552,6 @@ class DataSeries(NMObject):
     def get_data(self, chan_list=['ALL'], epoch_list=[-2], quiet=nmp.QUIET):
         if not self.__thedata:
             return {}
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         clist = self._get_channel_list(chan_list=chan_list)
         if not clist:
             return {}
@@ -644,7 +641,6 @@ class DataSeries(NMObject):
         return dlist
 
     def update(self, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         foundsomething = False
         htxt = []
         self.__thedata = {}
@@ -668,7 +664,6 @@ class DataSeries(NMObject):
 
     def make(self, channels=1, epochs=1, shape=[], fill_value=0, dims={},
              quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         if not nmu.number_ok(channels, no_neg=True, no_zero=True):
             e = 'bad channels argument: ' + str(channels)
             self._error(e, tp=self._tp, quiet=quiet)
@@ -725,7 +720,6 @@ class DataSeries(NMObject):
         if not isinstance(dims, dict):
             dims = {'xdata': None, 'xstart': 0, 'xdelta': 1, 'xlabel': '',
                     'xunits': '', 'ylabel': '', 'yunits': ''}
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         dims.update({'xstart': 0, 'xdelta': 1})  # enforce
         if 'xlabel' in dims.keys():  # switch x and y
             dims.update({'ylabel': dims['xlabel']})  # NOT DICT TYPE

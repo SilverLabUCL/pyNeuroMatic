@@ -88,7 +88,6 @@ class ChannelContainer(Container):
     # override, no super
     def name_next_seq(self, quiet=nmp.QUIET):
         # NO PREFIX, Channel names are 'A', 'B'...
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
         n = 10 + self.count
         for i in range(0, n):
             # name = self.prefix + nmu.channel_char(i)
