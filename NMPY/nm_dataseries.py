@@ -19,26 +19,12 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, xdim={}, ydim={},
-                 channel_container=None, eset_container=None):
+    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}):
         # name is data-series prefix
         super().__init__(parent, name, fxns=fxns, rename=False)
-        if channel_container is None:
-            self.__channel_container = ChannelContainer(self, 'Channels',
-                                                        fxns=fxns)
-        elif isinstance(channel_container, ChannelContainer):
-            self.__channel_container = channel_container
-        else:
-            e = nmu.type_error(channel_container, 'ChannelContainer')
-            raise TypeError(e)
-        if eset_container is None:
-            self.__eset_container = EpochSetContainer(self, 'EpochSets',
-                                                      fxns=fxns)
-        elif isinstance(eset_container, EpochSetContainer):
-            self.__eset_container = eset_container
-        else:
-            e = nmu.type_error(eset_container, 'EpochSetContainer')
-            raise TypeError(e)
+        self.__channel_container = ChannelContainer(self, 'Channels',
+                                                    fxns=fxns)
+        self.__eset_container = EpochSetContainer(self, 'EpochSets', fxns=fxns)
         self.__thedata = {}  # dict, {channel: data-list}
         self.__x = {'default': nmd.XDimension(self, 'xdim', fxns=fxns)}
         self.__y = {'default': nmd.Dimension(self, 'ydim', fxns=fxns)}
@@ -87,9 +73,9 @@ class DataSeries(NMObject):
     # override, no super
     def copy(self):
         c = DataSeries(self._parent, self.name, fxns=self._fxns,
-                       xdim=self.__x, ydim=self.__y,
-                       channel_container=self.__channel_container.copy(),
-                       eset_container=self.__eset_container.copy())
+                       xdim=self.__x, ydim=self.__y)
+        c._DataSeries__channel_container = self.__channel_container.copy()
+        c._DataSeries__eset_container = self.__eset_container.copy()
         # self.__dims_master_on
         # self.__data_select = {}
         # self.__channel_select = []

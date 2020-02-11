@@ -28,7 +28,7 @@ class Data(NMObject):
     """
 
     def __init__(self, parent, name, fxns={}, np_array=None, xdim={},
-                 ydim={}, notes=None, dataseries={}):
+                 ydim={}, dataseries={}):
         super().__init__(parent, name, fxns=fxns)
         if np_array is None:
             self.__np_array = None
@@ -37,16 +37,11 @@ class Data(NMObject):
             self.__np_array = np_array
         else:
             raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
-        if notes is None:
-            self._note_container = NoteContainer(self, 'Notes', fxns=fxns)
-        elif isinstance(notes, NoteContainer):
-            self._note_container = notes
-        else:
-            raise TypeError(nmu.type_error(notes, 'NoteContainer'))
+        self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, dim=xdim,
-                                  notes=self._note_container)
+                                  notes=self.__note_container)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim,
-                                 notes=self._note_container)
+                                 notes=self.__note_container)
         self.__dataseries = {}
         if dataseries is None:
             pass
@@ -85,8 +80,8 @@ class Data(NMObject):
     @property
     def content(self):
         k = {'data': self.name}
-        if self._note_container:
-            k.update(self._note_container.content)
+        if self.__note_container:
+            k.update(self.__note_container.content)
         return k
 
     # override
@@ -121,9 +116,9 @@ class Data(NMObject):
                     if alert:
                         self._alert('unequal np_array', tp=self._tp)
                     return False
-        if self._note_container:
-            if not self._note_container._equal(data._note_container,
-                                               alert=alert):
+        if self.__note_container:
+            if not self.__note_container._equal(data._Data__note_container,
+                                                alert=alert):
                 return False
         # if not self.__x._equal(data.x):
         #     return False
@@ -135,16 +130,14 @@ class Data(NMObject):
     # override, no super
     def copy(self):
         if self.__np_array is None:
-            npa = None
+            a = None
         else:
-            npa = self.__np_array.copy()
-        notes = self._note_container.copy()
-        notes.off = True  # want copy of old notes, not new ones
-        d = Data(self._parent, self.name, fxns=self._fxns, np_array=npa,
-                 xdim=self.__x.dim, ydim=self.__y.dim, notes=notes,
+            a = self.__np_array.copy()
+        c = Data(self._parent, self.name, fxns=self._fxns, np_array=a,
+                 xdim=self.__x.dim, ydim=self.__y.dim,
                  dataseries=self.__dataseries)
-        notes.off = False
-        return d
+        c._Data__note_container = self.__note_container.copy()
+        return c
 
     def _dataseries_str(self):
         d = {}
@@ -183,7 +176,7 @@ class Data(NMObject):
 
     @property
     def notes(self):
-        return self._note_container
+        return self.__note_container
 
     @property
     def x(self):
@@ -217,36 +210,32 @@ class Data(NMObject):
         else:
             new = self.__np_array.__array_interface__['data'][0]
         h = nmu.history_change('np_array reference', old, new)
-        self._note_container.new(h)
+        self.__note_container.new(h)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
     def np_array_make(self, shape, fill_value=NP_FILL_VALUE, dtype=NP_DTYPE,
                       order=NP_ORDER, quiet=nmp.QUIET):
-        if not nmu.number_ok(shape, no_neg=True):
-            raise ValueError('bad shape: ' + str(shape))
         self.__np_array = np.full(shape, fill_value, dtype=dtype, order=order)
         self._modified()
+        if not isinstance(self.__np_array, np.ndarray):
+            raise RuntimeError('failed to create numpy array')
         n = ('created numpy array (numpy.full): shape=' + str(shape) +
              ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
-        self._note_container.new(n)
+        self.__note_container.new(n)
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
     def np_array_make_random_normal(self, shape, mean=0, stdv=1,
                                     quiet=nmp.QUIET):
-        if not nmu.number_ok(shape, no_neg=True):
-            raise ValueError('bad shape: ' + str(shape))
-        if not nmu.number_ok(mean):
-            raise ValueError('bad mean: ' + str(mean))
-        if not nmu.number_ok(stdv, no_neg=True):
-            raise ValueError('bad stdv: ' + str(stdv))
         self.__np_array = np.random.normal(mean, stdv, shape)
         self._modified()
         # dtype = float64
+        if not isinstance(self.__np_array, np.ndarray):
+            raise RuntimeError('failed to create numpy array')
         n = ('created data array (numpy.random.normal): shape=' +
              str(shape) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
-        self._note_container.new(n)
+        self.__note_container.new(n)
         self._history(n, tp=self._tp, quiet=quiet)
         return True
 
@@ -284,7 +273,7 @@ class DataContainer(Container):
     def new(self, name='default', np_array=None, xdim={}, ydim={},
             dataseries={}, select=True, quiet=nmp.QUIET):
         o = Data(self._parent, 'temp', self._fxns, np_array=np_array,
-                 xdim=xdim, ydim=ydim)
+                 xdim=xdim, ydim=ydim, dataseries=dataseries)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override

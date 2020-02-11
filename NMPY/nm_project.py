@@ -14,16 +14,9 @@ class Project(NMObject):
     NM Project class
     """
 
-    def __init__(self, parent, name, fxns={}, folder_container=None):
+    def __init__(self, parent, name, fxns={}):
         super().__init__(parent, name, fxns=fxns)
-        if folder_container is None:
-            self.__folder_container = FolderContainer(self, 'Folders',
-                                                      fxns=fxns)
-        elif isinstance(folder_container, FolderContainer):
-            self.__folder_container = folder_container
-        else:
-            e = nmu.type_error(folder_container, 'FolderContainer')
-            raise TypeError(e)
+        self.__folder_container = FolderContainer(self, 'Folders', fxns=fxns)
 
     # override, no super
     @property
@@ -34,8 +27,9 @@ class Project(NMObject):
 
     # override, no super
     def copy(self):
-        return Project(self._parent, self.name, fxns=self._fxns,
-                       folder_container=self.__folder_container.copy())
+        c = Project(self._parent, self.name, fxns=self._fxns)
+        c._Project__folder_container = self.__folder_container.copy()
+        return c
 
     # override
     def _equal(self, project, alert=False):

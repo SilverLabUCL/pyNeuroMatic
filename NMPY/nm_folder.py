@@ -18,25 +18,12 @@ class Folder(NMObject):
     NM Data Folder class
     """
 
-    def __init__(self, parent, name, fxns={}, dataseries_container=None,
-                 data_container=None):
+    def __init__(self, parent, name, fxns={}):
         super().__init__(parent, name, fxns=fxns)
-        if dataseries_container is None:
-            dsc = DataSeriesContainer(self, 'DataSeries', fxns=fxns)
-            self.__dataseries_container = dsc
-        elif isinstance(dataseries_container, DataSeriesContainer):
-            dataseries_container = DataSeriesContainer
-        else:
-            e = nmu.type_error(dataseries_container, 'DataSeriesContainer')
-            raise TypeError(e)
-        if data_container is None:
-            self.__data_container = DataContainer(self, 'Data', fxns=fxns,
-                                                  dataseries_container=dsc)
-        elif isinstance(data_container, DataContainer):
-            self.__data_container = data_container
-        else:
-            e = nmu.type_error(data_container, 'DataContainer')
-            raise TypeError(e)
+        dsc = DataSeriesContainer(self, 'DataSeries', fxns=fxns)
+        self.__dataseries_container = dsc
+        self.__data_container = DataContainer(self, 'Data', fxns=fxns,
+                                              dataseries_container=dsc)
 
     # override, no super
     @property
@@ -58,9 +45,10 @@ class Folder(NMObject):
 
     # override, no super
     def copy(self):
-        return Folder(self._parent, self.name, fxns=self._fxns,
-                      dataseries_container=self.__dataseries_container.copy(),
-                      data_container=self.__data_container.copy())
+        c = Folder(self._parent, self.name, fxns=self._fxns)
+        c._Folder__dataseries_container = self.__dataseries_container.copy()
+        c._Folder__data_container = self.__dataseries_container.copy()
+        return c
 
     @property
     def data(self):

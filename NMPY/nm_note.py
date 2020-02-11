@@ -62,16 +62,6 @@ class NoteContainer(Container):
         t = Note(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t, prefix='Note',
                          rename=False, duplicate=False)
-        self.__off = False
-
-    @property
-    def off(self):
-        return self.__off
-
-    @off.setter
-    def off(self, off):
-        self.__off = nmu.check_bool(off, False)
-        return self.__off
 
     # override, no super
     @property
@@ -87,8 +77,6 @@ class NoteContainer(Container):
     # override
     def new(self, thenote='', select=True, quiet=True):
         # notes should be quiet
-        if self.__off:
-            return None
         o = Note(self._parent, name='temp', fxns=self._fxns, thenote=thenote)
         return super().new(name='default', nmobj=o, select=select, quiet=quiet)
 
