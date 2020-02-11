@@ -14,9 +14,15 @@ class Project(NMObject):
     NM Project class
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, **copy):
         super().__init__(parent, name, fxns=fxns)
-        self.__folder_container = FolderContainer(self, 'Folders', fxns=fxns)
+        self.__folder_container = None
+        for k, v in copy.items():
+            if k.lower() == 'folders' and isinstance(v, FolderContainer):
+                self.__folder_container = v
+        if not isinstance(self.__folder_container, FolderContainer):
+            self.__folder_container = FolderContainer(self, 'Folders',
+                                                      fxns=fxns)
 
     # override, no super
     @property
@@ -27,8 +33,8 @@ class Project(NMObject):
 
     # override, no super
     def copy(self):
-        c = Project(self._parent, self.name, fxns=self._fxns)
-        c._Project__folder_container = self.__folder_container.copy()
+        c = Project(self._parent, self.name, fxns=self._fxns,
+                    folders=self.__folder_container.copy())
         return c
 
     # override

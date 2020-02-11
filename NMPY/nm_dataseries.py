@@ -19,12 +19,22 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}):
+    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}, **copy):
         # name is data-series prefix
         super().__init__(parent, name, fxns=fxns, rename=False)
-        self.__channel_container = ChannelContainer(self, 'Channels',
-                                                    fxns=fxns)
-        self.__eset_container = EpochSetContainer(self, 'EpochSets', fxns=fxns)
+        self.__channel_container = None
+        self.__eset_container = None
+        for k, v in copy.items():
+            if k.lower() == 'channels' and isinstance(v, ChannelContainer):
+                self.__channel_container = v
+            if k.lower() == 'esets' and isinstance(v, EpochSetContainer):
+                self.__eset_container = v
+        if not isinstance(self.__channel_container, ChannelContainer):
+            self.__channel_container = ChannelContainer(self, 'Channels',
+                                         fxns=fxns)
+        if not isinstance(self.__eset_container, EpochSetContainer):
+            self.__eset_container = EpochSetContainer(self, 'EpochSets',
+                                                      fxns=fxns)
         self.__thedata = {}  # dict, {channel: data-list}
         self.__x = {'default': nmd.XDimension(self, 'xdim', fxns=fxns)}
         self.__y = {'default': nmd.Dimension(self, 'ydim', fxns=fxns)}
@@ -73,9 +83,9 @@ class DataSeries(NMObject):
     # override, no super
     def copy(self):
         c = DataSeries(self._parent, self.name, fxns=self._fxns,
-                       xdim=self.__x, ydim=self.__y)
-        c._DataSeries__channel_container = self.__channel_container.copy()
-        c._DataSeries__eset_container = self.__eset_container.copy()
+                       xdim=self.__x, ydim=self.__y,
+                       channels=self.__channel_container.copy(),
+                       esets=self.__eset_container.copy())
         # self.__dims_master_on
         # self.__data_select = {}
         # self.__channel_select = []
@@ -727,21 +737,20 @@ class DataSeriesContainer(Container):
     NM Container for DataSeries objects
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = DataSeries(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
-                         rename=False, duplicate=False)
+                         rename=False, duplicate=False, **copy)
 
     # override, no super
     @property
     def content(self):
         return {'dataseries': self.names}
 
-    # override
+    # override, no super
     def copy(self):
-        c = DataSeriesContainer(self._parent, self.name, fxns=self._fxns)
-        super().copy(container=c)
-        return c
+        return DataSeriesContainer(self._parent, self.name, fxns=self._fxns,
+                                   thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
@@ -751,4 +760,10 @@ class DataSeriesContainer(Container):
         if ds:
             ds.update(quiet=quiet)
             return ds
+        return None
+
+    @property
+    def data(self):
+        if self._parent._cname == 'Folder':
+            return self._parent.data
         return None

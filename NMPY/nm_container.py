@@ -284,7 +284,7 @@ class Container(NMObject):
     """
 
     def __init__(self, parent, name, fxns={}, type_='NMObject',
-                 prefix='NMObject', rename=True, duplicate=True):
+                 prefix='NMObject', rename=True, duplicate=True, **copy):
         super().__init__(parent, name, fxns=fxns, rename=rename)
         if not isinstance(type_, str):
             raise TypeError(nmu.type_error(type_, 'string'))
@@ -301,6 +301,12 @@ class Container(NMObject):
         self._duplicate = duplicate
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
+        for k, v in copy.items():
+            if k.lower() == 'thecontainer' and isinstance(v, dict):
+                if 'thecontainer' in v.keys():
+                    self.__thecontainer = v['thecontainer']
+                    if 'select' in v.keys():
+                        self.__select = v['select']
         self._param_list += ['type', 'prefix', 'duplicate', 'select']
 
     # override
@@ -312,7 +318,7 @@ class Container(NMObject):
         k.update({'duplicate': self._duplicate})
         if self.__select:
             k.update({'select': self.__select.name})
-            # need name for equal() to work
+            # need select's name for equal() to work
         else:
             k.update({'select': ''})
         return k
@@ -339,23 +345,26 @@ class Container(NMObject):
                 return False
         return True
 
-    def copy(self, container=None):
-        if container is None:
-            c = Container(self._parent, self.name, self._fxns,
-                          type_=self._type, prefix=self.__prefix,
-                          rename=self._rename, duplicate=self._duplicate)
-        elif isinstance(container, Container):
-            c = container
+    def copy(self):
+        return Container(self._parent, self.name, self._fxns, type_=self._type,
+                         prefix=self.__prefix, rename=self._rename,
+                         duplicate=self._duplicate,
+                         thecontainer=self._thecontainer_copy())
+
+    def _thecontainer_copy(self):
+        thecontainer = []
+        if self.__select and self.__select.name:
+            select_name = self.__select.name
         else:
-            raise TypeError(nmu.type_error(container, 'Container'))
+            select_name = ''
+        select = None
         for o in self.__thecontainer:
             if o:
-                c._Container__thecontainer.append(o.copy())
-        if self.__select and self.__select.name:
-            name = self.__select.name
-            if c._Container__exists(name):
-                c._Container__select = c._Container__getitem(name)
-        return c
+                c = o.copy()
+                thecontainer.append(c)
+                if c.name.lower() == select_name.lower():
+                    select = c
+        return {'thecontainer': thecontainer, 'select': select}
 
     @property
     def prefix(self):  # see name_next()

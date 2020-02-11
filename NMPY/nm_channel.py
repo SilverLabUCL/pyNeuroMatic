@@ -56,10 +56,10 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = Channel(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
-                         rename=False, duplicate=False)
+                         rename=False, duplicate=False, **copy)
         # NO PREFIX, Channel names are 'A', 'B'...
 
     # override, no super
@@ -67,11 +67,10 @@ class ChannelContainer(Container):
     def content(self):
         return {'channels': self.names}
 
-    # override
+    # override, no super
     def copy(self):
-        c = ChannelContainer(self._parent, self.__name, self._fxns)
-        super().copy(container=c)
-        return c
+        return ChannelContainer(self._parent, self.__name, self._fxns,
+                                thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):

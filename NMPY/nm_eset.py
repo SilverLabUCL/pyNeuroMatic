@@ -15,22 +15,20 @@ class EpochSet(NMObject):
     NM EpochSet class
     """
 
-    def __init__(self, parent, name, fxns={}, theset=None, eq_list=[],
-                 eq_lock=True):
+    def __init__(self, parent, name, fxns={}, **copy):
         super().__init__(parent, name, fxns=fxns)
-        if theset is None:
+        self.__theset = None
+        self.__eq_list = []
+        self.__eq_lock = True
+        for k, v in copy.items():
+            if k.lower() == 'theset' and isinstance(v, set):
+                self.__theset = v
+            if k.lower() == 'eq_list' and isinstance(v, list):
+                self.__eq_list = v
+            if k.lower() == 'eq_lock' and isinstance(v, bool):
+                self.__eq_lock = v
+        if not isinstance(self.__theset, set):
             self.__theset = set()
-        elif isinstance(theset, set):
-            self.__theset = theset
-        else:
-            raise TypeError(nmu.type_error(theset, 'set'))
-        if not eq_list:
-            self.__eq_list = []
-        elif isinstance(eq_list, list):
-            self.__eq_list = eq_list
-        else:
-            raise TypeError(nmu.type_error(eq_list, 'list'))
-        self.__eq_lock = nmu.check_bool(eq_lock, True)
         self._param_list += ['eq_list', 'eq_lock']
 
     # override
@@ -123,10 +121,10 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name, fxns={}):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = EpochSet(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.ESET_PREFIX)
+                         prefix=nmp.ESET_PREFIX, **copy)
 
     # override
     @property
@@ -140,11 +138,10 @@ class EpochSetContainer(Container):
     def content(self):
         return {'esets': self.names}
 
-    # override
+    # override, no super
     def copy(self):
-        c = EpochSetContainer(self._parent, self.name, fxns=self._fxns)
-        super().copy(container=c)
-        return c
+        return EpochSetContainer(self._parent, self.name, fxns=self._fxns,
+                                 thecontainer=self._thecontainer_copy())
 
     # @property  # override, no super
     # def select(self):

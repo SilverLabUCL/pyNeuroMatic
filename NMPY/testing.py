@@ -8,6 +8,7 @@ Created on Sun Dec 15 09:23:07 2019
 import inspect
 import unittest
 import numpy as np
+import time
 
 from nm_channel import Channel
 from nm_channel import ChannelContainer
@@ -106,6 +107,7 @@ class Test(unittest.TestCase):
         o1 = NMObject(parent, name1, fxns=nm._fxns, rename=False)
         self.assertTrue(o1._equal(o0, alert=True))
         # copy
+        time.sleep(2)  # force date to be different
         c = o0.copy()
         self.assertIsInstance(c, NMObject)
         self.assertTrue(o0._equal(c, alert=True))
@@ -817,11 +819,6 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 d0 = Data(parent, name0, fxns=nm._fxns, np_array=b)
         for b in BADTYPES + ['test']:
-            if b is None:
-                continue  # ok
-            with self.assertRaises(TypeError):
-                d0 = Data(parent, name0, fxns=nm._fxns, notes=b)
-        for b in BADTYPES + ['test']:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
@@ -919,14 +916,7 @@ class Test(unittest.TestCase):
             return
         nm.configs.quiet = False
         parent = self
-        for b in BADTYPES + ['test']:
-            if b is None:
-                continue  # ok
-            with self.assertRaises(TypeError):
-                data = DataContainer(parent, 'Data', fxns=nm._fxns,
-                                     dataseries_container=b)
-        data = DataContainer(parent, 'Data', fxns=nm._fxns,
-                                     dataseries_container=None)
+        data = DataContainer(parent, 'Data', fxns=nm._fxns)
         # new
         for b in BADTYPES:
             with self.assertRaises(TypeError):

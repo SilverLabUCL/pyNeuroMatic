@@ -28,7 +28,7 @@ class Data(NMObject):
     """
 
     def __init__(self, parent, name, fxns={}, np_array=None, xdim={},
-                 ydim={}, dataseries={}):
+                 ydim={}, dataseries={}, **copy):
         super().__init__(parent, name, fxns=fxns)
         if np_array is None:
             self.__np_array = None
@@ -37,7 +37,12 @@ class Data(NMObject):
             self.__np_array = np_array
         else:
             raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
-        self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
+        self.__note_container = None
+        for k, v in copy.items():
+            if k.lower() == 'notes' and isinstance(v, NoteContainer):
+                self.__note_container = v
+        if not isinstance(self.__note_container, NoteContainer):
+            self.__note_container = NoteContainer(self, 'Notes', fxns=fxns)
         self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, dim=xdim,
                                   notes=self.__note_container)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim,
@@ -133,10 +138,13 @@ class Data(NMObject):
             a = None
         else:
             a = self.__np_array.copy()
+        notes = self.__note_container.copy()
+        notes.off = True  # block notes during class creation
         c = Data(self._parent, self.name, fxns=self._fxns, np_array=a,
                  xdim=self.__x.dim, ydim=self.__y.dim,
-                 dataseries=self.__dataseries)
-        c._Data__note_container = self.__note_container.copy()
+                 dataseries=self.__dataseries,
+                 notes=notes)
+        notes.off = False
         return c
 
     def _dataseries_str(self):
@@ -245,29 +253,20 @@ class DataContainer(Container):
     Container for NM Data objects
     """
 
-    def __init__(self, parent, name, fxns={}, dataseries_container=None):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = Data(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.DATA_PREFIX)
-        if dataseries_container is None:
-            self.__dataseries_container = None
-        elif isinstance(dataseries_container, DataSeriesContainer):
-            self.__dataseries_container = dataseries_container
-        else:
-            e = nmu.type_error(dataseries_container, 'DataSeriesContainer')
-            raise TypeError(e)
+                         prefix=nmp.DATA_PREFIX, **copy)
 
     # override, no super
     @property
     def content(self):
         return {'data': self.names}
 
-    # override
+    # override, no super
     def copy(self):
-        c = DataContainer(self._parent, self.name, fxns=self._fxns,
-                          dataseries_container=self.__dataseries_container)
-        super().copy(container=c)
-        return c
+        return DataContainer(self._parent, self.name, fxns=self._fxns,
+                             thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, name='default', np_array=None, xdim={}, ydim={},
@@ -276,13 +275,18 @@ class DataContainer(Container):
                  xdim=xdim, ydim=ydim, dataseries=dataseries)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
+    @property
+    def dataseries(self):
+        if self._parent._cname == 'Folder':
+            return self._parent.dataseries
+        return None
+
     # override
     def kill(self, name, all_=False, confirm=True, quiet=nmp.QUIET):
-        klist = super().kill(name=name, all_=all_, confirm=confirm,
-                             quiet=quiet)
-        if not self.__dataseries_container:
+        klist = super().kill(name=name, all_=all_, confirm=confirm, quiet=quiet)
+        dsc = self.dataseries
+        if not dsc or not isinstance(dsc, DataSeriesContainer):
             return klist
-        dsc = self.__dataseries_container
         for d in klist:  # remove data refs from data series and sets
             for i in range(0, dsc.count):
                 ds = dsc.getitem(index=i)
