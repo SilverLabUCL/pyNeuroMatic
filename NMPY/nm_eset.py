@@ -87,6 +87,7 @@ class EpochSet(NMObject):
     @eq_lock.setter
     def eq_lock(self, eq_lock):
         self.__eq_lock = eq_lock
+        self._modified()
 
     def contains(self, data):
         return data in self.__theset
@@ -94,12 +95,14 @@ class EpochSet(NMObject):
     def add(self, data):
         if data.__class__.__name__ == 'Data':
             self.__theset.add(data)
+            self._modified()
             return True
         return False
 
     def discard(self, data):
         if data.__class__.__name__ == 'Data':
             self.__theset.discard(data)
+            self._modified()
             return True
         return False
 
@@ -107,6 +110,7 @@ class EpochSet(NMObject):
         if self.name.lower() == 'all':
             return False
         self.__theset.clear()
+        self._modified()
         return True
 
     def union(self, eset):

@@ -126,10 +126,6 @@ class Data(NMObject):
             if not self.__note_container._equal(data._Data__note_container,
                                                 alert=alert):
                 return False
-        # if not self.__x._equal(data.x):
-        #     return False
-        # if not self.__y._equal(data.y):
-        #     return False
         # self.__dataseries
         return True
 
@@ -159,6 +155,7 @@ class Data(NMObject):
         if chan_char not in nmp.CHAN_LIST:
             raise ValueError('bad chan_char: ' + chan_char)
         self.__dataseries.update({dataseries: chan_char})
+        self._modified()
         return True
 
     def _remove_dataseries(self, dataseries):
@@ -166,6 +163,7 @@ class Data(NMObject):
             raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
         if dataseries in self.__dataseries:
             del self.__dataseries[dataseries]
+            self._modified()
         return True
 
     def _dataseries_alert(self):

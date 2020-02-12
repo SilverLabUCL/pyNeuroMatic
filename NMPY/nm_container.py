@@ -82,6 +82,7 @@ class NMObject(object):
             raise ValueError('bad name:  ' + nmu.quotes(name))
         old = self.__name
         self.__name = name
+        self._modified()
         h = nmu.history_change('name', old, self.__name)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
@@ -320,7 +321,7 @@ class Container(NMObject):
             k.update({'select': self.__select.name})
             # need select's name for equal() to work
         else:
-            k.update({'select': ''})
+            k.update({'select': 'None'})
         return k
 
     # override

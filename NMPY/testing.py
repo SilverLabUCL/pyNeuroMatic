@@ -910,10 +910,10 @@ class Test(unittest.TestCase):
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 data0.new(name=b)
-                data1.new(name=b)
         nlist = ['RecordA0', 'WaveA0', 'Xdata']
         for n in nlist:
-            data0.new(name=n)
+            self.assertIsInstance(data0.new(name=n), Data)
+            self.assertIsInstance(data1.new(name=n), Data)
         # parameters
         self.assertTrue(data0._param_test())
         # content
@@ -926,6 +926,8 @@ class Test(unittest.TestCase):
         # equal
         self.assertTrue(data0._equal(c, alert=True))
         self.assertTrue(data0._equal(data1, alert=True))
+        self.assertIsInstance(data1._select_set('RecordA0'), Data)
+        self.assertFalse(data0._equal(data1, alert=True))
         # kill
 
     def test_project(self):

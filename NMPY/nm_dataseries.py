@@ -444,6 +444,7 @@ class DataSeries(NMObject):
             else:
                 self._error('bad channel: ' + nmu.quotes(c), tp=self._tp)
         self.__channel_select = clist
+        self._modified()
         self._history('channel = ' + str(clist), tp=self._tp)
         return True
 
@@ -517,6 +518,7 @@ class DataSeries(NMObject):
             else:
                 self._error('bad epoch: ' + str(e), tp=self._tp)
         self.__epoch_select = elist
+        self._modified()
         self._history('epoch = ' + str(elist), tp=self._tp)
         return True
 

@@ -50,6 +50,7 @@ class Note(NMObject):
             self.__thenote = thenote
         else:
             self.__thenote = str(thenote)
+        self._modified()
         return True
 
 
@@ -97,4 +98,5 @@ class NoteContainer(Container):
     @off.setter
     def off(self, off):
        self.__off = off
+       self._modified()
        return off
