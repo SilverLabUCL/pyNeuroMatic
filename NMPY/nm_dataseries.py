@@ -83,6 +83,7 @@ class DataSeries(NMObject):
     # override, no super
     def copy(self):
         c = DataSeries(self._parent, self.name, fxns=self._fxns,
+                       rename=self._rename,
                        xdim=self.__x, ydim=self.__y,
                        channels=self.__channel_container.copy(),
                        esets=self.__eset_container.copy())
@@ -166,7 +167,6 @@ class DataSeries(NMObject):
         for k in keys:
             if k not in nmd.DIM_LIST + ['channel']:
                 raise KeyError('unknown dimensions key: ' + k)
-        
         if 'xdata' in keys:
             self._xdata_set(dims['xdata'], quiet=quiet)
         if 'xstart' in keys:

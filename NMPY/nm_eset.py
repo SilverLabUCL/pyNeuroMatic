@@ -15,8 +15,8 @@ class EpochSet(NMObject):
     NM EpochSet class
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        super().__init__(parent, name, fxns=fxns)
+    def __init__(self, parent, name, fxns={}, rename=True, **copy):
+        super().__init__(parent, name, fxns=fxns, rename=rename)
         self.__theset = None
         self.__eq_list = []
         self.__eq_lock = True
@@ -55,6 +55,7 @@ class EpochSet(NMObject):
     # override, no super
     def copy(self):
         c = EpochSet(self._parent, self.name, fxns=self._fxns,
+                     rename=self._rename,
                      theset=self.__theset.copy(),
                      eq_list=self.__eq_list.copy(),
                      eq_lock=self.__eq_lock)

@@ -18,14 +18,15 @@ class Folder(NMObject):
     NM Data Folder class
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        super().__init__(parent, name, fxns=fxns)
+    def __init__(self, parent, name, fxns={}, rename=True, **copy):
+        super().__init__(parent, name, fxns=fxns, rename=rename)
         self.__data_container = None
         self.__dataseries_container = None
         for k, v in copy.items():
             if k.lower() == 'data' and isinstance(v, DataContainer):
                 self.__data_container = v
-            if k.lower() == 'dataseries' and isinstance(v, DataSeriesContainer):
+            if k.lower() == 'dataseries' and isinstance(v,
+                                                        DataSeriesContainer):
                 self.__dataseries_container = v
         if not isinstance(self.__data_container, DataContainer):
             self.__data_container = DataContainer(self, 'Data', fxns=fxns)
@@ -55,6 +56,7 @@ class Folder(NMObject):
     # override, no super
     def copy(self):
         c = Folder(self._parent, self.name, fxns=self._fxns,
+                   rename=self._rename,
                    data=self.__data_container.copy(),
                    dataseries=self.__dataseries_container.copy())
         return c

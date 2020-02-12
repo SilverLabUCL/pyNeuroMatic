@@ -301,7 +301,7 @@ class Container(NMObject):
         self._duplicate = duplicate
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
-        for k, v in copy.items():
+        for k, v in copy.items():  # see thecontainer_copy()
             if k.lower() == 'thecontainer' and isinstance(v, dict):
                 if 'thecontainer' in v.keys():
                     self.__thecontainer = v['thecontainer']

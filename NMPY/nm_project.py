@@ -14,8 +14,8 @@ class Project(NMObject):
     NM Project class
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        super().__init__(parent, name, fxns=fxns)
+    def __init__(self, parent, name, fxns={}, rename=True, **copy):
+        super().__init__(parent, name, fxns=fxns, rename=rename)
         self.__folder_container = None
         for k, v in copy.items():
             if k.lower() == 'folders' and isinstance(v, FolderContainer):
@@ -34,6 +34,7 @@ class Project(NMObject):
     # override, no super
     def copy(self):
         c = Project(self._parent, self.name, fxns=self._fxns,
+                    rename=self._rename,
                     folders=self.__folder_container.copy())
         return c
 

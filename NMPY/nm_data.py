@@ -27,9 +27,9 @@ class Data(NMObject):
     np_array: NumPy N-dimensional array (ndarray)
     """
 
-    def __init__(self, parent, name, fxns={}, np_array=None, xdim={},
-                 ydim={}, dataseries={}, **copy):
-        super().__init__(parent, name, fxns=fxns)
+    def __init__(self, parent, name, fxns={}, rename=True, np_array=None,
+                 xdim={}, ydim={}, dataseries={}, **copy):
+        super().__init__(parent, name, fxns=fxns, rename=rename)
         if np_array is None:
             self.__np_array = None
         elif isinstance(np_array, np.ndarray):
@@ -101,26 +101,27 @@ class Data(NMObject):
             if alert:
                 self._alert('unequal np_array NoneType', tp=self._tp)
             return False
-        if self.__np_array.dtype != data.np_array.dtype:
-            if alert:
-                self._alert('unequal np_array dtype', tp=self._tp)
-            return False
-        if self.__np_array.shape != data.np_array.shape:
-            if alert:
-                self._alert('unequal np_array shape', tp=self._tp)
-            return False
-        if self.__np_array.nbytes != data.np_array.nbytes:
-            if alert:
-                self._alert('unequal np_array nbytes', tp=self._tp)
-            return False
-        if not np.array_equal(self.__np_array, data.np_array):
-            # array_equal returns false if both arrays filled with NANs
-            if nmp.NAN_EQ_NAN:
-                if not np.allclose(self.__np_array, data.np_array, rtol=0,
-                                   atol=0, equal_nan=True):
-                    if alert:
-                        self._alert('unequal np_array', tp=self._tp)
-                    return False
+        if self.__np_array is not None and data.np_array is not None:
+            if self.__np_array.dtype != data.np_array.dtype:
+                if alert:
+                    self._alert('unequal np_array dtype', tp=self._tp)
+                return False
+            if self.__np_array.shape != data.np_array.shape:
+                if alert:
+                    self._alert('unequal np_array shape', tp=self._tp)
+                return False
+            if self.__np_array.nbytes != data.np_array.nbytes:
+                if alert:
+                    self._alert('unequal np_array nbytes', tp=self._tp)
+                return False
+            if not np.array_equal(self.__np_array, data.np_array):
+                # array_equal returns false if both arrays filled with NANs
+                if nmp.NAN_EQ_NAN:
+                    if not np.allclose(self.__np_array, data.np_array, rtol=0,
+                                       atol=0, equal_nan=True):
+                        if alert:
+                            self._alert('unequal np_array', tp=self._tp)
+                        return False
         if self.__note_container:
             if not self.__note_container._equal(data._Data__note_container,
                                                 alert=alert):
@@ -141,9 +142,8 @@ class Data(NMObject):
         notes = self.__note_container.copy()
         notes.off = True  # block notes during class creation
         c = Data(self._parent, self.name, fxns=self._fxns, np_array=a,
-                 xdim=self.__x.dim, ydim=self.__y.dim,
-                 dataseries=self.__dataseries,
-                 notes=notes)
+                 xdim=self.__x.dim, ydim=self.__y.dim, rename=self._rename,
+                 dataseries=self.__dataseries, notes=notes)
         notes.off = False
         return c
 
@@ -283,7 +283,8 @@ class DataContainer(Container):
 
     # override
     def kill(self, name, all_=False, confirm=True, quiet=nmp.QUIET):
-        klist = super().kill(name=name, all_=all_, confirm=confirm, quiet=quiet)
+        klist = super().kill(name=name, all_=all_, confirm=confirm,
+                             quiet=quiet)
         dsc = self.dataseries
         if not dsc or not isinstance(dsc, DataSeriesContainer):
             return klist

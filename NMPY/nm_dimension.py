@@ -17,8 +17,8 @@ class Dimension(NMObject):
     NM Dimension class
     """
 
-    def __init__(self, parent, name, fxns={}, dim={}, notes=None):
-        super().__init__(parent, name, fxns=fxns)
+    def __init__(self, parent, name, fxns={}, rename=True, dim={}, notes=None):
+        super().__init__(parent, name, fxns=fxns, rename=rename)
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
@@ -52,7 +52,8 @@ class Dimension(NMObject):
 
     # override, no super
     def copy(self):
-        return Dimension(self._parent, self.name, self._fxns, dim=self.dim,
+        return Dimension(self._parent, self.name, self._fxns,
+                         rename=self._rename, dim=self.dim,
                          notes=self._note_container)
 
     def _note_new(self, thenote, quiet=True):
