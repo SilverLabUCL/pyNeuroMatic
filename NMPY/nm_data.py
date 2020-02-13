@@ -135,12 +135,12 @@ class Data(NMObject):
             a = None
         else:
             a = self.__np_array.copy()
-        notes = self.__note_container.copy()
-        notes.off = True  # block notes during class creation
+        nc = self.__note_container.copy()
+        nc.off = True  # block notes during class creation
         c = Data(self._parent, self.name, fxns=self._fxns, np_array=a,
                  xdim=self.__x.dim, ydim=self.__y.dim, rename=self._rename,
-                 dataseries=self.__dataseries, notes=notes)
-        notes.off = False
+                 dataseries=self.__dataseries, notes=nc)
+        nc.off = False
         return c
 
     def _dataseries_str(self):
