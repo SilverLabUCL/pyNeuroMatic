@@ -904,31 +904,38 @@ class Test(unittest.TestCase):
             return
         nm.configs.quiet = False
         parent = self
-        data0 = DataContainer(parent, 'Data', fxns=nm._fxns)
-        data1 = DataContainer(parent, 'Data', fxns=nm._fxns)
+        c0 = DataContainer(parent, 'Data', fxns=nm._fxns)
+        c1 = DataContainer(parent, 'Data', fxns=nm._fxns)
         # new
         for b in BADTYPES:
             with self.assertRaises(TypeError):
-                data0.new(name=b)
+                c0.new(name=b)
         nlist = ['RecordA0', 'WaveA0', 'Xdata']
         for n in nlist:
-            self.assertIsInstance(data0.new(name=n), Data)
-            self.assertIsInstance(data1.new(name=n), Data)
+            self.assertIsInstance(c0.new(name=n), Data)
+            self.assertIsInstance(c1.new(name=n), Data)
         # parameters
-        self.assertTrue(data0._param_test())
+        self.assertTrue(c0._param_test())
         # content
-        c = data0.content
+        c = c0.content
         self.assertIsInstance(c, dict)
         self.assertEqual(list(c.keys()), ['data'])
+        self.assertEqual(c['data'], c0.names)
         # copy
-        c = data0.copy()
+        c = c0.copy()
         self.assertIsInstance(c, DataContainer)
+        self.assertTrue(c._equal(c0, alert=True))
+        for i in range(0, c.count):
+            o0 = c0.getitem(index=i)
+            oc = c.getitem(index=i)
+            self.assertIsInstance(oc, Data)
+            self.assertTrue(o0._equal(oc, alert=True))
         # equal
-        self.assertTrue(data0._equal(c, alert=True))
-        self.assertTrue(data0._equal(data1, alert=True))
-        self.assertIsInstance(data1._select_set('RecordA0'), Data)
-        self.assertFalse(data0._equal(data1, alert=True))
-        # kill
+        self.assertTrue(c0._equal(c0, alert=True))
+        self.assertTrue(c0._equal(c1, alert=True))
+        self.assertIsInstance(c1._select_set('RecordA0'), Data)
+        self.assertFalse(c0._equal(c1, alert=True))
+        # kill TODO, test if Data is removed from dataseries and esets
 
     def test_project(self):
         on = False

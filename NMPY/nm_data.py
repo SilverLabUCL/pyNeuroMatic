@@ -149,7 +149,7 @@ class Data(NMObject):
             d.update({ds.name: c})
         return d
 
-    def _add_dataseries(self, dataseries, chan_char):
+    def _dataseries_add(self, dataseries, chan_char):
         if not isinstance(dataseries, DataSeries):
             raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
         if chan_char not in nmp.CHAN_LIST:
@@ -158,7 +158,7 @@ class Data(NMObject):
         self._modified()
         return True
 
-    def _remove_dataseries(self, dataseries):
+    def _dataseries_remove(self, dataseries):
         if not isinstance(dataseries, DataSeries):
             raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
         if dataseries in self.__dataseries:
@@ -181,7 +181,7 @@ class Data(NMObject):
                 str(dsn) + '.' + '\n' + 'do you want to continue?')
 
     @property
-    def notes(self):
+    def note(self):
         return self.__note_container
 
     @property
