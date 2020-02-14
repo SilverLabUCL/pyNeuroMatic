@@ -558,9 +558,9 @@ class Container(NMObject):
         select = nmu.check_bool(select, True)
         if not isinstance(name, str):
             raise TypeError(nmu.type_error(name, 'string'))
-        if not self.name_ok(name, ok='default'):
+        if not name or not self.name_ok(name, ok='default'):
             raise ValueError('bad name:  ' + nmu.quotes(name))
-        if not name or name.lower() == 'default':
+        if name.lower() == 'default':
             name = self.name_next(quiet=quiet)
         if self.__exists(name):
             e = self._type + ' ' + nmu.quotes(name) + ' already exists'
