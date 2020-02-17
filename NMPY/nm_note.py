@@ -13,8 +13,10 @@ class Note(NMObject):
     NM Note class
     """
 
-    def __init__(self, parent, name, fxns={}, thenote=''):
-        super().__init__(parent, name, fxns=fxns, rename=False)
+    def __init__(self, parent, name, fxns={}, rename=False, thenote=''):
+        super().__init__(parent, name, fxns=fxns, rename=rename)
+        self._content_name = 'note'
+        self.__thenote = ''
         self._thenote_set(thenote)
         self._param_list += ['thenote']
 
@@ -26,14 +28,9 @@ class Note(NMObject):
         return k
 
     # override, no super
-    @property
-    def content(self):
-        return {'note': self.name}
-
-    # override, no super
     def copy(self):
         return Note(self._parent, self.name, fxns=self._fxns,
-                    thenote=self.__thenote)
+                    rename=self._rename, thenote=self.__thenote)
 
     @property
     def thenote(self):
@@ -43,7 +40,9 @@ class Note(NMObject):
     def thenote(self, thenote):
         return self._thenote_set(thenote)
 
-    def _thenote_set(self, thenote):
+    def _thenote_set(self, thenote, quiet=True):
+        # notes should be quiet
+        old = self.__thenote
         if not thenote:
             self.__thenote = ''
         elif isinstance(thenote, str):
@@ -51,6 +50,8 @@ class Note(NMObject):
         else:
             self.__thenote = str(thenote)
         self._modified()
+        h = nmu.history_change('thenote', old, self.__thenote)
+        self._history(h, tp=self._tp, quiet=quiet)
         return True
 
 
@@ -59,20 +60,19 @@ class NoteContainer(Container):
     Container for NM Note objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix='Note', rename=False,
+                 duplicate=False, **copy):
         t = Note(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix='Note',
-                         rename=False, duplicate=False, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, duplicate=duplicate, **copy)
+        self._content_name = 'notes'
         self.__off = False
-
-    # override, no super
-    @property
-    def content(self):
-        return {'notes': self.names}
 
     # override, no super
     def copy(self):
         return NoteContainer(self._parent, self.name, fxns=self._fxns,
+                             prefix=self.prefix, rename=self._rename,
+                             duplicate=self._duplicate,
                              thecontainer=self._thecontainer_copy())
 
     # override
@@ -84,6 +84,7 @@ class NoteContainer(Container):
         return super().new(name='default', nmobj=o, select=select, quiet=quiet)
 
     def thenotes(self, quiet=True):
+        # notes should be quiet
         notes = []
         self._history('', tp=self._tp, quiet=quiet)
         for n in self.getitems(names='all'):
@@ -97,6 +98,6 @@ class NoteContainer(Container):
 
     @off.setter
     def off(self, off):
-       self.__off = off
-       self._modified()
-       return off
+        self.__off = off
+        self._modified()
+        return off

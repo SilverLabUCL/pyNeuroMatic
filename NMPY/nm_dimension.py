@@ -29,6 +29,7 @@ class Dimension(NMObject):
             self._note_container = notes  # reference to notes container
         else:
             raise TypeError(nmu.type_error(notes, 'NoteContainer'))
+        self._content_name = 'dimension'
         self._offset = 0  # not to be controlled by master
         self._label = ''
         self._units = ''
@@ -46,17 +47,13 @@ class Dimension(NMObject):
         return k
 
     # override, no super
-    @property
-    def content(self):
-        return {'dimension': self.name}
-
-    # override, no super
     def copy(self):
         return Dimension(self._parent, self.name, self._fxns,
                          rename=self._rename, dim=self.dim,
                          notes=self._note_container)
 
     def _note_new(self, thenote, quiet=True):
+        # notes should be quiet
         if isinstance(self._note_container, NoteContainer):
             return self._note_container.new(thenote, quiet=quiet)
         return None
@@ -72,8 +69,8 @@ class Dimension(NMObject):
     def _master_set(self, dimension, quiet=nmp.QUIET):
         if dimension is None:
             pass  # ok, remove
-        elif dimension.__class__.__name__ != self._cname:
-            raise TypeError(nmu.type_error(dimension, self._cname))
+        elif dimension.__class__.__name__ != self.__class__.__name__:
+            raise TypeError(nmu.type_error(dimension, self.__class__.__name__))
         elif dimension == self:
             raise ValueError('got ' + nmu.quotes('self') + ' for master')
         elif dimension._master_lock:
@@ -92,7 +89,7 @@ class Dimension(NMObject):
 
     @property
     def _master_lock(self):
-        return self._master.__class__.__name__ == self._cname
+        return self._master.__class__.__name__ == self.__class__.__name__
 
     @property
     def _master_error(self):
@@ -227,12 +224,13 @@ class XDimension(Dimension):
     NM XDimension class
     """
 
-    def __init__(self, parent, name, fxns={}, dim={}, notes=None):
-        super().__init__(parent, name, fxns=fxns, notes=notes)
+    def __init__(self, parent, name, fxns={}, rename=True, dim={}, notes=None):
+        super().__init__(parent, name, fxns=fxns, rename=rename, notes=notes)
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
             raise TypeError(nmu.type_error(dim, 'dict'))
+        self._content_name = 'xdimension'
         self._start = 0
         self._delta = 1
         self._xdata = None
@@ -242,13 +240,9 @@ class XDimension(Dimension):
             self._dim_set(dim, quiet=True)
 
     # override, no super
-    @property
-    def content(self):
-        return {'xdimension': self.name}
-
-    # override, no super
     def copy(self):
-        return XDimension(self._parent, self.name, self._fxns, dim=self.dim,
+        return XDimension(self._parent, self.name, self._fxns, 
+                          rename=self._rename, dim=self.dim,
                           notes=self._note_container)
 
     @property

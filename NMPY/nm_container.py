@@ -40,52 +40,12 @@ class NMObject(object):
         else:
             self._fxns = {}
         self._rename = nmu.check_bool(rename, True)
+        self._content_name = 'nmobject'
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
         self._param_list = ['name', 'rename', 'date', 'modified']
         # param_list should match those listed in parameters()
         # see param_test()
-
-    def name_ok(self, name, ok=[]):
-        if not nmu.name_ok(name):
-            return False
-        if not isinstance(ok, list):
-            ok = [ok]
-        bad = [n.lower() for n in self._bad_names]
-        for n in ok:
-            if n.lower() in bad:
-                bad.remove(n.lower())
-        return name.lower() not in bad
-
-    @property
-    def _bad_names(self):  # names not allowed
-        return ['select', 'default', 'all']
-
-    @property
-    def _cname(self):  # class name
-        return self.__class__.__name__
-
-    @property
-    def name(self):
-        return self.__name
-
-    @name.setter
-    def name(self, name):
-        return self._name_set(name)
-
-    def _name_set(self, name, quiet=nmp.QUIET):
-        if not self._rename:
-            raise RuntimeError(nmu.quotes(self.__name) + ' cannot be renamed')
-        if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
-        if not name or not self.name_ok(name):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
-        old = self.__name
-        self.__name = name
-        self._modified()
-        h = nmu.history_change('name', old, self.__name)
-        self._history(h, tp=self._tp, quiet=quiet)
-        return True
 
     @property
     def parameters(self):  # child class should override
@@ -111,9 +71,8 @@ class NMObject(object):
         return True
 
     @property
-    def content(self):  # child class should override
-        # and change 'nmobject' to 'folder', 'data', etc.
-        return {'nmobject': self.__name}
+    def content(self):
+        return {self._content_name: self.__name}
 
     @property
     def content_tree(self):
@@ -124,13 +83,8 @@ class NMObject(object):
             return k
         return self.content
 
-    def _modified(self):
-        self.__modified = str(datetime.datetime.now())
-        if self._parent and isinstance(self._parent, NMObject):  # tree-path
-            self._parent._modified()
-
     @property
-    def _tp(self):  # used with history()
+    def _tp(self):  # use with history()
         return self.treepath(for_history=True)
 
     def treepath(self, for_history=False):
@@ -150,7 +104,8 @@ class NMObject(object):
         names = nmu.check_bool(names, True)
         if not isinstance(skip, list):
             skip = []
-        if self._cname in skip:
+        cname = self.__class__.__name__
+        if cname in skip:
             return []
         p = self._parent
         if p and isinstance(p, NMObject) and p.__class__.__name__ not in skip:
@@ -164,11 +119,48 @@ class NMObject(object):
             return [self.__name]
         return [self]
 
+    def name_ok(self, name, ok=[]):
+        if not nmu.name_ok(name):
+            return False
+        if not isinstance(ok, list):
+            ok = [ok]
+        bad = [n.lower() for n in self._bad_names]
+        for n in ok:
+            if n.lower() in bad:
+                bad.remove(n.lower())
+        return name.lower() not in bad
+
+    @property
+    def _bad_names(self):  # names not allowed
+        return ['select', 'default', 'all']
+
+    @property
+    def name(self):
+        return self.__name
+
+    @name.setter
+    def name(self, name):
+        return self._name_set(name)
+
+    def _name_set(self, name, quiet=nmp.QUIET):
+        if not self._rename:
+            raise RuntimeError(nmu.quotes(self.__name) + ' cannot be renamed')
+        if not isinstance(name, str):
+            raise TypeError(nmu.type_error(name, 'string'))
+        if not name or not self.name_ok(name):
+            raise ValueError('bad name:  ' + nmu.quotes(name))
+        old = self.__name
+        self.__name = name
+        self._modified()
+        h = nmu.history_change('name', old, self.__name)
+        self._history(h, tp=self._tp, quiet=quiet)
+        return True
+
     def _equal(self, nmobj, alert=False):
-        if nmobj.__class__.__name__ != self._cname:
+        if nmobj.__class__.__name__ != self.__class__.__name__:
             if alert:
-                a = ('unequal object types: ' + self._cname + ' vs ' +
-                     nmobj.__class__.__name__)
+                a = ('unequal object types: ' + self.__class__.__name__ +
+                     ' vs ' + nmobj.__class__.__name__)
                 self._alert(a, tp=self._tp)
             return False
         if self == nmobj:
@@ -212,6 +204,11 @@ class NMObject(object):
     def save(self, path='', quiet=nmp.QUIET):
         self._alert('under construction')
         return False
+
+    def _modified(self):
+        self.__modified = str(datetime.datetime.now())
+        if self._parent and isinstance(self._parent, NMObject):  # tree-path
+            self._parent._modified()
 
     @property
     def _quiet(self):
@@ -300,6 +297,7 @@ class Container(NMObject):
             raise ValueError('bad prefix:  ' + nmu.quotes(prefix))
         self.__prefix = prefix
         self._duplicate = duplicate
+        self._content_name = 'nmobjects'
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
         for k, v in copy.items():  # see thecontainer_copy()
@@ -324,11 +322,10 @@ class Container(NMObject):
             k.update({'select': 'None'})
         return k
 
-    # override
+    # override, no super
     @property
-    def content(self):  # child class should override
-        # and change 'nmobjects' to 'folders', etc
-        return {'nmobjects': self.names}
+    def content(self):
+        return {self._content_name: self.names}
 
     # override
     def _equal(self, container, alert=False):
@@ -423,21 +420,22 @@ class Container(NMObject):
 
     __exists = exists
 
-    def getitem(self, name='', index=-1, quiet=nmp.QUIET):
+    def getitem(self, name='', index=None, quiet=nmp.QUIET):
         """Get NMObject from Container"""
         if not isinstance(name, str):
             raise TypeError(nmu.type_error(name, 'string'))
         if not self.name_ok(name, ok='select'):
             raise ValueError('bad name:  ' + nmu.quotes(name))
-        if not isinstance(index, int):
+        if index is None:
+            pass  # ok
+        elif not isinstance(index, int):
             raise TypeError(nmu.type_error(index, 'integer'))
-        if index < 0:
-            pass  # ok, do not use index
+        elif index < 0 and index >= -1 * len(self.__thecontainer):
+            return self.__thecontainer[index]
         elif index >= 0 and index < len(self.__thecontainer):
             return self.__thecontainer[index]
         else:
-            e = 'bad index:  expected 0-' + str(len(self.__thecontainer)-1)
-            raise IndexError(e + ', got  ' + str(index))
+            raise IndexError('bad index: ' + str(index))
         if not name:
             return None
         if name.lower() == 'select':
@@ -451,44 +449,52 @@ class Container(NMObject):
 
     __getitem = getitem
 
-    def getitems(self, names=[], indexes=[], quiet=nmp.QUIET):
+    def getitems(self, names=[], indexes=[]):
         """Get a list of NMObjects from Container"""
-        if not isinstance(names, list):
+        if isinstance(names, list) or isinstance(names, tuple):
+            pass  # ok
+        elif isinstance(names, str):
             names = [names]
-        if not isinstance(indexes, list):
-            indexes = [indexes]
-        olist = []
-        if len(names) == 1 and names[0].lower() == 'all':
-            get_all = True
-            ok = 'all'
         else:
-            get_all = False
-            ok = 'select'
-        for name in names:
-            if not isinstance(name, str):
-                raise TypeError(nmu.type_error(name, 'string'))
-            if not self.name_ok(name, ok=ok):
-                raise ValueError('bad name:  ' + nmu.quotes(name))
-            if name.lower() == 'select':
+            raise TypeError(nmu.type_error(names, 'string'))
+        if isinstance(indexes, list) or isinstance(indexes, tuple):
+            pass  # ok
+        elif isinstance(indexes, int):
+            indexes = [indexes]
+        else:
+            raise TypeError(nmu.type_error(indexes, 'int'))
+        olist = []
+        all_ = False
+        for n in names:
+            if not isinstance(n, str):
+                raise TypeError(nmu.type_error(n, 'string'))
+            if n.lower() == 'all':
+                all_ = True
+            elif not self.name_ok(n, ok='select'):
+                raise ValueError('bad name:  ' + nmu.quotes(n))
+            if n.lower() == 'select':
                 if self.__select not in olist:
                     olist.append(self.__select)
             else:
                 for o in self.__thecontainer:
-                    if get_all:
+                    if all_ and o not in olist:
                         olist.append(o)
-                    elif name.lower() == o.name.lower() and o not in olist:
+                    elif n.lower() == o.name.lower() and o not in olist:
                         olist.append(o)
-        if get_all:
+        if all_:
             return olist
-        for index in indexes:
-            if not isinstance(index, int):
-                raise TypeError(nmu.type_error(index, 'integer'))
-            if index >= 0 and index < len(self.__thecontainer):
-                o = self.__thecontainer[index]
-                if o not in olist:
-                    olist.append(o)
+        for i in indexes:
+            if not isinstance(i, int):
+                raise TypeError(nmu.type_error(i, 'integer'))
+            o = None
+            if i < 0 and i >= -1 * len(self.__thecontainer):
+                o = self.__thecontainer[i]
+            elif i >= 0 and i < len(self.__thecontainer):
+                o = self.__thecontainer[i]
             else:
-                raise IndexError('index out of range:  ' + str(index))
+                raise IndexError('index out of range:  ' + str(i))
+            if o and o not in olist:
+                olist.append(o)
         return olist
 
     def _exists_error(self, name):
@@ -691,68 +697,34 @@ class Container(NMObject):
         self._modified()
         return c
 
-    def kill(self, name='', all_=False, confirm=True, quiet=nmp.QUIET):
-        """
-        Kill NMObject.
-
-        Args:
-            name: name of NMObject to kill
-
-        Returns:
-            True for success, False otherwise
-        """
-        all_ = nmu.check_bool(all_, False)
-        confirm = nmu.check_bool(confirm, True)
-        klist = []
-        if all_:
-            n = ', '.join(self.names)
-            if confirm and not self._quiet(quiet):
-                q = ('are you sure you want to kill all ' + self._type +
-                     ' items?' + '\n' + 'This will kill ' + n)
-                yn = nmu.input_yesno(q, tp=self._tp)
-                if not yn == 'y':
-                    self._history('cancel', tp=self._tp, quiet=quiet)
-                    return []
-            klist = [o for o in self.__thecontainer]
-            self.__thecontainer.clear()
-            self.__select = None
-            self._modified()
-            self._history('killed ' + n, tp=self._tp, quiet=quiet)
-            return klist
-        if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
-        if not self.name_ok(name, ok='select'):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
-        if not name:
+    def kill(self, names=[], indexes=[], confirm=True, quiet=nmp.QUIET):
+        olist = self.getitems(names=names, indexes=indexes)
+        if len(olist) == 0:
             return []
-        if not self.__exists(name):
-            e = self._exists_error(name)
-            self._error(e, tp=self._tp, quiet=quiet)
-            return []
-        o = self.__getitem(name, quiet=quiet)
-        if not o:
-            return []
-        if confirm and not self._quiet(quiet):
-            q = 'are you sure you want to kill ' + nmu.quotes(o.name) + '?'
+        if confirm:
+            nlist = []
+            for o in olist:
+                nlist.append(o.name)
+            q = ('are you sure you want to kill the following items?' + '\n' +
+                 ', '.join(nlist))
             yn = nmu.input_yesno(q, tp=self._tp)
             if not yn == 'y':
                 self._history('cancel', tp=self._tp, quiet=quiet)
                 return []
-        select_next = o is self.__select  # killing select, so need new one
-        if select_next:
-            i = self.__index(o.name)
-        klist.append(o)
-        self.__thecontainer.remove(o)
-        h = 'killed ' + nmu.quotes(o.name)
+        klist = []
+        nlist = []
+        for o in olist:
+            klist.append(o)
+            self.__thecontainer.remove(o)
+            nlist.append(o.name)
+            if self.__select is o:
+                select_old = self.__select
+                self.__select = None
+        h = 'killed ' + ', '.join(nlist)
         self._history(h, tp=self._tp, quiet=quiet)
-        items = len(self.__thecontainer)
-        if select_next and items > 0:
-            i = max(i, 0)
-            i = min(i, items - 1)
-            o = self.__thecontainer[i]
-            old = self.__select
-            self.__select = o
-            h = Container.__select_history(old, self.__select)
+        if self.__select is None and len(self.__thecontainer) > 0:
+            self.__select = self.__thecontainer[0]
+            h = Container.__select_history(select_old, self.__select)
             self._history(h, tp=self._tp, quiet=quiet)
         self._modified()
         return klist

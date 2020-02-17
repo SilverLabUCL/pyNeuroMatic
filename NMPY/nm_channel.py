@@ -16,8 +16,9 @@ class Channel(NMObject):
     NM Channel class
     """
 
-    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}):
-        super().__init__(parent, name, fxns=fxns, rename=False)
+    def __init__(self, parent, name, fxns={}, rename=False, xdim={}, ydim={}):
+        super().__init__(parent, name, fxns=fxns, rename=rename)
+        self._content_name = 'channel'
         self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, dim=xdim)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim)
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
@@ -33,13 +34,9 @@ class Channel(NMObject):
         return k
 
     # override, no super
-    @property
-    def content(self):
-        return {'channel': self.name}
-
-    # override, no super
     def copy(self):
         return Channel(self._parent, self.name, fxns=self._fxns,
+                       rename=self._rename,
                        xdim=self.__x.dim, ydim=self.__y.dim)
 
     @property
@@ -56,20 +53,19 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix='', rename=False,
+                 duplicate=False, **copy):
         t = Channel(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
-                         rename=False, duplicate=False, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, duplicate=duplicate, **copy)
         # NO PREFIX, Channel names are 'A', 'B'...
-
-    # override, no super
-    @property
-    def content(self):
-        return {'channels': self.names}
+        self._content_name = 'channels'
 
     # override, no super
     def copy(self):
         return ChannelContainer(self._parent, self.__name, self._fxns,
+                                prefix=self.prefix, rename=self._rename,
+                                duplicate=self._duplicate,
                                 thecontainer=self._thecontainer_copy())
 
     # override

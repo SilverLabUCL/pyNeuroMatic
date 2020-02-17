@@ -9,7 +9,7 @@ from nm_container import NMObject
 from nm_container import Container
 from nm_channel import ChannelContainer
 import nm_dimension as nmd
-from nm_eset import EpochSetContainer
+from nm_epochset import EpochSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 
@@ -19,9 +19,11 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}, **copy):
+    def __init__(self, parent, name, fxns={}, rename=False, xdim={}, ydim={},
+                 **copy):
         # name is data-series prefix
-        super().__init__(parent, name, fxns=fxns, rename=False)
+        super().__init__(parent, name, fxns=fxns, rename=rename)
+        self._content_name = 'dataseries'
         self.__channel_container = None
         self.__eset_container = None
         for k, v in copy.items():
@@ -31,7 +33,7 @@ class DataSeries(NMObject):
                 self.__eset_container = v
         if not isinstance(self.__channel_container, ChannelContainer):
             self.__channel_container = ChannelContainer(self, 'Channels',
-                                         fxns=fxns)
+                                                        fxns=fxns)
         if not isinstance(self.__eset_container, EpochSetContainer):
             self.__eset_container = EpochSetContainer(self, 'EpochSets',
                                                       fxns=fxns)
@@ -59,10 +61,10 @@ class DataSeries(NMObject):
         # k.update({'data_select': self.__data_select})
         return k
 
-    # override, no super
+    # override
     @property
     def content(self):
-        k = {'dataseries': self.name}
+        k = super().content
         k.update(self.__channel_container.content)
         k.update({'channel_select': self.channel_select})
         k.update({'epochs': self.epoch_count})
@@ -739,19 +741,18 @@ class DataSeriesContainer(Container):
     NM Container for DataSeries objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix='', rename=False,
+                 duplicate=False, **copy):
         t = DataSeries(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
-                         rename=False, duplicate=False, **copy)
-
-    # override, no super
-    @property
-    def content(self):
-        return {'dataseries': self.names}
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, duplicate=duplicate, **copy)
+        self._content_name = 'dataseries'
 
     # override, no super
     def copy(self):
         return DataSeriesContainer(self._parent, self.name, fxns=self._fxns,
+                                   prefix=self.prefix, rename=self._rename,
+                                   duplicate=self._duplicate,
                                    thecontainer=self._thecontainer_copy())
 
     # override
@@ -766,6 +767,6 @@ class DataSeriesContainer(Container):
 
     @property
     def data(self):
-        if self._parent._cname == 'Folder':
+        if self._parent.__class__.__name__ == 'Folder':
             return self._parent.data
         return None

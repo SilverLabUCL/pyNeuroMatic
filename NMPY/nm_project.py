@@ -16,6 +16,7 @@ class Project(NMObject):
 
     def __init__(self, parent, name, fxns={}, rename=True, **copy):
         super().__init__(parent, name, fxns=fxns, rename=rename)
+        self._content_name = 'project'
         self.__folder_container = None
         for k, v in copy.items():
             if k.lower() == 'folders' and isinstance(v, FolderContainer):
@@ -24,19 +25,18 @@ class Project(NMObject):
             self.__folder_container = FolderContainer(self, 'Folders',
                                                       fxns=fxns)
 
-    # override, no super
+    # override
     @property
     def content(self):
-        k = {'project': self.name}
+        k = super().content
         k.update(self.__folder_container.content)
         return k
 
     # override, no super
     def copy(self):
-        c = Project(self._parent, self.name, fxns=self._fxns,
-                    rename=self._rename,
-                    folders=self.__folder_container.copy())
-        return c
+        return Project(self._parent, self.name, fxns=self._fxns,
+                       rename=self._rename,
+                       folders=self.__folder_container.copy())
 
     # override
     def _equal(self, project, alert=False):

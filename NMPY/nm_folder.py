@@ -20,6 +20,7 @@ class Folder(NMObject):
 
     def __init__(self, parent, name, fxns={}, rename=True, **copy):
         super().__init__(parent, name, fxns=fxns, rename=rename)
+        self._content_name = 'folder'
         self.__data_container = None
         self.__dataseries_container = None
         for k, v in copy.items():
@@ -35,10 +36,10 @@ class Folder(NMObject):
                                                               'DataSeries',
                                                               fxns=fxns)
 
-    # override, no super
+    # override
     @property
     def content(self):
-        k = {'folder': self.name}
+        k = super().content
         k.update(self.__data_container.content)
         k.update(self.__dataseries_container.content)
         return k
@@ -55,11 +56,10 @@ class Folder(NMObject):
 
     # override, no super
     def copy(self):
-        c = Folder(self._parent, self.name, fxns=self._fxns,
-                   rename=self._rename,
-                   data=self.__data_container.copy(),
-                   dataseries=self.__dataseries_container.copy())
-        return c
+        return Folder(self._parent, self.name, fxns=self._fxns,
+                      rename=self._rename,
+                      data=self.__data_container.copy(),
+                      dataseries=self.__dataseries_container.copy())
 
     @property
     def data(self):
@@ -75,19 +75,19 @@ class FolderContainer(Container):
     Container for NM Folders
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix=nmp.FOLDER_PREFIX,
+                 rename=True, duplicate=True, **copy):
         t = Folder(parent, 'empty').__class__.__name__
         super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.FOLDER_PREFIX, **copy)
-
-    # override, no super
-    @property
-    def content(self):
-        return {'folders': self.names}
+                         prefix=prefix, rename=rename, duplicate=duplicate,
+                         **copy)
+        self._content_name = 'folders'
 
     # override, no super
     def copy(self):
         return FolderContainer(self._parent, self.name, fxns=self._fxns,
+                               prefix=self.prefix, rename=self._rename,
+                               duplicate=self._duplicate,
                                thecontainer=self._thecontainer_copy())
 
     # override

@@ -17,6 +17,7 @@ class EpochSet(NMObject):
 
     def __init__(self, parent, name, fxns={}, rename=True, **copy):
         super().__init__(parent, name, fxns=fxns, rename=rename)
+        self._content_name = 'epochset'
         self.__theset = None
         self.__eq_list = []
         self.__eq_lock = True
@@ -48,18 +49,10 @@ class EpochSet(NMObject):
         return k
 
     # override, no super
-    @property
-    def content(self):
-        return {'eset': self.name}
-
-    # override, no super
     def copy(self):
-        c = EpochSet(self._parent, self.name, fxns=self._fxns,
-                     rename=self._rename,
-                     theset=self.__theset.copy(),
-                     eq_list=self.__eq_list.copy(),
-                     eq_lock=self.__eq_lock)
-        return c
+        return EpochSet(self._parent, self.name, fxns=self._fxns,
+                        rename=self._rename, theset=self.__theset.copy(),
+                        eq_list=self.__eq_list.copy(), eq_lock=self.__eq_lock)
 
     @property
     def theset(self):
@@ -126,10 +119,12 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix=nmp.ESET_PREFIX,
+                 rename=True, duplicate=True, **copy):
         t = EpochSet(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.ESET_PREFIX, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, duplicate=duplicate, **copy)
+        self._content_name = 'epochsets'
 
     # override
     @property
@@ -139,13 +134,10 @@ class EpochSetContainer(Container):
         return bn
 
     # override, no super
-    @property
-    def content(self):
-        return {'esets': self.names}
-
-    # override, no super
     def copy(self):
         return EpochSetContainer(self._parent, self.name, fxns=self._fxns,
+                                 prefix=self.prefix, rename=self._rename,
+                                 duplicate=self._duplicate,
                                  thecontainer=self._thecontainer_copy())
 
     # @property  # override, no super
@@ -285,7 +277,7 @@ class EpochSetContainer(Container):
         return True
 
     def equation(self, name, eq_list, lock=True, quiet=nmp.QUIET):
-        """eq_list=[Set1', '|', 'Set2']"""
+        """eq_list=['Set1', '|', 'Set2']"""
         if self.exists(name):
             s = self.getitem(name, quiet=quiet)
         else:

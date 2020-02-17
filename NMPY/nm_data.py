@@ -30,6 +30,7 @@ class Data(NMObject):
     def __init__(self, parent, name, fxns={}, rename=True, np_array=None,
                  xdim={}, ydim={}, dataseries={}, **copy):
         super().__init__(parent, name, fxns=fxns, rename=rename)
+        self._content_name = 'data'
         if np_array is None:
             self.__np_array = None
         elif isinstance(np_array, np.ndarray):
@@ -78,13 +79,13 @@ class Data(NMObject):
         k.update({'xdim': self.__x.dim})
         k.update({'ydim': self.__y.dim})
         k.update({'dataseries': self._dataseries_str()})
-        # need dataseries name for equal() to work
+        # need dataseries names for equal() to work
         return k
 
-    # override, no super
+    # override
     @property
     def content(self):
-        k = {'data': self.name}
+        k = super().content
         if self.__note_container:
             k.update(self.__note_container.content)
         return k
@@ -137,8 +138,8 @@ class Data(NMObject):
             a = self.__np_array.copy()
         nc = self.__note_container.copy()
         nc.off = True  # block notes during class creation
-        c = Data(self._parent, self.name, fxns=self._fxns, np_array=a,
-                 xdim=self.__x.dim, ydim=self.__y.dim, rename=self._rename,
+        c = Data(self._parent, self.name, fxns=self._fxns, rename=self._rename,
+                 np_array=a, xdim=self.__x.dim, ydim=self.__y.dim,
                  dataseries=self.__dataseries, notes=nc)
         nc.off = False
         return c
@@ -251,19 +252,18 @@ class DataContainer(Container):
     Container for NM Data objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix=nmp.DATA_PREFIX,
+                 rename=True, duplicate=True, **copy):
         t = Data(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.DATA_PREFIX, **copy)
-
-    # override, no super
-    @property
-    def content(self):
-        return {'data': self.names}
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, duplicate=duplicate, **copy)
+        self._content_name = 'data'
 
     # override, no super
     def copy(self):
         return DataContainer(self._parent, self.name, fxns=self._fxns,
+                             prefix=self.prefix, rename=self._rename,
+                             duplicate=self._duplicate,
                              thecontainer=self._thecontainer_copy())
 
     # override
@@ -275,7 +275,7 @@ class DataContainer(Container):
 
     @property
     def dataseries(self):
-        if self._parent._cname == 'Folder':
+        if self._parent.__class__.__name__ == 'Folder':
             return self._parent.dataseries
         return None
 
