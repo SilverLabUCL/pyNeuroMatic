@@ -13,8 +13,8 @@ class Note(NMObject):
     NM Note class
     """
 
-    def __init__(self, parent, name, fxns={}, rename=False, thenote=''):
-        super().__init__(parent, name, fxns=fxns, rename=rename)
+    def __init__(self, parent, name, fxns={}, thenote='', **copy):
+        super().__init__(parent, name, fxns=fxns)
         self._content_name = 'note'
         self.__thenote = ''
         self._thenote_set(thenote)
@@ -29,8 +29,10 @@ class Note(NMObject):
 
     # override, no super
     def copy(self):
-        return Note(self._parent, self.name, fxns=self._fxns,
-                    rename=self._rename, thenote=self.__thenote)
+        c = Note(self._parent, self.name, fxns=self._fxns,
+                 thenote=self.__thenote)
+        self._copy_extra(c)
+        return c
 
     @property
     def thenote(self):
@@ -60,20 +62,19 @@ class NoteContainer(Container):
     Container for NM Note objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix='Note', rename=False,
-                 duplicate=False, **copy):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = Note(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, duplicate=duplicate, **copy)
+        super().__init__(parent, name, fxns=fxns, rename=False, type_=t,
+                         prefix='Note', **copy)
         self._content_name = 'notes'
         self.__off = False
 
     # override, no super
     def copy(self):
-        return NoteContainer(self._parent, self.name, fxns=self._fxns,
-                             prefix=self.prefix, rename=self._rename,
-                             duplicate=self._duplicate,
-                             thecontainer=self._thecontainer_copy())
+        c = NoteContainer(self._parent, self.name, fxns=self._fxns,
+                          thecontainer=self._thecontainer_copy())
+        self._copy_extra(c)
+        return c
 
     # override
     def new(self, thenote='', select=True, quiet=True):
@@ -101,3 +102,7 @@ class NoteContainer(Container):
         self.__off = off
         self._modified()
         return off
+
+    # override, no super
+    def duplicate(self):
+        raise RuntimeError('dataseries cannot be duplicated')

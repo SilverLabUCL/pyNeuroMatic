@@ -17,8 +17,8 @@ class Dimension(NMObject):
     NM Dimension class
     """
 
-    def __init__(self, parent, name, fxns={}, rename=True, dim={}, notes=None):
-        super().__init__(parent, name, fxns=fxns, rename=rename)
+    def __init__(self, parent, name, fxns={}, dim={}, notes=None, **copy):
+        super().__init__(parent, name, fxns=fxns)
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
@@ -48,9 +48,10 @@ class Dimension(NMObject):
 
     # override, no super
     def copy(self):
-        return Dimension(self._parent, self.name, self._fxns,
-                         rename=self._rename, dim=self.dim,
-                         notes=self._note_container)
+        c = Dimension(self._parent, self.name, fxns=self._fxns, dim=self.dim,
+                      notes=self._note_container)
+        self._copy_extra(c)
+        return c
 
     def _note_new(self, thenote, quiet=True):
         # notes should be quiet
@@ -224,8 +225,8 @@ class XDimension(Dimension):
     NM XDimension class
     """
 
-    def __init__(self, parent, name, fxns={}, rename=True, dim={}, notes=None):
-        super().__init__(parent, name, fxns=fxns, rename=rename, notes=notes)
+    def __init__(self, parent, name, fxns={}, dim={}, notes=None, **copy):
+        super().__init__(parent, name, fxns=fxns, notes=notes, **copy)
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
@@ -241,9 +242,10 @@ class XDimension(Dimension):
 
     # override, no super
     def copy(self):
-        return XDimension(self._parent, self.name, self._fxns, 
-                          rename=self._rename, dim=self.dim,
-                          notes=self._note_container)
+        c = XDimension(self._parent, self.name, fxns=self._fxns, dim=self.dim,
+                       notes=self._note_container)
+        self._copy_extra(c)
+        return c
 
     @property
     def xdata(self):

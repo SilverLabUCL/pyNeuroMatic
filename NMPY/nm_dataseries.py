@@ -19,10 +19,9 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, rename=False, xdim={}, ydim={},
-                 **copy):
+    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}, **copy):
         # name is data-series prefix
-        super().__init__(parent, name, fxns=fxns, rename=rename)
+        super().__init__(parent, name, fxns=fxns)
         self._content_name = 'dataseries'
         self.__channel_container = None
         self.__eset_container = None
@@ -85,10 +84,10 @@ class DataSeries(NMObject):
     # override, no super
     def copy(self):
         c = DataSeries(self._parent, self.name, fxns=self._fxns,
-                       rename=self._rename,
                        xdim=self.__x, ydim=self.__y,
                        channels=self.__channel_container.copy(),
                        esets=self.__eset_container.copy())
+        self._copy_extra(c)
         # self.__dims_master_on
         # self.__data_select = {}
         # self.__channel_select = []
@@ -741,24 +740,23 @@ class DataSeriesContainer(Container):
     NM Container for DataSeries objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix='', rename=False,
-                 duplicate=False, **copy):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = DataSeries(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, duplicate=duplicate, **copy)
+        super().__init__(parent, name, fxns=fxns, rename=False, type_=t,
+                         prefix='', **copy)
         self._content_name = 'dataseries'
 
     # override, no super
     def copy(self):
-        return DataSeriesContainer(self._parent, self.name, fxns=self._fxns,
-                                   prefix=self.prefix, rename=self._rename,
-                                   duplicate=self._duplicate,
-                                   thecontainer=self._thecontainer_copy())
+        c = DataSeriesContainer(self._parent, self.name, fxns=self._fxns,
+                                thecontainer=self._thecontainer_copy())
+        self._copy_extra(c)
+        return c
 
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
         # name is the data-series name
-        o = DataSeries(self._parent, 'temp', self._fxns)
+        o = DataSeries(self._parent, 'temp', fxns=self._fxns)
         ds = super().new(name=name, nmobj=o, select=select, quiet=quiet)
         if ds:
             ds.update(quiet=quiet)
@@ -770,3 +768,7 @@ class DataSeriesContainer(Container):
         if self._parent.__class__.__name__ == 'Folder':
             return self._parent.data
         return None
+
+    # override, no super
+    def duplicate(self):
+        raise RuntimeError('dataseries cannot be duplicated')

@@ -50,7 +50,7 @@ class Test(object):
         for d in s1.theset:
             if d.name.lower() == dname.lower():
                 print('found in Set1: ' + d.name)
-        f = Folder(nm.project, 'FolderTest', self._fxns)
+        f = Folder(nm.project, 'FolderTest', fxns=self._fxns)
         nm.folder.add(f)
         nm.folder.new()
         nm.folder.rename('select', 'FolderNew1')

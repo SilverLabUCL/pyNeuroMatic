@@ -110,7 +110,7 @@ class Manager(object):
             else:
                 self._history('cancel', quiet=quiet)
                 return None  # cancel
-        p = Project(self, name, self._fxns)
+        p = Project(self, name, fxns=self._fxns)
         self._history('created ' + nmu.quotes(name), quiet=quiet)
         if new_folder and p and p.folder:
             p.folder.new(quiet=quiet)  # create default folder

@@ -15,8 +15,8 @@ class EpochSet(NMObject):
     NM EpochSet class
     """
 
-    def __init__(self, parent, name, fxns={}, rename=True, **copy):
-        super().__init__(parent, name, fxns=fxns, rename=rename)
+    def __init__(self, parent, name, fxns={}, **copy):
+        super().__init__(parent, name, fxns=fxns)
         self._content_name = 'epochset'
         self.__theset = None
         self.__eq_list = []
@@ -43,27 +43,23 @@ class EpochSet(NMObject):
     @property
     def parameters(self):
         k = super().parameters
-        # k.update({'theset': self.__theset})
         k.update({'eq_list': self.__eq_list})
         k.update({'eq_lock': self.__eq_lock})
         return k
 
     # override, no super
     def copy(self):
-        return EpochSet(self._parent, self.name, fxns=self._fxns,
-                        rename=self._rename, theset=self.__theset.copy(),
-                        eq_list=self.__eq_list.copy(), eq_lock=self.__eq_lock)
+        thesetcopy = self.__theset.copy()  # TODO, refs need copying
+        c = EpochSet(self._parent, self.name, fxns=self._fxns,
+                     theset=thesetcopy,
+                     eq_list=self.__eq_list.copy(),
+                     eq_lock=self.__eq_lock)
+        self._copy_extra(c)
+        return c
 
     @property
     def theset(self):
         return self.__theset
-
-    @property
-    def data_names(self):
-        if self.name.lower() == 'all':
-            return ['All']
-        n = [d.name for d in self.__theset]
-        return n.sort()
 
     @property
     def eq_list(self):
@@ -81,6 +77,13 @@ class EpochSet(NMObject):
     def eq_lock(self, eq_lock):
         self.__eq_lock = eq_lock
         self._modified()
+
+    @property
+    def data_names(self):
+        if self.name.lower() == 'all':
+            return ['All']
+        n = [d.name for d in self.__theset]
+        return n.sort()
 
     def contains(self, data):
         return data in self.__theset
@@ -119,11 +122,10 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix=nmp.ESET_PREFIX,
-                 rename=True, duplicate=True, **copy):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = EpochSet(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, duplicate=duplicate, **copy)
+        super().__init__(parent, name, fxns=fxns, rename=True, type_=t,
+                         prefix=nmp.ESET_PREFIX, **copy)
         self._content_name = 'epochsets'
 
     # override
@@ -135,10 +137,10 @@ class EpochSetContainer(Container):
 
     # override, no super
     def copy(self):
-        return EpochSetContainer(self._parent, self.name, fxns=self._fxns,
-                                 prefix=self.prefix, rename=self._rename,
-                                 duplicate=self._duplicate,
-                                 thecontainer=self._thecontainer_copy())
+        c = EpochSetContainer(self._parent, self.name, fxns=self._fxns,
+                              thecontainer=self._thecontainer_copy())
+        self._copy_extra(c)
+        return c
 
     # @property  # override, no super
     # def select(self):
@@ -150,7 +152,7 @@ class EpochSetContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = EpochSet(self._parent, 'temp', self._fxns)
+        o = EpochSet(self._parent, 'temp', fxns=self._fxns)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 
     # override

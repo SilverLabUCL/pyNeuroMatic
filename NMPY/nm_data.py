@@ -27,9 +27,9 @@ class Data(NMObject):
     np_array: NumPy N-dimensional array (ndarray)
     """
 
-    def __init__(self, parent, name, fxns={}, rename=True, np_array=None,
+    def __init__(self, parent, name, fxns={}, np_array=None,
                  xdim={}, ydim={}, dataseries={}, **copy):
-        super().__init__(parent, name, fxns=fxns, rename=rename)
+        super().__init__(parent, name, fxns=fxns)
         self._content_name = 'data'
         if np_array is None:
             self.__np_array = None
@@ -138,11 +138,15 @@ class Data(NMObject):
             a = self.__np_array.copy()
         nc = self.__note_container.copy()
         nc.off = True  # block notes during class creation
-        c = Data(self._parent, self.name, fxns=self._fxns, rename=self._rename,
-                 np_array=a, xdim=self.__x.dim, ydim=self.__y.dim,
+        c = Data(self._parent, self.name, fxns=self._fxns, np_array=a,
+                 xdim=self.__x.dim, ydim=self.__y.dim,
                  dataseries=self.__dataseries, notes=nc)
+        self._copy_extra(c)
         nc.off = False
         return c
+
+    def _name_set(self, name, quiet=nmp.QUIET):
+        raise RuntimeError('use container rename()')
 
     def _dataseries_str(self):
         d = {}
@@ -252,24 +256,23 @@ class DataContainer(Container):
     Container for NM Data objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix=nmp.DATA_PREFIX,
-                 rename=True, duplicate=True, **copy):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = Data(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, duplicate=duplicate, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t,
+                         prefix=nmp.DATA_PREFIX, rename=True, **copy)
         self._content_name = 'data'
 
     # override, no super
     def copy(self):
-        return DataContainer(self._parent, self.name, fxns=self._fxns,
-                             prefix=self.prefix, rename=self._rename,
-                             duplicate=self._duplicate,
-                             thecontainer=self._thecontainer_copy())
+        c = DataContainer(self._parent, self.name, fxns=self._fxns,
+                          thecontainer=self._thecontainer_copy())
+        self._copy_extra(c)
+        return c
 
     # override
     def new(self, name='default', np_array=None, xdim={}, ydim={},
             dataseries={}, select=True, quiet=nmp.QUIET):
-        o = Data(self._parent, 'temp', self._fxns, np_array=np_array,
+        o = Data(self._parent, 'temp', fxns=self._fxns, np_array=np_array,
                  xdim=xdim, ydim=ydim, dataseries=dataseries)
         return super().new(name=name, nmobj=o, select=select, quiet=quiet)
 

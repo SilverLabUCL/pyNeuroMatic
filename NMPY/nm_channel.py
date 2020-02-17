@@ -16,28 +16,31 @@ class Channel(NMObject):
     NM Channel class
     """
 
-    def __init__(self, parent, name, fxns={}, rename=False, xdim={}, ydim={}):
-        super().__init__(parent, name, fxns=fxns, rename=rename)
+    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}, **copy):
+        super().__init__(parent, name, fxns=fxns)
         self._content_name = 'channel'
         self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, dim=xdim)
         self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim)
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         # self.__transform = []
-        # self._param_list += ['graphXY', 'transform']
+        self._param_list += ['xdim', 'ydim']  # ['graphXY', 'transform']
 
     # override
     @property
     def parameters(self):
         k = super().parameters
+        k.update({'xdim': self.__x.dim})
+        k.update({'ydim': self.__y.dim})
         # k.update({'graphXY': self.__graphXY})
         # k.update({'transform': self.__transform})
         return k
 
     # override, no super
     def copy(self):
-        return Channel(self._parent, self.name, fxns=self._fxns,
-                       rename=self._rename,
-                       xdim=self.__x.dim, ydim=self.__y.dim)
+        c = Channel(self._parent, self.name, fxns=self._fxns,
+                    xdim=self.__x.dim, ydim=self.__y.dim)
+        self._copy_extra(c)
+        return c
 
     @property
     def x(self):
@@ -53,25 +56,25 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix='', rename=False,
-                 duplicate=False, **copy):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = Channel(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, duplicate=duplicate, **copy)
+        super().__init__(parent, name, fxns=fxns, rename=False, type_=t,
+                         prefix='', **copy)
         # NO PREFIX, Channel names are 'A', 'B'...
         self._content_name = 'channels'
 
     # override, no super
     def copy(self):
-        return ChannelContainer(self._parent, self.__name, self._fxns,
-                                prefix=self.prefix, rename=self._rename,
-                                duplicate=self._duplicate,
-                                thecontainer=self._thecontainer_copy())
+        c = ChannelContainer(self._parent, self.name, fxns=self._fxns,
+                             thecontainer=self._thecontainer_copy())
+        self._copy_extra(c)
+        return c
 
     # override
-    def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = Channel(self._parent, 'temp', self._fxns)
-        return super().new(name=name, nmobj=o, select=select, quiet=quiet)
+    def new(self, xdim={}, ydim={}, select=True, quiet=nmp.QUIET):
+        o = Channel(self._parent, 'temp', fxns=self._fxns, xdim=xdim,
+                    ydim=ydim)
+        return super().new(name='default', nmobj=o, select=select, quiet=quiet)
 
     # override, no super
     def name_next(self, quiet=nmp.QUIET):
@@ -90,3 +93,7 @@ class ChannelContainer(Container):
             if not self.exists(name):
                 return i
         return -1
+
+    # override, no super
+    def duplicate(self):
+        raise RuntimeError('channels cannot be duplicated')
