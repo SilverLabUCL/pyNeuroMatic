@@ -7,6 +7,7 @@ Copyright 2019 Jason Rothman
 # import copy
 import datetime
 import math
+import types
 
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -35,15 +36,26 @@ class NMObject(object):
         if not name or not self.name_ok(name):
             raise ValueError('bad name:  ' + nmu.quotes(name))
         self.__name = name
-        if isinstance(fxns, dict):
-            self._fxns = fxns
+        if isinstance(fxns, dict):  # set fxn refs to fxns outside this class
+            for k, v in fxns.items():
+                # if not isinstance(v, types.FunctionType):
+                #    continue
+                if k == 'quiet':
+                    self._quiet = fxns[k]
+                if k == 'alert':
+                    self._alert = fxns[k]
+                if k == 'error':
+                    self._error = fxns[k]
+                if k == 'history':
+                    self._history = fxns[k]
+                if k == 'rename':
+                    self._rename = fxns[k]
         else:
-            self._fxns = {}
-        self._rename_ = False
+            raise TypeError(nmu.type_error(fxns, 'function dictionary'))
         self._content_name = 'nmobject'
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
-        self._param_list = ['name', 'rename', 'date', 'modified']
+        self._param_list = ['name', 'date', 'modified']
         # param_list should match those listed in parameters()
         # see param_test()
 
@@ -51,7 +63,6 @@ class NMObject(object):
     def parameters(self):  # child class should override
         # and add class parameters
         p = {'name': self.__name}
-        p.update({'rename': self._rename_})
         p.update({'date': self.__date})
         p.update({'modified': self.__modified})
         return p
@@ -142,9 +153,8 @@ class NMObject(object):
     def name(self, newname):
         return self._rename(self.__name, newname)
 
-    def __rename(self, name, newname, quiet=nmp.QUIET):
-        if not self._rename_:
-            raise RuntimeError(nmu.quotes(self.__name) + ' cannot be renamed')
+    def __rename(self, name_not_used, newname, quiet=nmp.QUIET):
+        # name_not_used, to be consistent with Container rename
         if not isinstance(newname, str):
             raise TypeError(nmu.type_error(newname, 'string'))
         if not newname or not self.name_ok(newname):
@@ -155,6 +165,8 @@ class NMObject(object):
         h = nmu.history_change('name', old, self.__name)
         self._history(h, tp=self._tp, quiet=quiet)
         return True
+
+    _rename = __rename
 
     def _equal(self, nmobj, alert=False):
         if nmobj.__class__.__name__ != self.__class__.__name__:
@@ -200,12 +212,6 @@ class NMObject(object):
     def copy(self):
         return NMObject(self._parent, self.__name, fxns=self._fxns)
 
-    def _copy_extra(self, nmobject):
-        if not isinstance(nmobject, NMObject):
-            raise TypeError(nmu.type_error(nmobject, 'NMObject'))
-        nmobject._rename_ = self._rename_
-        return True
-        
     def save(self, path='', quiet=nmp.QUIET):
         self._alert('under construction')
         return False
@@ -215,54 +221,39 @@ class NMObject(object):
         if self._parent and isinstance(self._parent, NMObject):  # tree-path
             self._parent._modified()
 
-    @property
-    def _quiet(self):
-        if 'quiet' in self._fxns.keys():
-            return self._fxns['quiet']
-        return self.__quiet
-
-    @property
-    def _alert(self):
-        if 'alert' in self._fxns.keys():
-            return self._fxns['alert']
-        return self.__alert
-
-    @property
-    def _error(self):
-        if 'error' in self._fxns.keys():
-            return self._fxns['error']
-        return self.__error
-
-    @property
-    def _history(self):
-        if 'history' in self._fxns.keys():
-            return self._fxns['history']
-        return self.__history
-    
-    @property
-    def _rename(self):
-        if 'rename' in self._fxns.keys():
-            return self._fxns['rename']
-        return self.__rename
-
     def __quiet(self, quiet=False):
         if nmp.QUIET:  # this quiet overrides
             return True
         return quiet
 
-    def __alert(self, message, tp='', quiet=nmp.QUIET, frame=2):
-        quiet = self._quiet(quiet)
+    _quiet = __quiet
+
+    def __alert(self, message, tp='', quiet=False, frame=2):
         return nmu.history(message, title='ALERT', tp=tp, frame=frame,
-                           red=True, quiet=quiet)
+                           red=True, quiet=self._quiet(quiet))
 
-    def __error(self, message, tp='', quiet=nmp.QUIET, frame=2):
-        quiet = self._quiet(quiet)
+    _alert = __alert
+
+    def __error(self, message, tp='', quiet=False, frame=2):
         return nmu.history(message, title='ERROR', tp=tp, frame=frame,
-                           red=True, quiet=quiet)
+                           red=True, quiet=self._quiet(quiet))
 
-    def __history(self, message, tp='', quiet=nmp.QUIET, frame=2):
-        quiet = self._quiet(quiet)
-        return nmu.history(message, tp=tp, frame=frame, quiet=quiet)
+    _error = __error
+
+    def __history(self, message, tp='', quiet=False, frame=2):
+        return nmu.history(message, tp=tp, frame=frame,
+                           quiet=self._quiet(quiet))
+
+    _history = __history
+
+    @property
+    def _fxns(self):
+        f = {'quiet': self._quiet}
+        f.update({'alert': self._alert})
+        f.update({'error': self._error})
+        f.update({'history': self._history})
+        f.update({'rename': self._rename})
+        return f
 
 
 class Container(NMObject):
@@ -294,8 +285,8 @@ class Container(NMObject):
 
     def __init__(self, parent, name, fxns={}, type_='NMObject',
                  prefix='NMObject', rename=True, **copy):
+        fxns.update({'rename': self.rename})
         super().__init__(parent, name, fxns=fxns)
-        # self._fxns.update({'rename': self.rename})
         if not isinstance(type_, str):
             raise TypeError(nmu.type_error(type_, 'string'))
         if not type_ or not nmu.name_ok(type_):
@@ -318,7 +309,7 @@ class Container(NMObject):
                     self.__thecontainer = v['thecontainer']
                     if 'select' in v.keys():
                         self.__select = v['select']
-        self._param_list += ['type', 'prefix', 'select']
+        self._param_list += ['type', 'prefix', 'rename', 'select']
 
     # override
     @property
@@ -326,6 +317,7 @@ class Container(NMObject):
         k = super().parameters
         k.update({'type': self._type})
         k.update({'prefix': self.__prefix})
+        k.update({'rename': self._rename_})
         if self.__select:
             k.update({'select': self.__select.name})
             # need select's name for equal() to work
@@ -376,11 +368,11 @@ class Container(NMObject):
                     select = c
         return {'thecontainer': thecontainer, 'select': select}
 
-    # override
     def _copy_extra(self, nmobject):
-        if not super()._copy_extra(nmobject):
-            return False
-        nmobject._Container__prefix = self.prefix
+        if not isinstance(nmobject, Container):
+            raise TypeError(nmu.type_error(nmobject, 'Container'))
+        nmobject._Container__prefix = self._Container__prefix
+        nmobject._rename_ = self._rename_
         return True
 
     @property
@@ -481,7 +473,7 @@ class Container(NMObject):
         elif isinstance(indexes, int):
             indexes = [indexes]
         else:
-            raise TypeError(nmu.type_error(indexes, 'int'))
+            raise TypeError(nmu.type_error(indexes, 'integer'))
         olist = []
         all_ = False
         for n in names:

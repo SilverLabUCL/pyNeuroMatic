@@ -56,11 +56,9 @@ class Folder(NMObject):
 
     # override, no super
     def copy(self):
-        c = Folder(self._parent, self.name, fxns=self._fxns,
-                   data=self.__data_container.copy(),
-                   dataseries=self.__dataseries_container.copy())
-        self._copy_extra(c)
-        return c
+        return Folder(self._parent, self.name, fxns=self._fxns,
+                      data=self.__data_container.copy(),
+                      dataseries=self.__dataseries_container.copy())
 
     @property
     def data(self):
@@ -78,8 +76,8 @@ class FolderContainer(Container):
 
     def __init__(self, parent, name, fxns={}, **copy):
         t = Folder(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, rename=True, type_=t,
-                         prefix=nmp.FOLDER_PREFIX, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t,
+                         prefix=nmp.FOLDER_PREFIX, rename=True, **copy)
         self._content_name = 'folders'
 
     # override, no super

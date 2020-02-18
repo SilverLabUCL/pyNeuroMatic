@@ -87,7 +87,6 @@ class DataSeries(NMObject):
                        xdim=self.__x, ydim=self.__y,
                        channels=self.__channel_container.copy(),
                        esets=self.__eset_container.copy())
-        self._copy_extra(c)
         # self.__dims_master_on
         # self.__data_select = {}
         # self.__channel_select = []
@@ -742,8 +741,8 @@ class DataSeriesContainer(Container):
 
     def __init__(self, parent, name, fxns={}, **copy):
         t = DataSeries(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, rename=False, type_=t,
-                         prefix='', **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
+                         rename=False, **copy)
         self._content_name = 'dataseries'
 
     # override, no super

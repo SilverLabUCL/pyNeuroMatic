@@ -54,7 +54,6 @@ class EpochSet(NMObject):
                      theset=thesetcopy,
                      eq_list=self.__eq_list.copy(),
                      eq_lock=self.__eq_lock)
-        self._copy_extra(c)
         return c
 
     @property
@@ -124,8 +123,8 @@ class EpochSetContainer(Container):
 
     def __init__(self, parent, name, fxns={}, **copy):
         t = EpochSet(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, rename=True, type_=t,
-                         prefix=nmp.ESET_PREFIX, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t,
+                         prefix=nmp.ESET_PREFIX, rename=True, **copy)
         self._content_name = 'epochsets'
 
     # override

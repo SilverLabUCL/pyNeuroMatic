@@ -69,7 +69,7 @@ class Data(NMObject):
                 else:
                     raise TypeError(nmu.type_error(ds, 'DataSeries'))
         else:
-            raise TypeError(nmu.type_error(dataseries, 'dict'))
+            raise TypeError(nmu.type_error(dataseries, 'dictionary'))
         self._param_list += ['xdim', 'ydim', 'dataseries']
 
     # override
@@ -141,12 +141,8 @@ class Data(NMObject):
         c = Data(self._parent, self.name, fxns=self._fxns, np_array=a,
                  xdim=self.__x.dim, ydim=self.__y.dim,
                  dataseries=self.__dataseries, notes=nc)
-        self._copy_extra(c)
         nc.off = False
         return c
-
-    def _name_set(self, name, quiet=nmp.QUIET):
-        raise RuntimeError('use container rename()')
 
     def _dataseries_str(self):
         d = {}

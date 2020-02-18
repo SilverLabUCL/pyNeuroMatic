@@ -53,13 +53,13 @@ class Test(unittest.TestCase):
 
     def test_all(self):
         nm.configs.quiet = False
-        # self._test_nmobject()
+        self._test_nmobject()
         # self._test_container()
         # self._test_note()
         # self._test_note_container()
         # self._test_dimension()
         # self._test_data()
-        self._test_data_container()
+        # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
         # self._test_epochset()
@@ -76,16 +76,21 @@ class Test(unittest.TestCase):
         for b in BADNAMES:
             with self.assertRaises(ValueError):
                 o0 = NMObject(PARENT, b)
+        for b in BADTYPES:
+            if isinstance(b, dict):
+                continue  # ok
+            with self.assertRaises(TypeError):
+                o0 = NMObject(PARENT, name0, fxns=b)
         o0 = NMObject(PARENT, name0, fxns=nm._fxns)
-        o0._rename_ = True
         o1 = NMObject(PARENT, name1, fxns=nm._fxns)
-        o1._rename_ = False
         self.assertEqual(o0.name, name0)
-        self.assertTrue(o0._rename_)
-        self.assertEqual(o1.name, name1)
-        self.assertFalse(o1._rename_)
+        self.assertEqual(o0._quiet, nm._fxns['quiet'])
+        self.assertEqual(o0._alert, nm._fxns['alert'])
+        self.assertEqual(o0._error, nm._fxns['error'])
+        self.assertEqual(o0._history, nm._fxns['history'])
+        self.assertEqual(o0._rename, o0._NMObject__rename)
         # parameters
-        p = ['name', 'rename', 'date', 'modified']
+        p = ['name', 'date', 'modified']
         self.assertEqual(o0._param_list, p)
         self.assertTrue(o0._param_test())
         # content
@@ -104,28 +109,25 @@ class Test(unittest.TestCase):
                 continue  # ok
             self.assertFalse(o1.name_ok(b))
         bnames = ['select', 'default', 'all']  # may need updating
+        self.assertEqual(o1._bad_names, bnames)  # check if list changes
         for b in bnames:
             self.assertTrue(o1.name_ok(b, ok=bnames))
         good = [name0, name1, '']
         for g in good:
             self.assertTrue(o1.name_ok(g))
-        # bad_names
-        self.assertEqual(o1._bad_names, bnames)  # check if list changes
         # name
         for b in BADTYPES:
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                o0._name_set(b)
+                o0._rename('', b)
         for b in BADNAMES:
             with self.assertRaises(ValueError):
-                o0._name_set(b)
+                o0._rename('', b)
         good = ['test', name0]
         for g in good:
-            self.assertTrue(o0._name_set(g))
+            self.assertTrue(o0._rename('', g))
             self.assertEqual(g, o0.name)
-        with self.assertRaises(RuntimeError):
-            o1._name_set(name0)  # rename = False
         # equal
         for b in BADTYPES:
             self.assertFalse(o1._equal(b, alert=True))
@@ -142,7 +144,6 @@ class Test(unittest.TestCase):
         self.assertEqual(o0._parent, c._parent)
         self.assertEqual(o0._fxns, c._fxns)
         self.assertEqual(o0.name, c.name)
-        self.assertEqual(o0._rename_, c._rename_)
         self.assertNotEqual(o0._NMObject__date, c._NMObject__date)
         self.assertNotEqual(o0._NMObject__modified, c._NMObject__modified)
         # save TODO
@@ -568,7 +569,7 @@ class Test(unittest.TestCase):
         c = notes.copy()
         self.assertIsInstance(c, NoteContainer)
         self.assertTrue(notes._equal(c, alert=True))
-        notes._rename_ = True;  # test copy_extra()
+        notes._rename_ = True  # test copy_extra()
         notes.prefix = 'test'  # test copy_extra()
         c = notes.copy()
         self.assertTrue(notes._equal(c, alert=True))
@@ -591,14 +592,10 @@ class Test(unittest.TestCase):
                 continue  # ok
             with self.assertRaises(TypeError):
                 y0 = Dimension(PARENT, 'ydim0', fxns=nm._fxns, notes=b)
-        y0 = Dimension(PARENT, 'ydim0', fxns=nm._fxns, dim=YDIM0,
-                           notes=notes)
-        x0 = XDimension(PARENT, 'xdim0', fxns=nm._fxns, dim=XDIM0,
-                            notes=notes)
-        y1 = Dimension(PARENT, 'ydim1', fxns=nm._fxns, dim=YDIM1,
-                           notes=notes)
-        x1 = XDimension(PARENT, 'xdim1', fxns=nm._fxns, dim=XDIM1,
-                            notes=notes)
+        y0 = Dimension(PARENT, 'ydim0', fxns=nm._fxns, dim=YDIM0, notes=notes)
+        x0 = XDimension(PARENT, 'xdim0', fxns=nm._fxns, dim=XDIM0, notes=notes)
+        y1 = Dimension(PARENT, 'ydim1', fxns=nm._fxns, dim=YDIM1, notes=notes)
+        x1 = XDimension(PARENT, 'xdim1', fxns=nm._fxns, dim=XDIM1, notes=notes)
         self.assertTrue(y0._rename_)
         self.assertEqual(y0._note_container, notes)
         self.assertEqual(y0._offset, YDIM0['offset'])
@@ -947,11 +944,7 @@ class Test(unittest.TestCase):
             self.assertIsInstance(c0.new(name=n, xdim=XDIM0), Data)
             self.assertIsInstance(c1.new(name=n, xdim=XDIM0), Data)
         o = c0.getitem(index=0)
-        print(o.x.dim)
-        XDIM0['offset'] = 5
-        print(o.x.dim)
-        # o._rename_ = True
-        # o.name = 'WaveA0'
+        o.name = 'WaveA0'
         return
         # copy
         c = c0.copy()

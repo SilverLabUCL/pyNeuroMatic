@@ -29,10 +29,8 @@ class Note(NMObject):
 
     # override, no super
     def copy(self):
-        c = Note(self._parent, self.name, fxns=self._fxns,
-                 thenote=self.__thenote)
-        self._copy_extra(c)
-        return c
+        return Note(self._parent, self.name, fxns=self._fxns,
+                    thenote=self.__thenote)
 
     @property
     def thenote(self):
@@ -64,8 +62,8 @@ class NoteContainer(Container):
 
     def __init__(self, parent, name, fxns={}, **copy):
         t = Note(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, rename=False, type_=t,
-                         prefix='Note', **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix='Note',
+                         rename=False, **copy)
         self._content_name = 'notes'
         self.__off = False
 

@@ -35,10 +35,8 @@ class Project(NMObject):
 
     # override, no super
     def copy(self):
-        c = Project(self._parent, self.name, fxns=self._fxns,
-                    folders=self.__folder_container.copy())
-        self._copy_extra(c)
-        return c
+        return Project(self._parent, self.name, fxns=self._fxns,
+                       folders=self.__folder_container.copy())
 
     # override
     def _equal(self, project, alert=False):

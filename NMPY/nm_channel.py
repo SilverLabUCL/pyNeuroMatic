@@ -37,10 +37,8 @@ class Channel(NMObject):
 
     # override, no super
     def copy(self):
-        c = Channel(self._parent, self.name, fxns=self._fxns,
-                    xdim=self.__x.dim, ydim=self.__y.dim)
-        self._copy_extra(c)
-        return c
+        return Channel(self._parent, self.name, fxns=self._fxns,
+                       xdim=self.__x.dim, ydim=self.__y.dim)
 
     @property
     def x(self):
@@ -58,8 +56,8 @@ class ChannelContainer(Container):
 
     def __init__(self, parent, name, fxns={}, **copy):
         t = Channel(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, rename=False, type_=t,
-                         prefix='', **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
+                         rename=False, **copy)
         # NO PREFIX, Channel names are 'A', 'B'...
         self._content_name = 'channels'
 
