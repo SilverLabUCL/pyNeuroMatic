@@ -15,11 +15,6 @@ class Stats(object):
     """
 
     def __init__(self, fxns):
-        if list(fxns.keys()) == ['quiet', 'alert', 'error', 'history']:
-            self._fxns = fxns
-        else:
-            e = 'bad fxn arg:  ' + str(fxns)
-            raise ValueError(e)
         self.b0 = 0
         self.b1 = 5
         self.x0 = 0

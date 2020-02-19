@@ -7,7 +7,6 @@ import datetime
 
 from nm_project import Project
 from nm_stats import Stats
-from nm_testing import Test
 import nm_preferences as nmp
 import nm_utilities as nmu
 
@@ -46,40 +45,9 @@ class Manager(object):
         self.__configs = nmp.Configs()
         self.__configs.quiet = quiet
         self.__stats = Stats(self._fxns)
-        self.__test = Test(self, self._fxns)
         self._history('created ' + nmu.quotes(self.__name), quiet=quiet)
         if new_project:
             self.project_new(quiet=quiet)
-        # self.__test.folder()
-        # self.__test.data()
-
-    def _quiet(self, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
-        if self.configs.quiet:  # manager config quiet overrides
-            return True
-        return quiet
-
-    def _alert(self, message, tp='', quiet=False, frame=2):
-        quiet = self._quiet(quiet)
-        return nmu.history(message, title='ALERT', tp=tp, frame=frame,
-                           red=True, quiet=quiet)
-
-    def _error(self, message, tp='', quiet=False, frame=2):
-        quiet = self._quiet(quiet)
-        return nmu.history(message, title='ERROR', tp=tp, frame=frame,
-                           red=True, quiet=quiet)
-
-    def _history(self, message, tp='', quiet=False, frame=2):
-        quiet = self._quiet(quiet)
-        return nmu.history(message, tp=tp, frame=frame, quiet=quiet)
-
-    @property
-    def _fxns(self):
-        f = {'quiet': self._quiet}
-        f.update({'alert': self._alert})
-        f.update({'error': self._error})
-        f.update({'history': self._history})
-        return f
 
     @property
     def parameters(self):
@@ -267,9 +235,27 @@ class Manager(object):
     def stats(self):
         return self.__stats
 
+    def _alert(self, message, tp='', quiet=False, frame=2):
+        return nmu.history(message, title='ALERT', tp=tp, frame=frame,
+                           red=True, quiet=self._quiet(quiet))
+
+    def _error(self, message, tp='', quiet=False, frame=2):
+        return nmu.history(message, title='ERROR', tp=tp, frame=frame,
+                           red=True, quiet=self._quiet(quiet))
+
+    def _history(self, message, tp='', quiet=False, frame=2):
+        return nmu.history(message, tp=tp, frame=frame,
+                           quiet=self._quiet(quiet))
+
+    def _quiet(self, quiet=nmp.QUIET):
+        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        if self.configs.quiet:  # manager config quiet overrides
+            return True
+        return quiet
+
     @property
-    def test(self):
-        return self.__test
+    def _fxns(self):
+        return {'quiet': self._quiet}
 
 
 if __name__ == '__main__':

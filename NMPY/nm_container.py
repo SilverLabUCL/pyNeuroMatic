@@ -36,18 +36,14 @@ class NMObject(object):
         if not name or not self.name_ok(name):
             raise ValueError('bad name:  ' + nmu.quotes(name))
         self.__name = name
+        self._quiet = NMObject.__quiet
+        self._rename = self.__rename
         if isinstance(fxns, dict):  # set fxn refs to fxns outside this class
             for k, v in fxns.items():
                 # if not isinstance(v, types.FunctionType):
                 #    continue
                 if k == 'quiet':
                     self._quiet = fxns[k]
-                if k == 'alert':
-                    self._alert = fxns[k]
-                if k == 'error':
-                    self._error = fxns[k]
-                if k == 'history':
-                    self._history = fxns[k]
                 if k == 'rename':
                     self._rename = fxns[k]
         else:
@@ -166,29 +162,27 @@ class NMObject(object):
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
-    _rename = __rename
-
-    def _equal(self, nmobj, alert=False):
-        if nmobj.__class__.__name__ != self.__class__.__name__:
+    def _equal(self, nmobject, alert=False):
+        if nmobject.__class__.__name__ != self.__class__.__name__:
             if alert:
                 a = ('unequal object types: ' + self.__class__.__name__ +
-                     ' vs ' + nmobj.__class__.__name__)
+                     ' vs ' + nmobject.__class__.__name__)
                 self._alert(a, tp=self._tp)
             return False
-        if self == nmobj:
+        if self == nmobject:
             return True
-        # if self._parent != nmobj._parent:  # problematic for containers
+        # if self._parent != nmobject._parent:  # problematic for containers
         #    a = ('unequal parents: ' +
-        #         str(self._parent) + ' vs ' + str(nmobj._parent))
+        #         str(self._parent) + ' vs ' + str(nmobject._parent))
         #    self._alert(a, tp=self._tp)
         #    return False
-        # if self._fxns != nmobj._fxns:  # ignore?
+        # if self._fxns != nmobject._fxns:  # ignore?
         #    a = ('unequal fxns: ' + str(self._fxns) + ' vs ' +
-        #         str(nmobj._fxns))
+        #         str(nmobject._fxns))
         #    self._alert(a, tp=self._tp)
         #    return False
         sp = self.parameters
-        op = nmobj.parameters
+        op = nmobject.parameters
         if op.keys() != sp.keys():
             return False
         for k in sp.keys():
@@ -221,38 +215,31 @@ class NMObject(object):
         if self._parent and isinstance(self._parent, NMObject):  # tree-path
             self._parent._modified()
 
-    def __quiet(self, quiet=False):
+    def _alert(self, message, tp='', quiet=False, frame=2):
+        return nmu.history(message, title='ALERT', tp=tp, frame=frame,
+                           red=True, quiet=self._quiet(quiet))
+
+    def _error(self, message, tp='', quiet=False, frame=2):
+        return nmu.history(message, title='ERROR', tp=tp, frame=frame,
+                           red=True, quiet=self._quiet(quiet))
+
+    def _history(self, message, tp='', quiet=False, frame=2):
+        return nmu.history(message, tp=tp, frame=frame,
+                           quiet=self._quiet(quiet))
+
+    @staticmethod
+    def __quiet(quiet=False):
         if nmp.QUIET:  # this quiet overrides
             return True
         return quiet
 
-    _quiet = __quiet
-
-    def __alert(self, message, tp='', quiet=False, frame=2):
-        return nmu.history(message, title='ALERT', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
-
-    _alert = __alert
-
-    def __error(self, message, tp='', quiet=False, frame=2):
-        return nmu.history(message, title='ERROR', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
-
-    _error = __error
-
-    def __history(self, message, tp='', quiet=False, frame=2):
-        return nmu.history(message, tp=tp, frame=frame,
-                           quiet=self._quiet(quiet))
-
-    _history = __history
-
     @property
     def _fxns(self):
-        f = {'quiet': self._quiet}
-        f.update({'alert': self._alert})
-        f.update({'error': self._error})
-        f.update({'history': self._history})
-        f.update({'rename': self._rename})
+        f = {}
+        if self._quiet != NMObject.__quiet:
+            f.update({'quiet': self._quiet})
+        if self._rename != self.__rename:
+            f.update({'rename': self._rename})
         return f
 
 
@@ -285,7 +272,7 @@ class Container(NMObject):
 
     def __init__(self, parent, name, fxns={}, type_='NMObject',
                  prefix='NMObject', rename=True, **copy):
-        fxns.update({'rename': self.rename})
+        fxns.update({'rename': self.rename})  # so self._rename = self.rename
         super().__init__(parent, name, fxns=fxns)
         if not isinstance(type_, str):
             raise TypeError(nmu.type_error(type_, 'string'))
@@ -561,7 +548,7 @@ class Container(NMObject):
             return nmu.history_change('select', old.name, n)
         return 'selected ' + nmu.quotes(n)
 
-    def new(self, name='default', nmobj=None, select=True, quiet=nmp.QUIET):
+    def new(self, name='default', nmobject=None, select=True, quiet=nmp.QUIET):
         """
         Create a new NMObject and add to container.
 
@@ -582,20 +569,20 @@ class Container(NMObject):
         if self.__exists(name):
             e = self._type + ' ' + nmu.quotes(name) + ' already exists'
             raise RuntimeError(e)
-        if not nmobj:
-            o = NMObject(self._parent, name, fxns=self._fxns, rename=False)
-            # rename = False, enforce using Container.rename()
-        elif isinstance(nmobj, NMObject):  # child 'new' should pass nmobj
-            if nmobj.__class__.__name__ == self._type:
-                o = nmobj
+        if nmobject is None:
+            o = NMObject(self._parent, name, fxns=self._fxns)
+        elif isinstance(nmobject, NMObject):
+            # child 'new' should pass nmobject
+            if nmobject.__class__.__name__ == self._type:
+                o = nmobject
                 # mangled...
                 o._NMObject__name = name  # this.name overrides o.name
                 o._parent = self._parent  # reset parent reference
                 o._rename_ = False  # enforce using Container.rename()
             else:
-                raise TypeError(nmu.type_error(nmobj, self._type))
+                raise TypeError(nmu.type_error(nmobject, self._type))
         else:
-            raise TypeError(nmu.type_error(nmobj, 'NMObject'))
+            raise TypeError(nmu.type_error(nmobject, 'NMObject'))
         if not o:
             return None
         self.__thecontainer.append(o)

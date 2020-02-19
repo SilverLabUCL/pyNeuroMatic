@@ -18,12 +18,11 @@ class Test(object):
     def __init__(self, manager, fxns):
         self._manager = manager
         self._fxns = fxns
-        self._history = fxns['history']
 
     def folder(self):
         nm = self._manager
         nm.configs.quiet = False
-        self._history('start...')
+        # self._history('start...')
         noise = [0, 0.1]
         dims = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',
@@ -61,7 +60,7 @@ class Test(object):
     def data(self):
         nm = self._manager
         nm.configs.quiet = False
-        self._history('start...')
+        # self._history('start...')
         noise = [0, 0.1]
         dims = {'xstart': -10, 'xdelta': 0.01,
                 'xlabel': 'time', 'xunits': 'ms',

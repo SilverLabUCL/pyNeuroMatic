@@ -85,9 +85,6 @@ class Test(unittest.TestCase):
         o1 = NMObject(PARENT, name1, fxns=nm._fxns)
         self.assertEqual(o0.name, name0)
         self.assertEqual(o0._quiet, nm._fxns['quiet'])
-        self.assertEqual(o0._alert, nm._fxns['alert'])
-        self.assertEqual(o0._error, nm._fxns['error'])
-        self.assertEqual(o0._history, nm._fxns['history'])
         self.assertEqual(o0._rename, o0._NMObject__rename)
         # parameters
         p = ['name', 'date', 'modified']
@@ -133,8 +130,8 @@ class Test(unittest.TestCase):
             self.assertFalse(o1._equal(b, alert=True))
         self.assertFalse(o1._equal(o0, alert=True))
         self.assertTrue(o1._equal(o1, alert=True))
-        o0 = NMObject(PARENT, name1, fxns=nm._fxns)
-        o1 = NMObject(PARENT, name1, fxns=nm._fxns)
+        o0 = NMObject(PARENT, name0, fxns=nm._fxns)
+        o1 = NMObject(PARENT, name0, fxns=nm._fxns)
         self.assertTrue(o1._equal(o0, alert=True))
         # copy
         time.sleep(2)  # forces date to be different
@@ -146,6 +143,8 @@ class Test(unittest.TestCase):
         self.assertEqual(o0.name, c.name)
         self.assertNotEqual(o0._NMObject__date, c._NMObject__date)
         self.assertNotEqual(o0._NMObject__modified, c._NMObject__modified)
+        self.assertEqual(c._quiet, nm._fxns['quiet'])
+        self.assertEqual(c._rename, c._NMObject__rename)
         # save TODO
 
     def _test_container(self):
@@ -175,22 +174,21 @@ class Test(unittest.TestCase):
                 c0 = Container(PARENT, name0, prefix=b)
         c0 = Container(PARENT, name0, prefix='')
         self.assertEqual(c0.prefix, '')  # '' is ok
-        c0 = Container(PARENT, name0, fxns=nm._fxns, type_=type_, prefix=p0)
-        c0._rename_ = True
-        c1 = Container(PARENT, name1, fxns=nm._fxns, type_=type_, prefix=p1)
-        c0._rename_ = False
+        c0 = Container(PARENT, name0, fxns=nm._fxns, type_=type_, prefix=p0,
+                       rename=True)
+        c1 = Container(PARENT, name1, fxns=nm._fxns, type_=type_, prefix=p1,
+                       rename=False)
+        self.assertEqual(c0.rename, c0._rename)
         self.assertEqual(c0.name, name0)
         self.assertEqual(c0._type, type_)
         self.assertTrue(c0._rename_)
         self.assertEqual(c0.prefix, p0)
         self.assertIsNone(c0.select)
-        self.assertEqual(c1.name, name1)
-        self.assertEqual(c1._type, type_)
+        self.assertEqual(c0.names, [])
+        self.assertEqual(c0.count, 0)
         self.assertFalse(c1._rename_)
-        self.assertEqual(c1.prefix, p1)
-        self.assertIsNone(c1.select)
         # parameters
-        p = ['name', 'rename', 'date', 'modified', 'type', 'prefix', 'select']
+        p = ['name', 'date', 'modified', 'type', 'prefix', 'rename', 'select']
         self.assertEqual(c0._param_list, p)
         self.assertTrue(c0._param_test())
         # prefix
@@ -212,21 +210,24 @@ class Test(unittest.TestCase):
         self.assertEqual(c1.prefix, p1)
         c0.prefix = p0  # reset
         # name_next
-        i = c0.name_next_seq()
-        self.assertIsInstance(i, int)
-        self.assertEqual(i, 0)
+        self.assertEqual(c0.name_next_seq(), 0)
         self.assertEqual(c0.name_next(), n[0])
         # new
         for b in BADTYPES:
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0.new(b)
+                c0.new(name=b)
         for b in BADNAMES:
             if b.lower() == 'default':
                 continue  # ok
             with self.assertRaises(ValueError):
-                c0.new(b)
+                c0.new(name=b)
+        for b in BADTYPES:
+            if b is None:
+                continue  # ok
+            with self.assertRaises(TypeError):
+                c0.new(nmobject=b)
         o = c0.new('default')
         self.assertIsInstance(o, NMObject)
         self.assertEqual(o.name, n[0])
@@ -246,7 +247,7 @@ class Test(unittest.TestCase):
         # skip n[3]
         o = NMObject(PARENT, n[4], fxns=nm._fxns)
         o._rename_ = True
-        o = c0.new(name=n[4], nmobj=o)
+        o = c0.new(name=n[4], nmobject=o)
         self.assertEqual(o.name, n[4])
         o = c0.new()
         self.assertEqual(o.name, n[5])
