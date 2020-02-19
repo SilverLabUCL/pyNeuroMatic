@@ -136,10 +136,9 @@ class EpochSetContainer(Container):
 
     # override, no super
     def copy(self):
-        c = EpochSetContainer(self._parent, self.name, fxns=self._fxns,
-                              thecontainer=self._thecontainer_copy())
-        self._copy_extra(c)
-        return c
+        return EpochSetContainer(self._parent, self.name, fxns=self._fxns,
+                              thecontainer=self._thecontainer_copy(),
+                              prefix=self.prefix, rename=self._rename_)
 
     # @property  # override, no super
     # def select(self):

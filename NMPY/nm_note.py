@@ -69,10 +69,9 @@ class NoteContainer(Container):
 
     # override, no super
     def copy(self):
-        c = NoteContainer(self._parent, self.name, fxns=self._fxns,
-                          thecontainer=self._thecontainer_copy())
-        self._copy_extra(c)
-        return c
+        return NoteContainer(self._parent, self.name, fxns=self._fxns,
+                             thecontainer=self._thecontainer_copy(),
+                             prefix=self.prefix, rename=self._rename_)
 
     # override
     def new(self, thenote='', select=True, quiet=True):
