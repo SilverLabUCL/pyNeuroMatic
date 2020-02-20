@@ -54,11 +54,11 @@ class Test(unittest.TestCase):
     def test_all(self):
         nm.configs.quiet = False
         # self._test_nmobject()
-        self._test_container()
+        # self._test_container()
         # self._test_note()
         # self._test_note_container()
         # self._test_dimension()
-        # self._test_data()
+        self._test_data()
         # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
@@ -66,8 +66,8 @@ class Test(unittest.TestCase):
         # self._test_utilities()
 
     def _test_nmobject(self):
-        name0 = 'object0'
-        name1 = 'object1'
+        n0 = 'object0'
+        n1 = 'object1'
         content_name = 'nmobject'
         plist = ['name', 'date', 'modified']
         for b in BADTYPES:
@@ -82,10 +82,10 @@ class Test(unittest.TestCase):
             if isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                o0 = NMObject(PARENT, name0, fxns=b)
-        o0 = NMObject(PARENT, name0, fxns=nm._fxns)
-        o1 = NMObject(PARENT, name1, fxns=nm._fxns)
-        self.assertEqual(o0.name, name0)
+                o0 = NMObject(PARENT, n0, fxns=b)
+        o0 = NMObject(PARENT, n0, fxns=nm._fxns)
+        o1 = NMObject(PARENT, n1, fxns=nm._fxns)
+        self.assertEqual(o0.name, n0)
         self.assertEqual(o0._quiet, nm._fxns['quiet'])
         self.assertEqual(o0._rename, o0._NMObject__rename)
         self.assertEqual(o0._content_name, content_name)
@@ -113,7 +113,7 @@ class Test(unittest.TestCase):
             self.assertFalse(o0.name_ok(b))
         for b in badnames:
             self.assertTrue(o0.name_ok(b, ok=badnames))
-        for n in [name0, name1, '']:
+        for n in [n0, n1, '']:
             self.assertTrue(o0.name_ok(n))
         # name
         for b in BADTYPES:
@@ -124,7 +124,7 @@ class Test(unittest.TestCase):
         for b in BADNAMES:
             with self.assertRaises(ValueError):
                 o0._rename('', b)
-        for n in ['test', name0]:
+        for n in ['test', n0]:
             self.assertTrue(o0._rename('', n))
             self.assertEqual(n, o0.name)
         # equal
@@ -132,10 +132,10 @@ class Test(unittest.TestCase):
             self.assertFalse(o0._equal(b, alert=True))
         self.assertFalse(o0._equal(o1, alert=True))
         self.assertTrue(o0._equal(o0, alert=True))
-        o0 = NMObject(PARENT, name0, fxns=nm._fxns)
-        o1 = NMObject(PARENT, name0, fxns=nm._fxns)
+        o0 = NMObject(PARENT, n0, fxns=nm._fxns)
+        o1 = NMObject(PARENT, n0, fxns=nm._fxns)
         self.assertTrue(o0._equal(o1, alert=True))
-        o1 = NMObject(PARENT, name0, fxns={})  # different quiet()
+        o1 = NMObject(PARENT, n0, fxns={})  # different quiet()
         self.assertFalse(o0._equal(o1, alert=True))
         # copy
         time.sleep(2)  # forces date to be different
@@ -154,41 +154,41 @@ class Test(unittest.TestCase):
         # save TODO
 
     def _test_container(self):
-        name0 = 'container0'
-        name1 = 'container1'
+        n0 = 'container0'
+        n1 = 'container1'
         p0 = 'TestA'
         p1 = 'TestB'
         type_ = 'NMObject'
         content_name = 'nmobjects'
         plist = ['name', 'date', 'modified', 'type', 'prefix', 'rename',
                  'select']
-        n = [p0 + str(i) for i in range(0, 6)]
+        nlist = [p0 + str(i) for i in range(0, 6)]
         for b in BADTYPES:
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0 = Container(PARENT, name0, type_=b)
+                c0 = Container(PARENT, n0, type_=b)
         for b in [BADNAME, '']:
             with self.assertRaises(ValueError):
-                c0 = Container(PARENT, name0, type_=b)
+                c0 = Container(PARENT, n0, type_=b)
         for b in BADTYPES:
             if b is None or isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0 = Container(PARENT, name0, prefix=b)
+                c0 = Container(PARENT, n0, prefix=b)
         for b in BADNAMES:
             if b == '':
                 continue  # ok
             with self.assertRaises(ValueError):
-                c0 = Container(PARENT, name0, prefix=b)
-        c0 = Container(PARENT, name0, prefix='')
+                c0 = Container(PARENT, n0, prefix=b)
+        c0 = Container(PARENT, n0, prefix='')
         self.assertEqual(c0.prefix, '')  # '' is ok
-        c0 = Container(PARENT, name0, fxns=nm._fxns, type_=type_, prefix=p0,
+        c0 = Container(PARENT, n0, fxns=nm._fxns, type_=type_, prefix=p0,
                        rename=True)
-        c1 = Container(PARENT, name1, fxns=nm._fxns, type_=type_, prefix=p1,
+        c1 = Container(PARENT, n1, fxns=nm._fxns, type_=type_, prefix=p1,
                        rename=False)
         self.assertEqual(c0._rename, c0.rename)  # fxn refs
-        self.assertEqual(c0.name, name0)
+        self.assertEqual(c0.name, n0)
         self.assertEqual(c0._type, type_)
         self.assertTrue(c0._rename_)
         self.assertEqual(c0.prefix, p0)
@@ -220,7 +220,7 @@ class Test(unittest.TestCase):
         c0._prefix_set(p0)  # reset
         # name_next
         self.assertEqual(c0.name_next_seq(), 0)
-        self.assertEqual(c0.name_next(), n[0])
+        self.assertEqual(c0.name_next(), nlist[0])
         # new
         for b in BADTYPES:
             if isinstance(b, str):
@@ -239,32 +239,33 @@ class Test(unittest.TestCase):
                 c0.new(nmobject=b)
         o = c0.new()
         self.assertIsInstance(o, NMObject)
-        self.assertEqual(o.name, n[0])
+        self.assertEqual(o.name, nlist[0])
         self.assertEqual(c0.select, o)
-        self.assertEqual(c0.select.name, n[0])
+        self.assertEqual(c0.select.name, nlist[0])
         with self.assertRaises(RuntimeError):
-            c0.new(name=n[0])  # already exists
+            c0.new(name=nlist[0])  # already exists
         self.assertEqual(c0.name_next_seq(), 1)
-        self.assertEqual(c0.name_next(), n[1])
+        self.assertEqual(c0.name_next(), nlist[1])
         o = c0.new(select=False)
-        self.assertEqual(o.name, n[1])
-        self.assertEqual(c0.select.name, n[0])
+        self.assertEqual(o.name, nlist[1])
+        self.assertEqual(c0.select.name, nlist[0])
         self.assertEqual(c0.name_next_seq(), 2)
-        self.assertEqual(c0.name_next(), n[2])
-        o = c0.new(n[2])
-        self.assertEqual(o.name, n[2])
+        self.assertEqual(c0.name_next(), nlist[2])
+        o = c0.new(nlist[2])
+        self.assertEqual(o.name, nlist[2])
         # skip n[3]
-        o = NMObject(PARENT, n[4], fxns=nm._fxns)
-        o = c0.new(name=n[4], nmobject=o)
-        self.assertEqual(o.name, n[4])
+        o = NMObject(PARENT, nlist[4], fxns=nm._fxns)
+        o = c0.new(name=nlist[4], nmobject=o)
+        self.assertEqual(o.name, nlist[4])
         o = c0.new()
-        self.assertEqual(o.name, n[5])
+        self.assertEqual(o.name, nlist[5])
         self.assertEqual(c0.count, 5)
         self.assertIsInstance(c1.new(), NMObject)
         self.assertIsInstance(c1.new(), NMObject)
         self.assertIsInstance(c1.new(), NMObject)
         # names
-        self.assertEqual(c0.names, [n[0], n[1], n[2], n[4], n[5]])
+        self.assertEqual(c0.names, [nlist[0], nlist[1], nlist[2], nlist[4],
+                                    nlist[5]])
         # content
         c = c0.content
         self.assertEqual(list(c.keys()), [content_name])
@@ -279,12 +280,12 @@ class Test(unittest.TestCase):
             if b.lower() == 'select':
                 continue  # ok
             self.assertEqual(c0.index(b), -1)
-        self.assertEqual(c0.index(n[0]), 0)
-        self.assertEqual(c0.index(n[1]), 1)
-        self.assertEqual(c0.index(n[2]), 2)
-        self.assertEqual(c0.index(n[3]), -1)  # does not exist
-        self.assertEqual(c0.index(n[4]), 3)
-        self.assertEqual(c0.index(n[5]), 4)
+        self.assertEqual(c0.index(nlist[0]), 0)
+        self.assertEqual(c0.index(nlist[1]), 1)
+        self.assertEqual(c0.index(nlist[2]), 2)
+        self.assertEqual(c0.index(nlist[3]), -1)  # does not exist
+        self.assertEqual(c0.index(nlist[4]), 3)
+        self.assertEqual(c0.index(nlist[5]), 4)
         self.assertEqual(c0.index('select'), 4)
         self.assertEqual(c1.index('select'), 2)
         # exists
@@ -297,9 +298,9 @@ class Test(unittest.TestCase):
                 self.assertFalse(c0.exists(b))
         for i in range(0, 6):
             if i == 3:
-                self.assertFalse(c0.exists(n[i]))
+                self.assertFalse(c0.exists(nlist[i]))
             else:
-                self.assertTrue(c0.exists(n[i]))
+                self.assertTrue(c0.exists(nlist[i]))
         # getitem
         for b in BADTYPES:
             if isinstance(b, str):
@@ -318,21 +319,21 @@ class Test(unittest.TestCase):
                 c0.getitem(index=b)
         self.assertIsNone(c0.getitem(name=''))
         self.assertEqual(c0.getitem(name='select'), c0.select)
-        for i in range(0, len(n)):
-            o = c0.getitem(name=n[i])
+        for i in range(0, len(nlist)):
+            o = c0.getitem(name=nlist[i])
             if i == 3:
                 self.assertIsNone(o)
             else:
                 self.assertIsInstance(o, NMObject)
-                self.assertEqual(o.name, n[i])
+                self.assertEqual(o.name, nlist[i])
         self.assertIsNone(c0.getitem(index=None))
         for i in range(0, c0.count):
             o = c0.getitem(index=i)
             self.assertIsInstance(o, NMObject)
             if i <= 2:
-                self.assertEqual(o.name, n[i])
+                self.assertEqual(o.name, nlist[i])
             else:
-                self.assertEqual(o.name, n[i+1])
+                self.assertEqual(o.name, nlist[i+1])
         for i in range(-1, -1 * (c0.count + 1)):
             o = c0.getitem(index=i)
             self.assertIsInstance(o, NMObject)
@@ -375,7 +376,7 @@ class Test(unittest.TestCase):
         for b in [c0.count, 50, i]:
             with self.assertRaises(IndexError):
                 olist1 = c0.getitems(indexes=[b])
-        olist0 = c0.getitems(names=[n[0], n[1], n[2], n[4]])
+        olist0 = c0.getitems(names=[nlist[0], nlist[1], nlist[2], nlist[4]])
         olist1 = c0.getitems(indexes=[0, 1, 2, 3])
         self.assertEqual(olist0, olist1)
         olist1 = c0.getitems(indexes=[-5, -4, -3, -2])
@@ -397,49 +398,50 @@ class Test(unittest.TestCase):
             with self.assertRaises(ValueError):
                 c0._select_set(b)
         self.assertIsNone(c0._select_set(''))
-        self.assertIsNone(c0._select_set(n[3]))
+        self.assertIsNone(c0._select_set(nlist[3]))
         if nm.configs.quiet:
             self.assertEqual(c0.select.name, sname)
-        self.assertIsInstance(c0._select_set(n[0]), NMObject)
-        self.assertEqual(c0.select.name, n[0])
+        self.assertIsInstance(c0._select_set(nlist[0]), NMObject)
+        self.assertEqual(c0.select.name, nlist[0])
         # rename
         for b in BADTYPES:
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0.rename(b, n[3])
+                c0.rename(b, nlist[3])
         for b in BADNAMES:
             if b.lower() == 'select' or b == '':
                 continue  # ok
             with self.assertRaises(ValueError):
-                c0.rename(b, n[3])
+                c0.rename(b, nlist[3])
         for b in BADTYPES:
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0.rename(n[4], b)
+                c0.rename(nlist[4], b)
         for b in BADNAMES:
             if b.lower() == 'default':
                 continue  # ok
             with self.assertRaises(ValueError):
-                c0.rename(n[4], b)
+                c0.rename(nlist[4], b)
         with self.assertRaises(RuntimeError):
-            c0.rename('select', n[0])  # already exists
+            c0.rename('select', nlist[0])  # name already used
         with self.assertRaises(RuntimeError):
             c1.rename('select', 'test')  # rename = False
-        s = c0.rename('', n[3])
+        s = c0.rename('', nlist[3])
         self.assertIsInstance(s, str)
         self.assertEqual(s, '')
-        i = c0.index(n[4])
+        i = c0.index(nlist[4])
         nnext = c0.name_next()
-        s = c0.rename(n[4], 'default')
+        s = c0.rename(nlist[4], 'default')
         self.assertEqual(s, nnext)
-        s = c0.rename(nnext, n[3])
-        self.assertEqual(s, n[3])
+        s = c0.rename(nnext, nlist[3])
+        self.assertEqual(s, nlist[3])
         o = c0.getitem(index=i)
-        self.assertEqual(o.name, n[3])
-        self.assertEqual(c0.rename(n[5], n[4]), n[4])
-        self.assertEqual(c0.names, [n[0], n[1], n[2], n[3], n[4]])
+        self.assertEqual(o.name, nlist[3])
+        self.assertEqual(c0.rename(nlist[5], nlist[4]), nlist[4])
+        self.assertEqual(c0.names, [nlist[0], nlist[1], nlist[2], nlist[3],
+                                    nlist[4]])
         # duplicate
         for b in BADTYPES:
             if isinstance(b, str):
@@ -455,26 +457,26 @@ class Test(unittest.TestCase):
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0.duplicate(n[0], b)
+                c0.duplicate(nlist[0], b)
         for b in BADNAMES:
             if b.lower() == 'default':
                 continue  # ok
             with self.assertRaises(ValueError):
-                c0.duplicate(n[0], b)
+                c0.duplicate(nlist[0], b)
         with self.assertRaises(RuntimeError):
-            c0.duplicate(n[0], n[1])  # already exists
+            c0.duplicate(nlist[0], nlist[1])  # already exists
         self.assertIsNone(c0.duplicate('', 'default'))
         icount = c0.count
-        o = c0.getitem(name=n[0])
+        o = c0.getitem(name=nlist[0])
         nnext = c0.name_next()
-        c = c0.duplicate(n[0], 'default')
+        c = c0.duplicate(nlist[0], 'default')
         self.assertIsInstance(c, NMObject)
         self.assertEqual(c.name, nnext)
         self.assertFalse(o._equal(c, alert=True))  # names are different
         self.assertEqual(c0.count, icount + 1)
         with self.assertRaises(RuntimeError):
-            c.name = n[0]  # must use Container.rename()
-        c._NMObject__name = n[0]
+            c.name = nlist[0]  # name already used
+        c._NMObject__name = nlist[0]
         self.assertTrue(o._equal(c, alert=True))
         c._NMObject__name = nnext
         # equal
@@ -491,7 +493,7 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.prefix, c.prefix)
         self.assertEqual(c0._rename_, c._rename_)
         self.assertEqual(c0._quiet, c._quiet)
-        self.assertNotEqual(c0._rename, c._rename)
+        self.assertNotEqual(c0._rename, c._rename)  # fxn refs not equal
         self.assertNotEqual(c0._NMObject__date, c._NMObject__date)
         self.assertNotEqual(c0._NMObject__modified, c._NMObject__modified)
         self.assertNotEqual(c0.select, c.select)  # refs not equal
@@ -507,12 +509,12 @@ class Test(unittest.TestCase):
         klist = c0.kill(names='select', confirm=False)
         self.assertEqual(klist, [s])
         self.assertIsNone(c0.getitem(name=s.name))
-        self.assertEqual(c0.select.name, n[0])
-        o = c0.getitem(name=n[0])
-        klist = c0.kill(names=n[0], confirm=False)
+        self.assertEqual(c0.select.name, nlist[0])
+        o = c0.getitem(name=nlist[0])
+        klist = c0.kill(names=nlist[0], confirm=False)
         self.assertEqual(klist, [o])
-        self.assertIsNone(c0.getitem(name=n[0]))
-        self.assertEqual(c0.select.name, n[1])
+        self.assertIsNone(c0.getitem(name=nlist[0]))
+        self.assertEqual(c0.select.name, nlist[1])
         names = c0.names
         klist = c0.kill(names='all', confirm=False)
         self.assertEqual(len(klist), len(names))
@@ -525,61 +527,64 @@ class Test(unittest.TestCase):
 
     def _test_note(self):
         thenote = 'note!'
-        plist = ['name', 'rename', 'date', 'modified', 'thenote']
-        note0 = Note(PARENT, 'Note0', fxns=nm._fxns, thenote=thenote)
-        self.assertEqual(note0._content_name, 'note')
-        self.assertEqual(note0.thenote, thenote)
-        self.assertEqual(note0._param_list, plist)
+        plist = ['name', 'date', 'modified', 'thenote']
+        n0 = Note(PARENT, 'Note0', fxns=nm._fxns, thenote=thenote)
+        self.assertEqual(n0._content_name, 'note')
+        self.assertEqual(n0.thenote, thenote)
+        self.assertEqual(n0._param_list, plist)
         # parameters
-        self.assertTrue(note0._param_test())
+        self.assertTrue(n0._param_test())
         # equal
-        note1 = Note(PARENT, 'Note0', fxns=nm._fxns, thenote=thenote)
-        self.assertTrue(note0._equal(note1, alert=True))
-        note1 = Note(PARENT, 'Note0', fxns=nm._fxns, thenote='different')
-        self.assertFalse(note0._equal(note1, alert=True))
+        n1 = Note(PARENT, 'Note0', fxns=nm._fxns, thenote=thenote)
+        self.assertTrue(n0._equal(n1, alert=True))
+        n1 = Note(PARENT, 'Note0', fxns=nm._fxns, thenote='different')
+        self.assertFalse(n0._equal(n1, alert=True))
         # copy
-        c = note0.copy()
+        c = n0.copy()
         self.assertIsInstance(c, Note)
-        self.assertTrue(note0._equal(c, alert=True))
-        self.assertEqual(note0._Note__thenote, c._Note__thenote)
+        self.assertTrue(n0._equal(c, alert=True))
+        self.assertEqual(n0._Note__thenote, c._Note__thenote)
         # thenote
-        self.assertTrue(note0._thenote_set(123))
-        self.assertEqual(note0.thenote, '123')
-        self.assertTrue(note0._thenote_set(None))
-        self.assertEqual(note0.thenote, '')
-        self.assertTrue(note0._thenote_set('test'))
-        self.assertEqual(note0.thenote, 'test')
+        self.assertTrue(n0._thenote_set(123))
+        self.assertEqual(n0.thenote, '123')
+        self.assertTrue(n0._thenote_set(None))
+        self.assertEqual(n0.thenote, '')
+        self.assertTrue(n0._thenote_set('test'))
+        self.assertEqual(n0.thenote, 'test')
 
     def _test_note_container(self):
+        txt = 'test #'
+        prefix = 'Note'
+        nlist = [prefix + str(i) for i in range(0, 4)]
+        thenotes = [txt + str(i) for i in range(0, 4)]
         notes = NoteContainer(PARENT, 'Notes', fxns=nm._fxns)
         self.assertEqual(notes._type, 'Note')
-        self.assertEqual(notes.prefix, 'Note')
+        self.assertEqual(notes.prefix, prefix)
         self.assertFalse(notes._rename_)
         self.assertEqual(notes._content_name, 'notes')
         self.assertFalse(notes._NoteContainer__off)
         # new
         self.assertEqual(notes.name_next_seq(), 0)
-        self.assertEqual(notes.name_next(), 'Note0')
-        nlist = []
+        self.assertEqual(notes.name_next(), nlist[0])
         for i in range(0, 4):
-            thenote = 'note test #' + str(i)
-            n = notes.new(thenote)
+            thenote = txt + str(i)
+            n = notes.new(thenote=thenote)
             self.assertIsInstance(n, Note)
+            self.assertEqual(n.name, nlist[i])
             self.assertEqual(n.thenote, thenote)
-            nlist.append(n.thenote)
         notes.off = True
         self.assertIsNone(notes.new('test'))
         # copy
         c = notes.copy()
         self.assertIsInstance(c, NoteContainer)
         self.assertTrue(notes._equal(c, alert=True))
-        notes._rename_ = True  # test copy_extra()
-        notes.prefix = 'test'  # test copy_extra()
+        notes._rename_ = True
+        notes.prefix = 'test'
         c = notes.copy()
         self.assertTrue(notes._equal(c, alert=True))
         # thenotes
-        self.assertEqual(nlist, notes.thenotes())
-        self.assertEqual(nlist, c.thenotes())
+        self.assertEqual(thenotes, notes.thenotes())
+        self.assertEqual(thenotes, c.thenotes())
         # duplicate
         with self.assertRaises(RuntimeError):
             notes.duplicate()
@@ -600,14 +605,12 @@ class Test(unittest.TestCase):
         x0 = XDimension(PARENT, 'xdim0', fxns=nm._fxns, dim=XDIM0, notes=notes)
         y1 = Dimension(PARENT, 'ydim1', fxns=nm._fxns, dim=YDIM1, notes=notes)
         x1 = XDimension(PARENT, 'xdim1', fxns=nm._fxns, dim=XDIM1, notes=notes)
-        self.assertTrue(y0._rename_)
         self.assertEqual(y0._note_container, notes)
         self.assertEqual(y0._offset, YDIM0['offset'])
         self.assertEqual(y0._label, YDIM0['label'])
         self.assertEqual(y0._units, YDIM0['units'])
         self.assertIsNone(y0._master)
         self.assertEqual(y0._content_name, 'dimension')
-        self.assertTrue(x0._rename_)
         self.assertEqual(x0._note_container, notes)
         self.assertEqual(x0._offset, XDIM0['offset'])
         self.assertEqual(x0._start, XDIM0['start'])
@@ -617,14 +620,14 @@ class Test(unittest.TestCase):
         self.assertIsNone(x0._master)
         self.assertIsNone(x0._xdata)
         self.assertEqual(x0._content_name, 'xdimension')
-        # parameters
-        p = ['name', 'rename', 'date', 'modified', 'offset', 'label', 'units',
-             'master']
-        self.assertEqual(y0._param_list, p)
+        plist = ['name', 'date', 'modified', 'offset', 'label', 'units',
+                 'master']
+        self.assertEqual(y0._param_list, plist)
         self.assertTrue(y0._param_test())
-        p = ['name', 'rename', 'date', 'modified', 'offset', 'label', 'units',
-             'master', 'start', 'delta', 'xdata']
-        self.assertEqual(x0._param_list, p)
+        plist = ['name', 'date', 'modified', 'offset', 'label', 'units',
+                 'master', 'start', 'delta', 'xdata']
+        self.assertEqual(x0._param_list, plist)
+        # parameters
         self.assertTrue(x0._param_test())
         # note_new
         note = 'test123'
@@ -824,92 +827,89 @@ class Test(unittest.TestCase):
         self.assertTrue(x0._equal(c, alert=True))
 
     def _test_data(self):
-        name0 = 'RecordA0'
-        name1 = 'RecordA1'
+        n0 = 'RecordA0'
+        n1 = 'RecordA1'
         nparray0 = np.full([4], 3.14, dtype=np.float64, order='C')
         nparray1 = np.full([5], 6.28, dtype=np.float64, order='C')
         nparrayx = np.full([6], 12.56, dtype=np.float64, order='C')
+        content_name = 'data'
+        plist = ['name', 'date', 'modified', 'xdim', 'ydim', 'dataseries']
         for b in BADTYPES:
             if b is None:
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, name0, fxns=nm._fxns, np_array=b)
+                d0 = Data(PARENT, n0, fxns=nm._fxns, np_array=b)
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, name0, fxns=nm._fxns, xdim=b)
+                d0 = Data(PARENT, n0, fxns=nm._fxns, xdim=b)
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, name0, fxns=nm._fxns, ydim=b)
+                d0 = Data(PARENT, n0, fxns=nm._fxns, ydim=b)
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, name0, fxns=nm._fxns, dataseries=b)
-        d0 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray0, xdim=XDIM0,
+                d0 = Data(PARENT, n0, fxns=nm._fxns, dataseries=b)
+        d0 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray0, xdim=XDIM0,
                   ydim=YDIM0)
-        d1 = Data(PARENT, name1, fxns=nm._fxns, np_array=nparray1, xdim=XDIM1,
+        d1 = Data(PARENT, n1, fxns=nm._fxns, np_array=nparray1, xdim=XDIM1,
                   ydim=YDIM1)
         xdata = Data(PARENT, 'xdata', fxns=nm._fxns, np_array=nparrayx,
                      xdim=XDIMx, ydim=YDIMx)
         self.assertTrue(np.array_equal(d0._Data__np_array, nparray0))
-        self.assertTrue(d0._rename_)
-        self.assertEqual(d0._content_name, 'data')
+        self.assertEqual(d0._content_name, content_name)
+        self.assertEqual(d0._param_list, plist)
         # parameters
-        p = ['name', 'rename', 'date', 'modified', 'xdim', 'ydim',
-             'dataseries']
-        self.assertEqual(d0._param_list, p)
         self.assertTrue(d0._param_test())
         # content
         c = d0.content
         self.assertIsInstance(c, dict)
-        self.assertEqual(list(c.keys()), ['data', 'notes'])
-        self.assertEqual(c['data'], d0.name)
+        self.assertEqual(list(c.keys()), [content_name, 'notes'])
+        self.assertEqual(c[content_name], d0.name)
         self.assertEqual(c['notes'], d0.note.names)
         # equal
-        for b in BADTYPES:
-            self.assertFalse(d0._equal(b, alert=True))
         self.assertFalse(d0._equal(d1, alert=True))
         self.assertTrue(d0._equal(d0, alert=True))
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray0,
-                   xdim=XDIM0, ydim=YDIM0)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray0, xdim=XDIM0,
+                   ydim=YDIM0)
         self.assertTrue(d0._equal(d00, alert=True))
         nparray00 = np.full([4], 3.14, dtype=np.float64, order='F')
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray00,
-                   xdim=XDIM0, ydim=YDIM0)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray00, xdim=XDIM0,
+                   ydim=YDIM0)
         self.assertTrue(d0._equal(d00, alert=True))
         nparray0[2] = 5
         self.assertFalse(d0._equal(d00, alert=True))
         nparray0[2] = 0
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=None,
-                   xdim=XDIM0, ydim=YDIM0)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=None, xdim=XDIM0,
+                   ydim=YDIM0)
         self.assertFalse(d0._equal(d00, alert=True))
         nparray00 = np.full([5, 2], 3.14, dtype=np.float64, order='C')
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray00,
-                   xdim=XDIM0, ydim=YDIM0)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray00, xdim=XDIM0,
+                   ydim=YDIM0)
         self.assertFalse(d0._equal(d00, alert=True))
         nparray00 = np.full([5], 3.14, dtype=np.int32, order='C')
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray00,
-                   xdim=XDIM0, ydim=YDIM0)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray00, xdim=XDIM0,
+                   ydim=YDIM0)
         self.assertFalse(d0._equal(d00, alert=True))
         nparray00 = np.full([5], 3.14, dtype=np.float64, order='F')
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray00,
-                   xdim=XDIM0, ydim=YDIM0)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray00, xdim=XDIM0,
+                   ydim=YDIM0)
         self.assertFalse(d0._equal(d00, alert=True))
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray0,
-                   xdim=XDIM1, ydim=YDIM0)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray0, xdim=XDIM1,
+                   ydim=YDIM0)
         self.assertFalse(d0._equal(d00, alert=True))
-        d00 = Data(PARENT, name0, fxns=nm._fxns, np_array=nparray0,
-                   xdim=XDIM0, ydim=YDIM1)
+        d00 = Data(PARENT, n0, fxns=nm._fxns, np_array=nparray0, xdim=XDIM0,
+                   ydim=YDIM1)
         self.assertFalse(d0._equal(d00, alert=True))
         # copy
         c = d0.copy()
         self.assertIsInstance(c, Data)
         self.assertTrue(d0._equal(c, alert=True))
-        d0._rename_ = False  # test copy_extra()
+        d0._rename_ = False
         c = d0.copy()
         self.assertTrue(d0._equal(c, alert=True))
         # np_array

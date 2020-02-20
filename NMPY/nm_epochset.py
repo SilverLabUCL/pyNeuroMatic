@@ -121,10 +121,11 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix=nmp.ESET_PREFIX,
+                 rename=True, **copy):
         t = EpochSet(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.ESET_PREFIX, rename=True, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, **copy)
         self._content_name = 'epochsets'
 
     # override
@@ -137,8 +138,8 @@ class EpochSetContainer(Container):
     # override, no super
     def copy(self):
         return EpochSetContainer(self._parent, self.name, fxns=self._fxns,
-                              thecontainer=self._thecontainer_copy(),
-                              prefix=self.prefix, rename=self._rename_)
+                                 prefix=self.prefix, rename=self._rename_,
+                                 thecontainer=self._thecontainer_copy())
 
     # @property  # override, no super
     # def select(self):
@@ -151,7 +152,7 @@ class EpochSetContainer(Container):
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
         o = EpochSet(self._parent, 'temp', fxns=self._fxns)
-        return super().new(name=name, nmobj=o, select=select, quiet=quiet)
+        return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     # override
     def rename(self, name, newname, quiet=nmp.QUIET):

@@ -54,24 +54,25 @@ class ChannelContainer(Container):
     Container for NM Channel objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix='', rename=False, **copy):
         t = Channel(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
-                         rename=False, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, **copy)
         # NO PREFIX, Channel names are 'A', 'B'...
         self._content_name = 'channels'
 
     # override, no super
     def copy(self):
         return ChannelContainer(self._parent, self.name, fxns=self._fxns,
-                                thecontainer=self._thecontainer_copy(),
-                                prefix=self.prefix, rename=self._rename_)
+                                prefix=self.prefix, rename=self._rename_,
+                                thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, xdim={}, ydim={}, select=True, quiet=nmp.QUIET):
         o = Channel(self._parent, 'temp', fxns=self._fxns, xdim=xdim,
                     ydim=ydim)
-        return super().new(name='default', nmobj=o, select=select, quiet=quiet)
+        return super().new(name='default', nmobject=o, select=select,
+                           quiet=quiet)
 
     # override, no super
     def name_next(self, quiet=nmp.QUIET):

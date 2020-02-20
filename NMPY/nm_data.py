@@ -252,24 +252,25 @@ class DataContainer(Container):
     Container for NM Data objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix=nmp.DATA_PREFIX,
+                 rename=True, **copy):
         t = Data(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.DATA_PREFIX, rename=True, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, **copy)
         self._content_name = 'data'
 
     # override, no super
     def copy(self):
         return DataContainer(self._parent, self.name, fxns=self._fxns,
-                             thecontainer=self._thecontainer_copy(),
-                             prefix=self.prefix, rename=self._rename_)
+                             prefix=self.prefix, rename=self._rename_,
+                             thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, name='default', np_array=None, xdim={}, ydim={},
             dataseries={}, select=True, quiet=nmp.QUIET):
         o = Data(self._parent, 'temp', fxns=self._fxns, np_array=np_array,
                  xdim=xdim, ydim=ydim, dataseries=dataseries)
-        return super().new(name=name, nmobj=o, select=select, quiet=quiet)
+        return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     @property
     def dataseries(self):

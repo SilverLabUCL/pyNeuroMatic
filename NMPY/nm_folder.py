@@ -74,22 +74,23 @@ class FolderContainer(Container):
     Container for NM Folders
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
+    def __init__(self, parent, name, fxns={}, prefix=nmp.FOLDER_PREFIX,
+                 rename=True, **copy):
         t = Folder(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.FOLDER_PREFIX, rename=True, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
+                         rename=rename, **copy)
         self._content_name = 'folders'
 
     # override, no super
     def copy(self):
         return FolderContainer(self._parent, self.name, fxns=self._fxns,
-                               thecontainer=self._thecontainer_copy(),
-                               prefix=self.prefix, rename=self._rename_)
+                               prefix=self.prefix, rename=self._rename_,
+                               thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
         o = Folder(self._parent, 'temp', fxns=self._fxns)
-        return super().new(name=name, nmobj=o, select=select, quiet=quiet)
+        return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     def add(self, folder, select=True, quiet=nmp.QUIET):
         if not isinstance(folder, Folder):
@@ -104,7 +105,7 @@ class FolderContainer(Container):
             e = nmu.quotes(name) + ' already exists'
             self._error(e, tp=self._tp, quiet=quiet)
             return False
-        super().new(name=name, nmobj=folder, select=select, quiet=quiet)
+        super().new(name=name, nmobject=folder, select=select, quiet=quiet)
         return self.exists(name)
 
     def open_hdf5(self):

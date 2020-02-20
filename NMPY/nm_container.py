@@ -171,13 +171,13 @@ class NMObject(object):
             return False
         if self == nmobject:
             return True
-        if nmobject._parent != self._parent:
+        # if nmobject._parent != self._parent:
             # problematic for containers?
             # compare parent name?
-            a = ('unequal parents: ' + str(self._parent) + ' vs ' +
-                 str(nmobject._parent))
-            self._alert(a, tp=self._tp)
-            return False
+            # a = ('unequal parents: ' + str(self._parent) + ' vs ' +
+            #      str(nmobject._parent))
+            # self._alert(a, tp=self._tp)
+            # return False
         if nmobject._quiet != self._quiet:
             a = ('unequal quiet() refs: ' + str(self._quiet) + ' vs ' +
                  str(nmobject._quiet))
