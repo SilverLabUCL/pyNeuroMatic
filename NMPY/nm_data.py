@@ -268,9 +268,15 @@ class DataContainer(Container):
     # override
     def new(self, name='default', np_array=None, xdim={}, ydim={},
             dataseries={}, select=True, quiet=nmp.QUIET):
-        o = Data(self._parent, 'temp', fxns=self._fxns, np_array=np_array,
-                 xdim=xdim, ydim=ydim, dataseries=dataseries)
+        o = Data(self._parent, 'iwillberenamed', np_array=np_array, xdim=xdim,
+                 ydim=ydim, dataseries=dataseries)
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
+
+    def add(self, data, select=True, quiet=nmp.QUIET):
+        if not isinstance(data, Data):
+            raise TypeError(nmu.type_error(data, 'Data'))
+        return self.new(name=data.name, nmobject=data, select=select,
+                        quiet=quiet)
 
     @property
     def dataseries(self):

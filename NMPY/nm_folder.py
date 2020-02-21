@@ -89,24 +89,14 @@ class FolderContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = Folder(self._parent, 'temp', fxns=self._fxns)
+        o = Folder(self._parent, 'iwillberenamed')
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     def add(self, folder, select=True, quiet=nmp.QUIET):
         if not isinstance(folder, Folder):
             raise TypeError(nmu.type_error(folder, 'Folder'))
-        select = nmu.check_bool(select, True)
-        name = folder.name
-        if not name or not nmu.name_ok(name):
-            e = 'bad folder name: ' + nmu.quotes(name)
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
-        if self.exists(name):
-            e = nmu.quotes(name) + ' already exists'
-            self._error(e, tp=self._tp, quiet=quiet)
-            return False
-        super().new(name=name, nmobject=folder, select=select, quiet=quiet)
-        return self.exists(name)
+        return self.new(name=folder.name, nmobject=folder, select=select,
+                        quiet=quiet)
 
     def open_hdf5(self):
         dataseries = 'Record'

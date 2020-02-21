@@ -151,7 +151,7 @@ class EpochSetContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = EpochSet(self._parent, 'temp', fxns=self._fxns)
+        o = EpochSet(self._parent, 'iwillberenamed')
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     # override

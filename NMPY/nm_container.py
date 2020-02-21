@@ -36,23 +36,14 @@ class NMObject(object):
         if not name or not self.name_ok(name):
             raise ValueError('bad name:  ' + nmu.quotes(name))
         self.__name = name
-        self._quiet = NMObject.__quiet  # fxn ref inside this class
-        self.__rename_fxnref = self.__changename
-        if isinstance(fxns, dict):
-            for k, v in fxns.items():  # fxn refs outside this class
-                if not isinstance(v, types.MethodType):
-                    continue
-                if k == 'quiet':
-                    self._quiet = fxns[k]  # e.g. Manager._quiet()
-                if k == 'rename':
-                    self.__rename_fxnref = fxns[k]  # e.g. Container.rename()
-        else:
-            raise TypeError(nmu.type_error(fxns, 'function dictionary'))
-        self._content_name = 'nmobject'
+        self.__quiet_fr = NMObject.__quiet  # fxn refs (fr) inside class
+        self.__rename_fr = self._name_set
+        self._fxns_set(fxns=fxns)
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
+        self._content_name = 'nmobject'  # child class should change
         self._param_list = ['name', 'date', 'modified']
-        # param_list should match those listed in parameters()
+        # param_list should match keys in parameters()
         # see param_test()
 
     @property
@@ -63,16 +54,16 @@ class NMObject(object):
         p.update({'modified': self.__modified})
         return p
 
-    def _param_test(self, quiet=nmp.QUIET):
+    def _param_test(self, quiet=False):
         pkeys = self.parameters.keys()
         for k in pkeys:
             if k not in self._param_list:
-                e = 'missing parameter ' + nmu.quotes(k)
+                e = 'missing param_list item ' + nmu.quotes(k)
                 self._error(e, tp=self._tp, quiet=quiet)
                 return False
         for k in self._param_list:
             if k not in pkeys:
-                e = 'missing parameter ' + nmu.quotes(k)
+                e = 'missing parameters key ' + nmu.quotes(k)
                 self._error(e, tp=self._tp, quiet=quiet)
                 return False
         return True
@@ -147,10 +138,11 @@ class NMObject(object):
 
     @name.setter
     def name(self, newname):
-        return self.__rename_fxnref(self.__name, newname)
+        # calls changename() or Container.rename()
+        return self.__rename_fr(self.__name, newname)
 
-    def __changename(self, name_notused, newname, quiet=nmp.QUIET):
-        # name_notused, to be consistent with Container rename(name, newname)
+    def _name_set(self, name_notused, newname, quiet=nmp.QUIET):
+        # name_notused, to be consistent with Container.rename(name, newname)
         if not isinstance(newname, str):
             raise TypeError(nmu.type_error(newname, 'string'))
         if not newname or not self.name_ok(newname):
@@ -172,21 +164,21 @@ class NMObject(object):
         if self == nmobject:
             return True
         # if nmobject._parent != self._parent:
-            # problematic for containers
+            # problematic for copying containers
             # compare parent name?
             # a = ('unequal parents: ' + str(self._parent) + ' vs ' +
             #      str(nmobject._parent))
             # self._alert(a, tp=self._tp)
             # return False
-        if nmobject._quiet != self._quiet:
-            a = ('unequal quiet() refs: ' + str(self._quiet) + ' vs ' +
-                 str(nmobject._quiet))
+        if nmobject._NMObject__quiet_fr != self.__quiet_fr:
+            a = ('unequal quiet() refs: ' + str(self.__quiet_fr) + ' vs ' +
+                 str(nmobject._NMObject__quiet_fr))
             self._alert(a, tp=self._tp)
             return False
-        # if nmobject._NMObject__rename_fxnref != self.__rename_fxnref:
+        # if nmobject._NMObject__rename_fr != self.__rename_fr:
         #     different, unless in same container
-        #     a = ('unequal rename() refs: ' + str(self.__rename_fxnref) +
-        #     ' vs ' + str(nmobject._NMObject__rename_fxnref))
+        #     a = ('unequal rename() refs: ' + str(self.__rename_fr) +
+        #     ' vs ' + str(nmobject._NMObject__rename_fr))
         #     self._alert(a, tp=self._tp)
         #     return False
         sp = self.parameters
@@ -223,15 +215,15 @@ class NMObject(object):
 
     def _alert(self, message, tp='', quiet=False, frame=2):
         return nmu.history(message, title='ALERT', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
+                           red=True, quiet=self.__quiet_fr(quiet))
 
     def _error(self, message, tp='', quiet=False, frame=2):
         return nmu.history(message, title='ERROR', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
+                           red=True, quiet=self.__quiet_fr(quiet))
 
     def _history(self, message, tp='', quiet=False, frame=2):
         return nmu.history(message, tp=tp, frame=frame,
-                           red=False, quiet=self._quiet(quiet))
+                           red=False, quiet=self.__quiet_fr(quiet))
 
     @staticmethod
     def __quiet(quiet=False):
@@ -242,11 +234,21 @@ class NMObject(object):
     @property
     def _fxns(self):
         f = {}
-        if self._quiet != NMObject.__quiet:
-            f.update({'quiet': self._quiet})
-        if self.__rename_fxnref != self.__changename:
-            f.update({'rename': self.__rename_fxnref})
+        if self.__quiet_fr != NMObject.__quiet:
+            f.update({'quiet': self.__quiet_fr})
         return f
+
+    def _fxns_set(self, fxns={}):
+        if isinstance(fxns, dict):
+            for k, v in fxns.items():  # fxn refs outside class
+                if not isinstance(v, types.MethodType):
+                    continue
+                if k == 'quiet':
+                    self.__quiet_fr = fxns[k]  # e.g. Manager._quiet()
+                if k == 'rename':
+                    self.__rename_fr = fxns[k]  # e.g. Container.rename()
+        else:
+            raise TypeError(nmu.type_error(fxns, 'function dictionary'))
 
 
 class Container(NMObject):
@@ -279,7 +281,6 @@ class Container(NMObject):
     def __init__(self, parent, name, fxns={}, type_='NMObject',
                  prefix='NMObject', rename=True, **copy):
         super().__init__(parent, name, fxns=fxns)
-        self._NMObject__rename_fxnref = self.rename
         if not isinstance(type_, str):
             raise TypeError(nmu.type_error(type_, 'string'))
         if not type_ or not nmu.name_ok(type_):
@@ -305,9 +306,12 @@ class Container(NMObject):
                 self.__rename = v
             if k.lower() == 'thecontainer' and isinstance(v, dict):
                 if 'thecontainer' in v.keys():
-                    self.__thecontainer = v['thecontainer']
-                    if 'select' in v.keys():
-                        self.__select = v['select']
+                    if isinstance(v['thecontainer'], list):
+                        self.__thecontainer = v['thecontainer']
+                        self._thecontainer_fxns_set()
+                        if 'select' in v.keys():
+                            if isinstance(v['select'], NMObject):
+                                self.__select = v['select']
         self._param_list += ['type', 'prefix', 'rename', 'select']
 
     # override
@@ -353,7 +357,7 @@ class Container(NMObject):
                          thecontainer=self._thecontainer_copy())
 
     def _thecontainer_copy(self):
-        thecontainer = []
+        thecontainercopy = []
         if self.__select and self.__select.name:
             select_name = self.__select.name
         else:
@@ -362,10 +366,16 @@ class Container(NMObject):
         for o in self.__thecontainer:
             if o:
                 c = o.copy()
-                thecontainer.append(c)
+                thecontainercopy.append(c)
                 if c.name.lower() == select_name.lower():
                     select = c
-        return {'thecontainer': thecontainer, 'select': select}
+        return {'thecontainer': thecontainercopy, 'select': select}
+    
+    def _thecontainer_fxns_set(self):
+        fxns = self._fxns
+        fxns.update({'rename': self.rename})
+        for o in self.__thecontainer:
+            o._fxns_set(fxns=fxns)
 
     @property
     def prefix(self):  # see name_next()
@@ -569,15 +579,13 @@ class Container(NMObject):
             e = self.__type + ' ' + nmu.quotes(name) + ' already exists'
             raise RuntimeError(e)
         if nmobject is None:
-            o = NMObject(self._parent, name, fxns=self._fxns)
+            o = NMObject(self._parent, name)
         elif isinstance(nmobject, NMObject):
             # child 'new' should pass nmobject
             if nmobject.__class__.__name__ == self.__type:
                 o = nmobject
-                # mangled...
-                o._NMObject__name = name  # this.name overrides o.name
+                o._NMObject__name = name  # rename nmobject
                 o._parent = self._parent  # reset parent reference
-                o._rename_ = False  # enforce using Container.rename()
             else:
                 raise TypeError(nmu.type_error(nmobject, self.__type))
         else:
@@ -585,6 +593,7 @@ class Container(NMObject):
         if not o:
             return None
         self.__thecontainer.append(o)
+        self._thecontainer_fxns_set()
         if select or not self.__select:
             old = self.__select
             self.__select = o
@@ -670,16 +679,13 @@ class Container(NMObject):
         if self.exists(newname):
             e = self.__type + ' ' + nmu.quotes(newname) + ' already exists'
             raise RuntimeError(e)
-        # c = copy.deepcopy(o) NOT WORKING
-        # TypeError: can't pickle Context objects
-        # c = copy.copy(o)
-        # c = NMObject(self._parent, newname, self._fxns)
         c = o.copy()
         if not c:
             return None
         c._NMObject__name = newname
         # c._parent = self._parent  # reset parent reference
         self.__thecontainer.append(c)
+        self._thecontainer_fxns_set()
         old = nmu.quotes(o.name)
         new = nmu.quotes(c.name)
         h = 'copied ' + old + ' to ' + new

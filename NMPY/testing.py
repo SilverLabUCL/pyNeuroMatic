@@ -53,12 +53,12 @@ class Test(unittest.TestCase):
 
     def test_all(self):
         nm.configs.quiet = False
-        self._test_nmobject()
+        # self._test_nmobject()
         self._test_container()
         # self._test_note()
         # self._test_note_container()
         # self._test_dimension()
-        #self._test_data()
+        # self._test_data()
         # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
@@ -86,8 +86,8 @@ class Test(unittest.TestCase):
         o0 = NMObject(PARENT, n0, fxns=nm._fxns)
         o1 = NMObject(PARENT, n1, fxns=nm._fxns)
         self.assertEqual(o0.name, n0)
-        self.assertEqual(o0._quiet, nm._fxns['quiet'])
-        self.assertEqual(o0._NMObject__rename_fxnref, o0._NMObject__changename)
+        self.assertEqual(o0._NMObject__quiet_fr, nm._fxns['quiet'])
+        self.assertEqual(o0._NMObject__rename_fr, o0._name_set)
         self.assertEqual(o0._content_name, content_name)
         self.assertEqual(o0._param_list, plist)
         # parameters
@@ -147,11 +147,11 @@ class Test(unittest.TestCase):
         self.assertEqual(o0.name, c.name)
         self.assertNotEqual(o0._NMObject__date, c._NMObject__date)
         self.assertNotEqual(o0._NMObject__modified, c._NMObject__modified)
-        self.assertEqual(c._quiet, nm._fxns['quiet'])
-        self.assertEqual(c._NMObject__rename_fxnref, c._NMObject__changename)
-        self.assertEqual(o0._quiet, c._quiet)
-        fr0 = o0._NMObject__rename_fxnref
-        frc = c._NMObject__rename_fxnref
+        self.assertEqual(c._NMObject__quiet_fr, nm._fxns['quiet'])
+        self.assertEqual(c._NMObject__rename_fr, c._name_set)
+        self.assertEqual(o0._NMObject__quiet_fr, c._NMObject__quiet_fr)
+        fr0 = o0._NMObject__rename_fr
+        frc = c._NMObject__rename_fr
         self.assertNotEqual(fr0, frc)
         # save TODO
 
@@ -189,8 +189,8 @@ class Test(unittest.TestCase):
                        rename=True)
         c1 = Container(PARENT, n1, fxns=nm._fxns, type_=type_, prefix=p1,
                        rename=False)
-        self.assertEqual(c0._NMObject__rename_fxnref, c0.rename)
-        self.assertEqual(c0.name, n0)
+        # self.assertEqual(c0._NMObject__rename_fr, c0._name_set)
+        # self.assertEqual(c0.name, n0)
         self.assertEqual(c0._Container__type, type_)
         self.assertTrue(c0._Container__rename)
         self.assertEqual(c0.prefix, p0)
@@ -244,6 +244,7 @@ class Test(unittest.TestCase):
         self.assertEqual(o.name, nlist[0])
         self.assertEqual(c0.select, o)
         self.assertEqual(c0.select.name, nlist[0])
+        self.assertEqual(o._NMObject__rename_fr, c0.rename)
         with self.assertRaises(RuntimeError):
             c0.new(name=nlist[0])  # already exists
         self.assertEqual(c0.name_next_seq(), 1)
@@ -265,6 +266,8 @@ class Test(unittest.TestCase):
         self.assertIsInstance(c1.new(), NMObject)
         self.assertIsInstance(c1.new(), NMObject)
         self.assertIsInstance(c1.new(), NMObject)
+        with self.assertRaises(RuntimeError):
+            o.name = nlist[0]  # already exists
         # names
         self.assertEqual(c0.names, [nlist[0], nlist[1], nlist[2], nlist[4],
                                     nlist[5]])
@@ -494,9 +497,9 @@ class Test(unittest.TestCase):
         self.assertEqual(c0._Container__type, c._Container__type)
         self.assertEqual(c0.prefix, c.prefix)
         self.assertEqual(c0._Container__rename, c._Container__rename)
-        self.assertEqual(c0._quiet, c._quiet)
-        fr0 = c0._NMObject__rename_fxnref
-        frc = c._NMObject__rename_fxnref
+        self.assertEqual(c0._NMObject__quiet_fr, c._NMObject__quiet_fr)
+        fr0 = c0._NMObject__rename_fr
+        frc = c._NMObject__rename_fr
         self.assertNotEqual(fr0, frc)
         self.assertNotEqual(c0._NMObject__date, c._NMObject__date)
         self.assertNotEqual(c0._NMObject__modified, c._NMObject__modified)

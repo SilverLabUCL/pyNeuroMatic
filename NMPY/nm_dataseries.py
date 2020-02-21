@@ -755,7 +755,7 @@ class DataSeriesContainer(Container):
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
         # name is the data-series name
-        o = DataSeries(self._parent, 'temp', fxns=self._fxns)
+        o = DataSeries(self._parent, 'iwillberenamed')
         ds = super().new(name=name, nmobject=o, select=select, quiet=quiet)
         if ds:
             ds.update(quiet=quiet)

@@ -79,7 +79,7 @@ class NoteContainer(Container):
         # notes should be quiet
         if self.__off:
             return None
-        o = Note(self._parent, name='temp', fxns=self._fxns, thenote=thenote)
+        o = Note(self._parent, name='iwillberenamed', thenote=thenote)
         return super().new(name='default', nmobject=o, select=select,
                            quiet=quiet)
 

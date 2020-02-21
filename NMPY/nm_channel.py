@@ -70,8 +70,7 @@ class ChannelContainer(Container):
 
     # override
     def new(self, xdim={}, ydim={}, select=True, quiet=nmp.QUIET):
-        o = Channel(self._parent, 'temp', fxns=self._fxns, xdim=xdim,
-                    ydim=ydim)
+        o = Channel(self._parent, 'iwillberenamed', xdim=xdim, ydim=ydim)
         return super().new(name='default', nmobject=o, select=select,
                            quiet=quiet)
 
