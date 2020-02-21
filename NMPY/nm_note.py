@@ -60,18 +60,18 @@ class NoteContainer(Container):
     Container for NM Note objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix='Note', rename=False,
-                 **copy):
+    def __init__(self, parent, name, fxns={},  **copy):
         t = Note(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix='Note',
+             rename=False, **copy)
         self._content_name = 'notes'
         self.__off = False
 
     # override, no super
     def copy(self):
         return NoteContainer(self._parent, self.name, fxns=self._fxns,
-                             prefix=self.prefix, rename=self._rename_,
+                             c_prefix=self.prefix,
+                             c_rename=self._Container__rename,
                              thecontainer=self._thecontainer_copy())
 
     # override

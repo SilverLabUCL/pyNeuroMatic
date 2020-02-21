@@ -53,12 +53,12 @@ class Test(unittest.TestCase):
 
     def test_all(self):
         nm.configs.quiet = False
-        # self._test_nmobject()
-        # self._test_container()
+        self._test_nmobject()
+        self._test_container()
         # self._test_note()
         # self._test_note_container()
         # self._test_dimension()
-        self._test_data()
+        #self._test_data()
         # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
@@ -87,7 +87,7 @@ class Test(unittest.TestCase):
         o1 = NMObject(PARENT, n1, fxns=nm._fxns)
         self.assertEqual(o0.name, n0)
         self.assertEqual(o0._quiet, nm._fxns['quiet'])
-        self.assertEqual(o0._rename, o0._NMObject__rename)
+        self.assertEqual(o0._NMObject__rename_fxnref, o0._NMObject__changename)
         self.assertEqual(o0._content_name, content_name)
         self.assertEqual(o0._param_list, plist)
         # parameters
@@ -120,12 +120,12 @@ class Test(unittest.TestCase):
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                o0._rename('', b)
+                o0.name = b
         for b in BADNAMES:
             with self.assertRaises(ValueError):
-                o0._rename('', b)
+                o0.name = b
         for n in ['test', n0]:
-            self.assertTrue(o0._rename('', n))
+            o0.name = n
             self.assertEqual(n, o0.name)
         # equal
         for b in BADTYPES:
@@ -148,9 +148,11 @@ class Test(unittest.TestCase):
         self.assertNotEqual(o0._NMObject__date, c._NMObject__date)
         self.assertNotEqual(o0._NMObject__modified, c._NMObject__modified)
         self.assertEqual(c._quiet, nm._fxns['quiet'])
-        self.assertEqual(c._rename, c._NMObject__rename)
+        self.assertEqual(c._NMObject__rename_fxnref, c._NMObject__changename)
         self.assertEqual(o0._quiet, c._quiet)
-        self.assertNotEqual(o0._rename, c._rename)
+        fr0 = o0._NMObject__rename_fxnref
+        frc = c._NMObject__rename_fxnref
+        self.assertNotEqual(fr0, frc)
         # save TODO
 
     def _test_container(self):
@@ -187,17 +189,17 @@ class Test(unittest.TestCase):
                        rename=True)
         c1 = Container(PARENT, n1, fxns=nm._fxns, type_=type_, prefix=p1,
                        rename=False)
-        self.assertEqual(c0._rename, c0.rename)  # fxn refs
+        self.assertEqual(c0._NMObject__rename_fxnref, c0.rename)
         self.assertEqual(c0.name, n0)
-        self.assertEqual(c0._type, type_)
-        self.assertTrue(c0._rename_)
+        self.assertEqual(c0._Container__type, type_)
+        self.assertTrue(c0._Container__rename)
         self.assertEqual(c0.prefix, p0)
         self.assertIsNone(c0.select)
         self.assertEqual(c0._content_name, content_name)
         self.assertEqual(c0.names, [])
         self.assertEqual(c0.count, 0)
         self.assertEqual(c0._param_list, plist)
-        self.assertFalse(c1._rename_)
+        self.assertFalse(c1._Container__rename)
         # parameters
         self.assertTrue(c0._param_test())
         # prefix
@@ -489,11 +491,13 @@ class Test(unittest.TestCase):
         self.assertTrue(c0._equal(c, alert=True))
         self.assertEqual(c0._parent, c._parent)
         self.assertEqual(c0.name, c.name)
-        self.assertEqual(c0._type, c._type)
+        self.assertEqual(c0._Container__type, c._Container__type)
         self.assertEqual(c0.prefix, c.prefix)
-        self.assertEqual(c0._rename_, c._rename_)
+        self.assertEqual(c0._Container__rename, c._Container__rename)
         self.assertEqual(c0._quiet, c._quiet)
-        self.assertNotEqual(c0._rename, c._rename)  # fxn refs not equal
+        fr0 = c0._NMObject__rename_fxnref
+        frc = c._NMObject__rename_fxnref
+        self.assertNotEqual(fr0, frc)
         self.assertNotEqual(c0._NMObject__date, c._NMObject__date)
         self.assertNotEqual(c0._NMObject__modified, c._NMObject__modified)
         self.assertNotEqual(c0.select, c.select)  # refs not equal
@@ -558,9 +562,9 @@ class Test(unittest.TestCase):
         nlist = [prefix + str(i) for i in range(0, 4)]
         thenotes = [txt + str(i) for i in range(0, 4)]
         notes = NoteContainer(PARENT, 'Notes', fxns=nm._fxns)
-        self.assertEqual(notes._type, 'Note')
+        self.assertEqual(notes._Container__type, 'Note')
         self.assertEqual(notes.prefix, prefix)
-        self.assertFalse(notes._rename_)
+        self.assertFalse(notes._Container__rename)
         self.assertEqual(notes._content_name, 'notes')
         self.assertFalse(notes._NoteContainer__off)
         # new
@@ -578,7 +582,7 @@ class Test(unittest.TestCase):
         c = notes.copy()
         self.assertIsInstance(c, NoteContainer)
         self.assertTrue(notes._equal(c, alert=True))
-        notes._rename_ = True
+        notes._Container__rename = True
         notes.prefix = 'test'
         c = notes.copy()
         self.assertTrue(notes._equal(c, alert=True))
@@ -819,10 +823,10 @@ class Test(unittest.TestCase):
         c = x0.copy()
         self.assertIsInstance(c, XDimension)
         self.assertTrue(x0._equal(c, alert=True))
-        y0._rename_ = False  # test copy_extra()
+        y0._Container__rename = False  # test copy_extra()
         c = y0.copy()
         self.assertTrue(y0._equal(c, alert=True))
-        x0._rename_ = False  # test copy_extra()
+        x0._Container__rename = False  # test copy_extra()
         c = x0.copy()
         self.assertTrue(x0._equal(c, alert=True))
 
@@ -909,7 +913,7 @@ class Test(unittest.TestCase):
         c = d0.copy()
         self.assertIsInstance(c, Data)
         self.assertTrue(d0._equal(c, alert=True))
-        d0._rename_ = False
+        d0._Container__rename = False
         c = d0.copy()
         self.assertTrue(d0._equal(c, alert=True))
         # np_array
@@ -931,12 +935,13 @@ class Test(unittest.TestCase):
         # remove_dataseries()
 
     def _test_data_container(self):
+        content_name = 'data'
         c0 = DataContainer(PARENT, 'Data', fxns=nm._fxns)
         c1 = DataContainer(PARENT, 'Data', fxns=nm._fxns)
-        self.assertEqual(c0._type, 'Data')
+        self.assertEqual(c0._Container__type, 'Data')
         self.assertEqual(c0.prefix, nmp.DATA_PREFIX)
-        self.assertTrue(c0._rename_)
-        self.assertEqual(c0._content_name, 'data')
+        self.assertTrue(c0._Container__rename)
+        self.assertEqual(c0._content_name, content_name)
         # new
         for b in BADTYPES:
             if isinstance(b, str):
@@ -945,11 +950,8 @@ class Test(unittest.TestCase):
                 c0.new(name=b)
         nlist = ['RecordA0', 'WaveA0', 'Xdata']
         for n in nlist:
-            self.assertIsInstance(c0.new(name=n, xdim=XDIM0), Data)
-            self.assertIsInstance(c1.new(name=n, xdim=XDIM0), Data)
-        o = c0.getitem(index=0)
-        o.name = 'WaveA0'
-        return
+            self.assertIsInstance(c0.new(name=n, xdim=XDIM0, ydim=YDIM0), Data)
+            self.assertIsInstance(c1.new(name=n, xdim=XDIM0, ydim=YDIM0), Data)
         # copy
         c = c0.copy()
         self.assertIsInstance(c, DataContainer)
@@ -959,10 +961,10 @@ class Test(unittest.TestCase):
             oc = c.getitem(index=i)
             self.assertTrue(o0._equal(oc, alert=True))
         c0.prefix = 'Test'  # test copy_extra()
-        c0._rename_ = False  # test copy_extra()
+        c0._Container__rename = False  # test copy_extra()
         c = c0.copy()
         self.assertTrue(c._equal(c0, alert=True))
-        c0._rename_ = True
+        c0._Container__rename = True
         c0.prefix = nmp.DATA_PREFIX
         # equal
         self.assertTrue(c0._equal(c0, alert=True))
@@ -975,7 +977,7 @@ class Test(unittest.TestCase):
         c0 = Channel(PARENT, 'A', fxns=nm._fxns, xdim=XDIM0, ydim=YDIM0)
         # ydim argument tested by Dimension
         # xdim argument tested by XDimension
-        self.assertFalse(c0._rename_)
+        self.assertFalse(c0._Container__rename)
         self.assertEqual(c0._content_name, 'channel')
         for k in XDIM0.keys():
             self.assertEqual(c0.x.dim[k], XDIM0[k])
@@ -990,10 +992,10 @@ class Test(unittest.TestCase):
         self.assertTrue(c0._equal(c, alert=True))
         self.assertTrue(c0.x._equal(c.x, alert=True))
         self.assertTrue(c0.y._equal(c.y, alert=True))
-        c0._rename_ = True  # test copy_extra()
+        c0._Container__rename = True  # test copy_extra()
         c = c0.copy()
         self.assertTrue(c0._equal(c, alert=True))
-        c0._rename_ = False
+        c0._Container__rename = False
         # equal
         c00 = Channel(PARENT, 'A', fxns=nm._fxns, xdim=XDIM0, ydim=YDIM0)
         self.assertTrue(c0._equal(c00, alert=True))
@@ -1002,18 +1004,18 @@ class Test(unittest.TestCase):
 
     def _test_channel_container(self):
         c0 = ChannelContainer(PARENT, 'channels', fxns=nm._fxns)
-        self.assertEqual(c0._type, 'Channel')
+        self.assertEqual(c0._Container__type, 'Channel')
         self.assertEqual(c0.prefix, '')
-        self.assertFalse(c0._rename_)
+        self.assertFalse(c0._Container__rename)
         self.assertEqual(c0._content_name, 'channels')
         # name
         self.assertEqual(c0.name_next_seq(), 0)
         self.assertEqual(c0.name_next(), 'A')
-        c0._rename_ = True
+        c0._Container__rename = True
         c0.prefix = 'Test'
         self.assertEqual(c0.name_next(), 'A')  # prefix not used
         c0.prefix = ''
-        c0._rename_ = False
+        c0._Container__rename = False
         # new
         self.assertEqual(c0.name_next_seq(), 0)
         self.assertEqual(c0.name_next(), 'A')
@@ -1029,12 +1031,12 @@ class Test(unittest.TestCase):
         # copy
         c = c0.copy()
         self.assertTrue(c0._equal(c, alert=True))
-        c0._rename_ = True # test copy_extra()
+        c0._Container__rename = True # test copy_extra()
         c0.prefix = 'Test' # test copy_extra()
         c = c0.copy()
         self.assertTrue(c0._equal(c, alert=True))
         c0.prefix = ''
-        c0._rename_ = False
+        c0._Container__rename = False
         # equal
         c00 = ChannelContainer(PARENT, 'channels', fxns=nm._fxns)
         c00.new(xdim=XDIM0, ydim=YDIM0)
@@ -1053,7 +1055,7 @@ class Test(unittest.TestCase):
         s1 = EpochSet(PARENT, 'Set1', fxns=nm._fxns)
         s2 = EpochSet(PARENT, 'Set2', fxns=nm._fxns)
         sx = EpochSet(PARENT, 'SetX', fxns=nm._fxns)
-        self.assertTrue(s0._rename_)
+        self.assertTrue(s0._Container__rename)
         self.assertEqual(s0.eq_list, [])
         self.assertTrue(s0.eq_lock)
         self.assertIsInstance(s0.theset, set)

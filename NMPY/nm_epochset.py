@@ -121,11 +121,10 @@ class EpochSetContainer(Container):
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix=nmp.ESET_PREFIX,
-                 rename=True, **copy):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = EpochSet(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t,
+                         prefix=nmp.ESET_PREFIX, rename=True,  **copy)
         self._content_name = 'epochsets'
 
     # override
@@ -138,7 +137,8 @@ class EpochSetContainer(Container):
     # override, no super
     def copy(self):
         return EpochSetContainer(self._parent, self.name, fxns=self._fxns,
-                                 prefix=self.prefix, rename=self._rename_,
+                                 c_prefix=self.prefix,
+                                 c_rename=self._Container__rename,
                                  thecontainer=self._thecontainer_copy())
 
     # @property  # override, no super

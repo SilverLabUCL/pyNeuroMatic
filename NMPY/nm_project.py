@@ -16,7 +16,6 @@ class Project(NMObject):
 
     def __init__(self, parent, name, fxns={}, **copy):
         super().__init__(parent, name, fxns=fxns)
-        self._rename = True
         self._content_name = 'project'
         self.__folder_container = None
         for k, v in copy.items():

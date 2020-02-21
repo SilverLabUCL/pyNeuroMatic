@@ -739,16 +739,17 @@ class DataSeriesContainer(Container):
     NM Container for DataSeries objects
     """
 
-    def __init__(self, parent, name, fxns={}, prefix='', rename=False, **copy):
+    def __init__(self, parent, name, fxns={}, **copy):
         t = DataSeries(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix=prefix,
-                         rename=rename, **copy)
+        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
+                         rename=False, **copy)
         self._content_name = 'dataseries'
 
     # override, no super
     def copy(self):
         return DataSeriesContainer(self._parent, self.name, fxns=self._fxns,
-                                   prefix=self.prefix, rename=self._rename_,
+                                   c_prefix=self.prefix,
+                                   c_rename=self._Container__rename,
                                    thecontainer=self._thecontainer_copy())
 
     # override
