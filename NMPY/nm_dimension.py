@@ -5,7 +5,7 @@ Created on Sat Jan 18 15:24:16 2020
 
 @author: jason
 """
-from nm_container import NMObject
+from nm_object import NMObject
 from nm_note import NoteContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -17,8 +17,8 @@ class Dimension(NMObject):
     NM Dimension class
     """
 
-    def __init__(self, parent, name, fxns={}, dim={}, notes=None, **copy):
-        super().__init__(parent, name, fxns=fxns)
+    def __init__(self, parent, name, dim={}, notes=None, **copy):
+        super().__init__(parent, name)
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
@@ -29,7 +29,6 @@ class Dimension(NMObject):
             self._note_container = notes  # reference to notes container
         else:
             raise TypeError(nmu.type_error(notes, 'NoteContainer'))
-        self._content_name = 'dimension'
         self._offset = 0  # not to be controlled by master
         self._label = ''
         self._units = ''
@@ -48,7 +47,7 @@ class Dimension(NMObject):
 
     # override, no super
     def copy(self):
-        return Dimension(self._parent, self.name, fxns=self._fxns, dim=self.dim,
+        return Dimension(self._parent, self.name, dim=self.dim,
                          notes=self._note_container)
 
     def _note_new(self, thenote, quiet=True):
@@ -223,13 +222,12 @@ class XDimension(Dimension):
     NM XDimension class
     """
 
-    def __init__(self, parent, name, fxns={}, dim={}, notes=None, **copy):
-        super().__init__(parent, name, fxns=fxns, notes=notes, **copy)
+    def __init__(self, parent, name, dim={}, notes=None, **copy):
+        super().__init__(parent, name, notes=notes, **copy)
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
             raise TypeError(nmu.type_error(dim, 'dimension dictionary'))
-        self._content_name = 'xdimension'
         self._start = 0
         self._delta = 1
         self._xdata = None
@@ -240,7 +238,7 @@ class XDimension(Dimension):
 
     # override, no super
     def copy(self):
-        return XDimension(self._parent, self.name, fxns=self._fxns, dim=self.dim,
+        return XDimension(self._parent, self.name, dim=self.dim,
                        notes=self._note_container)
 
     @property

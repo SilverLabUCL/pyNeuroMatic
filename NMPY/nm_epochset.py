@@ -4,8 +4,8 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-from nm_container import NMObject
-from nm_container import Container
+from nm_object import NMObject
+from nm_object import NMObjectContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 
@@ -15,21 +15,18 @@ class EpochSet(NMObject):
     NM EpochSet class
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        super().__init__(parent, name, fxns=fxns)
-        self._content_name = 'epochset'
-        self.__theset = None
+    def __init__(self, parent, name, **copy):
+        super().__init__(parent, name)
+        self.__theset = {}
         self.__eq_list = []
         self.__eq_lock = True
         for k, v in copy.items():
-            if k.lower() == 'theset' and isinstance(v, set):
+            if k.lower() == 'c_theset' and isinstance(v, dict):
                 self.__theset = v
-            if k.lower() == 'eq_list' and isinstance(v, list):
+            if k.lower() == 'c_eq_list' and isinstance(v, list):
                 self.__eq_list = v
-            if k.lower() == 'eq_lock' and isinstance(v, bool):
+            if k.lower() == 'c_eq_lock' and isinstance(v, bool):
                 self.__eq_lock = v
-        if not isinstance(self.__theset, set):
-            self.__theset = set()
         self._param_list += ['eq_list', 'eq_lock']
 
     # override
@@ -50,15 +47,10 @@ class EpochSet(NMObject):
     # override, no super
     def copy(self):
         thesetcopy = self.__theset.copy()  # TODO, refs need copying
-        c = EpochSet(self._parent, self.name, fxns=self._fxns,
-                     theset=thesetcopy,
-                     eq_list=self.__eq_list.copy(),
-                     eq_lock=self.__eq_lock)
+        c = EpochSet(self._parent, self.name, c_theset=thesetcopy,
+                     c_eq_list=self.__eq_list.copy(),
+                     c_eq_lock=self.__eq_lock)
         return c
-
-    @property
-    def theset(self):
-        return self.__theset
 
     @property
     def eq_list(self):
@@ -74,58 +66,152 @@ class EpochSet(NMObject):
 
     @eq_lock.setter
     def eq_lock(self, eq_lock):
+        return self._eq_lock_set(eq_lock)
+
+    def _eq_lock_set(self, eq_lock, quiet=nmp.QUIET):
         self.__eq_lock = eq_lock
-        self._modified()
-
-    @property
-    def data_names(self):
-        if self.name.lower() == 'all':
-            return ['All']
-        n = [d.name for d in self.__theset]
-        return n.sort()
-
-    def contains(self, data):
-        return data in self.__theset
-
-    def add(self, data):
-        if data.__class__.__name__ == 'Data':
-            self.__theset.add(data)
-            self._modified()
-            return True
-        return False
-
-    def discard(self, data):
-        if data.__class__.__name__ == 'Data':
-            self.__theset.discard(data)
-            self._modified()
-            return True
-        return False
-
-    def clear(self):
-        if self.name.lower() == 'all':
-            return False
-        self.__theset.clear()
         self._modified()
         return True
 
-    def union(self, eset):
-        if type(eset) is not list:
+    @property
+    def data_names(self):
+        if self.name.upper() == 'ALL':
+            return ['ALL']
+        n = {}
+        for cc, s in self.__theset.items():
+            nlist = [d.name for d in s]
+            nlist.sort()
+            n.update({cc: nlist})
+        return n
+
+    def contains(self, data, chan_char=''):
+        if data.__class__.__name__ != 'Data':
+            raise TypeError(nmu.type_error(data, 'Data'))
+        if not isinstance(chan_char, str):
+            raise TypeError(nmu.type_error(chan_char, 'string'))
+        if chan_char == '':
+            pass  # search all channels
+        elif nmu.channel_num(chan_char) < 0:
+            e = 'bad channel character: ' + nmu.quotes(chan_char)
+            raise ValueError(e)
+        if chan_char == '':
+            for cc, s in self.__theset.index():
+                if data in s:
+                    return True
+            return False
+        cc = chan_char.upper()
+        if cc in self.__theset.keys():
+            return data in self.__theset[cc]
+        return False
+
+    def add(self, data, quiet=nmp.QUIET):
+        if data.__class__.__name__ == 'Data':
+            if len(self.__theset.keys()) > 1:
+                raise TypeError(nmu.type_error(data, 'dict'))  # need channel
+            data = {'A': [data]}  # assume channel A
+        elif isinstance(data, list):
+            if len(self.__theset.keys()) > 1:
+                raise TypeError(nmu.type_error(data, 'dict'))  # need channel
+            data = {'A': data}  # assume channel A
+        elif not isinstance(data, dict):
+            raise TypeError(nmu.type_error(data, 'dict'))
+        for cc, dlist in data.items():
+            if nmu.channel_num(cc) < 0:
+                e = 'bad channel character: ' + nmu.quotes(cc)
+                raise ValueError(e)
+            if dlist.__class__.__name__ == 'Data':
+                dlist = [dlist]
+            elif not isinstance(dlist, list):
+                raise TypeError(nmu.type_error(dlist, 'Data list'))
+            modified = False
+            cc = cc.upper()
+            for d in dlist:
+                if d.__class__.__name__ != 'Data':
+                    raise TypeError(nmu.type_error(d, 'Data'))
+                if cc in self.__theset.keys():
+                    theset = self.__theset[cc]
+                    if d not in theset:
+                        theset.add(d)
+                        modified = True
+                else:
+                    s = set()
+                    s.add(d)
+                    self.__theset.update({cc: s})
+                    modified = True
+        if modified:
+            self._modified()
+        return True
+
+    def discard(self, data, chan_char='', quiet=nmp.QUIET):
+        if data.__class__.__name__ != 'Data':
+            raise TypeError(nmu.type_error(data, 'Data'))
+        if not isinstance(chan_char, str):
+            raise TypeError(nmu.type_error(chan_char, 'string'))
+        if chan_char == '':
+            pass  # search all channels
+        elif nmu.channel_num(chan_char) < 0:
+            e = 'bad channel character: ' + nmu.quotes(chan_char)
+            raise ValueError(e)
+        discarded = False
+        if chan_char == '':
+            for cc, s in self.__theset.index():
+                if data in s:
+                    self.__theset[cc].discard(data)
+                    discarded = True
+                    self._modified()
+            return discarded
+        cc = chan_char.upper()
+        if cc in self.__theset.keys() and data in self.__theset[cc]:
+            self.__theset[cc].discard(data)
+            self._modified()
+            return True
+        return False
+
+    def clear(self, chan_char='', quiet=nmp.QUIET):
+        if self.name.upper() == 'ALL':
+            e = 'Set ' + nmu.quotes('All') + ' cannot be cleared'
+            raise RuntimeError(e)
+        if not isinstance(chan_char, str):
+            raise TypeError(nmu.type_error(chan_char, 'string'))
+        if chan_char == '':
+            pass  # clear all channels
+        elif nmu.channel_num(chan_char) < 0:
+            e = 'bad channel character: ' + nmu.quotes(chan_char)
+            raise ValueError(e)
+        if chan_char == '':
+            for cc in self.__theset.keys():
+                self.__theset[cc].clear()
+                self._modified()
+            return True
+        cc = chan_char.upper()
+        if cc in self.__theset.keys():
+            self.__theset[cc].clear()
+            self._modified()
+        return True
+
+    def union(self, eset, quiet=nmp.QUIET):
+        if not isinstance(eset, list):
             eset = [eset]
         for s in eset:
             if isinstance(s, EpochSet):
                 self.__theset = self.__theset.union(s.__theset)
 
+    # issubset
+    # issuperset
+    # intersection
+    # difference
+    # symmetric_difference
 
-class EpochSetContainer(Container):
+
+class EpochSetContainer(NMObjectContainer):
     """
     Container for NM EpochSet objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        t = EpochSet(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.ESET_PREFIX, rename=True,  **copy)
-        self._content_name = 'epochsets'
+    def __init__(self, parent, name, **copy):
+        t = EpochSet(None, 'empty').__class__.__name__
+        super().__init__(parent, name, type_=t, prefix=nmp.ESET_PREFIX,
+                         rename=True,  **copy)
 
     # override
     @property
@@ -136,10 +222,9 @@ class EpochSetContainer(Container):
 
     # override, no super
     def copy(self):
-        return EpochSetContainer(self._parent, self.name, fxns=self._fxns,
-                                 c_prefix=self.prefix,
-                                 c_rename=self._Container__rename,
-                                 thecontainer=self._thecontainer_copy())
+        return EpochSetContainer(self._parent, self.name, c_prefix=self.prefix,
+                                 c_rename=self.parameters['rename'],
+                                 c_thecontainer=self._thecontainer_copy())
 
     # @property  # override, no super
     # def select(self):
@@ -151,7 +236,7 @@ class EpochSetContainer(Container):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = EpochSet(self._parent, 'iwillberenamed')
+        o = EpochSet(None, 'iwillberenamed')
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     # override
@@ -178,7 +263,7 @@ class EpochSetContainer(Container):
             e = 'no selected data for dataseries ' + tp
             self._error(e, quiet=quiet)
             return False
-        if type(name) is not list:
+        if not isinstance(name, list):
             if name.lower() == 'all':
                 name = self.names
                 name.remove('All')
@@ -187,7 +272,7 @@ class EpochSetContainer(Container):
                 name = [name]
         if len(name) == 0:
             return False
-        if type(epoch) is not list:
+        if not isinstance(epoch, list):
             epoch = [epoch]
         for n in name:
             if n.lower() == 'all':
@@ -226,7 +311,7 @@ class EpochSetContainer(Container):
             e = 'no selected data for dataseries ' + tp
             self._alert(e, quiet=quiet)
             return False
-        if type(name) is not list:
+        if not isinstance(name, list):
             if name.lower() == 'all':
                 name = self.names
                 name.remove('All')
@@ -235,7 +320,7 @@ class EpochSetContainer(Container):
                 name = [name]
         if len(name) == 0:
             return False
-        if type(epoch) is not list:
+        if not isinstance(epoch, list):
             epoch = [epoch]
         for n in name:
             if n.lower() == 'all':
@@ -295,7 +380,7 @@ class EpochSetContainer(Container):
         s.eq_list = eq_list
 
     def clear(self, name, quiet=nmp.QUIET):
-        if type(name) is not list:
+        if not isinstance(name, list):
             if name.lower() == 'all':
                 name = self.names
                 name.remove('All')

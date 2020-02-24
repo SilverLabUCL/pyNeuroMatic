@@ -3,8 +3,8 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-from nm_container import NMObject
-from nm_container import Container
+from nm_object import NMObject
+from nm_object import NMObjectContainer
 import nm_utilities as nmu
 
 
@@ -13,9 +13,8 @@ class Note(NMObject):
     NM Note class
     """
 
-    def __init__(self, parent, name, fxns={}, thenote='', **copy):
-        super().__init__(parent, name, fxns=fxns)
-        self._content_name = 'note'
+    def __init__(self, parent, name, thenote='', **copy):
+        super().__init__(parent, name)
         self.__thenote = ''
         self._thenote_set(thenote)
         self._param_list += ['thenote']
@@ -29,8 +28,7 @@ class Note(NMObject):
 
     # override, no super
     def copy(self):
-        return Note(self._parent, self.name, fxns=self._fxns,
-                    thenote=self.__thenote)
+        return Note(self._parent, self.name, thenote=self.__thenote)
 
     @property
     def thenote(self):
@@ -55,31 +53,29 @@ class Note(NMObject):
         return True
 
 
-class NoteContainer(Container):
+class NoteContainer(NMObjectContainer):
     """
     Container for NM Note objects
     """
 
-    def __init__(self, parent, name, fxns={},  **copy):
-        t = Note(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix='Note',
-             rename=False, **copy)
-        self._content_name = 'notes'
+    def __init__(self, parent, name, **copy):
+        t = Note(None, 'empty').__class__.__name__
+        super().__init__(parent, name, type_=t, prefix='Note', rename=False,
+                         **copy)
         self.__off = False
 
     # override, no super
     def copy(self):
-        return NoteContainer(self._parent, self.name, fxns=self._fxns,
-                             c_prefix=self.prefix,
-                             c_rename=self._Container__rename,
-                             thecontainer=self._thecontainer_copy())
+        return NoteContainer(self._parent, self.name, c_prefix=self.prefix,
+                             c_rename=self.parameters['rename'],
+                             c_thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, thenote='', select=True, quiet=True):
         # notes should be quiet
         if self.__off:
             return None
-        o = Note(self._parent, name='iwillberenamed', thenote=thenote)
+        o = Note(None, name='iwillberenamed', thenote=thenote)
         return super().new(name='default', nmobject=o, select=select,
                            quiet=quiet)
 

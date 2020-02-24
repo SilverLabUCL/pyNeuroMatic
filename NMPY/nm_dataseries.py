@@ -5,8 +5,8 @@ Copyright 2019 Jason Rothman
 """
 import numpy as np
 
-from nm_container import NMObject
-from nm_container import Container
+from nm_object import NMObject
+from nm_object import NMObjectContainer
 from nm_channel import ChannelContainer
 import nm_dimension as nmd
 from nm_epochset import EpochSetContainer
@@ -19,26 +19,23 @@ class DataSeries(NMObject):
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}, **copy):
+    def __init__(self, parent, name, xdim={}, ydim={}, **copy):
         # name is data-series prefix
-        super().__init__(parent, name, fxns=fxns)
-        self._content_name = 'dataseries'
+        super().__init__(parent, name)
         self.__channel_container = None
         self.__eset_container = None
         for k, v in copy.items():
-            if k.lower() == 'channels' and isinstance(v, ChannelContainer):
+            if k.lower() == 'c_channels' and isinstance(v, ChannelContainer):
                 self.__channel_container = v
-            if k.lower() == 'esets' and isinstance(v, EpochSetContainer):
+            if k.lower() == 'c_esets' and isinstance(v, EpochSetContainer):
                 self.__eset_container = v
         if not isinstance(self.__channel_container, ChannelContainer):
-            self.__channel_container = ChannelContainer(self, 'Channels',
-                                                        fxns=fxns)
+            self.__channel_container = ChannelContainer(self, 'Channels')
         if not isinstance(self.__eset_container, EpochSetContainer):
-            self.__eset_container = EpochSetContainer(self, 'EpochSets',
-                                                      fxns=fxns)
+            self.__eset_container = EpochSetContainer(self, 'EpochSets')
         self.__thedata = {}  # dict, {channel: data-list}
-        self.__x = {'default': nmd.XDimension(self, 'xdim', fxns=fxns)}
-        self.__y = {'default': nmd.Dimension(self, 'ydim', fxns=fxns)}
+        self.__x = {'default': nmd.XDimension(self, 'xdim')}
+        self.__y = {'default': nmd.Dimension(self, 'ydim')}
         if xdim:
             pass
         if ydim:
@@ -54,7 +51,6 @@ class DataSeries(NMObject):
     @property
     def parameters(self):
         k = super().parameters
-        # k.update({'thedata': self.__thedata})
         k.update({'channel_select': self.__channel_select})
         k.update({'epoch_select': self.__epoch_select})
         # k.update({'data_select': self.__data_select})
@@ -83,10 +79,9 @@ class DataSeries(NMObject):
 
     # override, no super
     def copy(self):
-        c = DataSeries(self._parent, self.name, fxns=self._fxns,
-                       xdim=self.__x, ydim=self.__y,
-                       channels=self.__channel_container.copy(),
-                       esets=self.__eset_container.copy())
+        c = DataSeries(self._parent, self.name, xdim=self.__x, ydim=self.__y,
+                       c_channels=self.__channel_container.copy(),
+                       c_esets=self.__eset_container.copy())
         # self.__dims_master_on
         # self.__data_select = {}
         # self.__channel_select = []
@@ -325,16 +320,17 @@ class DataSeries(NMObject):
             e = 'chan_ylabel is not a dictionary'
             self._error(e, tp=self._tp)
             return False
-        for c, ylabel in chan_ylabel.items():
+        for cc, ylabel in chan_ylabel.items():
             if not isinstance(ylabel, str):
-                e = 'ylabel is not a string type: ' + nmu.quotes(ylabel)
-                self._error(e, tp=self._tp)
+                raise TypeError(nmu.type_error(ylabel, 'string'))
             # elif c not in self.__thedata.keys():
-            elif c not in nmp.CHAN_LIST:
-                e = 'bad channel: ' + nmu.quotes(c)
-                self._error(e, tp=self._tp)
-            if c in self.__thedata.keys():
-                cdata = self.__thedata[c]
+            if not isinstance(cc, str):
+                raise TypeError(nmu.type_error(cc, 'string'))
+            if nmu.channel_num(cc) < 0:
+                e = 'bad channel character: ' + nmu.quotes(cc)
+                raise ValueError(e)
+            if cc in self.__thedata.keys():
+                cdata = self.__thedata[cc]
                 for d in cdata:
                     d.ylabel = ylabel
         return True
@@ -626,7 +622,7 @@ class DataSeries(NMObject):
         return dd
 
     def _getitems(self, chan_char):
-        thedata = self.data._Container__thecontainer  # mangled
+        thedata = self.data._NMObjectContainer__thecontainer  # mangled
         dlist = []
         i = len(self.name)
         for o in thedata:
@@ -643,13 +639,14 @@ class DataSeries(NMObject):
         htxt = []
         self.__thedata = {}
         for i in range(0, 25):
-            c = nmu.channel_char(i)
-            olist = self._getitems(c)
+            cc = nmu.channel_char(i)
+            olist = self._getitems(cc)
             if len(olist) > 0:
                 self.__thedata.append(olist)
                 foundsomething = True
-                self.channel.new(name=c, quiet=True)
-                htxt.append('ch=' + c + ', n=' + str(len(olist)))
+                if not self.channel.exists(cc):
+                    self.channel.new(name=cc, quiet=True)
+                htxt.append('ch=' + cc + ', n=' + str(len(olist)))
             else:
                 break  # no more channels
         if not foundsomething:
@@ -682,20 +679,20 @@ class DataSeries(NMObject):
         self.__thedata = {}
         epoch_bgn = []
         for i in range(0, channels):
-            c = nmu.channel_char(i)
-            dlist = self._getitems(c)  # search for existing data
+            cc = nmu.channel_char(i)
+            dlist = self._getitems(cc)  # search for existing data
             epoch_bgn.append(len(dlist))
-            self.__thedata.update({c: dlist})
-            if not self.channel.exists(c):
-                self.channel.new(name=c, quiet=True)
+            self.__thedata.update({cc: dlist})
+            if not self.channel.exists(cc):
+                self.channel.new(name=cc, quiet=True)
         e_bgn = max(epoch_bgn)
         e_end = e_bgn + epochs
         for i in range(0, channels):
-            c = nmu.channel_char(i)
+            cc = nmu.channel_char(i)
             elist = []
             dlist = []
             for j in range(e_bgn, e_end):
-                name2 = self.name + c + str(j)
+                name2 = self.name + cc + str(j)
                 d = self.data.new(name=name2, shape=shape,
                                   fill_value=fill_value, quiet=True)
                 if d:
@@ -704,10 +701,10 @@ class DataSeries(NMObject):
                 else:
                     a = 'failed to create ' + nmu.quotes(name2)
                     self._alert(a, tp=self._tp, quiet=quiet)
-            dlist2 = self.__thedata[c]
+            dlist2 = self.__thedata[cc]
             dlist2.extend(dlist)
-            self.__thedata[c] = dlist2
-            h = ('created ' + nmu.quotes(self.name) + ', ' + 'ch=' + c +
+            self.__thedata[cc] = dlist2
+            h = ('created ' + nmu.quotes(self.name) + ', ' + 'ch=' + cc +
                  ', ep=' + nmu.int_list_to_seq_str(elist, space=False))
             self._history(h, tp=self._tp, quiet=quiet)
         if dims:
@@ -734,28 +731,27 @@ class DataSeries(NMObject):
         return d
 
 
-class DataSeriesContainer(Container):
+class DataSeriesContainer(NMObjectContainer):
     """
     NM Container for DataSeries objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        t = DataSeries(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
-                         rename=False, **copy)
-        self._content_name = 'dataseries'
+    def __init__(self, parent, name, **copy):
+        t = DataSeries(None, 'empty').__class__.__name__
+        super().__init__(parent, name, type_=t, prefix='', rename=False,
+                         **copy)
 
     # override, no super
     def copy(self):
-        return DataSeriesContainer(self._parent, self.name, fxns=self._fxns,
+        return DataSeriesContainer(self._parent, self.name,
                                    c_prefix=self.prefix,
-                                   c_rename=self._Container__rename,
-                                   thecontainer=self._thecontainer_copy())
+                                   c_rename=self.parameters['rename'],
+                                   c_thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
         # name is the data-series name
-        o = DataSeries(self._parent, 'iwillberenamed')
+        o = DataSeries(None, 'iwillberenamed')
         ds = super().new(name=name, nmobject=o, select=select, quiet=quiet)
         if ds:
             ds.update(quiet=quiet)

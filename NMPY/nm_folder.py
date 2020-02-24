@@ -5,8 +5,8 @@ Copyright 2019 Jason Rothman
 """
 import h5py
 
-from nm_container import NMObject
-from nm_container import Container
+from nm_object import NMObject
+from nm_object import NMObjectContainer
 from nm_data import DataContainer
 from nm_dataseries import DataSeriesContainer
 import nm_preferences as nmp
@@ -18,23 +18,21 @@ class Folder(NMObject):
     NM Data Folder class
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        super().__init__(parent, name, fxns=fxns)
-        self._content_name = 'folder'
+    def __init__(self, parent, name, **copy):
+        super().__init__(parent, name)
         self.__data_container = None
         self.__dataseries_container = None
         for k, v in copy.items():
-            if k.lower() == 'data' and isinstance(v, DataContainer):
+            if k.lower() == 'c_data' and isinstance(v, DataContainer):
                 self.__data_container = v
-            if k.lower() == 'dataseries' and isinstance(v,
-                                                        DataSeriesContainer):
+            if k.lower() == 'c_dataseries' and isinstance(v,
+                                                          DataSeriesContainer):
                 self.__dataseries_container = v
         if not isinstance(self.__data_container, DataContainer):
-            self.__data_container = DataContainer(self, 'Data', fxns=fxns)
+            self.__data_container = DataContainer(self, 'Data')
         if not isinstance(self.__dataseries_container, DataSeriesContainer):
             self.__dataseries_container = DataSeriesContainer(self,
-                                                              'DataSeries',
-                                                              fxns=fxns)
+                                                              'DataSeries')
 
     # override
     @property
@@ -56,9 +54,9 @@ class Folder(NMObject):
 
     # override, no super
     def copy(self):
-        return Folder(self._parent, self.name, fxns=self._fxns,
-                      data=self.__data_container.copy(),
-                      dataseries=self.__dataseries_container.copy())
+        return Folder(self._parent, self.name,
+                      c_data=self.__data_container.copy(),
+                      c_dataseries=self.__dataseries_container.copy())
 
     @property
     def data(self):
@@ -69,27 +67,25 @@ class Folder(NMObject):
         return self.__dataseries_container
 
 
-class FolderContainer(Container):
+class FolderContainer(NMObjectContainer):
     """
     Container for NM Folders
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        t = Folder(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t,
-                         prefix=nmp.FOLDER_PREFIX, rename=True, **copy)
-        self._content_name = 'folders'
+    def __init__(self, parent, name, **copy):
+        t = Folder(None, 'empty').__class__.__name__
+        super().__init__(parent, name, type_=t, prefix=nmp.FOLDER_PREFIX,
+                         rename=True, **copy)
 
     # override, no super
     def copy(self):
-        return FolderContainer(self._parent, self.name, fxns=self._fxns,
-                               c_prefix=self.prefix,
-                               c_rename=self._Container__rename,
-                               thecontainer=self._thecontainer_copy())
+        return FolderContainer(self._parent, self.name, c_prefix=self.prefix,
+                               c_rename=self.parameters['rename'],
+                               c_thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = Folder(self._parent, 'iwillberenamed')
+        o = Folder(None, 'iwillberenamed')
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     def add(self, folder, select=True, quiet=nmp.QUIET):

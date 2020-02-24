@@ -4,8 +4,8 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-from nm_container import NMObject
-from nm_container import Container
+from nm_object import NMObject
+from nm_object import NMObjectContainer
 import nm_dimension as nmd
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -16,11 +16,10 @@ class Channel(NMObject):
     NM Channel class
     """
 
-    def __init__(self, parent, name, fxns={}, xdim={}, ydim={}, **copy):
-        super().__init__(parent, name, fxns=fxns)
-        self._content_name = 'channel'
-        self.__x = nmd.XDimension(self, 'xdim', fxns=fxns, dim=xdim)
-        self.__y = nmd.Dimension(self, 'ydim', fxns=fxns, dim=ydim)
+    def __init__(self, parent, name, xdim={}, ydim={}, **copy):
+        super().__init__(parent, name)
+        self.__x = nmd.XDimension(self, 'xdim', dim=xdim)
+        self.__y = nmd.Dimension(self, 'ydim', dim=ydim)
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         # self.__transform = []
         self._param_list += ['xdim', 'ydim']  # ['graphXY', 'transform']
@@ -37,8 +36,8 @@ class Channel(NMObject):
 
     # override, no super
     def copy(self):
-        return Channel(self._parent, self.name, fxns=self._fxns,
-                       xdim=self.__x.dim, ydim=self.__y.dim)
+        return Channel(self._parent, self.name, xdim=self.__x.dim,
+                       ydim=self.__y.dim)
 
     @property
     def x(self):
@@ -49,28 +48,26 @@ class Channel(NMObject):
         return self.__y
 
 
-class ChannelContainer(Container):
+class ChannelContainer(NMObjectContainer):
     """
     Container for NM Channel objects
     """
 
-    def __init__(self, parent, name, fxns={}, **copy):
-        t = Channel(parent, 'empty').__class__.__name__
-        super().__init__(parent, name, fxns=fxns, type_=t, prefix='',
-                         rename=False, **copy)
+    def __init__(self, parent, name, **copy):
+        t = Channel(None, 'empty').__class__.__name__
+        super().__init__(parent, name, type_=t, prefix='', rename=False,
+                         **copy)
         # NO PREFIX, Channel names are 'A', 'B'...
-        self._content_name = 'channels'
 
     # override, no super
     def copy(self):
-        return ChannelContainer(self._parent, self.name, fxns=self._fxns,
-                                c_prefix=self.prefix,
-                                c_rename=self._Container__rename,
-                                thecontainer=self._thecontainer_copy())
+        return ChannelContainer(self._parent, self.name, c_prefix=self.prefix,
+                                c_rename=self.parameters['rename'],
+                                c_thecontainer=self._thecontainer_copy())
 
     # override
     def new(self, xdim={}, ydim={}, select=True, quiet=nmp.QUIET):
-        o = Channel(self._parent, 'iwillberenamed', xdim=xdim, ydim=ydim)
+        o = Channel(None, 'iwillberenamed', xdim=xdim, ydim=ydim)
         return super().new(name='default', nmobject=o, select=select,
                            quiet=quiet)
 

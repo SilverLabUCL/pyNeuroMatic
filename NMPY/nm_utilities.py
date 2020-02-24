@@ -145,20 +145,21 @@ def channel_num(chan_char):
     if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return -1
     for i, c in enumerate(nmp.CHAN_LIST):
-        if chan_char.lower() == c.lower():
+        if chan_char.upper() == c.upper():
             return i
     return -1
 
 
-def channel_char_exists(text, chan_char):
-    if not text or not isinstance(text, str):
+def channel_char_exists(text_search_backwards, chan_char):
+    txt = text_search_backwards
+    if not txt or not isinstance(txt, str):
         return False
     if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return False
-    for i in reversed(range(len(text))):  # search backwards, chan char at end
-        if text[i].isdigit():  # skip thru seq number
+    for i in reversed(range(len(txt))):  # search backwards, chan-char at end
+        if txt[i].isdigit():  # skip thru any sequence number
             continue
-        if text[i].lower() == chan_char.lower():  # first char before seq #
+        if txt[i].upper() == chan_char.upper():  # first char before seq #
             return True
         return False  # check only last character
     return False

@@ -44,7 +44,7 @@ class Manager(object):
         self.__date = str(datetime.datetime.now())
         self.__configs = nmp.Configs()
         self.__configs.quiet = quiet
-        self.__stats = Stats(self._fxns)
+        self.__stats = Stats()
         self._history('created ' + nmu.quotes(self.__name), quiet=quiet)
         if new_project:
             self.project_new(quiet=quiet)
@@ -78,7 +78,7 @@ class Manager(object):
             else:
                 self._history('cancel', quiet=quiet)
                 return None  # cancel
-        p = Project(self, name, fxns=self._fxns)
+        p = Project(self, name)
         self._history('created ' + nmu.quotes(name), quiet=quiet)
         if new_folder and p and p.folder:
             p.folder.new(quiet=quiet)  # create default folder
@@ -252,10 +252,6 @@ class Manager(object):
         if self.configs.quiet:  # manager config quiet overrides
             return True
         return quiet
-
-    @property
-    def _fxns(self):
-        return {'quiet': self._quiet}
 
 
 if __name__ == '__main__':
