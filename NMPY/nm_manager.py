@@ -30,8 +30,8 @@ class Manager(object):
                 DataSeries (Record, Wave...)
                     ChannelContainer
                     Channel (A, B, C...)
-                    EpochSetContainer
-                    EpochSet (All, Set1, Set2...)
+                    DataSetContainer
+                    DataSet (All, Set1, Set2...)
     """
     def __init__(self, name='NeuroMatic Manager', new_project=True,
                  quiet=nmp.QUIET):

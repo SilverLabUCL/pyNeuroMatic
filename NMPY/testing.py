@@ -16,10 +16,10 @@ from nm_data import Data
 from nm_data import DataContainer
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
+from nm_dataset import DataSet
+from nm_dataset import DataSetContainer
 from nm_dimension import Dimension
 from nm_dimension import XDimension
-from nm_epochset import EpochSet
-from nm_epochset import EpochSetContainer
 from nm_manager import Manager
 from nm_object import NMObject
 from nm_object import NMObjectContainer
@@ -64,7 +64,7 @@ class Test(unittest.TestCase):
         # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
-        self._test_epochset()
+        self._test_dataset()
         # self._test_utilities()
 
     def _test_nmobject(self):
@@ -1032,37 +1032,45 @@ class Test(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             c0.duplicate()
 
-    def _test_epochset(self):
-        sall = EpochSet(PARENT, 'All')
-        s1 = EpochSet(PARENT, 'Set1')
-        s2 = EpochSet(PARENT, 'Set2')
-        sx = EpochSet(PARENT, 'SetX')
+    def _test_dataset(self):
+        sall = DataSet(PARENT, 'All')
+        s1 = DataSet(PARENT, 'Set1')
+        s2 = DataSet(PARENT, 'Set2')
+        sx = DataSet(PARENT, 'SetX')
         dA0 = Data(PARENT, 'RecordA0')
         dA1 = Data(PARENT, 'RecordA1')
         dA2 = Data(PARENT, 'RecordA2')
-        dA3 = Data(PARENT, 'RecordA3')
-        dA4 = Data(PARENT, 'RecordA4')
         dB0 = Data(PARENT, 'RecordB0')
         dB1 = Data(PARENT, 'RecordB1')
         dB2 = Data(PARENT, 'RecordB2')
-        dB3 = Data(PARENT, 'RecordB3')
-        dB4 = Data(PARENT, 'RecordB4')
+        epoch0 = {'A': dA0, 'B': dB0}
+        epoch1 = {'A': dA1, 'B': dB1}
+        epoch2 = {'A': dA2, 'B': dB2}
         self.assertEqual(s1.eq_list, [])
         self.assertTrue(s1.eq_lock)
         # self.assertIsInstance(s1.theset, dict)
+        # parameters
         plist = PLIST + ['eq_list', 'eq_lock']
         self.assertEqual(s1._param_list, plist)
-        # parameters
         self.assertTrue(s1._param_test())
         # content
-        self.assertEqual(s1._content_name, 'epochset')
+        self.assertEqual(s1._content_name, 'dataset')
         # bad_names
         self.assertEqual(s1._bad_names, ['select', 'default'])
         # add
-        s1.add({'A': dA0, 'B': dB0})  # episode 0
-        s1.add({'A': dA1, 'B': dB1})  # episode 1
-        s1.add({'A': dA0})
+        s1.add(epoch0)
+        s1.add(epoch1)
+        s1.add(epoch2)
         print(s1.data_names)
+        s1.discard(epoch1)
+        print(s1.data_names)
+        
+        test = {'A': 'one', 'B': 'two'}
+        for k, v in test.items():
+            v = [v]
+            test[k] =  v
+        for k, v in test.items():
+            print(v)
         # data_names
         # contains
         # union

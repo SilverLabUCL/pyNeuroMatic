@@ -10,9 +10,9 @@ import nm_preferences as nmp
 import nm_utilities as nmu
 
 
-class EpochSet(NMObject):
+class DataSet(NMObject):
     """
-    NM EpochSet class
+    NM DataSet class
     """
 
     def __init__(self, parent, name, **copy):
@@ -47,9 +47,9 @@ class EpochSet(NMObject):
     # override, no super
     def copy(self):
         thesetcopy = self.__theset.copy()  # TODO, refs need copying
-        c = EpochSet(self._parent, self.name, c_theset=thesetcopy,
-                     c_eq_list=self.__eq_list.copy(),
-                     c_eq_lock=self.__eq_lock)
+        c = DataSet(self._parent, self.name, c_theset=thesetcopy,
+                    c_eq_list=self.__eq_list.copy(),
+                    c_eq_lock=self.__eq_lock)
         return c
 
     @property
@@ -104,68 +104,75 @@ class EpochSet(NMObject):
             return data in self.__theset[cc]
         return False
 
-    def add(self, data, quiet=nmp.QUIET):
+    # add
+    # clear
+    # copy
+    # difference
+    # difference_update
+    # discard
+    # intersection
+    # intersection_update
+    # isdisjoint
+    # issubset
+    # issuperset
+    # pop
+    # remove
+    # symmetric_difference
+    # symmetric_difference_update
+    # union
+    # update
+
+    def _data_dict(self, data):
+        # data = MyData -converted-> {'A': [MyData]}
+        # data = [MyData0, MyData1] -converted-> {'A': [MyData0, MyData1]}
+        # data = {'A': MyDataA0, 'B': MyDataB0} -converted->
+        #        {'A': [MyDataA0], 'B': [MyDataB0]}
+        # data = {'A': [MyDataA0, MyDataA1], 'B': [MyDataB0, MyDataB1]}
+        # data format = {chan_char: [Data List]}
         if data.__class__.__name__ == 'Data':
             if len(self.__theset.keys()) > 1:
-                raise TypeError(nmu.type_error(data, 'dict'))  # need channel
-            data = {'A': [data]}  # assume channel A
-        elif isinstance(data, list):
+                e = 'dictionary with channel keys'
+                TypeError(nmu.type_error(data, e))
+            return {'A': [data]}  # assume channel A
+        if isinstance(data, list):
             if len(self.__theset.keys()) > 1:
-                raise TypeError(nmu.type_error(data, 'dict'))  # need channel
-            data = {'A': data}  # assume channel A
-        elif not isinstance(data, dict):
-            raise TypeError(nmu.type_error(data, 'dict'))
+                e = 'dictionary with channel keys'
+                TypeError(nmu.type_error(data, e))
+            return {'A': data}  # assume channel A
+        if not isinstance(data, dict):
+            raise TypeError(nmu.type_error(data, 'dictionary'))
         for cc, dlist in data.items():
             if nmu.channel_num(cc) < 0:
                 e = 'bad channel character: ' + nmu.quotes(cc)
                 raise ValueError(e)
             if dlist.__class__.__name__ == 'Data':
                 dlist = [dlist]
+                data[cc] = dlist
             elif not isinstance(dlist, list):
                 raise TypeError(nmu.type_error(dlist, 'Data list'))
-            modified = False
-            cc = cc.upper()
             for d in dlist:
                 if d.__class__.__name__ != 'Data':
                     raise TypeError(nmu.type_error(d, 'Data'))
+        return data
+
+    def add(self, data, quiet=nmp.QUIET):
+        dd = self._data_dict(data)
+        if not isinstance(dd, dict):
+            return False
+        modified = False
+        for cc, dlist in dd.items():
+            cc = cc.upper()
+            for d in dlist:
                 if cc in self.__theset.keys():
-                    theset = self.__theset[cc]
-                    if d not in theset:
-                        theset.add(d)
+                    if d not in self.__theset[cc]:
+                        self.__theset[cc].add(d)
                         modified = True
                 else:
-                    s = set()
-                    s.add(d)
-                    self.__theset.update({cc: s})
+                    self.__theset.update({cc: set([d])})
                     modified = True
         if modified:
             self._modified()
         return True
-
-    def discard(self, data, chan_char='', quiet=nmp.QUIET):
-        if data.__class__.__name__ != 'Data':
-            raise TypeError(nmu.type_error(data, 'Data'))
-        if not isinstance(chan_char, str):
-            raise TypeError(nmu.type_error(chan_char, 'string'))
-        if chan_char == '':
-            pass  # search all channels
-        elif nmu.channel_num(chan_char) < 0:
-            e = 'bad channel character: ' + nmu.quotes(chan_char)
-            raise ValueError(e)
-        discarded = False
-        if chan_char == '':
-            for cc, s in self.__theset.index():
-                if data in s:
-                    self.__theset[cc].discard(data)
-                    discarded = True
-                    self._modified()
-            return discarded
-        cc = chan_char.upper()
-        if cc in self.__theset.keys() and data in self.__theset[cc]:
-            self.__theset[cc].discard(data)
-            self._modified()
-            return True
-        return False
 
     def clear(self, chan_char='', quiet=nmp.QUIET):
         if self.name.upper() == 'ALL':
@@ -189,29 +196,40 @@ class EpochSet(NMObject):
             self._modified()
         return True
 
+    def discard(self, data, quiet=nmp.QUIET):
+        dd = self._data_dict(data)
+        if not isinstance(dd, dict):
+            return False
+        modified = False
+        for cc, dlist in dd.items():
+            cc = cc.upper()
+            if cc not in self.__theset.keys():
+                continue
+            for d in dlist:
+                if d in self.__theset[cc]:
+                    self.__theset[cc].discard(d)
+                    modified = True
+        if modified:
+            self._modified()
+        return True
+
     def union(self, eset, quiet=nmp.QUIET):
         if not isinstance(eset, list):
             eset = [eset]
         for s in eset:
-            if isinstance(s, EpochSet):
+            if isinstance(s, DataSet):
                 self.__theset = self.__theset.union(s.__theset)
 
-    # issubset
-    # issuperset
-    # intersection
-    # difference
-    # symmetric_difference
 
-
-class EpochSetContainer(NMObjectContainer):
+class DataSetContainer(NMObjectContainer):
     """
-    Container for NM EpochSet objects
+    Container for NM DataSet objects
     """
 
     def __init__(self, parent, name, **copy):
-        t = EpochSet(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t, prefix=nmp.ESET_PREFIX,
-                         rename=True,  **copy)
+        t = DataSet(None, 'empty').__class__.__name__
+        super().__init__(parent, name, type_=t, prefix=nmp.DATASET_PREFIX,
+                         rename=True, **copy)
 
     # override
     @property
@@ -222,7 +240,7 @@ class EpochSetContainer(NMObjectContainer):
 
     # override, no super
     def copy(self):
-        return EpochSetContainer(self._parent, self.name, c_prefix=self.prefix,
+        return DataSetContainer(self._parent, self.name, c_prefix=self.prefix,
                                  c_rename=self.parameters['rename'],
                                  c_thecontainer=self._thecontainer_copy())
 
@@ -236,7 +254,7 @@ class EpochSetContainer(NMObjectContainer):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = EpochSet(None, 'iwillberenamed')
+        o = DataSet(None, 'iwillberenamed')
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     # override

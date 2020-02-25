@@ -18,7 +18,7 @@ class NMObject(object):
     NM objects to be stored in a Container class (see below).
 
     Known children:
-        Channel, Data, DataSeries, Dimension, EpochSet, Folder, Note, Project
+        Channel, Data, DataSeries, Dimension, DataSet, Folder, Note, Project
 
     Attributes:
         parent (NMObject or any object):
@@ -262,7 +262,7 @@ class NMObjectContainer(NMObject):
 
     Known Children:
         FolderContainer, DataContainer, NoteContainer, DataSeriesContainer,
-        ChannelContainer, EpochSetContainer
+        ChannelContainer, DataSetContainer
 
     Attributes:
         prefix (str): For creating NMObject name via name_next(),
