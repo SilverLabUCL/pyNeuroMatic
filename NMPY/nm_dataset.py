@@ -104,24 +104,6 @@ class DataSet(NMObject):
             return data in self.__theset[cc]
         return False
 
-    # add
-    # clear
-    # copy
-    # difference
-    # difference_update
-    # discard
-    # intersection
-    # intersection_update
-    # isdisjoint
-    # issubset
-    # issuperset
-    # pop
-    # remove
-    # symmetric_difference
-    # symmetric_difference_update
-    # union
-    # update
-
     def _data_dict(self, data):
         # data = MyData -converted-> {'A': [MyData]}
         # data = [MyData0, MyData1] -converted-> {'A': [MyData0, MyData1]}
@@ -135,11 +117,13 @@ class DataSet(NMObject):
                 TypeError(nmu.type_error(data, e))
             return {'A': [data]}  # assume channel A
         if isinstance(data, list):
+            if len(data) == 0:
+                return {}
             if len(self.__theset.keys()) > 1:
                 e = 'dictionary with channel keys'
                 TypeError(nmu.type_error(data, e))
-            return {'A': data}  # assume channel A
-        if not isinstance(data, dict):
+            data = {'A': data}  # assume channel A
+        elif not isinstance(data, dict):
             raise TypeError(nmu.type_error(data, 'dictionary'))
         for cc, dlist in data.items():
             if nmu.channel_num(cc) < 0:
@@ -154,6 +138,22 @@ class DataSet(NMObject):
                 if d.__class__.__name__ != 'Data':
                     raise TypeError(nmu.type_error(d, 'Data'))
         return data
+
+    # add/update
+    # clear
+    # copy
+    # difference
+    # difference_update
+    # discard/remove
+    # intersection
+    # intersection_update
+    # isdisjoint
+    # issubset
+    # issuperset
+    # pop
+    # symmetric_difference
+    # symmetric_difference_update
+    # union
 
     def add(self, data, quiet=nmp.QUIET):
         dd = self._data_dict(data)
@@ -196,7 +196,7 @@ class DataSet(NMObject):
             self._modified()
         return True
 
-    def discard(self, data, quiet=nmp.QUIET):
+    def discard(self, data, quiet=nmp.QUIET):  # not in set? # remove
         dd = self._data_dict(data)
         if not isinstance(dd, dict):
             return False

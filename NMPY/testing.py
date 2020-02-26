@@ -1057,20 +1057,57 @@ class Test(unittest.TestCase):
         self.assertEqual(s1._content_name, 'dataset')
         # bad_names
         self.assertEqual(s1._bad_names, ['select', 'default'])
+        # data_dict
+        for b in BADTYPES:
+            if isinstance(b, list) or isinstance(b, dict):
+                continue  # ok
+            with self.assertRaises(TypeError):
+                s1._data_dict(b)
+        for b in BADTYPES:
+            with self.assertRaises(TypeError):
+                s1._data_dict([b])
+        for b in [None, True, 1, 3.14, 'test', nm, '', '0']:
+            with self.assertRaises(ValueError):
+                s1._data_dict({b: [dA0]})
+        for b in BADTYPES:
+            if isinstance(b, list):
+                continue  # ok
+            with self.assertRaises(TypeError):
+                s1._data_dict({'A': b})
+        self.assertEqual(s1._data_dict({}), {})
+        self.assertEqual(s1._data_dict([]), {})
+        self.assertEqual(s1._data_dict(dA0), {'A': [dA0]})
+        self.assertEqual(s1._data_dict([dA0]), {'A': [dA0]})
+        self.assertEqual(s1._data_dict({'A': dA0}), {'A': [dA0]})
+        self.assertEqual(s1._data_dict({'A': dA0, 'B': dB0}), {'A': [dA0],
+                         'B': [dB0]})
+        self.assertEqual(s1._data_dict({'A': dA0, 'B': [dB0]}), {'A': [dA0],
+                         'B': [dB0]})
         # add
-        s1.add(epoch0)
-        s1.add(epoch1)
-        s1.add(epoch2)
-        print(s1.data_names)
-        s1.discard(epoch1)
-        print(s1.data_names)
+        s1.add(dA0)
+        self.assertTrue(dA0 in s1._DataSet__theset['A'])
+        s1.add(dA1)
+        s1.add(dA2)
+        nlist_a = ['RecordA0', 'RecordA1', 'RecordA2']
+        self.assertEqual(s1.data_names, {'A': nlist_a})
+        s1.discard(dA1)
+        nlist_a = ['RecordA0', 'RecordA2']
+        self.assertEqual(s1.data_names, {'A': nlist_a})
+        # add epochs
+        s2.add(epoch0)
+        self.assertTrue(dA0 in s2._DataSet__theset['A'])
+        self.assertTrue(dB0 in s2._DataSet__theset['B'])
+        s2.add(epoch1)
+        s2.add(epoch2)
+        nlist_a = ['RecordA0', 'RecordA1', 'RecordA2']
+        nlist_b = ['RecordB0', 'RecordB1', 'RecordB2']
+        self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b})
+        s2.discard(epoch1)
+        nlist_a = ['RecordA0', 'RecordA2']
+        nlist_b = ['RecordB0', 'RecordB2']
+        self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b})
         
-        test = {'A': 'one', 'B': 'two'}
-        for k, v in test.items():
-            v = [v]
-            test[k] =  v
-        for k, v in test.items():
-            print(v)
+        
         # data_names
         # contains
         # union
