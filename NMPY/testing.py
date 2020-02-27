@@ -1083,10 +1083,10 @@ class Test(unittest.TestCase):
                          'B': [dB0]})
         self.assertEqual(s1._data_dict({'A': dA0, 'B': [dB0]}), {'A': [dA0],
                          'B': [dB0]})
-        # add
+        # add, data_names, discard
         s1.add(dA0)
         self.assertTrue(dA0 in s1._DataSet__theset['A'])
-        s1.add(dA1)
+        s1.add(dA1)  # data gets added to channel 'A' by default
         s1.add(dA2)
         nlist_a = ['RecordA0', 'RecordA1', 'RecordA2']
         self.assertEqual(s1.data_names, {'A': nlist_a})
@@ -1108,7 +1108,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b})
         
         
-        # data_names
+        
         # contains
         # union
         # discard

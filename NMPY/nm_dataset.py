@@ -154,8 +154,10 @@ class DataSet(NMObject):
     # symmetric_difference
     # symmetric_difference_update
     # union
+    # TODO 'All' set
 
     def add(self, data, quiet=nmp.QUIET):
+        # more like 'update' but call 'add'
         dd = self._data_dict(data)
         if not isinstance(dd, dict):
             return False
@@ -175,9 +177,6 @@ class DataSet(NMObject):
         return True
 
     def clear(self, chan_char='', quiet=nmp.QUIET):
-        if self.name.upper() == 'ALL':
-            e = 'Set ' + nmu.quotes('All') + ' cannot be cleared'
-            raise RuntimeError(e)
         if not isinstance(chan_char, str):
             raise TypeError(nmu.type_error(chan_char, 'string'))
         if chan_char == '':
@@ -193,6 +192,25 @@ class DataSet(NMObject):
         cc = chan_char.upper()
         if cc in self.__theset.keys():
             self.__theset[cc].clear()
+            self._modified()
+        return True
+
+    # difference
+    # difference_update (one function, with 'update' argument?)
+
+    def difference(self, data, quiet=nmp.QUIET):
+        dd = self._data_dict(data)
+        if not isinstance(dd, dict):
+            return False
+        for cc, dlist in dd.items():
+            cc = cc.upper()
+            if cc not in self.__theset.keys():
+                continue
+            for d in dlist:
+                if d in self.__theset[cc]:
+                    self.__theset[cc].discard(d)
+                    modified = True
+        if modified:
             self._modified()
         return True
 
@@ -212,6 +230,14 @@ class DataSet(NMObject):
         if modified:
             self._modified()
         return True
+
+    # intersection
+    # intersection_update
+    # isdisjoint
+    # issubset
+    # issuperset
+    # symmetric_difference
+    # symmetric_difference_update
 
     def union(self, eset, quiet=nmp.QUIET):
         if not isinstance(eset, list):
