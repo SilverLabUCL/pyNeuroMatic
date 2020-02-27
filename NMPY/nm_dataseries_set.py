@@ -10,9 +10,9 @@ import nm_preferences as nmp
 import nm_utilities as nmu
 
 
-class DataSet(NMObject):
+class DataSeriesSet(NMObject):
     """
-    NM DataSet class
+    NM DataSeriesSet class
     """
 
     def __init__(self, parent, name, **copy):
@@ -47,7 +47,7 @@ class DataSet(NMObject):
     # override, no super
     def copy(self):
         thesetcopy = self.__theset.copy()  # TODO, refs need copying
-        c = DataSet(self._parent, self.name, c_theset=thesetcopy,
+        c = DataSeriesSet(self._parent, self.name, c_theset=thesetcopy,
                     c_eq_list=self.__eq_list.copy(),
                     c_eq_lock=self.__eq_lock)
         return c
@@ -157,68 +157,65 @@ class DataSet(NMObject):
     # TODO 'All' set
 
     def add(self, data, quiet=nmp.QUIET):
+        # data = {'A': [DataA0, DataA1, DataA2...]}
         # more like 'update' but call 'add'
         dd = self._data_dict(data)
         if not isinstance(dd, dict):
             return False
-        modified = False
         for cc, dlist in dd.items():
             cc = cc.upper()
             for d in dlist:
                 if cc in self.__theset.keys():
                     if d not in self.__theset[cc]:
                         self.__theset[cc].add(d)
-                        modified = True
+                        self._modified()
                 else:
                     self.__theset.update({cc: set([d])})
-                    modified = True
-        if modified:
-            self._modified()
+                    self._modified()
         return True
 
-    def clear(self, chan_char='', quiet=nmp.QUIET):
-        if not isinstance(chan_char, str):
-            raise TypeError(nmu.type_error(chan_char, 'string'))
-        if chan_char == '':
-            pass  # clear all channels
-        elif nmu.channel_num(chan_char) < 0:
-            e = 'bad channel character: ' + nmu.quotes(chan_char)
-            raise ValueError(e)
-        if chan_char == '':
-            for cc in self.__theset.keys():
+    def clear(self, chan_list=['ALL'], confirm=True, quiet=nmp.QUIET):
+        # chan_list = ['A', 'B']
+        if isinstance(chan_list, str):
+            chan_list = [chan_list]
+        elif not isinstance(chan_list, list):
+            raise TypeError(nmu.type_error(chan_list, 'list'))
+        for cc in chan_list:
+            if cc.upper() == 'ALL':
+                chan_list = list(self.__theset.keys())
+                break
+            if nmu.channel_num(cc) < 0:
+                e = 'bad channel character: ' + nmu.quotes(cc)
+                raise ValueError(e)
+        if nmu.check_bool(confirm, True):
+            if len(chan_list) > 1:
+                ctxt = ' channels '
+            else:
+                ctxt = ' channel '
+            q = ('are you sure you want to clear ' + self.name + ',' + ctxt +
+                 ', '.join(chan_list) + '?')
+            yn = nmu.input_yesno(q, tp=self._tp)
+            if not yn == 'y':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
+        for cc in chan_list:
+            if cc in self.__theset.keys():
                 self.__theset[cc].clear()
                 self._modified()
-            return True
-        cc = chan_char.upper()
-        if cc in self.__theset.keys():
-            self.__theset[cc].clear()
-            self._modified()
         return True
 
-    # difference
-    # difference_update (one function, with 'update' argument?)
-
-    def difference(self, data, quiet=nmp.QUIET):
-        dd = self._data_dict(data)
-        if not isinstance(dd, dict):
-            return False
-        for cc, dlist in dd.items():
-            cc = cc.upper()
-            if cc not in self.__theset.keys():
-                continue
-            for d in dlist:
-                if d in self.__theset[cc]:
-                    self.__theset[cc].discard(d)
-                    modified = True
-        if modified:
-            self._modified()
+    def difference(self, dataseriesset, quiet=nmp.QUIET):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+            if cc in self.__theset.keys() and isinstance(s, set):
+                self.__theset[cc].difference_update(s)
         return True
 
     def discard(self, data, quiet=nmp.QUIET):  # not in set? # remove
         dd = self._data_dict(data)
         if not isinstance(dd, dict):
             return False
-        modified = False
         for cc, dlist in dd.items():
             cc = cc.upper()
             if cc not in self.__theset.keys():
@@ -226,36 +223,69 @@ class DataSet(NMObject):
             for d in dlist:
                 if d in self.__theset[cc]:
                     self.__theset[cc].discard(d)
-                    modified = True
-        if modified:
-            self._modified()
+                    self._modified()
         return True
 
-    # intersection
-    # intersection_update
-    # isdisjoint
-    # issubset
-    # issuperset
-    # symmetric_difference
-    # symmetric_difference_update
+    def intersection(self, dataseriesset, quiet=nmp.QUIET):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+            if cc in self.__theset.keys() and isinstance(s, set):
+                self.__theset[cc].intersection_update(s)
+        return True
 
-    def union(self, eset, quiet=nmp.QUIET):
-        if not isinstance(eset, list):
-            eset = [eset]
-        for s in eset:
-            if isinstance(s, DataSet):
-                self.__theset = self.__theset.union(s.__theset)
+    def isdisjoint(self, dataseriesset, quiet=nmp.QUIET):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+            if cc in self.__theset.keys() and isinstance(s, set):
+                if not self.__theset[cc].isdisjoint(s):
+                    return False
+        return True
 
+    def issubset(self, dataseriesset, quiet=nmp.QUIET):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+            if cc in self.__theset.keys() and isinstance(s, set):
+                if not self.__theset[cc].issubset(s):
+                    return False
+        return True
 
-class DataSetContainer(NMObjectContainer):
+    def issuperset(self, dataseriesset, quiet=nmp.QUIET):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+            if cc in self.__theset.keys() and isinstance(s, set):
+                if not self.__theset[cc].issuperset(s):
+                    return False
+        return True
+
+    def symmetric_difference(self, dataseriesset, quiet=nmp.QUIET):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+            if cc in self.__theset.keys() and isinstance(s, set):
+                self.__theset[cc].symmetric_difference_update(s)
+        return True
+
+    def union(self, dataseriesset, quiet=nmp.QUIET):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+            if cc in self.__theset.keys() and isinstance(s, set):
+                self.__theset[cc] = self.__theset[cc].union(s)
+        return True
+
+class DataSeriesSetContainer(NMObjectContainer):
     """
-    Container for NM DataSet objects
+    Container for NM DataSeriesSet objects
     """
 
     def __init__(self, parent, name, **copy):
-        t = DataSet(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t, prefix=nmp.DATASET_PREFIX,
-                         rename=True, **copy)
+        t = DataSeriesSet(None, 'empty').__class__.__name__
+        super().__init__(parent, name, type_=t,
+                         prefix=nmp.DATASERIESSET_PREFIX, rename=True, **copy)
 
     # override
     @property
@@ -266,9 +296,10 @@ class DataSetContainer(NMObjectContainer):
 
     # override, no super
     def copy(self):
-        return DataSetContainer(self._parent, self.name, c_prefix=self.prefix,
-                                 c_rename=self.parameters['rename'],
-                                 c_thecontainer=self._thecontainer_copy())
+        return DataSeriesSetContainer(self._parent, self.name,
+                                      c_prefix=self.prefix,
+                                      c_rename=self.parameters['rename'],
+                                      c_thecontainer=self._thecontainer_copy())
 
     # @property  # override, no super
     # def select(self):
@@ -280,7 +311,7 @@ class DataSetContainer(NMObjectContainer):
 
     # override
     def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = DataSet(None, 'iwillberenamed')
+        o = DataSeriesSet(None, 'iwillberenamed')
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     # override

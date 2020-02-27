@@ -6,8 +6,8 @@ Copyright 2019 Jason Rothman
 PROJECT_NAME = 'NMProject'
 FOLDER_PREFIX = 'NMFolder'
 DATA_PREFIX = 'Data'
-DATASET_PREFIX = 'Set'
-DATASET_LIST = ['All', 'Set1', 'Set2', 'SetX']
+DATASERIESSET_PREFIX = 'Set'
+DATASERIESSET_LIST = ['All', 'Set1', 'Set2', 'SetX']
 CHAN_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
              'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 HISTORY_TREEPATH_SKIP = ['Project']

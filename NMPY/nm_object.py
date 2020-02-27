@@ -18,7 +18,7 @@ class NMObject(object):
     NM objects to be stored in a Container class (see below).
 
     Known children:
-        Channel, Data, DataSeries, Dimension, DataSet, Folder, Note, Project
+        Channel, Data, DataSeries, Dimension, DataSeriesSet, Folder, Note, Project
 
     Attributes:
         parent (NMObject or any object):
@@ -262,7 +262,7 @@ class NMObjectContainer(NMObject):
 
     Known Children:
         FolderContainer, DataContainer, NoteContainer, DataSeriesContainer,
-        ChannelContainer, DataSetContainer
+        ChannelContainer, DataSeriesSetContainer
 
     Attributes:
         prefix (str): For creating NMObject name via name_next(),
@@ -701,7 +701,7 @@ class NMObjectContainer(NMObject):
         olist = self.getitems(names=names, indexes=indexes)
         if len(olist) == 0:
             return []
-        if confirm:
+        if nmu.check_bool(confirm, True):
             nlist = []
             for o in olist:
                 nlist.append(o.name)

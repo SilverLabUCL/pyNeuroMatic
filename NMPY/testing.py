@@ -16,8 +16,8 @@ from nm_data import Data
 from nm_data import DataContainer
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
-from nm_dataset import DataSet
-from nm_dataset import DataSetContainer
+from nm_dataseries_set import DataSeriesSet
+from nm_dataseries_set import DataSeriesSetContainer
 from nm_dimension import Dimension
 from nm_dimension import XDimension
 from nm_manager import Manager
@@ -64,7 +64,7 @@ class Test(unittest.TestCase):
         # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
-        self._test_dataset()
+        self._test_dataseries_set()
         # self._test_utilities()
 
     def _test_nmobject(self):
@@ -1032,11 +1032,11 @@ class Test(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             c0.duplicate()
 
-    def _test_dataset(self):
-        sall = DataSet(PARENT, 'All')
-        s1 = DataSet(PARENT, 'Set1')
-        s2 = DataSet(PARENT, 'Set2')
-        sx = DataSet(PARENT, 'SetX')
+    def _test_dataseries_set(self):
+        sall = DataSeriesSet(PARENT, 'All')
+        s1 = DataSeriesSet(PARENT, 'Set1')
+        s2 = DataSeriesSet(PARENT, 'Set2')
+        sx = DataSeriesSet(PARENT, 'SetX')
         dA0 = Data(PARENT, 'RecordA0')
         dA1 = Data(PARENT, 'RecordA1')
         dA2 = Data(PARENT, 'RecordA2')
@@ -1054,7 +1054,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s1._param_list, plist)
         self.assertTrue(s1._param_test())
         # content
-        self.assertEqual(s1._content_name, 'dataset')
+        self.assertEqual(s1._content_name, 'dataseriesset')
         # bad_names
         self.assertEqual(s1._bad_names, ['select', 'default'])
         # data_dict
@@ -1085,7 +1085,7 @@ class Test(unittest.TestCase):
                          'B': [dB0]})
         # add, data_names, discard
         s1.add(dA0)
-        self.assertTrue(dA0 in s1._DataSet__theset['A'])
+        self.assertTrue(dA0 in s1._DataSeriesSet__theset['A'])
         s1.add(dA1)  # data gets added to channel 'A' by default
         s1.add(dA2)
         nlist_a = ['RecordA0', 'RecordA1', 'RecordA2']
@@ -1095,8 +1095,8 @@ class Test(unittest.TestCase):
         self.assertEqual(s1.data_names, {'A': nlist_a})
         # add epochs
         s2.add(epoch0)
-        self.assertTrue(dA0 in s2._DataSet__theset['A'])
-        self.assertTrue(dB0 in s2._DataSet__theset['B'])
+        self.assertTrue(dA0 in s2._DataSeriesSet__theset['A'])
+        self.assertTrue(dB0 in s2._DataSeriesSet__theset['B'])
         s2.add(epoch1)
         s2.add(epoch2)
         nlist_a = ['RecordA0', 'RecordA1', 'RecordA2']
@@ -1107,7 +1107,8 @@ class Test(unittest.TestCase):
         nlist_b = ['RecordB0', 'RecordB2']
         self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b})
         
-        
+        s1.clear()
+        s2.clear()
         
         # contains
         # union

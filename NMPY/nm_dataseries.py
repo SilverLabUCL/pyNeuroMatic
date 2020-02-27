@@ -9,7 +9,7 @@ from nm_object import NMObject
 from nm_object import NMObjectContainer
 from nm_channel import ChannelContainer
 import nm_dimension as nmd
-from nm_dataset import DataSetContainer
+from nm_dataseries_set import DataSeriesSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 
@@ -27,12 +27,12 @@ class DataSeries(NMObject):
         for k, v in copy.items():
             if k.lower() == 'c_channels' and isinstance(v, ChannelContainer):
                 self.__channel_container = v
-            if k.lower() == 'c_esets' and isinstance(v, DataSetContainer):
+            if k.lower() == 'c_esets' and isinstance(v, DataSeriesSetContainer):
                 self.__eset_container = v
         if not isinstance(self.__channel_container, ChannelContainer):
             self.__channel_container = ChannelContainer(self, 'Channels')
-        if not isinstance(self.__eset_container, DataSetContainer):
-            self.__eset_container = DataSetContainer(self, 'DataSets')
+        if not isinstance(self.__eset_container, DataSeriesSetContainer):
+            self.__eset_container = DataSeriesSetContainer(self, 'DataSeriesSets')
         self.__thedata = {}  # dict, {channel: data-list}
         self.__x = {'default': nmd.XDimension(self, 'xdim')}
         self.__y = {'default': nmd.Dimension(self, 'ydim')}
@@ -448,7 +448,7 @@ class DataSeries(NMObject):
     def eset(self):
         return self.__eset_container
 
-    def eset_init(self, eset_list=nmp.DATASET_LIST, select=True,
+    def eset_init(self, eset_list=nmp.DATASERIESSET_LIST, select=True,
                   quiet=nmp.QUIET):
         if not eset_list:
             return []
@@ -457,7 +457,7 @@ class DataSeries(NMObject):
         select = nmu.check_bool(select, True)
         r = []
         init_select = select or not self.__eset_container.select
-        for s in nmp.DATASET_LIST:
+        for s in nmp.DATASERIESSET_LIST:
             if not s or not isinstance(s, str):
                 continue
             select = init_select and s.upper() == 'ALL'
