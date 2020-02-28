@@ -1036,16 +1036,19 @@ class Test(unittest.TestCase):
         sall = DataSeriesSet(PARENT, 'All')
         s1 = DataSeriesSet(PARENT, 'Set1')
         s2 = DataSeriesSet(PARENT, 'Set2')
-        sx = DataSeriesSet(PARENT, 'SetX')
-        dA0 = Data(PARENT, 'RecordA0')
-        dA1 = Data(PARENT, 'RecordA1')
-        dA2 = Data(PARENT, 'RecordA2')
-        dB0 = Data(PARENT, 'RecordB0')
-        dB1 = Data(PARENT, 'RecordB1')
-        dB2 = Data(PARENT, 'RecordB2')
-        epoch0 = {'A': dA0, 'B': dB0}
-        epoch1 = {'A': dA1, 'B': dB1}
-        epoch2 = {'A': dA2, 'B': dB2}
+        numwaves = 6
+        data_a = []
+        data_b = []
+        data_c = []
+        epoch = []
+        for e in range(0, numwaves):
+            da = Data(PARENT, 'RecordA' + str(e))
+            db = Data(PARENT, 'RecordB' + str(e))
+            dc = Data(PARENT, 'RecordC' + str(e))
+            data_a.append(da)
+            data_b.append(db)
+            data_c.append(dc)
+            epoch.append({'A': da, 'B': db, 'C': dc})
         self.assertEqual(s1.eq_list, [])
         self.assertTrue(s1.eq_lock)
         # self.assertIsInstance(s1.theset, dict)
@@ -1068,7 +1071,7 @@ class Test(unittest.TestCase):
                 s1._data_dict([b])
         for b in [None, True, 1, 3.14, 'test', nm, '', '0']:
             with self.assertRaises(ValueError):
-                s1._data_dict({b: [dA0]})
+                s1._data_dict({b: data_a})
         for b in BADTYPES:
             if isinstance(b, list):
                 continue  # ok
@@ -1076,6 +1079,8 @@ class Test(unittest.TestCase):
                 s1._data_dict({'A': b})
         self.assertEqual(s1._data_dict({}), {})
         self.assertEqual(s1._data_dict([]), {})
+        dA0 = data_a[0]
+        dB0 = data_b[0]
         self.assertEqual(s1._data_dict(dA0), {'A': [dA0]})
         self.assertEqual(s1._data_dict([dA0]), {'A': [dA0]})
         self.assertEqual(s1._data_dict({'A': dA0}), {'A': [dA0]})
@@ -1084,32 +1089,41 @@ class Test(unittest.TestCase):
         self.assertEqual(s1._data_dict({'A': dA0, 'B': [dB0]}), {'A': [dA0],
                          'B': [dB0]})
         # add, data_names, discard
-        s1.add(dA0)
-        self.assertTrue(dA0 in s1._DataSeriesSet__theset['A'])
-        s1.add(dA1)  # data gets added to channel 'A' by default
-        s1.add(dA2)
-        nlist_a = ['RecordA0', 'RecordA1', 'RecordA2']
+        self.assertTrue(s1.add(data_a))  # added to chan 'A' by default
+        for e in range(0, numwaves):
+            self.assertTrue(data_a[e] in s1._DataSeriesSet__theset['A'])
+        nlist_a = [data_a[e].name for e in range(0, numwaves)]
         self.assertEqual(s1.data_names, {'A': nlist_a})
-        s1.discard(dA1)
-        nlist_a = ['RecordA0', 'RecordA2']
+        s1.discard(data_a[1])
+        nlist_a.remove(data_a[1].name)
         self.assertEqual(s1.data_names, {'A': nlist_a})
         # add epochs
-        s2.add(epoch0)
-        self.assertTrue(dA0 in s2._DataSeriesSet__theset['A'])
-        self.assertTrue(dB0 in s2._DataSeriesSet__theset['B'])
-        s2.add(epoch1)
-        s2.add(epoch2)
-        nlist_a = ['RecordA0', 'RecordA1', 'RecordA2']
-        nlist_b = ['RecordB0', 'RecordB1', 'RecordB2']
-        self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b})
-        s2.discard(epoch1)
-        nlist_a = ['RecordA0', 'RecordA2']
-        nlist_b = ['RecordB0', 'RecordB2']
-        self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b})
-        
-        s1.clear()
-        s2.clear()
-        
+        for e in range(0, numwaves):
+            self.assertTrue(s2.add(epoch[e]))
+        for e in range(0, numwaves):
+            self.assertTrue(data_a[e] in s2._DataSeriesSet__theset['A'])
+            self.assertTrue(data_b[e] in s2._DataSeriesSet__theset['B'])
+            self.assertTrue(data_c[e] in s2._DataSeriesSet__theset['C'])
+        nlist_a = [data_a[e].name for e in range(0, numwaves)]
+        nlist_b = [data_b[e].name for e in range(0, numwaves)]
+        nlist_c = [data_c[e].name for e in range(0, numwaves)]
+        self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b,
+                                         'C': nlist_c})
+        s2.discard(epoch[1])
+        nlist_a.remove(data_a[1].name)
+        nlist_b.remove(data_b[1].name)
+        nlist_c.remove(data_c[1].name)
+        self.assertEqual(s2.data_names, {'A': nlist_a, 'B': nlist_b,
+                                         'C': nlist_c})
+        s1.clear(chan_list=['A'], confirm=False)
+        self.assertEqual(s1.data_names, {})
+        s2.clear(confirm=False)
+        self.assertEqual(s2.data_names, {})
+        s1.add(data_a)
+        for e in range(0, numwaves):
+            s2.add(epoch[e])
+        s1.difference(s2)
+        print(s1.data_names)
         # contains
         # union
         # discard

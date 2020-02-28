@@ -202,14 +202,32 @@ class DataSeriesSet(NMObject):
             if cc in self.__theset.keys():
                 self.__theset[cc].clear()
                 self._modified()
+        for s in self.__theset.values():
+            if len(s) > 0:
+                return True
+        self.__theset = {}  # empty
         return True
 
-    def difference(self, dataseriesset, quiet=nmp.QUIET):
+    def difference(self, dataseriesset, alert=True, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
-            if cc in self.__theset.keys() and isinstance(s, set):
+        ik = dataseriesset._DataSeriesSet__theset.keys()
+        sk = self.__theset.keys()
+        if alert and ik != sk:
+            q = ('unequal channels: ' + str(ik) + ' vs ' + str(sk) + '. ' +
+                 'Do you want to continue?')
+            yn = nmu.input_yesno(q, tp=self._tp)
+            if not yn == 'y':
+                self._history('cancel', tp=self._tp, quiet=quiet)
+                return False
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
+            if cc in sk and isinstance(s, set):
                 self.__theset[cc].difference_update(s)
+                self._modified()
+        for s in self.__theset.values():
+            if len(s) > 0:
+                return True
+        self.__theset = {}  # empty
         return True
 
     def discard(self, data, quiet=nmp.QUIET):  # not in set? # remove
@@ -229,7 +247,7 @@ class DataSeriesSet(NMObject):
     def intersection(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
             if cc in self.__theset.keys() and isinstance(s, set):
                 self.__theset[cc].intersection_update(s)
         return True
@@ -237,7 +255,7 @@ class DataSeriesSet(NMObject):
     def isdisjoint(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
             if cc in self.__theset.keys() and isinstance(s, set):
                 if not self.__theset[cc].isdisjoint(s):
                     return False
@@ -246,7 +264,7 @@ class DataSeriesSet(NMObject):
     def issubset(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
             if cc in self.__theset.keys() and isinstance(s, set):
                 if not self.__theset[cc].issubset(s):
                     return False
@@ -255,7 +273,7 @@ class DataSeriesSet(NMObject):
     def issuperset(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
             if cc in self.__theset.keys() and isinstance(s, set):
                 if not self.__theset[cc].issuperset(s):
                     return False
@@ -264,7 +282,7 @@ class DataSeriesSet(NMObject):
     def symmetric_difference(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
             if cc in self.__theset.keys() and isinstance(s, set):
                 self.__theset[cc].symmetric_difference_update(s)
         return True
@@ -272,7 +290,7 @@ class DataSeriesSet(NMObject):
     def union(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, s in dataseriesset._DataSeriesSet__theset.keys():
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
             if cc in self.__theset.keys() and isinstance(s, set):
                 self.__theset[cc] = self.__theset[cc].union(s)
         return True
