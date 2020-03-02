@@ -91,6 +91,7 @@ class Data(NMObject):
 
     # override
     def _equal(self, data, alert=False):
+        alert = nmu.bool_check(alert, False)
         if not super()._equal(data, alert=alert):
             return False
         if self.__np_array is None and data.np_array is not None:
@@ -153,10 +154,11 @@ class Data(NMObject):
             raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
         if not isinstance(chan_char, str):
             raise TypeError(nmu.type_error(chan_char, 'string'))
-        if nmu.channel_num(chan_char) < 0:
+        cc = nmu.chan_char_check(chan_char)
+        if len(cc) == 0:
             e = 'bad channel character: ' + nmu.quotes(chan_char)
             raise ValueError(e)
-        self.__dataseries.update({dataseries: chan_char})
+        self.__dataseries.update({dataseries: cc})
         self._modified()
         return True
 

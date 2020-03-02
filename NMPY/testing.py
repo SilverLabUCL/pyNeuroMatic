@@ -1065,30 +1065,31 @@ class Test(unittest.TestCase):
             if isinstance(b, list) or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                s1._data_dict(b)
+                s1._data_dict_check(b)
         for b in BADTYPES:
             with self.assertRaises(TypeError):
-                s1._data_dict([b])
+                s1._data_dict_check([b])
         for b in [None, True, 1, 3.14, 'test', nm, '', '0']:
             with self.assertRaises(ValueError):
-                s1._data_dict({b: data_a})
+                s1._data_dict_check({b: data_a})
         for b in BADTYPES:
             if isinstance(b, list):
                 continue  # ok
             with self.assertRaises(TypeError):
-                s1._data_dict({'A': b})
-        self.assertEqual(s1._data_dict({}), {})
-        self.assertEqual(s1._data_dict([]), {})
+                s1._data_dict_check({'A': b})
+        self.assertEqual(s1._data_dict_check({}), {})
+        self.assertEqual(s1._data_dict_check([]), {})
         dA0 = data_a[0]
         dB0 = data_b[0]
-        self.assertEqual(s1._data_dict(dA0), {'A': [dA0]})
-        self.assertEqual(s1._data_dict([dA0]), {'A': [dA0]})
-        self.assertEqual(s1._data_dict({'A': dA0}), {'A': [dA0]})
-        self.assertEqual(s1._data_dict({'A': dA0, 'B': dB0}), {'A': [dA0],
-                         'B': [dB0]})
-        self.assertEqual(s1._data_dict({'A': dA0, 'B': [dB0]}), {'A': [dA0],
-                         'B': [dB0]})
+        self.assertEqual(s1._data_dict_check(dA0), {'A': [dA0]})
+        self.assertEqual(s1._data_dict_check([dA0]), {'A': [dA0]})
+        self.assertEqual(s1._data_dict_check({'A': dA0}), {'A': [dA0]})
+        self.assertEqual(s1._data_dict_check({'A': dA0, 'B': dB0}),
+                         {'A': [dA0], 'B': [dB0]})
+        self.assertEqual(s1._data_dict_check({'A': dA0, 'B': [dB0]}),
+                         {'A': [dA0], 'B': [dB0]})
         # add, data_names, discard
+        """
         self.assertTrue(s1.add(data_a))  # added to chan 'A' by default
         for e in range(0, numwaves):
             self.assertTrue(data_a[e] in s1._DataSeriesSet__theset['A'])
@@ -1124,6 +1125,7 @@ class Test(unittest.TestCase):
             s2.add(epoch[e])
         s1.difference(s2)
         print(s1.data_names)
+        """
         # contains
         # union
         # discard
@@ -1221,34 +1223,34 @@ class Test(unittest.TestCase):
         i = [0, 1, 5, 6, 7, 12, 19, 20, 21, 22, 124]
         r = '0,1,5-7,12,19-22,124'
         self.assertEqual(nmu.int_list_to_seq_str(i, space=False), r)
-        # channel_char
-        self.assertEqual(nmu.channel_char(0), 'A')
-        self.assertEqual(nmu.channel_char(1), 'B')
-        self.assertEqual(nmu.channel_char(2), 'C')
-        self.assertEqual(nmu.channel_char(10), 'K')
-        self.assertEqual(nmu.channel_char(26), '')
-        self.assertEqual(nmu.channel_char(-2), '')
-        self.assertEqual(nmu.channel_char(float('inf')), '')
-        self.assertEqual(nmu.channel_char(float('nan')), '')
-        self.assertEqual(nmu.channel_char(None), '')
-        self.assertEqual(nmu.channel_char([0, 1, 2]), '')
-        # channel_num
-        self.assertEqual(nmu.channel_num('A'), 0)
-        self.assertEqual(nmu.channel_num('a'), 0)
-        self.assertEqual(nmu.channel_num('b'), 1)
-        self.assertEqual(nmu.channel_num('K'), 10)
-        self.assertEqual(nmu.channel_num(''), -1)
-        self.assertEqual(nmu.channel_num('AA'), -1)
-        self.assertEqual(nmu.channel_num(None), -1)
-        self.assertEqual(nmu.channel_num(['A', 'B', 'C']), -1)
-        # channel_char_exists
-        self.assertTrue(nmu.channel_char_exists('testA1', 'A'))
-        self.assertTrue(nmu.channel_char_exists('testa111', 'A'))
-        self.assertTrue(nmu.channel_char_exists('testA', 'A'))
-        self.assertTrue(nmu.channel_char_exists('A', 'A'))
-        self.assertFalse(nmu.channel_char_exists('testA111', 'B'))
-        self.assertFalse(nmu.channel_char_exists('A', 'B'))
-        self.assertFalse(nmu.channel_char_exists('taste', 'A'))
+        # chan_char
+        self.assertEqual(nmu.chan_char(0), 'A')
+        self.assertEqual(nmu.chan_char(1), 'B')
+        self.assertEqual(nmu.chan_char(2), 'C')
+        self.assertEqual(nmu.chan_char(10), 'K')
+        self.assertEqual(nmu.chan_char(26), '')
+        self.assertEqual(nmu.chan_char(-2), '')
+        self.assertEqual(nmu.chan_char(float('inf')), '')
+        self.assertEqual(nmu.chan_char(float('nan')), '')
+        self.assertEqual(nmu.chan_char(None), '')
+        self.assertEqual(nmu.chan_char([0, 1, 2]), '')
+        # chan_num
+        self.assertEqual(nmu.chan_num('A'), 0)
+        self.assertEqual(nmu.chan_num('a'), 0)
+        self.assertEqual(nmu.chan_num('b'), 1)
+        self.assertEqual(nmu.chan_num('K'), 10)
+        self.assertEqual(nmu.chan_num(''), -1)
+        self.assertEqual(nmu.chan_num('AA'), -1)
+        self.assertEqual(nmu.chan_num(None), -1)
+        self.assertEqual(nmu.chan_num(['A', 'B', 'C']), -1)
+        # chan_char_exists
+        self.assertTrue(nmu.chan_char_exists('testA1', 'A'))
+        self.assertTrue(nmu.chan_char_exists('testa111', 'A'))
+        self.assertTrue(nmu.chan_char_exists('testA', 'A'))
+        self.assertTrue(nmu.chan_char_exists('A', 'A'))
+        self.assertFalse(nmu.chan_char_exists('testA111', 'B'))
+        self.assertFalse(nmu.chan_char_exists('A', 'B'))
+        self.assertFalse(nmu.chan_char_exists('taste', 'A'))
         # type_error
         e = test_type_error(self, self, self, 'NMObject')
         e2 = "bad a: expected NMObject, but got __main__.Test"

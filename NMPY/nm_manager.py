@@ -35,7 +35,7 @@ class Manager(object):
     """
     def __init__(self, name='NeuroMatic Manager', new_project=True,
                  quiet=nmp.QUIET):
-        new_project = nmu.check_bool(new_project, True)
+        new_project = nmu.bool_check(new_project, True)
         if isinstance(name, str):
             self.__name = name
         else:
@@ -57,7 +57,7 @@ class Manager(object):
 
     def project_new(self, name='default', new_folder=True, quiet=nmp.QUIET):
         """Create a new project"""
-        new_folder = nmu.check_bool(new_folder, True)
+        new_folder = nmu.bool_check(new_folder, True)
         if not isinstance(name, str):
             raise TypeError(nmu.type_error(name, 'string'))
         if not nmu.name_ok(name) or name.lower() == 'select':
@@ -201,7 +201,7 @@ class Manager(object):
 
     @property
     def select_names(self, names=True):
-        names = nmu.check_bool(names, True)
+        names = nmu.bool_check(names, True)
         s = {}
         s['project'] = ''
         s['folder'] = ''
@@ -248,7 +248,7 @@ class Manager(object):
                            quiet=self._quiet(quiet))
 
     def _quiet(self, quiet=nmp.QUIET):
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        quiet = nmu.bool_check(quiet, nmp.QUIET)
         if self.configs.quiet:  # manager config quiet overrides
             return True
         return quiet

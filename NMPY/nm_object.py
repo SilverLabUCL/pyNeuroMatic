@@ -85,7 +85,7 @@ class NMObject(object):
         return self.treepath(for_history=True)
 
     def treepath(self, for_history=False):
-        for_history = nmu.check_bool(for_history, False)
+        for_history = nmu.bool_check(for_history, False)
         if for_history:  # create tree path for history
             skip = nmp.HISTORY_TREEPATH_SKIP
         else:
@@ -98,7 +98,7 @@ class NMObject(object):
         return tp
 
     def treepath_list(self, names=True, skip=[]):
-        names = nmu.check_bool(names, True)
+        names = nmu.bool_check(names, True)
         if not isinstance(skip, list):
             skip = []
         cname = self.__class__.__name__
@@ -172,6 +172,7 @@ class NMObject(object):
         return True
 
     def _equal(self, nmobject, alert=False):
+        alert = nmu.bool_check(alert, False)
         if nmobject.__class__.__name__ != self.__class__.__name__:
             if alert:
                 a = ('unequal object types: ' + self.__class__.__name__ +
@@ -243,7 +244,7 @@ class NMObject(object):
             return m._quiet(quiet=quiet)
         if nmp.QUIET:  # this quiet overrides
             return True
-        return nmu.check_bool(quiet, False)
+        return nmu.bool_check(quiet, False)
 
 
 class NMObjectContainer(NMObject):
@@ -288,7 +289,7 @@ class NMObjectContainer(NMObject):
         elif not self.name_ok(prefix):
             raise ValueError('bad prefix:  ' + nmu.quotes(prefix))
         self.__prefix = prefix
-        self.__rename = nmu.check_bool(rename, True)
+        self.__rename = nmu.bool_check(rename, True)
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
         for k, v in copy.items():  # see copy() and thecontainer_copy()
@@ -567,7 +568,7 @@ class NMObjectContainer(NMObject):
         Returns:
             new NMObject if successful, None otherwise
         """
-        select = nmu.check_bool(select, True)
+        select = nmu.bool_check(select, True)
         if not isinstance(name, str):
             raise TypeError(nmu.type_error(name, 'string'))
         if not name or not self.name_ok(name, ok='default'):
@@ -655,7 +656,7 @@ class NMObjectContainer(NMObject):
         Returns:
             new NMObject if successful, None otherwise
         """
-        select = nmu.check_bool(select, True)
+        select = nmu.bool_check(select, True)
         if not isinstance(name, str):
             raise TypeError(nmu.type_error(name, 'string'))
         if not self.name_ok(name, ok='select'):
@@ -701,7 +702,7 @@ class NMObjectContainer(NMObject):
         olist = self.getitems(names=names, indexes=indexes)
         if len(olist) == 0:
             return []
-        if nmu.check_bool(confirm, True):
+        if nmu.bool_check(confirm, True):
             nlist = []
             for o in olist:
                 nlist.append(o.name)
@@ -733,7 +734,7 @@ class NMObjectContainer(NMObject):
         """Get next default NMObject name based on prefix and sequence #."""
         if not isinstance(first, int):
             raise TypeError(nmu.type_error(first, 'integer'))
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        quiet = nmu.bool_check(quiet, nmp.QUIET)
         if not self.__prefix or first < 0:
             raise RuntimeError('cannot generate default names')
         i = self.name_next_seq(prefix=self.__prefix, first=first, quiet=quiet)
@@ -745,7 +746,7 @@ class NMObjectContainer(NMObject):
         """Get next seq num of default NMObject name based on prefix."""
         if not isinstance(first, int):
             raise TypeError(nmu.type_error(first, 'integer'))
-        quiet = nmu.check_bool(quiet, nmp.QUIET)
+        quiet = nmu.bool_check(quiet, nmp.QUIET)
         if not isinstance(prefix, str):
             raise TypeError(nmu.type_error(prefix, 'string'))
         if not self.name_ok(prefix, ok='default'):

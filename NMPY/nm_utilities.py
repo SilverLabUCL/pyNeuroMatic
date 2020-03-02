@@ -34,13 +34,13 @@ def name_ok(name):
 
 def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
               no_nan=True, no_neg=False, no_pos=False, no_zero=False):
-    only_integer = check_bool(only_integer, False)
-    no_boolean = check_bool(no_boolean, True)
-    no_inf = check_bool(no_inf, True)
-    no_nan = check_bool(no_nan, True)
-    no_neg = check_bool(no_neg, False)
-    no_pos = check_bool(no_pos, False)
-    no_zero = check_bool(no_zero, False)
+    only_integer = bool_check(only_integer, False)
+    no_boolean = bool_check(no_boolean, True)
+    no_inf = bool_check(no_inf, True)
+    no_nan = bool_check(no_nan, True)
+    no_neg = bool_check(no_neg, False)
+    no_pos = bool_check(no_pos, False)
+    no_zero = bool_check(no_zero, False)
     if isinstance(number, list):
         if not number:
             return False
@@ -67,7 +67,7 @@ def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
 
 
 def quotes(text, single=True):
-    single = check_bool(single, True)
+    single = bool_check(single, True)
     if not isinstance(text, str):
         text = str(text)
     if single:
@@ -87,7 +87,7 @@ def remove_special_chars(text):
 
 def int_list_to_seq_str(int_list, space=True):
     # e.g. [0,1,5,6,7,12,19,20,21,22,24] -> 0,1,5-7,12,19-22,24
-    space = check_bool(space, True)
+    space = bool_check(space, True)
     if not int_list or not isinstance(int_list, list):
         return ''
     for i in int_list:
@@ -130,27 +130,34 @@ def int_list_to_seq_str(int_list, space=True):
     return ','.join(slist)
 
 
-def channel_char(chan_num):
+def chan_char(chan_num):
     if not isinstance(chan_num, int) and not isinstance(chan_num, float):
         return ''
     if not number_ok(chan_num, no_neg=True):
         return ''
-    clist = nmp.CHAN_LIST
+    clist = nmp.CHANNEL_LIST
     if chan_num >= 0 and chan_num < len(clist):
-        return clist[chan_num]
+        cc = clist[chan_num]
+        return cc.upper()
     return ''
 
 
-def channel_num(chan_char):
+def chan_num(chan_char):
     if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return -1
-    for i, c in enumerate(nmp.CHAN_LIST):
+    for i, c in enumerate(nmp.CHANNEL_LIST):
         if chan_char.upper() == c.upper():
             return i
     return -1
 
 
-def channel_char_exists(text_search_backwards, chan_char):
+def chan_char_check(chan_char):
+    if chan_num(chan_char) >= 0:
+        return chan_char.upper()
+    return ''
+
+
+def chan_char_exists(text_search_backwards, chan_char):
     txt = text_search_backwards
     if not txt or not isinstance(txt, str):
         return False
@@ -165,7 +172,7 @@ def channel_char_exists(text_search_backwards, chan_char):
     return False
 
 
-def check_bool(var_bool, default_value):
+def bool_check(var_bool, default_value):
     if not isinstance(var_bool, bool):
         return default_value
     return var_bool
@@ -199,8 +206,8 @@ def history_change(var_name, from_value, to_value):
 
 
 def history(message, title='', tp='', frame=1, red=False, quiet=False):
-    red = check_bool(red, False)
-    quiet = check_bool(quiet, False)
+    red = bool_check(red, False)
+    quiet = bool_check(quiet, False)
     if tp.lower() == 'none':
         path = ''
     else:
@@ -234,7 +241,7 @@ def get_treepath(stack, tp='', frame=1):
 
 
 def get_class(stack, frame=1, module=False):
-    module = check_bool(module, False)
+    module = bool_check(module, False)
     if len(stack) <= frame or len(stack[0]) == 0:
         return ''
     f = stack[frame][0]
@@ -264,7 +271,7 @@ def get_method(stack, frame=1):
 
 
 def input_yesno(prompt, title='', tp='', frame=1, cancel=False):
-    cancel = check_bool(cancel, False)
+    cancel = bool_check(cancel, False)
     if not prompt:
         return ''
     if cancel:
