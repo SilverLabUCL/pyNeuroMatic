@@ -91,15 +91,17 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         #        {'A': [MyDataA0], 'B': [MyDataB0]}
         # data = {'A': [MyDataA0, MyDataA1], 'B': [MyDataB0, MyDataB1]}
         # data format = {chan_char: [Data List]}
+        if not isinstance(chan_default, str):
+            raise TypeError(nmu.type_error(chan_default, 'channel character'))
         dnew = {}
         if data.__class__.__name__ == 'Data':  # no channel
             if chan_default.upper() == 'ALL':
                 for cc in self.__theset.keys():
-                    dnew.append({cc.upper(): [data]})
+                    dnew.update({cc.upper(): [data]})
                 return dnew
             if len(self.__theset.keys()) > 1:
                 e = 'dictionary with channel keys'
-                TypeError(nmu.type_error(data, e))
+                raise TypeError(nmu.type_error(data, e))
             cc = nmu.chan_char_check(chan_default)
             if len(cc) == 0:
                 e = 'bad channel character: ' + nmu.quotes(chan_default)
@@ -114,11 +116,11 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                     raise TypeError(nmu.type_error(d, 'Data'))
             if chan_default.upper() == 'ALL':
                 for cc in self.__theset.keys():
-                    dnew.append({cc.upper(): data})
+                    dnew.update({cc.upper(): data})
                 return dnew
             if len(self.__theset.keys()) > 1:
                 e = 'dictionary with channel keys'
-                TypeError(nmu.type_error(data, e))
+                raise TypeError(nmu.type_error(data, e))
             cc = nmu.chan_char_check(chan_default)
             if len(cc) == 0:
                 e = 'bad channel character: ' + nmu.quotes(chan_default)
@@ -183,6 +185,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         # data = {'A': [DataA0, DataA1...]}
         # more like 'update' but call 'add'
         dd = self._data_dict_check(data)
+        modified = False
         if not isinstance(dd, dict):
             return False
         for cc, dlist in dd.items():
@@ -190,37 +193,30 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 if cc in self.__theset.keys():
                     if d not in self.__theset[cc]:
                         self.__theset[cc].add(d)
-                        self._modified()
+                        modified = True
                 else:
                     self.__theset.update({cc: set([d])})
-                    self._modified()
-        return True
+                    modified = True
+        if modified:
+            self._modified()
+        return modified
 
     def discard(self, data, quiet=nmp.QUIET):  # not in set? # remove
         # data = {'A': [DataA0, DataA1...]}
         dd = self._data_dict_check(data, chan_default='ALL')
         if not isinstance(dd, dict):
             return False
+        modified = False
         for cc, s in dd.items():
             if cc in self.__theset.keys():
                 for d in s:
                     if d in self.__theset[cc]:
                         self.__theset[cc].discard(d)
-                        self._modified()
+                        modified = True
+        if modified:
+            self._modified()
         self._theset_empty()
-        return True
-
-    def contains(self, data):
-        # data = {'A': [DataA0, DataA1...]}
-        dd = self._data_dict_check(data, chan_default='ALL')
-        if not isinstance(dd, dict):
-            return False
-        for cc, s in dd.items():
-            if cc in self.__theset.keys():
-                for d in s:
-                    if d in self.__theset[cc]:
-                        return True
-        return False
+        return modified
 
     def clear(self, chan_list=['ALL'], confirm=True, quiet=nmp.QUIET):
         # chan_list = ['A', 'B']
@@ -256,6 +252,18 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 self._modified()
         self._theset_empty()
         return True
+
+    def contains(self, data):
+        # data = {'A': [DataA0, DataA1...]}
+        dd = self._data_dict_check(data, chan_default='ALL')
+        if not isinstance(dd, dict):
+            return False
+        for cc, s in dd.items():
+            if cc in self.__theset.keys():
+                for d in s:
+                    if d in self.__theset[cc]:
+                        return True
+        return False
 
     def difference(self, dataseriesset, alert=True, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):

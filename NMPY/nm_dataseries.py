@@ -325,7 +325,7 @@ class DataSeries(NMObject):
                 raise TypeError(nmu.type_error(ylabel, 'string'))
             # elif c not in self.__thedata.keys():
             if not isinstance(cc, str):
-                raise TypeError(nmu.type_error(cc, 'string'))
+                raise TypeError(nmu.type_error(cc, 'channel character'))
             cc2 = nmu.chanel_char_check(cc)
             if nmu.chan_num(cc2) < 0:
                 e = 'bad channel character: ' + nmu.quotes(cc)

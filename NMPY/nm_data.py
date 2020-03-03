@@ -64,7 +64,8 @@ class Data(NMObject):
                             e = 'unknown dataseries channel: ' + c
                             raise ValueError(e)
                     else:
-                        raise TypeError(nmu.type_error(c, 'string'))
+                        e = nmu.type_error(c, 'channel character')
+                        raise TypeError(e)
                 else:
                     raise TypeError(nmu.type_error(ds, 'DataSeries'))
         else:
@@ -153,7 +154,7 @@ class Data(NMObject):
         if not isinstance(dataseries, DataSeries):
             raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
         if not isinstance(chan_char, str):
-            raise TypeError(nmu.type_error(chan_char, 'string'))
+            raise TypeError(nmu.type_error(chan_char, 'channel character'))
         cc = nmu.chan_char_check(chan_char)
         if len(cc) == 0:
             e = 'bad channel character: ' + nmu.quotes(chan_char)
