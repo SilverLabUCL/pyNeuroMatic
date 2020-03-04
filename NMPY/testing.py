@@ -1037,7 +1037,7 @@ class Test(unittest.TestCase):
         sall = DataSeriesSet(PARENT, 'All')
         s1 = DataSeriesSet(PARENT, 'Set1')
         s2 = DataSeriesSet(PARENT, 'Set2')
-        num_epochs = 6
+        num_epochs = 10
         data_a = []
         data_b = []
         data_c = []
@@ -1151,19 +1151,19 @@ class Test(unittest.TestCase):
         self.assertEqual(s1.data_names, {})
         # contains
         self.assertTrue(s1.add(data_a))
-        for e in range(0, num_epochs):
-            self.assertTrue(s1.contains(data_a[e]))
-            self.assertFalse(s1.contains(data_b[e]))
+        self.assertTrue(s1.contains(data_a, alert=ALERT))
+        self.assertFalse(s1.contains(data_b, alert=ALERT))
+        self.assertFalse(s1.contains({'B': data_a}, alert=ALERT))
         self.assertTrue(s1.discard(data_a[1]))
-        self.assertFalse(s1.contains(data_a[1]))
+        self.assertFalse(s1.contains(data_a[1], alert=ALERT))
         for e in range(0, num_epochs):
             self.assertTrue(s2.add(epoch[e]))
-        for e in range(0, num_epochs):
-            self.assertTrue(s2.contains(data_a[e]))
-            self.assertTrue(s2.contains(data_b[e]))
-            self.assertTrue(s2.contains(data_c[e]))
+        self.assertTrue(s2.contains({'A': data_a}, alert=ALERT))
+        self.assertTrue(s2.contains({'B': data_b}, alert=ALERT))
+        self.assertTrue(s2.contains({'C': data_c}, alert=ALERT))
+        self.assertFalse(s2.contains({'D': data_c}, alert=ALERT))
         self.assertTrue(s2.discard(epoch[1]))
-        self.assertFalse(s2.contains(epoch[1]))
+        self.assertFalse(s2.contains(epoch[1], alert=ALERT))
         # difference
         # s1.difference(s2)
         # print(s1.data_names)

@@ -186,7 +186,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         # more like 'update' but call 'add'
         dd = self._data_dict_check(data)
         modified = False
-        if not isinstance(dd, dict):
+        if not isinstance(dd, dict) or not dd:
             return False
         for cc, dlist in dd.items():
             for d in dlist:
@@ -204,7 +204,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
     def discard(self, data, quiet=nmp.QUIET):  # not in set? # remove
         # data = {'A': [DataA0, DataA1...]}
         dd = self._data_dict_check(data, chan_default='ALL')
-        if not isinstance(dd, dict):
+        if not isinstance(dd, dict) or not dd:
             return False
         modified = False
         for cc, s in dd.items():
@@ -253,17 +253,26 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         self._theset_empty()
         return True
 
-    def contains(self, data):
+    def contains(self, data, alert=False):
         # data = {'A': [DataA0, DataA1...]}
-        dd = self._data_dict_check(data, chan_default='ALL')
-        if not isinstance(dd, dict):
+        alert = nmu.bool_check(alert, False)
+        dd = self._data_dict_check(data)
+        if not isinstance(dd, dict) or not dd:
             return False
         for cc, s in dd.items():
             if cc in self.__theset.keys():
                 for d in s:
-                    if d in self.__theset[cc]:
-                        return True
-        return False
+                    if d not in self.__theset[cc]:
+                        if alert:
+                            a = ('failed to find ' + d.name + ' in channel ' +
+                                 cc)
+                            self._alert(a)
+                        return False
+            else:
+                if alert:
+                    self._alert('failed to find channel ' + cc)
+                return False
+        return True
 
     def difference(self, dataseriesset, alert=True, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
