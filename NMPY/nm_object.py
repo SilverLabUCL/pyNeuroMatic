@@ -34,7 +34,7 @@ class NMObject(object):
         if not name or not self.name_ok(name):
             raise ValueError('bad name:  ' + nmu.quotes(name))
         self.__name = name
-        self.__rename_fr = self._name_set
+        self.__rename_fxnref = self._name_set
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
         self._param_list = ['name', 'date', 'modified']
@@ -149,7 +149,7 @@ class NMObject(object):
     @name.setter
     def name(self, newname):
         # calls name_set() or NMObjectContainer.rename()
-        return self.__rename_fr(self.__name, newname)
+        return self.__rename_fxnref(self.__name, newname)
 
     def _name_set(self, name_notused, newname, quiet=nmp.QUIET):
         # name_notused, to be consistent with
@@ -165,10 +165,10 @@ class NMObject(object):
         self._history(h, tp=self._tp, quiet=quiet)
         return True
 
-    def _rename_fr_set(self, rename_fr):
-        if not isinstance(rename_fr, types.MethodType):
-            raise TypeError(nmu.type_error(rename_fr, 'MethodType'))
-        self.__rename_fr = rename_fr
+    def _rename_fxnref_set(self, rename_fxnref):
+        if not isinstance(rename_fxnref, types.MethodType):
+            raise TypeError(nmu.type_error(rename_fxnref, 'MethodType'))
+        self.__rename_fxnref = rename_fxnref
         return True
 
     def _equal(self, nmobject, alert=False):
@@ -188,10 +188,10 @@ class NMObject(object):
             #      str(nmobject._parent))
             # self._alert(a, tp=self._tp)
             # return False
-        # if nmobject._NMObject__rename_fr != self.__rename_fr:
+        # if nmobject._NMObject__rename_fxnref != self.__rename_fxnref:
         #     different, unless in same container
-        #     a = ('unequal rename() refs: ' + str(self.__rename_fr) +
-        #     ' vs ' + str(nmobject._NMObject__rename_fr))
+        #     a = ('unequal rename() refs: ' + str(self.__rename_fxnref) +
+        #     ' vs ' + str(nmobject._NMObject__rename_fxnref))
         #     self._alert(a, tp=self._tp)
         #     return False
         sp = self.parameters
@@ -303,7 +303,7 @@ class NMObjectContainer(NMObject):
                 if 'thecontainer' in v.keys():
                     if isinstance(v['thecontainer'], list):
                         self.__thecontainer = v['thecontainer']
-                        self._thecontainer_rename_fr_set()
+                        self._thecontainer_rename_fxnref_set()
                         if 'select' in v.keys():
                             if isinstance(v['select'], NMObject):
                                 self.__select = v['select']
@@ -366,16 +366,16 @@ class NMObjectContainer(NMObject):
             select_name = ''
         select = None
         for o in self.__thecontainer:
-            if o:
+            if o and isinstance(o, NMObject):
                 oc = o.copy()
                 c.append(oc)
                 if oc.name.lower() == select_name.lower():
                     select = oc
         return {'thecontainer': c, 'select': select}
 
-    def _thecontainer_rename_fr_set(self):
+    def _thecontainer_rename_fxnref_set(self):
         for o in self.__thecontainer:
-            o._rename_fr_set(self.rename)
+            o._rename_fxnref_set(self.rename)
 
     @property
     def prefix(self):  # see name_next()
@@ -593,7 +593,7 @@ class NMObjectContainer(NMObject):
         if not o:
             return None
         self.__thecontainer.append(o)
-        self._thecontainer_rename_fr_set()
+        self._thecontainer_rename_fxnref_set()
         if select or not self.__select:
             old = self.__select
             self.__select = o
@@ -685,7 +685,7 @@ class NMObjectContainer(NMObject):
         c._NMObject__name = newname
         # c._parent = self._parent  # reset parent reference
         self.__thecontainer.append(c)
-        self._thecontainer_rename_fr_set()
+        self._thecontainer_rename_fxnref_set()
         old = nmu.quotes(o.name)
         new = nmu.quotes(c.name)
         h = 'copied ' + old + ' to ' + new

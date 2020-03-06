@@ -44,6 +44,23 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         k.update({'eq_lock': self.__eq_lock})
         return k
 
+    # override
+    def _equal(self, dataseriesset, alert=False):
+        if not super()._equal(dataseriesset, alert=alert):
+            return False
+        if dataseriesset.count != self.count:
+            if alert:
+                a = ('unequal set count: ' + str(self.count) + ' vs ' +
+                     str(dataseriesset.count))
+                self._alert(a, tp=self._tp)
+            return False
+        for cc, s in dataseriesset._DataSeriesSet__theset.items():
+            print(str(cc) + ', ' + str(s))
+            # o = container.getitem(index=i, quiet=True)
+            # if not s._equal(o, alert=alert):
+            #    return False
+        return True
+
     # override, no super
     def copy(self):
         thesetcopy = self.__theset.copy()  # TODO, refs need copying
@@ -72,6 +89,10 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         self.__eq_lock = eq_lock
         self._modified()
         return True
+
+    @property
+    def count(self):
+        return len(self.__theset)
 
     @property
     def data_names(self):
@@ -164,24 +185,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             return yn == 'y'
         return False
 
-    # add/update
-    # clear
-    # copy
-    # difference
-    # difference_update
-    # discard/remove
-    # intersection
-    # intersection_update
-    # isdisjoint
-    # issubset
-    # issuperset
-    # pop
-    # symmetric_difference
-    # symmetric_difference_update
-    # union
-    # TODO 'All' set
-
-    def add(self, data, quiet=nmp.QUIET):
+    def add(self, data, quiet=nmp.QUIET):  # same as update()
         # data = {'A': [DataA0, DataA1...]}
         # more like 'update' but call 'add'
         dd = self._data_dict_check(data)
@@ -207,9 +211,9 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         if not isinstance(dd, dict) or not dd:
             return False
         modified = False
-        for cc, s in dd.items():
+        for cc, dlist in dd.items():
             if cc in self.__theset.keys():
-                for d in s:
+                for d in dlist:
                     if d in self.__theset[cc]:
                         self.__theset[cc].discard(d)
                         modified = True
@@ -259,9 +263,9 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         dd = self._data_dict_check(data)
         if not isinstance(dd, dict) or not dd:
             return False
-        for cc, s in dd.items():
+        for cc, dlist in dd.items():
             if cc in self.__theset.keys():
-                for d in s:
+                for d in dlist:
                     if d not in self.__theset[cc]:
                         if alert:
                             a = ('failed to find ' + d.name + ' in channel ' +

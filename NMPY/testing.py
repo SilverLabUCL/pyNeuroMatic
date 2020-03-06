@@ -1108,6 +1108,13 @@ class Test(unittest.TestCase):
         self.assertEqual(dd, {'A': [dA0], 'B': [dB0]})
         dd = s1._data_dict_check({'A': dA0, 'B': [dB0]}, chan_default='c')
         self.assertEqual(dd, {'A': [dA0], 'B': [dB0]})
+        # theset_empty
+        s1._DataSeriesSet__theset = {'A': [dA0], 'B': [dB0]}
+        s1._theset_empty()
+        self.assertEqual(s1._DataSeriesSet__theset, {'A': [dA0], 'B': [dB0]})
+        s1._DataSeriesSet__theset = {'A': [], 'B': []}
+        s1._theset_empty()
+        self.assertEqual(s1._DataSeriesSet__theset, {})
         # add, data_names, discard
         self.assertTrue(s1.add(data_a))  # added to chan 'A' by default
         self.assertFalse(s1.add(data_a))  # already exists
@@ -1165,19 +1172,107 @@ class Test(unittest.TestCase):
         self.assertTrue(s2.discard(epoch[1]))
         self.assertFalse(s2.contains(epoch[1], alert=ALERT))
         # difference
-        # s1.difference(s2)
-        # print(s1.data_names)
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs):  # 0-9
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(0, num_epochs-3):  # 0-6
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.difference(s2))  # 7-9
+        for e in range(0, num_epochs-3):
+            self.assertFalse(s1.contains(epoch[e], alert=ALERT))
+        for e in range(num_epochs-3, num_epochs):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs):  # 0-9
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(0, num_epochs-3):  # 0-6
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s2.difference(s1))  # empty
+        self.assertEqual(s2.data_names, {})
         # intersection
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs-2):  # 0-7
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(num_epochs-5, num_epochs):  # 5-9
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.intersection(s2))  # 5-7
+        for e in range(0, num_epochs-5):
+            self.assertFalse(s1.contains(epoch[e], alert=ALERT))
+        for e in range(num_epochs-2, num_epochs):
+            self.assertFalse(s1.contains(epoch[e], alert=ALERT))
+        for e in range(num_epochs-5, num_epochs-2):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
         # isdisjoint
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs, 2):  # 0, 2, 4...
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(1, num_epochs, 2):  # 1, 3, 5...
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.isdisjoint(s2))
+        self.assertTrue(s2.isdisjoint(s1))
+        self.assertTrue(s1.add(epoch[3]))
+        self.assertFalse(s1.isdisjoint(s2))
+        self.assertFalse(s2.isdisjoint(s1))
         # issubset
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs):  # 0-9
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(1, num_epochs, 2):  # 1, 3, 5...
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s2.issubset(s1))
+        self.assertFalse(s1.issubset(s2))
         # issuperset
+        self.assertTrue(s1.issuperset(s2))
         # symmetric_difference
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs-3):  # 0-6
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(num_epochs-6, num_epochs):  # 4-9
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.symmetric_difference(s2))  # 0-3, 7-9
+        for e in range(0, num_epochs-6):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
+        for e in range(num_epochs-3, num_epochs):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
+        for e in range(num_epochs-6, num_epochs-3):
+            self.assertFalse(s1.contains(epoch[e], alert=ALERT))
         # union
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs, 2):  # 0, 2, 4...
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(1, num_epochs, 2):  # 1, 3, 5...
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.union(s2))
+        for e in range(0, num_epochs):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs-3):  # 0-6
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(num_epochs-6, num_epochs):  # 4-9
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.union(s2))
+        for e in range(0, num_epochs):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
+        # equal
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs, 2):  # 0, 2, 4...
+            self.assertTrue(s1.add(epoch[e]))
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertFalse(s1._equal(s2, alert=ALERT))
+        s2.name = 'Set1'
+        self.assertTrue(s1._equal(s2, alert=ALERT))
+        # copy
         # eq_list
         # eq_lock
-        # copy
-        # equal
-        # s1.theset = None
 
     def _test_project(self):
         name0 = 'Project0'
