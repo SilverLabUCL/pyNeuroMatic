@@ -1109,17 +1109,17 @@ class Test(unittest.TestCase):
         dd = s1._data_dict_check({'A': dA0, 'B': [dB0]}, chan_default='c')
         self.assertEqual(dd, {'A': [dA0], 'B': [dB0]})
         # theset_empty
-        s1._DataSeriesSet__theset = {'A': [dA0], 'B': [dB0]}
+        s1._theset = {'A': [dA0], 'B': [dB0]}
         s1._theset_empty()
-        self.assertEqual(s1._DataSeriesSet__theset, {'A': [dA0], 'B': [dB0]})
-        s1._DataSeriesSet__theset = {'A': [], 'B': []}
+        self.assertEqual(s1._theset, {'A': [dA0], 'B': [dB0]})
+        s1._theset = {'A': [], 'B': []}
         s1._theset_empty()
-        self.assertEqual(s1._DataSeriesSet__theset, {})
+        self.assertEqual(s1._theset, {})
         # add, data_names, discard
         self.assertTrue(s1.add(data_a))  # added to chan 'A' by default
         self.assertFalse(s1.add(data_a))  # already exists
         for e in range(0, num_epochs):
-            self.assertTrue(data_a[e] in s1._DataSeriesSet__theset['A'])
+            self.assertTrue(data_a[e] in s1._theset['A'])
         nlist_a = [data_a[e].name for e in range(0, num_epochs)]
         self.assertEqual(s1.data_names, {'A': nlist_a})
         self.assertTrue(s1.discard(data_a[1]))
@@ -1132,9 +1132,9 @@ class Test(unittest.TestCase):
         for e in range(0, num_epochs):
             self.assertTrue(s1.add(epoch[e]))
         for e in range(0, num_epochs):
-            self.assertTrue(data_a[e] in s1._DataSeriesSet__theset['A'])
-            self.assertTrue(data_b[e] in s1._DataSeriesSet__theset['B'])
-            self.assertTrue(data_c[e] in s1._DataSeriesSet__theset['C'])
+            self.assertTrue(data_a[e] in s1._theset['A'])
+            self.assertTrue(data_b[e] in s1._theset['B'])
+            self.assertTrue(data_c[e] in s1._theset['C'])
         nlist_a = [data_a[e].name for e in range(0, num_epochs)]
         nlist_b = [data_b[e].name for e in range(0, num_epochs)]
         nlist_c = [data_c[e].name for e in range(0, num_epochs)]
@@ -1205,6 +1205,25 @@ class Test(unittest.TestCase):
             self.assertFalse(s1.contains(epoch[e], alert=ALERT))
         for e in range(num_epochs-5, num_epochs-2):
             self.assertTrue(s1.contains(epoch[e], alert=ALERT))
+        # union
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs, 2):  # 0, 2, 4...
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(1, num_epochs, 2):  # 1, 3, 5...
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.union(s2))
+        for e in range(0, num_epochs):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs-3):  # 0-6
+            self.assertTrue(s1.add(epoch[e]))
+        for e in range(num_epochs-6, num_epochs):  # 4-9
+            self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.union(s2))
+        for e in range(0, num_epochs):
+            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
         # isdisjoint
         s1.clear(confirm=False)
         s2.clear(confirm=False)
@@ -1242,34 +1261,38 @@ class Test(unittest.TestCase):
             self.assertTrue(s1.contains(epoch[e], alert=ALERT))
         for e in range(num_epochs-6, num_epochs-3):
             self.assertFalse(s1.contains(epoch[e], alert=ALERT))
-        # union
-        s1.clear(confirm=False)
-        s2.clear(confirm=False)
-        for e in range(0, num_epochs, 2):  # 0, 2, 4...
-            self.assertTrue(s1.add(epoch[e]))
-        for e in range(1, num_epochs, 2):  # 1, 3, 5...
-            self.assertTrue(s2.add(epoch[e]))
-        self.assertTrue(s1.union(s2))
-        for e in range(0, num_epochs):
-            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
-        s1.clear(confirm=False)
-        s2.clear(confirm=False)
-        for e in range(0, num_epochs-3):  # 0-6
-            self.assertTrue(s1.add(epoch[e]))
-        for e in range(num_epochs-6, num_epochs):  # 4-9
-            self.assertTrue(s2.add(epoch[e]))
-        self.assertTrue(s1.union(s2))
-        for e in range(0, num_epochs):
-            self.assertTrue(s1.contains(epoch[e], alert=ALERT))
         # equal
         s1.clear(confirm=False)
         s2.clear(confirm=False)
         for e in range(0, num_epochs, 2):  # 0, 2, 4...
             self.assertTrue(s1.add(epoch[e]))
             self.assertTrue(s2.add(epoch[e]))
+        self.assertTrue(s1.isequal(s2, alert=ALERT))
+        s2.discard({'A': data_a[0]})
+        self.assertFalse(s1.isequal(s2, alert=ALERT))
+        s2.add({'A': data_a[0]})
+        self.assertTrue(s1.isequal(s2, alert=ALERT))  # order does not matter
+        s2.add({'B': data_a[0]})
+        self.assertFalse(s1.isequal(s2, alert=ALERT))
+        s2.discard({'B': data_a[0]})
+        self.assertTrue(s1.isequal(s2, alert=ALERT))
+        s2.add({'D': data_a[0]})
+        self.assertFalse(s1.isequal(s2, alert=ALERT))
+        s1.clear(confirm=False)
+        self.assertFalse(s1.isequal(s2, alert=ALERT))
+        s2.clear(confirm=False)
+        self.assertTrue(s1.isequal(s2, alert=ALERT))
+        # _equal
+        for e in range(0, num_epochs, 2):  # 0, 2, 4...
+            self.assertTrue(s1.add(epoch[e]))
+            self.assertTrue(s2.add(epoch[e]))
         self.assertFalse(s1._equal(s2, alert=ALERT))
         s2.name = 'Set1'
         self.assertTrue(s1._equal(s2, alert=ALERT))
+        s2.discard({'A': data_a[0]})
+        self.assertFalse(s1._equal(s2, alert=ALERT))
+        s2.add({'A': data_a[0]})
+        self.assertFalse(s1._equal(s2, alert=ALERT))  # different order
         # copy
         # eq_list
         # eq_lock
