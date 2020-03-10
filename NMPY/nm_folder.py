@@ -43,14 +43,14 @@ class Folder(NMObject):
         return k
 
     # override
-    def _equal(self, folder, alert=False):
-        if not super()._equal(folder, alert=alert):
+    def _iscopy(self, folder, alert=False):
+        if not super()._iscopy(folder, alert=alert):
             return False
         c = folder._Folder__data_container
-        if not self.__data_container._equal(c, alert=alert):
+        if not self.__data_container._iscopy(c, alert=alert):
             return False
         c = folder._Folder__dataseries_container
-        return self.__dataseries_container._equal(c, alert=alert)
+        return self.__dataseries_container._iscopy(c, alert=alert)
 
     # override, no super
     def copy(self):

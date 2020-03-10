@@ -68,14 +68,14 @@ class DataSeries(NMObject):
         return k
 
     # override
-    def _equal(self, dataseries, alert=False):
-        if not super()._equal(dataseries, alert=alert):
+    def _iscopy(self, dataseries, alert=False):
+        if not super()._iscopy(dataseries, alert=alert):
             return False
         c = dataseries._DataSeries__channel_container
-        if not self.__channel_container._equal(c, alert=alert):
+        if not self.__channel_container._iscopy(c, alert=alert):
             return False
         c = dataseries._DataSeries__set_container
-        return self.__set_container._equal(c, alert=alert)
+        return self.__set_container._iscopy(c, alert=alert)
 
     # override, no super
     def copy(self):

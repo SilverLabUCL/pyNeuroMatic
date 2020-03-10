@@ -91,9 +91,9 @@ class Data(NMObject):
         return k
 
     # override
-    def _equal(self, data, alert=False):
+    def _iscopy(self, data, alert=False):
         alert = nmu.bool_check(alert, False)
-        if not super()._equal(data, alert=alert):
+        if not super()._iscopy(data, alert=alert):
             return False
         if self.__np_array is None and data.np_array is not None:
             if alert:
@@ -116,8 +116,8 @@ class Data(NMObject):
                 if alert:
                     self._alert('unequal np_array nbytes', tp=self._tp)
                 return False
-            if not np.array_equal(self.__np_array, data.np_array):
-                # array_equal returns false if both arrays filled with NANs
+            if not np.array_iscopy(self.__np_array, data.np_array):
+                # array_iscopy returns false if both arrays filled with NANs
                 if nmp.NAN_EQ_NAN:
                     if not np.allclose(self.__np_array, data.np_array, rtol=0,
                                        atol=0, equal_nan=True):
@@ -125,7 +125,7 @@ class Data(NMObject):
                             self._alert('unequal np_array', tp=self._tp)
                         return False
         if self.__note_container:
-            if not self.__note_container._equal(data._Data__note_container,
+            if not self.__note_container._iscopy(data._Data__note_container,
                                                 alert=alert):
                 return False
         # self.__dataseries

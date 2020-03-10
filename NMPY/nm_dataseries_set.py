@@ -17,12 +17,12 @@ class DataSeriesSet(NMObject):  # rename as DictSet
 
     def __init__(self, parent, name, **copy):
         super().__init__(parent, name)
-        self._theset = {}  # dictionary of sets, keys are chan-char
+        self.__theset = {}  # dictionary of sets, keys are chan-char
         self.__eq_list = []
         self.__eq_lock = True
         for k, v in copy.items():
             if k.lower() == 'c_theset' and isinstance(v, dict):
-                self._theset = v
+                self.__theset = v
             if k.lower() == 'c_eq_list' and isinstance(v, list):
                 self.__eq_list = v
             if k.lower() == 'c_eq_lock' and isinstance(v, bool):
@@ -45,19 +45,25 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return k
 
     # override
-    def _equal(self, dataseriesset, alert=False):
-        if not super()._equal(dataseriesset, alert=alert):
+    def _iscopy(self, dataseriesset, alert=False):
+        if not isinstance(dataseriesset, DataSeriesSet):
+            if alert:
+                a = nmu.type_error(dataseriesset, 'DataSeriesSet')
+                self._alert(a, tp=self._tp)
             return False
-        ks = self._theset.keys()
-        ko = dataseriesset._theset.keys()
+        if not super()._iscopy(dataseriesset, alert=alert):
+            return False
+        other = dataseriesset._DataSeriesSet__theset
+        ks = self.__theset.keys()
+        ko = other.keys()
         if ks != ko:
             if alert:
                 a = 'unequal channels: ' + str(ks) + ' vs ' + str(ko)
                 self._alert(a, tp=self._tp)
             return False
-        for cc in self._theset.keys():
-            dlist_s = self._theset[cc]
-            dlist_o = dataseriesset._theset[cc]
+        for cc in self.__theset.keys():
+            dlist_s = self.__theset[cc]
+            dlist_o = other[cc]
             ns = len(dlist_s)
             no = len(dlist_o)
             if ns != no:
@@ -66,15 +72,15 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 self._alert(a, tp=self._tp)
                 return False
             for i in range(0, ns):
-                if not dlist_s[i]._equal(dlist_o[i], alert=alert):
+                if not dlist_s[i]._iscopy(dlist_o[i], alert=alert):
                     return False
-        # eq_list
-        # eq_lock
+        # TODO eq_list
+        # TODO eq_lock
         return True
 
     # override, no super
     def copy(self):
-        thesetcopy = self._theset.copy()  # TODO, refs need copying
+        thesetcopy = self.__theset.copy()  # TODO, refs need copying
         c = DataSeriesSet(self._parent, self.name, c_theset=thesetcopy,
                     c_eq_list=self.__eq_list.copy(),
                     c_eq_lock=self.__eq_lock)
@@ -103,14 +109,14 @@ class DataSeriesSet(NMObject):  # rename as DictSet
 
     @property
     def count(self):
-        return len(self._theset)
+        return len(self.__theset)
 
     @property
     def data_names(self):
         if self.name.upper() == 'ALL':
             return ['ALL']
         n = {}
-        for cc, s in self._theset.items():
+        for cc, s in self.__theset.items():
             nlist = [d.name for d in s]
             nlist.sort()
             n.update({cc: nlist})
@@ -128,10 +134,10 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         dnew = {}
         if data.__class__.__name__ == 'Data':  # no channel
             if chan_default.upper() == 'ALL':
-                for cc in self._theset.keys():
+                for cc in self.__theset.keys():
                     dnew.update({cc.upper(): [data]})
                 return dnew
-            if len(self._theset.keys()) > 1:
+            if len(self.__theset.keys()) > 1:
                 e = 'dictionary with channel keys'
                 raise TypeError(nmu.type_error(data, e))
             cc = nmu.chan_char_check(chan_default)
@@ -147,10 +153,10 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 if d.__class__.__name__ != 'Data':
                     raise TypeError(nmu.type_error(d, 'Data'))
             if chan_default.upper() == 'ALL':
-                for cc in self._theset.keys():
+                for cc in self.__theset.keys():
                     dnew.update({cc.upper(): data})
                 return dnew
-            if len(self._theset.keys()) > 1:
+            if len(self.__theset.keys()) > 1:
                 e = 'dictionary with channel keys'
                 raise TypeError(nmu.type_error(data, e))
             cc = nmu.chan_char_check(chan_default)
@@ -180,15 +186,16 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return dnew
 
     def _theset_empty(self):
-        for s in self._theset.values():
+        for s in self.__theset.values():
             if len(s) > 0:
                 return False
-        self._theset.clear()
+        self.__theset.clear()
         return True
 
     def _chan_check(self, dataseriesset):
-        ks = self._theset.keys()
-        kd = dataseriesset._theset.keys()
+        other = dataseriesset._DataSeriesSet__theset
+        ks = self.__theset.keys()
+        kd = other.keys()
         if ks != kd:
             q = ('unequal channels: ' + str(ks) + ' vs ' + str(kd) + '. ' +
                  'Do you want to continue?')
@@ -205,14 +212,14 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             return False
         for cc, dlist in dd.items():
             for d in dlist:
-                if cc in self._theset.keys():
-                    if d in self._theset[cc]:
+                if cc in self.__theset.keys():
+                    if d in self.__theset[cc]:
                         pass  # do nothing
                     else:
-                        self._theset[cc].append(d)
+                        self.__theset[cc].append(d)
                         modified = True
                 else:
-                    self._theset.update({cc: [d]})
+                    self.__theset.update({cc: [d]})
                     modified = True
         if modified:
             self._modified()
@@ -225,10 +232,10 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             return False
         modified = False
         for cc, dlist in dd.items():
-            if cc in self._theset.keys():
+            if cc in self.__theset.keys():
                 for d in dlist:
-                    if d in self._theset[cc]:
-                        self._theset[cc].remove(d)
+                    if d in self.__theset[cc]:
+                        self.__theset[cc].remove(d)
                         modified = True
         self._theset_empty()
         if modified:
@@ -242,9 +249,9 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         if not isinstance(dd, dict) or not dd:
             return False
         for cc, dlist in dd.items():
-            if cc in self._theset.keys():
+            if cc in self.__theset.keys():
                 for d in dlist:
-                    if d not in self._theset[cc]:
+                    if d not in self.__theset[cc]:
                         if alert:
                             a = ('failed to find ' + d.name + ' in channel ' +
                                  cc)
@@ -265,7 +272,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         clist = []
         for cc in chan_list:
             if cc.upper() == 'ALL':
-                clist = list(self._theset.keys())
+                clist = list(self.__theset.keys())
                 break
             cc2 = nmu.chan_char_check(cc)
             if len(cc2) == 0:
@@ -286,8 +293,8 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 return False
         modified = False
         for cc in clist:
-            if cc in self._theset.keys():
-                self._theset[cc].clear()
+            if cc in self.__theset.keys():
+                self.__theset[cc].clear()
                 modified = True
         self._theset_empty()
         if modified:
@@ -300,12 +307,13 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
             self._history('cancel', tp=self._tp, quiet=quiet)
             return False
+        other = dataseriesset._DataSeriesSet__theset
         modified = False
-        for cc, dlist in dataseriesset._theset.items():
-            if cc in self._theset.keys() and isinstance(dlist, list):
+        for cc, dlist in other.items():
+            if cc in self.__theset.keys():
                 for d in dlist:
-                    if d in self._theset[cc]:
-                        self._theset[cc].remove(d)
+                    if d in self.__theset[cc]:
+                        self.__theset[cc].remove(d)
                         modified = True
         self._theset_empty()
         if modified:
@@ -318,11 +326,12 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
             self._history('cancel', tp=self._tp, quiet=quiet)
             return False
+        other = dataseriesset._DataSeriesSet__theset
         remove = {}
-        for cc, dlist in self._theset.items():
-            if cc in dataseriesset._theset.keys() and isinstance(dlist, list):
+        for cc, dlist in self.__theset.items():
+            if cc in other.keys():
                 for d in dlist:
-                    if d not in dataseriesset._theset[cc]:
+                    if d not in other[cc]:
                         if cc in remove.keys():
                             remove[cc].append(d)
                         else:
@@ -331,7 +340,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             return False
         for cc, dlist in remove.items():
             for d in dlist:
-                self._theset[cc].remove(d)
+                self.__theset[cc].remove(d)
         self._theset_empty()
         self._modified()
         return True
@@ -342,12 +351,13 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
             self._history('cancel', tp=self._tp, quiet=quiet)
             return False
+        other = dataseriesset._DataSeriesSet__theset
         add = {}
         remove = {}
-        for cc, dlist in dataseriesset._theset.items():
-            if cc in self._theset.keys() and isinstance(dlist, list):
+        for cc, dlist in other.items():
+            if cc in self.__theset.keys():
                 for d in dlist:
-                    if d in self._theset[cc]:
+                    if d in self.__theset[cc]:
                         if cc in remove.keys():
                             remove[cc].append(d)
                         else:
@@ -361,10 +371,10 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             return False
         for cc, dlist in remove.items():
             for d in dlist:
-                self._theset[cc].remove(d)
+                self.__theset[cc].remove(d)
         for cc, dlist in add.items():
             for d in dlist:
-                self._theset[cc].append(d)
+                self.__theset[cc].append(d)
         self._theset_empty()
         self._modified()
         return True
@@ -375,11 +385,12 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
             self._history('cancel', tp=self._tp, quiet=quiet)
             return False
+        other = dataseriesset._DataSeriesSet__theset
         add = {}
-        for cc, dlist in dataseriesset._theset.items():
-            if cc in self._theset.keys() and isinstance(dlist, list):
+        for cc, dlist in other.items():
+            if cc in self.__theset.keys() and isinstance(dlist, list):
                 for d in dlist:
-                    if d not in self._theset[cc]:
+                    if d not in self.__theset[cc]:
                         if cc in add.keys():
                             add[cc].append(d)
                         else:
@@ -388,7 +399,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             return False
         for cc, dlist in add.items():
             for d in dlist:
-                self._theset[cc].append(d)
+                self.__theset[cc].append(d)
         self._theset_empty()
         self._modified()
         return True
@@ -396,26 +407,28 @@ class DataSeriesSet(NMObject):  # rename as DictSet
     def isdisjoint(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, dlist in dataseriesset._theset.items():
-            if cc in self._theset.keys():
+        other = dataseriesset._DataSeriesSet__theset
+        for cc, dlist in other.items():
+            if cc in self.__theset.keys() and isinstance(dlist, list):
                 for d in dlist:
-                    if d in self._theset[cc]:
+                    if d in self.__theset[cc]:
                         return False
         return True
 
     def isequal(self, dataseriesset, alert=True, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        ks = self._theset.keys()
-        ko = dataseriesset._theset.keys()
+        other = dataseriesset._DataSeriesSet__theset
+        ks = self.__theset.keys()
+        ko = other.keys()
         if ks != ko:
             if alert:
                 a = 'unequal channels: ' + str(ks) + ' vs ' + str(ko)
                 self._alert(a, tp=self._tp)
             return False
-        for cc in self._theset.keys():
-            dlist_s = self._theset[cc]
-            dlist_o = dataseriesset._theset[cc]
+        for cc in self.__theset.keys():
+            dlist_s = self.__theset[cc]
+            dlist_o = other[cc]
             ns = len(dlist_s)
             no = len(dlist_o)
             if ns != no:
@@ -425,16 +438,19 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 return False
             for d in dlist_s:
                 if d not in dlist_o:
+                    a = 'missing data item ' + d.name + ': ' + str(d)
+                    self._alert(a, tp=self._tp)
                     return False
         return True
 
     def issubset(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, dlist in self._theset.items():
-            if cc in dataseriesset._theset.keys():
+        other = dataseriesset._DataSeriesSet__theset
+        for cc, dlist in self.__theset.items():
+            if cc in other.keys():
                 for d in dlist:
-                    if d not in dataseriesset._theset[cc]:
+                    if d not in other[cc]:
                         return False
             else:
                 return False
@@ -443,10 +459,11 @@ class DataSeriesSet(NMObject):  # rename as DictSet
     def issuperset(self, dataseriesset, quiet=nmp.QUIET):
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        for cc, dlist in dataseriesset._theset.items():
-            if cc in self._theset.keys():
+        other = dataseriesset._DataSeriesSet__theset
+        for cc, dlist in other.items():
+            if cc in self.__theset.keys():
                 for d in dlist:
-                    if d not in self._theset[cc]:
+                    if d not in self.__theset[cc]:
                         return False
             else:
                 return False

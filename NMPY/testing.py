@@ -125,19 +125,19 @@ class Test(unittest.TestCase):
         for n in ['test', n0]:
             o0.name = n
             self.assertEqual(n, o0.name)
-        # equal
+        # iscopy
         for b in BADTYPES:
-            self.assertFalse(o0._equal(b, alert=ALERT))
-        self.assertFalse(o0._equal(o1, alert=ALERT))
-        self.assertTrue(o0._equal(o0, alert=ALERT))
+            self.assertFalse(o0._iscopy(b, alert=ALERT))
+        self.assertFalse(o0._iscopy(o1, alert=ALERT))
+        self.assertTrue(o0._iscopy(o0, alert=ALERT))
         o0 = NMObject(PARENT, n0)
         o1 = NMObject(PARENT, n0)
-        self.assertTrue(o0._equal(o1, alert=ALERT))
+        self.assertTrue(o0._iscopy(o1, alert=ALERT))
         # copy
         time.sleep(2)  # forces date to be different
         c = o0.copy()
         self.assertIsInstance(c, NMObject)
-        self.assertTrue(o0._equal(c, alert=ALERT))
+        self.assertTrue(o0._iscopy(c, alert=ALERT))
         self.assertEqual(o0._parent, c._parent)
         self.assertEqual(o0.name, c.name)
         self.assertNotEqual(o0._NMObject__date, c._NMObject__date)
@@ -467,21 +467,21 @@ class Test(unittest.TestCase):
         self.assertIsInstance(c, NMObject)
         self.assertEqual(c.name, nnext)
         self.assertEqual(c._NMObject__rename_fr, c0.rename)
-        self.assertFalse(o._equal(c, alert=ALERT))  # names are different
+        self.assertFalse(o._iscopy(c, alert=ALERT))  # names are different
         self.assertEqual(c0.count, icount + 1)
         with self.assertRaises(RuntimeError):
             c.name = nlist[0]  # name already used
         c._NMObject__name = nlist[0]
-        self.assertTrue(o._equal(c, alert=ALERT))
+        self.assertTrue(o._iscopy(c, alert=ALERT))
         c._NMObject__name = nnext
-        # equal
+        # iscopy
         for b in BADTYPES:
-            self.assertFalse(c0._equal(b, alert=ALERT))
-        self.assertFalse(c0._equal(c1, alert=ALERT))
+            self.assertFalse(c0._iscopy(b, alert=ALERT))
+        self.assertFalse(c0._iscopy(c1, alert=ALERT))
         # copy
         c = c0.copy()
         self.assertIsInstance(c, NMObjectContainer)
-        self.assertTrue(c0._equal(c, alert=ALERT))
+        self.assertTrue(c0._iscopy(c, alert=ALERT))
         self.assertEqual(c0._parent, c._parent)
         self.assertEqual(c0.name, c.name)
         self.assertEqual(c0.parameters['type'], c.parameters['type'])
@@ -497,7 +497,7 @@ class Test(unittest.TestCase):
         for i in range(0, c0.count):
             o0 = c0.getitem(index=i)
             oc = c.getitem(index=i)
-            self.assertTrue(o0._equal(oc, alert=ALERT))
+            self.assertTrue(o0._iscopy(oc, alert=ALERT))
             fr0 = o0._NMObject__rename_fr
             frc = oc._NMObject__rename_fr
             self.assertNotEqual(fr0, frc)
@@ -536,15 +536,15 @@ class Test(unittest.TestCase):
         self.assertTrue(n0._param_test())
         # content
         self.assertEqual(n0._content_name, 'note')
-        # equal
+        # iscopy
         n1 = Note(PARENT, 'Note0', thenote=thenote)
-        self.assertTrue(n0._equal(n1, alert=ALERT))
+        self.assertTrue(n0._iscopy(n1, alert=ALERT))
         n1 = Note(PARENT, 'Note0', thenote='different')
-        self.assertFalse(n0._equal(n1, alert=ALERT))
+        self.assertFalse(n0._iscopy(n1, alert=ALERT))
         # copy
         c = n0.copy()
         self.assertIsInstance(c, Note)
-        self.assertTrue(n0._equal(c, alert=ALERT))
+        self.assertTrue(n0._iscopy(c, alert=ALERT))
         self.assertEqual(n0._Note__thenote, c._Note__thenote)
         # thenote
         self.assertTrue(n0._thenote_set(123))
@@ -580,11 +580,11 @@ class Test(unittest.TestCase):
         # copy
         c = notes.copy()
         self.assertIsInstance(c, NoteContainer)
-        self.assertTrue(notes._equal(c, alert=ALERT))
+        self.assertTrue(notes._iscopy(c, alert=ALERT))
         notes._NMObjectContainer__rename = True
         notes.prefix = 'test'
         c = notes.copy()
-        self.assertTrue(notes._equal(c, alert=ALERT))
+        self.assertTrue(notes._iscopy(c, alert=ALERT))
         # thenotes
         self.assertEqual(thenotes, notes.thenotes())
         self.assertEqual(thenotes, c.thenotes())
@@ -817,10 +817,10 @@ class Test(unittest.TestCase):
         # copy
         c = y0.copy()
         self.assertIsInstance(c, Dimension)
-        self.assertTrue(y0._equal(c, alert=ALERT))
+        self.assertTrue(y0._iscopy(c, alert=ALERT))
         c = x0.copy()
         self.assertIsInstance(c, XDimension)
-        self.assertTrue(x0._equal(c, alert=ALERT))
+        self.assertTrue(x0._iscopy(c, alert=ALERT))
 
     def _test_data(self):
         n0 = 'RecordA0'
@@ -852,7 +852,7 @@ class Test(unittest.TestCase):
         d1 = Data(PARENT, n1, np_array=nparray1, xdim=XDIM1, ydim=YDIM1)
         xdata = Data(PARENT, 'xdata', np_array=nparrayx, xdim=XDIMx,
                      ydim=YDIMx)
-        self.assertTrue(np.array_equal(d0._Data__np_array, nparray0))
+        self.assertTrue(np.array_iscopy(d0._Data__np_array, nparray0))
         # parameters
         plist = PLIST + ['xdim', 'ydim', 'dataseries']
         self.assertEqual(d0._param_list, plist)
@@ -865,36 +865,36 @@ class Test(unittest.TestCase):
         self.assertEqual(list(c.keys()), [content_name, 'notes'])
         self.assertEqual(c[content_name], d0.name)
         self.assertEqual(c['notes'], d0.note.names)
-        # equal
-        self.assertFalse(d0._equal(d1, alert=ALERT))
-        self.assertTrue(d0._equal(d0, alert=ALERT))
+        # iscopy
+        self.assertFalse(d0._iscopy(d1, alert=ALERT))
+        self.assertTrue(d0._iscopy(d0, alert=ALERT))
         d00 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM0, ydim=YDIM0)
-        self.assertTrue(d0._equal(d00, alert=ALERT))
+        self.assertTrue(d0._iscopy(d00, alert=ALERT))
         nparray00 = np.full([4], 3.14, dtype=np.float64, order='F')
         d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
-        self.assertTrue(d0._equal(d00, alert=ALERT))
+        self.assertTrue(d0._iscopy(d00, alert=ALERT))
         nparray0[2] = 5
-        self.assertFalse(d0._equal(d00, alert=ALERT))
+        self.assertFalse(d0._iscopy(d00, alert=ALERT))
         nparray0[2] = 0
         d00 = Data(PARENT, n0, np_array=None, xdim=XDIM0, ydim=YDIM0)
-        self.assertFalse(d0._equal(d00, alert=ALERT))
+        self.assertFalse(d0._iscopy(d00, alert=ALERT))
         nparray00 = np.full([5, 2], 3.14, dtype=np.float64, order='C')
         d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
-        self.assertFalse(d0._equal(d00, alert=ALERT))
+        self.assertFalse(d0._iscopy(d00, alert=ALERT))
         nparray00 = np.full([5], 3.14, dtype=np.int32, order='C')
         d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
-        self.assertFalse(d0._equal(d00, alert=ALERT))
+        self.assertFalse(d0._iscopy(d00, alert=ALERT))
         nparray00 = np.full([5], 3.14, dtype=np.float64, order='F')
         d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
-        self.assertFalse(d0._equal(d00, alert=ALERT))
+        self.assertFalse(d0._iscopy(d00, alert=ALERT))
         d00 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM1, ydim=YDIM0)
-        self.assertFalse(d0._equal(d00, alert=ALERT))
+        self.assertFalse(d0._iscopy(d00, alert=ALERT))
         d00 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM0, ydim=YDIM1)
-        self.assertFalse(d0._equal(d00, alert=ALERT))
+        self.assertFalse(d0._iscopy(d00, alert=ALERT))
         # copy
         c = d0.copy()
         self.assertIsInstance(c, Data)
-        self.assertTrue(d0._equal(c, alert=ALERT))
+        self.assertTrue(d0._iscopy(c, alert=ALERT))
         # np_array
         for b in BADTYPES:
             if b is None:
@@ -934,22 +934,22 @@ class Test(unittest.TestCase):
         # copy
         c = c0.copy()
         self.assertIsInstance(c, DataContainer)
-        self.assertTrue(c._equal(c0, alert=ALERT))
+        self.assertTrue(c._iscopy(c0, alert=ALERT))
         for i in range(0, c.count):
             o0 = c0.getitem(index=i)
             oc = c.getitem(index=i)
-            self.assertTrue(o0._equal(oc, alert=ALERT))
+            self.assertTrue(o0._iscopy(oc, alert=ALERT))
         c0.prefix = 'Test'  # test copy_extra()
         c0._NMObjectContainer__rename = False  # test copy_extra()
         c = c0.copy()
-        self.assertTrue(c._equal(c0, alert=ALERT))
+        self.assertTrue(c._iscopy(c0, alert=ALERT))
         c0._NMObjectContainer__rename = True
         c0.prefix = nmp.DATA_PREFIX
-        # equal
-        self.assertTrue(c0._equal(c0, alert=ALERT))
-        self.assertTrue(c0._equal(c1, alert=ALERT))
+        # iscopy
+        self.assertTrue(c0._iscopy(c0, alert=ALERT))
+        self.assertTrue(c0._iscopy(c1, alert=ALERT))
         self.assertIsInstance(c1._select_set('RecordA0'), Data)
-        self.assertFalse(c0._equal(c1, alert=ALERT))
+        self.assertFalse(c0._iscopy(c1, alert=ALERT))
         # kill  # TODO, test if Data is removed from dataseries and esets
 
     def _test_channel(self):
@@ -968,16 +968,16 @@ class Test(unittest.TestCase):
         self.assertEqual(c0._content_name, 'channel')
         # copy
         c = c0.copy()
-        self.assertTrue(c0._equal(c, alert=ALERT))
-        self.assertTrue(c0.x._equal(c.x, alert=ALERT))
-        self.assertTrue(c0.y._equal(c.y, alert=ALERT))
-        # equal
+        self.assertTrue(c0._iscopy(c, alert=ALERT))
+        self.assertTrue(c0.x._iscopy(c.x, alert=ALERT))
+        self.assertTrue(c0.y._iscopy(c.y, alert=ALERT))
+        # iscopy
         c00 = Channel(PARENT, 'A', xdim=XDIM0, ydim=YDIM0)
-        self.assertTrue(c0._equal(c00, alert=ALERT))
-        self.assertTrue(c0.x._equal(c00.x, alert=ALERT))
-        self.assertTrue(c0.y._equal(c00.y, alert=ALERT))
+        self.assertTrue(c0._iscopy(c00, alert=ALERT))
+        self.assertTrue(c0.x._iscopy(c00.x, alert=ALERT))
+        self.assertTrue(c0.y._iscopy(c00.y, alert=ALERT))
         c00.name = 'B'
-        self.assertFalse(c0._equal(c00, alert=ALERT))
+        self.assertFalse(c0._iscopy(c00, alert=ALERT))
 
     def _test_channel_container(self):
         c0 = ChannelContainer(PARENT, 'channels')
@@ -1009,26 +1009,26 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.name_next(), 'C')
         # copy
         c = c0.copy()
-        self.assertTrue(c0._equal(c, alert=ALERT))
+        self.assertTrue(c0._iscopy(c, alert=ALERT))
         c0._NMObjectContainer__rename = True  # test copy_extra()
         self.assertTrue(c0._prefix_set('Test'))
         c = c0.copy()
-        self.assertTrue(c0._equal(c, alert=ALERT))
+        self.assertTrue(c0._iscopy(c, alert=ALERT))
         self.assertTrue(c0._prefix_set(''))  # reset
         c0._NMObjectContainer__rename = False
-        # equal
+        # iscopy
         c00 = ChannelContainer(PARENT, 'channels')
         c00.new(xdim=XDIM0, ydim=YDIM0)
         c00.new(xdim=XDIM0, ydim=YDIM1)
-        self.assertTrue(c0._equal(c00, alert=ALERT))
+        self.assertTrue(c0._iscopy(c00, alert=ALERT))
         c00 = ChannelContainer(PARENT, 'channels')
         c00.new(xdim=XDIM0, ydim=YDIM0)
         c00.new(xdim=XDIM0, ydim=YDIM0)
-        self.assertFalse(c0._equal(c00, alert=ALERT))
+        self.assertFalse(c0._iscopy(c00, alert=ALERT))
         c00 = ChannelContainer(PARENT, 'chans')
         c00.new(xdim=XDIM0, ydim=YDIM0)
         c00.new(xdim=XDIM0, ydim=YDIM1)
-        self.assertFalse(c0._equal(c00, alert=ALERT))
+        self.assertFalse(c0._iscopy(c00, alert=ALERT))
         # duplicate
         with self.assertRaises(RuntimeError):
             c0.duplicate()
@@ -1109,17 +1109,18 @@ class Test(unittest.TestCase):
         dd = s1._data_dict_check({'A': dA0, 'B': [dB0]}, chan_default='c')
         self.assertEqual(dd, {'A': [dA0], 'B': [dB0]})
         # theset_empty
-        s1._theset = {'A': [dA0], 'B': [dB0]}
+        s1.clear(confirm=False)
+        s1.add({'A': [dA0], 'B': [dB0]})
         s1._theset_empty()
-        self.assertEqual(s1._theset, {'A': [dA0], 'B': [dB0]})
-        s1._theset = {'A': [], 'B': []}
+        self.assertEqual(s1._DataSeriesSet__theset, {'A': [dA0], 'B': [dB0]})
+        s1._DataSeriesSet__theset = {'A': [], 'B': []}
         s1._theset_empty()
-        self.assertEqual(s1._theset, {})
+        self.assertEqual(s1._DataSeriesSet__theset, {})
         # add, data_names, discard
         self.assertTrue(s1.add(data_a))  # added to chan 'A' by default
         self.assertFalse(s1.add(data_a))  # already exists
         for e in range(0, num_epochs):
-            self.assertTrue(data_a[e] in s1._theset['A'])
+            self.assertTrue(data_a[e] in s1._DataSeriesSet__theset['A'])
         nlist_a = [data_a[e].name for e in range(0, num_epochs)]
         self.assertEqual(s1.data_names, {'A': nlist_a})
         self.assertTrue(s1.discard(data_a[1]))
@@ -1132,9 +1133,9 @@ class Test(unittest.TestCase):
         for e in range(0, num_epochs):
             self.assertTrue(s1.add(epoch[e]))
         for e in range(0, num_epochs):
-            self.assertTrue(data_a[e] in s1._theset['A'])
-            self.assertTrue(data_b[e] in s1._theset['B'])
-            self.assertTrue(data_c[e] in s1._theset['C'])
+            self.assertTrue(data_a[e] in s1._DataSeriesSet__theset['A'])
+            self.assertTrue(data_b[e] in s1._DataSeriesSet__theset['B'])
+            self.assertTrue(data_c[e] in s1._DataSeriesSet__theset['C'])
         nlist_a = [data_a[e].name for e in range(0, num_epochs)]
         nlist_b = [data_b[e].name for e in range(0, num_epochs)]
         nlist_c = [data_c[e].name for e in range(0, num_epochs)]
@@ -1261,7 +1262,7 @@ class Test(unittest.TestCase):
             self.assertTrue(s1.contains(epoch[e], alert=ALERT))
         for e in range(num_epochs-6, num_epochs-3):
             self.assertFalse(s1.contains(epoch[e], alert=ALERT))
-        # equal
+        # isequal
         s1.clear(confirm=False)
         s2.clear(confirm=False)
         for e in range(0, num_epochs, 2):  # 0, 2, 4...
@@ -1282,17 +1283,25 @@ class Test(unittest.TestCase):
         self.assertFalse(s1.isequal(s2, alert=ALERT))
         s2.clear(confirm=False)
         self.assertTrue(s1.isequal(s2, alert=ALERT))
-        # _equal
+        # _iscopy
         for e in range(0, num_epochs, 2):  # 0, 2, 4...
             self.assertTrue(s1.add(epoch[e]))
             self.assertTrue(s2.add(epoch[e]))
-        self.assertFalse(s1._equal(s2, alert=ALERT))
+        self.assertFalse(s1._iscopy(s2, alert=ALERT))
         s2.name = 'Set1'
-        self.assertTrue(s1._equal(s2, alert=ALERT))
+        self.assertTrue(s1._iscopy(s2, alert=ALERT))
         s2.discard({'A': data_a[0]})
-        self.assertFalse(s1._equal(s2, alert=ALERT))
+        self.assertFalse(s1._iscopy(s2, alert=ALERT))
         s2.add({'A': data_a[0]})
-        self.assertFalse(s1._equal(s2, alert=ALERT))  # different order
+        self.assertFalse(s1._iscopy(s2, alert=ALERT))  # different order
+        self.assertFalse(s1.add(epoch[e]))
+        s1.clear(confirm=False)
+        s2.clear(confirm=False)
+        for e in range(0, num_epochs, 2):  # 0, 2, 4...
+            self.assertTrue(s1.add(data_a[e]))
+            self.assertTrue(s2.add(data_a[e].copy()))
+        self.assertTrue(s1._iscopy(s2, alert=ALERT))
+        self.assertFalse(s1.isequal(s2, alert=ALERT))  # different refs
         # copy
         # eq_list
         # eq_lock
@@ -1310,7 +1319,7 @@ class Test(unittest.TestCase):
         ds = f.dataseries.new('Wave')
         ds.make(channels=2, epochs=3, shape=5, dim=dim)
         # p1._copy(p0)
-        # self.assertTrue(p1._equal(p0, alert=ALERT))
+        # self.assertTrue(p1._iscopy(p0, alert=ALERT))
         """
 
     def _test_utilities(self):

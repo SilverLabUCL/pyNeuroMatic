@@ -171,7 +171,7 @@ class NMObject(object):
         self.__rename_fxnref = rename_fxnref
         return True
 
-    def _equal(self, nmobject, alert=False):
+    def _iscopy(self, nmobject, alert=False):
         alert = nmu.bool_check(alert, False)
         if nmobject.__class__.__name__ != self.__class__.__name__:
             if alert:
@@ -337,8 +337,8 @@ class NMObjectContainer(NMObject):
         return {self._content_name: self.names}
 
     # override
-    def _equal(self, container, alert=False):
-        if not super()._equal(container, alert=alert):
+    def _iscopy(self, container, alert=False):
+        if not super()._iscopy(container, alert=alert):
             return False
         if container.count != self.count:
             if alert:
@@ -348,7 +348,7 @@ class NMObjectContainer(NMObject):
             return False
         for i, s in enumerate(self.__thecontainer):
             o = container.getitem(index=i, quiet=True)
-            if not s._equal(o, alert=alert):
+            if not s._iscopy(o, alert=alert):
                 return False
         return True
 
