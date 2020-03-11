@@ -1172,6 +1172,12 @@ class Test(unittest.TestCase):
         self.assertFalse(s2.contains({'D': data_c}, alert=ALERT))
         self.assertTrue(s2.discard(epoch[1]))
         self.assertFalse(s2.contains(epoch[1], alert=ALERT))
+        # get_channel
+        s1.clear(confirm=False)
+        self.assertTrue(s1.add(data_a[0]))
+        dlist = s1.get_channel('A')
+        dlist.append(data_a[1])
+        print(s1.data_names)
         # difference
         s1.clear(confirm=False)
         s2.clear(confirm=False)
@@ -1305,7 +1311,7 @@ class Test(unittest.TestCase):
         # copy
         # eq_list
         # eq_lock
-
+        
     def _test_project(self):
         name0 = 'Project0'
         name1 = 'Project1'
