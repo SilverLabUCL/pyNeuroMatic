@@ -13,6 +13,9 @@ import nm_utilities as nmu
 class DataSeriesSet(NMObject):  # rename as DictSet
     """
     NM DataSeriesSet class
+    Behaves like a Python set, but is a list
+    Using lists instead of sets because sets have no order
+    For data series, want to keep items in order
     """
 
     def __init__(self, parent, name, **copy):
@@ -101,8 +104,11 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return self._eq_lock_set(eq_lock)
 
     def _eq_lock_set(self, eq_lock, quiet=nmp.QUIET):
-        self.__eq_lock = eq_lock
-        self._modified()
+        if not isinstance(eq_lock, bool):
+            raise TypeError(nmu.type_error(eq_lock, 'bool'))
+        if eq_lock != self.__eq_lock:
+            self.__eq_lock = eq_lock
+            self._modified()
         return True
 
     @property
@@ -120,29 +126,21 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             n.update({cc: nlist})
         return n
 
-    @property
-    def theset(self):
-        return self.__theset.copy()  # copy, enforce private set
-
-    @theset.setter
-    def theset(self, data):
-        # data = {'A': [DataA0, DataA1...]}
-        dd = self._data_dict_check(data)
-        self.__theset.clear()
-        return self.add(dd)
-
     def _theset_empty(self):
         for s in self.__theset.values():
             if len(s) > 0:
                 return False
         self.__theset.clear()
         return True
-
-    def _keys(self):
-        return self.__theset.keys()
+    
+    def _copy(self):
+        return self.__theset.copy()
 
     def _items(self):
         return self.__theset.items()
+
+    def _keys(self):
+        return self.__theset.keys()
 
     def _values(self):
         return self.__theset.values()
@@ -166,7 +164,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 e = 'dictionary with channel keys'
                 raise TypeError(nmu.type_error(data, e))
             cc = nmu.chan_char_check(chan_default)
-            if len(cc) == 0:
+            if not cc:
                 e = 'bad channel character: ' + nmu.quotes(chan_default)
                 raise ValueError(e)
             dnew.update({cc: [data]})
@@ -185,7 +183,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 e = 'dictionary with channel keys'
                 raise TypeError(nmu.type_error(data, e))
             cc = nmu.chan_char_check(chan_default)
-            if len(cc) == 0:
+            if not cc:
                 e = 'bad channel character: ' + nmu.quotes(chan_default)
                 raise ValueError(e)
             dnew.update({cc: data})
@@ -220,25 +218,14 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             return yn == 'y'
         return False
 
-    def get_channel(self, chan_char):
+    def get(self, chan_char):
         cc = nmu.chan_char_check(chan_char)
-        if len(cc) == 0:
+        if not cc:
             e = 'bad channel character: ' + nmu.quotes(chan_char)
             raise ValueError(e)
         if cc in self.__theset.keys():
             return self.__theset[cc].copy()  # copy, enforce private set
         return []
-
-    def set_channel(self, chan_char, data_list):
-        cc = nmu.chan_char_check(chan_char)
-        if len(cc) == 0:
-            e = 'bad channel character: ' + nmu.quotes(chan_char)
-            raise ValueError(e)
-        dd = self._data_dict_check({cc: data_list})
-        if cc in self.__theset.keys():
-            self.__theset[cc].clear()
-        self.add(dd)
-        return True
 
     def add(self, data, quiet=nmp.QUIET):
         # data = {'A': [DataA0, DataA1...]}
@@ -350,6 +337,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return modified
 
     def intersection(self, dataseriesset, alert=True, quiet=nmp.QUIET):
+        # AND &&
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
@@ -408,6 +396,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return True
 
     def union(self, dataseriesset, alert=True, quiet=nmp.QUIET):
+        # OR, ||
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
