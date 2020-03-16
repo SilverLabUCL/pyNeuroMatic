@@ -9,8 +9,12 @@ from nm_object import NMObjectContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 
+SET_SYMBOLS = ['&', '|', '-', '^']
+SET_SYMBOLS_QUOTED = [nmu.quotes('&'), nmu.quotes('|'), nmu.quotes('-'),
+                      nmu.quotes('^')]
 
-class DataSeriesSet(NMObject):  # rename as DictSet
+
+class DataSeriesSet(NMObject):
     """
     NM DataSeriesSet class
     Behaves like a Python set, but is a list
@@ -21,16 +25,13 @@ class DataSeriesSet(NMObject):  # rename as DictSet
     def __init__(self, parent, name, **copy):
         super().__init__(parent, name)
         self.__theset = {}  # dictionary of sets, keys are chan-char
-        self.__eq_list = []
-        self.__eq_lock = True
+        self.__eq_lock = []
         for k, v in copy.items():
             if k.lower() == 'c_theset' and isinstance(v, dict):
                 self.__theset = v
-            if k.lower() == 'c_eq_list' and isinstance(v, list):
-                self.__eq_list = v
-            if k.lower() == 'c_eq_lock' and isinstance(v, bool):
+            if k.lower() == 'c_eq_lock' and isinstance(v, list):
                 self.__eq_lock = v
-        self._param_list += ['eq_list', 'eq_lock']
+        self._param_list += ['eq_lock']
 
     # override
     @property
@@ -43,7 +44,6 @@ class DataSeriesSet(NMObject):  # rename as DictSet
     @property
     def parameters(self):
         k = super().parameters
-        k.update({'eq_list': self.__eq_list})
         k.update({'eq_lock': self.__eq_lock})
         return k
 
@@ -68,47 +68,116 @@ class DataSeriesSet(NMObject):  # rename as DictSet
             ns = len(dlist_s)
             no = len(dlist_o)
             if ns != no:
-                a = ('unequal data items in channel ' + cc + ': ' + str(ns) +
-                     ' vs ' + str(no))
-                self._alert(a, tp=self._tp)
+                if alert:
+                    a = ('unequal data items in channel ' + cc + ': n = ' +
+                         str(ns) + ' vs ' + str(no))
+                    self._alert(a, tp=self._tp)
                 return False
             for i in range(0, ns):
                 if not dlist_s[i]._iscopy(dlist_o[i], alert=alert):
+                    if alert:
+                        a = ('unequal data items in channel ' + cc + ': ' +
+                             str(dlist_s[i]) + ' vs ' + str(dlist_o[i]))
+                        self._alert(a, tp=self._tp)
                     return False
-        # TODO eq_list
-        # TODO eq_lock
+        elock_o = dataseriesset.equation_lock
+        if not self.__eq_lock and not elock_o:
+            return True
+        ns = len(self.__eq_lock)
+        no = len(elock_o)
+        if ns != no:
+            a = ('unequal items in equation lock: ' + str(ns) + ' vs ' +
+                 str(no))
+            self._alert(a, tp=self._tp)
+            return False
+        for i in range(0, ns, 2):
+            ss = self.__eq_lock[i]
+            so = elock_o[i]
+            if not ss._iscopy(so, alert=alert):
+                if alert:
+                    a = ('unequal equation lock item #' + str(i) + ': ' +
+                         str(ss) + ' vs ' + str(so))
+                    self._alert(a, tp=self._tp)
+                return False
+        for i in range(1, ns, 2):
+            ss = self.__eq_lock[i]
+            so = elock_o[i]
+            if ss != so:
+                if alert:
+                    a = ('unequal equation lock item #' + str(i) + ': ' + ss +
+                         ' vs ' + so)
+                    self._alert(a, tp=self._tp)
+                return False
         return True
 
     # override, no super
     def copy(self):
-        thesetcopy = self.__theset.copy()  # TODO, refs need copying
-        c = DataSeriesSet(self._parent, self.name, c_theset=thesetcopy,
-                          c_eq_list=self.__eq_list.copy(),
-                          c_eq_lock=self.__eq_lock)
+        # TODO, refs need copying
+        c = DataSeriesSet(self._parent, self.name,
+                          c_theset=self.__theset.copy(),
+                          c_eq_lock=self.__eq_lock.copy())
         return c
 
     @property
-    def eq_list(self):
-        return self.__eq_list
+    def equation(self):
+        return []  # nothing to return as this is one-off
 
-    @eq_list.setter
-    def eq_list(self, eq_list):
-        self._alert('see nm.eset.equation')
+    @equation.setter
+    def equation(self, eq_list):  # one-off execution
+        if len(self.__eq_lock) > 0:
+            e = "this set is locked to equation: " + str(self.__eq_lock)
+            raise RuntimeError(e)
+        return self._equation_execute(eq_list, lock=False)
 
     @property
-    def eq_lock(self):
+    def equation_lock(self):
         return self.__eq_lock
 
-    @eq_lock.setter
-    def eq_lock(self, eq_lock):
-        return self._eq_lock_set(eq_lock)
+    @equation_lock.setter
+    def equation_lock(self, eq_list):
+        return self._equation_execute(eq_list, lock=True)
 
-    def _eq_lock_set(self, eq_lock, quiet=nmp.QUIET):
-        if not isinstance(eq_lock, bool):
-            raise TypeError(nmu.type_error(eq_lock, 'bool'))
-        if eq_lock != self.__eq_lock:
-            self.__eq_lock = eq_lock
-            self._modified()
+    def _equation_execute(self, eq_list, lock=False):
+        if eq_list is None:
+            return True
+        elif not isinstance(eq_list, list):
+            eq_list = [eq_list]
+        elif len(eq_list) == 0:
+            return True
+        elif len(eq_list) % 2 == 0:
+            e = 'set equation list should have odd number of items'
+            raise ValueError(e)
+        for i in eq_list:  # check equation is OK
+            if i in SET_SYMBOLS:
+                continue
+            elif not isinstance(i, DataSeriesSet):
+                raise TypeError(nmu.type_error(i, 'DataSeriesSet'))
+            elif lock and i == self:
+                e = 'sets cannot have locked equations that contain themself'
+                raise ValueError(e)
+        for i in range(0, len(eq_list), 2):
+            if not isinstance(i, DataSeriesSet):
+                e = 'incorrect list sequence: even items should be a set'
+                raise TypeError(e)
+        for i in range(1, len(eq_list), 2):
+            if i not in SET_SYMBOLS:
+                e = ('incorrect list sequence: odd items should be one of ' +
+                     'the following: ' + ', '.join(SET_SYMBOLS_QUOTED))
+                raise TypeError(e)
+        c = eq_list[0].copy()
+        for i in range(1, len(eq_list), 2):
+            s2 = eq_list[i + 1]
+            if i == '&':
+                c.intersection(s2)
+            elif i == '|':
+                c.union(s2)
+            elif i == '-':
+                c.difference(s2)
+            elif i == '^':
+                c.symmetric_difference(s2)
+        self.__theset.clear()
+        for cc, dlist in c._items():
+            self.__theset.update({cc: dlist})
         return True
 
     @property
@@ -132,7 +201,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
                 return False
         self.__theset.clear()
         return True
-    
+
     def _copy(self):
         return self.__theset.copy()
 
@@ -319,6 +388,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return modified
 
     def difference(self, dataseriesset, alert=True, quiet=nmp.QUIET):
+        # symbol: -
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
@@ -337,7 +407,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return modified
 
     def intersection(self, dataseriesset, alert=True, quiet=nmp.QUIET):
-        # AND &&
+        # symbol: &
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
@@ -363,6 +433,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return True
 
     def symmetric_difference(self, dataseriesset, alert=True, quiet=nmp.QUIET):
+        # symbol: ^
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
@@ -396,7 +467,7 @@ class DataSeriesSet(NMObject):  # rename as DictSet
         return True
 
     def union(self, dataseriesset, alert=True, quiet=nmp.QUIET):
-        # OR, ||
+        # symbol: |
         if not isinstance(dataseriesset, DataSeriesSet):
             raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
@@ -644,22 +715,25 @@ class DataSeriesSetContainer(NMObjectContainer):
                 self._error(h, quiet=quiet)
         return True
 
-    def equation(self, name, eq_list, lock=True, quiet=nmp.QUIET):
-        """eq_list=['Set1', '|', 'Set2']"""
+    def equation(self, name, eq_list, lock=False, quiet=nmp.QUIET):
+        """eq_list = ['Set1', '|', 'Set2']"""
         if self.exists(name):
             s = self.getitem(name, quiet=quiet)
         else:
             s = self.new(name, quiet=quiet)
+        eq_list2 = []
         for i in eq_list:  # check equation is OK
-            if i == '|' or i == '&':
-                continue
-            elif self.exists(i):
-                continue
-            else:
-                e = 'unrecognized set equation item: ' + i
-                self._error(e, quiet=quiet)
-                return False
-        s.eq_list = eq_list
+            if i in SET_SYMBOLS:
+                eq_list2.append(i)
+            elif not self.exists(i):
+                raise ValueError(self._exists_error(i))
+            if lock and i.lower() == name.lower():
+                e = ('locked set equation cannot contain itself: ' +
+                     nmu.quotes(name))
+                raise ValueError(e)
+            s2 = self.getitem(i, quiet=quiet)
+            eq_list2.append(s2)
+        return s._equation_execute(eq_list2, lock=lock)
 
     def clear(self, name, quiet=nmp.QUIET):
         if not isinstance(name, list):

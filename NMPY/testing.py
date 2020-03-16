@@ -1050,11 +1050,12 @@ class Test(unittest.TestCase):
             data_b.append(db)
             data_c.append(dc)
             epoch.append({'A': da, 'B': db, 'C': dc})
-        self.assertEqual(s1.eq_list, [])
-        self.assertTrue(s1.eq_lock)
-        # self.assertIsInstance(s1.theset, dict)
+        self.assertEqual(s1.count, 0)
+        self.assertEqual(s1.data_names, {})
+        self.assertEqual(s1.equation, [])
+        self.assertEqual(s1.equation_lock, [])
         # parameters
-        plist = PLIST + ['eq_list', 'eq_lock']
+        plist = PLIST + ['eq_lock']
         self.assertEqual(s1._param_list, plist)
         self.assertTrue(s1._param_test())
         # content
@@ -1109,6 +1110,7 @@ class Test(unittest.TestCase):
         dd = s1._data_dict_check({'A': dA0, 'B': [dB0]}, chan_default='c')
         self.assertEqual(dd, {'A': [dA0], 'B': [dB0]})
         # theset_empty
+        """
         s1.clear(confirm=False)
         s1.add({'A': [dA0], 'B': [dB0]})
         s1._theset_empty()
@@ -1178,7 +1180,8 @@ class Test(unittest.TestCase):
         dlist = s1.get('A')
         dlist.append(data_a[1])
         print(s1.data_names)
-        """
+        test = [nmu.quotes('&'), nmu.quotes('|'), nmu.quotes('-'),
+                nmu.quotes('^')]
         # difference
         s1.clear(confirm=False)
         s2.clear(confirm=False)
@@ -1311,7 +1314,6 @@ class Test(unittest.TestCase):
         self.assertFalse(s1.isequal(s2, alert=ALERT))  # different refs
         # copy
         # eq_list
-        # eq_lock
         """
         
     def _test_project(self):

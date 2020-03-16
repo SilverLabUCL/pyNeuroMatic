@@ -144,7 +144,7 @@ class Manager(object):
         return None
 
     @property
-    def eset(self):  # epoch set
+    def eset(self):  # data-series sets
         ps = self._dataseries_select()
         if ps:
             return ps.eset
