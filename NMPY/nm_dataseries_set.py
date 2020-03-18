@@ -35,17 +35,17 @@ class DataSeriesSet(NMObject):
 
     # override
     @property
-    def _bad_names(self):
-        bn = super()._bad_names
-        bn.remove('all')
-        return bn
-
-    # override
-    @property
     def parameters(self):
         k = super().parameters
         k.update({'eq_lock': self.__eq_lock})
         return k
+
+    # override
+    @property
+    def _bad_names(self):
+        bn = super()._bad_names
+        bn.remove('all')
+        return bn
 
     # override
     def _iscopy(self, dataseriesset, alert=False):
@@ -127,7 +127,7 @@ class DataSeriesSet(NMObject):
         if len(self.__eq_lock) > 0:
             e = "this set is locked to equation: " + str(self.__eq_lock)
             raise RuntimeError(e)
-        return self._equation_execute(eq_list, lock=False)
+        return self._equation(eq_list, lock=False)
 
     @property
     def equation_lock(self):
@@ -135,9 +135,19 @@ class DataSeriesSet(NMObject):
 
     @equation_lock.setter
     def equation_lock(self, eq_list):
-        return self._equation_execute(eq_list, lock=True)
+        return self._equation(eq_list, lock=True)
 
-    def _equation_execute(self, eq_list, lock=False):
+    @property
+    def equation_lock_str(self):
+        elist = []
+        for i in self.__eq_lock:
+            if isinstance(i, DataSeriesSet):
+                elist.append(i.name)
+            else:
+                elist.append(i)
+        return elist
+
+    def _equation(self, eq_list, lock=False):
         if eq_list is None:
             return True
         elif not isinstance(eq_list, list):
@@ -147,42 +157,49 @@ class DataSeriesSet(NMObject):
         elif len(eq_list) % 2 == 0:
             e = 'set equation list should have odd number of items'
             raise ValueError(e)
-        for i in eq_list:  # check equation is OK
-            if i in SET_SYMBOLS:
-                continue
-            elif not isinstance(i, DataSeriesSet):
-                raise TypeError(nmu.type_error(i, 'DataSeriesSet'))
-            elif lock and i == self:
+        for i in range(0, len(eq_list), 2):
+            if not isinstance(eq_list[i], DataSeriesSet):
+                e = ('incorrect equation list: even items should be a ' +
+                     'DataSeriesSet')
+                raise TypeError(e)
+            if lock and eq_list[i] == self:
                 e = 'sets cannot have locked equations that contain themself'
                 raise ValueError(e)
-        for i in range(0, len(eq_list), 2):
-            if not isinstance(i, DataSeriesSet):
-                e = 'incorrect list sequence: even items should be a set'
-                raise TypeError(e)
         for i in range(1, len(eq_list), 2):
-            if i not in SET_SYMBOLS:
-                e = ('incorrect list sequence: odd items should be one of ' +
+            if eq_list[i] not in SET_SYMBOLS:
+                e = ('incorrect equation list: odd items should be one of ' +
                      'the following: ' + ', '.join(SET_SYMBOLS_QUOTED))
                 raise TypeError(e)
         c = eq_list[0].copy()
         for i in range(1, len(eq_list), 2):
             s2 = eq_list[i + 1]
-            if i == '&':
+            if eq_list[i] == '&':
                 c.intersection(s2)
-            elif i == '|':
+            elif eq_list[i] == '|':
                 c.union(s2)
-            elif i == '-':
+            elif eq_list[i] == '-':
                 c.difference(s2)
-            elif i == '^':
+            elif eq_list[i] == '^':
                 c.symmetric_difference(s2)
         self.__theset.clear()
         for cc, dlist in c._items():
             self.__theset.update({cc: dlist})
+        if lock:
+            self.__eq_lock = eq_list
+        else:
+            self.__eq_lock = []
         return True
 
     @property
-    def count(self):
+    def count_channels(self):
         return len(self.__theset)
+
+    @property
+    def count_epochs(self):
+        count = 0
+        for dlist in self.__theset.values():
+            count = max(count, len(dlist))
+        return count
 
     @property
     def data_names(self):
@@ -195,9 +212,18 @@ class DataSeriesSet(NMObject):
             n.update({cc: nlist})
         return n
 
+    @property
+    def isempty(self):
+        if not self.__theset:
+            return True
+        for dlist in self.__theset.values():
+            if len(dlist) > 0:
+                return False
+        return True
+
     def _theset_empty(self):
-        for s in self.__theset.values():
-            if len(s) > 0:
+        for dlist in self.__theset.values():
+            if len(dlist) > 0:
                 return False
         self.__theset.clear()
         return True
@@ -225,7 +251,7 @@ class DataSeriesSet(NMObject):
             raise TypeError(nmu.type_error(chan_default, 'channel character'))
         dnew = {}
         if data.__class__.__name__ == 'Data':  # no channel
-            if chan_default.upper() == 'ALL':
+            if chan_default.upper() == 'ALL_EXISTING':
                 for cc in self.__theset.keys():
                     dnew.update({cc.upper(): [data]})
                 return dnew
@@ -244,7 +270,7 @@ class DataSeriesSet(NMObject):
             for d in data:
                 if d.__class__.__name__ != 'Data':
                     raise TypeError(nmu.type_error(d, 'Data'))
-            if chan_default.upper() == 'ALL':
+            if chan_default.upper() == 'ALL_EXISTING':
                 for cc in self.__theset.keys():
                     dnew.update({cc.upper(): data})
                 return dnew
@@ -277,6 +303,23 @@ class DataSeriesSet(NMObject):
             dnew.update({cc2: dlist})
         return dnew
 
+    def _chan_list_check(self, chan_list):
+        # chan_list = ['A', 'B']
+        if isinstance(chan_list, str):
+            chan_list = [chan_list]
+        elif not isinstance(chan_list, list):
+            raise TypeError(nmu.type_error(chan_list, 'list'))
+        clist = []
+        for cc in chan_list:
+            if isinstance(cc, str) and cc.upper() == 'ALL':
+                return list(self.__theset.keys())
+            cc2 = nmu.chan_char_check(cc)
+            if len(cc2) == 0:
+                e = 'bad channel character: ' + nmu.quotes(cc)
+                raise ValueError(e)
+            clist.append(cc2)
+        return clist
+
     def _chan_check(self, dataseriesset):
         ks = self.__theset.keys()
         kd = dataseriesset._keys()
@@ -286,15 +329,6 @@ class DataSeriesSet(NMObject):
             yn = nmu.input_yesno(q, tp=self._tp)
             return yn == 'y'
         return False
-
-    def get(self, chan_char):
-        cc = nmu.chan_char_check(chan_char)
-        if not cc:
-            e = 'bad channel character: ' + nmu.quotes(chan_char)
-            raise ValueError(e)
-        if cc in self.__theset.keys():
-            return self.__theset[cc].copy()  # copy, enforce private set
-        return []
 
     def add(self, data, quiet=nmp.QUIET):
         # data = {'A': [DataA0, DataA1...]}
@@ -317,7 +351,7 @@ class DataSeriesSet(NMObject):
 
     def discard(self, data, quiet=nmp.QUIET):
         # data = {'A': [DataA0, DataA1...]}
-        dd = self._data_dict_check(data, chan_default='ALL')
+        dd = self._data_dict_check(data, chan_default='ALL_EXISTING')
         modified = False
         for cc, dlist in dd.items():
             if cc in self.__theset.keys():
@@ -349,24 +383,28 @@ class DataSeriesSet(NMObject):
                 return False
         return True
 
+    def get_channel(self, chan_char):
+        cc = nmu.chan_char_check(chan_char)
+        if not cc:
+            e = 'bad channel character: ' + nmu.quotes(chan_char)
+            raise ValueError(e)
+        if cc in self.__theset.keys():
+            return self.__theset[cc]  # copy, enforce private set
+        return []
+
+    def get(self, chan_list=['ALL']):
+        clist = self._chan_list_check(chan_list)
+        s = {}
+        for cc in clist:
+            if cc in self.__theset.keys():
+                s.update({cc: self.__theset[cc]})
+                # copy, enforce private set
+        return s
+
     def clear(self, chan_list=['ALL'], confirm=True, quiet=nmp.QUIET):
-        # chan_list = ['A', 'B']
-        if isinstance(chan_list, str):
-            chan_list = [chan_list]
-        elif not isinstance(chan_list, list):
-            raise TypeError(nmu.type_error(chan_list, 'list'))
-        clist = []
-        for cc in chan_list:
-            if cc.upper() == 'ALL':
-                clist = list(self.__theset.keys())
-                break
-            cc2 = nmu.chan_char_check(cc)
-            if len(cc2) == 0:
-                e = 'bad channel character: ' + nmu.quotes(cc)
-                raise ValueError(e)
-            clist.append(cc2)
-        if len(clist) == 0:
-            return False
+        clist = self._chan_list_check(chan_list)
+        if not clist:
+            return True  # nothing to do
         if nmu.bool_check(confirm, True):
             if len(clist) > 1:
                 ctxt = ', channels ' + ', '.join(clist) + '?'
@@ -385,7 +423,7 @@ class DataSeriesSet(NMObject):
         self._theset_empty()
         if modified:
             self._modified()
-        return modified
+        return True
 
     def difference(self, dataseriesset, alert=True, quiet=nmp.QUIET):
         # symbol: -
