@@ -173,14 +173,18 @@ class NMObject(object):
 
     def _iscopy(self, nmobject, alert=False):
         alert = nmu.bool_check(alert, False)
+        if nmobject == self:
+            if alert:
+                a = ('NMObject ' + nmu.quotes(self.name) +
+                     ' cannot be a copy of itself')
+                self._alert(a, tp=self._tp)
+            return False
         if nmobject.__class__.__name__ != self.__class__.__name__:
             if alert:
                 a = ('unequal object types: ' + self.__class__.__name__ +
                      ' vs ' + nmobject.__class__.__name__)
                 self._alert(a, tp=self._tp)
             return False
-        if self == nmobject:
-            return True
         # if nmobject._parent != self._parent:
             # problematic for copying containers
             # compare parent name?
@@ -197,10 +201,15 @@ class NMObject(object):
         sp = self.parameters
         op = nmobject.parameters
         if op.keys() != sp.keys():
+            if alert:
+                a = ('unequal parameter keys: ' + str(op.keys()) + ' vs ' +
+                     str(sp.keys()))
+                self._alert(a, tp=self._tp)
             return False
+        oktobedifferent = ['date', 'modified']
         for k in sp.keys():
-            if k == 'date' or k == 'modified':
-                continue  # ignore, will be different
+            if k in oktobedifferent:
+                continue
             if op[k] != sp[k]:
                 if nmp.NAN_EQ_NAN:
                     op_nan = isinstance(op[k], float) and math.isnan(op[k])
@@ -318,7 +327,7 @@ class NMObjectContainer(NMObject):
         k.update({'rename': self.__rename})
         if self.__select:
             k.update({'select': self.__select.name})
-            # need select's name for equal() to work
+            # need name for iscopy() to work
         else:
             k.update({'select': 'None'})
         return k

@@ -79,7 +79,7 @@ class Data(NMObject):
         k.update({'xdim': self.__x.dim})
         k.update({'ydim': self.__y.dim})
         k.update({'dataseries': self._dataseries_str()})
-        # need dataseries names for equal() to work
+        # need names for iscopy() to work
         return k
 
     # override
@@ -116,8 +116,8 @@ class Data(NMObject):
                 if alert:
                     self._alert('unequal np_array nbytes', tp=self._tp)
                 return False
-            if not np.array_iscopy(self.__np_array, data.np_array):
-                # array_iscopy returns false if both arrays filled with NANs
+            if not np.array_equal(self.__np_array, data.np_array):
+                # array_equal returns false if both arrays filled with NANs
                 if nmp.NAN_EQ_NAN:
                     if not np.allclose(self.__np_array, data.np_array, rtol=0,
                                        atol=0, equal_nan=True):
