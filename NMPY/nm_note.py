@@ -49,7 +49,7 @@ class Note(NMObject):
             self.__thenote = str(thenote)
         self._modified()
         h = nmu.history_change('thenote', old, self.__thenote)
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, quiet=quiet)
         return True
 
 
@@ -82,7 +82,7 @@ class NoteContainer(NMObjectContainer):
     def thenotes(self, quiet=True):
         # notes should be quiet
         notes = []
-        self._history('', tp=self._tp, quiet=quiet)
+        self._history('', quiet=quiet)
         for n in self.getitems(names='all'):
             notes.append(n.thenote)
             self._history(n.thenote, tp='none', quiet=quiet)
@@ -94,10 +94,12 @@ class NoteContainer(NMObjectContainer):
 
     @off.setter
     def off(self, off):
-        self.__off = off
-        self._modified()
+        if isinstance(off, bool):
+            self.__off = off
+            self._modified()
         return off
 
     # override, no super
     def duplicate(self):
-        raise RuntimeError('dataseries cannot be duplicated')
+        e = self._error('notes cannot be duplicated')
+        raise RuntimeError(e)

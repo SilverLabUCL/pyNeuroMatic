@@ -91,4 +91,5 @@ class ChannelContainer(NMObjectContainer):
 
     # override, no super
     def duplicate(self):
-        raise RuntimeError('channels cannot be duplicated')
+        e = self._error('channels cannot be duplicated')
+        raise RuntimeError(e)

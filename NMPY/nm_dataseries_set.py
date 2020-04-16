@@ -10,8 +10,6 @@ import nm_preferences as nmp
 import nm_utilities as nmu
 
 SET_SYMBOLS = ['&', '|', '-', '^']
-SET_SYMBOLS_QUOTED = [nmu.quotes('&'), nmu.quotes('|'), nmu.quotes('-'),
-                      nmu.quotes('^')]
 
 
 class DataSeriesSet(NMObject):
@@ -42,12 +40,12 @@ class DataSeriesSet(NMObject):
         k = super().parameters
         if isinstance(self.__sort_template, DataSeriesSet):
             k.update({'sort_template': self.__sort_template.name})
-            # need name for iscopy() to work
+            # need name for isequivalent() to work
         else:
             k.update({'sort_template': None})
         if self.__eq_lock:
             k.update({'eq_lock': self.equation_lock_str})
-            # need names for iscopy() to work
+            # need nmobject names for isequivalent() to work
         else:
             k.update({'eq_lock': None})
         return k
@@ -60,17 +58,16 @@ class DataSeriesSet(NMObject):
         return bn
 
     # override
-    def _iscopy(self, dataseriesset, alert=False):
-        if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
-        if not super()._iscopy(dataseriesset, alert=alert):
+    def _isequivalent(self, dataseriesset, alert=False):
+        if not super()._isequivalent(dataseriesset, alert=alert):
             return False
+        ue = 'unequivalent '
         ks = self.__theset.keys()
         ko = dataseriesset._theset_keys()
         if ks != ko:
             if alert:
-                a = 'unequal channel keys: ' + str(ks) + ' vs ' + str(ko)
-                self._alert(a, tp=self._tp)
+                a = ue + 'channels: ' + str(ks) + ' vs ' + str(ko)
+                self._alert(a)
             return False
         for cc, dlist_o in dataseriesset._theset_items():
             dlist_s = self.__theset[cc]
@@ -78,18 +75,18 @@ class DataSeriesSet(NMObject):
             no = len(dlist_o)
             if ns != no:
                 if alert:
-                    a = ('unequal data items in ch ' + cc + ': n = ' +
-                         str(ns) + ' vs ' + str(no))
-                    self._alert(a, tp=self._tp)
+                    a = (ue + 'data items in ch ' + cc + ': n = ' + str(ns) +
+                         ' vs ' + str(no))
+                    self._alert(a)
                 return False
             for i in range(0, ns):
-                if not dlist_s[i]._iscopy(dlist_o[i], alert=alert):
+                if not dlist_s[i]._isequivalent(dlist_o[i], alert=alert):
                     if alert:
                         nms = dlist_s[i].name
                         nmo = dlist_o[i].name
-                        a = ('not a copy: ch ' + cc + ', item #' + str(i) +
-                             ': ' + nms + ' vs ' + nmo)
-                        self._alert(a, tp=self._tp)
+                        a = (ue + 'ch ' + cc + ', item #' + str(i) + ': ' +
+                             nms + ' vs ' + nmo)
+                        self._alert(a)
                     return False
         if self.__sort_template != dataseriesset.sort_template:
             if alert:
@@ -101,8 +98,8 @@ class DataSeriesSet(NMObject):
                     nmo = dataseriesset.sort_template.name
                 else:
                     nmo = 'None'
-                a = 'unequal sort templates: ' + nms + ' vs ' + nmo
-                self._alert(a, tp=self._tp)
+                a = ue + 'sort templates: ' + nms + ' vs ' + nmo
+                self._alert(a)
             return False
         elock_o = dataseriesset.equation_lock
         if not self.__eq_lock and not elock_o:
@@ -110,27 +107,26 @@ class DataSeriesSet(NMObject):
         ns = len(self.__eq_lock)
         no = len(elock_o)
         if ns != no:
-            a = ('unequal items in equation lock: ' + str(ns) + ' vs ' +
-                 str(no))
-            self._alert(a, tp=self._tp)
+            a = ue + 'items in equation lock: ' + str(ns) + ' vs ' + str(no)
+            self._alert(a)
             return False
         for i in range(0, ns, 2):
             ss = self.__eq_lock[i]
             so = elock_o[i]
-            if not ss._iscopy(so, alert=alert):
+            if not ss._isequivalent(so, alert=alert):
                 if alert:
-                    a = ('not a copy: lock item #' + str(i) + ': ' +
-                         str(ss) + ' vs ' + str(so))
-                    self._alert(a, tp=self._tp)
+                    a = (ue + 'eq. lock item #' + str(i) + ': ' + str(ss) +
+                         ' vs ' + str(so))
+                    self._alert(a)
                 return False
         for i in range(1, ns, 2):
             ss = self.__eq_lock[i]
             so = elock_o[i]
             if ss != so:
                 if alert:
-                    a = ('unequal equation lock item #' + str(i) + ': ' + ss +
+                    a = (ue + 'eq. lock item #' + str(i) + ': ' + ss +
                          ' vs ' + so)
-                    self._alert(a, tp=self._tp)
+                    self._alert(a)
                 return False
         return True
 
@@ -148,10 +144,17 @@ class DataSeriesSet(NMObject):
 
     @sort_template.setter
     def sort_template(self, dataseriesset):
+        return self._sort_template_set(dataseriesset)
+
+    def _sort_template_set(self, dataseriesset, quiet=nmp.QUIET):
         if isinstance(dataseriesset, DataSeriesSet):
             self.__sort_template = dataseriesset
+            h = 'sort template = ' + dataseriesset._tp
+            self._history(h, quiet=quiet)
+            return True
         else:
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
 
     def _sort_update(self):
         if isinstance(self.__sort_template, DataSeriesSet):
@@ -160,7 +163,7 @@ class DataSeriesSet(NMObject):
 
     def sort(self, dataseriesset_template):
         if not isinstance(dataseriesset_template, DataSeriesSet):
-            e = nmu.type_error(dataseriesset_template, 'DataSeriesSet')
+            e = self._type_error(dataseriesset_template, 'DataSeriesSet')
             raise TypeError(e)
         s = {}
         for cc, dlist in dataseriesset_template._theset_items():
@@ -208,7 +211,7 @@ class DataSeriesSet(NMObject):
     @property
     def _eq_lock_error(self):
         e = 'this set is locked to equation: ' + self.equation_lock_str
-        return e
+        return self._error(e)
 
     def _eq_lock_update(self):
         if self.__eq_lock:
@@ -224,7 +227,8 @@ class DataSeriesSet(NMObject):
     @locked.setter
     def locked(self, lock):
         if lock:
-            e = 'create a locked equation via ' + nmu.quotes('equation_lock')
+            e = self._error('create a locked equation via ' +
+                            nmu.quotes('equation_lock'))
             raise ValueError(e)
         else:
             self.__eq_lock = []
@@ -238,39 +242,43 @@ class DataSeriesSet(NMObject):
         elif isinstance(eq_list, DataSeriesSet):
             eq_list = [eq_list]
         else:
-            e = 'bad equation list: even items should be a DataSeriesSet'
+            e = self._type_error(eq_list, 'list')
             raise TypeError(e)
         if len(eq_list) % 2 == 0:
-            e = 'equation list should have odd number of items'
+            e = self._error('equation list should have odd number of items')
             raise ValueError(e)
         for i in range(0, len(eq_list), 2):
             s = eq_list[i]
             if not isinstance(s, DataSeriesSet):
-                e = 'bad equation list: even items should be a DataSeriesSet'
+                e = self._error('bad equation list: even items should be ' +
+                                'a DataSeriesSet')
                 raise TypeError(e)
             if lock and s == self:
-                e = 'sets cannot have locked equations that contain themself'
+                e = self._error('sets cannot have locked equations that ' +
+                                'contain themself')
                 raise ValueError(e)
         for i in range(1, len(eq_list), 2):
-            s = eq_list[i]
-            if not isinstance(s, str):
-                raise TypeError(nmu.type_error(s, 'string'))
-            if s not in SET_SYMBOLS:
-                e = ('bad equation list: odd items should be one of ' +
-                     'the following: ' + ', '.join(SET_SYMBOLS_QUOTED))
+            symbol = eq_list[i]
+            if not isinstance(symbol, str):
+                e = self._type_error(symbol, 'string')
+                raise TypeError(e)
+            if symbol not in SET_SYMBOLS:
+                slist = [nmu.quotes(ss) for ss in SET_SYMBOLS]
+                e = self._error('bad equation list: odd items should be ' +
+                                'one of the following: ' + ', '.join(slist))
                 raise ValueError(e)
         return eq_list  # ok
 
     def _equation(self, eq_list, lock=False, quiet=nmp.QUIET):
-        if not lock and self.__eq_lock:
-            raise RuntimeError(self._eq_lock_error)
+        lock = nmu.bool_check(lock, False)
         eq_list = self._eq_list_check(eq_list, lock)
         if not eq_list:
-            if lock:
-                self.__eq_lock = []
-                h = 'unlocked'
-                self._history(h, tp=self._tp, quiet=quiet)
+            self.__eq_lock = []
+            h = 'unlocked'
+            self._history(h, quiet=quiet)
             return True
+        if not lock and self.__eq_lock:
+            raise RuntimeError(self._eq_lock_error)
         c = eq_list[0].copy()
         hlist = []
         hlist.append(c.name)
@@ -298,16 +306,16 @@ class DataSeriesSet(NMObject):
         if lock:
             h += ' (locked)'
         else:
-            h += ' (unlocked)'
-        self._history(h, tp=self._tp, quiet=quiet)
+            h += ' (not locked)'
+        self._history(h, quiet=quiet)
         return True
 
     @property
-    def count_channels(self):
+    def channel_count(self):
         return len(self.__theset)
 
     @property
-    def count_epochs(self):
+    def epoch_count(self):
         count = 0
         for dlist in self.__theset.values():
             count = max(count, len(dlist))
@@ -316,7 +324,7 @@ class DataSeriesSet(NMObject):
     @property
     def data_names(self):
         if self.name.upper() == 'ALL':
-            return ['ALL']
+            return {'ALL'}
         n = {}
         for cc, dlist in self.__theset.items():
             nlist = [d.name for d in dlist]
@@ -332,7 +340,7 @@ class DataSeriesSet(NMObject):
                 return False
         return True
 
-    def _theset_empty(self):
+    def _theset_clear_if_empty(self):
         for dlist in self.__theset.values():
             if len(dlist) > 0:
                 return False
@@ -363,7 +371,8 @@ class DataSeriesSet(NMObject):
         # data = {'A': [MyDataA0, MyDataA1], 'B': [MyDataB0, MyDataB1]}
         # data format = {chan_char: [Data List]}
         if not isinstance(chan_default, str):
-            raise TypeError(nmu.type_error(chan_default, 'channel character'))
+            e = self._type_error(chan_default, 'channel character')
+            raise TypeError(e)
         dnew = {}
         if data.__class__.__name__ == 'Data':  # no channel
             if chan_default.upper() == 'ALL_EXISTING':
@@ -371,50 +380,57 @@ class DataSeriesSet(NMObject):
                     dnew.update({cc.upper(): [data]})
                 return dnew
             if len(self.__theset.keys()) > 1:
-                e = 'dictionary with channel keys'
-                raise TypeError(nmu.type_error(data, e))
+                e = self._type_error(data, 'dictionary with channel keys')
+                raise TypeError(e)
             cc = nmu.chan_char_check(chan_default)
             if not cc:
-                e = 'bad channel character: ' + nmu.quotes(chan_default)
+                channel = chan_default
+                e = self._value_error(channel)
                 raise ValueError(e)
             dnew.update({cc: [data]})
             return dnew
         if isinstance(data, list):
             if len(data) == 0:
                 return {}
-            for d in data:
-                if d.__class__.__name__ != 'Data':
-                    raise TypeError(nmu.type_error(d, 'Data'))
+            for data_item in data:
+                if data_item.__class__.__name__ != 'Data':
+                    e = self._type_error(data_item, 'Data')
+                    raise TypeError(e)
             if chan_default.upper() == 'ALL_EXISTING':
                 for cc in self.__theset.keys():
                     dnew.update({cc.upper(): data})
                 return dnew
             if len(self.__theset.keys()) > 1:
-                e = 'dictionary with channel keys'
-                raise TypeError(nmu.type_error(data, e))
+                e = self._type_error(data, 'dictionary with channel keys')
+                raise TypeError(e)
             cc = nmu.chan_char_check(chan_default)
             if not cc:
-                e = 'bad channel character: ' + nmu.quotes(chan_default)
+                channel = chan_default
+                e = self._value_error(channel)
                 raise ValueError(e)
             dnew.update({cc: data})
             return dnew
         if not isinstance(data, dict):
-            e = 'dictionary with channel keys'
-            raise TypeError(nmu.type_error(data, e))
+            e = self._type_error(data, 'dictionary with channel keys')
+            raise TypeError(e)
         for cc, dlist in data.items():
             cc2 = nmu.chan_char_check(cc)
-            if len(cc2) == 0:
-                e = 'bad channel character: ' + nmu.quotes(cc)
+            if not cc2:
+                channel = cc
+                e = self._value_error(channel)
                 raise ValueError(e)
             if dlist.__class__.__name__ == 'Data':
                 dlist = [dlist]
             elif not isinstance(dlist, list):
-                raise TypeError(nmu.type_error(dlist, 'Data list'))
+                data_list = dlist
+                e = self._type_error(data_list, 'list of Data')
+                raise TypeError(e)
             if len(dlist) == 0:
                 continue
-            for d in dlist:
-                if d.__class__.__name__ != 'Data':
-                    raise TypeError(nmu.type_error(d, 'Data'))
+            for data in dlist:
+                if data.__class__.__name__ != 'Data':
+                    e = self._type_error(data, 'Data')
+                    raise TypeError(e)
             dnew.update({cc2: dlist})
         return dnew
 
@@ -423,14 +439,16 @@ class DataSeriesSet(NMObject):
         if isinstance(chan_list, str):
             chan_list = [chan_list]
         elif not isinstance(chan_list, list):
-            raise TypeError(nmu.type_error(chan_list, 'list'))
+            e = self._type_error(chan_list, 'list of channel characters')
+            raise TypeError(e)
         clist = []
         for cc in chan_list:
             if isinstance(cc, str) and cc.upper() == 'ALL':
                 return list(self.__theset.keys())
             cc2 = nmu.chan_char_check(cc)
-            if len(cc2) == 0:
-                e = 'bad channel character: ' + nmu.quotes(cc)
+            if not cc2:
+                channel = cc
+                e = self._value_error(channel)
                 raise ValueError(e)
             clist.append(cc2)
         return clist
@@ -442,7 +460,7 @@ class DataSeriesSet(NMObject):
             q = ('unequal channels: ' + str(ks) + ' vs ' + str(kd) + '. ' +
                  'Do you want to continue?')
             yn = nmu.input_yesno(q, tp=self._tp)
-            return yn == 'y'
+            return yn.lower() == 'y'
         return False
 
     def add(self, data, quiet=nmp.QUIET):
@@ -467,7 +485,7 @@ class DataSeriesSet(NMObject):
                     modified = True
             if hlist:
                 h = 'added to ch ' + cc + ': ' + ', '.join(hlist)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
         self._sort_update()
         if modified:
             self._modified()
@@ -489,9 +507,9 @@ class DataSeriesSet(NMObject):
                         modified = True
             if hlist:
                 h = 'removed from ch ' + cc + ': ' + ', '.join(hlist)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
         if modified:
-            self._theset_empty()
+            self._theset_clear_if_empty()
             self._modified()
         return modified
 
@@ -510,14 +528,16 @@ class DataSeriesSet(NMObject):
                         failure = True
             else:
                 if alert:
-                    self._alert('failed to find channel ' + cc)
+                    a = 'failed to find channel ' + cc
+                    self._alert(a)
                 failure = True
         return not failure
 
     def get_channel(self, chan_char):
         cc = nmu.chan_char_check(chan_char)
         if not cc:
-            e = 'bad channel character: ' + nmu.quotes(chan_char)
+            channel = chan_char
+            e = self._value_error(channel)
             raise ValueError(e)
         if cc in self.__theset.keys():
             return self.__theset[cc].copy()  # copy, enforce private set
@@ -545,8 +565,8 @@ class DataSeriesSet(NMObject):
                 ctxt = ', channel ' + ', '.join(clist) + '?'
             q = 'are you sure you want to clear ' + self.name + ctxt
             yn = nmu.input_yesno(q, tp=self._tp)
-            if not yn == 'y':
-                self._history('cancel', tp=self._tp, quiet=quiet)
+            if not yn.lower() == 'y':
+                self._history('cancel', quiet=quiet)
                 return False
         modified = False
         hlist = []
@@ -555,12 +575,33 @@ class DataSeriesSet(NMObject):
                 self.__theset[cc].clear()
                 hlist.append(cc)
                 modified = True
-        self._theset_empty()
+        self._theset_clear_if_empty()
         if modified:
             self._modified()
         if hlist:
             h = 'cleared ch ' + ', '.join(hlist)
-            self._history(h, tp=self._tp, quiet=quiet)
+            self._history(h, quiet=quiet)
+        return True
+
+    def reverse(self, chan_list=['ALL'], quiet=nmp.QUIET):
+        if self.__eq_lock:
+            raise RuntimeError(self._eq_lock_error)
+        clist = self._chan_list_check(chan_list)
+        if not clist:
+            return True  # nothing to do
+        modified = False
+        hlist = []
+        for cc in clist:
+            if cc in self.__theset.keys():
+                self.__theset[cc].reverse()
+                hlist.append(cc)
+                modified = True
+        self._theset_clear_if_empty()
+        if modified:
+            self._modified()
+        if hlist:
+            h = 'reversed ch ' + ', '.join(hlist)
+            self._history(h, quiet=quiet)
         return True
 
     def difference(self, dataseriesset, alert=True, quiet=nmp.QUIET):
@@ -568,9 +609,10 @@ class DataSeriesSet(NMObject):
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
-            self._history('cancel', tp=self._tp, quiet=quiet)
+            self._history('cancel', quiet=quiet)
             return False
         modified = False
         for cc, dlist in dataseriesset._theset_items():
@@ -584,8 +626,8 @@ class DataSeriesSet(NMObject):
                     modified = True
             if hlist:
                 h = 'removed from ch ' + cc + ': ' + ', '.join(hlist)
-                self._history(h, tp=self._tp, quiet=quiet)
-        self._theset_empty()
+                self._history(h, quiet=quiet)
+        self._theset_clear_if_empty()
         if modified:
             self._modified()
         return modified
@@ -595,9 +637,10 @@ class DataSeriesSet(NMObject):
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
-            self._history('cancel', tp=self._tp, quiet=quiet)
+            self._history('cancel', quiet=quiet)
             return False
         remove = {}
         for cc_s, dlist_s in self.__theset.items():
@@ -618,8 +661,8 @@ class DataSeriesSet(NMObject):
                 hlist.append(d.name)
             if hlist:
                 h = 'removed from ch ' + cc + ': ' + ', '.join(hlist)
-                self._history(h, tp=self._tp, quiet=quiet)
-        self._theset_empty()
+                self._history(h, quiet=quiet)
+        self._theset_clear_if_empty()
         self._modified()
         return True
 
@@ -628,9 +671,10 @@ class DataSeriesSet(NMObject):
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
-            self._history('cancel', tp=self._tp, quiet=quiet)
+            self._history('cancel', quiet=quiet)
             return False
         add = {}
         remove = {}
@@ -656,7 +700,7 @@ class DataSeriesSet(NMObject):
                 hlist.append(d.name)
             if hlist:
                 h = 'removed from ch ' + cc + ': ' + ', '.join(hlist)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
         for cc, dlist in add.items():
             hlist = []
             for d in dlist:
@@ -664,9 +708,9 @@ class DataSeriesSet(NMObject):
                 hlist.append(d.name)
             if hlist:
                 h = 'added to ch ' + cc + ': ' + ', '.join(hlist)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
         self._sort_update()
-        self._theset_empty()
+        self._theset_clear_if_empty()
         self._modified()
         return True
 
@@ -675,9 +719,10 @@ class DataSeriesSet(NMObject):
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
-            self._history('cancel', tp=self._tp, quiet=quiet)
+            self._history('cancel', quiet=quiet)
             return False
         add = {}
         for cc, dlist in dataseriesset._theset_items():
@@ -697,15 +742,16 @@ class DataSeriesSet(NMObject):
                 hlist.append(d.name)
             if hlist:
                 h = 'added to ch ' + cc + ': ' + ', '.join(hlist)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
         self._sort_update()
-        self._theset_empty()
+        self._theset_clear_if_empty()
         self._modified()
         return True
 
     def isdisjoint(self, dataseriesset):
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         for cc, dlist in dataseriesset._theset_items():
             if cc in self.__theset.keys() and isinstance(dlist, list):
                 for d in dlist:
@@ -715,13 +761,14 @@ class DataSeriesSet(NMObject):
 
     def isequal(self, dataseriesset, alert=True):
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         ks = self.__theset.keys()
         ko = dataseriesset._theset_keys()
         if ks != ko:
             if alert:
                 a = 'unequal channels: ' + str(ks) + ' vs ' + str(ko)
-                self._alert(a, tp=self._tp)
+                self._alert(a)
             return False
         for cc, dlist_o in dataseriesset._theset_items():
             dlist_s = self.__theset[cc]
@@ -730,18 +777,19 @@ class DataSeriesSet(NMObject):
             if ns != no:
                 a = ('unequal data items in channel ' + cc + ': ' + str(ns) +
                      ' vs ' + str(no))
-                self._alert(a, tp=self._tp)
+                self._alert(a)
                 return False
             for d in dlist_s:
                 if d not in dlist_o:
                     a = 'missing data item ' + d.name + ': ' + str(d)
-                    self._alert(a, tp=self._tp)
+                    self._alert(a)
                     return False
         return True
 
     def issubset(self, dataseriesset):
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         for cc_s, dlist_s in self.__theset.items():
             cc_found = False
             for cc_o, dlist_o in dataseriesset._theset_items():
@@ -756,7 +804,8 @@ class DataSeriesSet(NMObject):
 
     def issuperset(self, dataseriesset):
         if not isinstance(dataseriesset, DataSeriesSet):
-            raise TypeError(nmu.type_error(dataseriesset, 'DataSeriesSet'))
+            e = self._type_error(dataseriesset, 'DataSeriesSet')
+            raise TypeError(e)
         for cc, dlist in dataseriesset._theset_items():
             if cc in self.__theset.keys():
                 for d in dlist:
@@ -807,27 +856,26 @@ class DataSeriesSetContainer(NMObjectContainer):
     # override
     def rename(self, name, newname, quiet=nmp.QUIET):
         if name.lower() == 'all':
-            self._error("cannot rename 'All' set", quiet=quiet)
-            return False
+            e = self._error("cannot rename 'All' set")
+            raise RuntimeError(e)
         if name.lower() == 'setx':
-            self._error('cannot rename SetX', quiet=quiet)
-            return False
+            e = self._error('cannot rename SetX')
+            raise RuntimeError(e)
         return super().rename(name, newname, quiet=quiet)
 
-    # override, change default first to 1
+    # override, note first=1
     def name_next(self, first=1, quiet=nmp.QUIET):
         return super().name_next(first=first, quiet=quiet)
 
-    # override, change default first to 1
+    # override, note first=1
     def name_next_seq(self, prefix='default', first=1, quiet=nmp.QUIET):
         return super().name_next_seq(prefix=prefix, first=first, quiet=quiet)
 
     def add_epoch(self, name, epoch, quiet=nmp.QUIET):
-        if len(self._parent.thedata) == 0:
-            tp = self._parent._tp
-            e = 'no selected data for dataseries ' + tp
-            self._error(e, quiet=quiet)
-            return False
+        if not self._parent.thedata:
+            e = self._error('no selected data for dataseries ' +
+                            self._parent._tp)
+            raise RuntimeError(e)
         if not isinstance(name, list):
             if name.lower() == 'all':
                 name = self.names
@@ -835,29 +883,30 @@ class DataSeriesSetContainer(NMObjectContainer):
                 name.remove('SetX')
             else:
                 name = [name]
-        if len(name) == 0:
+        if not name:
             return False
         if not isinstance(epoch, list):
             epoch = [epoch]
         for n in name:
             if n.lower() == 'all':
-                self._alert("cannot edit 'All' set")
+                a = "cannot edit 'All' set"
+                self._alert(a, quiet=quiet)
                 continue
             s = self.getitem(n, quiet=quiet)
             if not s:
                 continue
             added = set()
             oor = set()
-            for e in epoch:
-                if e == -1:
-                    e = self._parent.epoch_select
+            for ep in epoch:
+                if ep == -1:
+                    ep = self._parent.epoch_select
                 for chan in self._parent.thedata:
-                    if e >= 0 and e < len(chan):
-                        d = chan[e]
+                    if ep >= 0 and ep < len(chan):
+                        d = chan[ep]
                         if s.add(d):
-                            added.add(e)
+                            added.add(ep)
                     else:
-                        oor.add(e)
+                        oor.add(ep)
             if len(added) > 0:
                 added = list(added)
                 added.sort()
@@ -873,8 +922,8 @@ class DataSeriesSetContainer(NMObjectContainer):
     def remove_epoch(self, name, epoch, quiet=nmp.QUIET):
         if len(self._parent.thedata) == 0:
             tp = self._parent.treepath(history=True)
-            e = 'no selected data for dataseries ' + tp
-            self._alert(e, quiet=quiet)
+            a = 'no selected data for dataseries ' + tp
+            self._alert(a, quiet=quiet)
             return False
         if not isinstance(name, list):
             if name.lower() == 'all':
@@ -889,7 +938,8 @@ class DataSeriesSetContainer(NMObjectContainer):
             epoch = [epoch]
         for n in name:
             if n.lower() == 'all':
-                self._alert("cannot edit 'All' set")
+                a = "cannot edit 'All' set"
+                self._alert(a, quiet=quiet)
                 continue
             s = self.getitem(n, quiet=quiet)
             if not s:
@@ -897,19 +947,19 @@ class DataSeriesSetContainer(NMObjectContainer):
             removed = set()
             nis = set()
             oor = set()
-            for e in epoch:
-                if e == -1:
-                    e = self._parent.epoch_select
+            for ep in epoch:
+                if ep == -1:
+                    ep = self._parent.epoch_select
                 for chan in self._parent.thedata:
-                    if e >= 0 and e < len(chan):
-                        d = chan[e]
+                    if ep >= 0 and ep < len(chan):
+                        d = chan[ep]
                         if s.contains(d):
                             if s.discard(d):
-                                removed.add(e)
+                                removed.add(ep)
                         else:
-                            nis.add(e)
+                            nis.add(ep)
                     else:
-                        oor.add(e)
+                        oor.add(ep)
             if len(removed) > 0:
                 removed = list(removed)
                 removed.sort()
@@ -938,10 +988,11 @@ class DataSeriesSetContainer(NMObjectContainer):
             if i in SET_SYMBOLS:
                 eq_list2.append(i)
             elif not self.exists(i):
-                raise ValueError(self._exists_error(i))
+                e = self._exists_error(i)
+                raise ValueError(e)
             if lock and i.lower() == name.lower():
-                e = ('locked set equation cannot contain itself: ' +
-                     nmu.quotes(name))
+                e = self._error('locked set equation cannot contain itself: ' +
+                                nmu.quotes(name))
                 raise ValueError(e)
             s2 = self.getitem(i, quiet=quiet)
             eq_list2.append(s2)
@@ -961,14 +1012,16 @@ class DataSeriesSetContainer(NMObjectContainer):
             n = ', '.join(name)
             q = 'are you sure you want to clear ' + n + '?'
             yn = nmu.input_yesno(q)
-            if not yn == 'y':
+            if not yn.lower() == 'y':
                 self._history('cancel')
                 return False
         for n in name:
             if n.lower() == 'all':
-                self._error("cannot clear 'All' set", quiet=quiet)
+                e = "cannot clear 'All' set"
+                self._error(e, quiet=quiet)
                 continue
             s = self.getitem(n, quiet=quiet)
             if s and s.clear():
-                self._history('cleared' + nmp.S0 + s._tp, quiet=quiet)
+                h = 'cleared' + nmp.S0 + s._tp
+                self._history(h, quiet=quiet)
         return True

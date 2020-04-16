@@ -36,7 +36,8 @@ class Data(NMObject):
             # self.__np_array = np_array.copy()  # COPY ARRAY?
             self.__np_array = np_array
         else:
-            raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
+            e = self._type_error(np_array, 'numpy.ndarray')
+            raise TypeError(e)
         self.__note_container = None
         for k, v in copy.items():
             if k.lower() == 'c_notes' and isinstance(v, NoteContainer):
@@ -51,25 +52,30 @@ class Data(NMObject):
         if dataseries is None:
             pass
         elif isinstance(dataseries, dict):
-            for ds, c in dataseries.items():
+            for ds, cc in dataseries.items():
                 if ds is None:
                     pass
                 elif isinstance(ds, DataSeries):
-                    if c is None:
+                    if cc is None:
                         pass
-                    elif isinstance(c, str):
-                        if c in ds.channel_list:
-                            self.__dataseries.update({ds: c})
+                    elif isinstance(cc, str):
+                        if cc in ds.channel_list:
+                            self.__dataseries.update({ds: cc})
                         else:
-                            e = 'unknown dataseries channel: ' + c
+                            channel = cc
+                            e = self._value_error(channel)
                             raise ValueError(e)
                     else:
-                        e = nmu.type_error(c, 'channel character')
+                        channel = cc
+                        e = self._type_error(channel, 'channel character')
                         raise TypeError(e)
                 else:
-                    raise TypeError(nmu.type_error(ds, 'DataSeries'))
+                    data_series = ds
+                    e = self._type_error(data_series, 'DataSeries')
+                    raise TypeError(e)
         else:
-            raise TypeError(nmu.type_error(dataseries, 'dictionary'))
+            e = self._type_error(dataseries, 'dictionary')
+            raise TypeError(e)
         self._param_list += ['xdim', 'ydim', 'dataseries']
 
     # override
@@ -79,7 +85,7 @@ class Data(NMObject):
         k.update({'xdim': self.__x.dim})
         k.update({'ydim': self.__y.dim})
         k.update({'dataseries': self._dataseries_str()})
-        # need names for iscopy() to work
+        # need nmobject names for isequivalent() to work
         return k
 
     # override
@@ -91,44 +97,46 @@ class Data(NMObject):
         return k
 
     # override
-    def _iscopy(self, data, alert=False):
+    def _isequivalent(self, data, alert=False):
+        nan_eq_nan = nmp.NAN_EQ_NAN  # argument?
         alert = nmu.bool_check(alert, False)
-        if not super()._iscopy(data, alert=alert):
+        if not super()._isequivalent(data, alert=alert):
             return False
+        ue = 'unequivalent '
         if self.__np_array is None and data.np_array is not None:
             if alert:
-                self._alert('unequal np_array NoneType', tp=self._tp)
+                self._alert(ue + 'np_array NoneType')
             return False
         if self.__np_array is not None and data.np_array is None:
             if alert:
-                self._alert('unequal np_array NoneType', tp=self._tp)
+                self._alert(ue + 'np_array NoneType')
             return False
         if self.__np_array is not None and data.np_array is not None:
             if self.__np_array.dtype != data.np_array.dtype:
                 if alert:
-                    self._alert('unequal np_array dtype', tp=self._tp)
+                    self._alert(ue + 'np_array dtype')
                 return False
             if self.__np_array.shape != data.np_array.shape:
                 if alert:
-                    self._alert('unequal np_array shape', tp=self._tp)
+                    self._alert(ue + 'np_array shape')
                 return False
             if self.__np_array.nbytes != data.np_array.nbytes:
                 if alert:
-                    self._alert('unequal np_array nbytes', tp=self._tp)
+                    self._alert(ue + 'np_array nbytes')
                 return False
             if not np.array_equal(self.__np_array, data.np_array):
                 # array_equal returns false if both arrays filled with NANs
-                if nmp.NAN_EQ_NAN:
+                if nan_eq_nan:
                     if not np.allclose(self.__np_array, data.np_array, rtol=0,
                                        atol=0, equal_nan=True):
                         if alert:
-                            self._alert('unequal np_array', tp=self._tp)
+                            self._alert(ue + 'np_array')
                         return False
-        if self.__note_container:
-            if not self.__note_container._iscopy(data._Data__note_container,
-                                                alert=alert):
-                return False
-        # self.__dataseries
+        c = self.__note_container
+        c2 = data._Data__note_container
+        if c and not c._isequivalent(c2, alert=alert):
+            return False
+        # TODO self.__dataseries
         return True
 
     # override, no super
@@ -152,12 +160,15 @@ class Data(NMObject):
 
     def _dataseries_add(self, dataseries, chan_char):
         if not isinstance(dataseries, DataSeries):
-            raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
+            e = self._type_error(dataseries, 'DataSeries')
+            raise TypeError(e)
         if not isinstance(chan_char, str):
-            raise TypeError(nmu.type_error(chan_char, 'channel character'))
+            e = self._type_error(chan_char, 'channel character')
+            raise TypeError(e)
         cc = nmu.chan_char_check(chan_char)
-        if len(cc) == 0:
-            e = 'bad channel character: ' + nmu.quotes(chan_char)
+        if not cc:
+            channel = chan_char
+            e = self._value_error(channel)
             raise ValueError(e)
         self.__dataseries.update({dataseries: cc})
         self._modified()
@@ -165,7 +176,8 @@ class Data(NMObject):
 
     def _dataseries_remove(self, dataseries):
         if not isinstance(dataseries, DataSeries):
-            raise TypeError(nmu.type_error(dataseries, 'DataSeries'))
+            e = self._type_error(dataseries, 'DataSeries')
+            raise TypeError(e)
         if dataseries in self.__dataseries:
             del self.__dataseries[dataseries]
             self._modified()
@@ -179,11 +191,14 @@ class Data(NMObject):
             if not isinstance(self.__dataseries[0], DataSeries):
                 return ''
             dsn = nmu.quotes(self.__dataseries[0].name)
-            return ('dimensions are superceded by those of data-series ' + dsn + '.'
-                    + '\n' + 'do you want to continue?')
+            a = ('dimensions are superceded by those of data-series ' + dsn +
+                 '.' + '\n' + 'do you want to continue?')
+            return a
         dsn = [d.name for d in self.__dataseries if isinstance(d, DataSeries)]
-        return ('dimensions are superceded by those of the following data-series: ' +
-                str(dsn) + '.' + '\n' + 'do you want to continue?')
+        a = ('dimensions are superceded by those of the following ' +
+             'data-series: ' + str(dsn) + '.' + '\n' +
+             'do you want to continue?')
+        return a
 
     @property
     def note(self):
@@ -209,7 +224,8 @@ class Data(NMObject):
         if np_array is None:
             pass  # ok
         elif not isinstance(np_array, np.ndarray):
-            raise TypeError(nmu.type_error(np_array, 'numpy.ndarray'))
+            e = self._type_error(np_array, 'numpy.ndarray')
+            raise TypeError(e)
         if self.__np_array is None:
             old = None
         else:
@@ -222,32 +238,36 @@ class Data(NMObject):
             new = self.__np_array.__array_interface__['data'][0]
         h = nmu.history_change('np_array reference', old, new)
         self.__note_container.new(h)
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, quiet=quiet)
         return True
 
     def np_array_make(self, shape, fill_value=NP_FILL_VALUE, dtype=NP_DTYPE,
                       order=NP_ORDER, quiet=nmp.QUIET):
+        # wrapper for NumPy.full
         self.__np_array = np.full(shape, fill_value, dtype=dtype, order=order)
         self._modified()
         if not isinstance(self.__np_array, np.ndarray):
-            raise RuntimeError('failed to create numpy array')
+            e = self._error('failed to create numpy array')
+            raise RuntimeError(e)
         n = ('created numpy array (numpy.full): shape=' + str(shape) +
              ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
         self.__note_container.new(n)
-        self._history(n, tp=self._tp, quiet=quiet)
+        self._history(n, quiet=quiet)
         return True
 
     def np_array_make_random_normal(self, shape, mean=0, stdv=1,
                                     quiet=nmp.QUIET):
+        # wrapper for NumPy.random.normal
+        # dtype = float64
         self.__np_array = np.random.normal(mean, stdv, shape)
         self._modified()
-        # dtype = float64
         if not isinstance(self.__np_array, np.ndarray):
-            raise RuntimeError('failed to create numpy array')
+            e = self._error('failed to create numpy array')
+            raise RuntimeError(e)
         n = ('created data array (numpy.random.normal): shape=' +
              str(shape) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
         self.__note_container.new(n)
-        self._history(n, tp=self._tp, quiet=quiet)
+        self._history(n, quiet=quiet)
         return True
 
 
@@ -279,11 +299,13 @@ class DataContainer(NMObjectContainer):
                  ydim=ydim, dataseries=dataseries)
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
+    # wrapper
     def add(self, data, select=True, quiet=nmp.QUIET):
         if not isinstance(data, Data):
-            raise TypeError(nmu.type_error(data, 'Data'))
-        return self.new(name=data.name, nmobject=data, select=select,
-                        quiet=quiet)
+            e = self._type_error(data, 'Data')
+            raise TypeError(e)
+        return super().new(name=data.name, nmobject=data, select=select,
+                           quiet=quiet)
 
     @property
     def dataseries(self):
@@ -292,8 +314,9 @@ class DataContainer(NMObjectContainer):
         return None
 
     # override
-    def kill(self, name, all_=False, confirm=True, quiet=nmp.QUIET):
-        klist = super().kill(name=name, all_=all_, confirm=confirm,
+    def kill(self, names=[], indexes=[], confirm=True, quiet=nmp.QUIET):
+        # wrapper for NMObjectContainer.kill()
+        klist = super().kill(names=names, indexes=indexes, confirm=confirm,
                              quiet=quiet)
         dsc = self.dataseries
         if not dsc or not isinstance(dsc, DataSeriesContainer):
@@ -308,10 +331,10 @@ class DataContainer(NMObjectContainer):
                         cdata.remove(d)
                         ds._modified()
                         dsc._modified()
-                for j in range(0, ds.eset.count):
-                    s = ds.eset.getitem(index=j)
+                for j in range(0, ds.sets.count):
+                    s = ds.sets.getitem(index=j)
                     if d in s.theset:
                         s.discard(d)
                         s._modified()
-                        ds.eset._modified()
+                        ds.sets._modified()
         return klist

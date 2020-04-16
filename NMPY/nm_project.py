@@ -36,10 +36,13 @@ class Project(NMObject):
                        c_folders=self.__folder_container.copy())
 
     # override
-    def _iscopy(self, project, alert=False):
-        if not super()._iscopy(project, alert=alert):
+    def _isequivalent(self, project, alert=False):
+        if not super()._isequivalent(project, alert=alert):
             return False
-        return self.__folder_container._iscopy(project.folder, alert=alert)
+        c = self.__folder_container
+        if c and not c._isequivalent(project.folder, alert=alert):
+            return False
+        return True
 
     @property
     def folder(self):

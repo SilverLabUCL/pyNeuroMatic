@@ -45,7 +45,8 @@ class Manager(object):
         self.__configs = nmp.Configs()
         self.__configs.quiet = quiet
         self.__stats = Stats()
-        self._history('created ' + nmu.quotes(self.__name), quiet=quiet)
+        h = 'created ' + nmu.quotes(self.__name)
+        self._history(h, quiet=quiet)
         if new_project:
             self.project_new(quiet=quiet)
 
@@ -59,9 +60,11 @@ class Manager(object):
         """Create a new project"""
         new_folder = nmu.bool_check(new_folder, True)
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         if not nmu.name_ok(name) or name.lower() == 'select':
-            raise ValueError('bad name:  ' + nmu.quotes(name))
+            e = self._value_error(name)
+            raise ValueError(e)
         if not name or name.lower() == 'default':
             name = nmp.PROJECT_NAME
         if self.__project:
@@ -69,17 +72,18 @@ class Manager(object):
             q = ('do you want to save ' + n +
                  ' before creating a new project?')
             ync = nmu.input_yesno(q, cancel=True)
-            if ync == 'y':
+            if ync.lower() == 'y':
                 path = "NOWHERE"
                 if not self.__project.save(path):
                     return None  # cancel
-            elif ync == 'n':
+            elif ync.lower() == 'n':
                 pass
             else:
                 self._history('cancel', quiet=quiet)
                 return None  # cancel
         p = Project(self, name)
-        self._history('created ' + nmu.quotes(name), quiet=quiet)
+        h = 'created ' + nmu.quotes(name)
+        self._history(h, quiet=quiet)
         if new_folder and p and p.folder:
             p.folder.new(quiet=quiet)  # create default folder
         self.__project = p
@@ -96,80 +100,80 @@ class Manager(object):
         return None
 
     def _folder_select(self):
-        fc = self.folder
-        if fc:
-            return fc.select
+        f = self.folder
+        if f:
+            return f.select
         return None
 
     @property
     def data(self):
-        fs = self._folder_select()
-        if fs:
-            return fs.data
+        f = self._folder_select()
+        if f:
+            return f.data
         return None
 
     @property
     def dataseries(self):
-        fs = self._folder_select()
-        if fs:
-            return fs.dataseries
+        f = self._folder_select()
+        if f:
+            return f.dataseries
         return None
 
     def _dataseries_select(self):
-        pc = self.dataseries
-        if pc:
-            return pc.select
+        ds = self.dataseries
+        if ds:
+            return ds.select
         return None
 
     @property
     def channel(self):
-        ps = self._dataseries_select()
-        if ps:
-            return ps.channel
+        ds = self._dataseries_select()
+        if ds:
+            return ds.channel
         return None
 
     @property
     def channel_select(self):
-        ps = self._dataseries_select()
-        if ps:
-            return ps.channel_select
+        ds = self._dataseries_select()
+        if ds:
+            return ds.channel_select
         return []  # channel select is a list
 
     @channel_select.setter
     def channel_select(self, chan_char_list):  # e.g 'A', 'All' or ['A', 'B']
-        ps = self._dataseries_select()
-        if ps:
-            ps.channel_select = chan_char_list
-            return ps.channel_select == chan_char_list
+        ds = self._dataseries_select()
+        if ds:
+            ds.channel_select = chan_char_list
+            return ds.channel_select == chan_char_list
         return None
 
     @property
-    def eset(self):  # data-series sets
-        ps = self._dataseries_select()
-        if ps:
-            return ps.eset
+    def sets(self):  # data-series sets
+        ds = self._dataseries_select()
+        if ds:
+            return ds.sets
         return None
 
     @property
     def epoch_select(self):
-        ps = self._dataseries_select()
-        if ps:
-            return ps.epoch_select
+        ds = self._dataseries_select()
+        if ds:
+            return ds.epoch_select
         return [-1]
 
     @epoch_select.setter
     def epoch_select(self, epoch_list):
-        ps = self._dataseries_select()
-        if ps:
-            ps.epoch_select = epoch_list
-            return ps.epoch_select == epoch_list
+        ds = self._dataseries_select()
+        if ds:
+            ds.epoch_select = epoch_list
+            return ds.epoch_select == epoch_list
         return False
 
     @property
     def data_select(self):
-        ps = self._dataseries_select()
-        if ps:
-            return ps.data_select
+        ds = self._dataseries_select()
+        if ds:
+            return ds.data_select
         return False
 
     @property
@@ -178,7 +182,7 @@ class Manager(object):
         s['project'] = None
         s['folder'] = None
         s['dataseries'] = None
-        s['eset'] = None
+        s['set'] = None
         s['channel'] = []
         s['epoch'] = -1
         if not self.__project:
@@ -192,9 +196,9 @@ class Manager(object):
         if not ps:
             return s
         s['dataseries'] = ps
-        ss = self.eset.select
+        ss = self.sets.select
         if ss:
-            s['eset'] = ss
+            s['set'] = ss
         s['channel'] = ps.channel_select
         s['epoch'] = ps.epoch_select
         return s
@@ -206,7 +210,7 @@ class Manager(object):
         s['project'] = ''
         s['folder'] = ''
         s['dataseries'] = ''
-        s['eset'] = ''
+        s['set'] = ''
         s['channel'] = []
         s['epoch'] = -1
         if not self.__project:
@@ -220,9 +224,9 @@ class Manager(object):
         if not ps:
             return s
         s['dataseries'] = ps.name
-        ss = self.eset.select
+        ss = self.sets.select
         if ss:
-            s['eset'] = ss.name
+            s['set'] = ss.name
         s['channel'] = ps.channel_select
         s['epoch'] = ps.epoch_select
         return s
@@ -247,7 +251,7 @@ class Manager(object):
         return nmu.history(message, tp=tp, frame=frame,
                            quiet=self._quiet(quiet))
 
-    def _quiet(self, quiet=nmp.QUIET):
+    def _quiet(self, quiet):
         quiet = nmu.bool_check(quiet, nmp.QUIET)
         if self.configs.quiet:  # manager config quiet overrides
             return True

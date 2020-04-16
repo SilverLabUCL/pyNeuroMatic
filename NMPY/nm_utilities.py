@@ -178,20 +178,6 @@ def bool_check(var_bool, default_value):
     return var_bool
 
 
-def type_error(object, varType):
-    callers_local_vars = inspect.currentframe().f_back.f_locals.items()
-    var_names = [var_name for var_name, var_val in callers_local_vars if
-                 var_val is object]
-    count = len(var_names)  # may be multiple variables with same value
-    if count > 0:
-        vname = var_names[0]  # take first name
-    else:
-        vname = 'FAILEDTOFINDVARIABLENAME'
-    got = str(type(object))
-    got = got.replace('<class ', '').replace('>', '').replace("'", "")
-    return 'bad ' + vname + ': expected ' + varType + ', but got ' + got
-
-
 def history_change(var_name, from_value, to_value):
     if isinstance(from_value, str):
         old = from_value

@@ -6,6 +6,7 @@ Copyright 2019 Jason Rothman
 """
 # import copy
 import datetime
+import inspect
 import math
 import types
 
@@ -18,23 +19,28 @@ class NMObject(object):
     NM objects to be stored in a Container class (see below).
 
     Known children:
-        Channel, Data, DataSeries, Dimension, DataSeriesSet, Folder, Note, Project
+        Channel, Data, DataSeries, Dimension, DataSeriesSet, Folder, Note,
+        Project
 
     Attributes:
-        parent (NMObject or any object):
-        name (str):
-        date (str):
-        modified (str):
+        _parent (NMObject or any object):
+        __name (str):
+        __rename_fxnref (ref):
+        __date (str):
+        __modified (str):
+        _param_list (list):
     """
 
     def __init__(self, parent, name):
         self._parent = parent
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
+            e = self._type_error(name, 'string', tp='')  # no tp yet
+            raise TypeError(e)
         if not name or not self.name_ok(name):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
+            e = self._value_error(name, tp='')  # no tp yet
+            raise ValueError(e)
         self.__name = name
-        self.__rename_fxnref = self._name_set
+        self.__rename_fxnref = self._name_set  # fxn ref
         self.__date = str(datetime.datetime.now())
         self.__modified = self.__date
         self._param_list = ['name', 'date', 'modified']
@@ -44,6 +50,7 @@ class NMObject(object):
     @property
     def parameters(self):  # child class should override
         # and add class parameters
+        # used in isequivalent
         p = {'name': self.__name}
         p.update({'date': self.__date})
         p.update({'modified': self.__modified})
@@ -54,12 +61,12 @@ class NMObject(object):
         for k in pkeys:
             if k not in self._param_list:
                 e = 'missing param_list item ' + nmu.quotes(k)
-                self._error(e, tp=self._tp, quiet=quiet)
+                self._error(e, quiet=quiet)
                 return False
         for k in self._param_list:
             if k not in pkeys:
                 e = 'missing parameters key ' + nmu.quotes(k)
-                self._error(e, tp=self._tp, quiet=quiet)
+                self._error(e, quiet=quiet)
                 return False
         return True
 
@@ -83,6 +90,13 @@ class NMObject(object):
     @property
     def _tp(self):  # use with history()
         return self.treepath(for_history=True)
+
+    def _tp_check(self, tp_str, for_history=True):
+        if not isinstance(tp_str, str):
+            return ''
+        if tp_str.lower() == 'self':
+            return self.treepath(for_history=for_history)
+        return tp_str
 
     def treepath(self, for_history=False):
         for_history = nmu.bool_check(for_history, False)
@@ -118,13 +132,12 @@ class NMObject(object):
 
     @property
     def _manager(self):
-        p = self._parent
-        if p is None:
+        if self._parent is None:
             return None
-        if p.__class__.__name__ == 'Manager':
-            return p
-        if isinstance(p, NMObject):
-            return p._manager
+        if self._parent.__class__.__name__ == 'Manager':
+            return self._parent
+        if isinstance(self._parent, NMObject):
+            return self._parent._manager  # go up the object tree
         return None
 
     def name_ok(self, name, ok=[]):
@@ -133,9 +146,12 @@ class NMObject(object):
         if not isinstance(ok, list):
             ok = [ok]
         bad = [n.lower() for n in self._bad_names]
-        for n in ok:
-            if n.lower() in bad:
-                bad.remove(n.lower())
+        for ok_item in ok:
+            if not isinstance(ok_item, str):
+                e = self._type_error(ok_item, 'string')
+                raise TypeError(e)
+            if ok_item.lower() in bad:
+                bad.remove(ok_item.lower())
         return name.lower() not in bad
 
     @property
@@ -155,71 +171,79 @@ class NMObject(object):
         # name_notused, to be consistent with
         # NMObjectContainer.rename(name, newname)
         if not isinstance(newname, str):
-            raise TypeError(nmu.type_error(newname, 'string'))
+            e = self._type_error(newname, 'string')
+            raise TypeError(e)
         if not newname or not self.name_ok(newname):
-            raise ValueError('bad name:  ' + nmu.quotes(newname))
+            e = self._value_error(newname)
+            raise ValueError(e)
         old = self.__name
         self.__name = newname
         self._modified()
         h = nmu.history_change('name', old, self.__name)
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, quiet=quiet)
         return True
 
     def _rename_fxnref_set(self, rename_fxnref):
         if not isinstance(rename_fxnref, types.MethodType):
-            raise TypeError(nmu.type_error(rename_fxnref, 'MethodType'))
+            e = self._type_error(rename_fxnref, 'MethodType')
+            raise TypeError(e)
         self.__rename_fxnref = rename_fxnref
         return True
 
-    def _iscopy(self, nmobject, alert=False):
+    def _isequivalent(self, nmobject, alert=False):
+        self_is_equiv = False  # argument?
+        nan_eq_nan = nmp.NAN_EQ_NAN  # argument?
+        oktobedifferent = ['date', 'modified']  # argument?
         alert = nmu.bool_check(alert, False)
+        ue = 'unequivalent '
         if nmobject == self:
+            if self_is_equiv:
+                return True
             if alert:
-                a = ('NMObject ' + nmu.quotes(self.name) +
-                     ' cannot be a copy of itself')
-                self._alert(a, tp=self._tp)
+                a = 'equivalence with self is False'
+                self._alert(a)
             return False
-        if nmobject.__class__.__name__ != self.__class__.__name__:
+        sn = self.__class__.__name__
+        on = nmobject.__class__.__name__
+        if on != sn:
             if alert:
-                a = ('unequal object types: ' + self.__class__.__name__ +
-                     ' vs ' + nmobject.__class__.__name__)
-                self._alert(a, tp=self._tp)
+                a = ue + 'NMObject types: ' + sn + ' vs ' + on
+                self._alert(a)
             return False
         # if nmobject._parent != self._parent:
             # problematic for copying containers
             # compare parent name?
-            # a = ('unequal parents: ' + str(self._parent) + ' vs ' +
+            # a = (ue + 'parents: ' + str(self._parent) + ' vs ' +
             #      str(nmobject._parent))
-            # self._alert(a, tp=self._tp)
+            # self._alert(a)
             # return False
         # if nmobject._NMObject__rename_fxnref != self.__rename_fxnref:
         #     different, unless in same container
-        #     a = ('unequal rename() refs: ' + str(self.__rename_fxnref) +
+        #     a = (ue + 'rename() refs: ' + str(self.__rename_fxnref) +
         #     ' vs ' + str(nmobject._NMObject__rename_fxnref))
-        #     self._alert(a, tp=self._tp)
+        #     self._alert(a)
         #     return False
         sp = self.parameters
         op = nmobject.parameters
         if op.keys() != sp.keys():
             if alert:
-                a = ('unequal parameter keys: ' + str(op.keys()) + ' vs ' +
+                a = (ue + 'parameter keys: ' + str(op.keys()) + ' vs ' +
                      str(sp.keys()))
-                self._alert(a, tp=self._tp)
+                self._alert(a)
             return False
-        oktobedifferent = ['date', 'modified']
         for k in sp.keys():
             if k in oktobedifferent:
                 continue
             if op[k] != sp[k]:
-                if nmp.NAN_EQ_NAN:
+                if nan_eq_nan:
                     op_nan = isinstance(op[k], float) and math.isnan(op[k])
                     sp_nan = isinstance(sp[k], float) and math.isnan(sp[k])
                     if op_nan and sp_nan:
                         continue  # ok (nan=nan)
                 if alert:
-                    a = ('unequal ' + nmu.quotes(k) + ': ' +
+                    a = (ue + nmu.quotes(k) + ': ' +
                          nmu.quotes(sp[k]) + ' vs ' + nmu.quotes(op[k]))
-                    self._alert(a, tp=self._tp)
+                    self._alert(a)
                 return False
         return True
 
@@ -228,32 +252,79 @@ class NMObject(object):
 
     def save(self, path='', quiet=nmp.QUIET):
         # TODO
-        raise RuntimeError('save under construction')
+        e = self._error('save under construction')
+        raise RuntimeError(e)
 
     def _modified(self):
         self.__modified = str(datetime.datetime.now())
-        if self._parent and isinstance(self._parent, NMObject):  # tree-path
+        if self._parent and isinstance(self._parent, NMObject):  # up treepath
             self._parent._modified()
 
-    def _alert(self, message, tp='', quiet=False, frame=2):
-        return nmu.history(message, title='ALERT', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
+    def _alert(self, message, tp='self', quiet=False, frame=2):
+        return nmu.history(message, title='ALERT', tp=self._tp_check(tp),
+                           frame=frame, red=True, quiet=self._quiet(quiet))
 
-    def _error(self, message, tp='', quiet=False, frame=2):
-        return nmu.history(message, title='ERROR', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
+    def _error(self, message, tp='self', quiet=False, frame=2):
+        return nmu.history(message, title='ERROR', tp=self._tp_check(tp),
+                           frame=frame, red=True, quiet=self._quiet(quiet))
 
-    def _history(self, message, tp='', quiet=False, frame=2):
-        return nmu.history(message, tp=tp, frame=frame,
+    def _history(self, message, tp='self', quiet=False, frame=2):
+        return nmu.history(message, tp=self._tp_check(tp), frame=frame,
                            red=False, quiet=self._quiet(quiet))
 
-    def _quiet(self, quiet=False):
+    def _type_error(self, obj, type_expected, tp='self', quiet=False, frame=2):
+        callers_local_vars = inspect.currentframe().f_back.f_locals.items()
+        var_names = [var_name for var_name, var_val in callers_local_vars if
+                     var_val is obj]
+        count = len(var_names)  # may be multiple variables with same value
+        if count > 0:
+            vname = var_names[0]  # take first name
+        else:
+            vname = 'FAILEDTOFINDVARIABLENAME'
+        t = str(type(obj))
+        t = t.replace('<class ', '').replace('>', '').replace("'", "")
+        e = 'bad ' + vname + ': expected ' + type_expected + ' but got ' + t
+        return nmu.history(e, title='', tp=self._tp_check(tp), frame=frame,
+                           red=True, quiet=self._quiet(quiet))
+
+    def _value_error(self, obj, tp='self', quiet=False, frame=2):
+        callers_local_vars = inspect.currentframe().f_back.f_locals.items()
+        var_names = [var_name for var_name, var_val in callers_local_vars if
+                     var_val is obj]
+        count = len(var_names)  # may be multiple variables with same value
+        if count > 0:
+            vname = var_names[0]  # take first name
+        else:
+            vname = 'FAILEDTOFINDVARIABLENAME'
+        if isinstance(obj, str):
+            e = 'bad ' + vname + ': ' + nmu.quotes(obj)
+        else:
+            e = 'bad ' + vname + ': ' + str(obj)
+        return nmu.history(e, title='', tp=self._tp_check(tp), frame=frame,
+                           red=True, quiet=self._quiet(quiet))
+
+    def _quiet(self, quiet):
         m = self._manager
         if m.__class__.__name__ == 'Manager':
-            return m._quiet(quiet=quiet)
+            return m._quiet(quiet)
         if nmp.QUIET:  # this quiet overrides
             return True
         return nmu.bool_check(quiet, False)
+
+
+class NMObjectTest(NMObject):
+
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.myvalue = 1
+        self._param_list += ['myvalue']
+
+    # override
+    @property
+    def parameters(self):
+        k = super().parameters
+        k.update({'myvalue': self.myvalue})
+        return k
 
 
 class NMObjectContainer(NMObject):
@@ -287,16 +358,20 @@ class NMObjectContainer(NMObject):
                  prefix='NMObject', rename=True, **copy):
         super().__init__(parent, name)
         if not isinstance(type_, str):
-            raise TypeError(nmu.type_error(type_, 'string'))
+            e = self._type_error(type_, 'string')
+            raise TypeError(e)
         if not type_ or not nmu.name_ok(type_):
-            raise ValueError('bad type_: ' + nmu.quotes(type_))
+            e = self._value_error(type_)
+            raise ValueError(e)
         self.__type = type_
         if prefix is None:
             prefix = ''
         elif not isinstance(prefix, str):
-            raise TypeError(nmu.type_error(prefix, 'string'))
+            e = self._type_error(prefix, 'string')
+            raise TypeError(e)
         elif not self.name_ok(prefix):
-            raise ValueError('bad prefix:  ' + nmu.quotes(prefix))
+            e = self._value_error(prefix)
+            raise ValueError(e)
         self.__prefix = prefix
         self.__rename = nmu.bool_check(rename, True)
         self.__thecontainer = []  # container of NMObject items
@@ -327,7 +402,7 @@ class NMObjectContainer(NMObject):
         k.update({'rename': self.__rename})
         if self.__select:
             k.update({'select': self.__select.name})
-            # need name for iscopy() to work
+            # need name for isequivalent() to work
         else:
             k.update({'select': 'None'})
         return k
@@ -346,18 +421,18 @@ class NMObjectContainer(NMObject):
         return {self._content_name: self.names}
 
     # override
-    def _iscopy(self, container, alert=False):
-        if not super()._iscopy(container, alert=alert):
+    def _isequivalent(self, container, alert=False):
+        if not super()._isequivalent(container, alert=alert):
             return False
         if container.count != self.count:
             if alert:
-                a = ('unequal container count: ' + str(self.count) + ' vs ' +
-                     str(container.count))
-                self._alert(a, tp=self._tp)
+                a = ('unequivalent container count: ' + str(self.count) +
+                     ' vs ' + str(container.count))
+                self._alert(a)
             return False
         for i, s in enumerate(self.__thecontainer):
             o = container.getitem(index=i, quiet=True)
-            if not s._iscopy(o, alert=alert):
+            if not s._isequivalent(o, alert=alert):
                 return False
         return True
 
@@ -396,16 +471,19 @@ class NMObjectContainer(NMObject):
 
     def _prefix_set(self, prefix, quiet=nmp.QUIET):
         if not self.__rename:
-            raise RuntimeError(self.__type + ' items cannot be renamed')
+            e = self._error(self.__type + ' items cannot be renamed')
+            raise RuntimeError(e)
         if not isinstance(prefix, str):
-            raise TypeError(nmu.type_error(prefix, 'string'))
+            e = self._type_error(prefix, 'string')
+            raise TypeError(e)
         if not self.name_ok(prefix):
-            raise ValueError('bad prefix: ' + nmu.quotes(prefix))
+            e = self._value_error(prefix)
+            raise ValueError(e)
         old = self.__prefix
         self.__prefix = prefix
         self._modified()
         h = nmu.history_change('prefix', old, self.__prefix)
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, quiet=quiet)
         return True
 
     @property
@@ -421,7 +499,8 @@ class NMObjectContainer(NMObject):
     def index(self, name):
         """Find item # of NMObject in container"""
         if not isinstance(name, str):
-            return -1
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         if not name or not nmu.name_ok(name):
             return -1
         if name.lower() == 'select':
@@ -436,18 +515,24 @@ class NMObjectContainer(NMObject):
 
     def exists(self, name):
         """Check if NMObject exists within container"""
+        if not isinstance(name, str):
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         return self.index(name) >= 0
 
     def getitem(self, name='', index=None, quiet=nmp.QUIET):
         """Get NMObject from Container"""
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         if not self.name_ok(name, ok='select'):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
+            e = self._value_error(name)
+            raise ValueError(e)
         if index is None:
             pass  # ok
         elif not isinstance(index, int):
-            raise TypeError(nmu.type_error(index, 'integer'))
+            e = self._type_error(index, 'integer')
+            raise TypeError(e)
         elif index < 0 and index >= -1 * len(self.__thecontainer):
             return self.__thecontainer[index]
         elif index >= 0 and index < len(self.__thecontainer):
@@ -462,7 +547,7 @@ class NMObjectContainer(NMObject):
             if name.lower() == o.name.lower():
                 return o
         e = self._exists_error(name)
-        self._error(e, tp=self._tp, quiet=quiet)
+        self._error(e, quiet=quiet)
         return None
 
     def getitems(self, names=[], indexes=[]):
@@ -472,43 +557,48 @@ class NMObjectContainer(NMObject):
         elif isinstance(names, str):
             names = [names]
         else:
-            raise TypeError(nmu.type_error(names, 'string'))
+            e = self._type_error(names, 'string')
+            raise TypeError(e)
         if isinstance(indexes, list) or isinstance(indexes, tuple):
             pass  # ok
         elif isinstance(indexes, int):
             indexes = [indexes]
         else:
-            raise TypeError(nmu.type_error(indexes, 'integer'))
+            e = self._type_error(indexes, 'integer')
+            raise TypeError(e)
         olist = []
         all_ = False
-        for n in names:
-            if not isinstance(n, str):
-                raise TypeError(nmu.type_error(n, 'string'))
-            if n.lower() == 'all':
+        for name in names:
+            if not isinstance(name, str):
+                e = self._type_error(name, 'string')
+                raise TypeError(e)
+            if name.lower() == 'all':
                 all_ = True
-            elif not self.name_ok(n, ok='select'):
-                raise ValueError('bad name:  ' + nmu.quotes(n))
-            if n.lower() == 'select':
+            elif not self.name_ok(name, ok='select'):
+                e = self._value_error(name)
+                raise ValueError(e)
+            if name.lower() == 'select':
                 if self.__select not in olist:
                     olist.append(self.__select)
             else:
                 for o in self.__thecontainer:
                     if all_ and o not in olist:
                         olist.append(o)
-                    elif n.lower() == o.name.lower() and o not in olist:
+                    elif name.lower() == o.name.lower() and o not in olist:
                         olist.append(o)
         if all_:
             return olist
-        for i in indexes:
-            if not isinstance(i, int):
-                raise TypeError(nmu.type_error(i, 'integer'))
+        for index in indexes:
+            if not isinstance(index, int):
+                e = self._type_error(index, 'integer')
+                raise TypeError(e)
             o = None
-            if i < 0 and i >= -1 * len(self.__thecontainer):
-                o = self.__thecontainer[i]
-            elif i >= 0 and i < len(self.__thecontainer):
-                o = self.__thecontainer[i]
+            if index < 0 and index >= -1 * len(self.__thecontainer):
+                o = self.__thecontainer[index]
+            elif index >= 0 and index < len(self.__thecontainer):
+                o = self.__thecontainer[index]
             else:
-                raise IndexError('index out of range:  ' + str(i))
+                raise IndexError('index out of range:  ' + str(index))
             if o and o not in olist:
                 olist.append(o)
         return olist
@@ -528,9 +618,11 @@ class NMObjectContainer(NMObject):
 
     def _select_set(self, name, failure_alert=True, quiet=nmp.QUIET):
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         if not self.name_ok(name):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
+            e = self._value_error(name)
+            raise ValueError(e)
         if not name:
             return None
         # if self.__select and name.lower() == self.__select.name.lower():
@@ -541,19 +633,19 @@ class NMObjectContainer(NMObject):
             self.__select = o
             self._modified()
             h = NMObjectContainer.__select_history(old, self.__select)
-            self._history(h, tp=self._tp, quiet=quiet)
+            self._history(h, quiet=quiet)
             return o
         if failure_alert:
             q = ('failed to find ' + nmu.quotes(name) + '.' + '\n' +
                  'do you want to create a new ' + self.__type +
                  ' named ' + nmu.quotes(name) + '?')
             yn = nmu.input_yesno(q, tp=self._tp)
-            if yn == 'y':
+            if yn.lower() == 'y':
                 return self.new(name=name, select=True)
-            self._history('cancel', tp=self._tp, quiet=quiet)
+            self._history('cancel', quiet=quiet)
             return None
         e = self._exists_error(name)
-        self._error(e, tp=self._tp, quiet=quiet)
+        self._error(e, quiet=quiet)
         return None
 
     @staticmethod
@@ -579,13 +671,16 @@ class NMObjectContainer(NMObject):
         """
         select = nmu.bool_check(select, True)
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         if not name or not self.name_ok(name, ok='default'):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
+            e = self._value_error(name)
+            raise ValueError(e)
         if name.lower() == 'default':
             name = self.name_next(quiet=quiet)
         if self.exists(name):
-            e = self.__type + ' ' + nmu.quotes(name) + ' already exists'
+            e = self._error(self.__type + ' ' + nmu.quotes(name) +
+                            ' already exists')
             raise RuntimeError(e)
         if nmobject is None:
             o = NMObject(self._parent, name)
@@ -596,9 +691,11 @@ class NMObjectContainer(NMObject):
                 o._NMObject__name = name  # rename nmobject
                 o._parent = self._parent  # reset parent reference
             else:
-                raise TypeError(nmu.type_error(nmobject, self.__type))
+                e = self._type_error(nmobject, self.__type)
+                raise TypeError(e)
         else:
-            raise TypeError(nmu.type_error(nmobject, 'NMObject'))
+            e = self._type_error(nmobject, 'NMObject')
+            raise TypeError(e)
         if not o:
             return None
         self.__thecontainer.append(o)
@@ -608,42 +705,48 @@ class NMObjectContainer(NMObject):
             self.__select = o
             if old:
                 h = 'created ' + nmu.quotes(name)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
                 h = NMObjectContainer.__select_history(old, self.__select)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
             else:
                 h = 'created/selected ' + nmu.quotes(name)
-                self._history(h, tp=self._tp, quiet=quiet)
+                self._history(h, quiet=quiet)
         else:
             h = 'created ' + nmu.quotes(name)
-            self._history(h, tp=self._tp, quiet=quiet)
+            self._history(h, quiet=quiet)
         self._modified()
         return o
 
     def rename(self, name, newname, quiet=nmp.QUIET):
         if not self.__rename:
-            raise RuntimeError(self.__type + ' items cannot be renamed')
+            e = self._error(self.__type + ' items cannot be renamed')
+            raise RuntimeError(e)
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         if not self.name_ok(name, ok='select'):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
+            e = self._value_error(name)
+            raise ValueError(e)
         if not name:
             return ''
         if not self.exists(name):
             e = self._exists_error(name)
-            self._error(e, tp=self._tp, quiet=quiet)
+            self._error(e, quiet=quiet)
             return ''
         o = self.getitem(name, quiet=quiet)
         if not o:
             return ''
         if not isinstance(newname, str):
-            raise TypeError(nmu.type_error(newname, 'string'))
+            e = self._type_error(newname, 'string')
+            raise TypeError(e)
         if not newname or not self.name_ok(newname, ok='default'):
-            raise ValueError('bad newname: ' + nmu.quotes(newname))
+            e = self._value_error(newname)
+            raise ValueError(e)
         if newname.lower() == 'default':
             newname = self.name_next(quiet=quiet)
         if self.exists(newname):
-            e = self.__type + ' ' + nmu.quotes(newname) + ' already exists'
+            e = self._error(self.__type + ' ' + nmu.quotes(newname) +
+                            ' already exists')
             raise RuntimeError(e)
         old = nmu.quotes(o.name)
         # o.name = newname  # double history
@@ -651,7 +754,7 @@ class NMObjectContainer(NMObject):
         self._modified()
         new = nmu.quotes(o.name)
         h = 'renamed ' + old + ' to ' + new
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, quiet=quiet)
         return newname
 
     def duplicate(self, name, newname, select=True, quiet=nmp.QUIET):
@@ -667,26 +770,31 @@ class NMObjectContainer(NMObject):
         """
         select = nmu.bool_check(select, True)
         if not isinstance(name, str):
-            raise TypeError(nmu.type_error(name, 'string'))
+            e = self._type_error(name, 'string')
+            raise TypeError(e)
         if not self.name_ok(name, ok='select'):
-            raise ValueError('bad name:  ' + nmu.quotes(name))
+            e = self._value_error(name)
+            raise ValueError(e)
         if not name:
             return None
         if not self.exists(name):
             e = self._exists_error(name)
-            self._error(e, tp=self._tp, quiet=quiet)
+            self._error(e, quiet=quiet)
             return None
         o = self.getitem(name, quiet=quiet)
         if not o:
             return None
         if not isinstance(newname, str):
-            raise TypeError(nmu.type_error(newname, 'string'))
+            e = self._type_error(newname, 'string')
+            raise TypeError(e)
         if not newname or not self.name_ok(newname, ok='default'):
-            raise ValueError('bad newname: ' + nmu.quotes(newname))
+            e = self._value_error(newname)
+            raise ValueError(e)
         if newname.lower() == 'default':
             newname = self.name_next(quiet=quiet)
         if self.exists(newname):
-            e = self.__type + ' ' + nmu.quotes(newname) + ' already exists'
+            e = self._error(self.__type + ' ' + nmu.quotes(newname) +
+                            ' already exists')
             raise RuntimeError(e)
         c = o.copy()
         if not c:
@@ -698,12 +806,12 @@ class NMObjectContainer(NMObject):
         old = nmu.quotes(o.name)
         new = nmu.quotes(c.name)
         h = 'copied ' + old + ' to ' + new
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, quiet=quiet)
         if select or not self.__select:
             old = self.__select
             self.__select = c
             h = NMObjectContainer.__select_history(old, self.__select)
-            self._history(h, tp=self._tp, quiet=quiet)
+            self._history(h, quiet=quiet)
         self._modified()
         return c
 
@@ -718,8 +826,8 @@ class NMObjectContainer(NMObject):
             q = ('are you sure you want to kill the following items?' + '\n' +
                  ', '.join(nlist))
             yn = nmu.input_yesno(q, tp=self._tp)
-            if not yn == 'y':
-                self._history('cancel', tp=self._tp, quiet=quiet)
+            if not yn.lower() == 'y':
+                self._history('cancel', quiet=quiet)
                 return []
         klist = []
         nlist = []
@@ -731,21 +839,23 @@ class NMObjectContainer(NMObject):
                 select_old = self.__select
                 self.__select = None
         h = 'killed ' + ', '.join(nlist)
-        self._history(h, tp=self._tp, quiet=quiet)
+        self._history(h, quiet=quiet)
         if self.__select is None and len(self.__thecontainer) > 0:
             self.__select = self.__thecontainer[0]
             h = NMObjectContainer.__select_history(select_old, self.__select)
-            self._history(h, tp=self._tp, quiet=quiet)
+            self._history(h, quiet=quiet)
         self._modified()
         return klist
 
     def name_next(self, first=0, quiet=nmp.QUIET):
         """Get next default NMObject name based on prefix and sequence #."""
         if not isinstance(first, int):
-            raise TypeError(nmu.type_error(first, 'integer'))
+            e = self._type_error(first, 'integer')
+            raise TypeError(e)
         quiet = nmu.bool_check(quiet, nmp.QUIET)
         if not self.__prefix or first < 0:
-            raise RuntimeError('cannot generate default names')
+            e = self._error('cannot generate default names')
+            raise RuntimeError(e)
         i = self.name_next_seq(prefix=self.__prefix, first=first, quiet=quiet)
         if i >= 0:
             return self.__prefix + str(i)
@@ -754,16 +864,20 @@ class NMObjectContainer(NMObject):
     def name_next_seq(self, prefix='default', first=0, quiet=nmp.QUIET):
         """Get next seq num of default NMObject name based on prefix."""
         if not isinstance(first, int):
-            raise TypeError(nmu.type_error(first, 'integer'))
+            e = self._type_error(first, 'integer')
+            raise TypeError(e)
         quiet = nmu.bool_check(quiet, nmp.QUIET)
         if not isinstance(prefix, str):
-            raise TypeError(nmu.type_error(prefix, 'string'))
+            e = self._type_error(prefix, 'string')
+            raise TypeError(e)
         if not self.name_ok(prefix, ok='default'):
-            raise ValueError('bad prefix: ' + nmu.quotes(prefix))
+            e = self._value_error(prefix)
+            raise ValueError(e)
         if prefix.lower() == 'default':
             prefix = self.__prefix
         if not prefix or first < 0:
-            raise RuntimeError('cannot generate default names')
+            e = self._error('cannot generate default names')
+            raise RuntimeError(e)
         elist = []
         for o in self.__thecontainer:
             name = o.name.lower()

@@ -43,14 +43,18 @@ class Folder(NMObject):
         return k
 
     # override
-    def _iscopy(self, folder, alert=False):
-        if not super()._iscopy(folder, alert=alert):
+    def _isequivalent(self, folder, alert=False):
+        if not super()._isequivalent(folder, alert=alert):
             return False
-        c = folder._Folder__data_container
-        if not self.__data_container._iscopy(c, alert=alert):
+        c = self.__data_container
+        c2 = folder._Folder__data_container
+        if c and not c._isequivalent(c2, alert=alert):
             return False
-        c = folder._Folder__dataseries_container
-        return self.__dataseries_container._iscopy(c, alert=alert)
+        c = self.__dataseries_container
+        c2 = folder._Folder__dataseries_container
+        if c and not c._isequivalent(c2, alert=alert):
+            return False
+        return True
 
     # override, no super
     def copy(self):
@@ -88,9 +92,11 @@ class FolderContainer(NMObjectContainer):
         o = Folder(None, 'iwillberenamed')
         return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
+    # wrapper
     def add(self, folder, select=True, quiet=nmp.QUIET):
         if not isinstance(folder, Folder):
-            raise TypeError(nmu.type_error(folder, 'Folder'))
+            e = self._type_error(folder, 'Folder')
+            raise TypeError(e)
         return self.new(name=folder.name, nmobject=folder, select=select,
                         quiet=quiet)
 
