@@ -363,57 +363,58 @@ class DataSeriesSet(NMObject):
     def _theset_values(self):
         return self.__theset.values()
 
-    def _data_dict_check(self, data, chan_default=nmp.CHANNEL_LIST[0]):
-        # data = MyData -converted-> {'A': [MyData]}
-        # data = [MyData0, MyData1] -converted-> {'A': [MyData0, MyData1]}
-        # data = {'A': MyDataA0, 'B': MyDataB0} -converted->
+    def _data_dict_check(self, data_dict, chan_default=nmp.CHANNEL_LIST[0]):
+        # data_dict = MyData -converted-> {'A': [MyData]}
+        # data_dict = [MyData0, MyData1] -converted-> {'A': [MyData0, MyData1]}
+        # data_dict = {'A': MyDataA0, 'B': MyDataB0} -converted->
         #        {'A': [MyDataA0], 'B': [MyDataB0]}
-        # data = {'A': [MyDataA0, MyDataA1], 'B': [MyDataB0, MyDataB1]}
-        # data format = {chan_char: [Data List]}
+        # data_dict = {'A': [MyDataA0, MyDataA1], 'B': [MyDataB0, MyDataB1]}
+        # data_dict format = {chan_char: [Data List]}
         if not isinstance(chan_default, str):
             e = self._type_error(chan_default, 'channel character')
             raise TypeError(e)
         dnew = {}
-        if data.__class__.__name__ == 'Data':  # no channel
+        edict = 'dictionary with channel keys'
+        if data_dict.__class__.__name__ == 'Data':  # no channel
             if chan_default.upper() == 'ALL_EXISTING':
                 for cc in self.__theset.keys():
-                    dnew.update({cc.upper(): [data]})
+                    dnew.update({cc.upper(): [data_dict]})
                 return dnew
             if len(self.__theset.keys()) > 1:
-                e = self._type_error(data, 'dictionary with channel keys')
+                e = self._type_error(data_dict, edict)
                 raise TypeError(e)
             cc = nmu.chan_char_check(chan_default)
             if not cc:
                 channel = chan_default
                 e = self._value_error(channel)
                 raise ValueError(e)
-            dnew.update({cc: [data]})
+            dnew.update({cc: [data_dict]})
             return dnew
-        if isinstance(data, list):
-            if len(data) == 0:
+        if isinstance(data_dict, list):
+            if len(data_dict) == 0:
                 return {}
-            for data_item in data:
+            for data_item in data_dict:
                 if data_item.__class__.__name__ != 'Data':
                     e = self._type_error(data_item, 'Data')
                     raise TypeError(e)
             if chan_default.upper() == 'ALL_EXISTING':
                 for cc in self.__theset.keys():
-                    dnew.update({cc.upper(): data})
+                    dnew.update({cc.upper(): data_dict})
                 return dnew
             if len(self.__theset.keys()) > 1:
-                e = self._type_error(data, 'dictionary with channel keys')
+                e = self._type_error(data_dict, edict)
                 raise TypeError(e)
             cc = nmu.chan_char_check(chan_default)
             if not cc:
                 channel = chan_default
                 e = self._value_error(channel)
                 raise ValueError(e)
-            dnew.update({cc: data})
+            dnew.update({cc: data_dict})
             return dnew
-        if not isinstance(data, dict):
-            e = self._type_error(data, 'dictionary with channel keys')
+        if not isinstance(data_dict, dict):
+            e = self._type_error(data_dict, edict)
             raise TypeError(e)
-        for cc, dlist in data.items():
+        for cc, dlist in data_dict.items():
             cc2 = nmu.chan_char_check(cc)
             if not cc2:
                 channel = cc
@@ -463,11 +464,11 @@ class DataSeriesSet(NMObject):
             return yn.lower() == 'y'
         return False
 
-    def add(self, data, quiet=nmp.QUIET):
-        # data = {'A': [DataA0, DataA1...]}
+    def add(self, data_dict, quiet=nmp.QUIET):
+        # data_dict = {'A': [DataA0, DataA1...]}
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
-        dd = self._data_dict_check(data)
+        dd = self._data_dict_check(data_dict)
         modified = False
         for cc, dlist in dd.items():
             hlist = []
@@ -491,11 +492,11 @@ class DataSeriesSet(NMObject):
             self._modified()
         return modified
 
-    def discard(self, data, quiet=nmp.QUIET):
-        # data = {'A': [DataA0, DataA1...]}
+    def discard(self, data_dict, quiet=nmp.QUIET):
+        # data_dict = {'A': [DataA0, DataA1...]}
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
-        dd = self._data_dict_check(data, chan_default='ALL_EXISTING')
+        dd = self._data_dict_check(data_dict, chan_default='ALL_EXISTING')
         modified = False
         for cc, dlist in dd.items():
             hlist = []
@@ -513,10 +514,10 @@ class DataSeriesSet(NMObject):
             self._modified()
         return modified
 
-    def contains(self, data, alert=False):
-        # data = {'A': [DataA0, DataA1...]}
+    def contains(self, data_dict, alert=False):
+        # data_dict = {'A': [DataA0, DataA1...]}
         alert = nmu.bool_check(alert, False)
-        dd = self._data_dict_check(data)
+        dd = self._data_dict_check(data_dict)
         failure = False
         for cc, dlist in dd.items():
             if cc in self.__theset.keys():

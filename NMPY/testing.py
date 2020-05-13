@@ -1172,7 +1172,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s1._content_name, 'dataseriesset')
         # bad_names
         self.assertEqual(s1._bad_names, ['select', 'default'])
-        # data_dict_check, args: data, chan_default
+        # data_dict_check, args: data_dict, chan_default
         for b in BADTYPES:
             if isinstance(b, list) or isinstance(b, dict):
                 continue  # ok
@@ -1227,8 +1227,8 @@ class Test(unittest.TestCase):
         s1._DataSeriesSet__theset = {'A': [], 'B': []}
         self.assertTrue(s1._theset_clear_if_empty())
         self.assertEqual(s1._DataSeriesSet__theset, {})
-        # add, args: data
-        # discard, args: data
+        # add, args: data_dict
+        # discard, args: data_dict
         # see data_dict_check()
         s1.clear(confirm=False, quiet=quiet)
         self.assertTrue(s1.add(data_a, quiet=quiet))  # added to chan 'A'
@@ -1282,7 +1282,7 @@ class Test(unittest.TestCase):
                 continue  # ok
             with self.assertRaises(ValueError):
                 s1._chan_list_check(chan_list=[b])
-        # reverse, args: chan_list, confirm
+        # reverse, args: chan_list
         # see chan_list_check()
         self.assertTrue(s1.reverse(chan_list=['A', 'C'], quiet=quiet))
         nlist_a.reverse()
@@ -1306,7 +1306,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s1.data_names, {'A': [], 'B': nlist_b, 'C': []})
         self.assertTrue(s1.clear(confirm=CONFIRM, quiet=quiet))
         self.assertEqual(s1.data_names, {})
-        # contains, args: data
+        # contains, args: data_dict
         # see data_dict_check()
         s1.clear(confirm=False, quiet=quiet)
         s2.clear(confirm=False, quiet=quiet)
@@ -1653,7 +1653,7 @@ class Test(unittest.TestCase):
                 s3._sort_template_set(b)
         self.assertTrue(s3._sort_template_set(s_all))
         # sort_update
-        self.assertTrue(s3._eq_lock_update())  # calls sort_update() and sort()
+        self.assertTrue(s3._eq_lock_update())  # calls sort_update() sort()
         nlist_a = [data_a[ep].name for ep in range(0, num_epochs)]
         nlist_b = [data_b[ep].name for ep in range(0, num_epochs)]
         nlist_c = [data_c[ep].name for ep in range(0, num_epochs)]
@@ -1663,7 +1663,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s3.data_names['A'], nlist_a)
         self.assertEqual(s3.data_names['B'], nlist_b)
         self.assertEqual(s3.data_names['C'], nlist_c)
-        # sort
+        # sort, args: DataSeriesSet
         for b in BADTYPES + [nm]:
             with self.assertRaises(TypeError):
                 s3.sort(b)
