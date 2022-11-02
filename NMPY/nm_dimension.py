@@ -22,14 +22,14 @@ class Dimension(NMObject):
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
-            e = self._type_error(dim, 'dimension dictionary')
+            e = self._type_error('dim', 'dimension dictionary')
             raise TypeError(e)
         if notes is None:
             self._note_container = None
         elif isinstance(notes, NoteContainer):
             self._note_container = notes  # reference to notes container
         else:
-            e = self._type_error(notes, 'NoteContainer')
+            e = self._type_error('notes', 'NoteContainer')
             raise TypeError(e)
         self._offset = 0  # not to be controlled by master
         self._label = ''
@@ -70,7 +70,7 @@ class Dimension(NMObject):
         if dimension is None:
             pass  # ok, master off
         elif dimension.__class__.__name__ != self.__class__.__name__:
-            e = self._type_error(dimension, self.__class__.__name__)
+            e = self._type_error('dimension', self.__class__.__name__)
             raise TypeError(e)
         elif dimension == self:
             e = self._error('got ' + nmu.quotes('self') + ' for master')
@@ -118,7 +118,7 @@ class Dimension(NMObject):
 
     def _dim_set(self, dim, quiet=nmp.QUIET):
         if not isinstance(dim, dict):
-            e = self._type_error(dim, 'dimension dictionary')
+            e = self._type_error('dim', 'dimension dictionary')
             raise TypeError(e)
         keys = dim.keys()
         for k in keys:
@@ -150,13 +150,13 @@ class Dimension(NMObject):
     def _offset_set(self, offset, quiet=nmp.QUIET):
         # no master
         if isinstance(offset, bool):
-            e = self._type_error(offset, 'number')
+            e = self._type_error('offset', 'number')
             raise TypeError(e)
         if not isinstance(offset, float) and not isinstance(offset, int):
-            e = self._type_error(offset, 'number')
+            e = self._type_error('offset', 'number')
             raise TypeError(e)
         if not nmu.number_ok(offset):
-            e = self._value_error(offset)
+            e = self._value_error('offset')
             raise ValueError(e)
         old = self._offset
         if offset == old:
@@ -184,7 +184,7 @@ class Dimension(NMObject):
         if label is None:
             label = ''
         elif not isinstance(label, str):
-            e = self._type_error(label, 'string')
+            e = self._type_error('label', 'string')
             raise TypeError(e)
         old = self._label
         if label == old:
@@ -212,7 +212,7 @@ class Dimension(NMObject):
         if units is None:
             units = ''
         elif not isinstance(units, str):
-            e = self._type_error(units, 'string')
+            e = self._type_error('units', 'string')
             raise TypeError(e)
         old = self._units
         if units == old:
@@ -235,7 +235,7 @@ class XDimension(Dimension):
         if dim is None:
             dim = {}
         elif not isinstance(dim, dict):
-            e = self._type_error(dim, 'dimension dictionary')
+            e = self._type_error('dim', 'dimension dictionary')
             raise TypeError(e)
         self._start = 0
         self._delta = 1
@@ -266,7 +266,7 @@ class XDimension(Dimension):
         if xdata is None:
             pass  # ok, unlock
         elif xdata.__class__.__name__ != 'Data':
-            e = self._type_error(xdata, 'Data')
+            e = self._type_error('xdata', 'Data')
             raise TypeError(e)
         old = self._xdata
         if xdata == old:
@@ -320,7 +320,7 @@ class XDimension(Dimension):
     # override, no super
     def _dim_set(self, dim, quiet=nmp.QUIET):
         if not isinstance(dim, dict):
-            e = self._type_error(dim, 'dimension dictionary')
+            e = self._type_error('dim', 'dimension dictionary')
             raise TypeError(e)
         keys = dim.keys()
         for k in keys:
@@ -367,10 +367,10 @@ class XDimension(Dimension):
         if self._xdata_lock:
             raise RuntimeError(self._xdata_error)
         if isinstance(start, bool):
-            e = self._type_error(start, 'number')
+            e = self._type_error('start', 'number')
             raise TypeError(e)
         if not isinstance(start, float) and not isinstance(start, int):
-            e = self._type_error(start, 'number')
+            e = self._type_error('start', 'number')
             raise TypeError(e)
         old = self._start
         if start == old:
@@ -400,10 +400,10 @@ class XDimension(Dimension):
         if self._xdata_lock:
             raise RuntimeError(self._xdata_error)
         if isinstance(delta, bool):
-            e = self._type_error(delta, 'number')
+            e = self._type_error('delta', 'number')
             raise TypeError(e)
         if not isinstance(delta, float) and not isinstance(delta, int):
-            e = self._type_error(delta, 'number')
+            e = self._type_error('delta', 'number')
             raise TypeError(e)
         old = self._delta
         if delta == old:

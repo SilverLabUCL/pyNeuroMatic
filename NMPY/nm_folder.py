@@ -6,7 +6,7 @@ Copyright 2019 Jason Rothman
 import h5py
 
 from nm_object import NMObject
-from nm_object import NMObjectContainer
+from nm_object_container import NMObjectContainer
 from nm_data import DataContainer
 from nm_dataseries import DataSeriesContainer
 import nm_preferences as nmp
@@ -95,7 +95,7 @@ class FolderContainer(NMObjectContainer):
     # wrapper
     def add(self, folder, select=True, quiet=nmp.QUIET):
         if not isinstance(folder, Folder):
-            e = self._type_error(folder, 'Folder')
+            e = self._type_error('folder', 'Folder')
             raise TypeError(e)
         return self.new(name=folder.name, nmobject=folder, select=select,
                         quiet=quiet)

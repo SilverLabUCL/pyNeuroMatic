@@ -33,8 +33,12 @@ class Manager(object):
                     DataSeriesSetContainer
                     DataSeriesSet (All, Set1, Set2...)
     """
-    def __init__(self, name='NeuroMatic Manager', new_project=True,
-                 quiet=nmp.QUIET):
+    def __init__(
+            self,
+            name='NeuroMatic Manager',
+            new_project=True,
+            quiet=nmp.QUIET
+    ):
         new_project = nmu.bool_check(new_project, True)
         if isinstance(name, str):
             self.__name = name
@@ -60,10 +64,12 @@ class Manager(object):
         """Create a new project"""
         new_folder = nmu.bool_check(new_folder, True)
         if not isinstance(name, str):
-            e = self._type_error(name, 'string')
+            # e = nmu.type_error('name', 'string') DOES NOT EXIST
+            e = "ERROR: nm.Manager.project_new: bad name: expected string"
             raise TypeError(e)
         if not nmu.name_ok(name) or name.lower() == 'select':
-            e = self._value_error(name)
+            # e = nmu.value_error('name') DOES NOT EXIST
+            e = "ERROR: nm.Manager.project_new: bad name: " + name
             raise ValueError(e)
         if not name or name.lower() == 'default':
             name = nmp.PROJECT_NAME

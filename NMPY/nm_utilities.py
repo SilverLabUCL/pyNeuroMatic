@@ -11,29 +11,40 @@ from colorama import Fore, Back, Style
 import nm_preferences as nmp
 
 
-def name_ok(name):
+def name_ok(  # check if name is OK to use
+    name_or_listofnames  # string name to check
+):
     ok = ['_']  # list of symbols OK to include in names
-    if isinstance(name, list):
-        if not name:
+    if isinstance(name_or_listofnames, list):
+        if not name_or_listofnames:  # empty list
             return False
+        listofnames = name_or_listofnames
     else:
-        name = [name]
-    for n in name:
-        if not isinstance(n, str):
+        listofnames = [name_or_listofnames]
+    for name in listofnames:
+        if not isinstance(name, str):
             return False
-        if len(n) == 0:
+        if len(name) == 0:
             continue  # empty string is OK
         for c in ok:
-            n = n.replace(c, '')
-        if len(n) == 0:
+            name = name.replace(c, '')
+        if len(name) == 0:
             return False
-        if not n.isalnum():
+        if not name.isalnum():
             return False
     return True
 
 
-def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
-              no_nan=True, no_neg=False, no_pos=False, no_zero=False):
+def number_ok(  # check if number is OK to use
+    number_or_listofnumbers,  # the number to check
+    only_integer=False,  # numbers must be integer type
+    no_boolean=True,  # numbers must be boolean type
+    no_inf=True,  # infinity is not OK
+    no_nan=True,  # NaN is not OK
+    no_neg=False,  # negative numbers are not OK
+    no_pos=False,  # positive numbers are not OK
+    no_zero=False  # 0 is not OK
+):
     only_integer = bool_check(only_integer, False)
     no_boolean = bool_check(no_boolean, True)
     no_inf = bool_check(no_inf, True)
@@ -41,12 +52,13 @@ def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
     no_neg = bool_check(no_neg, False)
     no_pos = bool_check(no_pos, False)
     no_zero = bool_check(no_zero, False)
-    if isinstance(number, list):
-        if not number:
+    if isinstance(number_or_listofnumbers, list):
+        if not number_or_listofnumbers:  # empty list
             return False
+        listofnumbers = number_or_listofnumbers
     else:
-        number = [number]
-    for i in number:
+        listofnumbers = [number_or_listofnumbers]
+    for i in listofnumbers:
         if only_integer and not isinstance(i, int):
             return False
         if no_boolean and isinstance(i, bool):
@@ -66,7 +78,24 @@ def number_ok(number, only_integer=False, no_boolean=True, no_inf=True,
     return True
 
 
-def quotes(text, single=True):
+def bool_check(  # check boolean value is OK
+    bool_value,  # the boolean value
+    default_value  # default value to return if bool-value is not boolean
+):
+    if not isinstance(bool_value, bool):
+        if isinstance(default_value, bool):
+            return default_value
+        else:
+            e = ("ERROR: nm.Utilities.bool_check: bad bool_value: " +
+                 "expected boolean but got " + str(type(default_value)))
+            raise TypeError(e)  # raise error since default is bad
+    return bool_value
+
+
+def quotes(  # add string quotes around text
+    text,  # the string text
+    single=True  # True: single quotes, False: double quotes
+):
     single = bool_check(single, True)
     if not isinstance(text, str):
         text = str(text)
@@ -75,7 +104,9 @@ def quotes(text, single=True):
     return '"' + str(text) + '"'
 
 
-def remove_special_chars(text):
+def remove_special_chars(  # remove non-alpha-numeric characters
+    text  # the string text
+):
     if not text or not isinstance(text, str):
         return ''
     temp = ''
@@ -85,7 +116,10 @@ def remove_special_chars(text):
     return temp
 
 
-def int_list_to_seq_str(int_list, space=True):
+def int_list_to_seq_str(  # convert list of integers to a sequence string
+    int_list,  # list of integers
+    space=True  # True: add space after comma, False: no space
+):
     # e.g. [0,1,5,6,7,12,19,20,21,22,24] -> 0,1,5-7,12,19-22,24
     space = bool_check(space, True)
     if not int_list or not isinstance(int_list, list):
@@ -130,7 +164,9 @@ def int_list_to_seq_str(int_list, space=True):
     return ','.join(slist)
 
 
-def chan_char(chan_num):
+def chan_char(  # convert channel number to character
+    chan_num  # channel number
+):
     if not isinstance(chan_num, int) and not isinstance(chan_num, float):
         return ''
     if not number_ok(chan_num, no_neg=True):
@@ -142,7 +178,9 @@ def chan_char(chan_num):
     return ''
 
 
-def chan_num(chan_char):
+def chan_num(  # convert channel character to number
+    chan_char  # channel character
+):
     if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return -1
     for i, c in enumerate(nmp.CHANNEL_LIST):
@@ -151,34 +189,37 @@ def chan_num(chan_char):
     return -1
 
 
-def chan_char_check(chan_char):
+def chan_char_check(  # check channel character is OK
+    chan_char  # channel character
+):
     if chan_num(chan_char) >= 0:
-        return chan_char.upper()
+        return chan_char.upper()  # enforce upper case
     return ''
 
 
-def chan_char_exists(text_search_backwards, chan_char):
-    txt = text_search_backwards
-    if not txt or not isinstance(txt, str):
+def chan_char_exists(  # search for channel character in text string
+    text,  # text to search
+    chan_char,  # channel character
+):
+    if not text or not isinstance(text, str):
         return False
     if not chan_char or not isinstance(chan_char, str) or len(chan_char) > 1:
         return False
-    for i in reversed(range(len(txt))):  # search backwards, chan-char at end
-        if txt[i].isdigit():  # skip thru any sequence number
+    irange = reversed(range(len(text)))  # search backwards thru text
+    for i in irange:
+        if text[i].isdigit():
             continue
-        if txt[i].upper() == chan_char.upper():  # first char before seq #
+        if text[i].upper() == chan_char.upper():
             return True
         return False  # check only last character
     return False
 
 
-def bool_check(var_bool, default_value):
-    if not isinstance(var_bool, bool):
-        return default_value
-    return var_bool
-
-
-def history_change(var_name, from_value, to_value):
+def history_change(  # create history text for variables that have changed
+    var_name,  # variable name
+    from_value,  # changed from this value
+    to_value  # changed to this value
+):
     if isinstance(from_value, str):
         old = from_value
     else:
@@ -191,7 +232,14 @@ def history_change(var_name, from_value, to_value):
             quotes(new))
 
 
-def history(message, title='', tp='', frame=1, red=False, quiet=False):
+def history(  # print message to history
+    message,  # string message
+    title='',  # message title (e.g. 'ALERT' or 'ERROR')
+    tp='',  # treepath, pass 'none' for none
+    frame=1,  # inspect frame # for creating treepath
+    red=False,  # True: print red, False: print black
+    quiet=False  # True: no print, False: print message
+):
     red = bool_check(red, False)
     quiet = bool_check(quiet, False)
     if tp.lower() == 'none':
@@ -212,21 +260,29 @@ def history(message, title='', tp='', frame=1, red=False, quiet=False):
     return h
 
 
-def get_treepath(stack, tp='', frame=1):
+def get_treepath(  # create ancestry treepath
+    stack,  # stack, e.g. inspect.stack()
+    tp='',  # treepath
+    frame=1  # inspect frame # for creating treepath
+):
     if not stack:
         return ''
     method = get_method(stack, frame=frame)
     if not tp:
         tp = get_class(stack, frame=frame)
-    path = ['nm']
+    path = ['nm']  # NeuroMatic
     if tp:
-        path.append(tp)
+        path.append(tp)  # class
     if method:
         path.append(method)
     return '.'.join(path)
 
 
-def get_class(stack, frame=1, module=False):
+def get_class(
+    stack,  # stack, e.g. inspect.stack()
+    frame=1,  # inspect frame
+    module=False
+):
     module = bool_check(module, False)
     if len(stack) <= frame or len(stack[0]) == 0:
         return ''
@@ -247,7 +303,10 @@ def get_class(stack, frame=1, module=False):
     return c
 
 
-def get_method(stack, frame=1):
+def get_method(  # get method from inspect stack
+    stack,  # stack, e.g. inspect.stack()
+    frame=1  # inspect frame
+):
     if len(stack) <= frame or len(stack[0]) == 0:
         return ''
     f = stack[frame][0]
@@ -256,7 +315,13 @@ def get_method(stack, frame=1):
     return f.f_code.co_name
 
 
-def input_yesno(prompt, title='', tp='', frame=1, cancel=False):
+def input_yesno(  # get user yes/no/cancel input
+    prompt,  # yes/no prompt message
+    title='',  # prompt title
+    tp='',  # treepath
+    frame=1,  # inspect frame # for creating treepath
+    cancel=False  # include cancel option
+):
     cancel = bool_check(cancel, False)
     if not prompt:
         return ''

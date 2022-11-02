@@ -7,7 +7,7 @@ Copyright 2019 Jason Rothman
 import numpy as np
 
 from nm_object import NMObject
-from nm_object import NMObjectContainer
+from nm_object_container import NMObjectContainer
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
 import nm_dimension as nmd
@@ -36,7 +36,7 @@ class Data(NMObject):
             # self.__np_array = np_array.copy()  # COPY ARRAY?
             self.__np_array = np_array
         else:
-            e = self._type_error(np_array, 'numpy.ndarray')
+            e = self._type_error('np_array', 'numpy.ndarray')
             raise TypeError(e)
         self.__note_container = None
         for k, v in copy.items():
@@ -63,18 +63,18 @@ class Data(NMObject):
                             self.__dataseries.update({ds: cc})
                         else:
                             channel = cc
-                            e = self._value_error(channel)
+                            e = self._value_error('channel')
                             raise ValueError(e)
                     else:
                         channel = cc
-                        e = self._type_error(channel, 'channel character')
+                        e = self._type_error('channel', 'channel character')
                         raise TypeError(e)
                 else:
                     data_series = ds
-                    e = self._type_error(data_series, 'DataSeries')
+                    e = self._type_error('data_series', 'DataSeries')
                     raise TypeError(e)
         else:
-            e = self._type_error(dataseries, 'dictionary')
+            e = self._type_error('dataseries', 'dictionary')
             raise TypeError(e)
         self._param_list += ['xdim', 'ydim', 'dataseries']
 
@@ -160,15 +160,15 @@ class Data(NMObject):
 
     def _dataseries_add(self, dataseries, chan_char):
         if not isinstance(dataseries, DataSeries):
-            e = self._type_error(dataseries, 'DataSeries')
+            e = self._type_error('dataseries', 'DataSeries')
             raise TypeError(e)
         if not isinstance(chan_char, str):
-            e = self._type_error(chan_char, 'channel character')
+            e = self._type_error('chan_char', 'channel character')
             raise TypeError(e)
         cc = nmu.chan_char_check(chan_char)
         if not cc:
             channel = chan_char
-            e = self._value_error(channel)
+            e = self._value_error('channel')
             raise ValueError(e)
         self.__dataseries.update({dataseries: cc})
         self._modified()
@@ -176,7 +176,7 @@ class Data(NMObject):
 
     def _dataseries_remove(self, dataseries):
         if not isinstance(dataseries, DataSeries):
-            e = self._type_error(dataseries, 'DataSeries')
+            e = self._type_error('dataseries', 'DataSeries')
             raise TypeError(e)
         if dataseries in self.__dataseries:
             del self.__dataseries[dataseries]
@@ -224,7 +224,7 @@ class Data(NMObject):
         if np_array is None:
             pass  # ok
         elif not isinstance(np_array, np.ndarray):
-            e = self._type_error(np_array, 'numpy.ndarray')
+            e = self._type_error('np_array', 'numpy.ndarray')
             raise TypeError(e)
         if self.__np_array is None:
             old = None
@@ -302,7 +302,7 @@ class DataContainer(NMObjectContainer):
     # wrapper
     def add(self, data, select=True, quiet=nmp.QUIET):
         if not isinstance(data, Data):
-            e = self._type_error(data, 'Data')
+            e = self._type_error('data', 'Data')
             raise TypeError(e)
         return super().new(name=data.name, nmobject=data, select=select,
                            quiet=quiet)

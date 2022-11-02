@@ -23,7 +23,7 @@ from nm_dimension import XDimension
 from nm_manager import Manager
 from nm_object import NMObject
 from nm_object import NMObjectTest
-from nm_object import NMObjectContainer
+from nm_object_container import NMObjectContainer
 from nm_note import Note
 from nm_note import NoteContainer
 from nm_project import Project
@@ -37,7 +37,7 @@ BADTYPES = [None, True, 1, 3.14, [], (), {}, set(), 'test', nm]
 BADNAME = 'b&dn@me!'
 BADNAMES = ['select', 'default', 'all'] + [BADNAME, '']
 # BADNAMES: special NM argument flags, list may need updating
-PLIST = ['name', 'date', 'modified']
+PLIST = ['name', 'date', 'modified']  # NMObject parameter list
 YDIM0 = {'offset': 0, 'label': 'Vmem', 'units': 'mV'}
 XDIM0 = {'offset': 0, 'start': 10, 'delta': 0.01, 'label': 'time',
          'units': 'ms'}
@@ -55,7 +55,7 @@ class Test(unittest.TestCase):
 
     def test_all(self):
         nm.configs.quiet = False
-        # self._test_nmobject()
+        self._test_nmobject()
         # self._test_nmobject_container()
         # self._test_note()
         # self._test_note_container()
@@ -64,18 +64,20 @@ class Test(unittest.TestCase):
         # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
-        self._test_dataseries_set()
+        # self._test_dataseries_set()
         # self._test_dataseries_set_container()
         # self._test_utilities()
 
     def _test_nmobject(self):
         # args: parent, name
         # not testing parent as it can be any object
+        # constructor
         for b in BADTYPES:
             if isinstance(b, str):
-                continue  # ok
+                continue  # str ok
             with self.assertRaises(TypeError):
                 o0 = NMObject(PARENT, b)
+        # breakpoint()
         for b in BADNAMES:
             with self.assertRaises(ValueError):
                 o0 = NMObject(PARENT, b)
@@ -88,9 +90,9 @@ class Test(unittest.TestCase):
         self.assertEqual(o0._NMObject__rename_fxnref, o0._name_set)
         # parameters
         self.assertEqual(o0._param_list, PLIST)
-        self.assertTrue(o0._param_test())
-        o0._param_list += ['test']
-        self.assertFalse(o0._param_test())
+        self.assertTrue(o0._parameters_key_test())
+        o0._param_list += ['test']  # 'test' is not a parameter name
+        self.assertFalse(o0._parameters_key_test())
         # content
         content_name = 'nmobject'
         self.assertEqual(o0._content_name, content_name)
@@ -105,8 +107,6 @@ class Test(unittest.TestCase):
         self.assertEqual(o0._tp_check('nm.test'), 'nm.test')
         self.assertEqual(o0.treepath(), o0.name)
         self.assertEqual(o0.treepath_list(), [o0.name])
-        # manager
-        self.assertEqual(o0._manager, nm)
         # name_ok, args: name, ok
         for b in BADTYPES:
             if isinstance(b, str):
@@ -129,7 +129,7 @@ class Test(unittest.TestCase):
             self.assertTrue(o0.name_ok(b, ok=badnames))
         for n in [n0, n1, '']:
             self.assertTrue(o0.name_ok(n))
-        # name_set, args: name_notused, newname
+        # _name_set, args: name_notused, newname
         for b in BADTYPES:
             if isinstance(b, str):
                 continue  # ok
@@ -150,6 +150,8 @@ class Test(unittest.TestCase):
         self.assertTrue(o0._rename_fxnref_set(self.rename))
         o0.name = 'test2'
         self.assertEqual(o0.name, 'test1')  # does not change
+        # manager
+        self.assertEqual(o0._manager, nm)
         # isequivalent, args: nmobject
         for b in BADTYPES:
             self.assertFalse(o0._isequivalent(b, alert=ALERT))
@@ -190,14 +192,14 @@ class Test(unittest.TestCase):
         # wrappers for nmu.history()
         # type_error, args: obj, type_expected, tp, quiet, frame
         dum_arg = {}
-        e1 = o0._type_error(dum_arg, 'list')
-        e2 = ('nm.object0._test_nmobject: ' +
-              'bad dum_arg: expected list but got dict')
+        e1 = o0._type_error('dum_arg', 'list')
+        e2 = ('ERROR: nm.object0._test_nmobject: bad dum_arg: ' +
+              'expected list but got dict')
         self.assertEqual(e1, e2)
         # value_error, args: obj, tp, quiet, frame
         dum_str = 'test'
-        e1 = o0._value_error(dum_str)
-        e2 = ("nm.object0._test_nmobject: bad dum_str: 'test'")
+        e1 = o0._value_error('dum_str')
+        e2 = ("ERROR: nm.object0._test_nmobject: bad dum_str: 'test'")
         self.assertEqual(e1, e2)
         # quiet, args: quiet
         self.assertFalse(o0._quiet(False))
@@ -256,7 +258,7 @@ class Test(unittest.TestCase):
         # parameters
         plist = PLIST + ['type', 'prefix', 'rename', 'select']
         self.assertEqual(c0._param_list, plist)
-        self.assertTrue(c0._param_test())
+        self.assertTrue(c0._parameters_key_test())
         # content
         content_name = 'nmobjects'
         self.assertEqual(c0._content_name, content_name)
@@ -609,7 +611,7 @@ class Test(unittest.TestCase):
         # parameters
         plist = PLIST + ['thenote']
         self.assertEqual(n0._param_list, plist)
-        self.assertTrue(n0._param_test())
+        self.assertTrue(n0._parameters_key_test())
         # content
         self.assertEqual(n0._content_name, 'note')
         # isequivalent, args: Note
@@ -700,10 +702,10 @@ class Test(unittest.TestCase):
         # parameters
         plist = PLIST + ['offset', 'label', 'units', 'master']
         self.assertEqual(y0._param_list, plist)
-        self.assertTrue(y0._param_test())
+        self.assertTrue(y0._parameters_key_test())
         xplist = plist + ['start', 'delta', 'xdata']
         self.assertEqual(x0._param_list, xplist)
-        self.assertTrue(x0._param_test())
+        self.assertTrue(x0._parameters_key_test())
         # content
         self.assertEqual(y0._content_name, 'dimension')
         self.assertEqual(x0._content_name, 'xdimension')
@@ -950,7 +952,7 @@ class Test(unittest.TestCase):
         # parameters
         plist = PLIST + ['xdim', 'ydim', 'dataseries']
         self.assertEqual(d0._param_list, plist)
-        self.assertTrue(d0._param_test())
+        self.assertTrue(d0._parameters_key_test())
         # content
         content_name = 'data'
         self.assertEqual(d0._content_name, content_name)
@@ -1064,7 +1066,7 @@ class Test(unittest.TestCase):
         # parameters
         plist = PLIST + ['xdim', 'ydim']
         self.assertEqual(c0._param_list, plist)
-        self.assertTrue(c0._param_test())
+        self.assertTrue(c0._parameters_key_test())
         # content
         self.assertEqual(c0._content_name, 'channel')
         # copy
@@ -1167,7 +1169,7 @@ class Test(unittest.TestCase):
         # parameters
         plist = PLIST + ['sort_template', 'eq_lock']
         self.assertEqual(s1._param_list, plist)
-        self.assertTrue(s1._param_test())
+        self.assertTrue(s1._parameters_key_test())
         # content
         self.assertEqual(s1._content_name, 'dataseriesset')
         # bad_names

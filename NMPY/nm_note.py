@@ -4,7 +4,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_object import NMObject
-from nm_object import NMObjectContainer
+from nm_object_container import NMObjectContainer
 import nm_utilities as nmu
 
 
