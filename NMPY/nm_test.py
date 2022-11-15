@@ -55,7 +55,7 @@ class Test(unittest.TestCase):
 
     def test_all(self):
         nm.configs.quiet = False
-        self._test_nmobject()
+        # self._test_nmobject()
         # self._test_nmobject_container()
         # self._test_note()
         # self._test_note_container()
@@ -66,7 +66,7 @@ class Test(unittest.TestCase):
         # self._test_channel_container()
         # self._test_dataseries_set()
         # self._test_dataseries_set_container()
-        # self._test_utilities()
+        self._test_utilities()
 
     def _test_nmobject(self):
         # args: parent, name
@@ -1705,113 +1705,226 @@ class Test(unittest.TestCase):
 
     def _test_utilities(self):
         # name_ok
-        self.assertTrue(nmu.name_ok(''))
+        self.assertFalse(nmu.name_ok(None))
+        self.assertFalse(nmu.name_ok(0))
+        self.assertFalse(nmu.name_ok(''))
         self.assertTrue(nmu.name_ok('test'))
+        self.assertFalse(nmu.name_ok('_'))
+        self.assertFalse(nmu.name_ok('*'))
+        self.assertFalse(nmu.name_ok('0'))
         self.assertTrue(nmu.name_ok('test1234567890'))
+        # NM preferences: NAME_SYMBOLS_OK = ['_']
         self.assertTrue(nmu.name_ok('test_'))
         self.assertTrue(nmu.name_ok('test_OK'))
         self.assertTrue(nmu.name_ok('test_OK_OK'))
-        self.assertTrue(nmu.name_ok('0'))
         self.assertFalse(nmu.name_ok('test*'))
-        self.assertFalse(nmu.name_ok('_'))
-        self.assertFalse(nmu.name_ok('*'))
         self.assertFalse(nmu.name_ok('@test'))
         self.assertFalse(nmu.name_ok('te.st'))
-        self.assertFalse(nmu.name_ok('test?'))
-        self.assertFalse(nmu.name_ok(None))
-        self.assertFalse(nmu.name_ok(0))
-        self.assertTrue(nmu.name_ok(['test']))
+        self.assertTrue(nmu.name_ok('te.st', ok_list=['.']))
+        self.assertFalse(nmu.name_ok([]))
         self.assertTrue(nmu.name_ok(['test0', 'test1', 'test2']))
         self.assertFalse(nmu.name_ok(['test0', 'test1', 'test2?']))
         self.assertFalse(nmu.name_ok(['test0', 1, 'test2']))
+        self.assertFalse(nmu.name_ok(['test0', '', 'test2']))
+        # bool_check
+        self.assertFalse(nmu.bool_check(False, False))
+        self.assertTrue(nmu.bool_check(True, False))
+        self.assertFalse(nmu.bool_check(0, False))
+        self.assertTrue(nmu.bool_check(0, True))
+        with self.assertRaises(TypeError):
+            self.assertTrue(nmu.bool_check(0, 0))
         # number_ok
         self.assertFalse(nmu.number_ok(None))
+        self.assertFalse(nmu.number_ok("one"))
         self.assertFalse(nmu.number_ok(False))
-        self.assertFalse(nmu.number_ok(complex(1, -1)))
-        self.assertTrue(nmu.number_ok(0))
         self.assertTrue(nmu.number_ok(-5))
         self.assertTrue(nmu.number_ok(1.34))
-        self.assertFalse(nmu.number_ok(1.34, only_integer=True))
+        self.assertFalse(nmu.number_ok(1.34, must_be_integer=True))
         self.assertFalse(nmu.number_ok(float('inf')))
+        self.assertTrue(nmu.number_ok(float('inf'), inf_is_ok=True))
         self.assertFalse(nmu.number_ok(float('-inf')))
+        self.assertTrue(nmu.number_ok(float('-inf'), inf_is_ok=True))
         self.assertFalse(nmu.number_ok(float('nan')))
-        self.assertTrue(nmu.number_ok(float('inf'), no_inf=False))
-        self.assertTrue(nmu.number_ok(float('-inf'), no_inf=False))
-        self.assertTrue(nmu.number_ok(float('nan'), no_nan=False))
-        self.assertTrue(nmu.number_ok(0, no_neg=True))
-        self.assertTrue(nmu.number_ok(1.34, no_neg=True))
-        self.assertFalse(nmu.number_ok(-1.34, no_neg=True))
-        self.assertTrue(nmu.number_ok(0, no_pos=True))
-        self.assertFalse(nmu.number_ok(1.34, no_pos=True))
-        self.assertTrue(nmu.number_ok(-1.34, no_pos=True))
-        self.assertFalse(nmu.number_ok(0, no_zero=True))
-        self.assertTrue(nmu.number_ok(1.34, no_zero=True))
-        self.assertTrue(nmu.number_ok(-1.34, no_zero=True))
-        self.assertTrue(nmu.number_ok([0]))
+        self.assertTrue(nmu.number_ok(float('nan'), nan_is_ok=True))
+        self.assertTrue(nmu.number_ok(0, neg_is_ok=False))
+        self.assertTrue(nmu.number_ok(1.34, neg_is_ok=False))
+        self.assertFalse(nmu.number_ok(-1.34, neg_is_ok=False))
+        self.assertTrue(nmu.number_ok(0, pos_is_ok=False))
+        self.assertFalse(nmu.number_ok(1.34, pos_is_ok=False))
+        self.assertTrue(nmu.number_ok(-1.34, pos_is_ok=False))
+        self.assertTrue(nmu.number_ok(0))
+        self.assertFalse(nmu.number_ok(0, zero_is_ok=False))
+        self.assertTrue(nmu.number_ok(1.34, zero_is_ok=False))
+        self.assertTrue(nmu.number_ok(-1.34, zero_is_ok=False))
+        self.assertFalse(nmu.number_ok(complex(1, -1)))
+        self.assertTrue(nmu.number_ok(complex(1, -1), complex_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, 'one']))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, None]))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, False]))
         self.assertTrue(nmu.number_ok([0, -5, 1.34]))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34], only_integer=True))
-        self.assertTrue(nmu.number_ok([0, 3, 4], no_neg=True))
-        self.assertFalse(nmu.number_ok([-1, 3, 4], no_neg=True))
-        self.assertFalse(nmu.number_ok([0, 3, 4], no_pos=True))
-        self.assertTrue(nmu.number_ok([0, -3, -4], no_pos=True))
-        self.assertFalse(nmu.number_ok([0, 3, 4], no_zero=True))
-        self.assertTrue(nmu.number_ok([-4, 4], no_zero=True))
-        self.assertTrue(nmu.number_ok([0, -5, 1.34]))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, 'test']))
-        # remove_special_chars
-        self.assertEqual(nmu.remove_special_chars('test*'), 'test')
-        self.assertEqual(nmu.remove_special_chars('test'), 'test')
-        self.assertEqual(nmu.remove_special_chars('t@st*'), 'tst')
-        self.assertEqual(nmu.remove_special_chars(''), '')
-        self.assertEqual(nmu.remove_special_chars(None), '')
-        self.assertEqual(nmu.remove_special_chars(['test*']), '')
+        self.assertFalse(nmu.number_ok([0, -5, 1.34], must_be_integer=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('inf')]))
+        self.assertTrue(nmu.number_ok([0, -5, float('inf')], inf_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('-inf')]))
+        self.assertTrue(nmu.number_ok([0, -5, float('-inf')], inf_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('nan')]))
+        self.assertTrue(nmu.number_ok([0, -5, float('nan')], nan_is_ok=True))
+        self.assertTrue(nmu.number_ok([0, 3, 4], neg_is_ok=False))
+        self.assertFalse(nmu.number_ok([-1, 3, 4], neg_is_ok=False))
+        self.assertFalse(nmu.number_ok([0, 3, 4], pos_is_ok=False))
+        self.assertTrue(nmu.number_ok([0, -3, -4], pos_is_ok=False))
+        self.assertFalse(nmu.number_ok([0, 3, 4], zero_is_ok=False))
+        self.assertTrue(nmu.number_ok([-4, 4], zero_is_ok=False))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, complex(1, -1)]))
+        self.assertTrue(nmu.number_ok([0, -5, 1.34, complex(1, -1)],
+                        complex_is_ok=True))
+        # quotes
+        self.assertEqual(nmu.quotes('test'), "'test'")
+        self.assertEqual(nmu.quotes('test', single=False), '"test"')
+        self.assertEqual(nmu.quotes(None), "'None'")
+        self.assertEqual(nmu.quotes(False), "'False'")
+        self.assertEqual(nmu.quotes(0), "'0'")
+        self.assertEqual(nmu.quotes(nm), "'" + str(nm) + "'")
+        # remove_special_char
+        self.assertEqual(nmu.remove_special_char('test*'), 'test')
+        self.assertEqual(nmu.remove_special_char('test'), 'test')
+        self.assertEqual(nmu.remove_special_char('t@st*'), 'tst')
+        self.assertEqual(nmu.remove_special_char(''), '')
+        self.assertEqual(nmu.remove_special_char(['test*', 't@st*']),
+                         ['test', 'tst'])
+        self.assertEqual(nmu.remove_special_char(['test', None, False]),
+                         ['test', '', ''])
+        self.assertEqual(nmu.remove_special_char(None), '')
+        self.assertEqual(nmu.remove_special_char(False), '')
+        self.assertEqual(nmu.remove_special_char('test_*'), 'test')
+        self.assertEqual(nmu.remove_special_char('test_*', ok_char=['_']),
+                         'test_')
+        self.assertEqual(nmu.remove_special_char('test_*',
+                         ok_char=['_', '*']), 'test_*')
+        self.assertEqual(nmu.remove_special_char('test_*',
+                         ok_char=['_', '*'], bad_char=['_', '*']), 'test')
+        self.assertEqual(nmu.remove_special_char('test0_*',
+                         bad_char=['t', '0']), 'es')
+        self.assertEqual(nmu.remove_special_char('test0_*',
+                         ok_char=['_', '*'], bad_char=['t', '0']), 'es_*')
         # int_list_to_seq_str
-        self.assertEqual(nmu.int_list_to_seq_str([1, 2, 3, 4, 6]), '1-4, 6')
+        i = [1, 2, 3, 4, 6]
+        s = '1-4, 6'
+        self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, 1, 2, 16, 145]
-        r = '0-2, 16, 145'
-        self.assertEqual(nmu.int_list_to_seq_str(i), r)
-        self.assertEqual(nmu.int_list_to_seq_str([0, 2, 4, 6]), '0, 2, 4, 6')
+        s = '0-2, 16, 145'
+        self.assertEqual(nmu.int_list_to_seq_str(i), s)
+        i = [0, 2, 4, 6]
+        s = '0, 2, 4, 6'
+        self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, 1, 5, 6, 7, 12, 19, 20, 21, 22, 124]
-        r = '0,1,5-7,12,19-22,124'
-        self.assertEqual(nmu.int_list_to_seq_str(i, space=False), r)
-        # chan_char
-        self.assertEqual(nmu.chan_char(0), 'A')
-        self.assertEqual(nmu.chan_char(1), 'B')
-        self.assertEqual(nmu.chan_char(2), 'C')
-        self.assertEqual(nmu.chan_char(10), 'K')
-        self.assertEqual(nmu.chan_char(26), '')
-        self.assertEqual(nmu.chan_char(-2), '')
-        self.assertEqual(nmu.chan_char(float('inf')), '')
-        self.assertEqual(nmu.chan_char(float('nan')), '')
-        self.assertEqual(nmu.chan_char(None), '')
-        self.assertEqual(nmu.chan_char([0, 1, 2]), '')
-        # chan_num
-        self.assertEqual(nmu.chan_num('A'), 0)
-        self.assertEqual(nmu.chan_num('a'), 0)
-        self.assertEqual(nmu.chan_num('b'), 1)
-        self.assertEqual(nmu.chan_num('K'), 10)
-        self.assertEqual(nmu.chan_num(''), -1)
-        self.assertEqual(nmu.chan_num('AA'), -1)
-        self.assertEqual(nmu.chan_num(None), -1)
-        self.assertEqual(nmu.chan_num(['A', 'B', 'C']), -1)
-        # chan_char_exists
-        self.assertTrue(nmu.chan_char_exists('testA1', 'A'))
-        self.assertTrue(nmu.chan_char_exists('testa111', 'A'))
-        self.assertTrue(nmu.chan_char_exists('testA', 'A'))
-        self.assertTrue(nmu.chan_char_exists('A', 'A'))
-        self.assertFalse(nmu.chan_char_exists('testA111', 'B'))
-        self.assertFalse(nmu.chan_char_exists('A', 'B'))
-        self.assertFalse(nmu.chan_char_exists('taste', 'A'))
+        s = '0, 1, 5-7, 12, 19-22, 124'
+        self.assertEqual(nmu.int_list_to_seq_str(i), s)
+        i = [0, 4, 5.0, 6]
+        s = '0, 4, 6'
+        self.assertEqual(nmu.int_list_to_seq_str(i), s)
+        i = [0, None, 4, 5, 6]
+        s = '0, 4-6'
+        self.assertEqual(nmu.int_list_to_seq_str(i), s)
+        i = [0, float('nan'), 4, 5, 6]
+        s = '0, 4-6'
+        self.assertEqual(nmu.int_list_to_seq_str(i), s)
+        i = [0, 2, 4, 5, 6]
+        s = '0,2,4-6'
+        self.assertEqual(nmu.int_list_to_seq_str(i, seperator=','), s)
+        i = [0, 2, 3, 4, 6]
+        s = '0$2-4$6'
+        self.assertEqual(nmu.int_list_to_seq_str(i, seperator='$'), s)
+        i = [0, 2, 3, 4, 6]
+        s = '0, 2-4, 6, '
+        self.assertEqual(nmu.int_list_to_seq_str(i, seperator_at_end=True), s)
+        # channel_char
+        self.assertEqual(nmu.channel_char(0), 'A')
+        self.assertEqual(nmu.channel_char(1), 'B')
+        self.assertEqual(nmu.channel_char(2), 'C')
+        self.assertEqual(nmu.channel_char(10), 'K')
+        self.assertEqual(nmu.channel_char(26), '')
+        self.assertEqual(nmu.channel_char(-2), '')
+        self.assertEqual(nmu.channel_char(float('inf')), '')
+        self.assertEqual(nmu.channel_char(float('nan')), '')
+        self.assertEqual(nmu.channel_char(None), '')
+        self.assertEqual(nmu.channel_char([]), [])
+        self.assertEqual(nmu.channel_char([0, 1, 3]), ['A', 'B', 'D'])
+        self.assertEqual(nmu.channel_char([0, 1, 26]), ['A', 'B', ''])
+        clist = ['w', 'x', 'y', 'z']
+        self.assertEqual(nmu.channel_char(0, char_list=clist), 'W')
+        self.assertEqual(nmu.channel_char(3, char_list=clist), 'Z')
+        self.assertEqual(nmu.channel_char(4, char_list=clist), '')
+        self.assertEqual(nmu.channel_char([0, 1, 3], char_list=clist),
+                         ['W', 'X', 'Z'])
+        clist = ['AA', 'BB', 'CC', 'DD']
+        self.assertEqual(nmu.channel_char(3, char_list=clist), 'DD')
+        # channel_num
+        self.assertEqual(nmu.channel_num(None), -1)
+        self.assertEqual(nmu.channel_num('A'), 0)
+        self.assertEqual(nmu.channel_num('a'), 0)
+        self.assertEqual(nmu.channel_num('b'), 1)
+        self.assertEqual(nmu.channel_num('K'), 10)
+        self.assertEqual(nmu.channel_num(''), -1)
+        self.assertEqual(nmu.channel_num('AA'), -1)
+        clist = ['AA', 'BB', 'CC', 'DD']
+        self.assertEqual(nmu.channel_num('AA', char_list=clist), 0)
+        clist = ['w', 'x', 'y', 'z']
+        self.assertEqual(nmu.channel_num('A', char_list=clist), -1)
+        self.assertEqual(nmu.channel_num('Y', char_list=clist), 2)
+        self.assertEqual(nmu.channel_num([]), [])
+        self.assertEqual(nmu.channel_num(['A', 'B', 'D']), [0, 1, 3])
+        self.assertEqual(nmu.channel_num(['A', 'B', '@']), [0, 1, -1])
+        self.assertEqual(nmu.channel_num(['c', 'a', 'f']), [2, 0, 5])
+        self.assertEqual(nmu.channel_num(['A', 'B', 'C'], char_list=clist),
+                         [-1, -1, -1])
+        self.assertEqual(nmu.channel_num(['w', 'z', 'x'], char_list=clist),
+                         [0, 3, 1])
+        # channel_char_check
+        self.assertEqual(nmu.channel_char_check(None), '')
+        self.assertEqual(nmu.channel_char_check('A'), 'A')
+        self.assertEqual(nmu.channel_char_check('Z'), 'Z')
+        clist = ['w', 'x', 'y', 'z']
+        self.assertEqual(nmu.channel_char_check('A', char_list=clist), '')
+        self.assertEqual(nmu.channel_char_check('Z', char_list=clist), 'Z')
+        self.assertEqual(nmu.channel_char_check([]), [])
+        self.assertEqual(nmu.channel_char_check(['A', 'B', 'D']),
+                         ['A', 'B', 'D'])
+        self.assertEqual(nmu.channel_char_check(['A', 'B', 'DD']),
+                         ['A', 'B', ''])
+        self.assertEqual(nmu.channel_char_check(['A', 'B', 'D'],
+                         char_list=clist), ['', '', ''])
+        # channel_char_search
+        self.assertEqual(nmu.channel_char_search(None, 'A'), -1)
+        self.assertEqual(nmu.channel_char_search('testA1', None), -1)
+        with self.assertRaises(TypeError):
+            self.assertEqual(nmu.channel_char_search('testA1', 'A1'), -1)
+        with self.assertRaises(TypeError):
+            self.assertEqual(nmu.channel_char_search('testA1', 'A$'), -1)
+        self.assertEqual(nmu.channel_char_search('testA1', 'a'), 4)
+        self.assertEqual(nmu.channel_char_search('testa111', 'A'), 4)
+        self.assertEqual(nmu.channel_char_search('testA', 'A'), 4)
+        self.assertEqual(nmu.channel_char_search('A', 'A'), 0)
+        self.assertEqual(nmu.channel_char_search('testA111', 'B'), -1)
+        self.assertEqual(nmu.channel_char_search('A', 'B'), -1)
+        self.assertEqual(nmu.channel_char_search('taste', 'A'), -1)
+        self.assertEqual(nmu.channel_char_search('testAA12', 'AA'), 4)
+        self.assertEqual(nmu.channel_char_search('testAAA1267', 'AAA'), 4)
+        self.assertEqual(nmu.channel_char_search('testAAA@1267', 'AAA'), 4)
+        self.assertEqual(nmu.channel_char_search('testA@1267', 'A'), 4)
+        self.assertEqual(nmu.channel_char_search('A@1267', 'A'), 0)
+        # history_change
         # history
-        quiet = True
+        quiet = False
         fxn = '_test_utilities'
         c = 'Test'  # this class
-        h = 'testing code'
+        h = 'history message'
         r = 'nm.' + c + '.' + fxn + ': ' + h
         self.assertEqual(nmu.history(h, quiet=quiet), r)
-        tp = 'one.two.three'
-        r = 'nm.one.two.three.' + fxn + ': ' + h
+        tp = 'nm.one.two.three'
+        r = tp + ': ' + h
         self.assertEqual(nmu.history(h, tp=tp, quiet=quiet), r)
+        """
         # get_treepath
         stack = inspect.stack()
         fxn = 'test_all'  # calling fxn
@@ -1827,7 +1940,7 @@ class Test(unittest.TestCase):
         # get_method
         stack = inspect.stack()
         self.assertEqual(nmu.get_method(stack), fxn)
-
+        """
 
 if __name__ == '__main__':
     unittest.main()

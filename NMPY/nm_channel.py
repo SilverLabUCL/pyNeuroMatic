@@ -75,7 +75,7 @@ class ChannelContainer(NMObjectContainer):
     def name_next(self, quiet=nmp.QUIET):
         i = self.name_next_seq(quiet=quiet)
         if i >= 0:
-            return nmu.chan_char(i)
+            return nmu.channel_char(i)
         return ''
 
     # override, no super
@@ -83,8 +83,8 @@ class ChannelContainer(NMObjectContainer):
         # NO PREFIX, Channel names are 'A', 'B'...
         n = 10 + self.count
         for i in range(0, n):
-            # name = self.prefix + nmu.chan_char(i)
-            name = nmu.chan_char(i)
+            # name = self.prefix + nmu.channel_char(i)
+            name = nmu.channel_char(i)
             if not self.exists(name):
                 return i
         return -1

@@ -383,7 +383,7 @@ class DataSeriesSet(NMObject):
             if len(self.__theset.keys()) > 1:
                 e = self._type_error('data_dict', edict)
                 raise TypeError(e)
-            cc = nmu.chan_char_check(chan_default)
+            cc = nmu.channel_char_check(chan_default)
             if not cc:
                 channel = chan_default
                 e = self._value_error('channel')
@@ -404,7 +404,7 @@ class DataSeriesSet(NMObject):
             if len(self.__theset.keys()) > 1:
                 e = self._type_error('data_dict', edict)
                 raise TypeError(e)
-            cc = nmu.chan_char_check(chan_default)
+            cc = nmu.channel_char_check(chan_default)
             if not cc:
                 channel = chan_default
                 e = self._value_error('channel')
@@ -415,7 +415,7 @@ class DataSeriesSet(NMObject):
             e = self._type_error('data_dict', edict)
             raise TypeError(e)
         for cc, dlist in data_dict.items():
-            cc2 = nmu.chan_char_check(cc)
+            cc2 = nmu.channel_char_check(cc)
             if not cc2:
                 channel = cc
                 e = self._value_error('channel')
@@ -446,7 +446,7 @@ class DataSeriesSet(NMObject):
         for cc in chan_list:
             if isinstance(cc, str) and cc.upper() == 'ALL':
                 return list(self.__theset.keys())
-            cc2 = nmu.chan_char_check(cc)
+            cc2 = nmu.channel_char_check(cc)
             if not cc2:
                 channel = cc
                 e = self._value_error('channel')
@@ -535,7 +535,7 @@ class DataSeriesSet(NMObject):
         return not failure
 
     def get_channel(self, chan_char):
-        cc = nmu.chan_char_check(chan_char)
+        cc = nmu.channel_char_check(chan_char)
         if not cc:
             channel = chan_char
             e = self._value_error('channel')

@@ -387,7 +387,7 @@ class DataSeries(NMObject):
                 e = self._type_error('yunits', 'string')
                 raise TypeError(e)
             # elif c not in self.__thedata.keys():
-            elif not nmu.chan_char_check(c):
+            elif not nmu.channel_char_check(c):
                 channel = c
                 e = self._value_error('channel')
                 raise ValueError(e)
@@ -649,7 +649,7 @@ class DataSeries(NMObject):
         for o in thedata:
             if o.name[:i].casefold() == self.name.casefold():
                 if chan_char:
-                    if nmu.chan_char_exists(o.name[i:], chan_char):
+                    if nmu.channel_char_search(o.name[i:], chan_char) >= 0:
                         dlist.append(o)
                 else:
                     dlist.append(o)
@@ -660,7 +660,7 @@ class DataSeries(NMObject):
         htxt = []
         self.__thedata = {}
         for i in range(0, 25):
-            cc = nmu.chan_char(i)
+            cc = nmu.channel_char(i)
             olist = self._getitems(cc)
             if len(olist) > 0:
                 self.__thedata.append(olist)
@@ -696,7 +696,7 @@ class DataSeries(NMObject):
         self.__thedata = {}
         epoch_bgn = []
         for i in range(0, channels):
-            cc = nmu.chan_char(i)
+            cc = nmu.channel_char(i)
             dlist = self._getitems(cc)  # search for existing data
             epoch_bgn.append(len(dlist))
             self.__thedata.update({cc: dlist})
@@ -705,7 +705,7 @@ class DataSeries(NMObject):
         e_bgn = max(epoch_bgn)
         e_end = e_bgn + epochs
         for i in range(0, channels):
-            cc = nmu.chan_char(i)
+            cc = nmu.channel_char(i)
             elist = []
             dlist = []
             for j in range(e_bgn, e_end):
@@ -722,7 +722,7 @@ class DataSeries(NMObject):
             dlist2.extend(dlist)
             self.__thedata[cc] = dlist2
             h = ('created ' + nmu.quotes(self.name) + ', ' + 'ch=' + cc +
-                 ', ep=' + nmu.int_list_to_seq_str(elist, space=False))
+                 ', ep=' + nmu.int_list_to_seq_str(elist, seperator=','))
             self._history(h, quiet=quiet)
         if dims:
             self.dims = dims

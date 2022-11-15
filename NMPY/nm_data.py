@@ -165,7 +165,7 @@ class Data(NMObject):
         if not isinstance(chan_char, str):
             e = self._type_error('chan_char', 'channel character')
             raise TypeError(e)
-        cc = nmu.chan_char_check(chan_char)
+        cc = nmu.channel_char_check(chan_char)
         if not cc:
             channel = chan_char
             e = self._value_error('channel')
