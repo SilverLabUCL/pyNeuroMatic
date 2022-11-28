@@ -99,7 +99,6 @@ class Data(NMObject):
     # override
     def _isequivalent(self, data, alert=False):
         nan_eq_nan = nmp.NAN_EQ_NAN  # argument?
-        alert = nmu.bool_check(alert, False)
         if not super()._isequivalent(data, alert=alert):
             return False
         ue = 'unequivalent '

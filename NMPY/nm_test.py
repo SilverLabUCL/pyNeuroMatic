@@ -22,7 +22,7 @@ from nm_dimension import Dimension
 from nm_dimension import XDimension
 from nm_manager import Manager
 from nm_object import NMObject
-from nm_object import NMObjectTest
+# from nm_object import NMObjectTest
 from nm_object_container import NMObjectContainer
 from nm_note import Note
 from nm_note import NoteContainer
@@ -35,8 +35,7 @@ PARENT = nm
 BADTYPES = [None, True, 1, 3.14, [], (), {}, set(), 'test', nm]
 # BADTYPES: all types, use continue to ignore OK types
 BADNAME = 'b&dn@me!'
-BADNAMES = ['select', 'default', 'all'] + [BADNAME, '']
-# BADNAMES: special NM argument flags, list may need updating
+BADNAMES = nmp.BAD_NAMES + [BADNAME, '']
 PLIST = ['name', 'date', 'modified']  # NMObject parameter list
 YDIM0 = {'offset': 0, 'label': 'Vmem', 'units': 'mV'}
 XDIM0 = {'offset': 0, 'start': 10, 'delta': 0.01, 'label': 'time',
@@ -56,7 +55,7 @@ class Test(unittest.TestCase):
     def test_all(self):
         nm.configs.quiet = False
         # self._test_nmobject()
-        # self._test_nmobject_container()
+        self._test_nmobject_container()
         # self._test_note()
         # self._test_note_container()
         # self._test_dimension()
@@ -66,7 +65,7 @@ class Test(unittest.TestCase):
         # self._test_channel_container()
         # self._test_dataseries_set()
         # self._test_dataseries_set_container()
-        self._test_utilities()
+        # self._test_utilities()
 
     def _test_nmobject(self):
         # args: parent, name
@@ -113,21 +112,20 @@ class Test(unittest.TestCase):
                 continue  # ok
             self.assertFalse(o0.name_ok(b))
         for b in BADNAMES:
-            if b == '':
-                continue  # ok
+            # if b == '':
+            #     continue  # ok
             self.assertFalse(o0.name_ok(b))
         for b in BADTYPES:
             if isinstance(b, list) or isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
                 o0.name_ok('test', ok=b)
-        badnames = ['select', 'default', 'all']  # may need updating
-        self.assertEqual(o0._bad_names, badnames)  # check if list changes
-        for b in badnames:
+        self.assertEqual(o0._bad_names, nmp.BAD_NAMES)
+        for b in nmp.BAD_NAMES:
             self.assertFalse(o0.name_ok(b))
-        for b in badnames:
-            self.assertTrue(o0.name_ok(b, ok=badnames))
-        for n in [n0, n1, '']:
+        for b in nmp.BAD_NAMES:
+            self.assertTrue(o0.name_ok(b, ok=nmp.BAD_NAMES))
+        for n in [n0, n1]:
             self.assertTrue(o0.name_ok(n))
         # _name_set, args: name_notused, newname
         for b in BADTYPES:
@@ -193,13 +191,12 @@ class Test(unittest.TestCase):
         # type_error, args: obj, type_expected, tp, quiet, frame
         dum_arg = {}
         e1 = o0._type_error('dum_arg', 'list')
-        e2 = ('ERROR: nm.object0._test_nmobject: bad dum_arg: ' +
-              'expected list but got dict')
+        e2 = ('ERROR: object0: bad dum_arg: expected list but got dict')
         self.assertEqual(e1, e2)
         # value_error, args: obj, tp, quiet, frame
         dum_str = 'test'
         e1 = o0._value_error('dum_str')
-        e2 = ("ERROR: nm.object0._test_nmobject: bad dum_str: 'test'")
+        e2 = ("ERROR: object0: bad dum_str: 'test'")
         self.assertEqual(e1, e2)
         # quiet, args: quiet
         self.assertFalse(o0._quiet(False))
@@ -945,8 +942,9 @@ class Test(unittest.TestCase):
         nparrayx = np.full([6], 12.56, dtype=np.float64, order='C')
         d0 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM0, ydim=YDIM0)
         d1 = Data(PARENT, n1, np_array=nparray1, xdim=XDIM1, ydim=YDIM1)
-        xdata = Data(PARENT, 'xdata', np_array=nparrayx, xdim=XDIMx,
-                     ydim=YDIMx)
+        xdata = Data(
+                    PARENT, 'xdata', np_array=nparrayx, xdim=XDIMx, ydim=YDIMx
+                )
         self.assertTrue(np.array_equal(d0._Data__np_array, nparray0))
         self.assertTrue(np.array_equal(d1._Data__np_array, nparray1))
         # parameters
@@ -1726,13 +1724,6 @@ class Test(unittest.TestCase):
         self.assertFalse(nmu.name_ok(['test0', 'test1', 'test2?']))
         self.assertFalse(nmu.name_ok(['test0', 1, 'test2']))
         self.assertFalse(nmu.name_ok(['test0', '', 'test2']))
-        # bool_check
-        self.assertFalse(nmu.bool_check(False, False))
-        self.assertTrue(nmu.bool_check(True, False))
-        self.assertFalse(nmu.bool_check(0, False))
-        self.assertTrue(nmu.bool_check(0, True))
-        with self.assertRaises(TypeError):
-            self.assertTrue(nmu.bool_check(0, 0))
         # number_ok
         self.assertFalse(nmu.number_ok(None))
         self.assertFalse(nmu.number_ok("one"))
@@ -1790,23 +1781,40 @@ class Test(unittest.TestCase):
         self.assertEqual(nmu.remove_special_char('test'), 'test')
         self.assertEqual(nmu.remove_special_char('t@st*'), 'tst')
         self.assertEqual(nmu.remove_special_char(''), '')
-        self.assertEqual(nmu.remove_special_char(['test*', 't@st*']),
-                         ['test', 'tst'])
-        self.assertEqual(nmu.remove_special_char(['test', None, False]),
-                         ['test', '', ''])
+        self.assertEqual(
+            nmu.remove_special_char(['test*', 't@st*']), ['test', 'tst']
+        )
+        self.assertEqual(
+            nmu.remove_special_char(['test', None, False]), ['test', '', '']
+        )
         self.assertEqual(nmu.remove_special_char(None), '')
         self.assertEqual(nmu.remove_special_char(False), '')
         self.assertEqual(nmu.remove_special_char('test_*'), 'test')
-        self.assertEqual(nmu.remove_special_char('test_*', ok_char=['_']),
-                         'test_')
-        self.assertEqual(nmu.remove_special_char('test_*',
-                         ok_char=['_', '*']), 'test_*')
-        self.assertEqual(nmu.remove_special_char('test_*',
-                         ok_char=['_', '*'], bad_char=['_', '*']), 'test')
-        self.assertEqual(nmu.remove_special_char('test0_*',
-                         bad_char=['t', '0']), 'es')
-        self.assertEqual(nmu.remove_special_char('test0_*',
-                         ok_char=['_', '*'], bad_char=['t', '0']), 'es_*')
+        self.assertEqual(
+            nmu.remove_special_char('test_*', ok_char=['_']), 'test_'
+        )
+        self.assertEqual(
+            nmu.remove_special_char('test_*', ok_char=['_', '*']), 'test_*'
+        )
+        self.assertEqual(
+            nmu.remove_special_char(
+                'test_*',
+                ok_char=['_', '*'],
+                bad_char=['_', '*']
+            ),
+            'test'
+        )
+        self.assertEqual(
+            nmu.remove_special_char('test0_*', bad_char=['t', '0']), 'es'
+        )
+        self.assertEqual(
+            nmu.remove_special_char(
+                'test0_*',
+                ok_char=['_', '*'],
+                bad_char=['t', '0']
+            ),
+            'es_*'
+        )
         # int_list_to_seq_str
         i = [1, 2, 3, 4, 6]
         s = '1-4, 6'
@@ -1941,6 +1949,22 @@ class Test(unittest.TestCase):
         stack = inspect.stack()
         self.assertEqual(nmu.get_method(stack), fxn)
         """
+
+
+class NMObjectTest(NMObject):
+
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.myvalue = 1
+        self._param_list += ['myvalue']
+
+    # override
+    @property
+    def parameters(self):
+        k = super().parameters
+        k.update({'myvalue': self.myvalue})
+        return k
+
 
 if __name__ == '__main__':
     unittest.main()

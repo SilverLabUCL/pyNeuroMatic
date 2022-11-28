@@ -34,12 +34,11 @@ class Manager(object):
                     DataSeriesSet (All, Set1, Set2...)
     """
     def __init__(
-            self,
-            name='NeuroMatic Manager',
-            new_project=True,
-            quiet=nmp.QUIET
+        self,
+        name='NeuroMatic Manager',
+        new_project=True,
+        quiet=nmp.QUIET
     ):
-        new_project = nmu.bool_check(new_project, True)
         if isinstance(name, str):
             self.__name = name
         else:
@@ -60,9 +59,13 @@ class Manager(object):
         k.update({'date': self.__date})
         return k
 
-    def project_new(self, name='default', new_folder=True, quiet=nmp.QUIET):
+    def project_new(
+        self,
+        name='default',
+        new_folder=True,
+        quiet=nmp.QUIET
+    ):
         """Create a new project"""
-        new_folder = nmu.bool_check(new_folder, True)
         if not isinstance(name, str):
             # e = nmu.type_error('name', 'string') DOES NOT EXIST
             e = "ERROR: nm.Manager.project_new: bad name: expected string"
@@ -211,7 +214,6 @@ class Manager(object):
 
     @property
     def select_names(self, names=True):
-        names = nmu.bool_check(names, True)
         s = {}
         s['project'] = ''
         s['folder'] = ''
@@ -245,20 +247,37 @@ class Manager(object):
     def stats(self):
         return self.__stats
 
-    def _alert(self, message, tp='', quiet=False, frame=2):
+    def _alert(
+        self,
+        message,
+        tp='',
+        quiet=False,
+        frame=2
+    ):
         return nmu.history(message, title='ALERT', tp=tp, frame=frame,
                            red=True, quiet=self._quiet(quiet))
 
-    def _error(self, message, tp='', quiet=False, frame=2):
+    def _error(
+        self,
+        message,
+        tp='',
+        quiet=False,
+        frame=2
+    ):
         return nmu.history(message, title='ERROR', tp=tp, frame=frame,
                            red=True, quiet=self._quiet(quiet))
 
-    def _history(self, message, tp='', quiet=False, frame=2):
+    def _history(
+        self,
+        message,
+        tp='',
+        quiet=False,
+        frame=2
+    ):
         return nmu.history(message, tp=tp, frame=frame,
                            quiet=self._quiet(quiet))
 
-    def _quiet(self, quiet):
-        quiet = nmu.bool_check(quiet, nmp.QUIET)
+    def _quiet(self, quiet=nmp.QUIET):
         if self.configs.quiet:  # manager config quiet overrides
             return True
         return quiet

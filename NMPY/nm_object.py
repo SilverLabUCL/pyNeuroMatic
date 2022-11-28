@@ -12,6 +12,9 @@ import types
 
 import nm_preferences as nmp
 import nm_utilities as nmu
+from typing import List, Dict, NewType
+
+NMobject = NewType('NMObject', object)
 
 
 class NMObject(object):
@@ -39,9 +42,9 @@ class NMObject(object):
 
     def __init__(
         self,
-        parent,  # parent of NMObject
-        name  # name of this NMObject
-    ):
+        parent: object,  # parent of NMObject
+        name: str  # name of this NMObject
+    ) -> None:
         self._parent = parent
         if not isinstance(name, str):
             e = self._type_error('name', 'string', tp='')  # no tp yet
@@ -65,7 +68,7 @@ class NMObject(object):
     #    modified: last modified
     #
     @property
-    def parameters(self):  # child class should override
+    def parameters(self) -> Dict[str, str]:  # child class should override
         # and add class parameters
         # used in isequivalent
         p = {'name': self.__name}
@@ -75,8 +78,8 @@ class NMObject(object):
 
     def _parameters_key_test(
         self,
-        quiet=False
-    ):  # used in nm_test.py
+        quiet: bool = False
+    ) -> bool:  # used in nm_test.py
         #  verify parameters match self._param_list
         pkeys = self.parameters.keys()
         for k in pkeys:
@@ -95,15 +98,15 @@ class NMObject(object):
     #  content and content_tree are dictionaries {}
     #
     @property
-    def _content_name(self):
+    def _content_name(self) -> str:
         return self.__class__.__name__.lower()  # class name, lower case
 
     @property
-    def content(self):
+    def content(self) -> Dict[str, str]:
         return {self._content_name: self.__name}
 
     @property
-    def content_tree(self):
+    def content_tree(self) -> Dict[str, str]:
         if self._parent and isinstance(self._parent, NMObject):
             k = {}
             k.update(self._parent.content_tree)  # goes up the ancestry tree
@@ -116,14 +119,14 @@ class NMObject(object):
     #  treepath_list: [object0,object1,object2] or [name0,name1,name2]
     #
     @property
-    def _tp(self):  # shorthand, use with history()
+    def _tp(self) -> str:  # shorthand, use with history()
         return self.treepath(for_history=True)
 
     def _tp_check(  # check treepath string (e.g. fxn arg, see below)
         self,
-        tp_str,  # tp_str = 'self' to get self.treepath
-        for_history=True
-    ):
+        tp_str: str,  # tp_str = 'self' to get self.treepath
+        for_history: bool = True
+    ) -> str:
         if not isinstance(tp_str, str):
             return ''
         if tp_str.lower() == 'self':
@@ -132,9 +135,8 @@ class NMObject(object):
 
     def treepath(
         self,
-        for_history=False  # treepath is for NM history
-    ):
-        for_history = nmu.bool_check(for_history, False)
+        for_history: bool = False  # treepath is for NM history
+    ) -> str:
         if for_history:  # create treepath for history
             skip = nmp.HISTORY_TREEPATH_SKIP  # NM preferences, names to skip
         else:
@@ -148,12 +150,11 @@ class NMObject(object):
 
     def treepath_list(
         self,
-        names=True,
+        names: bool = True,
         # True: get list of NMObject names
         # False: get list of NMObjects
-        skip=[]  # pass NMObject names to skip/exclude
-    ):
-        names = nmu.bool_check(names, True)
+        skip: List[str] = []  # pass NMObject names to skip/exclude
+    ) -> List[str]:
         if not isinstance(skip, list):
             skip = []
         cname = self.__class__.__name__
@@ -177,9 +178,9 @@ class NMObject(object):
     #
     def name_ok(  # check name is OK, see _bad_names
         self,
-        name,  # name to test
-        ok=[]  # list of OK names
-    ):
+        name: str,  # name to test
+        ok: List[str] = []  # list of OK names
+    ) -> str:
         if not nmu.name_ok(name):
             return False
         if not isinstance(ok, list):
@@ -194,26 +195,26 @@ class NMObject(object):
         return name.lower() not in bad
 
     @property
-    def _bad_names(self):  # names not allowed
-        return ['select', 'default', 'all']  # use lower case
+    def _bad_names(self) -> List[str]:  # names not allowed
+        return nmp.BAD_NAMES
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.__name
 
     @name.setter
-    def name(self, newname):
+    def name(self, newname: str) -> bool:
         # calls _name_set() or NMObjectContainer.rename()
         return self.__rename_fxnref(self.__name, newname)
 
     def _name_set(
         self,
-        name_notused,
+        name_notused: None,
         # name_notused, dummy argument to be consistent with
         # NMObjectContainer.rename(name, newname)
-        newname,
-        quiet=nmp.QUIET
-    ):
+        newname: str,
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if not isinstance(newname, str):
             e = self._type_error('newname', 'string')
             raise TypeError(e)
@@ -231,7 +232,7 @@ class NMObject(object):
         self,
         rename_fxnref  # fxn reference
         # rename fxn must have this format: fxn(name, newname)
-    ):
+    ) -> bool:
         if not isinstance(rename_fxnref, types.MethodType):
             e = self._type_error('rename_fxnref', 'MethodType')
             raise TypeError(e)
@@ -242,7 +243,7 @@ class NMObject(object):
     #  misc functions
     #
     @property
-    def _manager(self):  # find reference to Manager of this NMObject
+    def _manager(self) -> object:  # find reference to Manager of this NMObject
         if self._parent is None:
             return None
         if self._parent.__class__.__name__ == 'Manager':
@@ -253,13 +254,12 @@ class NMObject(object):
 
     def _isequivalent(  # compare this NMObject to another NMObject
         self,
-        nmobject,  # the other NMObject
-        alert=False  # write alert to NM history
-    ):
+        nmobject: NMobject,  # the other NMObject
+        alert: bool = False  # write alert to NM history
+    ) -> bool:
         self_is_equiv = False  # make this an argument?
         nan_eq_nan = nmp.NAN_EQ_NAN  # make this an argument?
         oktobedifferent = ['date', 'modified']  # make this an argument?
-        alert = nmu.bool_check(alert, False)
         ue = 'unequivalent '
         if nmobject == self:
             if self_is_equiv:
@@ -312,46 +312,64 @@ class NMObject(object):
                 return False
         return True
 
-    def copy(self):
+    def copy(self) -> NMobject:
         return NMObject(self._parent, self.__name)
 
     def save(
         self,
-        path='',
-        quiet=nmp.QUIET
+        path: str = '',
+        quiet: bool = nmp.QUIET
     ):
         # TODO
         e = self._error('save under construction')
         raise RuntimeError(e)
 
-    def _modified(self):
+    def _modified(self) -> str:
         self.__modified = str(datetime.datetime.now())
         if self._parent and isinstance(self._parent, NMObject):
             self._parent._modified()  # goes up the ancestry tree
 
-    def _alert(self, message, tp='self', quiet=False, frame=2):
+    def _alert(
+        self,
+        message: str,
+        tp: str = 'self',
+        quiet: bool = False,
+        frame: int = 2
+    ) -> str:
         # wrapper, see nmu.history
         return nmu.history(message, title='ALERT', tp=self._tp_check(tp),
                            frame=frame, red=True, quiet=self._quiet(quiet))
 
-    def _error(self, message, tp='self', quiet=False, frame=2):
+    def _error(
+        self,
+        message: str,
+        tp: str = 'self',
+        quiet: bool = False,
+        frame: int = 2
+    ) -> str:
         # wrapper, see nmu.history
         return nmu.history(message, title='ERROR', tp=self._tp_check(tp),
                            frame=frame, red=True, quiet=self._quiet(quiet))
 
-    def _history(self, message, tp='self', quiet=False, frame=2):
+    def _history(
+        self,
+        message: str,
+        tp: str = 'self',
+        quiet: bool = False,
+        frame: int = 2
+    ) -> str:
         # wrapper, see nmu.history
         return nmu.history(message, tp=self._tp_check(tp), frame=frame,
                            red=False, quiet=self._quiet(quiet))
 
     def _type_error(
         self,
-        obj_name,  # name of object that is of the wrong type
-        type_expected,  # expected type of the object
-        tp='self',  # history treepath
-        quiet=False,  # history quiet
-        frame=2
-    ):
+        obj_name: str,  # name of object that is of the wrong type
+        type_expected: str,  # expected type of the object
+        tp: str = 'self',  # history treepath
+        quiet: bool = False,  # history quiet
+        frame: int = 2
+    ) -> str:
         callers_local_vars = inspect.currentframe().f_back.f_locals.items()
         found_variable = False
         for var_name, var_val in callers_local_vars:  # loop thru dict_items
@@ -370,11 +388,11 @@ class NMObject(object):
 
     def _value_error(
         self,
-        obj_name,  # name of object that has the wrong value
-        tp='self',  # history treepath
-        quiet=False,  # history quiet
-        frame=2
-    ):
+        obj_name: str,  # name of object that has the wrong value
+        tp: str = 'self',  # history treepath
+        quiet: bool = False,  # history quiet
+        frame: int = 2
+    ) -> str:
         callers_local_vars = inspect.currentframe().f_back.f_locals.items()
         found_variable = False
         for var_name, var_val in callers_local_vars:  # loop thru dict_items
@@ -395,26 +413,11 @@ class NMObject(object):
 
     def _quiet(
         self,
-        quiet
-    ):
+        quiet: bool
+    ) -> bool:
         m = self._manager
         if m.__class__.__name__ == 'Manager':
             return m._quiet(quiet)
         if nmp.QUIET:  # this quiet overrides
             return True
-        return nmu.bool_check(quiet, False)
-
-
-class NMObjectTest(NMObject):
-
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.myvalue = 1
-        self._param_list += ['myvalue']
-
-    # override
-    @property
-    def parameters(self):
-        k = super().parameters
-        k.update({'myvalue': self.myvalue})
-        return k
+        return quiet

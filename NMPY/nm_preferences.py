@@ -5,14 +5,15 @@ Copyright 2019 Jason Rothman
 """
 PROJECT_NAME = 'NMProject'
 FOLDER_PREFIX = 'NMFolder'
-DATA_PREFIX = 'Data'
-DATASERIESSET_PREFIX = 'Set'
-DATASERIESSET_LIST = ['All', 'Set1', 'Set2', 'SetX']
+DATA_PREFIX = 'Record'
+DATASERIES_SET_PREFIX = 'Set'
+DATASERIES_SET_LIST = ['All', 'Set1', 'Set2', 'SetX']
 CHANNEL_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
                 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
                 'Y', 'Z']
 HISTORY_TREEPATH_SKIP = ['Project']
 NAME_SYMBOLS_OK = ['_']
+BAD_NAMES = ['select', 'default', 'all']  # use lower case
 QUIET = False
 GUI = False
 NAN_EQ_NAN = True  # in Python nan != nan, use this flag so nan == nan

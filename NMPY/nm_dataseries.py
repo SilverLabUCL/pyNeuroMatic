@@ -110,7 +110,6 @@ class DataSeries(NMObject):
 
     @dims_master_on.setter
     def dims_master_on(self, on):
-        on = nmu.bool_check(on, True)
         self.__dims_master_on = on
         return on
 
@@ -465,16 +464,15 @@ class DataSeries(NMObject):
     def sets(self):
         return self.__set_container
 
-    def _sets_init(self, set_list=nmp.DATASERIESSET_LIST, select=True,
+    def _sets_init(self, set_list=nmp.DATASERIES_SET_LIST, select=True,
                    quiet=nmp.QUIET):
         if not set_list:
             return []
         if not isinstance(set_list, list):
             set_list = [set_list]
-        select = nmu.bool_check(select, True)
         r = []
         init_select = select or not self.__set_container.select
-        for s in nmp.DATASERIESSET_LIST:
+        for s in nmp.DATASERIES_SET_LIST:
             if not s or not isinstance(s, str):
                 continue
             select = init_select and s.upper() == 'ALL'

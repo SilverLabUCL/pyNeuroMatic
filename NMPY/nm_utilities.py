@@ -7,14 +7,14 @@ Copyright 2019 Jason Rothman
 import math
 import inspect
 from colorama import Fore, Back, Style
-from typing import Union
+from typing import Union, List
 
 import nm_preferences as nmp
 
 
 def name_ok(
-    name: Union[str, list[str]],
-    ok_list: list = nmp.NAME_SYMBOLS_OK
+    name: Union[str, List[str]],
+    ok_list: List[str] = nmp.NAME_SYMBOLS_OK
 ) -> bool:
     """Check if name(s) is alpha-numeric.
 
@@ -44,28 +44,8 @@ def name_ok(
     return True
 
 
-def bool_check(bool_value, bool_default) -> bool:
-    """Check if boolean is ok.
-
-    :param bool_value: boolean to check.
-    :type bool_value: bool
-    :param bool_default: default boolean to return if bool_value is bad.
-    :type bool_default: bool
-    :return: bool_value if it is boolean, otherwise bool_default.
-    :rtype: bool
-    :raises TypeError: if bool_default is not boolean.
-    """
-    if isinstance(bool_value, bool):
-        return bool_value
-    if isinstance(bool_default, bool):
-        return bool_default
-    t = str(type(bool_default))
-    e = ("bad bool_default: " + "expected boolean but got " + t)
-    raise TypeError(e)
-
-
 def number_ok(
-    number: Union[object, list[object]],
+    number: Union[object, List[object]],
     must_be_integer: bool = False,
     inf_is_ok: bool = False,
     nan_is_ok: bool = False,
@@ -128,7 +108,10 @@ def number_ok(
     return True
 
 
-def quotes(text: str, single: bool = True) -> str:
+def quotes(
+    text: str,
+    single: bool = True
+) -> str:
     """Add quotes around text.
 
     :param text: text.
@@ -146,10 +129,10 @@ def quotes(text: str, single: bool = True) -> str:
 
 
 def remove_special_char(
-    text: Union[str, list[str]],
-    ok_char: list = [str],
-    bad_char: list = [str]
-) -> Union[str, list[str]]:
+    text: Union[str, List[str]],
+    ok_char: List[str] = [],
+    bad_char: List[str] = []
+) -> Union[str, List[str]]:
     """Remove non-alpha-numeric characters from text.
 
     :param text: text.
@@ -187,7 +170,7 @@ def remove_special_char(
 
 
 def int_list_to_seq_str(
-    int_list: list[int],
+    int_list: List[int],
     seperator: str = nmp.SEQ_SEPERATOR,
     seperator_at_end: bool = False
 ) -> str:
@@ -256,9 +239,9 @@ def int_list_to_seq_str(
 
 
 def channel_char(
-    chan_num: Union[int, list[int]],
-    char_list: list = nmp.CHANNEL_LIST
-) -> Union[str, list[str]]:
+    chan_num: Union[int, List[int]],
+    char_list: List[str] = nmp.CHANNEL_LIST
+) -> Union[str, List[str]]:
     """Convert channel number(s) to character.
 
     :param chan_num: channel number, e.g. 0.
@@ -289,9 +272,9 @@ def channel_char(
 
 
 def channel_num(
-    chan_char: Union[str, list[str]],
-    char_list: list = nmp.CHANNEL_LIST
-) -> Union[int, list[int]]:
+    chan_char: Union[str, List[str]],
+    char_list: List[str] = nmp.CHANNEL_LIST
+) -> Union[int, List[int]]:
     """Convert channel character(s) to number.
 
     :param chan_char: channel character, e.g. 'A', or list of characters.
@@ -325,9 +308,9 @@ def channel_num(
 
 
 def channel_char_check(
-    chan_char: Union[str, list[str]],
-    char_list: list = nmp.CHANNEL_LIST
-) -> Union[str, list[str]]:
+    chan_char: Union[str, List[str]],
+    char_list: List[str] = nmp.CHANNEL_LIST
+) -> Union[str, List[str]]:
     """Check channel character
 
     :param chan_char: channel character, e.g. 'A', or list of characters.
@@ -351,7 +334,10 @@ def channel_char_check(
     return ''
 
 
-def channel_char_search(text: str, chan_char: str) -> int:
+def channel_char_search(
+    text: str,
+    chan_char: str
+) -> int:
     """Search for channel character in text (backwards search).
 
     :param text: text to search, e.g. 'RecordA127'.
@@ -459,7 +445,7 @@ def history(
 
 
 def get_treepath(
-    stack: list[],
+    stack: list,
     frame: int = 1,
     package: str = 'nm'
 ) -> str:

@@ -270,7 +270,6 @@ class DataSeriesSet(NMObject):
         return eq_list  # ok
 
     def _equation(self, eq_list, lock=False, quiet=nmp.QUIET):
-        lock = nmu.bool_check(lock, False)
         eq_list = self._eq_list_check(eq_list, lock)
         if not eq_list:
             self.__eq_lock = []
@@ -516,7 +515,6 @@ class DataSeriesSet(NMObject):
 
     def contains(self, data_dict, alert=False):
         # data_dict = {'A': [DataA0, DataA1...]}
-        alert = nmu.bool_check(alert, False)
         dd = self._data_dict_check(data_dict)
         failure = False
         for cc, dlist in dd.items():
@@ -559,7 +557,7 @@ class DataSeriesSet(NMObject):
         clist = self._chan_list_check(chan_list)
         if not clist:
             return True  # nothing to do
-        if nmu.bool_check(confirm, True):
+        if confirm:
             if len(clist) > 1:
                 ctxt = ', channels ' + ', '.join(clist) + '?'
             else:
@@ -612,7 +610,7 @@ class DataSeriesSet(NMObject):
         if not isinstance(dataseriesset, DataSeriesSet):
             e = self._type_error('dataseriesset', 'DataSeriesSet')
             raise TypeError(e)
-        if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
+        if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
             return False
         modified = False
@@ -640,7 +638,7 @@ class DataSeriesSet(NMObject):
         if not isinstance(dataseriesset, DataSeriesSet):
             e = self._type_error('dataseriesset', 'DataSeriesSet')
             raise TypeError(e)
-        if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
+        if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
             return False
         remove = {}
@@ -674,7 +672,7 @@ class DataSeriesSet(NMObject):
         if not isinstance(dataseriesset, DataSeriesSet):
             e = self._type_error('dataseriesset', 'DataSeriesSet')
             raise TypeError(e)
-        if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
+        if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
             return False
         add = {}
@@ -722,7 +720,7 @@ class DataSeriesSet(NMObject):
         if not isinstance(dataseriesset, DataSeriesSet):
             e = self._type_error('dataseriesset', 'DataSeriesSet')
             raise TypeError(e)
-        if nmu.bool_check(alert, True) and self._chan_check(dataseriesset):
+        if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
             return False
         add = {}
@@ -825,7 +823,7 @@ class DataSeriesSetContainer(NMObjectContainer):
     def __init__(self, parent, name, **copy):
         t = DataSeriesSet(None, 'empty').__class__.__name__
         super().__init__(parent, name, type_=t,
-                         prefix=nmp.DATASERIESSET_PREFIX, rename=True, **copy)
+                         prefix=nmp.DATASERIES_SET_PREFIX, rename=True, **copy)
 
     # override
     @property
