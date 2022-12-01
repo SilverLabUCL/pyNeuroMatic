@@ -35,8 +35,8 @@ class DataSeries(NMObject):
             self.__set_container = DataSeriesSetContainer(self,
                                                           'DataSeriesSets')
         self.__thedata = {}  # dict, {channel: data-list}
-        self.__x = {'default': nmd.XDimension(self, 'xdim')}
-        self.__y = {'default': nmd.Dimension(self, 'ydim')}
+        self.__x = {'default': nmd.NMDimensionX(self, 'xdim')}
+        self.__y = {'default': nmd.NMDimension(self, 'ydim')}
         if xdim:
             pass
         if ydim:

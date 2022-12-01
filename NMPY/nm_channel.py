@@ -18,8 +18,8 @@ class Channel(NMObject):
 
     def __init__(self, parent, name, xdim={}, ydim={}, **copy):
         super().__init__(parent, name)
-        self.__x = nmd.XDimension(self, 'xdim', dim=xdim)
-        self.__y = nmd.Dimension(self, 'ydim', dim=ydim)
+        self.__x = nmd.NMDimensionX(self, 'xdim', dim=xdim)
+        self.__y = nmd.NMDimension(self, 'ydim', dim=ydim)
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         # self.__transform = []
 

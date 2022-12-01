@@ -44,7 +44,7 @@ class Manager(object):
         else:
             self.__name = 'NeuroMatic Manager'
         self.__project = None
-        self.__date = str(datetime.datetime.now())
+        self.__created = str(datetime.datetime.now())
         self.__configs = nmp.Configs()
         self.__configs.quiet = quiet
         self.__stats = Stats()
@@ -56,7 +56,7 @@ class Manager(object):
     @property
     def parameters(self):
         k = {'name': self.__name}
-        k.update({'date': self.__date})
+        k.update({'created': self.__created})
         return k
 
     def project_new(

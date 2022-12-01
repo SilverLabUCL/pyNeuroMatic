@@ -7,13 +7,18 @@ Copyright 2019 Jason Rothman
 import numpy as np
 
 from nm_object import NMObject
+from nm_object import NMobject
 from nm_object_container import NMObjectContainer
+from nm_object_container import NMobjectContainer
 from nm_dataseries import DataSeries
 from nm_dataseries import DataSeriesContainer
 import nm_dimension as nmd
-from nm_note import NoteContainer
+from nm_note import NMNoteContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
+from typing import Dict, List, NewType
+
+# NMdata = NewType('NMData', NMobject)
 
 NP_ORDER = 'C'
 NP_DTYPE = np.float64
@@ -38,16 +43,16 @@ class Data(NMObject):
         else:
             e = self._type_error('np_array', 'numpy.ndarray')
             raise TypeError(e)
-        self.__note_container = None
+        self.__notes_container = None
         for k, v in copy.items():
-            if k.lower() == 'c_notes' and isinstance(v, NoteContainer):
-                self.__note_container = v
-        if not isinstance(self.__note_container, NoteContainer):
-            self.__note_container = NoteContainer(self, 'Notes')
+            if k.lower() == 'c_notes' and isinstance(v, NMNoteContainer):
+                self.__notes_container = v
+        if not isinstance(self.__notes_container, NMNoteContainer):
+            self.__notes_container = NMNoteContainer(self, 'Notes')
         self.__x = nmd.XDimension(self, 'xdim', dim=xdim,
-                                  notes=self.__note_container)
+                                  notes=self.__notes_container)
         self.__y = nmd.Dimension(self, 'ydim', dim=ydim,
-                                 notes=self.__note_container)
+                                 notes=self.__notes_container)
         self.__dataseries = {}
         if dataseries is None:
             pass
@@ -91,8 +96,8 @@ class Data(NMObject):
     @property
     def content(self):
         k = super().content
-        if self.__note_container:
-            k.update(self.__note_container.content)
+        if self.__notes_container:
+            k.update(self.__notes_container.content)
         return k
 
     # override
@@ -130,8 +135,8 @@ class Data(NMObject):
                         if alert:
                             self._alert(ue + 'np_array')
                         return False
-        c = self.__note_container
-        c2 = data._Data__note_container
+        c = self.__notes_container
+        c2 = data._Data__notes_container
         if c and not c._isequivalent(c2, alert=alert):
             return False
         # TODO self.__dataseries
@@ -143,7 +148,7 @@ class Data(NMObject):
             a = None
         else:
             a = self.__np_array.copy()
-        nc = self.__note_container.copy()
+        nc = self.__notes_container.copy()
         nc.off = True  # block notes during class creation
         c = Data(self._parent, self.name, np_array=a, xdim=self.__x.dim,
                  ydim=self.__y.dim, dataseries=self.__dataseries, c_notes=nc)
@@ -200,7 +205,7 @@ class Data(NMObject):
 
     @property
     def note(self):
-        return self.__note_container
+        return self.__notes_container
 
     @property
     def x(self):
@@ -235,7 +240,7 @@ class Data(NMObject):
         else:
             new = self.__np_array.__array_interface__['data'][0]
         h = nmu.history_change('np_array reference', old, new)
-        self.__note_container.new(h)
+        self.__notes_container.new(h)
         self._history(h, quiet=quiet)
         return True
 
@@ -249,7 +254,7 @@ class Data(NMObject):
             raise RuntimeError(e)
         n = ('created numpy array (numpy.full): shape=' + str(shape) +
              ', fill_value=' + str(fill_value) + ', dtype=' + str(dtype))
-        self.__note_container.new(n)
+        self.__notes_container.new(n)
         self._history(n, quiet=quiet)
         return True
 
@@ -264,7 +269,7 @@ class Data(NMObject):
             raise RuntimeError(e)
         n = ('created data array (numpy.random.normal): shape=' +
              str(shape) + ', mean=' + str(mean) + ', stdv=' + str(stdv))
-        self.__note_container.new(n)
+        self.__notes_container.new(n)
         self._history(n, quiet=quiet)
         return True
 
@@ -278,11 +283,6 @@ class DataContainer(NMObjectContainer):
         d = Data(None, 'empty')
         super().__init__(parent, name, nmobject=d, prefix=nmp.DATA_PREFIX,
                          rename=True, **copy)
-
-    # override, no super
-    @property
-    def _content_name(self):
-        return 'data'
 
     # override, no super
     def copy(self):

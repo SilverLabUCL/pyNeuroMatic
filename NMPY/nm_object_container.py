@@ -11,7 +11,7 @@ import nm_utilities as nmu
 
 from nm_object import NMObject
 from nm_object import NMobject
-from typing import List, Dict, NewType, Optional
+from typing import Dict, List, NewType, Optional
 
 NMobjectContainer = NewType('NMObjectContainer', NMobject)
 
@@ -72,8 +72,6 @@ class NMObjectContainer(NMObject):
         self.__thecontainer = []  # container of NMObject items
         self.__select = None  # selected NMObject
         for k, v in copy.items():  # see copy() and thecontainer_copy()
-            if k.lower() == 'c_nmobject' and isinstance(v, NMObject):
-                self.__nmobject = v
             if k.lower() == 'c_prefix' and isinstance(v, str):
                 self.__prefix = v
             if k.lower() == 'c_rename' and isinstance(v, bool):
@@ -102,18 +100,24 @@ class NMObjectContainer(NMObject):
         return k
 
     @property
+    def content_parameters(self) -> List[Dict]:
+        plist = []
+        for o in self.__thecontainer:
+            plist.append(o.parameters)
+        return plist
+
+    def print_content_parameters(self) -> None:
+        for p in self.content_parameters:
+            print(p)
+
+    @property
     def content_type(self) -> str:
         return self.__nmobject.__class__.__name__
 
     # override, no super
     @property
-    def _content_name(self) -> str:
-        return self.content_type.lower() + 's'
-
-    # override, no super
-    @property
     def content(self) -> Dict[str, str]:
-        return {self._content_name: self.names}
+        return {self.content_type + 's': self.names}
 
     # override
     def _isequivalent(
@@ -146,7 +150,7 @@ class NMObjectContainer(NMObject):
             c_thecontainer=self._thecontainer_copy()
         )
 
-    def _thecontainer_copy(self):
+    def _thecontainer_copy(self) -> Dict[List, NMobject]:
         c = []
         if self.__select and self.__select.name:
             select_name = self.__select.name

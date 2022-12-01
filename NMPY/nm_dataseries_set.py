@@ -41,12 +41,12 @@ class DataSeriesSet(NMObject):
             k.update({'sort_template': self.__sort_template.name})
             # need name for isequivalent() to work
         else:
-            k.update({'sort_template': None})
+            k.update({'sort_template': str(None)})
         if self.__eq_lock:
             k.update({'eq_lock': self.equation_lock_str})
             # need nmobject names for isequivalent() to work
         else:
-            k.update({'eq_lock': None})
+            k.update({'eq_lock': str(None)})
         return k
 
     # override

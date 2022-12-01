@@ -4,45 +4,61 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_object import NMObject
+from nm_object import NMobject
 from nm_object_container import NMObjectContainer
+from nm_object_container import NMobjectContainer
 import nm_utilities as nmu
+from typing import Dict, List, NewType
+
+NMnote = NewType('NMNote', NMobject)
+NMnoteContainer = NewType('NMNoteContainer', NMobjectContainer)
+
+NOTE_PREFIX = 'Note'
 
 
-class Note(NMObject):
+class NMNote(NMObject):
     """
     NM Note class
     """
 
-    def __init__(self, parent, name, thenote='', **copy):
+    def __init__(
+        self,
+        parent: object,
+        name: str,
+        thenote: str = '',
+        **copy
+    ) -> None:
         super().__init__(parent, name)
-        self.__thenote = ''
-        self._thenote_set(thenote)
+        if isinstance(thenote, str):
+            self.__thenote = thenote
+        else:
+            self.__thenote = str(thenote)
 
     # override
     @property
-    def parameters(self):
+    def parameters(self) -> Dict[str, str]:
         k = super().parameters
         k.update({'thenote': self.__thenote})
         return k
 
     # override, no super
-    def copy(self):
-        return Note(self._parent, self.name, thenote=self.__thenote)
+    def copy(self) -> NMnote:
+        return NMNote(self._parent, self.name, thenote=self.__thenote)
 
     @property
-    def thenote(self):
+    def thenote(self) -> str:
         return self.__thenote
 
     @thenote.setter
-    def thenote(self, thenote):
+    def thenote(self, thenote: str) -> bool:
         return self._thenote_set(thenote)
 
-    def _thenote_set(self, thenote, quiet=True):
+    def _thenote_set(self, thenote: str, quiet: bool = True) -> bool:
         # notes should be quiet
+        if thenote == self.__thenote:
+            return True
         old = self.__thenote
-        if not thenote:
-            self.__thenote = ''
-        elif isinstance(thenote, str):
+        if isinstance(thenote, str):
             self.__thenote = thenote
         else:
             self.__thenote = str(thenote)
@@ -52,53 +68,68 @@ class Note(NMObject):
         return True
 
 
-class NoteContainer(NMObjectContainer):
+class NMNoteContainer(NMObjectContainer):
     """
     Container for NM Note objects
     """
 
-    def __init__(self, parent, name, **copy):
-        n = Note(None, 'empty')
-        super().__init__(parent, name, nmobject=n, prefix='Note', rename=False,
-                         **copy)
+    def __init__(
+        self,
+        parent: object,
+        name: str,
+        **copy
+    ) -> None:
+        n = NMNote(None, 'empty')
+        super().__init__(parent, name, nmobject=n, prefix=NOTE_PREFIX,
+                         rename=False, **copy)
         self.__off = False
 
     # override, no super
-    def copy(self):
-        return NoteContainer(self._parent, self.name, c_prefix=self.prefix,
-                             c_rename=self.parameters['rename'],
-                             c_thecontainer=self._thecontainer_copy())
+    def copy(self) -> NMnoteContainer:
+        return NMNoteContainer(self._parent, self.name, c_prefix=self.prefix,
+                               c_rename=self.parameters['rename'],
+                               c_thecontainer=self._thecontainer_copy())
 
     # override
-    def new(self, thenote='', select=True, quiet=True):
+    def new(
+        self,
+        thenote: str = '',
+        select: bool = True,
+        quiet: bool = True
+    ) -> NMnote:
         # notes should be quiet
         if self.__off:
             return None
-        o = Note(None, name='iwillberenamed', thenote=thenote)
-        return super().new(name='default', nmobject=o, select=select,
-                           quiet=quiet)
-
-    def thenotes(self, quiet=True):
-        # notes should be quiet
-        notes = []
-        self._history('', quiet=quiet)
-        for n in self.getitems(names='all'):
-            notes.append(n.thenote)
-            self._history(n.thenote, tp='none', quiet=quiet)
-        return notes
+        name = self.name_next()
+        o = NMNote(None, name=name, thenote=thenote)
+        if super().add(nmobject=o, select=select, quiet=quiet):
+            return o
+        else:
+            return None
 
     @property
-    def off(self):
+    def all_(self) -> List[str]:
+        notes = []
+        for p in self.content_parameters:
+            notes.append(p['thenote'])
+        return notes
+
+    def print_all(self):
+        for n in self.all_:
+            self._history(n, quiet=False)
+
+    @property
+    def off(self) -> bool:
         return self.__off
 
     @off.setter
-    def off(self, off):
+    def off(self, off: bool) -> bool:
         if isinstance(off, bool):
             self.__off = off
             self._modified()
-        return off
+        return self.__off
 
     # override, no super
-    def duplicate(self):
+    def duplicate(self) -> None:
         e = self._error('notes cannot be duplicated')
         raise RuntimeError(e)

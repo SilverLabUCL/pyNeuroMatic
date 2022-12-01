@@ -6,18 +6,33 @@ Created on Sat Jan 18 15:24:16 2020
 @author: jason
 """
 from nm_object import NMObject
-from nm_note import NoteContainer
+from nm_object import NMobject
+from nm_note import NMnote
+from nm_note import NMNoteContainer
+# from nm_data import Data
+# from nm_data import NMdata
 import nm_preferences as nmp
 import nm_utilities as nmu
+from typing import Dict, List, NewType, Optional, Union
 # cannot import Data class
 
+NMdimension = NewType('NMDimension', NMobject)
+NMdimensionX = NewType('NMDimensionX', NMdimension)
 
-class Dimension(NMObject):
+
+class NMDimension(NMObject):
     """
     NM Dimension class
     """
 
-    def __init__(self, parent, name, dim={}, notes=None, **copy):
+    def __init__(
+        self,
+        parent: object,
+        name: str,
+        dim: Dict[str, str] = {},
+        notes: Optional[str] = None,
+        **copy
+    ) -> None:
         super().__init__(parent, name)
         if dim is None:
             dim = {}
@@ -25,48 +40,57 @@ class Dimension(NMObject):
             e = self._type_error('dim', 'dimension dictionary')
             raise TypeError(e)
         if notes is None:
-            self._note_container = None
-        elif isinstance(notes, NoteContainer):
-            self._note_container = notes  # reference to notes container
+            self.__notes_container = None
+        elif isinstance(notes, NMNoteContainer):
+            self.__notes_container = notes  # reference to notes container
         else:
-            e = self._type_error('notes', 'NoteContainer')
+            e = self._type_error('notes', 'NMNoteContainer')
             raise TypeError(e)
         self._offset = 0  # not to be controlled by master
         self._label = ''
         self._units = ''
         self._master = None  # e.g. dimension of a DataSeries
         # self._dim_list = ['offset', 'label', 'units', 'master']
-        # self._param_list += self._dim_list
+        # self.parameter_list += self._dim_list
         if dim:
             self._dim_set(dim, quiet=True)
 
     # override
     @property
-    def parameters(self):
+    def parameters(self) -> Dict[str, str]:
         k = super().parameters
         k.update(self.dim)
         return k
 
     # override, no super
-    def copy(self):
-        return Dimension(self._parent, self.name, dim=self.dim,
-                         notes=self._note_container)
+    def copy(self) -> NMdimension:
+        return NMDimension(self._parent, self.name, dim=self.dim,
+                           notes=self.__notes_container)
 
-    def _note_new(self, thenote, quiet=True):
+    def _note_new(
+        self,
+        thenote: str,
+        quiet: bool = True
+    ) -> NMnote:
         # notes should be quiet
-        if isinstance(self._note_container, NoteContainer):
-            return self._note_container.new(thenote, quiet=quiet)
+        if isinstance(self.__notes_container, NMNoteContainer):
+            return self.__notes_container.new(thenote, quiet=quiet)
         return None
 
     @property
-    def master(self):
+    def master(self) -> NMdimension:
         return self._master
 
     @master.setter
-    def master(self, dimension):
+    def master(self, dimension: NMdimension) -> bool:
         return self._master_set(dimension)
 
-    def _master_set(self, dimension, quiet=nmp.QUIET):
+    def _master_set(
+        self,
+        dimension: NMdimension,
+        quiet: bool = nmp.QUIET
+    ) -> bool:
+        # TODO: change type check with 'isinstance'
         if dimension is None:
             pass  # ok, master off
         elif dimension.__class__.__name__ != self.__class__.__name__:
@@ -90,11 +114,11 @@ class Dimension(NMObject):
         return True
 
     @property
-    def _master_lock(self):
+    def _master_lock(self) -> bool:
         return self._master.__class__.__name__ == self.__class__.__name__
 
     @property
-    def _master_error(self):
+    def _master_error(self) -> str:
         if self._master is None:
             return ''
         e = ('this dimension is locked to master ' +
@@ -102,32 +126,36 @@ class Dimension(NMObject):
         return self._error(e)
 
     @property
-    def dim(self):
+    def dim(self) -> Dict[str, str]:
         if self._master_lock:
             d = self._master.dim
             d.update({'master': self._master})
         else:
             d = {'offset': self._offset}
             d.update({'label': self._label, 'units': self._units})
-            d.update({'master': None})
+            d.update({'master': str(None)})
         return d
 
     @property
-    def dim_list(self):
+    def dim_list(self) -> List[str]:
         return list(self.dim.keys())
 
     @dim.setter
-    def dim(self, dim):
+    def dim(self, dim: Dict[str, str]) -> bool:
         return self._dim_set(dim)
 
-    def _dim_set(self, dim, quiet=nmp.QUIET):
+    def _dim_set(
+        self,
+        dim: Dict[str, str],
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if not isinstance(dim, dict):
             e = self._type_error('dim', 'dimension dictionary')
             raise TypeError(e)
         keys = dim.keys()
-        for k in keys:
-            if k not in self._dim_list:
-                raise KeyError('unknown dimension key ' + nmu.quotes(k))
+        # for k in keys:
+        #    if k not in self._dim_list:
+        #        raise KeyError('unknown dimension key ' + nmu.quotes(k))
         if 'offset' in keys:
             if not self._offset_set(dim['offset'], quiet=quiet):
                 return False
@@ -143,15 +171,19 @@ class Dimension(NMObject):
         return True
 
     @property
-    def offset(self):
+    def offset(self) -> Union[float, int]:
         # no master
         return self._offset
 
     @offset.setter
-    def offset(self, offset):
+    def offset(self, offset: Union[float, int]) -> bool:
         return self._offset_set(offset)
 
-    def _offset_set(self, offset, quiet=nmp.QUIET):
+    def _offset_set(
+        self,
+        offset: Union[float, int],
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         # no master
         if isinstance(offset, bool):
             e = self._type_error('offset', 'number')
@@ -173,16 +205,20 @@ class Dimension(NMObject):
         return True
 
     @property
-    def label(self):
+    def label(self) -> str:
         if self._master_lock:
             return self._master.label
         return self._label
 
     @label.setter
-    def label(self, label):
+    def label(self, label: str) -> bool:
         return self._label_set(label)
 
-    def _label_set(self, label, quiet=nmp.QUIET):
+    def _label_set(
+        self,
+        label: str,
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if self._master_lock:
             raise RuntimeError(self._master_error)
         if label is None:
@@ -201,16 +237,20 @@ class Dimension(NMObject):
         return True
 
     @property
-    def units(self):
+    def units(self) -> str:
         if self._master_lock:
             return self._master.units
         return self._units
 
     @units.setter
-    def units(self, units):
+    def units(self, units: str) -> bool:
         return self._units_set(units)
 
-    def _units_set(self, units, quiet=nmp.QUIET):
+    def _units_set(
+        self,
+        units: str,
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if self._master_lock:
             raise RuntimeError(self._master_error)
         if units is None:
@@ -229,12 +269,19 @@ class Dimension(NMObject):
         return True
 
 
-class XDimension(Dimension):
+class NMDimensionX(NMDimension):
     """
-    NM XDimension class
+    NM x-Dimension class
     """
 
-    def __init__(self, parent, name, dim={}, notes=None, **copy):
+    def __init__(
+        self,
+        parent: object,
+        name: str,
+        dim: Dict[str, str] = {},
+        notes: Optional[str] = None,
+        **copy
+    ) -> None:
         super().__init__(parent, name, notes=notes, **copy)
         if dim is None:
             dim = {}
@@ -244,32 +291,40 @@ class XDimension(Dimension):
         self._start = 0
         self._delta = 1
         self._xdata = None
-        self._dim_list += ['start', 'delta', 'xdata']
-        self._param_list += ['start', 'delta', 'xdata']
+        # self._dim_list += ['start', 'delta', 'xdata']
+        # self.parameter_list += ['start', 'delta', 'xdata']
         if dim and isinstance(dim, dict):
             self._dim_set(dim, quiet=True)
 
     # override, no super
-    def copy(self):
-        return XDimension(self._parent, self.name, dim=self.dim,
-                          notes=self._note_container)
+    def copy(self) -> NMdimensionX:
+        return NMDimensionX(self._parent, self.name, dim=self.dim,
+                            notes=self.__notes_container)
 
     @property
     def xdata(self):
+        # TODO: typing
         if self._master_lock:
             return self._master.xdata
         return self._xdata
 
     @xdata.setter
-    def xdata(self, xdata):
+    def xdata(self, xdata) -> bool:
+        # TODO: typing
         return self._xdata_set(xdata)
 
-    def _xdata_set(self, xdata, quiet=nmp.QUIET):
+    def _xdata_set(
+        self,
+        xdata,
+        quiet: bool = nmp.QUIET
+    ) -> bool:
+        # TODO: typing
         if self._master_lock:
             raise RuntimeError(self._master_error)
         if xdata is None:
             pass  # ok, unlock
         elif xdata.__class__.__name__ != 'Data':
+            # TODO: use isinstance
             e = self._type_error('xdata', 'Data')
             raise TypeError(e)
         old = self._xdata
@@ -291,11 +346,11 @@ class XDimension(Dimension):
         return True
 
     @property
-    def _xdata_lock(self):
+    def _xdata_lock(self)-> bool:
         return self._xdata.__class__.__name__ == 'Data'
 
     @property
-    def _xdata_error(self):
+    def _xdata_error(self) -> str:
         if self._xdata is None:
             return ''
         e = ('this x-dimension is locked to xdata ' +
@@ -304,7 +359,7 @@ class XDimension(Dimension):
 
     # override, no super
     @property
-    def dim(self):
+    def dim(self) -> Dict[str, str]:
         if self._master_lock:
             d = self._master.dim
             d.update({'master': self._master})
@@ -313,23 +368,27 @@ class XDimension(Dimension):
                 d = {'offset': self._offset, 'xdata': self._xdata}
                 d.update({'start': self.start, 'delta': self.delta})
                 d.update({'label': self.label, 'units': self.units})
-                d.update({'master': None})
+                d.update({'master': str(None)})
             else:
                 d = {'offset': self._offset}
                 d.update({'start': self.start, 'delta': self.delta})
                 d.update({'label': self.label, 'units': self.units})
-                d.update({'xdata': None, 'master': None})
+                d.update({'xdata': str(None), 'master': str(None)})
         return d
 
     # override, no super
-    def _dim_set(self, dim, quiet=nmp.QUIET):
+    def _dim_set(
+        self,
+        dim: Dict[str, str],
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if not isinstance(dim, dict):
             e = self._type_error('dim', 'dimension dictionary')
             raise TypeError(e)
         keys = dim.keys()
-        for k in keys:
-            if k not in self._dim_list:
-                raise KeyError('unknown dimension key ' + nmu.quotes(k))
+        # for k in keys:
+        #    if k not in self._dim_list:
+        #        raise KeyError('unknown dimension key ' + nmu.quotes(k))
         if 'offset' in keys:
             if not self._offset_set(dim['offset'], quiet=quiet):
                 return False
@@ -354,7 +413,7 @@ class XDimension(Dimension):
         return True
 
     @property
-    def start(self):
+    def start(self) -> Union[float, int]:
         if self._master_lock:
             return self._master.start
         if self._xdata_lock:
@@ -362,10 +421,14 @@ class XDimension(Dimension):
         return self._start
 
     @start.setter
-    def start(self, start):
+    def start(self, start: Union[float, int]) -> bool:
         return self._start_set(start)
 
-    def _start_set(self, start, quiet=nmp.QUIET):
+    def _start_set(
+        self,
+        start: Union[float, int],
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if self._master_lock:
             raise RuntimeError(self._master_error)
         if self._xdata_lock:
@@ -387,7 +450,7 @@ class XDimension(Dimension):
         return True
 
     @property
-    def delta(self):
+    def delta(self) -> Union[float, int]:
         if self._master_lock:
             return self._master.delta
         if self._xdata_lock:
@@ -395,10 +458,14 @@ class XDimension(Dimension):
         return self._delta
 
     @delta.setter
-    def delta(self, delta):
+    def delta(self, delta: Union[float, int]) -> bool:
         return self._delta_set(delta)
 
-    def _delta_set(self, delta, quiet=nmp.QUIET):
+    def _delta_set(
+        self,
+        delta: Union[float, int],
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if self._master_lock:
             raise RuntimeError(self._master_error)
         if self._xdata_lock:
@@ -421,7 +488,7 @@ class XDimension(Dimension):
 
     # override, no super
     @property
-    def label(self):
+    def label(self) -> str:
         if self._master_lock:
             return self._master.label
         if self._xdata_lock:
@@ -429,7 +496,11 @@ class XDimension(Dimension):
         return self._label
 
     # override
-    def _label_set(self, label, quiet=nmp.QUIET):
+    def _label_set(
+        self,
+        label: str,
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if self._master_lock:
             raise RuntimeError(self._master_error)
         if self._xdata_lock:
@@ -438,7 +509,7 @@ class XDimension(Dimension):
 
     # override, no super
     @property
-    def units(self):
+    def units(self) -> str:
         if self._master_lock:
             return self._master.units
         if self._xdata_lock:
@@ -446,7 +517,11 @@ class XDimension(Dimension):
         return self._units
 
     # override
-    def _units_set(self, units, quiet=nmp.QUIET):
+    def _units_set(
+        self,
+        units: str,
+        quiet: bool = nmp.QUIET
+    ) -> bool:
         if self._master_lock:
             raise RuntimeError(self._master_error)
         if self._xdata_lock:

@@ -12,7 +12,7 @@ import types
 
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import List, Dict, NewType
+from typing import Dict, List, NewType
 
 NMobject = NewType('NMObject', object)
 
@@ -29,7 +29,7 @@ class NMObject(object):
         _parent (NMObject or any object):
         __name (str):
         __rename_fxnref (ref):
-        __date (str):
+        __created (str):
         __modified (str):
         _param_list (list):
     """
@@ -55,8 +55,8 @@ class NMObject(object):
         # private attributes
         self.__name = name
         self.__rename_fxnref = self._name_set  # fxn ref for name.setter
-        self.__date = str(datetime.datetime.now())  # creation date
-        self.__modified = self.__date  # creation date
+        self.__created = str(datetime.datetime.now())  # creation date
+        self.__modified = None
         # param_list should match dictionary keys in parameters()
         # see param_test()
     #
@@ -71,7 +71,7 @@ class NMObject(object):
         # and add class parameters
         # used in isequivalent
         p = {'name': self.__name}
-        p.update({'date': self.__date})
+        p.update({'created': self.__created})
         p.update({'modified': self.__modified})
         return p
 
@@ -83,13 +83,11 @@ class NMObject(object):
     #  ancestry content functions
     #  content and content_tree are dictionaries {}
     #
-    @property
-    def _content_name(self) -> str:
-        return self.__class__.__name__.lower()  # class name, lower case
 
     @property
     def content(self) -> Dict[str, str]:
-        return {self._content_name: self.__name}
+        cname = self.__class__.__name__.lower()
+        return {cname: self.__name}
 
     @property
     def content_tree(self) -> Dict[str, str]:
@@ -248,7 +246,7 @@ class NMObject(object):
     ) -> bool:
         self_is_equiv = False  # make this an argument?
         nan_eq_nan = nmp.NAN_EQ_NAN  # make this an argument?
-        oktobedifferent = ['date', 'modified']  # make this an argument?
+        oktobedifferent = ['created', 'modified']  # make this an argument?
         ue = 'unequivalent '
         if nmobject == self:
             if self_is_equiv:
