@@ -77,8 +77,8 @@ class FolderContainer(NMObjectContainer):
     """
 
     def __init__(self, parent, name, **copy):
-        t = Folder(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t, prefix=nmp.FOLDER_PREFIX,
+        f = Folder(None, 'empty')
+        super().__init__(parent, name, nmobject=f, prefix=nmp.FOLDER_PREFIX,
                          rename=True, **copy)
 
     # override, no super

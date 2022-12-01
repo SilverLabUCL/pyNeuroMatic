@@ -32,7 +32,6 @@ class DataSeriesSet(NMObject):
                 self.__sort_template = v
             if k.lower() == 'c_eq_lock' and isinstance(v, list):
                 self.__eq_lock = v
-        self._param_list += ['sort_template', 'eq_lock']
 
     # override
     @property
@@ -821,8 +820,8 @@ class DataSeriesSetContainer(NMObjectContainer):
     """
 
     def __init__(self, parent, name, **copy):
-        t = DataSeriesSet(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t,
+        dss = DataSeriesSet(None, 'empty')
+        super().__init__(parent, name, nmobject=dss,
                          prefix=nmp.DATASERIES_SET_PREFIX, rename=True, **copy)
 
     # override

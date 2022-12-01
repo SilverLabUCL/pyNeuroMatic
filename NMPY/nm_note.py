@@ -17,7 +17,6 @@ class Note(NMObject):
         super().__init__(parent, name)
         self.__thenote = ''
         self._thenote_set(thenote)
-        self._param_list += ['thenote']
 
     # override
     @property
@@ -59,8 +58,8 @@ class NoteContainer(NMObjectContainer):
     """
 
     def __init__(self, parent, name, **copy):
-        t = Note(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t, prefix='Note', rename=False,
+        n = Note(None, 'empty')
+        super().__init__(parent, name, nmobject=n, prefix='Note', rename=False,
                          **copy)
         self.__off = False
 

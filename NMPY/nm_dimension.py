@@ -35,8 +35,8 @@ class Dimension(NMObject):
         self._label = ''
         self._units = ''
         self._master = None  # e.g. dimension of a DataSeries
-        self._dim_list = ['offset', 'label', 'units', 'master']
-        self._param_list += self._dim_list
+        # self._dim_list = ['offset', 'label', 'units', 'master']
+        # self._param_list += self._dim_list
         if dim:
             self._dim_set(dim, quiet=True)
 
@@ -111,6 +111,10 @@ class Dimension(NMObject):
             d.update({'label': self._label, 'units': self._units})
             d.update({'master': None})
         return d
+
+    @property
+    def dim_list(self):
+        return list(self.dim.keys())
 
     @dim.setter
     def dim(self, dim):

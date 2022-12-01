@@ -76,7 +76,6 @@ class Data(NMObject):
         else:
             e = self._type_error('dataseries', 'dictionary')
             raise TypeError(e)
-        self._param_list += ['xdim', 'ydim', 'dataseries']
 
     # override
     @property
@@ -276,8 +275,8 @@ class DataContainer(NMObjectContainer):
     """
 
     def __init__(self, parent, name, **copy):
-        t = Data(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t, prefix=nmp.DATA_PREFIX,
+        d = Data(None, 'empty')
+        super().__init__(parent, name, nmobject=d, prefix=nmp.DATA_PREFIX,
                          rename=True, **copy)
 
     # override, no super
@@ -313,14 +312,14 @@ class DataContainer(NMObjectContainer):
         return None
 
     # override
-    def kill(self, names=[], indexes=[], confirm=True, quiet=nmp.QUIET):
-        # wrapper for NMObjectContainer.kill()
-        klist = super().kill(names=names, indexes=indexes, confirm=confirm,
-                             quiet=quiet)
+    def remove(self, names=[], indexes=[], confirm=True, quiet=nmp.QUIET):
+        # wrapper for NMObjectContainer.remove()
+        rlist = super().remove(names=names, indexes=indexes, confirm=confirm,
+                               quiet=quiet)
         dsc = self.dataseries
         if not dsc or not isinstance(dsc, DataSeriesContainer):
-            return klist
-        for d in klist:  # remove data refs from data series and sets
+            return rlist
+        for d in rlist:  # remove data refs from data series and sets
             for i in range(0, dsc.count):
                 ds = dsc.getitem(index=i)
                 if not ds or not ds.thedata:
@@ -336,4 +335,4 @@ class DataContainer(NMObjectContainer):
                         s.discard(d)
                         s._modified()
                         ds.sets._modified()
-        return klist
+        return rlist

@@ -27,7 +27,7 @@ def name_ok(
     """
     if not isinstance(name, list):
         name = [name]  # convert to list of names
-    if len(name) == 0:
+    if len(name) == 0:  # no name is not OK
         return False
     if not isinstance(ok_list, list):
         ok_list = [ok_list]
@@ -36,9 +36,9 @@ def name_ok(
             return False
         if not n[0].isalpha():
             return False
-        for s in ok_list:
-            if isinstance(s, str):
-                n = n.replace(s, '')  # remove ok strings
+        for ok_str in ok_list:
+            if isinstance(ok_str, str):
+                n = n.replace(ok_str, '')  # remove ok strings
         if not n.isalnum():
             return False
     return True
@@ -387,11 +387,17 @@ def history_change(
     if not isinstance(param_name, str):
         param_name = str(param_name)
     if not isinstance(old_value, str):
-        old_value = str(old_value)
+        if old_value is None:
+            old_value = str(old_value)
+        else:
+            old_value = quotes(str(old_value))
     if not isinstance(new_value, str):
-        new_value = new_value
-    return ('changed ' + param_name + ' from ' + quotes(old_value) + ' to ' +
-            quotes(new_value))
+        if new_value is None:
+            new_value = str(new_value)
+        else:
+            new_value = quotes(str(new_value))
+    h = 'changed ' + param_name + ' from ' + old_value + ' to ' + new_value
+    return h
 
 
 def history(
@@ -574,7 +580,7 @@ def input_yesno(
     if tp.lower() == 'none':
         path = ''
     else:
-        path = get_treepath(inspect.stack(), tp=tp, frame=frame)
+        path = get_treepath(inspect.stack(), frame=frame)
     if path:
         txt = path + ': ' + txt
     if title:

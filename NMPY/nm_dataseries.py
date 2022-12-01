@@ -46,7 +46,6 @@ class DataSeries(NMObject):
         self.__channel_select = []
         self.__epoch_select = []
         self._sets_init(quiet=True)
-        self._param_list += ['channel_select', 'epoch_select']
 
     # override
     @property
@@ -752,8 +751,8 @@ class DataSeriesContainer(NMObjectContainer):
     """
 
     def __init__(self, parent, name, **copy):
-        t = DataSeries(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t, prefix='', rename=False,
+        ds = DataSeries(None, 'empty')
+        super().__init__(parent, name, nmobject=ds, prefix='', rename=False,
                          **copy)
 
     # override, no super

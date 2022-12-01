@@ -22,7 +22,6 @@ class Channel(NMObject):
         self.__y = nmd.Dimension(self, 'ydim', dim=ydim)
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         # self.__transform = []
-        self._param_list += ['xdim', 'ydim']  # ['graphXY', 'transform']
 
     # override
     @property
@@ -54,8 +53,8 @@ class ChannelContainer(NMObjectContainer):
     """
 
     def __init__(self, parent, name, **copy):
-        t = Channel(None, 'empty').__class__.__name__
-        super().__init__(parent, name, type_=t, prefix='', rename=False,
+        c = Channel(None, 'empty')
+        super().__init__(parent, name, nmobject=c, prefix='', rename=False,
                          **copy)
         # NO PREFIX, Channel names are 'A', 'B'...
 

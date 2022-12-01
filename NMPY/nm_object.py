@@ -57,7 +57,6 @@ class NMObject(object):
         self.__rename_fxnref = self._name_set  # fxn ref for name.setter
         self.__date = str(datetime.datetime.now())  # creation date
         self.__modified = self.__date  # creation date
-        self._param_list = ['name', 'date', 'modified']
         # param_list should match dictionary keys in parameters()
         # see param_test()
     #
@@ -68,31 +67,18 @@ class NMObject(object):
     #    modified: last modified
     #
     @property
-    def parameters(self) -> Dict[str, str]:  # child class should override
+    def parameters(self) -> Dict[str, str]:  # child class can override
         # and add class parameters
         # used in isequivalent
         p = {'name': self.__name}
         p.update({'date': self.__date})
         p.update({'modified': self.__modified})
-        return p  # dictionary {}
+        return p
 
-    def _parameters_key_test(
-        self,
-        quiet: bool = False
-    ) -> bool:  # used in nm_test.py
-        #  verify parameters match self._param_list
-        pkeys = self.parameters.keys()
-        for k in pkeys:
-            if k not in self._param_list:
-                e = 'missing param_list item ' + nmu.quotes(k)
-                self._error(e, quiet=quiet)
-                return False
-        for k in self._param_list:
-            if k not in pkeys:
-                e = 'missing parameters key ' + nmu.quotes(k)
-                self._error(e, quiet=quiet)
-                return False
-        return True
+    @property
+    def parameter_list(self) -> List[str]:
+        return list(self.parameters.keys())
+
     #
     #  ancestry content functions
     #  content and content_tree are dictionaries {}
@@ -176,27 +162,29 @@ class NMObject(object):
     #
     #  name functions
     #
-    def name_ok(  # check name is OK, see _bad_names
+    def name_ok(
         self,
-        name: str,  # name to test
-        ok: List[str] = []  # list of OK names
-    ) -> str:
-        if not nmu.name_ok(name):
+        name: str,
+        ok: List[str] = []
+    ) -> bool:
+        """ Check name is OK
+            See _bad_names
+        """
+        if not isinstance(name, str):
             return False
-        if not isinstance(ok, list):
-            ok = [ok]  # make sure ok is a list
-        bad = [n.lower() for n in self._bad_names]  # bad names in lower case
-        for ok_item in ok:
-            if not isinstance(ok_item, str):
-                e = self._type_error('ok_item', 'string')
-                raise TypeError(e)
-            if ok_item.lower() in bad:
-                bad.remove(ok_item.lower())
-        return name.lower() not in bad
+        if isinstance(ok, str):
+            ok = [ok]
+        ok_names = [n.lower() for n in ok]  # lower case
+        if name.lower() in ok_names:
+            return True
+        if not nmu.name_ok(name):  # check if alpha-numeric
+            return False
+        bad_names = [n.lower() for n in self._bad_names]  # lower case
+        return name.lower() not in bad_names
 
     @property
-    def _bad_names(self) -> List[str]:  # names not allowed
-        return nmp.BAD_NAMES
+    def _bad_names(self) -> List[str]:  # names that are not allowed
+        return nmp.BAD_NAMES  # default
 
     @property
     def name(self) -> str:
@@ -221,17 +209,18 @@ class NMObject(object):
         if not newname or not self.name_ok(newname):
             e = self._value_error('newname')
             raise ValueError(e)
+        tp = self._tp
         oldname = self.__name
         self.__name = newname
         self._modified()  # modification date
         h = nmu.history_change('name', oldname, self.__name)
-        self._history(h, quiet=quiet)
+        self._history(h, tp=tp, quiet=quiet)
         return True
 
     def _rename_fxnref_set(
         self,
         rename_fxnref  # fxn reference
-        # rename fxn must have this format: fxn(name, newname)
+        # rename fxn must have this format: fxn(oldname, newname)
     ) -> bool:
         if not isinstance(rename_fxnref, types.MethodType):
             e = self._type_error('rename_fxnref', 'MethodType')
@@ -366,6 +355,7 @@ class NMObject(object):
         self,
         obj_name: str,  # name of object that is of the wrong type
         type_expected: str,  # expected type of the object
+        # TODO: can pass type
         tp: str = 'self',  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2
