@@ -22,7 +22,7 @@ class NMObject(object):
     NeuroMatic object to be stored in a Container class (NMObjectContainer).
 
     Known children:
-        Channel, Data, DataSeries, Dimension, DataSeriesSet, Folder, Note,
+        Channel, Data, DataSeries, Dimension, DataSeriesSet, Folder, not,
         Project
 
     Attributes:
@@ -31,7 +31,7 @@ class NMObject(object):
         __rename_fxnref (ref):
         __created (str):
         __modified (str):
-        _param_list (list):
+        __notes (List[Dict])
     """
 
     # tp: treepath of the NMObject
@@ -42,33 +42,42 @@ class NMObject(object):
 
     def __init__(
         self,
-        parent: object,  # parent of NMObject
-        name: str  # name of this NMObject
+        parent: object = None,  # parent of NMObject
+        name: str = 'NMObject',  # name of this NMObject
+        copy: NMobject = None  # see copy()
     ) -> None:
-        self._parent = parent
-        if not isinstance(name, str):
+
+        if isinstance(copy, NMObject):
+            params = copy.parameters
+            self._parent = copy._parent
+            self.__name = params['name']
+            self.__created = params['created']
+            self.__modified = params['modified']
+            self.__notes_on = copy.notes_on
+            self.__notes = []
+            for n in copy.notes:
+                self.__notes.append(n.copy())
+        else:
+            self._parent = parent
+            self.__name = name
+            self.__created = str(datetime.datetime.now())
+            self.__modified = None
+            self.__notes_on = True
+            self.__notes = []
+            self.note = 'created ' + name
+
+        self.__rename_fxnref = self._name_set  # fxn ref for name.setter
+
+        if not isinstance(self.__name, str):
             e = self._type_error('name', 'string', tp='')  # no tp yet
             raise TypeError(e)
-        if not name or not self.name_ok(name):
+        if not self.__name or not self.name_ok(self.__name):
             e = self._value_error('name', tp='')  # no tp yet
             raise ValueError(e)
-        # private attributes
-        self.__name = name
-        self.__rename_fxnref = self._name_set  # fxn ref for name.setter
-        self.__created = str(datetime.datetime.now())  # creation date
-        self.__modified = None
-        # param_list should match dictionary keys in parameters()
-        # see param_test()
-    #
-    #  parameter functions
-    #  parameters:
-    #    name
-    #    date: creation date
-    #    modified: last modified
-    #
+
     @property
-    def parameters(self) -> Dict[str, str]:  # child class can override
-        # and add class parameters
+    def parameters(self) -> Dict[str, str]:
+        # child class can override and add class parameters
         # used in isequivalent
         p = {'name': self.__name}
         p.update({'created': self.__created})
@@ -78,11 +87,6 @@ class NMObject(object):
     @property
     def parameter_list(self) -> List[str]:
         return list(self.parameters.keys())
-
-    #
-    #  ancestry content functions
-    #  content and content_tree are dictionaries {}
-    #
 
     @property
     def content(self) -> Dict[str, str]:
@@ -97,11 +101,10 @@ class NMObject(object):
             k.update(self.content)
             return k
         return self.content
-    #
+
     #  ancestry treepath functions
     #  treepath: name0.name1.name2
     #  treepath_list: [object0,object1,object2] or [name0,name1,name2]
-    #
     @property
     def _tp(self) -> str:  # shorthand, use with history()
         return self.treepath(for_history=True)
@@ -157,9 +160,6 @@ class NMObject(object):
             return [self.__name]
         return [self]
 
-    #
-    #  name functions
-    #
     def name_ok(
         self,
         name: str,
@@ -210,7 +210,8 @@ class NMObject(object):
         tp = self._tp
         oldname = self.__name
         self.__name = newname
-        self._modified()  # modification date
+        self.note = 'renamed to ' + nmu.quotes(self.__name)
+        self._modified()
         h = nmu.history_change('name', oldname, self.__name)
         self._history(h, tp=tp, quiet=quiet)
         return True
@@ -225,15 +226,93 @@ class NMObject(object):
             raise TypeError(e)
         # TODO: test if function has 2 arguments?
         self.__rename_fxnref = rename_fxnref
+        self._modified()
         return True
-    #
-    #  misc functions
-    #
+
+    @property
+    def notes(self) -> List[Dict]:
+        return self.__notes
+
+    def notes_print(self) -> None:
+        for n in self.notes:
+            print(n['date'] + ' ' + n['note'])
+
+    @property
+    def note(self) -> str:
+        if len(self.__notes) > 0:
+            return self.__notes[-1]
+        return ''
+
+    @note.setter
+    def note(self, thenote: str) -> None:
+        return self._note(thenote)
+
+    def _note(self, thenote: str) -> bool:
+        if not self.__notes_on:
+            a = 'notes are off'
+            self._alert(a)
+            return False
+        if not isinstance(thenote, str):
+            thenote = str(thenote)
+        if self.__notes is None:
+            self.__notes = []
+            n = {}
+            n.update({'note': 'created ' + self.__name})
+            n.update({'date': self.__created})
+            self.__notes.append(n)
+        n = {}
+        n.update({'date': str(datetime.datetime.now())})
+        n.update({'note': thenote})
+        self.__notes.append(n)
+        return True
+
+    def notes_clear(self, prompt: bool = True) -> bool:
+        if prompt:
+            q = ('are you sure you want to clear all notes for ' +
+                 nmu.quotes(self.__name) + '?')
+            yn = nmu.input_yesno(q, tp=self._tp)
+            if not yn.lower() == 'y':
+                return False
+        self.__notes = []
+        return True
+
+    @property
+    def notes_on(self) -> bool:
+        return self.__notes_on
+
+    @notes_on.setter
+    def notes_on(self, on: bool) -> None:
+        if on is None:
+            self.__notes_on = False
+        elif isinstance(on, bool):
+            self.__notes_on = on
+
+    def notes_ok(notes: List[Dict]) -> bool:  # test notes type format
+        if not isinstance(notes, list):
+            return False
+        for n in notes:
+            if not isinstance(n, dict):
+                return False
+            foundNote = False
+            foundDate = False
+            for k, v in n.items():
+                if k.lower() == 'note':
+                    foundNote = True
+                    if not isinstance(v, str):
+                        return False
+                elif k.lower() == 'date':
+                    foundDate = True
+                    if not isinstance(v, str):
+                        return False
+                else:
+                    return False  # unknown key
+        return foundNote and foundDate
+
     @property
     def _manager(self) -> object:  # find reference to Manager of this NMObject
         if self._parent is None:
             return None
-        if self._parent.__class__.__name__ == 'Manager':
+        if self._parent.__class__.__name__ == 'NMManager':
             return self._parent
         if isinstance(self._parent, NMObject):
             return self._parent._manager  # goes up the ancestry tree
@@ -247,6 +326,7 @@ class NMObject(object):
         self_is_equiv = False  # make this an argument?
         nan_eq_nan = nmp.NAN_EQ_NAN  # make this an argument?
         oktobedifferent = ['created', 'modified']  # make this an argument?
+        # TODO: notes?
         ue = 'unequivalent '
         if nmobject == self:
             if self_is_equiv:
@@ -299,8 +379,11 @@ class NMObject(object):
                 return False
         return True
 
+    # children need to override copy()
     def copy(self) -> NMobject:
-        return NMObject(self._parent, self.__name)
+        c = NMObject(copy=self)
+        c.note = 'this is a copy of ' + str(self)
+        return c
 
     def save(
         self,
@@ -314,7 +397,7 @@ class NMObject(object):
     def _modified(self) -> str:
         self.__modified = str(datetime.datetime.now())
         if self._parent and isinstance(self._parent, NMObject):
-            self._parent._modified()  # goes up the ancestry tree
+            self._parent._modified()  # up the ancestry tree
 
     def _alert(
         self,
@@ -404,7 +487,7 @@ class NMObject(object):
         quiet: bool
     ) -> bool:
         m = self._manager
-        if m.__class__.__name__ == 'Manager':
+        if m.__class__.__name__ == 'NMManager':
             return m._quiet(quiet)
         if nmp.QUIET:  # this quiet overrides
             return True

@@ -4,34 +4,35 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import datetime
+# import matplotlib
 
-from nm_project import Project
+from nm_project import NMProject
 from nm_stats import Stats
 import nm_preferences as nmp
 import nm_utilities as nmu
+from typing import Dict, List, NewType
 
 nm = None  # holds Manager, accessed via console
 
 
-class Manager(object):
+class NMManager(object):  # TODO: can manager be a NMObejct? or static?
     """
     NM Manager class
 
     NM class tree:
-        Manager (root)
-        Project
-            FolderContainer
-            Folder (Folder0, Folder1...)
-                DataContainer
-                Data (Record0, Record1...)
-                    NoteContainer
-                    Note (Note0, Note1, Note2...)
-                DataSeriesContainer
-                DataSeries (Record, Wave...)
-                    ChannelContainer
-                    Channel (A, B, C...)
-                    DataSeriesSetContainer
-                    DataSeriesSet (All, Set1, Set2...)
+
+    NMManager (root)
+        NMProject
+            NMFolderContainer
+                NMFolder (Folder0, Folder1...)
+                    NMDataContainer
+                        NMData (Record0, Record1... Avg0, Avg1)
+                    NMDataSeriesContainer
+                        NMDataSeries (Record, Avg...)
+                            NMChannelContainer
+                                NMChannel (A, B, C...)
+                            NMDataSeriesSetContainer
+                                NMDataSeriesSet (All, Set1, Set2...)
     """
     def __init__(
         self,
@@ -54,7 +55,7 @@ class Manager(object):
             self.project_new(quiet=quiet)
 
     @property
-    def parameters(self):
+    def parameters(self) -> Dict[str, str]:
         k = {'name': self.__name}
         k.update({'created': self.__created})
         return k
@@ -75,7 +76,7 @@ class Manager(object):
             e = "ERROR: nm.Manager.project_new: bad name: " + name
             raise ValueError(e)
         if not name or name.lower() == 'default':
-            name = nmp.PROJECT_NAME
+            name = 'NMProject'
         if self.__project:
             n = nmu.quotes(self.__project.name)
             q = ('do you want to save ' + n +
@@ -90,11 +91,11 @@ class Manager(object):
             else:
                 self._history('cancel', quiet=quiet)
                 return None  # cancel
-        p = Project(self, name)
+        p = NMProject(self, name)
         h = 'created ' + nmu.quotes(name)
         self._history(h, quiet=quiet)
         if new_folder and p and p.folder:
-            p.folder.new(quiet=quiet)  # create default folder
+            p.folders.new(quiet=quiet)  # create default folder
         self.__project = p
         return p
 
@@ -103,7 +104,7 @@ class Manager(object):
         return self.__project
 
     @property
-    def folder(self):
+    def folders(self):
         if self.__project:
             return self.__project.folder
         return None
@@ -197,7 +198,7 @@ class Manager(object):
         if not self.__project:
             return s
         s['project'] = self.__project
-        fs = self.folder.select
+        fs = self.folders.select
         if not fs:
             return s
         s['folder'] = fs
@@ -224,7 +225,7 @@ class Manager(object):
         if not self.__project:
             return s
         s['project'] = self.__project.name
-        fs = self.folder.select
+        fs = self.folders.select
         if not fs:
             return s
         s['folder'] = fs.name
@@ -284,4 +285,4 @@ class Manager(object):
 
 
 if __name__ == '__main__':
-    nm = Manager()
+    nm = NMManager()

@@ -75,8 +75,12 @@ def number_ok(
     :return: True if number is ok, otherwise False.
     :rtype: bool
     """
+    if number is None:
+        return False
     if not isinstance(number, list):
         number = [number]  # convert to list of numbers
+    if len(number) == 0:  # no number is not OK
+        return False
     for n in number:
         if must_be_integer and not isinstance(n, int):
             return False
@@ -171,7 +175,7 @@ def remove_special_char(
 
 def int_list_to_seq_str(
     int_list: List[int],
-    seperator: str = nmp.SEQ_SEPERATOR,
+    seperator: str = ', ',
     seperator_at_end: bool = False
 ) -> str:
     """Convert list of integers to a sequence string.
@@ -186,7 +190,7 @@ def int_list_to_seq_str(
     :rtype: str
     """
     if not isinstance(seperator, str):
-        seperator = nmp.SEQ_SEPERATOR
+        seperator = ', '
     if not isinstance(int_list, list):
         if isinstance(int_list, int):
             return str(int_list)

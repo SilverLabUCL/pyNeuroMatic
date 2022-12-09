@@ -5,51 +5,62 @@ Copyright 2019 Jason Rothman
 """
 import numpy as np
 
-from nm_object import NMObject
-from nm_object_container import NMObjectContainer
-from nm_channel import ChannelContainer
-import nm_dimension as nmd
-from nm_dataseries_set import DataSeriesSetContainer
+from nm_object import NMObject, NMobject
+from nm_object_container import NMObjectContainer, NMobjectContainer
+from nm_channel import NMChannelContainer
+# import nm_scale as nms
+from nm_dataseries_set import NMDataSeriesSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
+from typing import Dict, List, NewType
+
+NMdataSeries = NewType('NMDataSeries', NMobject)
+NMdataSeriesContainer = NewType('NMDataSeriesContainer', NMobjectContainer)
 
 
-class DataSeries(NMObject):
+class NMDataSeries(NMObject):
     """
     NM DataSeries class
     """
 
-    def __init__(self, parent, name, xdim={}, ydim={}, **copy):
-        # name is data-series prefix
-        super().__init__(parent, name)
+    def __init__(
+        self,
+        parent: object = None,
+        name: str = 'NMDataSeries',  # name is data-series prefix
+        copy: NMdataSeries = None  # see copy()
+    ) -> None:
+
+        super().__init__(parent=parent, name=name, copy=copy)
+
         self.__channel_container = None
         self.__set_container = None
-        for k, v in copy.items():
-            if k.lower() == 'c_channels' and isinstance(v, ChannelContainer):
-                self.__channel_container = v
-            if k.lower() == 'c_sets' and isinstance(v, DataSeriesSetContainer):
-                self.__set_container = v
-        if not isinstance(self.__channel_container, ChannelContainer):
-            self.__channel_container = ChannelContainer(self, 'Channels')
-        if not isinstance(self.__set_container, DataSeriesSetContainer):
-            self.__set_container = DataSeriesSetContainer(self,
-                                                          'DataSeriesSets')
-        self.__thedata = {}  # dict, {channel: data-list}
-        self.__x = {'default': nmd.NMDimensionX(self, 'xdim')}
-        self.__y = {'default': nmd.NMDimension(self, 'ydim')}
-        if xdim:
-            pass
-        if ydim:
-            pass
-        self.__dims_master_on = True
-        self.__data_select = {}  # dict, {channel: data-list}
+        # self.__thedata = {}  # dict, {channel: data-list}
+        # TODO: change to thedata list contained with NMChannel
+        self.__scale_master_on = True
         self.__channel_select = []
         self.__epoch_select = []
-        self._sets_init(quiet=True)
+        self.__data_select = {}  # dict, {channel: data-list}
+        self._sets_init(quiet=True)  # TODO: move below after copy?
+
+        if isinstance(copy, NMDataSeries):
+            if isinstance(copy.channel, NMChannelContainer):
+                self.__channel_container = copy.channel.copy()
+            if isinstance(copy.sets, DataSeriesSetContainer):
+                self.__set_container = copy.sets.copy()
+            # self.__scale_master_on
+            # self.__data_select = {}
+            # self.__channel_select = []
+            # self.__epoch_select = []
+
+        if self.__channel_container is None:
+            self.__channel_container = NMChannelContainer(self, 'Channels')
+        if self.__set_container is None:
+            self.__set_container = NMDataSeriesSetContainer(self,
+                                                          'DataSeriesSets')
 
     # override
     @property
-    def parameters(self):
+    def parameters(self) -> Dict[str, str]:
         k = super().parameters
         k.update({'channel_select': self.__channel_select})
         k.update({'epoch_select': self.__epoch_select})
@@ -58,7 +69,7 @@ class DataSeries(NMObject):
 
     # override
     @property
-    def content(self):
+    def content(self) -> Dict[str, str]:
         k = super().content
         k.update(self.__channel_container.content)
         k.update({'channel_select': self.channel_select})
@@ -82,14 +93,9 @@ class DataSeries(NMObject):
         return True
 
     # override, no super
-    def copy(self):
-        c = DataSeries(self._parent, self.name, xdim=self.__x, ydim=self.__y,
-                       c_channels=self.__channel_container.copy(),
-                       c_sets=self.__set_container.copy())
-        # self.__dims_master_on
-        # self.__data_select = {}
-        # self.__channel_select = []
-        # self.__epoch_select = []
+    def copy(self) -> NMdataSeries:
+        c = NMDataSeries(copy=self)
+        c.note = 'this is a copy of ' + str(self)
         return c
 
     @property
@@ -104,18 +110,18 @@ class DataSeries(NMObject):
         return self.__thedata
 
     @property
-    def dims_master_on(self):
-        return self.__dims_master_on
+    def scale_master_on(self):
+        return self.__scale_master_on
 
-    @dims_master_on.setter
-    def dims_master_on(self, on):
-        self.__dims_master_on = on
+    @scale_master_on.setter
+    def scale_master_on(self, on):
+        self.__scale_master_on = on
         return on
 
     # override
     @property
     def dims(self):
-        if self.__dims_master_on:
+        if self.__scale_master_on:
             return self.__dims
         return self._dims_of_thedata
 
@@ -745,27 +751,33 @@ class DataSeries(NMObject):
         return d
 
 
-class DataSeriesContainer(NMObjectContainer):
+class NMDataSeriesContainer(NMObjectContainer):
     """
     NM Container for DataSeries objects
     """
 
-    def __init__(self, parent, name, **copy):
-        ds = DataSeries(None, 'empty')
-        super().__init__(parent, name, nmobject=ds, prefix='', rename=False,
-                         **copy)
+    def __init__(
+        self,
+        parent: object = None,
+        name: str = 'NMDataSeriesContainer',
+        copy: NMdataSeriesContainer = None
+    ):
+        o = NMDataSeries(None, 'empty')
+        prefix = ''  # no prefix
+        super().__init__(parent=parent, name=name, nmobject=o, prefix=prefix,
+                         rename=False, copy=copy)
+        # TODO: copy
 
     # override, no super
-    def copy(self):
-        return DataSeriesContainer(self._parent, self.name,
-                                   c_prefix=self.prefix,
-                                   c_rename=self.parameters['rename'],
-                                   c_thecontainer=self._thecontainer_copy())
+    def copy(self) -> NMdataSeriesContainer:
+        c = NMDataSeriesContainer(copy=self)
+        c.note = 'this is a copy of ' + str(self)
+        return c
 
     # override
     def new(self, name='', select=True, quiet=nmp.QUIET):
         # name is the data-series name
-        o = DataSeries(None, 'iwillberenamed')
+        o = NMDataSeries(None, 'iwillberenamed')
         ds = super().new(name=name, nmobject=o, select=select, quiet=quiet)
         if ds:
             ds.update(quiet=quiet)

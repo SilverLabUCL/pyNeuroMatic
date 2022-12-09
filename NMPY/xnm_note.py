@@ -19,6 +19,7 @@ NOTE_PREFIX = 'Note'
 class NMNote(NMObject):
     """
     NM Note class
+    TODO: change notes to Dictionary within NMObject
     """
 
     def __init__(

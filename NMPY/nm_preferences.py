@@ -3,8 +3,6 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-PROJECT_NAME = 'NMProject'
-FOLDER_PREFIX = 'NMFolder'
 DATA_PREFIX = 'Record'
 DATASERIES_SET_PREFIX = 'Set'
 DATASERIES_SET_LIST = ['All', 'Set1', 'Set2', 'SetX']
@@ -17,9 +15,7 @@ BAD_NAMES = ['', 'all', 'default', 'none', 'select', 'self',
              'nan', 'inf', '-inf']
 QUIET = False
 GUI = False
-NAN_EQ_NAN = True  # in Python nan != nan, use this flag so nan == nan
-S0 = ' -> '
-SEQ_SEPERATOR = ', '
+NAN_EQ_NAN = True  # in Python nan != nan, use this flag so that nan == nan
 
 
 class Configs(object):

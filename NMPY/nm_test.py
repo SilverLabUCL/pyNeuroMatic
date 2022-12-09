@@ -10,42 +10,34 @@ import unittest
 import numpy as np
 import time
 
-from nm_channel import Channel
-from nm_channel import ChannelContainer
-from nm_data import Data
-from nm_data import DataContainer
-from nm_dataseries import DataSeries
-from nm_dataseries import DataSeriesContainer
-from nm_dataseries_set import DataSeriesSet
-from nm_dataseries_set import DataSeriesSetContainer
-from nm_dimension import NMDimension
-from nm_dimension import NMDimensionX
-from nm_manager import Manager
+from nm_manager import NMManager
 from nm_object import NMObject
-# from nm_object import NMObjectTest
 from nm_object_container import NMObjectContainer
-from nm_note import NMNote
-from nm_note import NMNoteContainer
-from nm_project import Project
+from nm_channel import NMChannel, NMChannelContainer 
+from nm_data import NMData, NMDataContainer 
+from nm_dataseries import NMDataSeries, NMDataSeriesContainer 
+from nm_dataseries_set import NMDataSeriesSet, NMDataSeriesSetContainer 
+from nm_scale import NMScale, NMScaleX 
+from nm_project import NMProject
 import nm_preferences as nmp
 import nm_utilities as nmu
 
-nm = Manager(new_project=False, quiet=True)
+nm = NMManager(new_project=False, quiet=True)
 PARENT = nm
 BADTYPES = [None, True, 1, 3.14, [], (), {}, set(), 'test', nm]
 # BADTYPES: all types, use continue to ignore OK types
 BADNAME = 'b&dn@me!'
 BADNAMES = nmp.BAD_NAMES + [BADNAME]
 PLIST = ['name', 'created', 'modified']  # NMObject parameter list
-YDIM0 = {'offset': 0, 'label': 'Vmem', 'units': 'mV'}
-XDIM0 = {'offset': 0, 'start': 10, 'delta': 0.01, 'label': 'time',
-         'units': 'ms'}
-YDIM1 = {'offset': 0, 'label': 'Imem', 'units': 'pA'}
-XDIM1 = {'offset': 0, 'start': -10, 'delta': 0.2, 'label': 't',
-         'units': 'seconds'}
-YDIMx = {'offset': 0, 'label': 'time interval', 'units': 'usec'}
-XDIMx = {'offset': 0, 'start': 0, 'delta': 1, 'label': 'sample',
-         'units': '#'}
+YSCALE0 = {'offset': 0, 'label': 'Vmem', 'units': 'mV'}
+XSCALE0 = {'offset': 0, 'start': 10, 'delta': 0.01, 'label': 'time',
+           'units': 'ms'}
+YSCALE1 = {'offset': 0, 'label': 'Imem', 'units': 'pA'}
+XSCALE1 = {'offset': 0, 'start': -10, 'delta': 0.2, 'label': 't',
+           'units': 'seconds'}
+YSCALEx = {'offset': 0, 'label': 'time interval', 'units': 'usec'}
+XSCALEx = {'offset': 0, 'start': 0, 'delta': 1, 'label': 'sample',
+           'units': '#'}
 ALERT = True
 CONFIRM = False
 
@@ -56,16 +48,17 @@ class Test(unittest.TestCase):
         nm.configs.quiet = False
         # self._test_nmobject()
         # self._test_nmobject_container()
-        # self._test_nmnote()
-        # self._test_nmnote_container()
-        self._test_dimension()
-        # self._test_data()
+        # self._test_scale()
+        self._test_data()
         # self._test_data_container()
         # self._test_channel()
         # self._test_channel_container()
         # self._test_dataseries_set()
         # self._test_dataseries_set_container()
         # self._test_utilities()
+        
+        # self._test_nmnote()
+        # self._test_nmnote_container()
         # breakpoint()
 
     def _test_nmobject(self):
@@ -106,6 +99,37 @@ class Test(unittest.TestCase):
         self.assertEqual(o0._tp_check('nm.test'), 'nm.test')
         self.assertEqual(o0.treepath(), o0.name)
         self.assertEqual(o0.treepath_list(), [o0.name])
+
+        # notes()
+        self.assertTrue(o0.notes_on)
+        o0.note = 'added TTX'
+        self.assertTrue(o0._note('added AP5'))
+        o0.notes_on = None
+        self.assertFalse(o0.notes_on)
+        o0.notes_on = True
+        self.assertTrue(o0.notes_on)
+        o0.notes_on = False
+        self.assertFalse(o0.notes_on)
+        self.assertFalse(o0._note('added NBQX'))
+        self.assertTrue(isinstance(o0.notes, list))
+        self.assertEqual(len(o0.notes), 3)
+        self.assertEqual(o0.notes[0].get('note'), 'created ' + n0)
+        self.assertEqual(o0.notes[1].get('note'), 'added TTX')
+        self.assertEqual(o0.notes[2].get('note'), 'added AP5')
+        if o0.notes_clear():
+            self.assertEqual(len(o0.notes), 0)
+        else:
+            self.assertEqual(len(o0.notes), 3)
+        self.assertTrue(NMObject.notes_ok([{'note': 'hey', 'date': '111'}]))
+        self.assertTrue(NMObject.notes_ok([{'date': '111', 'note': 'hey'}]))
+        self.assertFalse(NMObject.notes_ok([{'n': 'hey', 'date': '111'}]))
+        self.assertFalse(NMObject.notes_ok([{'note': 'hey', 'd': '111'}]))
+        self.assertFalse(NMObject.notes_ok([{'note': 'hey', 'date': None}]))
+        self.assertTrue(NMObject.notes_ok([{'note': 'hey', 'date': 'None'}]))
+        self.assertFalse(NMObject.notes_ok([{'note': 'hey'}]))
+        self.assertFalse(NMObject.notes_ok([{'date': '111'}]))
+        self.assertFalse(NMObject.notes_ok([{'note': 'hey', 'date': '111',
+                                             'more': '1'}]))
 
         # name_ok()
         # arg: name
@@ -174,21 +198,25 @@ class Test(unittest.TestCase):
         time.sleep(2)  # forces date to be different
         o0 = NMObject(PARENT, n0)
         c = o0.copy()
+        # print(c.notes)
         self.assertIsInstance(c, NMObject)
         self.assertTrue(o0._isequivalent(c, alert=ALERT))
         self.assertEqual(o0._parent, c._parent)
         self.assertEqual(o0.name, c.name)
-        self.assertNotEqual(o0._NMObject__created, c._NMObject__created)
-        self.assertNotEqual(o0._NMObject__modified, c._NMObject__modified)
+        p0 = o0.parameters
+        p = c.parameters
+        self.assertEqual(p0.get('created'), p.get('created'))
+        self.assertEqual(p0.get('modified'), p.get('modified'))
         self.assertEqual(c._NMObject__rename_fxnref, c._name_set)
         fr0 = o0._NMObject__rename_fxnref
         frc = c._NMObject__rename_fxnref
         self.assertNotEqual(fr0, frc)  # should be different
 
         # modified()
-        m1 = o0._NMObject__modified
+        m1 = o0.parameters.get('modified')
         o0._modified()
-        self.assertNotEqual(m1, o0._NMObject__modified)
+        m2 = o0.parameters.get('modified')
+        self.assertNotEqual(m1, m2)
 
         # alert(), error(), history()
         # wrappers for nmu.history()
@@ -632,9 +660,11 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.parameters['rename'], c.parameters['rename'])
         fr0 = c0._NMObject__rename_fxnref
         frc = c._NMObject__rename_fxnref
+        p0 = c0.parameters
+        p = c.parameters
         self.assertNotEqual(fr0, frc)
-        self.assertNotEqual(c0._NMObject__created, c._NMObject__created)
-        self.assertNotEqual(c0._NMObject__modified, c._NMObject__modified)
+        self.assertEqual(p0.get('created'), p.get('created'))
+        self.assertEqual(p0.get('modified'), p.get('modified'))
         self.assertNotEqual(c0.select, c.select)  # refs not equal
         self.assertEqual(c0.select.name, c.select.name)  # but names equal
         for i in range(0, c0.count):
@@ -647,7 +677,8 @@ class Test(unittest.TestCase):
             self.assertEqual(fr0, c0.rename)
             self.assertEqual(frc, c.rename)
 
-        # c0.print_content()
+        c0.notes_print()
+        # c0.getitem(index=0).notes_print()
 
         # remove()
         # args: names, indexes, confirm
@@ -673,134 +704,52 @@ class Test(unittest.TestCase):
         self.assertEqual(klist, olist)
         self.assertIsNone(c1.select)
 
-    def _test_nmnote(self):
+    def _test_scale(self):
 
         # __init__()
-        # args: parent, name, thenote, copy
-        thenote = 'note!'
-        n0 = NMNote(PARENT, 'Note0', thenote=thenote)
-        self.assertEqual(n0.thenote, thenote)
-
-        # parameters()
-        plist = PLIST + ['thenote']
-        self.assertEqual(n0.parameter_list, plist)
-
-        # isequivalent()
-        # arg: NMNote
-        n1 = NMNote(PARENT, 'Note0', thenote=thenote)
-        self.assertTrue(n0._isequivalent(n1, alert=ALERT))
-        n1 = NMNote(PARENT, 'Note0', thenote='different')
-        self.assertFalse(n0._isequivalent(n1, alert=ALERT))
-
-        # copy()
-        c = n0.copy()
-        self.assertIsInstance(c, NMNote)
-        self.assertTrue(n0._isequivalent(c, alert=ALERT))
-        self.assertEqual(n0.thenote, c.thenote)
-
-        # thenote_set()
-        # arg: thenote
-        self.assertTrue(n0._thenote_set(123))
-        self.assertEqual(n0.thenote, '123')
-        self.assertTrue(n0._thenote_set(None))
-        self.assertEqual(n0.thenote, 'None')
-        self.assertTrue(n0._thenote_set('test'))
-        self.assertEqual(n0.thenote, 'test')
-        self.assertTrue(n0._thenote_set([1]))
-        self.assertEqual(n0.thenote, '[1]')
-
-    def _test_nmnote_container(self):
-
-        # __init__()
-        # args: parent, name, copy
-        txt = 'test #'
-        prefix = 'Note'
-        nlist = [prefix + str(i) for i in range(0, 4)]
-        thenotes = [txt + str(i) for i in range(0, 4)]
-        notes = NMNoteContainer(PARENT, 'MyNotes')
-        self.assertEqual(notes.parameters['type'], 'NMNote')
-        self.assertEqual(notes.prefix, prefix)
-        self.assertFalse(notes.parameters['rename'])
-        self.assertFalse(notes._NMNoteContainer__off)
-
-        # new()
-        # args: thenote, select
-        self.assertEqual(notes.name_next_seq(), 0)
-        self.assertEqual(notes.name_next(), nlist[0])
-        for i in range(0, 4):
-            thenote = txt + str(i)
-            n = notes.new(thenote=thenote)
-            self.assertIsInstance(n, NMNote)
-            self.assertEqual(n.name, nlist[i])
-            self.assertEqual(n.thenote, thenote)
-        # notes.print_content_parameters()
-        notes.off = True
-        self.assertIsNone(notes.new('test'))  # notes are off
-
-        # copy()
-        c = notes.copy()
-        self.assertIsInstance(c, NMNoteContainer)
-        self.assertTrue(notes._isequivalent(c, alert=ALERT))
-
-        # all_()
-        self.assertEqual(thenotes, notes.all_)
-        self.assertEqual(thenotes, c.all_)
-        # notes.print_all()
-
-        # duplicate()
-        with self.assertRaises(RuntimeError):  # notes cannot be duplicated
-            notes.duplicate()
-
-    def _test_dimension(self):
-
-        # __init__()
-        # args: parent, name, dim, notes, copy
+        # args: parent, name, scale, copy
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                y0 = NMDimension(PARENT, 'ydim0', dim=b)
-        for b in BADTYPES:
-            if b is None:
-                continue  # ok
-            with self.assertRaises(TypeError):
-                y0 = NMDimension(PARENT, 'ydim0', notes=b)
-        notes = NMNoteContainer(PARENT, 'Notes')
-        y0 = NMDimension(PARENT, 'ydim0', dim=YDIM0, notes=notes)
-        x0 = NMDimensionX(PARENT, 'xdim0', dim=XDIM0, notes=notes)
-        y1 = NMDimension(PARENT, 'ydim1', dim=YDIM1, notes=notes)
-        x1 = NMDimensionX(PARENT, 'xdim1', dim=XDIM1, notes=notes)
-        self.assertEqual(y0._NMDimension__notes_container, notes)
-        self.assertEqual(y0._offset, YDIM0['offset'])
-        self.assertEqual(y0._label, YDIM0['label'])
-        self.assertEqual(y0._units, YDIM0['units'])
-        self.assertIsNone(y0._master)
-        self.assertEqual(x0._NMDimension__notes_container, notes)
-        self.assertEqual(x0._offset, XDIM0['offset'])
-        self.assertEqual(x0._start, XDIM0['start'])
-        self.assertEqual(x0._delta, XDIM0['delta'])
-        self.assertEqual(x0._label, XDIM0['label'])
-        self.assertEqual(x0._units, XDIM0['units'])
-        self.assertIsNone(x0._master)
-        self.assertIsNone(x0._xdata)
+                y0 = NMScale(PARENT, 'yscale0', scale=b)
+        # notes = NMNoteContainer(PARENT, 'Notes')
+        y0 = NMScale(PARENT, 'yscale0', scale=YSCALE0)
+        x0 = NMScaleX(PARENT, 'xscale0', scale=XSCALE0)
+        # y1 = NMScale(PARENT, 'yscale1', scale=YSCALE1)
+        # x1 = NMScaleX(PARENT, 'xscale1', scale=XSCALE1)
+        # self.assertEqual(y0._NMScale__notes_container, notes)
+        self.assertEqual(y0.offset, YSCALE0['offset'])
+        self.assertEqual(y0.label, YSCALE0['label'])
+        self.assertEqual(y0.units, YSCALE0['units'])
+        # self.assertIsNone(y0.master)
+        # self.assertEqual(x0._NMScale__notes_container, notes)
+        self.assertEqual(x0.offset, XSCALE0['offset'])
+        self.assertEqual(x0.start, XSCALE0['start'])
+        self.assertEqual(x0.delta, XSCALE0['delta'])
+        self.assertEqual(x0.label, XSCALE0['label'])
+        self.assertEqual(x0.units, XSCALE0['units'])
+        # self.assertIsNone(x0._master)
+        # self.assertIsNone(x0._xdata)
 
         # parameters()
-        plist = PLIST + ['offset', 'label', 'units', 'master']
+        plist = PLIST + ['offset', 'label', 'units']
         self.assertEqual(y0.parameter_list, plist)
-        xplist = plist + ['start', 'delta', 'xdata']
+        xplist = PLIST + ['offset', 'start', 'delta', 'label', 'units']
         self.assertEqual(x0.parameter_list, xplist)
 
         # note_new()
         # arg: thenote
-        note = 'test123'
-        n = y0._note_new(note)
-        self.assertIsInstance(n, NMNote)
-        self.assertEqual(n.thenote, note)
-        n = x0._note_new(note)
-        self.assertEqual(n.thenote, note)
+        # note = 'test123'
+        # n = y0.note = note
+        # self.assertIsInstance(n, NMNote)
+        # self.assertEqual(n.thenote, note)
+        # n = x0.note = note
+        # self.assertEqual(n.thenote, note)
 
-        # master_set()
-        # arg: dimension
+        """
+        # master_set() REMOVED
+        # arg: scale
         for b in BADTYPES + [x0]:
             if b is None:
                 continue  # ok
@@ -822,30 +771,30 @@ class Test(unittest.TestCase):
         self.assertFalse(y1._master_lock)
         self.assertFalse(x1._master_lock)
         self.assertTrue(y1._master_set(y0))
-        self.assertIsInstance(y1._master, NMDimension)
+        self.assertIsInstance(y1._master, NMScale)
         self.assertEqual(y1._master, y0)
         self.assertTrue(y1._master_lock)
         self.assertTrue(x1._master_set(x0))
-        self.assertIsInstance(x1._master, NMDimensionX)
+        self.assertIsInstance(x1._master, NMScaleX)
         self.assertEqual(x1._master, x0)
         self.assertTrue(x1._master_lock)
-        dim = y1.dim
-        for k in YDIM0.keys():  # y0 is master
-            self.assertEqual(YDIM0[k], dim[k])
-        self.assertEqual(dim['master'], y0)
-        dim = x1.dim
-        for k in XDIM0.keys():  # x0 is master
-            self.assertEqual(XDIM0[k], dim[k])
-        self.assertEqual(dim['master'], x0)
+        scale = y1.scale
+        for k in YSCALE0.keys():  # y0 is master
+            self.assertEqual(YSCALE0[k], scale[k])
+        self.assertEqual(scale['master'], y0)
+        scale = x1.scale
+        for k in XSCALE0.keys():  # x0 is master
+            self.assertEqual(XSCALE0[k], scale[k])
+        self.assertEqual(scale['master'], x0)
         with self.assertRaises(RuntimeError):
-            y1._dim_set(YDIM0)  # master on
+            y1._scale_set(YSCALE0)  # master on
         self.assertTrue(y1._offset_set(3.14))  # offset free from master
         with self.assertRaises(RuntimeError):
             y1._label_set('test')  # master on
         with self.assertRaises(RuntimeError):
             y1._units_set('test')  # master on
         with self.assertRaises(RuntimeError):
-            x1._dim_set(XDIM0)  # master on
+            x1._scale_set(XSCALE0)  # master on
         self.assertTrue(x1._offset_set(3.14))  # offset free from master
         with self.assertRaises(RuntimeError):
             x1._label_set('test')  # master on
@@ -855,136 +804,93 @@ class Test(unittest.TestCase):
             x1._start_set(0)  # master on
         with self.assertRaises(RuntimeError):
             x1._delta_set(1)  # master on
-        xdata = Data(PARENT, 'xdata', xdim=XDIMx, ydim=YDIMx)
+        xdata = NMData(PARENT, 'xdata', xscale=XSCALEx, yscale=YSCALEx)
         with self.assertRaises(RuntimeError):
             x1._xdata_set(xdata)  # master on
         with self.assertRaises(RuntimeError):
             y0._master_set(y1)  # y1 has master
         with self.assertRaises(RuntimeError):
             x0._master_set(x1)  # x1 has master
+        """
 
-        # dim_set()
-        # arg: dim
-        for b in BADTYPES + [y1]:
+        # scale_set() arg: scale
+        for b in BADTYPES + [x0]:
             if isinstance(b, dict):
                 continue
             with self.assertRaises(TypeError):
-                y0._dim_set(b)
+                y0._scale_set(b)
             with self.assertRaises(TypeError):
-                x0._dim_set(b)
-        bad_dim = {'label': 'Vmem', 'units': 'mV', 'test': 0}
+                x0._scale_set(b)
+        bad_scale = {'label': 'Vmem', 'units': 'mV', 'test': 0}
         with self.assertRaises(KeyError):
-            y0._dim_set(bad_dim)
+            y0._scale_set(bad_scale)
         with self.assertRaises(KeyError):
-            y0._dim_set(XDIM0)
+            y0._scale_set(XSCALE0)
         with self.assertRaises(KeyError):
-            x0._dim_set(bad_dim)
-        self.assertTrue(y0._dim_set(YDIM0))
-        self.assertTrue(x0._dim_set(YDIM0))  # ok
-        self.assertTrue(x0._dim_set(XDIM0))
+            x0._scale_set(bad_scale)
+        self.assertTrue(y0._scale_set(YSCALE0))
+        self.assertTrue(x0._scale_set(YSCALE0))  # ok
+        self.assertTrue(x0._scale_set(XSCALE0))
 
-        # offset_set()
-        # arg: offset
-        for b in BADTYPES + [y1]:
+        # offset_set() arg: offset
+        # start_set() arg: start
+        # delta_set() arg: delta
+        for b in BADTYPES + [x0]:
             if isinstance(b, int) or isinstance(b, float):
                 continue  # ok
             with self.assertRaises(TypeError):
                 y0._offset_set(b)
             with self.assertRaises(TypeError):
-                x0._offset_set(b)
+                x0._start_set(b)
+            with self.assertRaises(TypeError):
+                x0._delta_set(b)
         badvalues = [float('nan'), float('inf')]
         for b in badvalues:
             with self.assertRaises(ValueError):
                 y0._offset_set(b)
-        for b in badvalues:
             with self.assertRaises(ValueError):
-                x0._offset_set(b)
-        self.assertTrue(y0._offset_set(3.14))
-        self.assertEqual(y0._offset, 3.14)
-        self.assertTrue(x0._offset_set(3.14))
-        self.assertEqual(x0._offset, 3.14)
-        self.assertTrue(y1._master_lock)
-        self.assertTrue(y1._offset_set(3.14))  # offset free from master
-        self.assertEqual(y1._offset, 3.14)  # offset free from master
-        self.assertTrue(x1._master_lock)
-        self.assertTrue(x1._offset_set(3.14))  # offset free from master
-        self.assertEqual(x1._offset, 3.14)  # offset free from master
+                x0._start_set(b)
+            with self.assertRaises(ValueError):
+                x0._delta_set(b)
+        goodvalues = [0, 10, -10.2, 3.14]
+        for g in goodvalues:
+            self.assertTrue(y0._offset_set(g))
+            self.assertEqual(y0.offset, g)
+            self.assertTrue(x0._start_set(g))
+            self.assertEqual(x0.start, g)
+            self.assertTrue(x0._delta_set(g))
+            self.assertEqual(x0.delta, g)
+        # self.assertTrue(y1._master_lock)
+        # self.assertTrue(y1._offset_set(3.14))  # offset free from master
+        # self.assertEqual(y1.offset, 3.14)  # offset free from master
+        # self.assertTrue(x1._master_lock)
+        # self.assertTrue(x1._offset_set(3.14))  # offset free from master
+        # self.assertEqual(x1.offset, 3.14)  # offset free from master
 
-        # label_set()
-        # arg: label
-        for b in BADTYPES + [y1]:
+        # label_set() arg: label
+        # units_set() arg: units
+        for b in BADTYPES + [x0]:
             if b is None or isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
                 y0._label_set(b)
             with self.assertRaises(TypeError):
-                x0._label_set(b)
-        self.assertTrue(y0._label_set(None))
-        self.assertEqual(y0._label, '')
-        self.assertTrue(x0._label_set(None))
-        self.assertEqual(x0._label, '')
-        self.assertTrue(y0._label_set('test'))
-        self.assertEqual(y0._label, 'test')
-        self.assertTrue(x0._label_set('test'))
-        self.assertEqual(x0._label, 'test')
-        with self.assertRaises(RuntimeError):
-            y1._label_set('test')  # master on
-        with self.assertRaises(RuntimeError):
-            x1._label_set('test')  # master on
-
-        # units_set()
-        # arg: units
-        for b in BADTYPES + [y1]:
-            if b is None or isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
                 y0._units_set(b)
-            with self.assertRaises(TypeError):
-                x0._units_set(b)
+        self.assertTrue(y0._label_set(None))
+        self.assertEqual(y0.label, '')
+        self.assertTrue(y0._label_set('test'))
+        self.assertEqual(y0.label, 'test')
         self.assertTrue(y0._units_set(None))
-        self.assertEqual(y0._units, '')
-        self.assertTrue(x0._units_set(None))
-        self.assertEqual(x0._units, '')
+        self.assertEqual(y0.units, '')
         self.assertTrue(y0._units_set('test'))
-        self.assertEqual(y0._units, 'test')
-        self.assertTrue(x0._units_set('test'))
-        self.assertEqual(x0._units, 'test')
-        with self.assertRaises(RuntimeError):
-            y1._units_set('test')  # master on
-        with self.assertRaises(RuntimeError):
-            x1._units_set('test')  # master on
+        self.assertEqual(y0.units, 'test')
+        # with self.assertRaises(RuntimeError):
+        #     y1._label_set('test')  # master on
+        # with self.assertRaises(RuntimeError):
+        #     x1._label_set('test')  # master on
 
-        # start_set()
-        # arg: start
-        for b in BADTYPES + [x1]:
-            if isinstance(b, int) or isinstance(b, float):
-                continue  # continue
-            with self.assertRaises(TypeError):
-                x0._start_set(b)
-        goodvalues = [0, 10, -10.2, float('inf')]
-        for g in goodvalues:
-            self.assertTrue(x0._start_set(g))
-            self.assertEqual(x0._start, g)
-        self.assertTrue(x0._start_set(float('nan')))  # nan ok
-        with self.assertRaises(RuntimeError):
-            x1._start_set(0)  # master on
-
-        # delta_set()
-        # arg: delta
-        for b in BADTYPES + [x1]:
-            if isinstance(b, int) or isinstance(b, float):
-                continue  # continue
-            with self.assertRaises(TypeError):
-                x0._delta_set(b)
-        goodvalues = [0, 10, -10.2, float('inf')]
-        for g in goodvalues:
-            self.assertTrue(x0._delta_set(g))
-            self.assertEqual(x0._delta, g)
-        self.assertTrue(x0._delta_set(float('nan')))  # nan ok
-        with self.assertRaises(RuntimeError):
-            x1._delta_set(0)  # master on
-
-        # xdata_set()
+        """
+        # xdata_set() REMOVED
         # arg: xdata
         for b in BADTYPES + [x1]:
             if b is None:
@@ -1006,51 +912,56 @@ class Test(unittest.TestCase):
         self.assertEqual(x0._xdata, None)
         with self.assertRaises(RuntimeError):
             x1._xdata_set(xdata)  # master on
+        """
 
         # copy()
         c = y0.copy()
-        self.assertIsInstance(c, NMDimension)
+        self.assertIsInstance(c, NMScale)
         self.assertTrue(y0._isequivalent(c, alert=ALERT))
         c = x0.copy()
-        self.assertIsInstance(c, NMDimensionX)
+        self.assertIsInstance(c, NMScaleX)
         self.assertTrue(x0._isequivalent(c, alert=ALERT))
 
     def _test_data(self):
-        # args: parent, name, np_array, xdim, ydim, dataseries, copy
+
+        # __init__()
+        # args: parent, name, np_array, xscale, yscale, dataseries, copy
         n0 = 'RecordA0'
         n1 = 'RecordA1'
         for b in BADTYPES:
             if b is None:
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, n0, np_array=b)
+                d0 = NMData(PARENT, n0, np_array=b)
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, n0, xdim=b)
+                d0 = NMData(PARENT, n0, xscale=b)
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, n0, ydim=b)
+                d0 = NMData(PARENT, n0, yscale=b)
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = Data(PARENT, n0, dataseries=b)
+                d0 = NMData(PARENT, n0, dataseries=b)
         nparray0 = np.full([4], 3.14, dtype=np.float64, order='C')
         nparray1 = np.full([5], 6.28, dtype=np.float64, order='C')
         nparrayx = np.full([6], 12.56, dtype=np.float64, order='C')
-        d0 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM0, ydim=YDIM0)
-        d1 = Data(PARENT, n1, np_array=nparray1, xdim=XDIM1, ydim=YDIM1)
-        xdata = Data(
-                    PARENT, 'xdata', np_array=nparrayx, xdim=XDIMx, ydim=YDIMx
-                )
+        d0 = NMData(PARENT, n0, np_array=nparray0, xscale=XSCALE0,
+                    yscale=YSCALE0)
+        d1 = NMData(PARENT, n1, np_array=nparray1, xscale=XSCALE1,
+                    yscale=YSCALE1)
+        xdata = NMData(PARENT, 'xdata', np_array=nparrayx, xscale=XSCALEx,
+                       yscale=YSCALEx)
         self.assertTrue(np.array_equal(d0._Data__np_array, nparray0))
         self.assertTrue(np.array_equal(d1._Data__np_array, nparray1))
+
         # parameters
-        plist = PLIST + ['xdim', 'ydim', 'dataseries']
+        plist = PLIST + ['xscale', 'yscale', 'dataseries']
         self.assertEqual(d0.parameter_list, plist)
 
         # content
@@ -1060,35 +971,38 @@ class Test(unittest.TestCase):
         self.assertEqual(list(c.keys()), [content_name, 'notes'])
         self.assertEqual(c[content_name], d0.name)
         self.assertEqual(c['notes'], d0.note.names)
+
         # isequivalent, args: Data
         self.assertFalse(d0._isequivalent(d1, alert=ALERT))
-        d00 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM0, ydim=YDIM0)
+        d00 = NMData(PARENT, n0, np_array=nparray0, xscale=XSCALE0, yscale=YSCALE0)
         self.assertTrue(d0._isequivalent(d00, alert=ALERT))
         nparray00 = np.full([4], 3.14, dtype=np.float64, order='F')
-        d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
+        d00 = NMData(PARENT, n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0)
         self.assertTrue(d0._isequivalent(d00, alert=ALERT))
         nparray0[2] = 5
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
         nparray0[2] = 0
-        d00 = Data(PARENT, n0, np_array=None, xdim=XDIM0, ydim=YDIM0)
+        d00 = NMData(PARENT, n0, np_array=None, xscale=XSCALE0, yscale=YSCALE0)
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
         nparray00 = np.full([5, 2], 3.14, dtype=np.float64, order='C')
-        d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
+        d00 = NMData(PARENT, n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0)
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
         nparray00 = np.full([5], 3.14, dtype=np.int32, order='C')
-        d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
+        d00 = NMData(PARENT, n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0)
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
         nparray00 = np.full([5], 3.14, dtype=np.float64, order='F')
-        d00 = Data(PARENT, n0, np_array=nparray00, xdim=XDIM0, ydim=YDIM0)
+        d00 = NMData(PARENT, n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0)
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        d00 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM1, ydim=YDIM0)
+        d00 = NMData(PARENT, n0, np_array=nparray0, xscale=XSCALE1, yscale=YSCALE0)
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        d00 = Data(PARENT, n0, np_array=nparray0, xdim=XDIM0, ydim=YDIM1)
+        d00 = NMData(PARENT, n0, np_array=nparray0, xscale=XSCALE0, yscale=YSCALE1)
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
+
         # copy
         c = d0.copy()
-        self.assertIsInstance(c, Data)
+        self.assertIsInstance(c, NMData)
         self.assertTrue(d0._isequivalent(c, alert=ALERT))
+
         # np_array_set, args: np_array
         for b in BADTYPES:
             if b is None:
@@ -1109,7 +1023,7 @@ class Test(unittest.TestCase):
         # dataseries_str
         # dataseries_add
         # dataseries_remove
-        # ds = DataSeries(PARENT, 'Record')
+        # ds = NMDataSeries(PARENT, 'Record')
 
     def _test_data_container(self):
         c0 = DataContainer(PARENT, 'Data')
@@ -1117,12 +1031,12 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.parameters['type'], 'Data')
         self.assertEqual(c0.prefix, nmp.DATA_PREFIX)
         self.assertTrue(c0.parameters['rename'])
-        # new, args: name, np_array, xdim=, ydim, dataseries, select
+        # new, args: name, np_array, xscale=, yscale, dataseries, select
         # wrapper for Data.new() and NMObjectContainer.new()
         nlist = ['RecordA0', 'WaveA0', 'Xdata']
         for n in nlist:
-            self.assertIsInstance(c0.new(name=n, xdim=XDIM0, ydim=YDIM0), Data)
-            self.assertIsInstance(c1.new(name=n, xdim=XDIM0, ydim=YDIM0), Data)
+            self.assertIsInstance(c0.new(name=n, xscale=XSCALE0, yscale=YSCALE0), NMData)
+            self.assertIsInstance(c1.new(name=n, xscale=XSCALE0, yscale=YSCALE0), NMData)
         # add, args: data, select
         # wrapper for NMObjectContainer.new()
         for b in BADTYPES:
@@ -1131,8 +1045,8 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0.add(b)
         nparray0 = np.full([4], 3.14, dtype=np.float64, order='C')
-        d0 = Data(PARENT, 'RecordA1', np_array=nparray0, xdim=XDIM0,
-                  ydim=YDIM0)
+        d0 = NMData(PARENT, 'RecordA1', np_array=nparray0, xscale=XSCALE0,
+                  yscale=YSCALE0)
         self.assertTrue(c0.add(d0))
         # copy
         c = c0.copy()
@@ -1140,28 +1054,28 @@ class Test(unittest.TestCase):
         self.assertTrue(c._isequivalent(c0, alert=ALERT))
         # isequivalent, args: DataContainer
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
-        d1 = Data(PARENT, 'RecordA1', np_array=nparray0, xdim=XDIM0,
-                  ydim=YDIM0)
+        d1 = NMData(PARENT, 'RecordA1', np_array=nparray0, xscale=XSCALE0,
+                  yscale=YSCALE0)
         c1.add(d1)
         self.assertTrue(c0._isequivalent(c1, alert=ALERT))
-        self.assertIsInstance(c0._select_set('WaveA0'), Data)
-        self.assertIsInstance(c1._select_set('RecordA0'), Data)
+        self.assertIsInstance(c0._select_set('WaveA0'), NMData)
+        self.assertIsInstance(c1._select_set('RecordA0'), NMData)
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
         # remove(), args: names, indexes, confirm
         # wrapper for NMObjectContainer.remove()
         # TODO, test if Data is removed from dataseries and sets
 
     def _test_channel(self):
-        # args: parent, name, xdim, ydim, copy
-        # ydim tested by NMDimension
-        # xdim tested by NMDimensionX
-        c0 = Channel(PARENT, 'A', xdim=XDIM0, ydim=YDIM0)
-        for k in XDIM0.keys():
-            self.assertEqual(c0.x.dim[k], XDIM0[k])
-        for k in YDIM0.keys():
-            self.assertEqual(c0.y.dim[k], YDIM0[k])
+        # args: parent, name, xscale, yscale, copy
+        # yscale tested by NMScale
+        # xscale tested by NMScaleX
+        c0 = NMChannel(PARENT, 'A', xscale=XSCALE0, yscale=YSCALE0)
+        for k in XSCALE0.keys():
+            self.assertEqual(c0.x.scale[k], XSCALE0[k])
+        for k in YSCALE0.keys():
+            self.assertEqual(c0.y.scale[k], YSCALE0[k])
         # parameters
-        plist = PLIST + ['xdim', 'ydim']
+        plist = PLIST + ['xscale', 'yscale']
         self.assertEqual(c0.parameter_list, plist)
 
         # copy
@@ -1170,7 +1084,7 @@ class Test(unittest.TestCase):
         self.assertTrue(c0.x._isequivalent(c.x, alert=ALERT))
         self.assertTrue(c0.y._isequivalent(c.y, alert=ALERT))
         # isequivalent, args: Channel
-        c1 = Channel(PARENT, 'A', xdim=XDIM0, ydim=YDIM0)
+        c1 = NMChannel(PARENT, 'A', xscale=XSCALE0, yscale=YSCALE0)
         self.assertTrue(c0._isequivalent(c1, alert=ALERT))
         self.assertTrue(c0.x._isequivalent(c1.x, alert=ALERT))
         self.assertTrue(c0.y._isequivalent(c1.y, alert=ALERT))
@@ -1179,7 +1093,7 @@ class Test(unittest.TestCase):
 
     def _test_channel_container(self):
         # args: parent, name, copy
-        c0 = ChannelContainer(PARENT, 'channels')
+        c0 = NMChannelContainer(PARENT, 'channels')
         self.assertEqual(c0.parameters['type'], 'Channel')
         self.assertEqual(c0.prefix, '')
         self.assertFalse(c0.parameters['rename'])
@@ -1195,30 +1109,30 @@ class Test(unittest.TestCase):
         # new
         self.assertEqual(c0.name_next_seq(), 0)
         self.assertEqual(c0.name_next(), 'A')
-        c = c0.new(xdim=XDIM0, ydim=YDIM0)
+        c = c0.new(xscale=XSCALE0, yscale=YSCALE0)
         self.assertIsInstance(c, Channel)
         self.assertEqual(c.name, 'A')
         self.assertEqual(c0.name_next_seq(), 1)
         self.assertEqual(c0.name_next(), 'B')
-        c = c0.new(xdim=XDIM0, ydim=YDIM1)
+        c = c0.new(xscale=XSCALE0, yscale=YSCALE1)
         self.assertEqual(c.name, 'B')
         self.assertEqual(c0.name_next_seq(), 2)
         self.assertEqual(c0.name_next(), 'C')
         # copy
         c = c0.copy()
         self.assertTrue(c0._isequivalent(c, alert=ALERT))
-        # isequivalent, args: ChannelContainer
-        c00 = ChannelContainer(PARENT, 'channels')
-        c00.new(xdim=XDIM0, ydim=YDIM0)
-        c00.new(xdim=XDIM0, ydim=YDIM1)
+        # isequivalent, args: NMChannelContainer
+        c00 = NMChannelContainer(PARENT, 'channels')
+        c00.new(xscale=XSCALE0, yscale=YSCALE0)
+        c00.new(xscale=XSCALE0, yscale=YSCALE1)
         self.assertTrue(c0._isequivalent(c00, alert=ALERT))
-        c00 = ChannelContainer(PARENT, 'channels')
-        c00.new(xdim=XDIM0, ydim=YDIM0)
-        c00.new(xdim=XDIM0, ydim=YDIM0)
+        c00 = NMChannelContainer(PARENT, 'channels')
+        c00.new(xscale=XSCALE0, yscale=YSCALE0)
+        c00.new(xscale=XSCALE0, yscale=YSCALE0)
         self.assertFalse(c0._isequivalent(c00, alert=ALERT))
-        c00 = ChannelContainer(PARENT, 'chans')
-        c00.new(xdim=XDIM0, ydim=YDIM0)
-        c00.new(xdim=XDIM0, ydim=YDIM1)
+        c00 = NMChannelContainer(PARENT, 'chans')
+        c00.new(xscale=XSCALE0, yscale=YSCALE0)
+        c00.new(xscale=XSCALE0, yscale=YSCALE1)
         self.assertFalse(c0._isequivalent(c00, alert=ALERT))
         # duplicate
         with self.assertRaises(RuntimeError):
@@ -1227,10 +1141,10 @@ class Test(unittest.TestCase):
     def _test_dataseries_set(self):
         # args: parent, name, copy
         quiet = True
-        s_all = DataSeriesSet(PARENT, 'All')
-        s1 = DataSeriesSet(PARENT, 'Set1')
-        s2 = DataSeriesSet(PARENT, 'Set2')
-        s3 = DataSeriesSet(PARENT, 'Set3')
+        s_all = NMDataSeriesSet(PARENT, 'All')
+        s1 = NMDataSeriesSet(PARENT, 'Set1')
+        s2 = NMDataSeriesSet(PARENT, 'Set2')
+        s3 = NMDataSeriesSet(PARENT, 'Set3')
         num_epochs = 10
         data_a = []
         data_a_c = []
@@ -1238,9 +1152,9 @@ class Test(unittest.TestCase):
         data_c = []
         epoch = []
         for ep in range(0, num_epochs):
-            da = Data(PARENT, 'RecordA' + str(ep))
-            db = Data(PARENT, 'RecordB' + str(ep))
-            dc = Data(PARENT, 'RecordC' + str(ep))
+            da = NMData(PARENT, 'RecordA' + str(ep))
+            db = NMData(PARENT, 'RecordB' + str(ep))
+            dc = NMData(PARENT, 'RecordC' + str(ep))
             da.np_array_make_random_normal(10, mean=0, stdv=1)
             da_c = da.copy()
             db.np_array_make_random_normal(10, mean=0, stdv=1)
@@ -1316,10 +1230,10 @@ class Test(unittest.TestCase):
         self.assertTrue(s1.clear(confirm=False, quiet=quiet))
         self.assertTrue(s1.add({'A': [dA0], 'B': [dB0]}, quiet=quiet))
         self.assertFalse(s1._theset_clear_if_empty())
-        self.assertEqual(s1._DataSeriesSet__theset, {'A': [dA0], 'B': [dB0]})
-        s1._DataSeriesSet__theset = {'A': [], 'B': []}
+        self.assertEqual(s1._NMDataSeriesSet__theset, {'A': [dA0], 'B': [dB0]})
+        s1._NMDataSeriesSet__theset = {'A': [], 'B': []}
         self.assertTrue(s1._theset_clear_if_empty())
-        self.assertEqual(s1._DataSeriesSet__theset, {})
+        self.assertEqual(s1._NMDataSeriesSet__theset, {})
         # add, args: data_dict
         # discard, args: data_dict
         # see data_dict_check()
@@ -1327,7 +1241,7 @@ class Test(unittest.TestCase):
         self.assertTrue(s1.add(data_a, quiet=quiet))  # added to chan 'A'
         self.assertFalse(s1.add(data_a, quiet=quiet))  # already exists
         for ep in range(0, num_epochs):
-            self.assertTrue(data_a[ep] in s1._DataSeriesSet__theset['A'])
+            self.assertTrue(data_a[ep] in s1._NMDataSeriesSet__theset['A'])
         nlist_a = [data_a[ep].name for ep in range(0, num_epochs)]
         self.assertEqual(s1.data_names, {'A': nlist_a})
         self.assertTrue(s1.discard(data_a[1], quiet=quiet))
@@ -1341,9 +1255,9 @@ class Test(unittest.TestCase):
         for ep in range(0, num_epochs):
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
         for ep in range(0, num_epochs):
-            self.assertTrue(data_a[ep] in s1._DataSeriesSet__theset['A'])
-            self.assertTrue(data_b[ep] in s1._DataSeriesSet__theset['B'])
-            self.assertTrue(data_c[ep] in s1._DataSeriesSet__theset['C'])
+            self.assertTrue(data_a[ep] in s1._NMDataSeriesSet__theset['A'])
+            self.assertTrue(data_b[ep] in s1._NMDataSeriesSet__theset['B'])
+            self.assertTrue(data_c[ep] in s1._NMDataSeriesSet__theset['C'])
         nlist_a = [data_a[ep].name for ep in range(0, num_epochs)]
         nlist_b = [data_b[ep].name for ep in range(0, num_epochs)]
         nlist_c = [data_c[ep].name for ep in range(0, num_epochs)]
@@ -1467,7 +1381,7 @@ class Test(unittest.TestCase):
         s = s1.get('A')
         dlist = s['A']
         self.assertEqual(len(dlist), num_epochs-1)
-        # difference, args: DataSeriesSet, alert
+        # difference, args: NMDataSeriesSet, alert
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.difference(b)
@@ -1491,7 +1405,7 @@ class Test(unittest.TestCase):
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s2.difference(s1, quiet=quiet))  # empty
         self.assertEqual(s2.data_names, {})
-        # intersection, args: DataSeriesSet, alert
+        # intersection, args: NMDataSeriesSet, alert
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.intersection(b)
@@ -1518,7 +1432,7 @@ class Test(unittest.TestCase):
         self.assertTrue(s1.intersection(s2, quiet=quiet))
         self.assertTrue(s1.isempty)
         self.assertFalse(s2.isempty)
-        # symmetric_difference, args: DataSeriesSet, alert
+        # symmetric_difference, args: NMDataSeriesSet, alert
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.symmetric_difference(b)
@@ -1543,7 +1457,7 @@ class Test(unittest.TestCase):
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.symmetric_difference(s2, quiet=quiet))
         self.assertTrue(s1.isempty)
-        # union, args: DataSeriesSet, alert
+        # union, args: NMDataSeriesSet, alert
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.union(b)
@@ -1565,7 +1479,7 @@ class Test(unittest.TestCase):
         self.assertTrue(s1.union(s2, quiet=quiet))
         for ep in range(0, num_epochs):
             self.assertTrue(s1.contains(epoch[ep], alert=ALERT))
-        # isdisjoint, args: DataSeriesSet
+        # isdisjoint, args: NMDataSeriesSet
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.isdisjoint(b)
@@ -1580,7 +1494,7 @@ class Test(unittest.TestCase):
         self.assertTrue(s1.add(epoch[3], quiet=quiet))
         self.assertFalse(s1.isdisjoint(s2))
         self.assertFalse(s2.isdisjoint(s1))
-        # issubset, args: DataSeriesSet
+        # issubset, args: NMDataSeriesSet
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.issubset(b)
@@ -1592,13 +1506,13 @@ class Test(unittest.TestCase):
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s2.issubset(s1))
         self.assertFalse(s1.issubset(s2))
-        # issuperset, args: DataSeriesSet
+        # issuperset, args: NMDataSeriesSet
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.issuperset(b)
         self.assertTrue(s1.issuperset(s2))
         self.assertFalse(s2.issuperset(s1))
-        # isequal, args: DataSeriesSet
+        # isequal, args: NMDataSeriesSet
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1.isequal(b)
@@ -1622,7 +1536,7 @@ class Test(unittest.TestCase):
         self.assertFalse(s1.isequal(s2, alert=ALERT))
         s2.clear(confirm=False, quiet=quiet)
         self.assertTrue(s1.isequal(s2, alert=ALERT))
-        # isequivalent, args: DataSeriesSet
+        # isequivalent, args: NMDataSeriesSet
         s1.clear(confirm=False, quiet=quiet)
         s2.clear(confirm=False, quiet=quiet)
         for ep in range(0, num_epochs, 2):  # 0, 2, 4...
@@ -1740,7 +1654,7 @@ class Test(unittest.TestCase):
                          s2.data_names['B'])
         self.assertEqual(s3.data_names['C'], s1.data_names['C'] +
                          s2.data_names['C'])
-        # sort_template_set, args: DataSeriesSet
+        # sort_template_set, args: NMDataSeriesSet
         for b in BADTYPES + [nm]:
             with self.assertRaises(TypeError):
                 s3._sort_template_set(b)
@@ -1756,7 +1670,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s3.data_names['A'], nlist_a)
         self.assertEqual(s3.data_names['B'], nlist_b)
         self.assertEqual(s3.data_names['C'], nlist_c)
-        # sort, args: DataSeriesSet
+        # sort, args: NMDataSeriesSet
         for b in BADTYPES + [nm]:
             with self.assertRaises(TypeError):
                 s3.sort(b)
@@ -1769,7 +1683,7 @@ class Test(unittest.TestCase):
         # copy
         """
         c = s3.copy()
-        self.assertIsInstance(c, DataSeriesSet)
+        self.assertIsInstance(c, NMDataSeriesSet)
         self.assertFalse(s3._isequivalent(c, alert=ALERT))
         self.assertTrue(s3.isequal(c))
         """
@@ -1782,14 +1696,14 @@ class Test(unittest.TestCase):
         """
         name0 = 'Project0'
         name1 = 'Project1'
-        p0 = Project(PARENT, name0)
-        p1 = Project(PARENT, name1)
-        f = p0.folder.new()
+        p0 = NMProject(PARENT, name0)
+        p1 = NMProject(PARENT, name1)
+        f = p0.folders.new()
         ds = f.dataseries.new('Record')
-        ds.make(channels=1, epochs=3, shape=5, dim=dim)
-        f = p0.folder.new()
+        ds.make(channels=1, epochs=3, shape=5, scale=scale)
+        f = p0.folders.new()
         ds = f.dataseries.new('Wave')
-        ds.make(channels=2, epochs=3, shape=5, dim=dim)
+        ds.make(channels=2, epochs=3, shape=5, scale=scale)
         # p1._copy(p0)
         # self.assertTrue(p1._isequivalent(p0, alert=ALERT))
         """
@@ -2043,11 +1957,91 @@ class Test(unittest.TestCase):
         self.assertEqual(nmu.get_method(stack), fxn)
         """
 
+    """
+    def _test_nmnote(self):
+
+        # __init__()
+        # args: parent, name, thenote, copy
+        thenote = 'note!'
+        n0 = NMNote(PARENT, 'Note0', thenote=thenote)
+        self.assertEqual(n0.thenote, thenote)
+
+        # parameters()
+        plist = PLIST + ['thenote']
+        self.assertEqual(n0.parameter_list, plist)
+
+        # isequivalent()
+        # arg: NMNote
+        n1 = NMNote(PARENT, 'Note0', thenote=thenote)
+        self.assertTrue(n0._isequivalent(n1, alert=ALERT))
+        n1 = NMNote(PARENT, 'Note0', thenote='different')
+        self.assertFalse(n0._isequivalent(n1, alert=ALERT))
+
+        # copy()
+        c = n0.copy()
+        self.assertIsInstance(c, NMNote)
+        self.assertTrue(n0._isequivalent(c, alert=ALERT))
+        self.assertEqual(n0.thenote, c.thenote)
+
+        # thenote_set()
+        # arg: thenote
+        self.assertTrue(n0._thenote_set(123))
+        self.assertEqual(n0.thenote, '123')
+        self.assertTrue(n0._thenote_set(None))
+        self.assertEqual(n0.thenote, 'None')
+        self.assertTrue(n0._thenote_set('test'))
+        self.assertEqual(n0.thenote, 'test')
+        self.assertTrue(n0._thenote_set([1]))
+        self.assertEqual(n0.thenote, '[1]')
+
+    def _test_nmnote_container(self):
+
+        # __init__()
+        # args: parent, name, copy
+        txt = 'test #'
+        prefix = 'Note'
+        nlist = [prefix + str(i) for i in range(0, 4)]
+        thenotes = [txt + str(i) for i in range(0, 4)]
+        notes = NMNoteContainer(PARENT, 'MyNotes')
+        self.assertEqual(notes.parameters['type'], 'NMNote')
+        self.assertEqual(notes.prefix, prefix)
+        self.assertFalse(notes.parameters['rename'])
+        self.assertFalse(notes._NMNoteContainer__off)
+
+        # new()
+        # args: thenote, select
+        self.assertEqual(notes.name_next_seq(), 0)
+        self.assertEqual(notes.name_next(), nlist[0])
+        for i in range(0, 4):
+            thenote = txt + str(i)
+            n = notes.new(thenote=thenote)
+            self.assertIsInstance(n, NMNote)
+            self.assertEqual(n.name, nlist[i])
+            self.assertEqual(n.thenote, thenote)
+        # notes.print_content_parameters()
+        notes.off = True
+        self.assertIsNone(notes.new('test'))  # notes are off
+
+        # copy()
+        c = notes.copy()
+        self.assertIsInstance(c, NMNoteContainer)
+        self.assertTrue(notes._isequivalent(c, alert=ALERT))
+
+        # all_()
+        self.assertEqual(thenotes, notes.all_)
+        self.assertEqual(thenotes, c.all_)
+        # notes.print_all()
+
+        # duplicate()
+        with self.assertRaises(RuntimeError):  # notes cannot be duplicated
+            notes.duplicate()
+    """
+
 
 class NMObjectTest(NMObject):
 
     def __init__(self, parent, name):
-        super().__init__(parent, name)
+        super().__init__(parent=parent, name=name)
         self.myvalue = 1
 
     # override
