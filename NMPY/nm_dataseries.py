@@ -5,17 +5,15 @@ Copyright 2019 Jason Rothman
 """
 import numpy as np
 
-from nm_object import NMObject, NMobject
-from nm_object_container import NMObjectContainer, NMobjectContainer
+from nm_object import NMObject
+from nm_object_container import NMObjectContainer
 from nm_channel import NMChannelContainer
-# import nm_scale as nms
 from nm_dataseries_set import NMDataSeriesSetContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, NewType
+from typing import Dict, List, Union
 
-NMdataSeries = NewType('NMDataSeries', NMobject)
-NMdataSeriesContainer = NewType('NMDataSeriesContainer', NMobjectContainer)
+ALLSTR = 'ALL'
 
 
 class NMDataSeries(NMObject):
@@ -26,41 +24,55 @@ class NMDataSeries(NMObject):
     def __init__(
         self,
         parent: object = None,
-        name: str = 'NMDataSeries',  # name is data-series prefix
-        copy: NMdataSeries = None  # see copy()
+        name: str = 'NMDataSeries',  # dataseries name/prefix
+        copy: nmu.NMDataSeriesType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__channel_container = None
         self.__set_container = None
+
         # self.__thedata = {}  # dict, {channel: data-list}
         # TODO: change to thedata list contained with NMChannel
-        self.__scale_master_on = True
-        self.__channel_select = []
-        self.__epoch_select = []
-        self.__data_select = {}  # dict, {channel: data-list}
-        self._sets_init(quiet=True)  # TODO: move below after copy?
 
         if isinstance(copy, NMDataSeries):
             if isinstance(copy.channel, NMChannelContainer):
                 self.__channel_container = copy.channel.copy()
-            if isinstance(copy.sets, DataSeriesSetContainer):
+            if isinstance(copy.sets, NMDataSeriesSetContainer):
                 self.__set_container = copy.sets.copy()
-            # self.__scale_master_on
-            # self.__data_select = {}
-            # self.__channel_select = []
-            # self.__epoch_select = []
+            self.__channel_scale_lock = copy.channel_scale_lock
+            # self.__channel_select = []  # new reference
+            # self.__epoch_select = []  # new reference
+            # self.__data_select = {}  # new reference
+        else:
+            self.__channel_scale_lock = True  # NMdata share channel x-y scales
+            self.__xscale_lock = True  # all NMdata share x-scale
+            self.__channel_select = None  # 'A', ['A', 'C'], 'ALL'
+            self.__epoch_select = None  # 0, [0, 5], 'ALL', range(2, 6)
+            self.__data_select = None  # {['A']: [NMData]}
 
-        if self.__channel_container is None:
-            self.__channel_container = NMChannelContainer(self, 'Channels')
-        if self.__set_container is None:
-            self.__set_container = NMDataSeriesSetContainer(self,
-                                                          'DataSeriesSets')
+        if not isinstance(self.__channel_container, NMChannelContainer):
+            self.__channel_container = NMChannelContainer(
+                parent=self,
+                name='Channels')
+            self.__channel_select = None
+            self.__epoch_select = None
+            self.__data_select = None
+
+        if not isinstance(self.__set_container, NMDataSeriesSetContainer):
+            self.__set_container = NMDataSeriesSetContainer(
+                parent=self,
+                name='DataSeriesSets')
+        self._sets_init(quiet=True)
+
+    # override, no super
+    def copy(self) -> nmu.NMDataSeriesType:
+        return NMDataSeries(copy=self)
 
     # override
     @property
-    def parameters(self) -> Dict[str, str]:
+    def parameters(self) -> Dict[str, object]:
         k = super().parameters
         k.update({'channel_select': self.__channel_select})
         k.update({'epoch_select': self.__epoch_select})
@@ -83,45 +95,239 @@ class NMDataSeries(NMObject):
         if not super()._isequivalent(dataseries, alert=alert):
             return False
         c = self.__channel_container
-        c2 = dataseries._DataSeries__channel_container
+        c2 = dataseries._NMDataSeries__channel_container
         if c and not c._isequivalent(c2, alert=alert):
             return False
         c = self.__set_container
-        c2 = dataseries._DataSeries__set_container
+        c2 = dataseries._NMDataSeries__set_container
         if c and not c._isequivalent(c2, alert=alert):
             return False
         return True
 
-    # override, no super
-    def copy(self) -> NMdataSeries:
-        c = NMDataSeries(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
+#    @property
+#    def folder_data(self):  # use self._folder.data
+        # cannot import NMFolder class
+#        if not isinstance(self._parent, NMObject):
+#            return None
+#        if self._parent.__class__.__name__ == 'NMFolder':
+#            return self._parent.data
+#       return None
 
     @property
-    def data(self):
-        # cannot import Folder class
-        if self._parent.__class__.__name__ == 'Folder':
-            return self._parent.data
+    def thedata(self) -> Dict[str, List[nmu.NMDataType]]:
+        if not self.__channel_container:
+            return {}
+        data = {}
+        for i in range(0, self.__channel_container.count):
+            c = self.__channel_container.getitem(i)
+            data.update({c.name.upper(): len(c.data)})
+        return data
+
+    @property
+    def channel_scale_lock(self) -> bool:
+        if isinstance(self.__channel_scale_lock, bool):
+            return self.__channel_scale_lock
+        else:
+            return True
+
+    @channel_scale_lock.setter
+    def channel_scale_lock(self, on: bool) -> None:
+        if isinstance(on, bool):
+            self.__channel_scale_lock = on
+        else:
+            e = self._type_error('channel_scale_lock', 'boolean')
+            raise TypeError(e)
+
+    @property
+    def xscale_lock(self) -> bool:
+        if isinstance(self.__xscale_lock, bool):
+            return self.__xscale_lock
+        else:
+            return True
+
+    @xscale_lock.setter
+    def xscale_lock(self, on: bool) -> None:
+        if isinstance(on, bool):
+            self.__xscale_lock = on
+        else:
+            e = self._type_error('xscale_lock', 'boolean')
+            raise TypeError(e)
+
+    @property
+    def channel(self) -> NMChannelContainer:
+        return self.__channel_container
+
+    @property
+    def channel_count(self) -> int:
+        if isinstance(self.__channel_container, NMChannelContainer):
+            return self.__channel_container.count
+        return 0
+
+    @property
+    def channel_list(self) -> List[str]:  # UPPER
+        if isinstance(self.__channel_container, NMChannelContainer):
+            return [c.upper() for c in self.__channel_container.names]
+        else:
+            return []
+
+    def channel_ok(
+        self,
+        channel: Union[str, List[str]]
+    ) -> bool:
+        if not isinstance(channel, list):
+            channel = [channel]
+        for c in channel:
+            if not isinstance(c, str):
+                return False
+            if c.upper() == ALLSTR:
+                return True  # OK
+            if c.upper() not in self.channel_list:  # UPPER
+                return False
+        return True
+
+    @property
+    def channel_select(self) -> Union[str, List[str]]:
+        if isinstance(self.__channel_select, str):
+            return self.__channel_select.upper()
+        if isinstance(self.__channel_select, list):
+            return [c.upper() for c in self.__channel_select]  # UPPER
         return None
 
-    @property
-    def thedata(self):
-        return self.__thedata
+    @channel_select.setter
+    def channel_select(
+        self,
+        channel: Union[str, List[str]]  # 'A', 'ALL', ['A', 'C'], None
+    ) -> None:
+        self._channel_select_set(channel=channel)
+
+    def _channel_select_set(
+        self,
+        channel: Union[str, List[str]]  # 'A', 'ALL', ['A', 'C'], None
+    ) -> bool:
+        clist = self.channel_list
+        select = None
+        if channel is None:
+            pass  # OK
+        elif isinstance(channel, str):
+            if channel.upper == ALLSTR:
+                select = ALLSTR
+            elif channel.upper in clist:
+                select = channel.upper()
+            else:
+                e = self._value_error('channel')
+                raise ValueError(e)
+        elif isinstance(channel, list):
+            select = []
+            for c in channel:
+                if c.upper() == ALLSTR:
+                    select = ALLSTR
+                    break
+                elif c.upper in clist:
+                    select.append(c.upper())  # UPPER
+                else:
+                    channel = c
+                    e = self._value_error('channel')
+                    raise ValueError(e)
+        else:
+            e = self._type_error('channel', 'string or list')
+            raise TypeError(e)
+        self.__channel_select = select
+        self._modified()
+        self._history('channel select = ' + str(select), quiet=nmp.QUIET)
+        return True
 
     @property
-    def scale_master_on(self):
-        return self.__scale_master_on
+    def channel_select_List(self) -> List[str]:
+        return self._channel_list(self.__channel_select)
 
-    @scale_master_on.setter
-    def scale_master_on(self, on):
-        self.__scale_master_on = on
-        return on
+    def _channel_list(
+        self,
+        channel  # 'A', 'ALL', ['A', 'C'], None
+    ) -> List[str]:
+        if channel is None:
+            return []
+        if isinstance(channel, str):
+            if channel.upper() == ALLSTR:
+                return self.channel_list
+        if isinstance(channel, list):
+            clist = self.channel_list
+            clist2 = []
+            for c in channel:
+                if c.upper() == ALLSTR:
+                    return clist
+                if c.upper in clist:
+                    clist2.append(c.upper())  # UPPER
+            return clist2
+        return []
 
+    @property
+    def epoch_count(self) -> Dict[str, int]:  # epochs per channel
+        if not self.__channel_container:
+            return {}
+        e = {}
+        for i in range(0, self.__channel_container.count):
+            c = self.__channel_container.getitem(i)
+            e.update({c.name.upper(): len(c.data)})
+        return e
+
+    def epoch_ok(self, epoch_list):
+        if not isinstance(epoch_list, list):
+            epoch_list = [epoch_list]
+        ep_max = max(self.epoch_count)
+        for ep in epoch_list:
+            if not isinstance(ep, int):
+                return False
+            if ep < 0 or ep >= ep_max:
+                return False
+        return True
+
+    @property
+    def epoch_select(self):
+        if not self.__epoch_select:
+            for c, n in self.epoch_count:
+                if n > 0:
+                    self.__epoch_select = [0]  # first is default
+                    return self.__epoch_select
+            self.__epoch_select = []
+            return self.__epoch_select
+        if not isinstance(self.__epoch_select, list):
+            self.__epoch_select = [self.__epoch_select]
+        self.__epoch_select = [ep for ep in self.__epoch_select if
+                               isinstance(ep, int)]
+        return self.__epoch_select
+
+    @epoch_select.setter
+    def epoch_select(self, epoch: Union[int, List[int]]) -> None:
+        self._epoch_select_set(epoch)
+
+    def _epoch_select_set(
+        self,
+        epoch: Union[int, List[int]]
+    ) -> bool:
+        select = None
+        if epoch is None:
+            pass  # OK
+        elif isinstance(epoch, int):
+            pass
+        elif not isinstance(epoch_list, list):
+            epoch_list = [epoch_list]
+        elist = []
+        for ep in epoch_list:
+            if self.epoch_ok(ep):
+                elist.append(ep)
+            else:
+                epoch = ep
+                e = self._value_error('epoch')
+                raise ValueError(e)
+        self.__epoch_select = elist
+        self._modified()
+        self._history('epoch select = ' + str(elist), quiet=nmp.QUIET)
+        return True
     # override
+
     @property
     def dims(self):
-        if self.__scale_master_on:
+        if self.__channel_scale_lock:
             return self.__dims
         return self._dims_of_thedata
 
@@ -204,8 +410,8 @@ class NMDataSeries(NMObject):
     def _xdata_set(self, xdata, quiet=nmp.QUIET):
         if xdata is None:
             pass  # ok
-        elif xdata.__class__.__name__ != 'Data':  # cannot import Data class
-            e = self._type_error('xdata', 'Data')
+        elif xdata.__class__.__name__ != 'NMData':  # cannot import Data class
+            e = self._type_error('xdata', 'NMData')
             raise TypeError(e)
         old = self.xdata
         # if xdata == old:
@@ -402,70 +608,6 @@ class NMDataSeries(NMObject):
         return True
 
     @property
-    def channel(self):
-        return self.__channel_container
-
-    @property
-    def channel_count(self):
-        if not self.__thedata:
-            return 0
-        return len(self.__thedata)
-
-    @property
-    def channel_list(self):
-        if not self.__thedata:
-            return []
-        return [c.upper() for c in self.__thedata.keys()]  # force UPPER
-
-    def channel_ok(self, chan_list):
-        if not isinstance(chan_list, list):
-            chan_list = [chan_list]
-        for c in chan_list:
-            if not isinstance(c, str):
-                return False
-            if c.upper() == 'ALL':
-                return True  # always OK
-        clist = self.channel_list
-        for c in chan_list:
-            if c.upper() not in clist:
-                return False
-        return True
-
-    @property
-    def channel_select(self):
-        if not self.__channel_select:
-            clist = self.channel_list
-            if len(clist) > 0:
-                cfirst = clist[0].upper()
-                self.__channel_select = [cfirst]  # first is default
-            else:
-                self.__channel_select = []
-            return self.__channel_select
-        if not isinstance(self.__channel_select, list):
-            self.__channel_select = [self.__channel_select]
-        clist = [c.upper() for c in self.__channel_select]  # force UPPER
-        self.__channel_select = clist
-        return self.__channel_select
-
-    @channel_select.setter
-    def channel_select(self, chan_list):  # e.g 'A', 'ALL' or ['A', 'C']
-        quiet = nmp.QUIET
-        if not isinstance(chan_list, list):
-            chan_list = [chan_list]
-        clist = []
-        for c in chan_list:
-            if self.channel_ok(c):
-                clist.append(c.upper())  # force UPPER
-            else:
-                channel = c
-                e = self._value_error('channel')
-                raise ValueError(e)
-        self.__channel_select = clist
-        self._modified()
-        self._history('channel = ' + str(clist), quiet=quiet)
-        return True
-
-    @property
     def sets(self):
         return self.__set_container
 
@@ -480,82 +622,14 @@ class NMDataSeries(NMObject):
         for s in nmp.DATASERIES_SET_LIST:
             if not s or not isinstance(s, str):
                 continue
-            select = init_select and s.upper() == 'ALL'
+            select = init_select and s.upper() == ALLSTR
             if self.__set_container.new(name=s, select=select, quiet=quiet):
                 r.append(s)
         if init_select and not self.__set_container.select:
             self.__set_container.select = set_list[0]
         return r
 
-    @property
-    def epoch_count(self):  # epochs per channel
-        if not self.__thedata:
-            return {}
-        e = {}
-        for c, cdata in self.__thedata.items():
-            e.update({c: len(cdata)})
-        return e
-
-    def epoch_ok(self, epoch_list):
-        if not isinstance(epoch_list, list):
-            epoch_list = [epoch_list]
-        ep_max = max(self.epoch_count)
-        for ep in epoch_list:
-            if not isinstance(ep, int):
-                return False
-            if ep < 0 or ep >= ep_max:
-                return False
-        return True
-
-    @property
-    def epoch_select(self):
-        if not self.__epoch_select:
-            for c, n in self.epoch_count:
-                if n > 0:
-                    self.__epoch_select = [0]  # first is default
-                    return self.__epoch_select
-            self.__epoch_select = []
-            return self.__epoch_select
-        if not isinstance(self.__epoch_select, list):
-            self.__epoch_select = [self.__epoch_select]
-        self.__epoch_select = [ep for ep in self.__epoch_select if
-                               isinstance(ep, int)]
-        return self.__epoch_select
-
-    @epoch_select.setter
-    def epoch_select(self, epoch_list):
-        quiet = nmp.QUIET
-        if not isinstance(epoch_list, list):
-            epoch_list = [epoch_list]
-        elist = []
-        for ep in epoch_list:
-            if self.epoch_ok(ep):
-                elist.append(ep)
-            else:
-                epoch = ep
-                e = self._value_error('epoch')
-                raise ValueError(e)
-        self.__epoch_select = elist
-        self._modified()
-        self._history('epoch = ' + str(elist), quiet=quiet)
-        return True
-
-    def _get_channel_list(self, chan_list=['select']):
-        if not isinstance(chan_list, list):
-            chan_list = [chan_list]
-        clist = []
-        for c in chan_list:
-            if not isinstance(c, str):
-                continue
-            if c.upper() == 'ALL':
-                return self.channel_list
-            if c.upper() == 'SELECT':
-                clist = self.channel_select
-                break
-            clist.append(c)
-        return [c for c in clist if self.channel_ok(c)]
-
-    def get_data_names(self, chan_list=['ALL'], epoch_list=[-2],
+    def get_data_names(self, chan_list=ALLSTR, epoch_list=[-2],
                        quiet=nmp.QUIET):
         d = self.get_data(chan_list=chan_list, epoch_list=epoch_list,
                           quiet=quiet)
@@ -565,10 +639,10 @@ class NMDataSeries(NMObject):
             n.update({c: nlist})
         return n
 
-    def get_data(self, chan_list=['ALL'], epoch_list=[-2], quiet=nmp.QUIET):
+    def get_data(self, chan_list=ALLSTR, epoch_list=[-2], quiet=nmp.QUIET):
         if not self.__thedata:
             return {}
-        clist = self._get_channel_list(chan_list=chan_list)
+        clist = self._channel_list(chan_list=chan_list)
         if not clist:
             return {}
         if not isinstance(epoch_list, list):
@@ -618,7 +692,7 @@ class NMDataSeries(NMObject):
 
     @property
     def data_select(self):
-        clist = self._get_channel_list(chan_list=['select'])
+        clist = self.channel_select_list
         if not clist:
             return {}
         if not self.sets.select or not self.sets.select.name:
@@ -632,7 +706,7 @@ class NMDataSeries(NMObject):
             setx = sx.theset
         else:
             setx = None
-        all_epochs = sname.upper() == 'ALL'
+        all_epochs = sname.upper() == ALLSTR
         dd = {}
         for c in clist:
             cdata = self.__thedata[c]
@@ -646,7 +720,7 @@ class NMDataSeries(NMObject):
         return dd
 
     def _getitems(self, chan_char):
-        thedata = self.data._NMObjectContainer__thecontainer  # mangled
+        thedata = self._folder.data._NMObjectContainer__container  # mangled
         dlist = []
         i = len(self.name)
         for o in thedata:
@@ -713,8 +787,10 @@ class NMDataSeries(NMObject):
             dlist = []
             for j in range(e_bgn, e_end):
                 name2 = self.name + cc + str(j)
-                d = self.data.new(name=name2, shape=shape,
-                                  fill_value=fill_value, quiet=True)
+                d = self._folder.data.new(name=name2,
+                                         shape=shape,
+                                         fill_value=fill_value,
+                                         quiet=True)
                 if d:
                     elist.append(j)
                     dlist.append(d)
@@ -742,7 +818,8 @@ class NMDataSeries(NMObject):
         if 'xunits' in dims.keys():  # switch x and y
             dims.update({'yunits': dims['xunits']})  # NOT DICT TYPE
             dims.update({'xunits': ''})
-        d = self.data.new(name=name, shape=shape, dims=dims, quiet=quiet)
+        d = self._folder.data.new(name=name, shape=shape, dims=dims,
+                                 quiet=quiet)
         if not d:
             return None
         for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
@@ -760,35 +837,37 @@ class NMDataSeriesContainer(NMObjectContainer):
         self,
         parent: object = None,
         name: str = 'NMDataSeriesContainer',
-        copy: NMdataSeriesContainer = None
+        copy: nmu.NMDataSeriesContainerType = None
     ):
-        o = NMDataSeries(None, 'empty')
+        o = NMDataSeries(parent=parent, name='ContainerUtility')
         prefix = ''  # no prefix
         super().__init__(parent=parent, name=name, nmobject=o, prefix=prefix,
                          rename=False, copy=copy)
         # TODO: copy
 
     # override, no super
-    def copy(self) -> NMdataSeriesContainer:
-        c = NMDataSeriesContainer(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
+    def copy(self) -> nmu.NMDataSeriesContainerType:
+        return NMDataSeriesContainer(copy=self)
 
     # override
-    def new(self, name='', select=True, quiet=nmp.QUIET):
-        # name is the data-series name
-        o = NMDataSeries(None, 'iwillberenamed')
-        ds = super().new(name=name, nmobject=o, select=select, quiet=quiet)
-        if ds:
+    def new(
+        self,
+        name: str = '',  # dataseries name/prefix
+        select: bool = True,
+        quiet: bool = nmp.QUIET
+    ) -> NMDataSeries:
+        ds = super().new(name=name, select=select, quiet=quiet)
+        # TODO: change to super.add?
+        if isinstance(ds, NMDataSeries):
             ds.update(quiet=quiet)
             return ds
         return None
 
-    @property
-    def data(self):
-        if self._parent.__class__.__name__ == 'Folder':
-            return self._parent.data
-        return None
+    # @property
+    # def data(self):  # use self._folder.data
+    #    if self._parent.__class__.__name__ == 'NMFolder':
+    #        return self._parent.data
+    #    return None
 
     # override, no super
     def duplicate(self):

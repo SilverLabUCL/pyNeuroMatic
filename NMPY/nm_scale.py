@@ -6,13 +6,9 @@ Created on Sat Jan 18 15:24:16 2020
 @author: jason
 """
 from nm_object import NMObject
-from nm_object import NMobject
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, NewType, Union
-
-NMscale = NewType('NMScale', NMobject)
-NMscaleX = NewType('NMScaleX', NMscale)
+from typing import Dict, List, Union
 
 SCALE_DEFAULT = {'offset': 0, 'label': '', 'units': ''}
 SCALEX_DEFAULT = {'offset': 0, 'start': 0, 'delta': 1, 'label': '',
@@ -31,7 +27,7 @@ class NMScale(NMObject):
         parent: object = None,
         name: str = 'NMScale',
         scale: Dict[str, str] = {},
-        copy: NMscale = None  # see copy()
+        copy: nmu.NMScaleType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
@@ -47,22 +43,22 @@ class NMScale(NMObject):
         else:
             if isinstance(scale, dict):
                 self._scale_set(scale, quiet=True)
+            elif scale is None:
+                pass  # OK
             else:
                 e = self._type_error('scale', 'dictionary', tp='')  # no tp yet
                 raise TypeError(e)
 
+    # override, no super
+    def copy(self) -> nmu.NMScaleType:
+        return NMScale(copy=self)
+
     # override
     @property
-    def parameters(self) -> Dict[str, str]:
+    def parameters(self) -> Dict[str, object]:
         k = super().parameters
         k.update(self.scale)
         return k
-
-    # override, no super
-    def copy(self) -> NMscale:
-        c = NMScale(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
 
     @property
     def scale(self) -> Dict[str, str]:
@@ -71,8 +67,8 @@ class NMScale(NMObject):
         return d
 
     @scale.setter
-    def scale(self, scale: Dict[str, str]) -> bool:
-        return self._scale_set(scale)
+    def scale(self, scale: Dict[str, str]) -> None:
+        self._scale_set(scale)
 
     def _scale_set(
         self,
@@ -101,8 +97,8 @@ class NMScale(NMObject):
         return self.__offset
 
     @offset.setter
-    def offset(self, offset: Union[float, int]) -> bool:
-        return self._offset_set(offset)
+    def offset(self, offset: Union[float, int]) -> None:
+        self._offset_set(offset)
 
     def _offset_set(
         self,
@@ -130,8 +126,8 @@ class NMScale(NMObject):
         return self.__label
 
     @label.setter
-    def label(self, label: str) -> bool:
-        return self._label_set(label)
+    def label(self, label: str) -> None:
+        self._label_set(label)
 
     def _label_set(
         self,
@@ -158,8 +154,8 @@ class NMScale(NMObject):
         return self.__units
 
     @units.setter
-    def units(self, units: str) -> bool:
-        return self._units_set(units)
+    def units(self, units: str) -> None:
+        self._units_set(units)
 
     def _units_set(
         self,
@@ -194,7 +190,7 @@ class NMScaleX(NMScale):
         parent: object = None,
         name: str = 'NMScaleX',
         scale: Dict[str, str] = {},
-        copy: NMscaleX = None  # see copy()
+        copy: nmu.NMScaleXType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
@@ -209,10 +205,8 @@ class NMScaleX(NMScale):
             self._scale_set(scale, quiet=True)
 
     # override, no super
-    def copy(self) -> NMscaleX:
-        c = NMScaleX(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
+    def copy(self) -> nmu.NMScaleXType:
+        return NMScaleX(copy=self)
 
     # override, no super
     @property
@@ -259,8 +253,8 @@ class NMScaleX(NMScale):
         return self.__start
 
     @start.setter
-    def start(self, start: Union[float, int]) -> bool:
-        return self._start_set(start)
+    def start(self, start: Union[float, int]) -> None:
+        self._start_set(start)
 
     def _start_set(
         self,
@@ -288,8 +282,8 @@ class NMScaleX(NMScale):
         return self.__delta
 
     @delta.setter
-    def delta(self, delta: Union[float, int]) -> bool:
-        return self._delta_set(delta)
+    def delta(self, delta: Union[float, int]) -> None:
+        self._delta_set(delta)
 
     def _delta_set(
         self,

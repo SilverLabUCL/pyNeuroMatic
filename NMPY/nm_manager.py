@@ -7,15 +7,16 @@ import datetime
 # import matplotlib
 
 from nm_project import NMProject
+from nm_folder import NMFolderContainer
 from nm_stats import Stats
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, NewType
+from typing import Dict, List, Union
 
 nm = None  # holds Manager, accessed via console
 
 
-class NMManager(object):  # TODO: can manager be a NMObejct? or static?
+class NMManager(object):  # TODO: can manager be a NMObejct or static?
     """
     NM Manager class
 
@@ -36,10 +37,10 @@ class NMManager(object):  # TODO: can manager be a NMObejct? or static?
     """
     def __init__(
         self,
-        name='NeuroMatic Manager',
-        new_project=True,
-        quiet=nmp.QUIET
-    ):
+        name: str = 'NeuroMatic Manager',
+        new_project: bool = True,
+        quiet: bool = nmp.QUIET
+    ) -> None:
         if isinstance(name, str):
             self.__name = name
         else:
@@ -62,10 +63,10 @@ class NMManager(object):  # TODO: can manager be a NMObejct? or static?
 
     def project_new(
         self,
-        name='default',
-        new_folder=True,
-        quiet=nmp.QUIET
-    ):
+        name: str = 'default',
+        new_folder: bool = True,
+        quiet: bool = nmp.QUIET
+    ) -> nmu.NMProjectType:
         """Create a new project"""
         if not isinstance(name, str):
             # e = nmu.type_error('name', 'string') DOES NOT EXIST
@@ -91,88 +92,95 @@ class NMManager(object):  # TODO: can manager be a NMObejct? or static?
             else:
                 self._history('cancel', quiet=quiet)
                 return None  # cancel
-        p = NMProject(self, name)
+        p = NMProject(parent=self, name=name)
         h = 'created ' + nmu.quotes(name)
         self._history(h, quiet=quiet)
         if new_folder and p and p.folder:
-            p.folders.new(quiet=quiet)  # create default folder
+            p.folder.new(quiet=quiet)  # create default folder
         self.__project = p
         return p
 
     @property
-    def project(self):
+    def project(self) -> nmu.NMProjectType:
         return self.__project
 
     @property
-    def folders(self):
-        if self.__project:
+    def folder(self) -> nmu.NMFolderContainerType:
+        if isinstance(NMFolderContainer, self.__project):
             return self.__project.folder
         return None
 
-    def _folder_select(self):
+    def _folder_select(self) -> nmu.NMFolderType:
         f = self.folder
         if f:
             return f.select
         return None
 
     @property
-    def data(self):
+    def data(self) -> nmu.NMDataContainerType:
         f = self._folder_select()
         if f:
             return f.data
         return None
 
     @property
-    def dataseries(self):
+    def dataseries(self) -> nmu.NMDataSeriesContainerType:
         f = self._folder_select()
         if f:
             return f.dataseries
         return None
 
-    def _dataseries_select(self):
+    def _dataseries_select(self) -> nmu.NMDataSeriesType:
         ds = self.dataseries
         if ds:
             return ds.select
         return None
 
     @property
-    def channel(self):
+    def channel(self) -> nmu.NMChannelContainerType:
         ds = self._dataseries_select()
         if ds:
             return ds.channel
         return None
 
     @property
-    def channel_select(self):
+    def channel_select(self) -> List[str]:
         ds = self._dataseries_select()
         if ds:
             return ds.channel_select
         return []  # channel select is a list
 
     @channel_select.setter
-    def channel_select(self, chan_char_list):  # e.g 'A', 'All' or ['A', 'B']
+    def channel_select(
+        self,
+        chan_char_list: Union[str, List[str]]
+    ) -> bool:
+        # e.g 'A', 'All' or ['A', 'B']
         ds = self._dataseries_select()
         if ds:
             ds.channel_select = chan_char_list
             return ds.channel_select == chan_char_list
-        return None
+        return False
 
     @property
-    def sets(self):  # data-series sets
+    def sets(self) -> nmu.NMDataSeriesSetContainerType:  # data-series sets
         ds = self._dataseries_select()
         if ds:
             return ds.sets
         return None
 
     @property
-    def epoch_select(self):
+    def epoch_select(self) -> List[int]:
         ds = self._dataseries_select()
         if ds:
             return ds.epoch_select
-        return [-1]
+        return []
 
     @epoch_select.setter
-    def epoch_select(self, epoch_list):
+    def epoch_select(
+        self,
+        epoch_list: List[int]
+    ) -> bool:
         ds = self._dataseries_select()
         if ds:
             ds.epoch_select = epoch_list
@@ -180,14 +188,14 @@ class NMManager(object):  # TODO: can manager be a NMObejct? or static?
         return False
 
     @property
-    def data_select(self):
+    def data_select(self) -> Dict[str, object]:
         ds = self._dataseries_select()
         if ds:
             return ds.data_select
-        return False
+        return {}
 
     @property
-    def select(self):
+    def select(self) -> Dict[str, object]:
         s = {}
         s['project'] = None
         s['folder'] = None
@@ -198,7 +206,7 @@ class NMManager(object):  # TODO: can manager be a NMObejct? or static?
         if not self.__project:
             return s
         s['project'] = self.__project
-        fs = self.folders.select
+        fs = self.folder.select
         if not fs:
             return s
         s['folder'] = fs
@@ -214,7 +222,10 @@ class NMManager(object):  # TODO: can manager be a NMObejct? or static?
         return s
 
     @property
-    def select_names(self, names=True):
+    def select_names(
+        self,
+        names: bool = True
+    ) -> Dict[str, object]:
         s = {}
         s['project'] = ''
         s['folder'] = ''
@@ -225,7 +236,7 @@ class NMManager(object):  # TODO: can manager be a NMObejct? or static?
         if not self.__project:
             return s
         s['project'] = self.__project.name
-        fs = self.folders.select
+        fs = self.folder.select
         if not fs:
             return s
         s['folder'] = fs.name

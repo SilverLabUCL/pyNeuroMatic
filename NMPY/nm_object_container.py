@@ -5,12 +5,11 @@ Created on Tue Nov  1 13:51:13 2022
 
 @author: jason
 """
-from nm_object import NMObject, NMobject
+from nm_object import NMObject
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, NewType, Optional
-
-NMobjectContainer = NewType('NMObjectContainer', NMobject)
+from nm_utilities import NMObjectType, NMObjectContainerType
+from typing import Dict, List, Optional
 
 
 class NMObjectContainer(NMObject):
@@ -28,8 +27,8 @@ class NMObjectContainer(NMObject):
     accessed via 'select' property.
 
     Known Children:
-        FolderContainer, DataContainer, NoteContainer, DataSeriesContainer,
-        ChannelContainer, DataSeriesSetContainer
+        NMFolderContainer, NMDataContainer, NMDataSeriesContainer,
+        NMChannelContainer, NMDataSeriesSetContainer
 
     Attributes:
         prefix (str): For creating NMObject name via name_next(),
@@ -44,23 +43,27 @@ class NMObjectContainer(NMObject):
         self,
         parent: object = None,
         name: str = 'NMObjectContainer',
-        nmobject: NMobject = None,  # for typing
-        prefix: str = 'NMObject',  # for generating names of NMObjects
+        nmobject: NMObjectType,  # for typing
+        prefix: str = 'NMObject',
+        # auto-generation of NMObject names, see next_name()
         rename: bool = True,
-        copy: NMobjectContainer = None  # see copy()
+        copy: NMObjectContainerType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
 
         if isinstance(copy, NMObjectContainer):
-            params = copy.parameters
-            self.__nmobject = copy._NMObjectContainer__nmobject
-            self.__prefix = params['prefix']
-            self.__rename = params['rename']
-            select_name = params['select']
-            self.__thecontainer = copy._thecontainer_copy()
-            self._thecontainer_update_references()
-            if isinstance(select_name, str) and len(select_name) > 0:
+            if isinstance(copy._nmobject, NMObject):
+                self.__nmobject = copy._nmobject
+            else:
+                e = self._type_error('nmobject', 'NMObject', tp='')
+                raise TypeError(e)
+            self.__prefix = copy._NMObjectContainer__prefix
+            self.__rename = copy._NMObjectContainer__rename
+            self.__container = copy._container_copy()
+            self.__container_update_references()
+            if isinstance(copy._NMObjectContainer__select, NMObject):
+                select_name = copy._NMObjectContainer__select.name
                 self.__select = self.getitem(select_name)
             else:
                 self.__select = None
@@ -69,11 +72,14 @@ class NMObjectContainer(NMObject):
             self.__prefix = prefix
             self.__rename = rename
             self.__select = None  # selected NMObject
-            self.__thecontainer = []  # list of NMObjects
+            self.__container = []  # list of NMObjects
 
         if not isinstance(self.__nmobject, NMObject):
             e = self._type_error('nmobject', 'NMObject', tp='')
             raise TypeError(e)
+
+        self.__nmobject._NMObject__parent = parent
+        self.__nmobject._NMObject__name = 'ContainerUtility'
 
         if self.__prefix is None:
             self.__prefix = ''
@@ -86,9 +92,13 @@ class NMObjectContainer(NMObject):
         if self.__prefix.lower() == 'default':
             self.__prefix = 'NMObject'
 
+    # override, no super
+    def copy(self) -> NMObjectContainerType:
+        return NMObjectContainer(copy=self)
+
     # override
     @property
-    def parameters(self) -> Dict[str, str]:
+    def parameters(self) -> Dict[str, object]:
         k = super().parameters
         k.update({'type': self.content_type})
         k.update({'prefix': self.__prefix})
@@ -103,7 +113,7 @@ class NMObjectContainer(NMObject):
     @property
     def content_parameters(self) -> List[Dict]:
         plist = []
-        for o in self.__thecontainer:
+        for o in self.__container:
             plist.append(o.parameters)
         return plist
 
@@ -123,7 +133,7 @@ class NMObjectContainer(NMObject):
     # override
     def _isequivalent(
         self,
-        container: NMobjectContainer,
+        container: NMObjectContainerType,
         alert: bool = False
     ) -> bool:
         if not super()._isequivalent(container, alert=alert):
@@ -134,49 +144,48 @@ class NMObjectContainer(NMObject):
                      ' vs ' + str(container.count))
                 self._alert(a)
             return False
-        for i, s in enumerate(self.__thecontainer):
+        for i, s in enumerate(self.__container):
             o = container.getitem(index=i, quiet=True)
             if not s._isequivalent(o, alert=alert):
                 return False
         return True
 
-    # override, no super
-    def copy(self) -> NMobjectContainer:
-        c = NMObjectContainer(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
+    @property
+    def _nmobject(self) -> NMObjectType:
+        return self.__nmobject
 
-    def _thecontainer_copy(self) -> List:
+    def _container_copy(self) -> List:
         c = []
-        for o in self.__thecontainer:
+        for o in self.__container:
             if o and isinstance(o, NMObject):
                 oc = o.copy()
                 c.append(oc)
         return c
 
-    def _thecontainer_append(self, nmobject):
+    def __container_append(self, nmobject):
         if not isinstance(nmobject, NMObject):
             e = self._type_error('nmobject', 'NMObject')
             raise TypeError(e)
-        if nmobject.__class__.__name__ != self.content_type:
-            e = self._type_error('nmobject', self.content_type)
+        containertype = self.__nmobject.__class__.__name__
+        if nmobject.__class__.__name__ != containertype:
+            e = self._type_error('nmobject', containertype)
             raise TypeError(e)
-        self.__thecontainer.append(nmobject)
-        self._thecontainer_update_references()
+        self.__container.append(nmobject)
+        self.__container_update_references()
         return True
 
-    def _thecontainer_update_references(self):
-        for o in self.__thecontainer:
+    def __container_update_references(self):
+        for o in self.__container:
             o._rename_fxnref_set(self.rename)  # reference of 'rename' fxn
-            o._parent = self._parent
+            o._NMObject__parent = self._parent
 
     @property
     def prefix(self) -> str:  # see name_next()
         return self.__prefix
 
     @prefix.setter
-    def prefix(self, newprefix: str) -> bool:
-        return self._prefix_set(newprefix)
+    def prefix(self, newprefix: str) -> None:
+        self._prefix_set(newprefix)
 
     def _prefix_set(
         self,
@@ -213,12 +222,12 @@ class NMObjectContainer(NMObject):
     @property
     def names(self) -> List[str]:
         """Get list of names of NMObject items in container"""
-        return [o.name for o in self.__thecontainer]
+        return [o.name for o in self.__container]
 
     @property
     def count(self) -> int:
         """Number of NMObject items stored in container"""
-        return len(self.__thecontainer)
+        return len(self.__container)
 
     def index(
         self,
@@ -235,7 +244,7 @@ class NMObjectContainer(NMObject):
                 name = self.__select.name
             else:
                 return -1
-        for i, o in enumerate(self.__thecontainer):
+        for i, o in enumerate(self.__container):
             if name.lower() == o.name.lower():
                 return i
         return -1
@@ -249,19 +258,19 @@ class NMObjectContainer(NMObject):
         name: Optional[str] = None,  # special: 'select'
         index: Optional[int] = None,
         quiet: bool = nmp.QUIET
-    ) -> NMobject:
+    ) -> NMObjectType:
         """Get NMObject from Container"""
         if isinstance(index, int):
-            if index < 0 and index >= -1 * len(self.__thecontainer):
-                return self.__thecontainer[index]
-            elif index >= 0 and index < len(self.__thecontainer):
-                return self.__thecontainer[index]
+            if index < 0 and index >= -1 * len(self.__container):
+                return self.__container[index]
+            elif index >= 0 and index < len(self.__container):
+                return self.__container[index]
             else:
                 raise IndexError('bad index: ' + str(index))
         if isinstance(name, str):
             if name.lower() == 'select':
                 return self.__select
-            for o in self.__thecontainer:
+            for o in self.__container:
                 if name.lower() == o.name.lower():
                     return o
             e = self._exists_error(name)
@@ -272,7 +281,7 @@ class NMObjectContainer(NMObject):
         self,
         names: Optional[List[str]] = [],  # special: 'select' or 'all'
         indexes: Optional[List[int]] = []
-    ) -> List[NMobject]:
+    ) -> List[NMObjectType]:
         """Get a list of NMObjects from Container"""
         if isinstance(names, list) or isinstance(names, tuple):
             pass  # ok
@@ -303,7 +312,7 @@ class NMObjectContainer(NMObject):
                 if self.__select not in olist:
                     olist.append(self.__select)
             else:
-                for o in self.__thecontainer:
+                for o in self.__container:
                     if all_ and o not in olist:
                         olist.append(o)
                     elif name.lower() == o.name.lower() and o not in olist:
@@ -315,10 +324,10 @@ class NMObjectContainer(NMObject):
                 e = self._type_error('index', 'integer')
                 raise TypeError(e)
             o = None
-            if index < 0 and index >= -1 * len(self.__thecontainer):
-                o = self.__thecontainer[index]
-            elif index >= 0 and index < len(self.__thecontainer):
-                o = self.__thecontainer[index]
+            if index < 0 and index >= -1 * len(self.__container):
+                o = self.__container[index]
+            elif index >= 0 and index < len(self.__container):
+                o = self.__container[index]
             else:
                 raise IndexError('index out of range:  ' + str(index))
             if o and o not in olist:
@@ -331,12 +340,12 @@ class NMObjectContainer(NMObject):
         return e
 
     @property
-    def select(self) -> NMobject:
+    def select(self) -> NMObjectType:
         return self.__select
 
     @select.setter
-    def select(self, name: str) -> NMobject:
-        return self._select_set(name)
+    def select(self, name: str) -> None:
+        self._select_set(name)
 
     def _select_set(
         self,
@@ -345,7 +354,7 @@ class NMObjectContainer(NMObject):
         failure_alert: bool = True,
         notes: bool = False,    # too many notes for select
         quiet: bool = nmp.QUIET
-    ) -> NMobject:
+    ) -> NMObjectType:
         old = self.__select
         if name is None:
             pass
@@ -392,10 +401,10 @@ class NMObjectContainer(NMObject):
             self.__select = None
             return None
         elif isinstance(index, int):
-            if index < 0 and index >= -1 * len(self.__thecontainer):
-                o = self.__thecontainer[index]
-            elif index >= 0 and index < len(self.__thecontainer):
-                o = self.__thecontainer[index]
+            if index < 0 and index >= -1 * len(self.__container):
+                o = self.__container[index]
+            elif index >= 0 and index < len(self.__container):
+                o = self.__container[index]
             else:
                 raise IndexError('bad index: ' + str(index))
             self.__select = o
@@ -410,7 +419,7 @@ class NMObjectContainer(NMObject):
             raise TypeError(e)
 
     @staticmethod
-    def __select_history(old: NMobject, new: NMobject) -> str:
+    def __select_history(old: NMObjectType, new: NMObjectType) -> str:
         if new:
             n = new.name
         else:
@@ -424,12 +433,12 @@ class NMObjectContainer(NMObject):
         name: str = 'default',
         select: bool = True,
         quiet: bool = nmp.QUIET
-    ) -> NMobject:
+    ) -> NMObjectType:
         """
         Create a new NMObject and add to container.
 
         Args:
-            name: unique name of new NMObject, pass 'default' for default
+            name: unique name of new NMObject, pass 'default' for default.
             select: select this NMObject
 
         Returns:
@@ -442,13 +451,15 @@ class NMObjectContainer(NMObject):
             e = self._value_error('name')
             raise ValueError(e)
         if name.lower() == 'default':
-            name = self.name_next(quiet=quiet)
+            name = self.name_next()
         if self.exists(name):
             e = self._error(self.content_type + ' ' + nmu.quotes(name) +
                             ' already exists')
             raise RuntimeError(e)
-        nmobject = NMObject(self._parent, name)
-        if not self._thecontainer_append(nmobject):
+        nmobject = self.__nmobject.copy()
+        nmobject._NMObject__parent = self._parent
+        nmobject._NMObject__name = name  # use mangled to prevent notes
+        if not self.__container_append(nmobject):
             return None
         if select or not self.__select:
             old = self.__select
@@ -468,16 +479,16 @@ class NMObjectContainer(NMObject):
         self._modified()
         return nmobject
 
-    def add(
+    def append(
         self,
-        nmobject: NMobject,
+        nmobject: NMObjectType,
         select: bool = True,
         quiet: bool = nmp.QUIET
     ) -> bool:
         """
-        Add a NMObject to container.
+        Append a NMObject to container.
         """
-        if not self._thecontainer_append(nmobject):
+        if not self.__container_append(nmobject):
             return False
         if select or not self.__select:
             old = self.__select
@@ -531,7 +542,7 @@ class NMObjectContainer(NMObject):
             e = self._value_error('newname')
             raise ValueError(e)
         if newname.lower() == 'default':
-            newname = self.name_next(quiet=quiet)
+            newname = self.name_next()
         if self.exists(newname):
             e = self._error(self.content_type + ' ' + nmu.quotes(newname) +
                             ' already exists')
@@ -553,7 +564,7 @@ class NMObjectContainer(NMObject):
         newname: str,
         select: bool = True,
         quiet: bool = nmp.QUIET
-    ) -> NMobject:
+    ) -> NMObjectType:
         """
         Copy NMObject.
 
@@ -591,7 +602,7 @@ class NMObjectContainer(NMObject):
             e = self._value_error('newname')
             raise ValueError(e)
         if newname.lower() == 'default':
-            newname = self.name_next(quiet=quiet)
+            newname = self.name_next()
         if self.exists(newname):
             e = self._error(self.content_type + ' ' + nmu.quotes(newname) +
                             ' already exists')
@@ -600,7 +611,7 @@ class NMObjectContainer(NMObject):
         if not c:
             return None
         c._NMObject__name = newname
-        self._thecontainer_append(c)
+        self.__container_append(c)
         old = nmu.quotes(o.name)
         new = nmu.quotes(c.name)
         h = 'copied ' + old + ' to ' + new
@@ -621,7 +632,7 @@ class NMObjectContainer(NMObject):
         indexes: Optional[int] = [],
         confirm: bool = True,
         quiet: bool = nmp.QUIET
-    ) -> List[NMobject]:
+    ) -> List[NMObjectType]:
         olist = self.getitems(names=names, indexes=indexes)
         if len(olist) == 0:
             return []
@@ -639,7 +650,7 @@ class NMObjectContainer(NMObject):
         nlist = []
         for o in olist:
             klist.append(o)
-            self.__thecontainer.remove(o)
+            self.__container.remove(o)
             nlist.append(o.name)
             if self.__select is o:
                 select_old = self.__select
@@ -647,8 +658,8 @@ class NMObjectContainer(NMObject):
         h = 'removed ' + ', '.join(nlist)
         self.note = h
         self._history(h, quiet=quiet)
-        if self.__select is None and len(self.__thecontainer) > 0:
-            self.__select = self.__thecontainer[0]
+        if self.__select is None and len(self.__container) > 0:
+            self.__select = self.__container[0]
             h = NMObjectContainer.__select_history(select_old, self.__select)
             self._history(h, quiet=quiet)
         self._modified()
@@ -656,8 +667,7 @@ class NMObjectContainer(NMObject):
 
     def name_next(
         self,
-        first: int = 0,
-        quiet: bool = nmp.QUIET
+        first: int = 0
     ) -> str:
         """Get next default NMObject name based on prefix and sequence #."""
         if not isinstance(first, int):
@@ -666,7 +676,7 @@ class NMObjectContainer(NMObject):
         if not self.__prefix or first < 0:
             e = self._error('cannot generate default names')
             raise RuntimeError(e)
-        i = self.name_next_seq(prefix=self.__prefix, first=first, quiet=quiet)
+        i = self.name_next_seq(prefix=self.__prefix, first=first)
         if i >= 0:
             return self.__prefix + str(i)
         return ''
@@ -674,8 +684,7 @@ class NMObjectContainer(NMObject):
     def name_next_seq(
         self,
         prefix: str = 'default',
-        first: int = 0,
-        quiet: bool = nmp.QUIET
+        first: int = 0
     ) -> int:
         """Get next seq num of default NMObject name based on prefix."""
         if not isinstance(first, int):
@@ -693,7 +702,7 @@ class NMObjectContainer(NMObject):
             e = self._error('cannot generate default name')
             raise RuntimeError(e)
         elist = []
-        for o in self.__thecontainer:
+        for o in self.__container:
             name = o.name.lower()
             istr = name.replace(prefix.lower(), '')
             if str.isdigit(istr):

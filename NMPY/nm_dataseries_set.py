@@ -4,17 +4,13 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-from nm_object import NMObject, NMobject
-from nm_object_container import NMObjectContainer, NMobjectContainer
+from nm_object import NMObject
+from nm_object_container import NMObjectContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, NewType
+from typing import Dict, List
 
 SET_SYMBOLS = ['&', '|', '-', '^']
-
-NMdataSeriesSet = NewType('NMDataSeriesSet', NMobject)
-NMdataSeriesSetContainer = NewType('NMDataSeriesContainerSet',
-                                   NMobjectContainer)
 
 
 class NMDataSeriesSet(NMObject):
@@ -29,26 +25,27 @@ class NMDataSeriesSet(NMObject):
         self,
         parent: object = None,
         name: str = 'NMDataSeriesSet',
-        copy: NMdataSeriesSet = None  # see copy()
+        copy: nmu.NMDataSeriesSetType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__theset = {}  # dictionary of sets, keys are chan-char
-        self.__sort_template = None
-        self.__eq_lock = []
-        # TODO copy
-        for k, v in copy.items():
-            if k.lower() == 'c_theset' and isinstance(v, dict):
-                self.__theset = v
-            if k.lower() == 'c_sort_template' and isinstance(v, NMDataSeriesSet):
-                self.__sort_template = v
-            if k.lower() == 'c_eq_lock' and isinstance(v, list):
-                self.__eq_lock = v
+        if isinstance(copy, NMDataSeriesSet):  # TODO copy
+            self.__theset = {}
+            self.__sort_template = None
+            self.__eq_lock = []
+        else:
+            self.__theset = {}  # dictionary of sets, keys are chan-char
+            self.__sort_template = None
+            self.__eq_lock = []
+
+    # override, no super
+    def copy(self) -> nmu.NMDataSeriesSetType:
+        return NMDataSeriesSet(copy=self)
 
     # override
     @property
-    def parameters(self) -> Dict[str, str]:
+    def parameters(self) -> Dict[str, object]:
         k = super().parameters
         if isinstance(self.__sort_template, NMDataSeriesSet):
             k.update({'sort_template': self.__sort_template.name})
@@ -65,7 +62,7 @@ class NMDataSeriesSet(NMObject):
     # override
     @property
     def _bad_names(self):
-        bn = super()._bad_names
+        bn = nmp.BAD_NAMES.copy()
         bn.remove('all')
         return bn
 
@@ -142,19 +139,13 @@ class NMDataSeriesSet(NMObject):
                 return False
         return True
 
-    # override, no super
-    def copy(self) -> NMdataSeriesSet:
-        c = NMDataSeriesSet(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
-
     @property
     def sort_template(self):
         return self.__sort_template
 
     @sort_template.setter
-    def sort_template(self, dataseriesset):
-        return self._sort_template_set(dataseriesset)
+    def sort_template(self, dataseriesset) -> None:
+        self._sort_template_set(dataseriesset)
 
     def _sort_template_set(self, dataseriesset, quiet=nmp.QUIET):
         if isinstance(dataseriesset, NMDataSeriesSet):
@@ -197,16 +188,16 @@ class NMDataSeriesSet(NMObject):
         return []  # nothing to return as this is one-off
 
     @equation.setter
-    def equation(self, eq_list):  # one-off execution
-        return self._equation(eq_list, lock=False)
+    def equation(self, eq_list) -> None:  # one-off execution
+        self._equation(eq_list, lock=False)
 
     @property
     def equation_lock(self):
         return self.__eq_lock
 
     @equation_lock.setter
-    def equation_lock(self, eq_list):
-        return self._equation(eq_list, lock=True)
+    def equation_lock(self, eq_list) -> None:
+        self._equation(eq_list, lock=True)
 
     @property
     def equation_lock_str(self):
@@ -235,7 +226,7 @@ class NMDataSeriesSet(NMObject):
         return False
 
     @locked.setter
-    def locked(self, lock):
+    def locked(self, lock) -> None:
         if lock:
             e = self._error('create a locked equation via ' +
                             nmu.quotes('equation_lock'))
@@ -384,7 +375,7 @@ class NMDataSeriesSet(NMObject):
             raise TypeError(e)
         dnew = {}
         edict = 'dictionary with channel keys'
-        if data_dict.__class__.__name__ == 'Data':  # no channel
+        if data_dict.__class__.__name__ == 'NMData':  # no channel
             if chan_default.upper() == 'ALL_EXISTING':
                 for cc in self.__theset.keys():
                     dnew.update({cc.upper(): [data_dict]})
@@ -403,8 +394,8 @@ class NMDataSeriesSet(NMObject):
             if len(data_dict) == 0:
                 return {}
             for data_item in data_dict:
-                if data_item.__class__.__name__ != 'Data':
-                    e = self._type_error('data_item', 'Data')
+                if data_item.__class__.__name__ != 'NMData':
+                    e = self._type_error('data_item', 'NMData')
                     raise TypeError(e)
             if chan_default.upper() == 'ALL_EXISTING':
                 for cc in self.__theset.keys():
@@ -429,7 +420,7 @@ class NMDataSeriesSet(NMObject):
                 channel = cc
                 e = self._value_error('channel')
                 raise ValueError(e)
-            if dlist.__class__.__name__ == 'Data':
+            if dlist.__class__.__name__ == 'NMData':
                 dlist = [dlist]
             elif not isinstance(dlist, list):
                 data_list = dlist
@@ -438,8 +429,8 @@ class NMDataSeriesSet(NMObject):
             if len(dlist) == 0:
                 continue
             for data in dlist:
-                if data.__class__.__name__ != 'Data':
-                    e = self._type_error('data', 'Data')
+                if data.__class__.__name__ != 'NMData':
+                    e = self._type_error('data', 'NMData')
                     raise TypeError(e)
             dnew.update({cc2: dlist})
         return dnew
@@ -836,25 +827,23 @@ class NMDataSeriesSetContainer(NMObjectContainer):
         name: str = 'NMDataSeriesSetContainer',
         prefix: str = nmp.DATASERIES_SET_PREFIX,
         # for generating names of NMDataSeriesSet
-        copy: NMdataSeriesSetContainer = None
+        copy: nmu.NMDataSeriesSetContainerType = None
     ) -> None:
-        o = NMDataSeriesSet(None, 'empty')
+        o = NMDataSeriesSet(parent=parent, name='ContainerUtility')
         super().__init__(parent=parent, name=name, nmobject=o, prefix=prefix,
                          rename=True, copy=copy)
         # TODO: copy
 
+    # override, no super
+    def copy(self) -> nmu.NMDataSeriesSetContainerType:
+        return NMDataSeriesSetContainer(copy=self)
+
     # override
     @property
     def _bad_names(self):  # names not allowed
-        bn = super()._bad_names
+        bn = nmp.BAD_NAMES.copy()
         bn.remove('all')
         return bn
-
-    # override, no super
-    def copy(self) -> NMdataSeriesSetContainer:
-        c = NMDataSeriesSetContainer(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
 
     # @property  # override, no super
     # def select(self):
@@ -863,11 +852,6 @@ class NMDataSeriesSetContainer(NMObjectContainer):
     # @select.setter
     # def select(self, set_eq):
     #     self.__set_select = set_eq
-
-    # override
-    def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = NMDataSeriesSet(None, 'iwillberenamed')
-        return super().new(name=name, nmobject=o, select=select, quiet=quiet)
 
     # override
     def rename(self, name, newname, quiet=nmp.QUIET):
@@ -880,12 +864,12 @@ class NMDataSeriesSetContainer(NMObjectContainer):
         return super().rename(name, newname, quiet=quiet)
 
     # override, note first=1
-    def name_next(self, first=1, quiet=nmp.QUIET):
-        return super().name_next(first=first, quiet=quiet)
+    def name_next(self, first=1):
+        return super().name_next(first=first)
 
     # override, note first=1
-    def name_next_seq(self, prefix='default', first=1, quiet=nmp.QUIET):
-        return super().name_next_seq(prefix=prefix, first=first, quiet=quiet)
+    def name_next_seq(self, prefix='default', first=1):
+        return super().name_next_seq(prefix=prefix, first=first)
 
     def add_epoch(self, name, epoch, quiet=nmp.QUIET):
         if not self._parent.thedata:

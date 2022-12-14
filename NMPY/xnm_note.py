@@ -3,15 +3,13 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-from nm_object import NMObject
-from nm_object import NMobject
-from nm_object_container import NMObjectContainer
-from nm_object_container import NMobjectContainer
+from nm_object import NMObject, NMObjectType
+from nm_object_container import NMObjectContainer, NMObjectContainerType 
 import nm_utilities as nmu
 from typing import Dict, List, NewType
 
-NMnote = NewType('NMNote', NMobject)
-NMnoteContainer = NewType('NMNoteContainer', NMobjectContainer)
+NMNoteType = NewType('NMNote', NMObjectType)
+NMNoteContainerType = NewType('NMNoteContainer', NMObjectContainerType)
 
 NOTE_PREFIX = 'Note'
 
@@ -35,24 +33,24 @@ class NMNote(NMObject):
         else:
             self.__thenote = str(thenote)
 
+    # override, no super
+    def copy(self) -> NMNoteType:
+        return NMNote(self._parent, self.name, thenote=self.__thenote)
+
     # override
     @property
-    def parameters(self) -> Dict[str, str]:
+    def parameters(self) -> Dict[str, object]:
         k = super().parameters
         k.update({'thenote': self.__thenote})
         return k
-
-    # override, no super
-    def copy(self) -> NMnote:
-        return NMNote(self._parent, self.name, thenote=self.__thenote)
 
     @property
     def thenote(self) -> str:
         return self.__thenote
 
     @thenote.setter
-    def thenote(self, thenote: str) -> bool:
-        return self._thenote_set(thenote)
+    def thenote(self, thenote: str) -> None:
+        self._thenote_set(thenote)
 
     def _thenote_set(self, thenote: str, quiet: bool = True) -> bool:
         # notes should be quiet
@@ -80,16 +78,16 @@ class NMNoteContainer(NMObjectContainer):
         name: str,
         **copy
     ) -> None:
-        n = NMNote(None, 'empty')
+        n = NMNote(parent=parent, name='ContainerUtility')
         super().__init__(parent, name, nmobject=n, prefix=NOTE_PREFIX,
                          rename=False, **copy)
         self.__off = False
 
     # override, no super
-    def copy(self) -> NMnoteContainer:
+    def copy(self) -> NMNoteContainerType:
         return NMNoteContainer(self._parent, self.name, c_prefix=self.prefix,
                                c_rename=self.parameters['rename'],
-                               c_thecontainer=self._thecontainer_copy())
+                               c_container=self._container_copy())
 
     # override
     def new(
@@ -97,13 +95,13 @@ class NMNoteContainer(NMObjectContainer):
         thenote: str = '',
         select: bool = True,
         quiet: bool = True
-    ) -> NMnote:
+    ) -> NMNoteType:
         # notes should be quiet
         if self.__off:
             return None
         name = self.name_next()
         o = NMNote(None, name=name, thenote=thenote)
-        if super().add(nmobject=o, select=select, quiet=quiet):
+        if super().append(nmobject=o, select=select, quiet=quiet):
             return o
         else:
             return None
@@ -124,11 +122,10 @@ class NMNoteContainer(NMObjectContainer):
         return self.__off
 
     @off.setter
-    def off(self, off: bool) -> bool:
+    def off(self, off: bool) -> None:
         if isinstance(off, bool):
             self.__off = off
             self._modified()
-        return self.__off
 
     # override, no super
     def duplicate(self) -> None:

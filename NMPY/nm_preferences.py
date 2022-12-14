@@ -33,7 +33,8 @@ class Configs(object):
 
     @quiet.setter
     def quiet(self, quiet):
-        self.__quiet = quiet
+        if isinstance(quiet, bool):
+            self.__quiet = quiet
 
     @property
     def gui(self):
@@ -41,4 +42,5 @@ class Configs(object):
 
     @gui.setter
     def gui(self, on):
-        self.__qui = on
+        if isinstance(on, bool):
+            self.__qui = on

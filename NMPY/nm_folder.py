@@ -5,16 +5,13 @@ Copyright 2019 Jason Rothman
 """
 import h5py
 
-from nm_object import NMObject, NMobject
-from nm_object_container import NMObjectContainer, NMobjectContainer
-from nm_data import NMDataContainer, NMdataContainer
-from nm_dataseries import NMDataSeriesContainer, NMdataSeriesContainer
+from nm_object import NMObject
+from nm_object_container import NMObjectContainer
+from nm_data import NMDataContainer
+from nm_dataseries import NMDataSeriesContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, NewType
-
-NMfolder = NewType('NMFolder', NMobject)
-NMfolderContainer = NewType('NMFolderContainer', NMobjectContainer)
+from typing import Dict, List
 
 
 class NMFolder(NMObject):
@@ -26,26 +23,28 @@ class NMFolder(NMObject):
         self,
         parent: object = None,
         name: str = 'NMFolder',
-        copy: NMfolder = None  # see copy()
+        copy: nmu.NMFolderType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__data_container = None
         self.__dataseries_container = None
-        #TODO: update copy
-        for k, v in copy.items():
-            if k.lower() == 'c_data' and isinstance(v, DataContainer):
-                self.__data_container = v
-            if k.lower() == 'c_dataseries' and isinstance(v,
-                                                          DataSeriesContainer):
-                self.__dataseries_container = v
 
-        if not isinstance(self.__data_container, DataContainer):
-            self.__data_container = NMDataContainer(self, 'Data')
-        if not isinstance(self.__dataseries_container, DataSeriesContainer):
-            self.__dataseries_container = NMDataSeriesContainer(self,
-                                                              'DataSeries')
+        if isinstance(copy, NMFolder):
+            self.__data_container = copy.data._container_copy()
+            self.__dataseries_container = copy.dataseries._container_copy()
+
+        if not isinstance(self.__data_container, NMDataContainer):
+            self.__data_container = NMDataContainer(parent=self, name='Data')
+        if not isinstance(self.__dataseries_container, NMDataSeriesContainer):
+            self.__dataseries_container = NMDataSeriesContainer(
+                parent=self,
+                name='Dataseries')
+
+    # override, no super
+    def copy(self) -> nmu.NMFolderType:
+        return NMFolder(copy=self)
 
     # override
     @property
@@ -60,20 +59,14 @@ class NMFolder(NMObject):
         if not super()._isequivalent(folder, alert=alert):
             return False
         c = self.__data_container
-        c2 = folder._Folder__data_container
+        c2 = folder._NMFolder__data_container
         if c and not c._isequivalent(c2, alert=alert):
             return False
         c = self.__dataseries_container
-        c2 = folder._Folder__dataseries_container
+        c2 = folder._NMFolder__dataseries_container
         if c and not c._isequivalent(c2, alert=alert):
             return False
         return True
-
-    # override, no super
-    def copy(self) -> NMfolder:
-        c = NMFolder(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
 
     @property
     def data(self):
@@ -94,31 +87,15 @@ class NMFolderContainer(NMObjectContainer):
         parent: object = None,
         name: str = 'NMFolderContainer',
         prefix: str = 'NMFolder',  # for generating names of NMFolders
-        copy: NMfolderContainer = None  # see copy()
+        copy: nmu.NMFolderContainerType = None  # see copy()
     ) -> None:
-        f = NMFolder(None, 'empty')
+        f = NMFolder(parent=parent, name='ContainerUtility')
         super().__init__(parent=parent, name=name, nmobject=f, prefix=prefix,
                          rename=True, copy=copy)
-        # TODO: copy
 
     # override, no super
-    def copy(self) -> NMfolderContainer:
-        c = NMFolderContainer(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
-
-    # override
-    def new(self, name='default', select=True, quiet=nmp.QUIET):
-        o = NMFolder(None, 'iwillberenamed')
-        return super().new(name=name, nmobject=o, select=select, quiet=quiet)
-
-    # wrapper
-    def add(self, folder, select=True, quiet=nmp.QUIET):
-        if not isinstance(folder, NMFolder):
-            e = self._type_error('folder', 'Folder')
-            raise TypeError(e)
-        return self.new(name=folder.name, nmobject=folder, select=select,
-                        quiet=quiet)
+    def copy(self) -> nmu.NMFolderContainerType:
+        return NMFolderContainer(copy=self)
 
     def open_hdf5(self):
         dataseries = 'Record'

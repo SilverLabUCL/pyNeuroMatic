@@ -7,9 +7,28 @@ Copyright 2019 Jason Rothman
 import math
 import inspect
 from colorama import Fore, Back, Style
-from typing import Union, List
+from typing import Union, List, NewType
 
 import nm_preferences as nmp
+
+NMManagerType = NewType('NMManager', object)
+NMObjectType = NewType('NMObject', object)
+NMObjectContainerType = NewType('NMObjectContainer', NMObjectType)
+NMProjectType = NewType('NMProject', NMObjectType)
+NMFolderType = NewType('NMFolder', NMObjectType)
+NMFolderContainerType = NewType('NMFolderContainer', NMObjectContainerType)
+NMDataType = NewType('NMData', NMObjectType)
+NMDataContainerType = NewType('NMDataContainer', NMObjectContainerType)
+NMDataSeriesType = NewType('NMDataSeries', NMObjectType)
+NMDataSeriesContainerType = NewType('NMDataSeriesContainer',
+                                    NMObjectContainerType)
+NMChannelType = NewType('NMChannel', NMObjectType)
+NMChannelContainerType = NewType('NMChannelContainer', NMObjectContainerType)
+NMScaleType = NewType('NMScale', NMObjectType)
+NMScaleXType = NewType('NMScaleX', NMScaleType)
+NMDataSeriesSetType = NewType('NMDataSeriesSet', NMObjectType)
+NMDataSeriesSetContainerType = NewType('NMDataSeriesContainerSet',
+                                       NMObjectContainerType)
 
 
 def name_ok(

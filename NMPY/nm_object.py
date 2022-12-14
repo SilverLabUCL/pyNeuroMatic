@@ -12,9 +12,7 @@ import types
 
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, NewType
-
-NMobject = NewType('NMObject', object)
+from typing import Dict, List
 
 
 class NMObject(object):
@@ -44,27 +42,27 @@ class NMObject(object):
         self,
         parent: object = None,  # parent of NMObject
         name: str = 'NMObject',  # name of this NMObject
-        copy: NMobject = None  # see copy()
+        copy: nmu.NMObjectType = None  # see copy()
     ) -> None:
 
         if isinstance(copy, NMObject):
-            params = copy.parameters
-            self._parent = copy._parent
-            self.__name = params['name']
-            self.__created = params['created']
-            self.__modified = params['modified']
+            self.__parent = copy._parent
+            self.__name = copy._NMObject__name
+            self.__created = copy._NMObject__created
+            self.__modified = copy._NMObject__modified
             self.__notes_on = copy.notes_on
             self.__notes = []
+            self.__copy_of = copy
             for n in copy.notes:
                 self.__notes.append(n.copy())
         else:
-            self._parent = parent
+            self.__parent = parent
             self.__name = name
             self.__created = str(datetime.datetime.now())
             self.__modified = None
             self.__notes_on = True
             self.__notes = []
-            self.note = 'created ' + name
+            self.__copy_of = None
 
         self.__rename_fxnref = self._name_set  # fxn ref for name.setter
 
@@ -75,14 +73,30 @@ class NMObject(object):
             e = self._value_error('name', tp='')  # no tp yet
             raise ValueError(e)
 
+    # children need to override copy()
+    def copy(self) -> nmu.NMObjectType:
+        return NMObject(copy=self)
+
     @property
-    def parameters(self) -> Dict[str, str]:
+    def parameters(self) -> Dict[str, object]:
         # child class can override and add class parameters
         # used in isequivalent
         p = {'name': self.__name}
         p.update({'created': self.__created})
         p.update({'modified': self.__modified})
+        if isinstance(self.__copy_of, NMObject):
+            p.update({'copy of': self.__copy_of._tp})
+        else:
+            p.update({'copy of': 'None'})
         return p
+
+    @property
+    def _parent(self) -> object:
+        return self.__parent
+
+    # @_parent.setter  # discourage changes to parent
+    # def _parent(self, parent: object) -> None:
+    #     self.__parent = parent
 
     @property
     def parameter_list(self) -> List[str]:
@@ -95,9 +109,9 @@ class NMObject(object):
 
     @property
     def content_tree(self) -> Dict[str, str]:
-        if self._parent and isinstance(self._parent, NMObject):
+        if self.__parent and isinstance(self.__parent, NMObject):
             k = {}
-            k.update(self._parent.content_tree)  # goes up the ancestry tree
+            k.update(self.__parent.content_tree)  # goes up the ancestry tree
             k.update(self.content)
             return k
         return self.content
@@ -147,7 +161,7 @@ class NMObject(object):
         cname = self.__class__.__name__
         if cname in skip:
             return []
-        p = self._parent
+        p = self.__parent
         if p and isinstance(p, NMObject) and p.__class__.__name__ not in skip:
             tpl = p.treepath_list(names=names, skip=skip)
             # goes up the ancestry tree
@@ -189,9 +203,9 @@ class NMObject(object):
         return self.__name
 
     @name.setter
-    def name(self, newname: str) -> bool:
+    def name(self, newname: str) -> None:
         # calls _name_set() or NMObjectContainer.rename()
-        return self.__rename_fxnref(self.__name, newname)
+        self.__rename_fxnref(self.__name, newname)
 
     def _name_set(
         self,
@@ -245,23 +259,20 @@ class NMObject(object):
 
     @note.setter
     def note(self, thenote: str) -> None:
-        return self._note(thenote)
+        self._note(thenote)
 
     def _note(self, thenote: str) -> bool:
+        if self.__notes is None:
+            self.__notes = []
         if not self.__notes_on:
             a = 'notes are off'
             self._alert(a)
             return False
+        if thenote is None:
+            return False
         if not isinstance(thenote, str):
             thenote = str(thenote)
-        if self.__notes is None:
-            self.__notes = []
-            n = {}
-            n.update({'note': 'created ' + self.__name})
-            n.update({'date': self.__created})
-            self.__notes.append(n)
-        n = {}
-        n.update({'date': str(datetime.datetime.now())})
+        n = {'date': str(datetime.datetime.now())}
         n.update({'note': thenote})
         self.__notes.append(n)
         return True
@@ -293,39 +304,51 @@ class NMObject(object):
         for n in notes:
             if not isinstance(n, dict):
                 return False
-            foundNote = False
             foundDate = False
+            foundNote = False
             for k, v in n.items():
-                if k.lower() == 'note':
-                    foundNote = True
-                    if not isinstance(v, str):
-                        return False
-                elif k.lower() == 'date':
+                if not isinstance(v, str):
+                    return False
+                if k.lower() == 'date':
                     foundDate = True
-                    if not isinstance(v, str):
-                        return False
+                elif k.lower() == 'note':
+                    foundNote = True
                 else:
                     return False  # unknown key
-        return foundNote and foundDate
+            if not foundNote or not foundDate:
+                return False
+        return True
 
     @property
-    def _manager(self) -> object:  # find reference to Manager of this NMObject
-        if self._parent is None:
+    def _manager(self) -> nmu.NMManagerType:  # find NMManager of this NMObject
+        return self._find_ancestor('NMManager')
+
+    @property
+    def _project(self) -> nmu.NMProjectType:  # find NMProject of this NMObject
+        return self._find_ancestor('NMProject')
+
+    @property
+    def _folder(self) -> nmu.NMFolderType:  # find NMFolder of this NMObject
+        return self._find_ancestor('NMFolder')
+
+    def _find_ancestor(self, classname: str) -> object:
+        if self.__parent is None or not isinstance(classname, str):
             return None
-        if self._parent.__class__.__name__ == 'NMManager':
-            return self._parent
-        if isinstance(self._parent, NMObject):
-            return self._parent._manager  # goes up the ancestry tree
+        if self.__parent.__class__.__name__ == classname:
+            return self.__parent
+        if isinstance(self.__parent, NMObject):
+            # go up the ancestry tree
+            return self.__parent._find_ancestor(classname)
         return None
 
     def _isequivalent(  # compare this NMObject to another NMObject
         self,
-        nmobject: NMobject,  # the other NMObject
+        nmobject: nmu.NMObjectType,  # the other NMObject
         alert: bool = False  # write alert to NM history
     ) -> bool:
         self_is_equiv = False  # make this an argument?
         nan_eq_nan = nmp.NAN_EQ_NAN  # make this an argument?
-        oktobedifferent = ['created', 'modified']  # make this an argument?
+        oktobedifferent = ['created', 'modified', 'copy of']  # make argument?
         # TODO: notes?
         ue = 'unequivalent '
         if nmobject == self:
@@ -342,10 +365,10 @@ class NMObject(object):
                 a = ue + 'NMObject types: ' + scn + ' vs ' + ocn
                 self._alert(a)
             return False
-        # if nmobject._parent != self._parent:
+        # if nmobject._parent != self.__parent:
             # problematic for copying containers
             # compare parent name?
-            # a = (ue + 'parents: ' + str(self._parent) + ' vs ' +
+            # a = (ue + 'parents: ' + str(self.__parent) + ' vs ' +
             #      str(nmobject._parent))
             # self._alert(a)
             # return False
@@ -356,14 +379,16 @@ class NMObject(object):
         #     self._alert(a)
         #     return False
         sp = self.parameters
+        spkeys = sp.keys()
         op = nmobject.parameters
-        if op.keys() != sp.keys():
+        opkeys = op.keys()
+        if opkeys != spkeys:
             if alert:
-                a = (ue + 'parameter keys: ' + str(op.keys()) + ' vs ' +
-                     str(sp.keys()))
+                a = (ue + 'parameter keys: ' + str(opkeys) +
+                     ' vs ' + str(spkeys))
                 self._alert(a)
             return False
-        for k in sp.keys():
+        for k in spkeys:
             if k in oktobedifferent:
                 continue
             if op[k] != sp[k]:
@@ -379,12 +404,6 @@ class NMObject(object):
                 return False
         return True
 
-    # children need to override copy()
-    def copy(self) -> NMobject:
-        c = NMObject(copy=self)
-        c.note = 'this is a copy of ' + str(self)
-        return c
-
     def save(
         self,
         path: str = '',
@@ -396,8 +415,8 @@ class NMObject(object):
 
     def _modified(self) -> str:
         self.__modified = str(datetime.datetime.now())
-        if self._parent and isinstance(self._parent, NMObject):
-            self._parent._modified()  # up the ancestry tree
+        if self.__parent and isinstance(self.__parent, NMObject):
+            self.__parent._modified()  # up the ancestry tree
 
     def _alert(
         self,
