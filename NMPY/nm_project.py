@@ -35,6 +35,17 @@ class NMProject(NMObject):
             self.__folder_container = NMFolderContainer(parent=self,
                                                         name='Folders')
 
+    # override
+    def __eq__(
+        self,
+        other: nmu.NMProjectType
+    ) -> bool:
+        if not super().__eq__(other):
+            return False
+        if self.__folder_container != other._NMProject__folder_container:
+            return False
+        return True
+
     # override, no super
     def copy(self) -> nmu.NMProjectType:
         return NMProject(copy=self)

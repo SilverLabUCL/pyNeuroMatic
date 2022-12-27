@@ -41,7 +41,9 @@ class NMChannel(NMObject):
             self.__x = NMScaleX(self, 'xscale', scale=xscale)
             yscale = copy._NMChannel__y.scale
             self.__y = NMScale(self, 'yscale', scale=yscale)
-            self.__thedata = list(copy._NMChannel__thedata)
+
+            if isinstance(copy._NMChannel__thedata, list):
+                self.__thedata = list(copy._NMChannel__thedata)
 
         else:
 
@@ -71,6 +73,22 @@ class NMChannel(NMObject):
         if not isinstance(self.__y, NMScale):
             self.__y = NMScale(self, 'yscale')
 
+    # override
+    def __eq__(
+        self,
+        other: nmu.NMObjectType
+    ) -> bool:
+        if not super().__eq__(other):
+            return False
+        if self.x.scale != other.x.scale:
+            return False
+        if self.y.scale != other.y.scale:
+            return False
+        for a, b in zip(self.data, other.data):
+            if a != b:  # __ne__()
+                return False
+        return True
+
     # override, no super
     def copy(self) -> nmu.NMChannelType:
         return NMChannel(copy=self)
@@ -90,11 +108,11 @@ class NMChannel(NMObject):
         return self.__thedata
 
     @property
-    def x(self) -> Union[dict, nmu.NMScaleXType]:
+    def x(self) -> nmu.NMScaleXType:
         return self.__x
 
     @property
-    def y(self) -> Union[dict, nmu.NMScaleXType]:
+    def y(self) -> nmu.NMScaleType:
         return self.__y
 
 

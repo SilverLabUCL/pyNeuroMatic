@@ -32,25 +32,45 @@ class NMDataSeries(NMObject):
 
         self.__channel_container = None
         self.__set_container = None
+        self.__channel_scale_lock = None  # NMdata share channel x-y scales
+        self.__xscale_lock = None  # all NMdata share x-scale
+        self.__channel_select = None  # 'A', ['A', 'C'], 'ALL'
+        self.__epoch_select = None  # 0, [0, 5], 'ALL', range(2, 6)
+        self.__data_select = None  # {['A']: [NMData]}
 
         # self.__thedata = {}  # dict, {channel: data-list}
-        # TODO: change to thedata list contained with NMChannel
+        # TODO: data list contained in each NMChannel
 
         if isinstance(copy, NMDataSeries):
+
             if isinstance(copy.channel, NMChannelContainer):
                 self.__channel_container = copy.channel.copy()
+
             if isinstance(copy.sets, NMDataSeriesSetContainer):
                 self.__set_container = copy.sets.copy()
+
             self.__channel_scale_lock = copy.channel_scale_lock
-            # self.__channel_select = []  # new reference
-            # self.__epoch_select = []  # new reference
-            # self.__data_select = {}  # new reference
-        else:
-            self.__channel_scale_lock = True  # NMdata share channel x-y scales
-            self.__xscale_lock = True  # all NMdata share x-scale
-            self.__channel_select = None  # 'A', ['A', 'C'], 'ALL'
-            self.__epoch_select = None  # 0, [0, 5], 'ALL', range(2, 6)
-            self.__data_select = None  # {['A']: [NMData]}
+            self.__xscale_lock = copy.xscale_lock
+
+            if isinstance(copy.channel_select, str):
+                self.__channel_select = copy.channel_select
+            elif isinstance(copy.channel_select, list):
+                self.__channel_select = list(copy.channel_select)
+
+            if isinstance(copy.epoch_select, int) or isinstance(
+                    copy.epoch_select, str):
+                self.__epoch_select = copy.epoch_select
+            elif isinstance(copy.epoch_select, list):
+                self.__epoch_select = list(copy.epoch_select)
+            elif isinstance(copy.epoch_select, range):
+                start = copy.epoch_select.start
+                stop = copy.epoch_select.stop
+                step = copy.epoch_select.step
+                self.__epoch_select = range(start, stop, step)
+
+            # TODO: function to create this dictionary of selected data
+            # based on channel and epoch select
+            # self.__data_select = {}  # new refs
 
         if not isinstance(self.__channel_container, NMChannelContainer):
             self.__channel_container = NMChannelContainer(
@@ -64,7 +84,24 @@ class NMDataSeries(NMObject):
             self.__set_container = NMDataSeriesSetContainer(
                 parent=self,
                 name='DataSeriesSets')
+
+        if not isinstance(self.__channel_scale_lock, bool):
+            self.__channel_scale_lock = True
+
+        if not isinstance(self.__xscale_lock, bool):
+            self.__xscale_lock = True
+
         self._sets_init(quiet=True)
+
+    # override
+    def __eq__(
+        self,
+        other: nmu.NMObjectType
+    ) -> bool:
+        if not super().__eq__(other):
+            return False
+        # TODO: finish
+        return True
 
     # override, no super
     def copy(self) -> nmu.NMDataSeriesType:

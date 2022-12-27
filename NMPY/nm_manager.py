@@ -290,7 +290,7 @@ class NMManager(object):  # TODO: can manager be a NMObejct or static?
                            quiet=self._quiet(quiet))
 
     def _quiet(self, quiet=nmp.QUIET):
-        if self.configs.quiet:  # manager config quiet overrides
+        if self.configs.quiet:  # config quiet overrides
             return True
         return quiet
 

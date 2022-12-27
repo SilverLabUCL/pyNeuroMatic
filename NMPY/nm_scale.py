@@ -49,6 +49,17 @@ class NMScale(NMObject):
                 e = self._type_error('scale', 'dictionary', tp='')  # no tp yet
                 raise TypeError(e)
 
+    # override
+    def __eq__(
+        self,
+        other: nmu.NMObjectType
+    ) -> bool:
+        if not super().__eq__(other):
+            return False
+        if self.scale != other.scale:
+            return False
+        return True
+
     # override, no super
     def copy(self) -> nmu.NMScaleType:
         return NMScale(copy=self)

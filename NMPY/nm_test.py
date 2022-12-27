@@ -44,6 +44,8 @@ CONFIRM = False
 
 class Test(unittest.TestCase):
 
+    # unittest runs any function beginning with 'test'
+    # test_all is only function that is run
     def test_all(self):
         nm.configs.quiet = False
         # self._test_nmobject()
@@ -103,14 +105,14 @@ class Test(unittest.TestCase):
         # notes()
         self.assertTrue(o0.notes_on)
         o0.note = 'added TTX'
-        self.assertTrue(o0._note('added AP5'))
+        self.assertTrue(o0._note_add('added AP5'))
         o0.notes_on = None
         self.assertFalse(o0.notes_on)
         o0.notes_on = True
         self.assertTrue(o0.notes_on)
         o0.notes_on = False
         self.assertFalse(o0.notes_on)
-        self.assertFalse(o0._note('added NBQX'))
+        self.assertFalse(o0._note_add('added NBQX'))
         self.assertTrue(isinstance(o0.notes, list))
         self.assertEqual(len(o0.notes), 2)
         self.assertEqual(o0.notes[0].get('note'), 'added TTX')
@@ -932,8 +934,10 @@ class Test(unittest.TestCase):
 
         # __init__()
         # args: parent, name, np_array, xscale, yscale, copy
+        # dataseries, dataseries_channel, dataseries_epoch
         n0 = 'RecordA0'
         n1 = 'RecordA1'
+        ds = NMDataSeries(parent=PARENT, name='Record')
         for b in BADTYPES:
             if b is None:
                 continue  # ok
@@ -949,6 +953,23 @@ class Test(unittest.TestCase):
                 continue  # ok
             with self.assertRaises(TypeError):
                 d0 = NMData(parent=PARENT, name=n0, yscale=b)
+        for b in BADTYPES:
+            if b is None:
+                continue  # ok
+            with self.assertRaises(TypeError):
+                d0 = NMData(parent=PARENT, name=n0, dataseries=b)
+        for b in BADTYPES:
+            if isinstance(b, str):
+                continue  # ok
+            with self.assertRaises(TypeError):
+                d0 = NMData(parent=PARENT, name=n0, dataseries=ds,
+                            dataseries_channel=b)
+        for b in BADTYPES:
+            if isinstance(b, int):
+                continue  # ok
+            with self.assertRaises(TypeError):
+                d0 = NMData(parent=PARENT, name=n0, dataseries=ds,
+                            dataseries_channel='A', dataseries_epoch=b)
         nparray0 = np.full([4], 3.14, dtype=np.float64, order='C')
         nparray1 = np.full([5], 6.28, dtype=np.float64, order='C')
         # nparrayx = np.full([6], 12.56, dtype=np.float64, order='C')
@@ -1031,10 +1052,10 @@ class Test(unittest.TestCase):
         # wrapper fxn, so basic testing here
         self.assertTrue(d0.np_array_make_random_normal(10, mean=3, stdv=1))
         # TODO
-        # dataseries_str
-        # dataseries_add
-        # dataseries_remove
+        # dataseries
+        # dataseries_set
         # ds = NMDataSeries(parent=PARENT, name='Record')
+        # TODO x- and y-scale
 
     def _test_data_container(self):
         c0 = NMDataContainer(parent=PARENT, name='Data')

@@ -42,6 +42,20 @@ class NMFolder(NMObject):
                 parent=self,
                 name='Dataseries')
 
+    # override
+    def __eq__(
+        self,
+        other: nmu.NMObjectType
+    ) -> bool:
+        if not super().__eq__(other):
+            return False
+        if self.__data_container != other._NMFolder__data_container:
+            return False
+        if (self.__dataseries_container !=
+                other._NMFolder__dataseries_container):
+            return False
+        return True
+
     # override, no super
     def copy(self) -> nmu.NMFolderType:
         return NMFolder(copy=self)

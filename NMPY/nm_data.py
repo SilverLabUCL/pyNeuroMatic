@@ -11,6 +11,7 @@ import numpy
 from nm_object import NMObject
 from nm_object_container import NMObjectContainer
 from nm_dataseries import NMDataSeries, NMDataSeriesContainer
+from nm_channel import NMChannel
 from nm_scale import NMScale, NMScaleX
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -37,12 +38,17 @@ class NMData(NMObject):
         yscale: Union[dict, nmu.NMScaleType] = {},
         # pass dictionary for independent scale
         # pass reference to NMscale (master)
-        dataseries: Optional[dict] = None,  # master dataseries
-        # {'dataseries': NMDataSeries, 'channel': 'A', 'epoch': 0}
+        dataseries: Optional[nmu.NMDataSeriesType] = None,  # master dataseries
+        dataseries_channel: Optional[str] = None,
+        dataseries_epoch: Optional[int] = None,
         copy: nmu.NMDataType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
+
+        self.__dataseries = None
+        self.__dataseries_channel = None
+        self.__dataseries_epoch = None
 
         if isinstance(copy, NMData):
             if isinstance(copy.np_array, numpy.ndarray):
@@ -52,6 +58,8 @@ class NMData(NMObject):
             xscale = copy._NMData__x.scale
             yscale = copy._NMData__y.scale
             dataseries = copy._NMData__dataseries
+            dataseries_channel = copy._NMData__dataseries_channel
+            dataseries_epoch = copy._NMData__dataseries_epoch
 
         if np_array is None:
             self.__np_array = None
@@ -81,19 +89,7 @@ class NMData(NMObject):
             e = self._type_error('yscale', 'dictionary or NMScale')
             raise TypeError(e)
 
-        if isinstance(dataseries, dict) and dataseries:
-            if 'dataseries' not in dataseries:
-                e = ('missing key ' + nmu.quotes('dataseries'))
-                raise KeyError(e)
-            if 'channel' not in dataseries:
-                e = ('missing key ' + nmu.quotes('channel'))
-                raise KeyError(e)
-            if 'epoch' not in dataseries:
-                e = ('missing key ' + nmu.quotes('epoch'))
-                raise KeyError(e)
-            self._dataseries_set(dataseries['dataseries'],
-                                 dataseries['channel'],
-                                 dataseries['epoch'])
+        self._dataseries_set(dataseries, dataseries_channel, dataseries_epoch)
 
         # TODO: if dataseries exist, then use this as x-y scale master
         # TODO: turn off scale notes and divert here?
@@ -114,7 +110,11 @@ class NMData(NMObject):
         return k
 
     # override
-    def _isequivalent(self, data, alert=False):
+    def _isequivalent(
+        self,
+        data: nmu.NMDataType,
+        alert: bool = False
+    ) -> bool:
         nan_eq_nan = nmp.NAN_EQ_NAN  # argument?
         if not super()._isequivalent(data, alert=alert):
             return False
@@ -148,31 +148,26 @@ class NMData(NMObject):
                         if alert:
                             self._alert(ue + 'np_array')
                         return False
-        # TODO self.__dataseries
         return True
 
     @property
-    def dataseries(self):
-        if isinstance(self.__dataseries, dict) and self.__dataseries:
-            if (
-                'dataseries' in self.__dataseries and
-                'channel' in self.__dataseries and
-                'epoch' in self.__dataseries
-            ):
-                name = self.__dataseries['dataseries'].name
-                channel = self.__dataseries['channel']
-                epoch = self.__dataseries['epoch']
-                return {'name': name, 'channel': channel, 'epoch': epoch}
+    def dataseries(self) -> Dict[str, object]:
+        if isinstance(self.__dataseries, NMDataSeries):
+            return {'name': self.__dataseries._tp,
+                    'channel': self.__dataseries_channel,
+                    'epoch': self.__dataseries_epoch}
         return None
 
     def _dataseries_set(
         self,
-        dataseries: nmu.NMDataSeriesType,
+        dataseries: Union[nmu.NMDataSeriesType, None],
         channel: str,
         epoch: int
     ) -> bool:
-        if dataseries is None or not dataseries:
+        if dataseries is None:
             self.__dataseries = None
+            self.__dataseries_channel = None
+            self.__dataseries_epoch = None
             return True
         if not isinstance(dataseries, NMDataSeries):
             e = self._type_error('dataseries', 'NMDataSeries')
@@ -183,24 +178,49 @@ class NMData(NMObject):
         # TODO: check channel and epoch are OK for this dataseries?
         cc = nmu.channel_char_check(channel)
         if not cc:
-            e = self._value_error('channel')
+            e = self._value_error('channelh')
             raise ValueError(e)
         if not isinstance(epoch, int):
             e = self._type_error('int', 'integer')
             raise TypeError(e)
+        if epoch < 0:
+            e = self._value_error('epoch')
+            raise ValueError(e)
 
-        self.__dataseries = {'dataseries': dataseries, 'channel': channel,
-                             'epoch': epoch}
+        self.__dataseries = dataseries
+        self.__dataseries_channel = channel
+        self.__dataseries_epoch = epoch
         self._modified()
         # TODO: history
         return True
 
     @property
-    def x(self):
+    def x(self) -> nmu.NMScaleXType:
+        if isinstance(self.__dataseries, NMDataSeries):
+            if self.__dataseries.channel_scale_lock:
+                if self.__dataseries.channel_count > 0:
+                    c = None
+                    if self.__dataseries.xscale_lock:
+                        c = self.__dataseries.channel.getitem(item=0)
+                        # first channel contains universal x-scale
+                    elif isinstance(self.__dataseries_channel, str):
+                        c = self.__dataseries.channel.getitem(
+                            name=self.__dataseries_channel)
+                    if isinstance(c, NMChannel) and isinstance(c.x, NMScaleX):
+                        return c.x
         return self.__x
 
     @property
-    def y(self):
+    def y(self) -> nmu.NMScaleType:
+        if isinstance(self.__dataseries, NMDataSeries):
+            if self.__dataseries.channel_scale_lock:
+                if self.__dataseries.channel_count > 0:
+                    c = None
+                    if isinstance(self.__dataseries_channel, str):
+                        c = self.__dataseries.channel.getitem(
+                            name=self.__dataseries_channel)
+                    if isinstance(c, NMChannel) and isinstance(c.x, NMScale):
+                        return c.y
         return self.__y
 
     @property

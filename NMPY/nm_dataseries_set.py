@@ -62,8 +62,10 @@ class NMDataSeriesSet(NMObject):
     # override
     @property
     def _bad_names(self):
-        bn = nmp.BAD_NAMES.copy()
-        bn.remove('all')
+        bn = []
+        if isinstance(nmp.BAD_NAMES, list):
+            bn = list(nmp.BAD_NAMES)
+            bn.remove('all')
         return bn
 
     # override
@@ -841,8 +843,10 @@ class NMDataSeriesSetContainer(NMObjectContainer):
     # override
     @property
     def _bad_names(self):  # names not allowed
-        bn = nmp.BAD_NAMES.copy()
-        bn.remove('all')
+        bn = []
+        if isinstance(nmp.BAD_NAMES, list):
+            bn = list(nmp.BAD_NAMES)
+            bn.remove('all')
         return bn
 
     # @property  # override, no super

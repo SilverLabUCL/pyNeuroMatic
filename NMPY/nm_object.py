@@ -45,21 +45,24 @@ class NMObject(object):
         copy: nmu.NMObjectType = None  # see copy()
     ) -> None:
 
+        self.__created = str(datetime.datetime.now())
+        self.__modified = None
+
         if isinstance(copy, NMObject):
             self.__parent = copy._parent
             self.__name = copy._NMObject__name
-            self.__created = copy._NMObject__created
-            self.__modified = copy._NMObject__modified
+            # self.__created = copy._NMObject__created
+            # self.__modified = copy._NMObject__modified
             self.__notes_on = copy.notes_on
-            self.__notes = []
+            self.__notes = []  # [{'date': 'date', 'note': 'note'}]
             self.__copy_of = copy
-            for n in copy.notes:
-                self.__notes.append(n.copy())
+            if isinstance(copy.notes, list):
+                for n in copy.notes:
+                    if isinstance(n, dict):
+                        self.__notes.append(dict(n))
         else:
             self.__parent = parent
             self.__name = name
-            self.__created = str(datetime.datetime.now())
-            self.__modified = None
             self.__notes_on = True
             self.__notes = []
             self.__copy_of = None
@@ -73,10 +76,103 @@ class NMObject(object):
             e = self._value_error('name', tp='')  # no tp yet
             raise ValueError(e)
 
+    def __eq__(
+        self,
+        other: nmu.NMObjectType
+    ) -> bool:
+        # executed with '==' but not 'is'
+        # can use 'is' to test if objects are the same
+        # if not super().__eq__(other):  # not sure this is needed (object)
+        #    return False
+        if not isinstance(other, type(self)):
+            return False
+        if self.name.lower() != other.name.lower():
+            # names are case insensitive
+            return False
+        for a, b in zip(self.notes, other.notes):
+            if a != b:
+                return False
+        return True
+
+    def __ne__(
+        self,
+        other: nmu.NMObjectType
+    ) -> bool:
+        return not self.__eq__(other)
+
     # children need to override copy()
     def copy(self) -> nmu.NMObjectType:
         return NMObject(copy=self)
 
+    def _isequivalent(  # compare this NMObject to another NMObject
+        self,
+        other: nmu.NMObjectType,  # the other NMObject
+        alert: bool = False  # write alert to NM history
+    ) -> bool:
+        self_is_equiv = False  # make this an argument?
+        nan_eq_nan = nmp.NAN_EQ_NAN  # make this an argument?
+        # TODO: REPLACE WITH __EQ__
+        ue = 'unequivalent '
+
+        if other is self:
+            if self_is_equiv:
+                return True
+            if alert:
+                a = 'equivalence with self is False'
+                self._alert(a)
+            return False
+
+        scn = self.__class__.__name__
+        ocn = other.__class__.__name__
+        if ocn != scn:
+            if alert:
+                a = ue + 'NMObject types: ' + scn + ' vs ' + ocn
+                self._alert(a)
+            return False
+        # if nmobject._parent != self.__parent:
+            # problematic for copying containers
+            # compare parent name?
+            # a = (ue + 'parents: ' + str(self.__parent) + ' vs ' +
+            #      str(nmobject._parent))
+            # self._alert(a)
+            # return False
+        # if nmobject._NMObject__rename_fxnref != self.__rename_fxnref:
+        #     different, unless in same container
+        #     a = (ue + 'rename() refs: ' + str(self.__rename_fxnref) +
+        #     ' vs ' + str(nmobject._NMObject__rename_fxnref))
+        #     self._alert(a)
+        #     return False
+        sp = self.parameters
+        spkeys = sp.keys()
+        op = other.parameters
+        opkeys = op.keys()
+        if opkeys != spkeys:
+            if alert:
+                a = (ue + 'parameter keys: ' + str(opkeys) +
+                     ' vs ' + str(spkeys))
+                self._alert(a)
+            return False
+        for k in spkeys:
+            if k in self._oktobedifferent:
+                continue
+            if op[k] != sp[k]:
+                if nan_eq_nan:
+                    op_nan = isinstance(op[k], float) and math.isnan(op[k])
+                    sp_nan = isinstance(sp[k], float) and math.isnan(sp[k])
+                    if op_nan and sp_nan:
+                        continue  # ok (nan=nan)
+                if alert:
+                    a = (ue + nmu.quotes(k) + ': ' +
+                         nmu.quotes(sp[k]) + ' vs ' + nmu.quotes(op[k]))
+                    self._alert(a)
+                return False
+        return True
+
+    @property
+    def _oktobedifferent(self) -> list:
+        return ['created', 'modified', 'copy of']
+
+    # TODO: convert to __repr__
     @property
     def parameters(self) -> Dict[str, object]:
         # child class can override and add class parameters
@@ -87,7 +183,7 @@ class NMObject(object):
         if isinstance(self.__copy_of, NMObject):
             p.update({'copy of': self.__copy_of._tp})
         else:
-            p.update({'copy of': 'None'})
+            p.update({'copy of': None})
         return p
 
     @property
@@ -248,21 +344,25 @@ class NMObject(object):
         return self.__notes
 
     def notes_print(self) -> None:
-        for n in self.notes:
-            print(n['date'] + ' ' + n['note'])
+        note_seperator = '  '
+        if isinstance(self.__notes, list):
+            for n in self.__notes:
+                keys = n.keys()
+                if isinstance(n, dict) and 'date' in keys and 'note' in keys:
+                    print(n['date'] + note_seperator + n['note'])
 
     @property
     def note(self) -> str:
-        if len(self.__notes) > 0:
+        if isinstance(self.__notes, list) and len(self.__notes) > 0:
             return self.__notes[-1]
         return ''
 
     @note.setter
     def note(self, thenote: str) -> None:
-        self._note(thenote)
+        self._note_add(thenote)
 
-    def _note(self, thenote: str) -> bool:
-        if self.__notes is None:
+    def _note_add(self, thenote: str) -> bool:
+        if not isinstance(self.__notes, list):
             self.__notes = []
         if not self.__notes_on:
             a = 'notes are off'
@@ -282,7 +382,7 @@ class NMObject(object):
             q = ('are you sure you want to clear all notes for ' +
                  nmu.quotes(self.__name) + '?')
             yn = nmu.input_yesno(q, tp=self._tp)
-            if not yn.lower() == 'y':
+            if yn.lower() != 'y':
                 return False
         self.__notes = []
         return True
@@ -304,19 +404,14 @@ class NMObject(object):
         for n in notes:
             if not isinstance(n, dict):
                 return False
-            foundDate = False
-            foundNote = False
+            keys = n.keys()
+            if len(keys) == 2 and 'date' in keys and 'note' in keys:
+                pass  # ok
+            else:
+                return False
             for k, v in n.items():
                 if not isinstance(v, str):
                     return False
-                if k.lower() == 'date':
-                    foundDate = True
-                elif k.lower() == 'note':
-                    foundNote = True
-                else:
-                    return False  # unknown key
-            if not foundNote or not foundDate:
-                return False
         return True
 
     @property
@@ -341,69 +436,6 @@ class NMObject(object):
             return self.__parent._find_ancestor(classname)
         return None
 
-    def _isequivalent(  # compare this NMObject to another NMObject
-        self,
-        nmobject: nmu.NMObjectType,  # the other NMObject
-        alert: bool = False  # write alert to NM history
-    ) -> bool:
-        self_is_equiv = False  # make this an argument?
-        nan_eq_nan = nmp.NAN_EQ_NAN  # make this an argument?
-        oktobedifferent = ['created', 'modified', 'copy of']  # make argument?
-        # TODO: notes?
-        ue = 'unequivalent '
-        if nmobject == self:
-            if self_is_equiv:
-                return True
-            if alert:
-                a = 'equivalence with self is False'
-                self._alert(a)
-            return False
-        scn = self.__class__.__name__
-        ocn = nmobject.__class__.__name__
-        if ocn != scn:
-            if alert:
-                a = ue + 'NMObject types: ' + scn + ' vs ' + ocn
-                self._alert(a)
-            return False
-        # if nmobject._parent != self.__parent:
-            # problematic for copying containers
-            # compare parent name?
-            # a = (ue + 'parents: ' + str(self.__parent) + ' vs ' +
-            #      str(nmobject._parent))
-            # self._alert(a)
-            # return False
-        # if nmobject._NMObject__rename_fxnref != self.__rename_fxnref:
-        #     different, unless in same container
-        #     a = (ue + 'rename() refs: ' + str(self.__rename_fxnref) +
-        #     ' vs ' + str(nmobject._NMObject__rename_fxnref))
-        #     self._alert(a)
-        #     return False
-        sp = self.parameters
-        spkeys = sp.keys()
-        op = nmobject.parameters
-        opkeys = op.keys()
-        if opkeys != spkeys:
-            if alert:
-                a = (ue + 'parameter keys: ' + str(opkeys) +
-                     ' vs ' + str(spkeys))
-                self._alert(a)
-            return False
-        for k in spkeys:
-            if k in oktobedifferent:
-                continue
-            if op[k] != sp[k]:
-                if nan_eq_nan:
-                    op_nan = isinstance(op[k], float) and math.isnan(op[k])
-                    sp_nan = isinstance(sp[k], float) and math.isnan(sp[k])
-                    if op_nan and sp_nan:
-                        continue  # ok (nan=nan)
-                if alert:
-                    a = (ue + nmu.quotes(k) + ': ' +
-                         nmu.quotes(sp[k]) + ' vs ' + nmu.quotes(op[k]))
-                    self._alert(a)
-                return False
-        return True
-
     def save(
         self,
         path: str = '',
@@ -413,7 +445,7 @@ class NMObject(object):
         e = self._error('save under construction')
         raise RuntimeError(e)
 
-    def _modified(self) -> str:
+    def _modified(self) -> None:
         self.__modified = str(datetime.datetime.now())
         if self.__parent and isinstance(self.__parent, NMObject):
             self.__parent._modified()  # up the ancestry tree
@@ -478,7 +510,7 @@ class NMObject(object):
 
     def _value_error(
         self,
-        obj_name: str,  # name of object that has the wrong value
+        obj_name: str,  # name of function variable with bad value
         tp: str = 'self',  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2
@@ -506,7 +538,7 @@ class NMObject(object):
         quiet: bool
     ) -> bool:
         m = self._manager
-        if m.__class__.__name__ == 'NMManager':
+        if m and m.__class__.__name__ == 'NMManager':
             return m._quiet(quiet)
         if nmp.QUIET:  # this quiet overrides
             return True

@@ -5,6 +5,7 @@ Created on Tue Nov  1 13:51:13 2022
 
 @author: jason
 """
+from collections.abc import MutableMapping
 from nm_object import NMObject
 import nm_preferences as nmp
 import nm_utilities as nmu
@@ -16,6 +17,7 @@ class NMObjectContainer(NMObject):
     """
     class collections.abc.MutableSequence
     class collections.abc.MutableMapping (implement this?)
+    keys can be NMObject names
 
     A list container for NMObject items (above), one of which is assigned to
     'select'.
@@ -43,7 +45,7 @@ class NMObjectContainer(NMObject):
         self,
         parent: object = None,
         name: str = 'NMObjectContainer',
-        nmobject: NMObjectType,  # for typing
+        nmobject: NMObjectType = None,  # for typing
         prefix: str = 'NMObject',
         # auto-generation of NMObject names, see next_name()
         rename: bool = True,
@@ -92,6 +94,30 @@ class NMObjectContainer(NMObject):
         if self.__prefix.lower() == 'default':
             self.__prefix = 'NMObject'
 
+    # override
+    def __eq__(
+        self,
+        other: NMObjectContainerType,
+    ) -> bool:
+        if not super().__eq__(other):
+            return False
+        if not isinstance(other._NMObjectContainer__nmobject,
+                          type(self.__nmobject)):
+            return False
+        if self.__prefix != other._NMObjectContainer__prefix:
+            return False
+        if self.__rename != other._NMObjectContainer__rename:
+            return False
+        if self.__select != other._NMObjectContainer__select:
+            return False
+        if self.count != other.count:
+            return False
+        for i, s in enumerate(self.__container):
+            o = other.getitem(index=i, quiet=True)
+            if not s.__eq__(o):
+                return False
+        return True
+
     # override, no super
     def copy(self) -> NMObjectContainerType:
         return NMObjectContainer(copy=self)
@@ -107,7 +133,7 @@ class NMObjectContainer(NMObject):
             k.update({'select': self.__select.name})
             # need name for isequivalent() to work
         else:
-            k.update({'select': 'None'})
+            k.update({'select': None})
         return k
 
     @property
@@ -133,19 +159,19 @@ class NMObjectContainer(NMObject):
     # override
     def _isequivalent(
         self,
-        container: NMObjectContainerType,
+        other: NMObjectContainerType,
         alert: bool = False
     ) -> bool:
-        if not super()._isequivalent(container, alert=alert):
+        if not super()._isequivalent(other, alert=alert):
             return False
-        if container.count != self.count:
+        if other.count != self.count:
             if alert:
                 a = ('unequivalent container count: ' + str(self.count) +
-                     ' vs ' + str(container.count))
+                     ' vs ' + str(other.count))
                 self._alert(a)
             return False
         for i, s in enumerate(self.__container):
-            o = container.getitem(index=i, quiet=True)
+            o = other.getitem(index=i, quiet=True)
             if not s._isequivalent(o, alert=alert):
                 return False
         return True
@@ -288,7 +314,7 @@ class NMObjectContainer(NMObject):
         elif isinstance(names, str):
             names = [names]
         else:
-            e = self._type_error('names', 'List[str]')
+            e = self._type_error('names', 'List[string]')
             raise TypeError(e)
         if isinstance(indexes, list) or isinstance(indexes, tuple):
             pass  # ok
@@ -625,6 +651,8 @@ class NMObjectContainer(NMObject):
             self._history(h, quiet=quiet)
         self._modified()
         return c
+
+    # TODO: clear()
 
     def remove(
         self,

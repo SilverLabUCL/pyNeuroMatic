@@ -14,6 +14,7 @@ import nm_preferences as nmp
 NMManagerType = NewType('NMManager', object)
 NMObjectType = NewType('NMObject', object)
 NMObjectContainerType = NewType('NMObjectContainer', NMObjectType)
+NMObjectMappingType = NewType('NMObjectMapping', NMObjectType)
 NMProjectType = NewType('NMProject', NMObjectType)
 NMFolderType = NewType('NMFolder', NMObjectType)
 NMFolderContainerType = NewType('NMFolderContainer', NMObjectContainerType)
@@ -29,38 +30,6 @@ NMScaleXType = NewType('NMScaleX', NMScaleType)
 NMDataSeriesSetType = NewType('NMDataSeriesSet', NMObjectType)
 NMDataSeriesSetContainerType = NewType('NMDataSeriesContainerSet',
                                        NMObjectContainerType)
-
-
-def name_ok(
-    name: Union[str, List[str]],
-    ok_list: List[str] = nmp.NAME_SYMBOLS_OK
-) -> bool:
-    """Check if name(s) is alpha-numeric.
-
-    :param name: name or list of names to check.
-    :type name: str or list
-    :param is_ok: list of symbols that are ok to include in names.
-    :type is_ok: list, optional
-    :return: True if name ok, otherwise False.
-    :rtype: bool
-    """
-    if not isinstance(name, list):
-        name = [name]  # convert to list of names
-    if len(name) == 0:  # no name is not OK
-        return False
-    if not isinstance(ok_list, list):
-        ok_list = [ok_list]
-    for n in name:
-        if not isinstance(n, str) or len(n) == 0:
-            return False
-        if not n[0].isalpha():
-            return False
-        for ok_str in ok_list:
-            if isinstance(ok_str, str):
-                n = n.replace(ok_str, '')  # remove ok strings
-        if not n.isalnum():
-            return False
-    return True
 
 
 def number_ok(
@@ -129,6 +98,86 @@ def number_ok(
         if not pos_is_ok and n > 0:
             return False
     return True
+
+
+def name_ok(
+    name: Union[str, List[str]],
+    ok_list: List[str] = nmp.NAME_SYMBOLS_OK
+) -> bool:
+    """Check if name(s) is alpha-numeric.
+
+    :param name: name or list of names to check.
+    :type name: str or list
+    :param is_ok: list of symbols that are ok to include in names.
+    :type is_ok: list, optional
+    :return: True if name ok, otherwise False.
+    :rtype: bool
+    """
+    if not isinstance(name, list):
+        name = [name]  # convert to list of names
+    if len(name) == 0:  # no name is not OK
+        return False
+    if not isinstance(ok_list, list):
+        ok_list = [ok_list]
+    for n in name:
+        if not isinstance(n, str) or len(n) == 0:
+            return False
+        if not n[0].isalpha():
+            return False
+        for ok_str in ok_list:
+            if isinstance(ok_str, str):
+                n = n.replace(ok_str, '')  # remove ok strings
+        if not n.isalnum():
+            return False
+    return True
+
+
+def name_next_seq(
+    self,
+    names: List[str],  # existing names, e.g. ['A0', 'A1', 'A2']
+    prefix: str,  # prefix of names, e.g. 'A'
+    first: int = 0  # first number of sequence
+) -> int:  # e.g. 3
+    """Find next sequence number of a list of names.
+    Names are case insensitive.
+
+    :param names: list of names (keys) with format PREFIX + SEQ#.
+    :type names: List[str]
+    :param prefix: True for single quotes, False for double quotes.
+    :type prefix: str
+    :param first: first number of sequence.
+    :type first: int
+    :return: next unused sequence number.
+    :rtype: int
+    """
+    if not isinstance(names, list):
+        e = self._type_error('names', 'List[string]')
+        raise TypeError(e)
+    if not isinstance(prefix, str):
+        e = self._type_error('prefix', 'string')
+        raise TypeError(e)
+    if not prefix or not name_ok(prefix):
+        e = self._value_error('prefix')
+        raise ValueError(e)
+    if not isinstance(first, int):
+        e = self._type_error('first', 'integer')
+        raise TypeError(e)
+    if first < 0:
+        e = self._value_error('first')
+        raise ValueError(e)
+
+    imax = -1
+    for name in names:
+        if not isinstance(name, str):
+            e = self._type_error('name', 'string')
+            raise TypeError(e)
+        name = name.lower()
+        istr = name.replace(prefix.lower(), '')
+        if str.isdigit(istr):
+            imax = max(imax, int(istr))
+    if imax >= first:
+        return imax + 1
+    return first
 
 
 def quotes(
@@ -589,7 +638,7 @@ def input_yesno(
     :type frame: int
     :param cancel: include 'cancel'.
     :type cancel: bool
-    :return: user input, 'yes', 'no' or 'cancel'.
+    :return: user input, 'y', 'n' or 'c' (for 'yes', 'no' or 'cancel')
     :rtype: str
     """
     if not prompt:
@@ -611,5 +660,5 @@ def input_yesno(
     answer = input(txt)
     a = answer.lower()
     if a in ok:
-        return a[:1]
+        return a[:1]  # 'y', 'n' or 'c'
     return ''
