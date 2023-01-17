@@ -41,6 +41,6 @@ if __name__ == '__main__':
     suite.addTests(loader.loadTestsFromName(c+'test13_getitem'))
     suite.addTests(loader.loadTestsFromName(c+'test14_getitems'))
     '''
-    
+
     runner = unittest.TextTestRunner(verbosity=3)
     result = runner.run(suite)

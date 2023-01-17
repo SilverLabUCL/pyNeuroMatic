@@ -68,20 +68,6 @@ class NMFolder(NMObject):
         k.update(self.__dataseries_container.content)
         return k
 
-    # override
-    def _isequivalent(self, folder, alert=False):
-        if not super()._isequivalent(folder, alert=alert):
-            return False
-        c = self.__data_container
-        c2 = folder._NMFolder__data_container
-        if c and not c._isequivalent(c2, alert=alert):
-            return False
-        c = self.__dataseries_container
-        c2 = folder._NMFolder__dataseries_container
-        if c and not c._isequivalent(c2, alert=alert):
-            return False
-        return True
-
     @property
     def data(self):
         return self.__data_container

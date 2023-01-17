@@ -57,19 +57,6 @@ class NMProject(NMObject):
         k.update(self.__folder_container.content)
         return k
 
-    # override
-    def _isequivalent(
-        self,
-        project: nmu.NMProjectType,
-        alert: bool = False
-    ) -> bool:
-        if not super()._isequivalent(project, alert=alert):
-            return False
-        c = self.__folder_container
-        if c and not c._isequivalent(project.folder, alert=alert):
-            return False
-        return True
-
     @property
     def folder(self) -> nmu.NMFolderContainerType:
         return self.__folder_container

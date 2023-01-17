@@ -105,19 +105,19 @@ class Test(unittest.TestCase):
         # notes()
         self.assertTrue(o0.notes_on)
         o0.note = 'added TTX'
-        self.assertTrue(o0._note_add('added AP5'))
+        self.assertTrue(o0._notes_append('added AP5'))
         o0.notes_on = None
         self.assertFalse(o0.notes_on)
         o0.notes_on = True
         self.assertTrue(o0.notes_on)
         o0.notes_on = False
         self.assertFalse(o0.notes_on)
-        self.assertFalse(o0._note_add('added NBQX'))
+        self.assertFalse(o0._notes_append('added NBQX'))
         self.assertTrue(isinstance(o0.notes, list))
         self.assertEqual(len(o0.notes), 2)
         self.assertEqual(o0.notes[0].get('note'), 'added TTX')
         self.assertEqual(o0.notes[1].get('note'), 'added AP5')
-        if o0.notes_clear():
+        if o0._notes_clear():
             self.assertEqual(len(o0.notes), 0)
         else:
             self.assertEqual(len(o0.notes), 2)

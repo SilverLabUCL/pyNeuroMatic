@@ -93,8 +93,11 @@ class NMObjectTest(unittest.TestCase):
         self.assertEqual(fr0, frc)  # both refs point to _name_set()
 
     def test03_parameters(self):
-        plist = ['name', 'created', 'modified', 'copy of']
-        self.assertEqual(self.o0.parameter_list, plist)
+        plist = self.o0.parameters
+        plist2 = ['name', 'created', 'modified', 'copy of']
+        self.assertEqual(list(plist.keys()), plist2)
+        self.assertEqual(plist['name'], self.n0)
+        self.assertIsNone(plist['copy of'])
 
     def test04_content(self):
         self.assertEqual(self.o0.content, {'nmobject': self.o0.name})
@@ -113,19 +116,19 @@ class NMObjectTest(unittest.TestCase):
     def test06_notes(self):
         self.assertTrue(self.o0.notes_on)
         self.o0.note = 'added TTX'
-        self.assertTrue(self.o0._note_add('added AP5'))
+        self.assertTrue(self.o0._notes_append('added AP5'))
         self.o0.notes_on = None
         self.assertFalse(self.o0.notes_on)
         self.o0.notes_on = True
         self.assertTrue(self.o0.notes_on)
         self.o0.notes_on = False
         self.assertFalse(self.o0.notes_on)
-        self.assertFalse(self.o0._note_add('added NBQX'))
+        self.assertFalse(self.o0._notes_append('added NBQX'))
         self.assertTrue(isinstance(self.o0.notes, list))
         self.assertEqual(len(self.o0.notes), 2)
         self.assertEqual(self.o0.notes[0].get('note'), 'added TTX')
         self.assertEqual(self.o0.notes[1].get('note'), 'added AP5')
-        if self.o0.notes_clear():
+        if self.o0._notes_clear():
             self.assertEqual(len(self.o0.notes), 0)
         else:
             self.assertEqual(len(self.o0.notes), 2)
