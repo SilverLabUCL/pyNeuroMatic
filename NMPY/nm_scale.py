@@ -5,14 +5,11 @@ Created on Sat Jan 18 15:24:16 2020
 
 @author: jason
 """
+from typing import Dict, Union
+
 from nm_object import NMObject
 import nm_preferences as nmp
 import nm_utilities as nmu
-from typing import Dict, List, Union
-
-SCALE_DEFAULT = {'offset': 0, 'label': '', 'units': ''}
-SCALEX_DEFAULT = {'offset': 0, 'start': 0, 'delta': 1, 'label': '',
-                  'units': ''}
 
 
 class NMScale(NMObject):
@@ -26,37 +23,43 @@ class NMScale(NMObject):
         self,
         parent: object = None,
         name: str = 'NMScale',
-        scale: Dict[str, str] = {},
+        scale: Dict[str, object] = {},
         copy: nmu.NMScaleType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__offset = 0
         self.__label = ''
         self.__units = ''
 
-        if isinstance(copy, NMScale):
-            self.offset = copy.offset
-            self.label = copy.label
-            self.units = copy.units
+        if copy is None:
+            pass  # ok
+        elif isinstance(copy, NMScale):
+            self.__label = copy.label
+            self.__units = copy.units
         else:
-            if isinstance(scale, dict):
+            e = nmu.typeerror(copy, 'copy', 'NMScale')
+            raise TypeError(e)
+
+        if scale is None:
+            pass  # ok
+        elif isinstance(scale, dict):
+            if not copy:
                 self._scale_set(scale, quiet=True)
-            elif scale is None:
-                pass  # OK
-            else:
-                e = self._type_error('scale', 'dictionary', tp='')  # no tp yet
-                raise TypeError(e)
+        else:
+            e = nmu.typeerror(scale, 'scale', 'dictionary')
+            raise TypeError(e)
 
     # override
     def __eq__(
         self,
-        other: nmu.NMObjectType
+        other: nmu.NMScaleType
     ) -> bool:
         if not super().__eq__(other):
             return False
-        if self.scale != other.scale:
+        if self.__label.lower() != other.label.lower():
+            return False
+        if self.__units.lower() != other.units.lower():
             return False
         return True
 
@@ -72,121 +75,95 @@ class NMScale(NMObject):
         return k
 
     @property
-    def scale(self) -> Dict[str, str]:
-        d = {'offset': self.__offset}
-        d.update({'label': self.__label, 'units': self.__units})
-        return d
+    def scale(self) -> Dict[str, object]:
+        return {'label': self.__label, 'units': self.__units}
 
     @scale.setter
-    def scale(self, scale: Dict[str, str]) -> None:
+    def scale(
+        self,
+        scale: Dict[str, object]
+    ) -> None:
         self._scale_set(scale)
 
     def _scale_set(
         self,
-        scale: Dict[str, str],
+        scale: Dict[str, object],
         quiet: bool = nmp.QUIET
-    ) -> bool:
+    ) -> None:
         if not isinstance(scale, dict):
-            e = self._type_error('scale', 'dictionary')
+            e = nmu.typeerror(scale, 'scale', 'dictionary')
             raise TypeError(e)
-        for k in scale.keys():
-            if k.lower() not in SCALE_DEFAULT.keys():
-                raise KeyError('unknown scale key ' + nmu.quotes(k))
-            if k.lower() == 'offset':
-                if not self._offset_set(scale['offset'], quiet=quiet):
-                    return False
-            if k.lower() == 'label':
-                if not self._label_set(scale['label'], quiet=quiet):
-                    return False
-            if k.lower() == 'units':
-                if not self._units_set(scale['units'], quiet=quiet):
-                    return False
-        return True
-
-    @property
-    def offset(self) -> Union[float, int]:
-        return self.__offset
-
-    @offset.setter
-    def offset(self, offset: Union[float, int]) -> None:
-        self._offset_set(offset)
-
-    def _offset_set(
-        self,
-        offset: Union[float, int],
-        quiet: bool = nmp.QUIET
-    ) -> bool:
-        if not isinstance(offset, int) and not isinstance(offset, float):
-            e = self._type_error('offset', 'number')
-            raise TypeError(e)
-        if not nmu.number_ok(offset):
-            e = self._value_error('offset')
-            raise ValueError(e)
-        if offset == self.__offset:
-            return True  # no change
-        old = self.__offset
-        self.__offset = offset
-        self._modified()
-        h = nmu.history_change('offset', old, offset)
-        self.note = h
-        self._history(h, quiet=quiet)
-        return True
+        for k, v in scale.items():
+            k = k.lower()
+            if k == 'label':
+                self._label_set(v, quiet=quiet)
+            elif k == 'units':
+                self._units_set(v, quiet=quiet)
+            else:
+                raise KeyError("unknown key '%s'" % k)
+        return None
 
     @property
     def label(self) -> str:
         return self.__label
 
     @label.setter
-    def label(self, label: str) -> None:
-        self._label_set(label)
+    def label(
+        self,
+        label: str
+    ) -> None:
+        return self._label_set(label)
 
     def _label_set(
         self,
         label: str,
         quiet: bool = nmp.QUIET
-    ) -> bool:
+    ) -> None:
         if label is None:
             label = ''
         elif not isinstance(label, str):
-            e = self._type_error('label', 'string')
+            e = nmu.typeerror(label, 'label', 'string')
             raise TypeError(e)
-        if label == self.__label:
-            return True  # no change
         old = self.__label
+        if label == old:
+            return None
         self.__label = label
-        self._modified()
+        self.modified()
         h = nmu.history_change('label', old, label)
-        self.note = h
-        self._history(h, quiet=quiet)
-        return True
+        # self.note = h
+        # self._history(h, quiet=quiet)
+        return None
 
     @property
     def units(self) -> str:
         return self.__units
 
     @units.setter
-    def units(self, units: str) -> None:
-        self._units_set(units)
+    def units(
+        self,
+        units: str
+    ) -> None:
+        return self._units_set(units)
 
     def _units_set(
         self,
         units: str,
         quiet: bool = nmp.QUIET
-    ) -> bool:
+    ) -> None:
         if units is None:
             units = ''
         elif not isinstance(units, str):
-            e = self._type_error('units', 'string')
+            e = nmu.typeerror(units, 'units', 'string')
             raise TypeError(e)
-        if units == self.__units:
-            return True  # no change
         old = self.__units
+        if units == old:
+            return None
         self.__units = units
-        self._modified()
+        self.modified()
         h = nmu.history_change('units', old, units)
-        self.note = h
-        self._history(h, quiet=quiet)
-        return True
+        # self.note = h
+        # self._history(h, quiet=quiet)
+        return None
 
 
 class NMScaleX(NMScale):
@@ -200,119 +177,153 @@ class NMScaleX(NMScale):
         self,
         parent: object = None,
         name: str = 'NMScaleX',
-        scale: Dict[str, str] = {},
+        scale: Dict[str, object] = {},
         copy: nmu.NMScaleXType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__start = 0
-        self.__delta = 1
+        self.__start = 0.0
+        self.__delta = 1.0
 
-        if isinstance(copy, NMScaleX):
-            self.start = copy.start
-            self.delta = copy.delta
+        if copy is None:
+            pass  # ok
+        elif isinstance(copy, NMScaleX):
+            self.__start = copy.start
+            self.__delta = copy.delta
+        else:
+            e = nmu.typeerror(copy, 'copy', 'NMScaleX')
+            raise TypeError(e)
+
+        if scale is None:
+            pass  # ok
         elif isinstance(scale, dict):
-            self._scale_set(scale, quiet=True)
+            if not copy:
+                self._scale_set(scale, quiet=True)
+        else:
+            e = nmu.typeerror(scale, 'scale', 'dictionary')
+            raise TypeError(e)
+
+    # override
+    def __eq__(
+        self,
+        other: nmu.NMScaleType
+    ) -> bool:
+        if not super().__eq__(other):
+            return False
+        if self.__start != other.start:
+            return False
+        if self.__delta != other.delta:
+            return False
+        return True
 
     # override, no super
     def copy(self) -> nmu.NMScaleXType:
         return NMScaleX(copy=self)
 
-    # override, no super
+    # override
     @property
-    def scale(self) -> Dict[str, str]:
-        d = {'offset': self.offset}
-        d.update({'start': self.start, 'delta': self.delta})
-        d.update({'label': self.label, 'units': self.units})
+    def scale(self) -> Dict[str, object]:
+        d = super().scale
+        d.update({'start': self.__start, 'delta': self.__delta})
         return d
+
+    @scale.setter
+    def scale(
+        self,
+        scale: Dict[str, object]
+    ) -> None:
+        self._scale_set(scale)
 
     # override, no super
     def _scale_set(
         self,
-        scale: Dict[str, str],
+        scale: Dict[str, object],
         quiet: bool = nmp.QUIET
-    ) -> bool:
+    ) -> None:
         if not isinstance(scale, dict):
-            e = self._type_error('scale', 'dictionary')
+            e = nmu.typeerror(scale, 'scale', 'dictionary')
             raise TypeError(e)
-        for k in scale.keys():
-            if k.lower() not in SCALEX_DEFAULT.keys():
-                raise KeyError('unknown scale key ' + nmu.quotes(k))
-            if k.lower() == 'offset':
-                if not self._offset_set(scale['offset'], quiet=quiet):
-                    # TODO: self.__offset_set is INCORRECT
-                    return False
-            if k.lower() == 'start':
-                if not self._start_set(scale['start'], quiet=quiet):
-                    return False
-            if k.lower() == 'delta':
-                if not self._delta_set(scale['delta'], quiet=quiet):
-                    return False
-            if k.lower() == 'label':
-                if not self._label_set(scale['label'], quiet=quiet):
-                    # TODO: self.__label_set is INCORRECT
-                    return False
-            if k.lower() == 'units':
-                if not self._units_set(scale['units'], quiet=quiet):
-                    # TODO: self.__units_set is INCORRECT
-                    return False
-        return True
+        for k, v in scale.items():
+            k = k.lower()
+            if k == 'label':
+                self._label_set(v, quiet=quiet)
+            elif k == 'units':
+                self._units_set(v, quiet=quiet)
+            elif k == 'start':
+                self._start_set(v, quiet=quiet)
+            elif k == 'delta':
+                self._delta_set(v, quiet=quiet)
+            else:
+                raise KeyError("unknown key '%s'" % k)
+        return None
 
     @property
-    def start(self) -> Union[float, int]:
+    def start(self) -> float:
         return self.__start
 
     @start.setter
-    def start(self, start: Union[float, int]) -> None:
-        self._start_set(start)
+    def start(
+        self,
+        start: Union[float, int]
+    ) -> None:
+        return self._start_set(start)
 
     def _start_set(
         self,
         start: Union[float, int],
         quiet: bool = nmp.QUIET
-    ) -> bool:
-        if not isinstance(start, int) and not isinstance(start, float):
-            e = self._type_error('start', 'number')
+    ) -> None:
+        if isinstance(start, float):
+            pass
+        elif isinstance(start, int) and not isinstance(start, bool):
+            pass
+        else:
+            e = nmu.typeerror(start, 'start', 'number')
             raise TypeError(e)
         if not nmu.number_ok(start):
-            e = self._value_error('start')
-            raise ValueError(e)
-        if start == self.__start:
-            return True  # no change
+            raise ValueError('start: %s' % start)
         old = self.__start
+        if start == old:
+            return None
         self.__start = start
-        self._modified()
+        self.modified()
         h = nmu.history_change('start', old, start)
-        self.note = h
-        self._history(h, quiet=quiet)
-        return True
+        # self.note = h
+        # self._history(h, quiet=quiet)
+        return None
 
     @property
-    def delta(self) -> Union[float, int]:
+    def delta(self) -> float:
         return self.__delta
 
     @delta.setter
-    def delta(self, delta: Union[float, int]) -> None:
-        self._delta_set(delta)
+    def delta(
+        self,
+        delta: Union[float, int]
+    ) -> None:
+        return self._delta_set(delta)
 
     def _delta_set(
         self,
         delta: Union[float, int],
         quiet: bool = nmp.QUIET
-    ) -> bool:
-        if not isinstance(delta, int) and not isinstance(delta, float):
-            e = self._type_error('delta', 'number')
+    ) -> None:
+        if isinstance(delta, float):
+            pass
+        elif isinstance(delta, int) and not isinstance(delta, bool):
+            pass
+        else:
+            e = nmu.typeerror(delta, 'delta', 'number')
             raise TypeError(e)
         if not nmu.number_ok(delta):
-            e = self._value_error('delta')
-            raise ValueError(e)
-        if delta == self.__delta:
-            return True  # no change
+            raise ValueError('delta: %s' % delta)
         old = self.__delta
+        if delta == old:
+            return None
         self.__delta = delta
-        self._modified()
+        self.modified()
         h = nmu.history_change('delta', old, delta)
-        self.note = h
-        self._history(h, quiet=quiet)
-        return True
+        # self.note = h
+        # self._history(h, quiet=quiet)
+        return None

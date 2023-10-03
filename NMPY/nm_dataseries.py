@@ -8,12 +8,37 @@ import numpy as np
 from nm_object import NMObject
 from nm_object_container import NMObjectContainer
 from nm_channel import NMChannelContainer
-from nm_dataseries_set import NMDataSeriesSetContainer
+from nm_epoch import NMEpochContainer
 import nm_preferences as nmp
 import nm_utilities as nmu
 from typing import Dict, List, Union
 
-ALLSTR = 'ALL'
+ALLSTR = 'all'.upper()
+
+"""
+NM class tree:
+
+NMManager
+    NMProjectContainer
+        NMProject (project0, project1...)
+            NMFolderContainer
+                NMFolder (folder0, folder1...)
+                    NMDataContainer
+                        NMData (recordA0, recordA1... avgA0, avgB0)
+                    NMDataSeriesContainer
+                        NMDataSeries (record, avg...)
+                            NMChannelContainer
+                                NMChannel (A, B, C...)
+                            NMEpochContainer
+                                NMEpoch (E0, E1, E2...)
+DataSeries:
+      E0  E1  E2... (epochs)
+Ch A  A0  A1  A2...
+Ch B  B0  B1  B2...
+.
+.
+.
+"""
 
 
 class NMDataSeries(NMObject):
@@ -31,59 +56,34 @@ class NMDataSeries(NMObject):
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__channel_container = None
-        self.__set_container = None
+        self.__epoch_container = None
         self.__channel_scale_lock = None  # NMdata share channel x-y scales
         self.__xscale_lock = None  # all NMdata share x-scale
-        self.__channel_select = None  # 'A', ['A', 'C'], 'ALL'
-        self.__epoch_select = None  # 0, [0, 5], 'ALL', range(2, 6)
-        self.__data_select = None  # {['A']: [NMData]}
 
         # self.__thedata = {}  # dict, {channel: data-list}
-        # TODO: data list contained in each NMChannel
 
-        if isinstance(copy, NMDataSeries):
-
-            if isinstance(copy.channel, NMChannelContainer):
-                self.__channel_container = copy.channel.copy()
-
-            if isinstance(copy.sets, NMDataSeriesSetContainer):
-                self.__set_container = copy.sets.copy()
-
+        if copy is None:
+            pass
+        elif isinstance(copy, NMDataSeries):
+            if isinstance(copy.channels, NMChannelContainer):
+                self.__channel_container = copy.channels.copy()
+            if isinstance(copy.epochs, NMEpochContainer):
+                self.__epoch_container = copy.epochs.copy()
             self.__channel_scale_lock = copy.channel_scale_lock
             self.__xscale_lock = copy.xscale_lock
-
-            if isinstance(copy.channel_select, str):
-                self.__channel_select = copy.channel_select
-            elif isinstance(copy.channel_select, list):
-                self.__channel_select = list(copy.channel_select)
-
-            if isinstance(copy.epoch_select, int) or isinstance(
-                    copy.epoch_select, str):
-                self.__epoch_select = copy.epoch_select
-            elif isinstance(copy.epoch_select, list):
-                self.__epoch_select = list(copy.epoch_select)
-            elif isinstance(copy.epoch_select, range):
-                start = copy.epoch_select.start
-                stop = copy.epoch_select.stop
-                step = copy.epoch_select.step
-                self.__epoch_select = range(start, stop, step)
+        else:
+            e = nmu.typeerror(copy, 'copy', 'NMDataSeries')
+            raise TypeError(e)
 
             # TODO: function to create this dictionary of selected data
             # based on channel and epoch select
             # self.__data_select = {}  # new refs
 
         if not isinstance(self.__channel_container, NMChannelContainer):
-            self.__channel_container = NMChannelContainer(
-                parent=self,
-                name='Channels')
-            self.__channel_select = None
-            self.__epoch_select = None
-            self.__data_select = None
+            self.__channel_container = NMChannelContainer(parent=self)
 
-        if not isinstance(self.__set_container, NMDataSeriesSetContainer):
-            self.__set_container = NMDataSeriesSetContainer(
-                parent=self,
-                name='DataSeriesSets')
+        if not isinstance(self.__epoch_container, NMEpochContainer):
+            self.__epoch_container = NMEpochContainer(parent=self)
 
         if not isinstance(self.__channel_scale_lock, bool):
             self.__channel_scale_lock = True
@@ -91,16 +91,30 @@ class NMDataSeries(NMObject):
         if not isinstance(self.__xscale_lock, bool):
             self.__xscale_lock = True
 
-        self._sets_init(quiet=True)
+        # self._sets_init(quiet=True)
+
+        return None
 
     # override
     def __eq__(
         self,
-        other: nmu.NMObjectType
+        other: nmu.NMDataSeriesType
     ) -> bool:
-        if not super().__eq__(other):
+        # TODO
+        return super().__eq__(other)
+
+    # TODO: replace with __eq__()
+    def _isequivalent(self, dataseries, alert=False):
+        if not super()._isequivalent(dataseries, alert=alert):
             return False
-        # TODO: finish
+        c = self.channels
+        c2 = dataseries._NMDataSeries__channel_container
+        if c and not c._isequivalent(c2, alert=alert):
+            return False
+        # c = self.__set_container
+        # c2 = dataseries._NMDataSeries__set_container
+        # if c and not c._isequivalent(c2, alert=alert):
+        #    return False
         return True
 
     # override, no super
@@ -108,11 +122,12 @@ class NMDataSeries(NMObject):
         return NMDataSeries(copy=self)
 
     # override
+    # TODO: finish
     @property
     def parameters(self) -> Dict[str, object]:
         k = super().parameters
-        k.update({'channel_select': self.__channel_select})
-        k.update({'epoch_select': self.__epoch_select})
+        # k.update({'channel_select': self.__channel_select})
+        # k.update({'epoch_select': self.__epoch_select})
         # k.update({'data_select': self.__data_select})
         return k
 
@@ -120,45 +135,37 @@ class NMDataSeries(NMObject):
     @property
     def content(self) -> Dict[str, str]:
         k = super().content
-        k.update(self.__channel_container.content)
-        k.update({'channel_select': self.channel_select})
-        k.update({'epochs': self.epoch_count})
-        k.update({'epoch_select': self.epoch_select})
-        k.update(self.__set_container.content)
+        k.update(self.channels.content)
+        k.update(self.epochs.content)
         return k
 
-    # override
-    def _isequivalent(self, dataseries, alert=False):
-        if not super()._isequivalent(dataseries, alert=alert):
-            return False
-        c = self.__channel_container
-        c2 = dataseries._NMDataSeries__channel_container
-        if c and not c._isequivalent(c2, alert=alert):
-            return False
-        c = self.__set_container
-        c2 = dataseries._NMDataSeries__set_container
-        if c and not c._isequivalent(c2, alert=alert):
-            return False
-        return True
-
-#    @property
-#    def folder_data(self):  # use self._folder.data
-        # cannot import NMFolder class
-#        if not isinstance(self._parent, NMObject):
-#            return None
-#        if self._parent.__class__.__name__ == 'NMFolder':
-#            return self._parent.data
-#       return None
+    @property
+    def channels(self) -> NMChannelContainer:
+        return self.__channel_container
 
     @property
-    def thedata(self) -> Dict[str, List[nmu.NMDataType]]:
-        if not self.__channel_container:
-            return {}
-        data = {}
-        for i in range(0, self.__channel_container.count):
-            c = self.__channel_container.getitem(i)
-            data.update({c.name.upper(): len(c.data)})
-        return data
+    def epochs(self) -> NMEpochContainer:
+        return self.__epoch_container
+
+    def get_select(
+        self,
+        get_keys: bool = False
+    ):
+        if not self.channels.select_key:
+            return []
+        c = self.channels.get('select')
+        if not self.epochs.select_key:
+            return []
+        e = self.epochs.get('select')
+
+        dlist = []
+        for d in e.data:
+            if d in c.data:
+                if get_keys:
+                    dlist.append(d.name)
+                else:
+                    dlist.append(d)
+        return dlist
 
     @property
     def channel_scale_lock(self) -> bool:
@@ -171,6 +178,7 @@ class NMDataSeries(NMObject):
     def channel_scale_lock(self, on: bool) -> None:
         if isinstance(on, bool):
             self.__channel_scale_lock = on
+            self.modified()
         else:
             e = self._type_error('channel_scale_lock', 'boolean')
             raise TypeError(e)
@@ -186,181 +194,10 @@ class NMDataSeries(NMObject):
     def xscale_lock(self, on: bool) -> None:
         if isinstance(on, bool):
             self.__xscale_lock = on
+            self.modified()
         else:
             e = self._type_error('xscale_lock', 'boolean')
             raise TypeError(e)
-
-    @property
-    def channel(self) -> NMChannelContainer:
-        return self.__channel_container
-
-    @property
-    def channel_count(self) -> int:
-        if isinstance(self.__channel_container, NMChannelContainer):
-            return self.__channel_container.count
-        return 0
-
-    @property
-    def channel_list(self) -> List[str]:  # UPPER
-        if isinstance(self.__channel_container, NMChannelContainer):
-            return [c.upper() for c in self.__channel_container.names]
-        else:
-            return []
-
-    def channel_ok(
-        self,
-        channel: Union[str, List[str]]
-    ) -> bool:
-        if not isinstance(channel, list):
-            channel = [channel]
-        for c in channel:
-            if not isinstance(c, str):
-                return False
-            if c.upper() == ALLSTR:
-                return True  # OK
-            if c.upper() not in self.channel_list:  # UPPER
-                return False
-        return True
-
-    @property
-    def channel_select(self) -> Union[str, List[str]]:
-        if isinstance(self.__channel_select, str):
-            return self.__channel_select.upper()
-        if isinstance(self.__channel_select, list):
-            return [c.upper() for c in self.__channel_select]  # UPPER
-        return None
-
-    @channel_select.setter
-    def channel_select(
-        self,
-        channel: Union[str, List[str]]  # 'A', 'ALL', ['A', 'C'], None
-    ) -> None:
-        self._channel_select_set(channel=channel)
-
-    def _channel_select_set(
-        self,
-        channel: Union[str, List[str]]  # 'A', 'ALL', ['A', 'C'], None
-    ) -> bool:
-        clist = self.channel_list
-        select = None
-        if channel is None:
-            pass  # OK
-        elif isinstance(channel, str):
-            if channel.upper == ALLSTR:
-                select = ALLSTR
-            elif channel.upper in clist:
-                select = channel.upper()
-            else:
-                e = self._value_error('channel')
-                raise ValueError(e)
-        elif isinstance(channel, list):
-            select = []
-            for c in channel:
-                if c.upper() == ALLSTR:
-                    select = ALLSTR
-                    break
-                elif c.upper in clist:
-                    select.append(c.upper())  # UPPER
-                else:
-                    channel = c
-                    e = self._value_error('channel')
-                    raise ValueError(e)
-        else:
-            e = self._type_error('channel', 'string or list')
-            raise TypeError(e)
-        self.__channel_select = select
-        self._modified()
-        self._history('channel select = ' + str(select), quiet=nmp.QUIET)
-        return True
-
-    @property
-    def channel_select_List(self) -> List[str]:
-        return self._channel_list(self.__channel_select)
-
-    def _channel_list(
-        self,
-        channel  # 'A', 'ALL', ['A', 'C'], None
-    ) -> List[str]:
-        if channel is None:
-            return []
-        if isinstance(channel, str):
-            if channel.upper() == ALLSTR:
-                return self.channel_list
-        if isinstance(channel, list):
-            clist = self.channel_list
-            clist2 = []
-            for c in channel:
-                if c.upper() == ALLSTR:
-                    return clist
-                if c.upper in clist:
-                    clist2.append(c.upper())  # UPPER
-            return clist2
-        return []
-
-    @property
-    def epoch_count(self) -> Dict[str, int]:  # epochs per channel
-        if not self.__channel_container:
-            return {}
-        e = {}
-        for i in range(0, self.__channel_container.count):
-            c = self.__channel_container.getitem(i)
-            e.update({c.name.upper(): len(c.data)})
-        return e
-
-    def epoch_ok(self, epoch_list):
-        if not isinstance(epoch_list, list):
-            epoch_list = [epoch_list]
-        ep_max = max(self.epoch_count)
-        for ep in epoch_list:
-            if not isinstance(ep, int):
-                return False
-            if ep < 0 or ep >= ep_max:
-                return False
-        return True
-
-    @property
-    def epoch_select(self):
-        if not self.__epoch_select:
-            for c, n in self.epoch_count:
-                if n > 0:
-                    self.__epoch_select = [0]  # first is default
-                    return self.__epoch_select
-            self.__epoch_select = []
-            return self.__epoch_select
-        if not isinstance(self.__epoch_select, list):
-            self.__epoch_select = [self.__epoch_select]
-        self.__epoch_select = [ep for ep in self.__epoch_select if
-                               isinstance(ep, int)]
-        return self.__epoch_select
-
-    @epoch_select.setter
-    def epoch_select(self, epoch: Union[int, List[int]]) -> None:
-        self._epoch_select_set(epoch)
-
-    def _epoch_select_set(
-        self,
-        epoch: Union[int, List[int]]
-    ) -> bool:
-        select = None
-        if epoch is None:
-            pass  # OK
-        elif isinstance(epoch, int):
-            pass
-        elif not isinstance(epoch_list, list):
-            epoch_list = [epoch_list]
-        elist = []
-        for ep in epoch_list:
-            if self.epoch_ok(ep):
-                elist.append(ep)
-            else:
-                epoch = ep
-                e = self._value_error('epoch')
-                raise ValueError(e)
-        self.__epoch_select = elist
-        self._modified()
-        self._history('epoch select = ' + str(elist), quiet=nmp.QUIET)
-        return True
-    # override
 
     @property
     def dims(self):
@@ -459,7 +296,7 @@ class NMDataSeries(NMObject):
         self.__dims = {}  # reset
         new = self.xdata
         h = nmu.history_change('xdata', old, new)
-        self._history(h, quiet=quiet)
+        # self._history(h, quiet=quiet)
         return True
 
     @property
@@ -644,10 +481,10 @@ class NMDataSeries(NMObject):
                     d.yunits = yunits
         return True
 
-    @property
-    def sets(self):
-        return self.__set_container
-
+    # @property
+    # def sets(self):
+    #    return self.__set_container
+    """
     def _sets_init(self, set_list=nmp.DATASERIES_SET_LIST, select=True,
                    quiet=nmp.QUIET):
         if not set_list:
@@ -665,7 +502,7 @@ class NMDataSeries(NMObject):
         if init_select and not self.__set_container.select:
             self.__set_container.select = set_list[0]
         return r
-
+    """
     def get_data_names(self, chan_list=ALLSTR, epoch_list=[-2],
                        quiet=nmp.QUIET):
         d = self.get_data(chan_list=chan_list, epoch_list=epoch_list,
@@ -729,6 +566,7 @@ class NMDataSeries(NMObject):
 
     @property
     def data_select(self):
+        # TODO: remove sets.select
         clist = self.channel_select_list
         if not clist:
             return {}
@@ -785,11 +623,11 @@ class NMDataSeries(NMObject):
             else:
                 break  # no more channels
         if not foundsomething:
-            a = 'failed to find data with prefix ' + nmu.quotes(self.name)
+            a = "failed to find data with prefix '%s'" % self.name
             self._alert(a, quiet=quiet)
         for h in htxt:
-            h = 'found data with prefix ' + nmu.quotes(self.name) + ': ' + h
-            self._history(h, quiet=quiet)
+            h = "found data with prefix '%s' : %s" % (self.name, h)
+            # self._history(h, quiet=quiet)
         return True
 
     def make(self, channels=1, epochs=1, shape=[], fill_value=0, dims={},
@@ -804,8 +642,8 @@ class NMDataSeries(NMObject):
             e = self._value_error('shape')
             raise ValueError(e)
         if self.channel_count > 0 and channels != self.channel_count:
-            e = self._error('data series ' + nmu.quotes(self.name) +
-                            'requires channels=' + str(self.channel_count))
+            e = ("data series '%s' requires channels = %s" %
+                 (self.name, self.channel_count))
             raise ValueError(e)
         self.__thedata = {}
         epoch_bgn = []
@@ -825,21 +663,21 @@ class NMDataSeries(NMObject):
             for j in range(e_bgn, e_end):
                 name2 = self.name + cc + str(j)
                 d = self._folder.data.new(name=name2,
-                                         shape=shape,
-                                         fill_value=fill_value,
-                                         quiet=True)
+                                          shape=shape,
+                                          fill_value=fill_value,
+                                          quiet=True)
                 if d:
                     elist.append(j)
                     dlist.append(d)
                 else:
-                    a = 'failed to create ' + nmu.quotes(name2)
+                    a = "failed to create '%s'" % name2
                     self._alert(a, quiet=quiet)
             dlist2 = self.__thedata[cc]
             dlist2.extend(dlist)
             self.__thedata[cc] = dlist2
-            h = ('created ' + nmu.quotes(self.name) + ', ' + 'ch=' + cc +
-                 ', ep=' + nmu.int_list_to_seq_str(elist, seperator=','))
-            self._history(h, quiet=quiet)
+            ep = nmu.int_list_to_seq_str(elist, seperator=',')
+            h = ("created '%s', ch=%s, ep=%s" % (self.name, cc, ep))
+            # self._history(h, quiet=quiet)
         if dims:
             self.dims = dims
         return True
@@ -856,7 +694,7 @@ class NMDataSeries(NMObject):
             dims.update({'yunits': dims['xunits']})  # NOT DICT TYPE
             dims.update({'xunits': ''})
         d = self._folder.data.new(name=name, shape=shape, dims=dims,
-                                 quiet=quiet)
+                                  quiet=quiet)
         if not d:
             return None
         for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
@@ -867,7 +705,7 @@ class NMDataSeries(NMObject):
 
 class NMDataSeriesContainer(NMObjectContainer):
     """
-    NM Container for DataSeries objects
+    Container of NMDataSeries
     """
 
     def __init__(
@@ -876,29 +714,38 @@ class NMDataSeriesContainer(NMObjectContainer):
         name: str = 'NMDataSeriesContainer',
         copy: nmu.NMDataSeriesContainerType = None
     ):
-        o = NMDataSeries(parent=parent, name='ContainerUtility')
-        prefix = ''  # no prefix
-        super().__init__(parent=parent, name=name, nmobject=o, prefix=prefix,
-                         rename=False, copy=copy)
+        rename_on = False
+        name_prefix = ''  # no prefix
+        name_seq_format = ''
+        super().__init__(
+            parent=parent,
+            name=name,
+            rename_on=rename_on,
+            name_prefix=name_prefix,
+            name_seq_format=name_seq_format,
+            copy=copy
+        )
         # TODO: copy
 
     # override, no super
     def copy(self) -> nmu.NMDataSeriesContainerType:
         return NMDataSeriesContainer(copy=self)
 
+    # override, no super
+    def content_type(self) -> str:
+        return NMDataSeries.__name__
+
     # override
     def new(
         self,
         name: str = '',  # dataseries name/prefix
-        select: bool = True,
-        quiet: bool = nmp.QUIET
-    ) -> NMDataSeries:
-        ds = super().new(name=name, select=select, quiet=quiet)
-        # TODO: change to super.add?
-        if isinstance(ds, NMDataSeries):
-            ds.update(quiet=quiet)
-            return ds
-        return None
+        select: bool = False,
+        # quiet: bool = nmp.QUIET
+    ) -> nmu.NMDataSeriesType:
+        name = self._newkey(name)
+        s = NMDataSeries(parent=self, name=name)
+        super().new(s, select=select)
+        return s
 
     # @property
     # def data(self):  # use self._folder.data
@@ -908,5 +755,4 @@ class NMDataSeriesContainer(NMObjectContainer):
 
     # override, no super
     def duplicate(self):
-        e = self._error('dataseries cannot be duplicated')
-        raise RuntimeError(e)
+        raise RuntimeError('dataseries cannot be duplicated')

@@ -3,16 +3,8 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-DATA_PREFIX = 'Record'
-DATASERIES_SET_PREFIX = 'Set'
-DATASERIES_SET_LIST = ['All', 'Set1', 'Set2', 'SetX']
-CHANNEL_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
-                'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-                'Y', 'Z']
-HISTORY_TREEPATH_SKIP = ['Project']
-NAME_SYMBOLS_OK = ['_']
-BAD_NAMES = ['', 'all', 'default', 'none', 'select', 'self',
-             'nan', 'inf', '-inf']
+DATASERIES_SET_LIST = ['all', 'set1', 'set2', 'setX']
+DELETE_CONFIRM = True
 QUIET = False
 GUI = False
 NAN_EQ_NAN = True  # in Python nan != nan, use this flag so that nan == nan

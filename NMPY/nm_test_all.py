@@ -6,41 +6,41 @@ Created on Fri Dec 23 10:30:47 2022
 @author: jason
 """
 import unittest
+
+import nm_channel_test
+import nm_data_test
+import nm_dataseries_test
+import nm_epoch_test
+import nm_folder_test
+import nm_manager_test
 import nm_object_test
-# import nm_object_container_test
-import nm_object_mapping_test
+import nm_object_container_test
+import nm_project_test
+import nm_scale_test
+import nm_sets_test
+import nm_utilities_test
+
 
 if __name__ == '__main__':
 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
 
-    # suite.addTests(loader.loadTestsFromModule(nm_object_test))
     # c = 'nm_object_test.NMObjectTest.'
     # suite.addTests(loader.loadTestsFromName(c+'test00_init'))
 
-    suite.addTests(loader.loadTestsFromModule(nm_object_mapping_test))
-
-    '''
+    # suite.addTests(loader.loadTestsFromModule(nm_utilities_test))
+    suite.addTests(loader.loadTestsFromModule(nm_object_test))
     # suite.addTests(loader.loadTestsFromModule(nm_object_container_test))
-    # c = 'nm_object_container_test.NMObjectContainerTest.'
-    # suite.addTests(loader.loadTestsFromName(c+'test00_init'))
-
-    suite.addTests(loader.loadTestsFromName(c+'test01_eq_ne'))
-    suite.addTests(loader.loadTestsFromName(c+'test02_copy'))
-    suite.addTests(loader.loadTestsFromName(c+'test03_parameters'))
-    suite.addTests(loader.loadTestsFromName(c+'test04_content_type'))
-    suite.addTests(loader.loadTestsFromName(c+'test05_prefix_set'))
-    suite.addTests(loader.loadTestsFromName(c+'test06_name_next'))
-    suite.addTests(loader.loadTestsFromName(c+'test07_new'))
-    suite.addTests(loader.loadTestsFromName(c+'test08_append'))
-    suite.addTests(loader.loadTestsFromName(c+'test09_names'))
-    suite.addTests(loader.loadTestsFromName(c+'test10_content'))
-    suite.addTests(loader.loadTestsFromName(c+'test11_index'))
-    suite.addTests(loader.loadTestsFromName(c+'test12_exists'))
-    suite.addTests(loader.loadTestsFromName(c+'test13_getitem'))
-    suite.addTests(loader.loadTestsFromName(c+'test14_getitems'))
-    '''
+    # suite.addTests(loader.loadTestsFromModule(nm_manager_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_scale_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_sets_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_data_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_dataseries_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_folder_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_project_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_channel_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_epoch_test))
 
     runner = unittest.TextTestRunner(verbosity=3)
     result = runner.run(suite)

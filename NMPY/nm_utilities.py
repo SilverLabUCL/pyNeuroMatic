@@ -9,13 +9,24 @@ import inspect
 from colorama import Fore, Back, Style
 from typing import Union, List, NewType
 
-import nm_preferences as nmp
+CHANNEL_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+                'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+                'Y', 'Z']
 
-NMManagerType = NewType('NMManager', object)
+CONFIRM_LIST = ['y', 'yes', 'n', 'no', 'c', 'cancel']  # see input_yesno()
+
+# for testing
+BADTYPES = [None, 3, 3.14, True, [], (), {}, set(), 'string', Fore]
+BADNAMES = [n.lower() for n in ['', 'all', 'default', 'none', 'select',
+            'self', 'nan', 'inf', '-inf', 'b&dn@me!']]
+
+# NM Class types
 NMObjectType = NewType('NMObject', object)
 NMObjectContainerType = NewType('NMObjectContainer', NMObjectType)
-NMObjectMappingType = NewType('NMObjectMapping', NMObjectType)
+NMSetsType = NewType('NMSets', NMObjectType)
+NMManagerType = NewType('NMManager', object)
 NMProjectType = NewType('NMProject', NMObjectType)
+NMProjectContainerType = NewType('NMProjectContainer', NMObjectContainerType)
 NMFolderType = NewType('NMFolder', NMObjectType)
 NMFolderContainerType = NewType('NMFolderContainer', NMObjectContainerType)
 NMDataType = NewType('NMData', NMObjectType)
@@ -25,11 +36,10 @@ NMDataSeriesContainerType = NewType('NMDataSeriesContainer',
                                     NMObjectContainerType)
 NMChannelType = NewType('NMChannel', NMObjectType)
 NMChannelContainerType = NewType('NMChannelContainer', NMObjectContainerType)
+NMEpochType = NewType('NMEpoch', NMObjectType)
+NMEpochContainerType = NewType('NMEpochContainer', NMObjectContainerType)
 NMScaleType = NewType('NMScale', NMObjectType)
 NMScaleXType = NewType('NMScaleX', NMScaleType)
-NMDataSeriesSetType = NewType('NMDataSeriesSet', NMObjectType)
-NMDataSeriesSetContainerType = NewType('NMDataSeriesContainerSet',
-                                       NMObjectContainerType)
 
 
 def number_ok(
@@ -42,7 +52,8 @@ def number_ok(
     pos_is_ok: bool = True,
     complex_is_ok: bool = False
 ) -> bool:
-    """Check if object(s) is a number.
+    """
+    Check if object(s) is a number.
 
     :param number: object or list of objects to check.
     :type number: object or list
@@ -101,40 +112,58 @@ def number_ok(
 
 
 def name_ok(
-    name: Union[str, List[str]],
-    ok_list: List[str] = nmp.NAME_SYMBOLS_OK
+    name: str,
+    ok_names: Union[str, List[str]] = [],
+    ok_strings: Union[str, List[str]] = ['_']
 ) -> bool:
-    """Check if name(s) is alpha-numeric.
+    """Check if name is alpha-numeric.
 
-    :param name: name or list of names to check.
-    :type name: str or list
-    :param is_ok: list of symbols that are ok to include in names.
-    :type is_ok: list, optional
+    :param name: name to check.
+    :type name: str
+    :param ok_names: list of names that are ok.
+    :type ok_names: str or List[str]
+    :param ok_strings: list of strings/symbols that are ok to include in name.
+    :type ok_strings: str or List[str]
     :return: True if name ok, otherwise False.
     :rtype: bool
     """
-    if not isinstance(name, list):
-        name = [name]  # convert to list of names
-    if len(name) == 0:  # no name is not OK
+    if not isinstance(name, str):
         return False
-    if not isinstance(ok_list, list):
-        ok_list = [ok_list]
-    for n in name:
-        if not isinstance(n, str) or len(n) == 0:
-            return False
-        if not n[0].isalpha():
-            return False
-        for ok_str in ok_list:
-            if isinstance(ok_str, str):
-                n = n.replace(ok_str, '')  # remove ok strings
-        if not n.isalnum():
-            return False
-    return True
+    if len(name) > 0 and not name[0].isalpha():  # first char must be alpha
+        return False
+
+    if isinstance(ok_names, str):
+        ok_names = [ok_names]
+    elif not isinstance(ok_names, list):
+        e = typeerror(ok_names, 'ok_names', 'string or list')
+        raise TypeError(e)
+    for ok_name in ok_names:
+        if not isinstance(ok_name, str):
+            e = typeerror(ok_name, 'ok_names: list item', 'string')
+            raise TypeError(e)
+        if name.lower() == ok_name.lower():
+            return True
+
+    if isinstance(ok_strings, str):
+        ok_strings = [ok_strings]
+    elif not isinstance(ok_strings, list):
+        e = typeerror(ok_strings, 'ok_strings', 'string or list')
+        raise TypeError(e)
+    for ok_str in ok_strings:
+        if not isinstance(ok_str, str):
+            e = typeerror(ok_strings, 'ok_strings: list item', 'string')
+            raise TypeError(e)
+        name = name.replace(ok_str, '')  # remove ok strings from name
+
+    if not name.isalnum():
+        return False
+
+    return name.lower() not in BADNAMES  # compare lower-case name
 
 
 def name_next_seq(
     self,
-    names: List[str],  # existing names, e.g. ['A0', 'A1', 'A2']
+    names: List[str],  # existing names, e.g. ['RecordA0', 'RecordA1'...]
     prefix: str,  # prefix of names, e.g. 'A'
     first: int = 0  # first number of sequence
 ) -> int:  # e.g. 3
@@ -180,24 +209,52 @@ def name_next_seq(
     return first
 
 
-def quotes(
-    text: str,
-    single: bool = True
-) -> str:
-    """Add quotes around text.
+def keys_are_equal(
+    keys1: Union[str, List[str]],
+    keys2: Union[str, List[str]],
+    case_insensitive: bool = True
+) -> bool:
+    """Determine if two lists contain the same keys.
+    Comparison can be either case sensitive or insensitive (default).
+    Order does not matter.
 
-    :param text: text.
-    :type text: str
-    :param single: True for single quotes, False for double quotes.
-    :type single: bool, optional
-    :return: quoted text.
-    :rtype: str
+    :param keys1: first key list.
+    :type keys1: List[str]
+    :param keys2: second key list.
+    :type prefix: List[str]
+    :param keys2: second key list.
+    :type prefix: List[str]
+    :return: True if key lists are the same, otherwise False.
+    :rtype: bool
     """
-    if not isinstance(text, str):
-        text = str(text)
-    if single:
-        return "'" + str(text) + "'"
-    return '"' + str(text) + '"'
+    if not hasattr(keys1, '__iter__'):
+        return False
+    if not hasattr(keys2, '__iter__'):
+        return False
+    if not isinstance(keys1, list):
+        keys1 = list(keys1)
+    if not isinstance(keys2, list):
+        keys2 = list(keys2)
+    if len(keys1) != len(keys2):
+        return False
+    for k1 in keys1:
+        if not isinstance(k1, str):
+            return False
+        found = False
+        for k2 in keys2:
+            if not isinstance(k2, str):
+                return False
+            if case_insensitive:
+                if k1.lower() == k2.lower():
+                    found = True
+                    break
+            else:
+                if k1 == k2:
+                    found = True
+                    break
+        if not found:
+            return False
+    return True
 
 
 def remove_special_char(
@@ -312,7 +369,7 @@ def int_list_to_seq_str(
 
 def channel_char(
     chan_num: Union[int, List[int]],
-    char_list: List[str] = nmp.CHANNEL_LIST
+    char_list: List[str] = CHANNEL_LIST
 ) -> Union[str, List[str]]:
     """Convert channel number(s) to character.
 
@@ -324,7 +381,7 @@ def channel_char(
     :rtype: str or list
     """
     if not isinstance(char_list, list):
-        char_list = nmp.CHANNEL_LIST  # use default NM list
+        char_list = CHANNEL_LIST  # use default NM list
     if isinstance(chan_num, int):
         if chan_num >= 0 and chan_num < len(char_list):
             cc = char_list[chan_num]
@@ -345,7 +402,7 @@ def channel_char(
 
 def channel_num(
     chan_char: Union[str, List[str]],
-    char_list: List[str] = nmp.CHANNEL_LIST
+    char_list: List[str] = CHANNEL_LIST
 ) -> Union[int, List[int]]:
     """Convert channel character(s) to number.
 
@@ -357,7 +414,7 @@ def channel_num(
     :rtype: int or list
     """
     if not isinstance(char_list, list):
-        char_list = nmp.CHANNEL_LIST
+        char_list = CHANNEL_LIST
     if isinstance(chan_char, str):
         for i, c in enumerate(char_list):
             if chan_char.upper() == c.upper():
@@ -381,7 +438,7 @@ def channel_num(
 
 def channel_char_check(
     chan_char: Union[str, List[str]],
-    char_list: List[str] = nmp.CHANNEL_LIST
+    char_list: List[str] = CHANNEL_LIST
 ) -> Union[str, List[str]]:
     """Check channel character
 
@@ -440,6 +497,15 @@ def channel_char_search(
     return -1
 
 
+def typeerror(
+    obj: object,
+    obj_name: str,
+    type_str: str
+) -> str:
+    return (obj_name + ': expected ' + type_str + ' but got %s %s'
+            % (type(obj).__name__, obj))
+
+
 def history_change(
     param_name: str,
     old_value: object,
@@ -460,14 +526,14 @@ def history_change(
         param_name = str(param_name)
     if not isinstance(old_value, str):
         if old_value is None:
-            old_value = str(old_value)
+            old_value = 'None'
         else:
-            old_value = quotes(str(old_value))
+            old_value = "'%s'" % old_value
     if not isinstance(new_value, str):
         if new_value is None:
-            new_value = str(new_value)
+            new_value = 'None'
         else:
-            new_value = quotes(str(new_value))
+            new_value = "'%s'" % new_value
     h = 'changed ' + param_name + ' from ' + old_value + ' to ' + new_value
     return h
 
@@ -524,7 +590,7 @@ def history(
 
 def get_treepath(
     stack: list,
-    frame: int = 1,
+    frame: int = 1,  # stack frame
     package: str = 'nm'
 ) -> str:
     """Create function ancestry treepath.
@@ -546,8 +612,8 @@ def get_treepath(
         path = [package]
     else:
         path = []
-    c = get_class(stack, frame=frame)  # class ancestry
-    m = get_method(stack, frame=frame)
+    c = get_class_from_stack(stack, frame=frame)  # class ancestry
+    m = get_method_from_stack(stack, frame=frame)
     if c:
         path.append(c)
     if m:
@@ -555,7 +621,7 @@ def get_treepath(
     return '.'.join(path)  # e.g. 'nm.myparent.mychild.mymethod
 
 
-def get_class(
+def get_class_from_stack(
     stack: list,
     frame: int = 1,
     module: bool = False
@@ -594,7 +660,7 @@ def get_class(
     return c
 
 
-def get_method(
+def get_method_from_stack(
     stack: list,
     frame: int = 1,
 ) -> str:
@@ -622,9 +688,10 @@ def get_method(
 def input_yesno(
     prompt: str,
     title: str = '',
-    tp: str = '',
+    treepath: str = 'default',
     frame: int = 1,
-    cancel: bool = False  # include cancel option
+    cancel: bool = True,
+    answer: Union[str, None] = None  # for testing, bypasses input()
 ):
     """Get user yes/no/cancel input
 
@@ -632,33 +699,40 @@ def input_yesno(
     :type prompt: str
     :param title: prompt title.
     :type title: str
-    :param tp: function treepath.
-    :type tp: str
+    :param treepath: function treepath.
+    :type treepath: str
     :param frame: inspect frame # for creating treepath.
     :type frame: int
-    :param cancel: include 'cancel'.
+    :param cancel: include 'cancel' option.
     :type cancel: bool
-    :return: user input, 'y', 'n' or 'c' (for 'yes', 'no' or 'cancel')
+    :param answer: answer that will bypass input, for testing purposes.
+    :type answer: str
+    :return: user input, 'y', 'n', 'c' or 'error'
     :rtype: str
     """
-    if not prompt:
-        return ''
+    if not isinstance(prompt, str):
+        prompt = ''
     if cancel:
         txt = prompt + '\n' + '(y)es (n)o (c)ancel: '
         ok = ['y', 'yes', 'n', 'no', 'c', 'cancel']
     else:
         txt = prompt + '\n' + '(y)es, (n)o: '
         ok = ['y', 'yes', 'n', 'no']
-    if tp.lower() == 'none':
+    if not isinstance(treepath, str):
         path = ''
-    else:
+    elif treepath.lower() == 'default':
         path = get_treepath(inspect.stack(), frame=frame)
+    else:
+        path = treepath # + '.userinput'
     if path:
-        txt = path + ': ' + txt
+        txt = path + ':\n' + txt
     if title:
-        txt = title + ': ' + txt
-    answer = input(txt)
+        txt = title + ':\n' + txt
+    if prompt.lower() == 'testprompt':
+        return txt
+    if not isinstance(answer, str):
+        answer = input(txt)
     a = answer.lower()
     if a in ok:
         return a[:1]  # 'y', 'n' or 'c'
-    return ''
+    return 'error'

@@ -13,7 +13,7 @@ from typing import Dict, List
 SET_SYMBOLS = ['&', '|', '-', '^']
 
 
-class NMDataSeriesSet(NMObject):
+class NMSet(NMObject):
     """
     NM DataSeriesSet class
     Behaves like a Python set, but is a list
@@ -24,13 +24,13 @@ class NMDataSeriesSet(NMObject):
     def __init__(
         self,
         parent: object = None,
-        name: str = 'NMDataSeriesSet',
-        copy: nmu.NMDataSeriesSetType = None  # see copy()
+        name: str = 'NMSet',
+        copy: nmu.NMSetType = None  # see copy()
     ) -> None:
 
         super().__init__(parent=parent, name=name, copy=copy)
 
-        if isinstance(copy, NMDataSeriesSet):  # TODO copy
+        if isinstance(copy, NMSet):  # TODO copy
             self.__theset = {}
             self.__sort_template = None
             self.__eq_lock = []
@@ -40,14 +40,14 @@ class NMDataSeriesSet(NMObject):
             self.__eq_lock = []
 
     # override, no super
-    def copy(self) -> nmu.NMDataSeriesSetType:
-        return NMDataSeriesSet(copy=self)
+    def copy(self) -> nmu.NMSetType:
+        return NMSet(copy=self)
 
     # override
     @property
     def parameters(self) -> Dict[str, object]:
         k = super().parameters
-        if isinstance(self.__sort_template, NMDataSeriesSet):
+        if isinstance(self.__sort_template, NMSet):
             k.update({'sort_template': self.__sort_template.name})
             # need name for isequivalent() to work
         else:
@@ -63,12 +63,12 @@ class NMDataSeriesSet(NMObject):
     @property
     def _bad_names(self):
         bn = []
-        if isinstance(nmp.BAD_NAMES, list):
-            bn = list(nmp.BAD_NAMES)
+        if isinstance(nmp.BADNAMES, list):
+            bn = list(nmp.BADNAMES)
             bn.remove('all')
         return bn
 
-    # override
+    # TODO: replace with __eq__()
     def _isequivalent(self, dataseriesset, alert=False):
         if not super()._isequivalent(dataseriesset, alert=alert):
             return False
@@ -101,11 +101,11 @@ class NMDataSeriesSet(NMObject):
                     return False
         if self.__sort_template != dataseriesset.sort_template:
             if alert:
-                if isinstance(self.__sort_template, NMDataSeriesSet):
+                if isinstance(self.__sort_template, NMSet):
                     nms = self.__sort_template.name
                 else:
                     nms = 'None'
-                if isinstance(dataseriesset.sort_template, NMDataSeriesSet):
+                if isinstance(dataseriesset.sort_template, NMSet):
                     nmo = dataseriesset.sort_template.name
                 else:
                     nmo = 'None'
@@ -150,23 +150,23 @@ class NMDataSeriesSet(NMObject):
         self._sort_template_set(dataseriesset)
 
     def _sort_template_set(self, dataseriesset, quiet=nmp.QUIET):
-        if isinstance(dataseriesset, NMDataSeriesSet):
+        if isinstance(dataseriesset, NMSet):
             self.__sort_template = dataseriesset
             h = 'sort template = ' + dataseriesset._tp
             self._history(h, quiet=quiet)
             return True
         else:
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
 
     def _sort_update(self):
-        if isinstance(self.__sort_template, NMDataSeriesSet):
+        if isinstance(self.__sort_template, NMSet):
             return self.sort(self.__sort_template)
         return False
 
     def sort(self, dataseriesset_template):
-        if not isinstance(dataseriesset_template, NMDataSeriesSet):
-            e = self._type_error('dataseriesset_template', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset_template, NMSet):
+            e = self._type_error('dataseriesset_template', 'NMSet')
             raise TypeError(e)
         s = {}
         for cc, dlist in dataseriesset_template._theset_items():
@@ -205,7 +205,7 @@ class NMDataSeriesSet(NMObject):
     def equation_lock_str(self):
         elist = []
         for i in self.__eq_lock:
-            if isinstance(i, NMDataSeriesSet):
+            if isinstance(i, NMSet):
                 elist.append(i.name)
             else:
                 elist.append(i)
@@ -242,7 +242,7 @@ class NMDataSeriesSet(NMObject):
         if isinstance(eq_list, list):
             if not eq_list:
                 return []
-        elif isinstance(eq_list, NMDataSeriesSet):
+        elif isinstance(eq_list, NMSet):
             eq_list = [eq_list]
         else:
             e = self._type_error('eq_list', 'list')
@@ -252,9 +252,9 @@ class NMDataSeriesSet(NMObject):
             raise ValueError(e)
         for i in range(0, len(eq_list), 2):
             s = eq_list[i]
-            if not isinstance(s, NMDataSeriesSet):
+            if not isinstance(s, NMSet):
                 e = self._error('bad equation list: even items should be ' +
-                                'a NMDataSeriesSet')
+                                'a NMSet')
                 raise TypeError(e)
             if lock and s == self:
                 e = self._error('sets cannot have locked equations that ' +
@@ -365,7 +365,7 @@ class NMDataSeriesSet(NMObject):
     def _theset_values(self):
         return self.__theset.values()
 
-    def _data_dict_check(self, data_dict, chan_default=nmp.CHANNEL_LIST[0]):
+    def _data_dict_check(self, data_dict, chan_default=nmu.CHANNEL_LIST[0]):
         # data_dict = MyData -converted-> {'A': [MyData]}
         # data_dict = [MyData0, MyData1] -converted-> {'A': [MyData0, MyData1]}
         # data_dict = {'A': MyDataA0, 'B': MyDataB0} -converted->
@@ -462,7 +462,7 @@ class NMDataSeriesSet(NMObject):
         if ks != kd:
             q = ('unequal channels: ' + str(ks) + ' vs ' + str(kd) + '. ' +
                  'Do you want to continue?')
-            yn = nmu.input_yesno(q, tp=self._tp)
+            yn = nmu.input_yesno(q)
             return yn.lower() == 'y'
         return False
 
@@ -566,7 +566,7 @@ class NMDataSeriesSet(NMObject):
             else:
                 ctxt = ', channel ' + ', '.join(clist) + '?'
             q = 'are you sure you want to clear ' + self.name + ctxt
-            yn = nmu.input_yesno(q, tp=self._tp)
+            yn = nmu.input_yesno(q)
             if not yn.lower() == 'y':
                 self._history('cancel', quiet=quiet)
                 return False
@@ -610,8 +610,8 @@ class NMDataSeriesSet(NMObject):
         # symbol: -
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
@@ -638,8 +638,8 @@ class NMDataSeriesSet(NMObject):
         # symbol: &
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
@@ -672,8 +672,8 @@ class NMDataSeriesSet(NMObject):
         # symbol: ^
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
@@ -720,8 +720,8 @@ class NMDataSeriesSet(NMObject):
         # symbol: |
         if self.__eq_lock:
             raise RuntimeError(self._eq_lock_error)
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         if alert and self._chan_check(dataseriesset):
             self._history('cancel', quiet=quiet)
@@ -751,8 +751,8 @@ class NMDataSeriesSet(NMObject):
         return True
 
     def isdisjoint(self, dataseriesset):
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         for cc, dlist in dataseriesset._theset_items():
             if cc in self.__theset.keys() and isinstance(dlist, list):
@@ -762,8 +762,8 @@ class NMDataSeriesSet(NMObject):
         return True
 
     def isequal(self, dataseriesset, alert=True):
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         ks = self.__theset.keys()
         ko = dataseriesset._theset_keys()
@@ -789,8 +789,8 @@ class NMDataSeriesSet(NMObject):
         return True
 
     def issubset(self, dataseriesset):
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         for cc_s, dlist_s in self.__theset.items():
             cc_found = False
@@ -805,8 +805,8 @@ class NMDataSeriesSet(NMObject):
         return True
 
     def issuperset(self, dataseriesset):
-        if not isinstance(dataseriesset, NMDataSeriesSet):
-            e = self._type_error('dataseriesset', 'NMDataSeriesSet')
+        if not isinstance(dataseriesset, NMSet):
+            e = self._type_error('dataseriesset', 'NMSet')
             raise TypeError(e)
         for cc, dlist in dataseriesset._theset_items():
             if cc in self.__theset.keys():
@@ -818,34 +818,58 @@ class NMDataSeriesSet(NMObject):
         return True
 
 
-class NMDataSeriesSetContainer(NMObjectContainer):
+class NMSetContainer(NMObjectContainer):
     """
-    Container for NM DataSeriesSet objects
+    Container of NMSets
     """
 
     def __init__(
         self,
         parent: object = None,
-        name: str = 'NMDataSeriesSetContainer',
-        prefix: str = nmp.DATASERIES_SET_PREFIX,
-        # for generating names of NMDataSeriesSet
-        copy: nmu.NMDataSeriesSetContainerType = None
+        name: str = 'NMSetContainer',
+        rename_on: bool = False,
+        name_prefix: str = 'set',
+        # for generating names of NMSet
+        name_seq_format: str = '0',
+        copy: nmu.NMSetContainerType = None
     ) -> None:
-        o = NMDataSeriesSet(parent=parent, name='ContainerUtility')
-        super().__init__(parent=parent, name=name, nmobject=o, prefix=prefix,
-                         rename=True, copy=copy)
-        # TODO: copy
+        super().__init__(
+            parent=parent,
+            name=name,
+            rename_on=rename_on,
+            name_prefix=name_prefix,
+            name_seq_format=name_seq_format,
+            copy=copy
+        )
 
     # override, no super
-    def copy(self) -> nmu.NMDataSeriesSetContainerType:
-        return NMDataSeriesSetContainer(copy=self)
+    def copy(self) -> nmu.NMSetContainerType:
+        return NMSetContainer(copy=self)
+
+    # override, no super
+    def content_type(self) -> str:
+        return NMSet.__name__
+
+    # override
+    def new(
+        self,
+        name: str = 'default',
+        # select: bool = True,
+        # quiet: bool = nmp.QUIET
+    ) -> nmu.NMSetType:
+        name = self._newkey_check(name, ok='default')
+        if name.lower() == 'default':
+            name = self.name_next()
+        s = NMSet(parent=self, name=name)
+        super().new(s)
+        return s
 
     # override
     @property
     def _bad_names(self):  # names not allowed
         bn = []
-        if isinstance(nmp.BAD_NAMES, list):
-            bn = list(nmp.BAD_NAMES)
+        if isinstance(nmp.BADNAMES, list):
+            bn = list(nmp.BADNAMES)
             bn.remove('all')
         return bn
 
@@ -925,7 +949,7 @@ class NMDataSeriesSetContainer(NMObjectContainer):
 
     def remove_epoch(self, name, epoch, quiet=nmp.QUIET):
         if len(self._parent.thedata) == 0:
-            tp = self._parent.treepath(history=True)
+            tp = self._parent.treepath()
             a = 'no selected data for dataseries ' + tp
             self._alert(a, quiet=quiet)
             return False

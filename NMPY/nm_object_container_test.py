@@ -1,7 +1,7 @@
-#!/usr/bin/env python[3]
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Dec 15 09:23:07 2019
+Created on Sun Dec 25 14:43:19 2022
 
 @author: jason
 """
@@ -9,493 +9,947 @@ import unittest
 
 from nm_manager import NMManager
 from nm_object import NMObject
+from nm_object_test import NMObject2
 from nm_object_container import NMObjectContainer
-import nm_preferences as nmp
+import nm_utilities as nmu
 
-NM = NMManager(new_project=False, quiet=True)
-BADTYPES = [None, True, 1, 3.14, [], (), {}, set(), 'test', NM]
-# BADTYPES: all types, use continue to ignore OK types
-BADNAME = 'b&dn@me!'
-BADNAMES = nmp.BAD_NAMES + [BADNAME]
-ALERT = True
-CONFIRM = False
+QUIET = True
+NM = NMManager(quiet=QUIET)
+NM0 = NMManager(quiet=QUIET)
+NM1 = NMManager(quiet=QUIET)
+CNAME0 = 'map0'  # name
+CNAME1 = 'map1'
+OPREFIX0 = 'object'
+OPREFIX1 = 'obj'
+OSEQFORMAT0 = '0'
+OSEQFORMAT1 = 'A'
+CHARLIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
+            'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
+            'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+ONLIST0 = [OPREFIX0 + str(i) for i in range(6)]
+ONLIST1 = [OPREFIX1 + CHARLIST[i] for i in range(6)]
+SETS_NLIST0 = ['set' + str(i) for i in range(3)]
+SETS_NLIST1 = ['s' + str(i) for i in range(3)]
 
 
 class NMObjectContainerTest(unittest.TestCase):
 
-    def setUp(self):
-        self.nm = NMManager(new_project=False, quiet=True)
-        self.n0 = 'container0'
-        self.n1 = 'container1'
-        self.p0 = 'TestA'
-        self.p1 = 'TestB'
-        self.select0 = 0
-        self.select1 = 1
-        self.nlist0 = [self.p0 + str(i) for i in range(6)]
-        self.nlist1 = [self.p1 + str(i) for i in range(3)]
-        self.o0 = NMObject(parent=None, name='dummy')
-        self.o1 = NMObject(parent=None, name='dummy')
-        self.c0 = NMObjectContainer(parent=self.nm,
-                                    name=self.n0,
-                                    nmobject=self.o0,
-                                    prefix=self.p0,
-                                    rename=True)
-        self.c1 = NMObjectContainer(parent=self.nm,
-                                    name=self.n1,
-                                    nmobject=self.o1,
-                                    prefix=self.p1,
-                                    rename=False)
-        for n in self.nlist0:
-            self.c0.new(n)
-        for n in self.nlist1:
-            self.c1.new(n)
-        self.c0.select = self.p0 + str(self.select0)
-        self.c1.select = self.p1 + str(self.select1)
+    def setUp(self):  # executed before each test
+        self.olist0 = []  # NM object list
+        self.olist1 = []
+        for n in ONLIST0:
+            self.olist0.append(NMObject(parent=NM0, name=n))
+        for n in ONLIST1:
+            self.olist1.append(NMObject(parent=NM1, name=n))
+
+        self.map0 = NMObjectContainer(
+            parent=NM0,
+            name=CNAME0,
+            rename_on=True,
+            name_prefix=OPREFIX0,
+            name_seq_format=OSEQFORMAT0
+        )
+        self.map0.update(self.olist0)
+
+        self.sets0 = {SETS_NLIST0[0]: [ONLIST0[0], ONLIST0[2], ONLIST0[3]]}
+        self.map0.sets.update(self.sets0)
+
+        self.map1 = NMObjectContainer(
+            parent=NM1,
+            name=CNAME1,
+            rename_on=False,
+            name_prefix=OPREFIX1,
+            name_seq_format=OSEQFORMAT1
+        )
+        self.map1.update(self.olist1)
+        self.map1.select_key = ONLIST1[2]
+
+        self.sets1 = {SETS_NLIST1[0]: [ONLIST1[0], ONLIST1[2], ONLIST1[4]],
+                      SETS_NLIST1[1]: [ONLIST1[1], ONLIST1[3], ONLIST1[5]]}
+        self.map1.sets.update(self.sets1)
+
+        self.map1_copy = NMObjectContainer(copy=self.map1)
+
+    # __init__, copy (NMObject), parameters (NMObject)
+    # content (NMObject), content_type, content_parameters (NMObject)
 
     def test00_init(self):
-        # arg: parent, name (NMObject)
-        # arg: nmobject, prefix, rename, copy
-        for b in BADTYPES:  # nmobject
+        # args: parent, name (NMObject)
+        # args: nmobjects, rename_on, name_prefix, name_seq_format, copy
+        # nmobjects: see test_update()
+        # name_prefix: see test_name_prefix_set()
+        # name_seq_format: see test_name_seq_format()
+
+        bad = list(nmu.BADTYPES)
+        bad.remove(None)
+        bad.remove(True)
+        for b in bad:
             with self.assertRaises(TypeError):
-                NMObjectContainer(parent=self.nm, name=self.n0, nmobject=b)
-        for b in BADTYPES:  # prefix
-            if b is None or isinstance(b, str):
-                continue  # ok
+                NMObjectContainer(rename_on=b)
+
+        bad = list(nmu.BADTYPES)
+        bad.remove(None)
+        for b in bad:
             with self.assertRaises(TypeError):
-                NMObjectContainer(parent=self.nm, name=self.n0,
-                                  nmobject=self.o0, prefix=b)
-        for b in BADNAMES:  # prefix
-            if b == '' or b == 'default':
-                continue  # ok
+                NMObjectContainer(copy=b)
+
+        NMObjectContainer()  # no arguments is ok
+
+        self.assertEqual(self.map0._parent, NM0)
+        self.assertEqual(self.map0.name, CNAME0)
+        self.assertTrue(self.map0._NMObjectContainer__rename_on)
+        self.assertEqual(self.map0._NMObjectContainer__name_prefix,
+                         OPREFIX0)
+        self.assertEqual(self.map0._NMObjectContainer__name_seq_format,
+                         OSEQFORMAT0)
+        self.assertIsNone(self.map0.select_key)
+        self.assertIsNone(self.map0.select_value)
+        self.assertEqual(self.map0.execute_key, 'select')
+        self.assertEqual(self.map0.execute_values, [])
+        self.assertEqual(list(self.map0.sets.keys()), [SETS_NLIST0[0]])
+        self.assertEqual(len(self.map0._NMObjectContainer__map),
+                         len(ONLIST0))
+
+        self.assertEqual(self.map1._parent, NM1)
+        self.assertEqual(self.map1.name, CNAME1)
+        self.assertFalse(self.map1._NMObjectContainer__rename_on)
+        self.assertEqual(self.map1._NMObjectContainer__name_prefix,
+                         OPREFIX1)
+        self.assertEqual(self.map1._NMObjectContainer__name_seq_format,
+                         OSEQFORMAT1)
+        self.assertEqual(self.map1.select_key, ONLIST1[2])
+        self.assertEqual(self.map1.select_value, self.olist1[2])
+        self.assertEqual(self.map1.execute_key, 'select')
+        self.assertEqual(self.map1.execute_values, [self.olist1[2]])
+        self.assertEqual(list(self.map1.sets.keys()), [SETS_NLIST1[0],
+                         SETS_NLIST1[1]])
+        self.assertEqual(len(self.map1._NMObjectContainer__map),
+                         len(ONLIST1))
+
+        self.assertEqual(self.map1_copy._parent, NM1)
+        self.assertEqual(self.map1_copy.name, CNAME1)
+        self.assertFalse(self.map1_copy._NMObjectContainer__rename_on)
+        self.assertEqual(self.map1_copy._NMObjectContainer__name_prefix,
+                         OPREFIX1)
+        self.assertEqual(self.map1_copy._NMObjectContainer__name_seq_format,
+                         OSEQFORMAT1)
+        self.assertEqual(self.map1_copy.select_key, ONLIST1[2])
+        self.assertEqual(self.map1_copy.execute_key, 'select')
+        self.assertEqual(list(self.map1_copy.sets.keys()), [SETS_NLIST1[0],
+                         SETS_NLIST1[1]])
+        self.assertEqual(len(self.map1_copy._NMObjectContainer__map),
+                         len(ONLIST1))
+
+    def test01_copy(self):
+        for n in ONLIST1:
+            s = self.map1.get(n)
+            c = self.map1_copy.get(n)
+            self.assertTrue(s == c)
+            self.assertFalse(s is c)
+        self.assertEqual(self.map1.select_key, self.map1_copy.select_key)
+        self.assertTrue(self.map1.select_value == self.map1_copy.select_value)
+        self.assertFalse(self.map1.select_value is self.map1_copy.select_value)
+
+    def test02_parameters(self):
+        klist = ['name', 'created', 'modified', 'copy of']
+        klist += ['content_type', 'rename_on', 'name_prefix',
+                  'name_seq_format', 'select', 'execute',
+                  'sets']
+
+        plist = self.map0.parameters
+        self.assertEqual(list(plist.keys()), klist)
+        self.assertEqual(plist['name'], CNAME0)
+        self.assertIsNone(plist['copy of'])
+        self.assertEqual(plist['content_type'], 'nmobject')
+        self.assertTrue(plist['rename_on'])
+        self.assertEqual(plist['name_prefix'], OPREFIX0)
+        self.assertEqual(plist['name_seq_format'], OSEQFORMAT0)
+        self.assertIsNone(plist['select'])
+        self.assertEqual(plist['execute'], 'select')
+        self.assertEqual(plist['sets'], [SETS_NLIST0[0]])
+
+        plist = self.map1.parameters
+        self.assertEqual(plist['name'], CNAME1)
+        self.assertIsNone(plist['copy of'])
+        self.assertEqual(plist['content_type'], 'nmobject')
+        self.assertFalse(plist['rename_on'])
+        self.assertEqual(plist['name_prefix'], OPREFIX1)
+        self.assertEqual(plist['name_seq_format'], OSEQFORMAT1)
+        self.assertEqual(plist['select'], ONLIST1[2])
+        self.assertEqual(plist['execute'], 'select')
+        self.assertEqual(plist['sets'], [SETS_NLIST1[0], SETS_NLIST1[1]])
+
+        plist = self.map1_copy.parameters
+        self.assertEqual(plist['name'], CNAME1)
+        tp = NM1.name + '.' + CNAME1
+        self.assertEqual(plist['copy of'], tp)
+        self.assertEqual(plist['content_type'], 'nmobject')
+        self.assertFalse(plist['rename_on'])
+        self.assertEqual(plist['name_prefix'], OPREFIX1)
+        self.assertEqual(plist['name_seq_format'], OSEQFORMAT1)
+        self.assertEqual(plist['select'], ONLIST1[2])
+        self.assertEqual(plist['execute'], 'select')
+        self.assertEqual(plist['sets'], [SETS_NLIST1[0], SETS_NLIST1[1]])
+
+    def test03_content_type(self):
+        self.assertEqual(self.map0.content_type(), 'NMObject')
+
+    def test04_content_type_ok(self):  # NMObject type
+        self.assertFalse(self.map0.content_type_ok(NM0))
+        self.assertFalse(self.map0.content_type_ok(self.map1))
+        self.assertTrue(self.map0.content_type_ok(self.olist0[0]))
+
+    def test05_content_parameters(self):
+        plist = self.map0.content_parameters
+        self.assertTrue(isinstance(plist, list))
+        self.assertEqual(len(plist), len(self.map0))
+        for p in plist:
+            self.assertTrue(isinstance(p, dict))
+            # print(p.keys())  see NMObject.parameters
+
+    # MutableMapping Abstract Methods
+    # __getitem__, __setitem__, __delitem__, __iter__, __len__
+
+    def test06_getitem(self):
+        # args: key (see key_check)
+        # get(), items(), values()
+
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.get(b)
+            with self.assertRaises(TypeError):
+                o = self.map0[b]
+
+        for i, n in enumerate(ONLIST0):
+            o = self.map0.get(n)
+            self.assertEqual(o, self.olist0[i])
+
+        for i, n in enumerate(ONLIST0):
+            o = self.map0[n]
+            self.assertEqual(o, self.olist0[i])
+
+        with self.assertRaises(KeyError):
+            o = self.map0.__getitem__('test')
+
+        with self.assertRaises(KeyError):
+            o = self.map0['test']
+
+        o = self.map0.get('test')  # get() does not throw key error
+        self.assertIsNone(o)
+
+        for i, k in enumerate(ONLIST0):
+            self.assertEqual(self.map0.get(k), self.olist0[i])
+            self.assertEqual(self.map0.get(k.upper()), self.olist0[i])
+            # case insensitive
+
+        for i, (k, v) in enumerate(self.map0.items()):
+            self.assertEqual(k, ONLIST0[i])
+            self.assertEqual(v, self.olist0[i])
+
+        for i, v in enumerate(self.map0.values()):
+            self.assertEqual(v, self.olist0[i])
+
+    def test07_setitem(self):
+        # '=' symbol calls __setitem__()
+        # see update()
+
+        n = ONLIST0[1]
+
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')
+        bad.remove(None)
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0[b] = NMObject(parent=NM0, name='test')
+
+        bad = list(nmu.BADTYPES)
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0[n] = b
+
+        badname = n + 'x'  # name should be the same as key
+        with self.assertRaises(KeyError):
+            self.map0[n] = NMObject(parent=NM0, name=badname)
+
+        # change existing NMObject
+        o1 = self.map0.get(n)
+        self.assertTrue(o1 is self.olist0[1])
+        o2 = NMObject(parent=NM0, name=n)
+        rfr_before = o2._NMObject__rename_fxnref
+        self.map0[n.upper()] = o2
+        o1 = self.map0.get(n)
+        self.assertFalse(o1 is self.olist0[1])
+        self.assertTrue(o1 is o2)
+        rfr_after = o1._NMObject__rename_fxnref
+        self.assertNotEqual(rfr_before, rfr_after)
+        self.assertEqual(rfr_after, self.map0.rename)
+        self.assertEqual(len(self.map0), len(ONLIST0))  # stays the same
+
+        # add new NMObject
+        n = 'test'
+        o3 = NMObject(parent=NM0, name=n)
+        self.assertFalse(n in self.map0)
+        self.map0[n.upper()] = o3
+        self.assertEqual(len(self.map0), len(ONLIST0)+1)
+
+    def test08_delitem(self):
+        # test 'del' command, which calls pop()
+        # see pop(), popitem() and clear()
+        with self.assertRaises(KeyError):
+            del self.map0['test']
+
+        print('\nanswer NO')
+        del self.map0[ONLIST0[1]]
+        self.assertTrue(ONLIST0[1] in self.map0)
+
+        print('\nanswer YES')
+        del self.map0[ONLIST0[1]]
+        self.assertFalse(ONLIST0[1] in self.map0)
+        with self.assertRaises(KeyError):
+            del self.map0[ONLIST0[1]]
+
+    def test09_iter(self):
+        o_iter = iter(self.map0)
+        for n in ONLIST0:
+            self.assertEqual(next(o_iter), n)
+
+    def test10_len(self):
+        self.assertEqual(len(self.map0), len(ONLIST0))
+
+    # Mapping Mixin Methods
+    # __contains__, __eq__, __ne__
+    # keys, items, values, get (no override)
+
+    def test11_contains(self):  # 'in' operator
+        self.assertFalse('' in self.map0)
+        self.assertFalse('test' in self.map0)
+        for n in ONLIST0:
+            self.assertTrue(n in self.map0)
+            self.assertTrue(n.upper() in self.map0)  # case insensitive
+            self.assertFalse(n in self.map1)
+        for o in self.olist0:
+            self.assertTrue(o in self.map0)
+            self.assertFalse(o in self.map1)
+        for n in ONLIST1:
+            self.assertTrue(n in self.map1)
+        for o in self.olist1:
+            self.assertTrue(o in self.map1)
+
+    def test12_eq(self):  # '==' and '!=' and 'is' operators
+        # arg; other
+
+        for b in nmu.BADTYPES:
+            self.assertFalse(self.map0 == b)
+
+        self.assertTrue(self.map0 is self.map0)
+        self.assertFalse(self.map0 is self.map1)
+        self.assertTrue(self.map0 == self.map0)
+        self.assertFalse(self.map0 == self.map1)
+        self.assertFalse(self.map0 != self.map0)
+        self.assertTrue(self.map0 != self.map1)
+
+        # recreate map0 and compare to self.map0
+
+        map0 = NMObjectContainer(
+            parent=NM0,
+            name=CNAME0,
+            rename_on=True,
+            name_prefix=OPREFIX0,
+        )
+
+        olist0 = []
+        for n in ONLIST0:
+            olist0.append(NMObject(parent=NM0, name=n))
+        map0.update(olist0)
+
+        self.assertFalse(map0 == self.map0)  # sets are not equal
+        self.assertFalse(map0 is self.map0)
+
+        map0.sets.update(self.sets0)
+        self.assertTrue(map0 == self.map0)
+
+        map0.sets.new(SETS_NLIST0[1])
+        self.assertFalse(map0 == self.map0)
+
+        self.map0.sets.new(SETS_NLIST0[1])
+        self.assertTrue(map0 == self.map0)
+
+    def test13_keys(self):
+        klist = list(self.map0.keys())
+        self.assertEqual(klist, ONLIST0)
+        klist = list(self.map1.keys())
+        self.assertEqual(klist, ONLIST1)
+
+    def test14_items(self):
+        # see test06_getitem
+        pass
+
+    def test15_values(self):
+        # see test06_getitem
+        pass
+
+    def test16_get(self):
+        # see test06_getitem
+        pass
+
+    # MutableMapping Mixin functions
+    # pop, popitem, clear, update, setdefault
+
+    def test17_pop(self):
+        # see test07_delitem
+
+        with self.assertRaises(KeyError):
+            self.map0.pop('test')
+
+        o = self.map0.pop(ONLIST0[1], confirm_answer='n')
+        self.assertIsNone(o)
+        self.assertTrue(ONLIST0[1] in self.map0)
+        o = self.map0.pop(ONLIST0[1], confirm_answer='y')
+        self.assertEqual(o, self.olist0[1])
+        self.assertFalse(ONLIST0[1] in self.map0)
+
+        with self.assertRaises(KeyError):
+            o = self.map0.pop(ONLIST0[1])
+
+        for i, n in enumerate(ONLIST1):
+            o = self.map1.pop(n, confirm_answer='y')
+            self.assertEqual(o, self.olist1[i])
+            self.assertFalse(n in self.map1)
+        self.assertEqual(len(self.map1), 0)
+
+    def test18_popitem(self):
+        # with self.assertRaises(RuntimeError):
+        #    self.map0.popitem()  # NOT ALLOWED
+        # popitem returns a tuple
+        o = self.map0.popitem(confirm_answer='n')
+        # print(o)
+        self.assertEqual(o, ())
+        self.assertTrue(ONLIST0[-1] in self.map0)
+        o = self.map0.popitem(confirm_answer='y')
+        self.assertFalse(ONLIST0[-1] in self.map0)
+        t = (ONLIST0[-1], self.olist0[-1])
+        self.assertEqual(o, t)
+        for i, n in reversed(list(enumerate(ONLIST1))):
+            o = self.map1.popitem(confirm_answer='y')
+            self.assertFalse(n in self.map1)
+        self.assertEqual(len(self.map1), 0)
+
+    def test19_clear(self):
+        o = self.map0.clear(confirm_answer='n')
+        # print(o)
+        self.assertIsNone(o)
+        self.assertEqual(len(self.map0), len(ONLIST0))
+        o = self.map0.clear(confirm_answer='y')
+        self.assertIsNone(o)
+        self.assertEqual(len(self.map0), 0)
+
+    def test20_update(self):  # add NMObject to map
+        n1 = 'test'
+        o1 = NMObject(parent=NM0, name=n1)
+        o2 = NMObject(parent=NM0, name=n1.upper())
+        o3 = NMObject2(parent=NM0, name='test3')
+
+        bad = list(nmu.BADTYPES)
+        bad.remove([])
+        bad.remove({})
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.update(b)
+
+        bad = list(nmu.BADTYPES)
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.update([b, o1])
+
+        rfr_before = o1._NMObject__rename_fxnref
+        self.map0.update(o1)
+        self.assertEqual(len(self.map0), len(ONLIST0) + 1)
+        rfr_after = o1._NMObject__rename_fxnref
+        self.assertNotEqual(rfr_before, rfr_after)
+        self.assertEqual(rfr_after, self.map0.rename)
+        for i, k in enumerate(self.map0.keys()):
+            if k.lower() == n1.lower():
+                self.assertEqual(i, len(self.map0)-1)
+
+        self.map0.update(o1)
+        self.map0.update(o2)  # o1 and o2 have the same name
+        self.assertTrue(self.map0.get(n1) is o2)
+        self.map0.update({'test': o2})  # key not used
+
+        with self.assertRaises(KeyError):
+            self.map0.update({'test1': o1, 'test2': o2})  # key not used
+
+        self.assertTrue(self.map0.get(n1) is o2)
+
+        with self.assertRaises(TypeError):
+            self.map0.update(o3)  # wrong type
+
+        new_len = len(self.map0) + len(self.map1)
+        self.map0.update(self.map1)  # another NMObjectContainer is ok
+        self.assertEqual(len(self.map0), new_len)
+        for n in ONLIST1:
+            self.assertTrue(n in self.map0)
+
+    def test21_setdefault(self):
+        # calls __getitem__()
+        # should be called get_value_or_default()
+        # does not remove NMObject
+        with self.assertRaises(KeyError):
+            self.map0.setdefault('test')
+        o = self.map0.setdefault('test', default='ok')
+        self.assertEqual(o, 'ok')
+        for i, n in enumerate(ONLIST0):
+            self.assertEqual(self.map0.setdefault(n), self.olist0[i])
+        self.assertEqual(len(self.map0), len(ONLIST0))
+
+    # NMObjectContainer methods
+    # getkey, newkey
+    # rename, reorder, duplicate
+    # name_prefix (property), name_prefix_set, name_next
+    # select (property), select_set, select_get
+
+    def test22_getkey(self):
+        # args: key, ok, error
+
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')
+        for b in bad:
+            with self.assertRaises(TypeError):
+                key = self.map0._getkey(b)
+            key = self.map0._getkey(b, error1=False)
+            self.assertIsNone(key)
+
+        bad = list(nmu.BADNAMES)
+        bad.remove('select')
+        for b in bad:
+            with self.assertRaises(KeyError):
+                key = self.map0._getkey(b)
+            key = self.map0._getkey(b, error2=False)
+            self.assertIsNone(key)
+
+        for n in ONLIST0:
+            with self.assertRaises(KeyError):
+                key = self.map0._getkey(n + 'x')
+            key = self.map0._getkey(n + 'x', error2=False)
+            self.assertIsNone(key)
+
+        # test keys are case insensitive
+        key = self.map0._getkey(ONLIST0[1].upper())
+        self.assertEqual(key, ONLIST0[1])
+
+        # test key = 'select'
+        with self.assertRaises(KeyError):
+            key = self.map0._getkey('select')
+        key = self.map0._getkey('select', error2=False)
+        self.assertIsNone(key)
+        self.map0.select_key = ONLIST0[1]
+        key = self.map0._getkey('select')
+        self.assertEqual(key, ONLIST0[1])
+        # select/key should be case insensitive
+        self.map0.select_key = ONLIST0[1].upper()
+        key = self.map0._getkey('select')
+        self.assertEqual(key, ONLIST0[1])
+
+    def test23_newkey(self):
+        # args: key, ok, error
+
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')
+        for b in bad:
+            with self.assertRaises(TypeError):
+                key = self.map0._newkey(b)
+
+        bad = list(nmu.BADNAMES)
+        bad.remove('default')
+        for b in bad:
             with self.assertRaises(ValueError):
-                NMObjectContainer(parent=self.nm, name=self.n0,
-                                  nmobject=self.o0, prefix=b)
-        c0 = NMObjectContainer(parent=self.nm, name=self.n0, nmobject=self.o0,
-                               prefix='')
-        self.assertEqual(c0.prefix, '')  # '' is ok
-        c0 = NMObjectContainer(parent=self.nm, name=self.n0, nmobject=self.o0,
-                               prefix=None)
-        self.assertEqual(c0.prefix, '')  # None is ok
-        c0 = NMObjectContainer(parent=self.nm, name=self.n0, nmobject=self.o0,
-                               prefix='default')
-        self.assertEqual(c0.prefix, 'NMObject')
+                key = self.map0._newkey(b)
 
-        # test self.c0 and self.c1
-        self.assertTrue(isinstance(self.c0._nmobject, NMObject))
-        self.assertTrue(isinstance(self.c1._nmobject, NMObject))
-        self.assertTrue(self.c0._NMObjectContainer__rename)
-        self.assertFalse(self.c1._NMObjectContainer__rename)
-        self.assertEqual(self.c0.prefix, self.p0)
-        self.assertEqual(self.c1.prefix, self.p1)
-        self.assertEqual(self.c0.select.name, self.p0 + str(self.select0))
-        self.assertEqual(self.c1.select.name, self.p1 + str(self.select1))
-        self.assertEqual(len(self.c0._NMObjectContainer__container),
-                         len(self.nlist0))
-        self.assertEqual(len(self.c1._NMObjectContainer__container),
-                         len(self.nlist1))
+        for n in ONLIST0:
+            with self.assertRaises(KeyError):
+                key = self.map0._newkey(n)
+            with self.assertRaises(KeyError):
+                key = self.map0._newkey(n.upper())
+            key = self.map0._newkey(n + 'x')
+            self.assertEqual(key, n + 'x')
 
-    def test01_eq_ne(self):
-        for b in BADTYPES:
-            self.assertFalse(self.c0 == b)
-        self.assertTrue(self.c0 is self.c0)
-        self.assertFalse(self.c0 is self.c1)
-        self.assertTrue(self.c0 == self.c0)
-        self.assertFalse(self.c0 == self.c1)
-        self.assertFalse(self.c0 != self.c0)
-        self.assertTrue(self.c0 != self.c1)
+        # test key = 'default'
+        key = self.map0._newkey('default')
+        n = len(ONLIST0)
+        self.assertEqual(key, OPREFIX0 + str(n))
 
-    def test02_copy(self):
-        c = self.c0.copy()
-        self.assertIsInstance(c, NMObjectContainer)
-        self.assertTrue(self.c0 == c)  # __eq__
-        self.assertEqual(self.c0._parent, c._parent)
-        self.assertEqual(self.c0.name, c.name)
-        self.assertTrue(self.c0._nmobject == c._nmobject)  # __eq__
-        self.assertEqual(self.c0.prefix, c.prefix)
-        self.assertEqual(self.c0._NMObjectContainer__rename,
-                         c._NMObjectContainer__rename)
-        fr0 = self.c0._NMObject__rename_fxnref
-        frc = c._NMObject__rename_fxnref
-        # self.assertNotEqual(fr0, frc)
-        self.assertEqual(fr0, frc)  # names are the same, but refs different
-        self.assertEqual(self.c0._name_set, c._name_set)
-        p0 = self.c0.parameters
-        p = c.parameters
-        self.assertNotEqual(p0.get('created'), p.get('created'))
-        self.assertNotEqual(p0.get('modified'), p.get('modified'))
-        self.assertTrue(self.c0.select == c.select)  # __eq__
-        self.assertEqual(self.c0.select.name, c.select.name)
-        for i in range(self.c0.count):
-            o0 = self.c0.getitem(index=i)
-            oc = c.getitem(index=i)
-            self.assertTrue(o0 == oc)  # __eq__
-            fr0 = o0._NMObject__rename_fxnref
-            frc = oc._NMObject__rename_fxnref
-            # self.assertNotEqual(fr0, frc)
-            self.assertEqual(fr0, frc)
-            self.assertEqual(fr0, self.c0.rename)
-            self.assertEqual(frc, c.rename)
-            self.assertEqual(self.c0.rename, c.rename)
-
-    def test03_parameters(self):
-        plist = ['name', 'created', 'modified', 'copy of', 'type', 'prefix',
-                 'rename', 'select']
-        self.assertEqual(self.c0.parameter_list, plist)
-
-    def test04_content_type(self):
-        self.assertEqual(self.c0.content_type, self.o0.__class__.__name__)
-
-    def test05_prefix_set(self):
-        # arg: newprefix
-        for b in BADTYPES:  # newprefix
-            if b is None or isinstance(b, str):
-                continue  # ok
+    def test24_rename(self):
+        # args: key, newkey
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')  # ok
+        for b in bad:  # test key
             with self.assertRaises(TypeError):
-                self.c0._prefix_set(newprefix=b)
-        for b in BADNAMES:  # newprefix
-            if b == '':
-                continue  # ok
+                self.map0.rename(b, ONLIST0[3])
+        for b in bad:  # test newkey
+            with self.assertRaises(TypeError):
+                self.map0.rename(ONLIST0[4], b)
+
+        bad = list(nmu.BADNAMES)
+        # bad.remove('select')  # ok
+        for b in bad:  # test key
+            with self.assertRaises(KeyError):
+                self.map0.rename(b, ONLIST0[3])
+
+        bad = list(nmu.BADNAMES)
+        bad.remove('default')  # ok
+        for b in bad:  # test newkey
             with self.assertRaises(ValueError):
-                self.c0._prefix_set(newprefix=b)
-        for p in [None, self.p1, '', self.p0]:
-            self.assertTrue(self.c0._prefix_set(newprefix=p))
-            if p == '':
-                self.assertEqual(self.c0.prefix, None)
+                self.map0.rename(ONLIST0[4], b)
+        """
+        with self.assertRaises(KeyError):
+            self.map0.rename('select', ONLIST0[0])  # name already used
+        with self.assertRaises(RuntimeError):
+            self.map1.rename('select', 'test')  # rename = False
+        """
+        self.map0.pop(ONLIST0[3], confirm_answer='y')
+        self.assertFalse(ONLIST0[3] in self.map0)
+        klist = [OPREFIX0 + str(i) for i in [0, 1, 2, 4, 5]]
+        self.assertEqual(list(self.map0.keys()), klist)
+        # self.map0.select = ONLIST0[0]
+        # s = self.map0.rename('select', ONLIST0[3])
+        # self.assertTrue(s)
+        s = self.map0.rename(ONLIST0[0], ONLIST0[3])
+        self.assertTrue(s)
+        klist = [OPREFIX0 + str(i) for i in [3, 1, 2, 4, 5]]
+        self.assertEqual(list(self.map0.keys()), klist)
+        nnext = self.map0.name_next()
+        self.assertEqual(nnext, OPREFIX0 + '0')
+        s = self.map0.rename(ONLIST0[4], 'default')
+        self.assertTrue(s)
+        klist = [OPREFIX0 + str(i) for i in [3, 1, 2, 0, 5]]
+        self.assertEqual(list(self.map0.keys()), klist)
+        for i, v in enumerate(self.map0.values()):
+            o = self.map0.get(v.name)
+            if i == 0:
+                o.name = 'test'  # executes rename()
             else:
-                self.assertEqual(self.c0.prefix, p)
-        with self.assertRaises(RuntimeError):
-            self.c1.prefix = self.p0  # rename = False
+                with self.assertRaises(KeyError):
+                    o.name = 'test'  # name already exists
+        for i, v in enumerate(self.map0.values()):
+            o = self.map0.get(v.name)
+            o.name = 'test' + str(i)
+        klist = ['test0', 'test1', 'test2', 'test3', 'test4']
+        self.assertEqual(list(self.map0.keys()), klist)
 
-    def test06_name_next(self):
-        i = len(self.nlist0)
-        self.assertEqual(self.c0.name_next_seq(), i)
-        n = self.p0 + str(i)
-        self.assertEqual(self.c0.name_next(), n)
+        # map_before = self.map0._NMObjectContainer__map
+        # ms = self.map0.rename('test2', 'test2b')
+        # mmap_after = self.map0._NMObjectContainer__map
+        # mself.assertEqual(map_before, map_after)
 
-    def test07_new(self):
-        # args: name, select
-        for b in BADTYPES:  # name
-            if isinstance(b, str):
-                continue  # ok
+    def test25_reorder(self):
+        # args: newkeys list
+        bad = list(nmu.BADTYPES)
+        bad.remove([])  # ok
+        for b in bad:  # test key
             with self.assertRaises(TypeError):
-                self.c0.new(name=b)
-        for b in BADNAMES:  # name
-            if b.lower() == 'default':
-                continue  # ok
-            with self.assertRaises(ValueError):
-                self.c0.new(name=b)
-        self.c0._NMObjectContainer__container.clear()  # empty container
-        o = self.c0.new()
-        self.assertIsInstance(o, NMObject)
-        self.assertEqual(o.name, self.nlist0[0])
-        self.assertEqual(self.c0.select, o)
-        self.assertEqual(self.c0.select.name, self.nlist0[0])
-        self.assertEqual(o._NMObject__rename_fxnref, self.c0.rename)
-        with self.assertRaises(RuntimeError):
-            self.c0.new(name=self.nlist0[0])  # already exists
-        self.assertEqual(self.c0.name_next_seq(), 1)
-        self.assertEqual(self.c0.name_next(), self.nlist0[1])
-        o = self.c0.new(select=False)
-        self.assertEqual(o.name, self.nlist0[1])
-        self.assertEqual(self.c0.select.name, self.nlist0[0])
-        self.assertEqual(self.c0.name_next_seq(), 2)
-        self.assertEqual(self.c0.name_next(), self.nlist0[2])
-        o = self.c0.new(name=self.nlist0[2])
-        self.assertEqual(o.name, self.nlist0[2])
-        # skip nlist0[3]
-        o = self.c0.new(name=self.nlist0[4])
-        self.assertEqual(o.name, self.nlist0[4])
-        o = self.c0.new()
-        self.assertEqual(o.name, self.nlist0[5])
-        self.assertEqual(self.c0.count, 5)
-        with self.assertRaises(RuntimeError):
-            o.name = self.nlist0[0]  # name is used
+                self.map0.reorder(b)
 
-    def test08_append(self):
-        # args: nmobject, select
-        for b in BADTYPES:  # nmobject
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')  # ok
+        for b in bad:  # test key
             with self.assertRaises(TypeError):
-                self.c1.new(nmobject=b)
-        self.c1._NMObjectContainer__container.clear()  # empty container
-        o = NMObject(parent=self.nm, name=self.nlist1[0])
-        self.assertTrue(self.c1.append(nmobject=o))
-        o = self.c1.new()
-        self.assertIsInstance(o, NMObject)
-        self.assertEqual(o.name, self.nlist1[1])
+                self.map0.reorder([b])
 
-    def test09_names(self):
-        self.assertEqual(self.c0.names, self.nlist0)
-        self.assertEqual(self.c1.names, self.nlist1)
+        klist = [OPREFIX0 + str(i) for i in [0, 1, 2, 3, 4]]
+        with self.assertRaises(KeyError):
+            self.map0.reorder(klist)  # number mismatch
 
-    def test10_content(self):
-        content_name = 'NMObjects'
-        c = self.c0.content
-        self.assertEqual(list(c.keys()), [content_name])
-        self.assertEqual(c[content_name], self.c0.names)
-        c = self.c0.content_tree
-        self.assertEqual(list(c.keys()), [content_name])
-        self.assertEqual(c[content_name], self.c0.names)
+        klist = [OPREFIX0 + str(i) for i in [0, 1, 2, 3, 4, 6]]
+        with self.assertRaises(KeyError):
+            self.map0.reorder(klist)
 
-    def test11_index(self):
-        # arg: name
-        for b in BADTYPES:  # name
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.index(b)
-        for b in BADNAMES:  # name
-            if b.lower() == 'select':
-                continue  # ok
-            self.assertEqual(self.c0.index(b), -1)
-        self.assertEqual(self.c0.index('doesnotexist'), -1)
-        for i in range(len(self.nlist0)):
-            self.assertEqual(self.c0.index(self.nlist0[i]), i)
-        self.assertEqual(self.c0.index('select'), self.select0)
-        self.assertEqual(self.c1.index('select'), self.select1)
+        self.map0.reorder(ONLIST0)  # OK, no change
 
-    def test12_exists(self):
-        # arg: name
-        for b in BADTYPES:  # name
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.exists(b)
-        for b in BADNAMES:  # name
-            if b.lower() == 'select':
-                self.assertTrue(self.c0.exists(b))
-            else:
-                self.assertFalse(self.c0.exists(b))
-        self.assertFalse(self.c0.exists('doesnotexist'))
-        for i in range(len(self.nlist0)):
-            self.assertTrue(self.c0.exists(self.nlist0[i]))
+        klist = ONLIST0
+        klist.reverse()
+        self.map0.reorder(klist)
+        self.assertEqual(list(self.map0.keys()), klist)
 
-    def test13_getitem(self):
-        # args: name, index
-        for b in BADTYPES:  # name
-            if isinstance(b, str):
-                continue  # ok
-            self.assertIsNone(self.c0.getitem(name=b))
-        for b in BADNAMES:  # name
-            if b.lower() == 'select':
-                continue  # ok
-            self.assertIsNone(self.c0.getitem(name=b))
-        for b in BADTYPES:  # index
-            if isinstance(b, int):
-                continue  # ok
-            self.assertIsNone(self.c0.getitem(index=b))
-        self.assertIsNone(self.c0.getitem(name=''))
-        self.assertEqual(self.c0.getitem(name='select'), self.c0.select)
-        for i in range(len(self.nlist0)):
-            o = self.c0.getitem(name=self.nlist0[i])
-            self.assertIsInstance(o, NMObject)
-            self.assertEqual(o.name, self.nlist0[i])
-        self.assertIsNone(self.c0.getitem(index=None))
-        for i in range(self.c0.count):
-            o = self.c0.getitem(index=i)
-            self.assertIsInstance(o, NMObject)
-            self.assertEqual(o.name, self.nlist0[i])
-        for i in range(-1, -1 * (self.c0.count + 1), -1):
-            o = self.c0.getitem(index=i)
-            self.assertIsInstance(o, NMObject)
-            self.assertEqual(o.name, self.nlist0[i])
-        i = -1 * (self.c0.count + 1)
-        for b in [self.c0.count, 100, i, -100]:
-            with self.assertRaises(IndexError):
-                self.c0.getitem(index=b)
+    def test26_duplicate(self):
+        # args: newkeys list
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')  # ok
+        for b in bad:  # test key
+            with self.assertRaises(TypeError):
+                self.map0.duplicate(b, 'default')
+            with self.assertRaises(TypeError):
+                self.map0.duplicate(OPREFIX0+'0', b)
 
-    def test14_getitems(self):
-        # args: names, indexes
-        for b in BADTYPES:  # names
-            if isinstance(b, list) or isinstance(b, tuple):
-                continue  # ok
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.getitems(names=b)
-        for b in BADTYPES:  # names
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.getitems(names=[b])
-        for b in BADNAMES:  # names
-            if b.lower() == 'select' or b.lower() == 'all' or b == '':
-                continue  # ok
-            with self.assertRaises(ValueError):
-                self.c0.getitems(names=[b])
-        for b in BADTYPES:  # indexes
-            if isinstance(b, list) or isinstance(b, tuple):
-                continue  # ok
-            if isinstance(b, int):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.getitems(indexes=b)
-        for b in BADTYPES:  # indexes
-            if isinstance(b, int):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.getitems(indexes=[b])
-        self.assertEqual(self.c0.getitems(), [])
-        i = -1 * (self.c0.count + 1)
-        for b in [self.c0.count, 50, i]:
-            with self.assertRaises(IndexError):
-                olist1 = self.c0.getitems(indexes=[b])
-        olist0 = self.c0.getitems(names=[self.nlist0[0], self.nlist0[1],
-                                  self.nlist0[2], self.nlist0[4]])
-        olist1 = self.c0.getitems(indexes=[0, 1, 2, 3])
-        self.assertEqual(olist0, olist1)
-        olist1 = self.c0.getitems(indexes=[-5, -4, -3, -2])
-        self.assertEqual(olist0, olist1)
-        olist0 = self.c0.getitems(names='all')
-        self.assertEqual(len(olist0), self.c0.count)
-        olist0.pop()  # pop should NOT change container list
-        self.assertEqual(len(olist0), self.c0.count-1)
+        # self.map0.select = ONLIST0[1]
 
-    def test15_select_set(self):
-        # args: name, index, failure_alert
-        for b in BADTYPES:  # test name
-            if b is None or isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0._select_set(name=b)
-        for b in BADNAMES:  # test name
-            if b == '' or b == 'none' or b == 'select':
-                continue  # ok
-            with self.assertRaises(ValueError):
-                self.c0._select_set(name=b)
-        for b in BADTYPES:  # test index
-            if b is None or isinstance(b, int):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0._select_set(index=b)
-        sname = self.c0.select.name
-        self.assertIsNone(self.c0._select_set())
-        self.assertIsNone(self.c0._select_set(name=None))
-        self.assertIsNone(self.c0._select_set(name=''))
-        self.assertIsNone(self.c0._select_set(index=None))
-        self.assertIsNone(self.c0._select_set(name=self.nlist0[3]))  # 'no'
-        if self.nm.configs.quiet:
-            self.assertEqual(self.c0.select.name, sname)
-        self.assertIsInstance(self.c0._select_set(name=self.nlist0[0]),
-                              NMObject)
-        self.assertEqual(self.c0.select.name, self.nlist0[0])
+        with self.assertRaises(KeyError):
+            self.map0.duplicate(ONLIST0[0], ONLIST0[3])
+            # name already used
 
-    def test16_rename(self):
-        # args: name, newname
-        for b in BADTYPES:  # test name
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.rename(b, self.nlist0[3])
-        for b in BADNAMES:  # test name
-            if b.lower() == 'select':
-                continue  # ok
-            with self.assertRaises(ValueError):
-                self.c0.rename(b, self.nlist0[3])
-        for b in BADTYPES:  # test newname
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.rename(self.nlist0[4], b)
-        for b in BADNAMES:  # test newname
-            if b.lower() == 'default':
-                continue  # ok
-            with self.assertRaises(ValueError):
-                self.c0.rename(self.nlist0[4], b)
-        with self.assertRaises(RuntimeError):
-            self.c0.rename('select', self.nlist0[0])  # name already used
-        with self.assertRaises(RuntimeError):
-            self.c1.rename('select', 'test')  # rename = False
-        # c0.names = ['TestA0', 'TestA1', 'TestA2', 'TestA4', 'TestA5']
-        s = self.c0.rename('select', self.nlist0[3])
-        self.assertIsInstance(s, str)
-        self.assertEqual(s, self.nlist0[3])
-        # c0.names = ['TestA3', 'TestA1', 'TestA2', 'TestA4', 'TestA5']
-        i = self.c0.index(self.nlist0[4])  # 'TestA4', i = 3
-        nnext = self.c0.name_next()
-        self.assertEqual(nnext, 'TestA6')
-        s = self.c0.rename(self.nlist0[4], 'default')
-        self.assertEqual(s, nnext)
-        # c0.names = ['TestA3', 'TestA1', 'TestA2', 'TestA6', 'TestA5']
-        for i in range(5):
-            o = self.c0.getitem(index=i)
-            self.c0.rename(o.name, 'temp' + str(i))
-        for i in range(5):
-            o = self.c0.getitem(index=i)
-            self.c0.rename(o.name, self.nlist0[i])
-        # c0.names = ['TestA0', 'TestA1', 'TestA2', 'TestA3', 'TestA4']
-        self.assertEqual(self.c0.names, [self.nlist0[0],
-                                         self.nlist0[1],
-                                         self.nlist0[2],
-                                         self.nlist0[3],
-                                         self.nlist0[4]])
-
-    def test17_duplicate(self):
-        # args: name, newname, select
-        for b in BADTYPES:  # test name
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.duplicate(b, 'default')
-        for b in BADNAMES:  # test name
-            if b.lower() == 'select':
-                continue  # ok
-            with self.assertRaises(ValueError):
-                self.c0.duplicate(b, 'default')
-        for b in BADTYPES:  # test newname
-            if isinstance(b, str):
-                continue  # ok
-            with self.assertRaises(TypeError):
-                self.c0.duplicate(self.nlist0[0], b)
-        for b in BADNAMES:  # test newname
-            if b.lower() == 'default':
-                continue  # ok
-            with self.assertRaises(ValueError):
-                self.c0.duplicate(self.nlist0[0], b)
-        with self.assertRaises(RuntimeError):
-            self.c0.duplicate(self.nlist0[0], self.nlist0[1])  # already exists
-        # self.assertIsNone(c0.duplicate('', 'default'))
-        icount = self.c0.count
-        o = self.c0.getitem(name=self.nlist0[0])
-        nnext = self.c0.name_next()  # 'TestA5'
-        c = self.c0.duplicate(self.nlist0[0], 'default')
-        self.assertIsInstance(c, NMObject)
+        nnext = self.map0.name_next()
+        self.assertEqual(nnext, OPREFIX0+'6')
+        c = self.map0.duplicate(ONLIST0[1], 'default')
         self.assertEqual(c.name, nnext)
-        self.assertEqual(c._NMObject__rename_fxnref, self.c0.rename)
-        self.assertFalse(o._isequivalent(c, alert=ALERT))  # different names
-        self.assertEqual(self.c0.count, icount + 1)
-        with self.assertRaises(RuntimeError):
-            c.name = self.nlist0[0]  # name already used
-        c._NMObject__name = self.nlist0[0]  # manual name change
-        self.assertTrue(o._isequivalent(c, alert=ALERT))
-        c._NMObject__name = nnext  # back to default name
+        self.assertEqual(len(self.map0), len(ONLIST0)+1)
+        o = self.map0.get(ONLIST0[1])
+        self.assertFalse(c == o)  # same name
+        pc = c.parameters
+        tp = NM0.name + '.' + ONLIST0[1]
+        self.assertEqual(pc['copy of'], tp)
 
-        # self.c0.notes_print()
-        # c0.getitem(index=0).notes_print()
+        c = self.map0.duplicate(ONLIST0[0], 'test')
+        self.assertEqual(c.name, 'test')
+        self.assertEqual(len(self.map0), len(ONLIST0)+2)
+        pc = c.parameters
+        tp = NM0.name + '.' + ONLIST0[0]
+        self.assertEqual(pc['copy of'], tp)
 
-    def test18_remove(self):
-        # args: names, indexes, confirm
-        # uses getitems, so no need to test BADTYPES and BADNAMES
-        self.assertEqual(self.c0.remove(), [])  # nothing killed
-        select = self.c0.select
-        klist = self.c0.remove(names='select', confirm=CONFIRM)
-        self.assertEqual(klist, [select])
-        self.assertIsNone(self.c0.getitem(name=select.name))
-        self.assertEqual(self.c0.select.name, self.nlist0[0])
-        o = self.c0.getitem(name=self.nlist0[0])
-        klist = self.c0.remove(names=self.nlist0[0], confirm=CONFIRM)
-        self.assertEqual(klist, [o])
-        self.assertIsNone(self.c0.getitem(name=self.nlist0[0]))
-        self.assertEqual(self.c0.select.name, self.nlist0[1])
-        names = self.c0.names
-        klist = self.c0.remove(names='all', confirm=CONFIRM)
-        self.assertEqual(len(klist), len(names))
-        self.assertEqual(self.c0.count, 0)
-        self.assertIsNone(self.c0.select)
-        olist = self.c1.getitems(indexes=[0, 1, 2])
-        klist = self.c1.remove(indexes=[0, 1, 2], confirm=CONFIRM)
-        self.assertEqual(klist, olist)
-        self.assertIsNone(self.c1.select)
+    def test27_new(self):
+        # args: nmobject
+        bad = list(nmu.BADTYPES)
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.new(b)
 
+        with self.assertRaises(KeyError):
+            self.map0.new(self.olist0[3])  # already in container
 
-if __name__ == '__main__':
-    unittest.main()
+        nnext = self.map0.name_next()
+        self.assertEqual(nnext, OPREFIX0+'6')
+        o = NMObject(parent=NM0, name=nnext)
+        o2 = self.map0.new(o)
+        self.assertEqual(o2.name, nnext)
+        self.assertEqual(len(self.map0), len(ONLIST0)+1)
+        """
+        old_select = self.map0.select
+        o = self.map0.new('test', select=False)
+        self.assertEqual(o.name, 'test')
+        self.assertEqual(len(self.map0), len(ONLIST0)+2)
+        self.assertEqual(old_select, self.map0.select)  # does not change
+        """
+    def test28_name_prefix(self):
+        # args: prefix
+
+        bad = list(nmu.BADTYPES)
+        bad.remove(None)
+        bad.remove('string')
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.name_prefix = b
+
+        bad = list(nmu.BADNAMES)
+        bad.remove('')
+        bad.remove('default')
+        for b in bad:
+            with self.assertRaises(ValueError):
+                self.map0.name_prefix = b
+
+        self.assertEqual(self.map0.name_prefix, OPREFIX0)
+        self.map0.name_prefix = 'Test'
+        self.assertEqual(self.map0.name_prefix, 'Test')
+
+    def test29_name_seq_format(self):
+        # args: seq_format
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')  # ok
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.name_seq_format = b
+        with self.assertRaises(ValueError):
+            self.map0.name_seq_format = 'string'
+        with self.assertRaises(ValueError):
+            self.map0.name_seq_format = '*'
+        with self.assertRaises(ValueError):
+            self.map0.name_seq_format = '5'
+
+        self.assertEqual(self.map0.name_seq_format, OSEQFORMAT0)
+        self.assertEqual(len(self.map0.name_seq_format), 1)
+        with self.assertRaises(ValueError):
+            self.map0.name_seq_format = '01'
+        with self.assertRaises(ValueError):
+            self.map0.name_seq_format = 'A0'
+        self.map0.name_seq_format = 0  # ok
+        self.assertEqual(self.map0.name_seq_format, '0')
+        self.map0.name_seq_format = '000'
+        self.assertEqual(self.map0.name_seq_format, '000')
+
+    def test30_name_seq_next_str(self):  # and name_seq_counter
+
+        seq_str = self.map0._name_seq_next_str()
+        seq_next_str = str(len(ONLIST0))
+        self.assertEqual(seq_str, seq_next_str)
+        seq_str = self.map0._name_seq_counter()
+        self.assertEqual(seq_str, '0')  # first seq using counter
+        self.map0.name_seq_format = '000'
+        seq_str = self.map0._name_seq_next_str()
+        self.assertEqual(seq_str, '00' + seq_next_str)
+        seq_str = self.map0._name_seq_counter()
+        self.assertEqual(seq_str, '000')
+
+        seq_str = self.map1._name_seq_next_str()
+        seq_next = len(ONLIST1)
+        seq_next_str = CHARLIST[seq_next]
+        self.assertEqual(seq_str, seq_next_str)
+        seq_str = self.map1._name_seq_counter()
+        self.assertEqual(seq_str, 'A')  # first seq using counter
+        self.map1.name_seq_format = 'AAA'
+        self.assertEqual(self.map1._name_seq_next_str(), 'AA' + seq_next_str)
+        seq_str = self.map1._name_seq_counter()
+        self.assertEqual(seq_str, 'AAA')
+
+    def test31_name_seq_counter_increment(self):
+
+        for i in range(10):
+            self.assertEqual(self.map0._name_seq_counter(), str(i))
+            if i == 9:
+                with self.assertRaises(RuntimeError):
+                    self.map0._name_seq_counter_increment()
+            else:
+                self.map0._name_seq_counter_increment()
+
+        self.map0.name_seq_format = '000'
+        for i in range(1000):
+            if i < 10:
+                seq_str = self.map0._name_seq_counter()
+                self.assertEqual(seq_str, '00' + str(i))
+            elif i < 100:
+                seq_str = self.map0._name_seq_counter()
+                self.assertEqual(seq_str, '0' + str(i))
+            elif i < 1000:
+                seq_str = self.map0._name_seq_counter()
+                self.assertEqual(seq_str, str(i))
+            if i == 999:
+                with self.assertRaises(RuntimeError):
+                    self.map0._name_seq_counter_increment()
+            else:
+                self.map0._name_seq_counter_increment()
+        self.assertEqual(self.map0._name_seq_counter(), '999')
+
+        for s in CHARLIST:
+            self.assertEqual(self.map1._name_seq_counter(), s)
+            if s == 'Z':
+                with self.assertRaises(RuntimeError):
+                    self.map1._name_seq_counter_increment()
+            else:
+                self.map1._name_seq_counter_increment()
+
+        self.map1.name_seq_format = 'AA'
+        for s1 in CHARLIST:
+            for s0 in CHARLIST:
+                self.assertEqual(self.map1._name_seq_counter(), s1 + s0)
+                if s1 == 'Z' and s0 == 'Z':
+                    with self.assertRaises(RuntimeError):
+                        self.map1._name_seq_counter_increment()
+                else:
+                    self.map1._name_seq_counter_increment()
+        self.assertEqual(self.map1._name_seq_counter(), 'ZZ')
+
+    def test32_name_next(self):
+        name = self.map0.name_next()
+        seq_str = str(len(ONLIST0))
+        self.assertEqual(name, OPREFIX0 + seq_str)
+        name = self.map0.name_next(use_counter=True)
+        self.assertEqual(name, OPREFIX0 + seq_str)
+        self.map0._name_seq_counter_increment()
+        self.map0._name_seq_counter_increment()
+        name = self.map0.name_next(use_counter=True)
+        self.assertEqual(name, OPREFIX0 + '8')
+
+        name = self.map1.name_next()
+        i = len(ONLIST1)
+        seq_str = CHARLIST[i]
+        self.assertEqual(name, OPREFIX1 + seq_str)
+        name = self.map1.name_next(use_counter=True)
+        n = 6
+        self.assertEqual(name, OPREFIX1 + CHARLIST[n])
+        self.map1._name_seq_counter_increment()
+        name = self.map1.name_next(use_counter=True)
+        n += 1
+        self.assertEqual(name, OPREFIX1 + CHARLIST[n])
+        for i in range(10):
+            self.map1._name_seq_counter_increment()
+            n += 1
+        name = self.map1.name_next(use_counter=True)
+        self.assertEqual(name, OPREFIX1 + CHARLIST[n])
+
+    def test33_select(self):
+        # args: key
+
+        bad = list(nmu.BADTYPES)
+        bad.remove(None)  # ok
+        bad.remove('string')  # ok
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.select_key = b
+
+        self.map0.select_key = ONLIST0[3]
+        self.assertEqual(self.map0.select_key, ONLIST0[3])
+        self.assertEqual(self.map0.select_value, self.olist0[3])
+        self.assertEqual(self.map0.get('select'), self.olist0[3])
+        self.assertTrue(self.map0.is_select_key(ONLIST0[3]))
+        self.assertFalse(self.map0.is_select_key(ONLIST0[0]))
+        self.assertFalse(self.map0.is_select_key(1))
+
+        with self.assertRaises(KeyError):
+            self.map0.select_key = 'test'
+
+        self.map0.select_key = None
+        self.assertIsNone(self.map0.select_key)
+
+        self.map0.select_key = ONLIST0[3]
+        self.map0.pop(ONLIST0[3], confirm_answer='y')
+        self.assertIsNone(self.map0.select_key)
+
+        # print((nmu.quotes('test') + ' this' '1'))
+        # namez = 'test'
+        # print(f'Encountered duplicate field name: {namez!r}')
+
+    def test34_execute(self):
+        # args: key
+
+        bad = list(nmu.BADTYPES)
+        bad.remove(None)  # ok
+        bad.remove('string')  # ok
+        for b in bad:
+            with self.assertRaises(TypeError):
+                self.map0.execute_key = b
+
+        bad = list(nmu.BADTYPES)
+        for b in bad:
+            self.assertFalse(self.map0.is_execute_key(b))
+
+        with self.assertRaises(KeyError):
+            self.map0.execute_key = 'test'
+        self.assertFalse(self.map0.is_execute_key('test'))
+
+        self.map0.execute_key = 'select'
+
+        self.map0.select_key = ONLIST0[3]
+        self.assertEqual(self.map0.select_value, self.olist0[3])
+        self.assertTrue(self.map0.is_execute_key('select'))
+        self.assertTrue(self.map0.is_execute_key(ONLIST0[3]))
+        self.assertEqual(self.map0.execute_key, 'select')
+        self.assertEqual(self.map0.execute_values, [self.olist0[3]])
+
+        self.map0.execute_key = ONLIST0[4]
+        self.assertEqual(self.map0.execute_values, [self.olist0[4]])
+        self.assertFalse(self.map0.is_execute_key('select'))
+        self.assertFalse(self.map0.is_execute_key(ONLIST0[3]))
+        self.assertTrue(self.map0.is_execute_key(ONLIST0[4]))
+
+        self.map0.execute_key = SETS_NLIST0[0]
+        self.assertEqual(self.map0.execute_values,
+                         [self.olist0[0], self.olist0[2], self.olist0[3]])
+
+        self.map0.execute_key = 'all'
+        self.assertEqual(self.map0.execute_values, self.olist0)
+        self.assertFalse(self.map0.is_execute_key('select'))
+        self.assertTrue(self.map0.is_execute_key('all'))
+        for n in ONLIST0:
+            self.assertTrue(self.map0.is_execute_key(n))
+
+    def test35_sets(self):
+        # TODO
+        pass

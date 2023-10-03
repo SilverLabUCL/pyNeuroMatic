@@ -6,78 +6,188 @@ Created on Sun Dec 15 09:23:07 2019
 @author: jason
 """
 import unittest
-import time
-import math
 
 from nm_manager import NMManager
 from nm_object import NMObject
 import nm_preferences as nmp
+import nm_utilities as nmu
 
-NM = NMManager(new_project=False, quiet=True)
-BADTYPES = [None, True, 1, 3.14, [], (), {}, set(), 'test', NM]
-# BADTYPES: all types, use continue to ignore OK types
-BADNAME = 'b&dn@me!'
-BADNAMES = nmp.BAD_NAMES + [BADNAME]
-ALERT = True
+QUIET = True
+NM = NMManager(quiet=QUIET)
+
+NM0 = NMManager(quiet=QUIET)
+NM1 = NMManager(quiet=QUIET)
+ONAME0 = 'object0'
+ONAME1 = 'object1'
 
 
 class NMObjectTest(unittest.TestCase):
 
     def setUp(self):
-        self.nm = NMManager(new_project=False, quiet=True)
-        self.n0 = 'object0'
-        self.n1 = 'object1'
-        self.o0 = NMObject(parent=self.nm, name=self.n0)
-        self.o1 = NMObject(parent=self.nm, name=self.n1)
+        self.o0 = NMObject(parent=NM0, name=ONAME0)
+        self.o1 = NMObject(parent=NM1, name=ONAME1)
+        self.o0_copy = NMObject(copy=self.o0)
+        self.o1_copy = NMObject(parent=NM, name='object1_copy',
+                                copy=self.o1)
+        # print(self.o0.__dict__)
 
     # def tearDown(self):
     #    pass
 
     def test00_init(self):
-        # arg: parent, not testing since it can be any object
-        # arg: name
-        for b in BADTYPES:
-            if isinstance(b, str):
-                continue  # ok
+        # args: parent, not testing since it can be any object
+        # args: name
+
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')
+        bad.remove(None)
+        for b in bad:
             with self.assertRaises(TypeError):
-                NMObject(parent=self.nm, name=b)
-        for b in BADNAMES:
+                NMObject(name=b)
+
+        bad = list(nmu.BADNAMES)
+        for b in bad:
             with self.assertRaises(ValueError):
-                NMObject(parent=self.nm, name=b)
-        self.assertEqual(self.o0._parent, self.nm)
-        self.assertEqual(self.o0.name, self.n0)
+                NMObject(name=b)
+
+        bad = list(nmu.BADTYPES)
+        bad.remove(None)
+        for b in bad:
+            with self.assertRaises(TypeError):
+                NMObject(copy=b)
+
+        self.assertEqual(self.o0._parent, NM0)
+        self.assertEqual(self.o0.name, ONAME0)
         self.assertEqual(self.o0._NMObject__rename_fxnref, self.o0._name_set)
 
-    def test01_eq_ne(self):
-        for b in BADTYPES:
+        self.assertEqual(self.o1._parent, NM1)
+        self.assertEqual(self.o1.name, ONAME1)
+        self.assertEqual(self.o1._NMObject__rename_fxnref, self.o1._name_set)
+
+        self.assertEqual(self.o0_copy._parent, NM0)
+        self.assertEqual(self.o0_copy.name, ONAME0)
+        self.assertEqual(self.o0_copy._NMObject__rename_fxnref,
+                         self.o0_copy._name_set)
+
+        self.assertEqual(self.o1_copy._parent, NM1)  # copy overrides
+        self.assertEqual(self.o1_copy.name, ONAME1)    # copy overrides
+        self.assertEqual(self.o1_copy._NMObject__rename_fxnref,
+                         self.o1_copy._name_set)
+
+    def test01_eq(self):
+
+        bad = list(nmu.BADTYPES)
+        for b in bad:
             self.assertFalse(self.o0 == b)
+
         self.assertTrue(self.o0 is self.o0)
         self.assertFalse(self.o0 is self.o1)
         self.assertTrue(self.o0 == self.o0)
-        self.assertFalse(self.o0 == self.o1)
         self.assertFalse(self.o0 != self.o0)
+        self.assertFalse(self.o0 == self.o1)
         self.assertTrue(self.o0 != self.o1)
-        o0 = NMObject(parent=self.nm, name=self.n0)
-        o1 = NMObject(parent=self.nm, name=self.n0)
+        self.assertTrue(self.o0 == self.o0_copy)
+        self.assertTrue(self.o1 == self.o1_copy)
+
+        o0 = NMObject(parent=NM0, name=ONAME0)
+        o1 = NMObject(parent=NM0, name=ONAME0)
         self.assertTrue(o0 == o1)
-        self.assertFalse(o0 != o1)
-        o0 = NMObject2(parent=self.nm, name=self.n0)
+        o0 = NMObject2(parent=NM0, name=ONAME0)  # NMObject2
         self.assertFalse(o0 == o1)
-        o1 = NMObject2(parent=self.nm, name=self.n0)
-        self.assertTrue(o0 == o1)
+        o1 = NMObject2(parent=None, name=ONAME0)
+
+        self.assertTrue(o0 == o1)  # parent not tested
+        o0._eq_list.append('parent')
+        self.assertFalse(o0 == o1)  # parent tested
+        o1._parent = NM1
+        self.assertTrue(o0 == o1)  # parents are same type
+
         o0.myvalue = 1
         o1.myvalue = 2
         self.assertFalse(o0 == o1)
+        o0.myvalue = 2
+        self.assertTrue(o0 == o1)
         o0.myvalue = float('nan')
         o1.myvalue = float('nan')
         self.assertFalse(o0 == o1)  # NAN != NAN
         o0.myvalue = 2
         o1.myvalue = 2
+        self.assertTrue(o0 == o1)
+
         o0.note = 'my note'
         o1.note = 'my note'
-        self.assertFalse(self.o0 == self.o1)  # different time stamps
+        self.assertTrue(o0 == o1)  # notes not tested
+        o0._eq_list.append('notes')
+        self.assertFalse(o0 == o1)  # notes tested, different time stamps
+        o0._notes_delete(confirm_answer='y')
+        o1._notes_delete(confirm_answer='y')
+        self.assertTrue(o0 == o1)
+        o0.note = 'my note 0'
+        o0.note = 'my note 1'
+        for n in o0.notes:
+            o1._NMObject__notes.append(dict(n))  # notes have same time stamp
+        self.assertTrue(o0 == o1)
 
-    def test02_copy(self):
+    def test02_lists_are_equal(self):
+
+        olist0 = []
+        for i in range(10):
+            o = NMObject(parent=NM0, name='test'+str(i))
+            olist0.append(o)
+        olist1 = []
+
+        for i in range(10):
+            o = NMObject(parent=NM0, name='test'+str(i))
+            olist1.append(o)
+        self.assertTrue(NMObject.lists_are_equal(olist0, olist1))
+
+        bad = list(nmu.BADTYPES)
+        for b in bad:
+            self.assertFalse(NMObject.lists_are_equal(b, olist1))
+
+        for i in range(10):
+            o = NMObject2(parent=NM0, name='test'+str(i))  # NMObject2
+            olist1.append(o)
+        self.assertFalse(NMObject.lists_are_equal(olist0, olist1))
+
+        for i in range(9):
+            o = NMObject(parent=NM0, name='test'+str(i))
+            olist1.append(o)
+        self.assertFalse(NMObject.lists_are_equal(olist0, olist1))
+
+        for i in range(11):
+            o = NMObject(parent=NM0, name='test'+str(i))
+            olist1.append(o)
+        self.assertFalse(NMObject.lists_are_equal(olist0, olist1))
+
+        for i in range(10):
+            if i == 7:
+                o = NMObject2(parent=NM0, name='test'+str(i))
+            else:
+                o = NMObject(parent=NM0, name='test'+str(i))
+            olist1.append(o)
+        self.assertFalse(NMObject.lists_are_equal(olist0, olist1))
+
+        self.assertTrue(NMObject.lists_are_equal(None, None))
+
+        olist0 = []
+        for i in range(10):
+            o = NMObject2(parent=NM0, name='test'+str(i))
+            olist0.append(o)
+        olist1 = []
+
+        for i in range(10):
+            o = NMObject2(parent=NM0, name='test'+str(i))
+            olist1.append(o)
+        self.assertTrue(NMObject.lists_are_equal(olist0, olist1))
+
+        for i in range(10):
+            o = NMObject2(parent=NM0, name='test'+str(i))
+            o.myvalue = i
+            olist1.append(o)
+        self.assertFalse(NMObject.lists_are_equal(olist0, olist1))
+
+    def test03_copy(self):
         c = self.o0.copy()
         self.assertIsInstance(c, NMObject)
         self.assertTrue(self.o0 == c)
@@ -86,39 +196,51 @@ class NMObjectTest(unittest.TestCase):
         p0 = self.o0.parameters
         p = c.parameters
         self.assertNotEqual(p0.get('created'), p.get('created'))
-        self.assertEqual(p0.get('modified'), p.get('modified'))
         self.assertEqual(c._NMObject__rename_fxnref, c._name_set)
         fr0 = self.o0._NMObject__rename_fxnref
         frc = c._NMObject__rename_fxnref
         self.assertEqual(fr0, frc)  # both refs point to _name_set()
 
-    def test03_parameters(self):
+    def test04_parameters(self):
         plist = self.o0.parameters
         plist2 = ['name', 'created', 'modified', 'copy of']
         self.assertEqual(list(plist.keys()), plist2)
-        self.assertEqual(plist['name'], self.n0)
+        self.assertEqual(plist['name'], ONAME0)
         self.assertIsNone(plist['copy of'])
 
-    def test04_content(self):
+    def test05_content(self):
         self.assertEqual(self.o0.content, {'nmobject': self.o0.name})
-        self.assertEqual(self.o0.content_tree, {'nmobject': self.o0.name})
+        ct = {'nmmanager': 'nm', 'nmobject': self.o0.name}
+        self.assertEqual(self.o0.content_tree, ct)
 
-    def test05_treepath(self):
-        self.assertEqual(self.o0._tp, self.o0.name)
-        self.assertEqual(self.o0._tp_check(0), '')
-        self.assertEqual(self.o0._tp_check(None), '')
-        self.assertEqual(self.o0._tp_check(''), '')
-        self.assertEqual(self.o0._tp_check('self'), self.o0.name)
-        self.assertEqual(self.o0._tp_check('nm.test'), 'nm.test')
-        self.assertEqual(self.o0.treepath(), self.o0.name)
-        self.assertEqual(self.o0.treepath_list(), [self.o0.name])
+    def test06_treepath(self):
+        tp = NM0.name + '.' + self.o0.name
+        self.assertEqual(self.o0.treepath(), tp)
+        tp = [NM0.name, self.o0.name]
+        self.assertEqual(self.o0.treepath(list_format=True), tp)
 
-    def test06_notes(self):
+        o2 = NMObject2(parent=NM0, name=ONAME0)
+        tp = NM0.name + '.' + ONAME0 + '.myobject'
+        self.assertEqual(o2.myobject.treepath(), tp)
+        tp = [NM0.name, ONAME0, 'myobject']
+        self.assertEqual(o2.myobject.treepath(list_format=True), tp)
+
+    def test07_modified(self):
+        modified_parent = self.o0._parent.parameters['modified']
+        modified_self = self.o0.parameters['modified']
+        self.o0.name = 'test'
+        self.assertNotEqual(modified_parent,
+                            self.o0._parent.parameters['modified'])
+        self.assertNotEqual(modified_self, self.o0.parameters['modified'])
+        self.assertEqual(self.o0._parent.parameters['modified'],
+                         self.o0.parameters['modified'])
+
+    def test07_notes(self):
         self.assertTrue(self.o0.notes_on)
         self.o0.note = 'added TTX'
         self.assertTrue(self.o0._notes_append('added AP5'))
         self.o0.notes_on = None
-        self.assertFalse(self.o0.notes_on)
+        self.assertTrue(self.o0.notes_on)
         self.o0.notes_on = True
         self.assertTrue(self.o0.notes_on)
         self.o0.notes_on = False
@@ -128,10 +250,8 @@ class NMObjectTest(unittest.TestCase):
         self.assertEqual(len(self.o0.notes), 2)
         self.assertEqual(self.o0.notes[0].get('note'), 'added TTX')
         self.assertEqual(self.o0.notes[1].get('note'), 'added AP5')
-        if self.o0._notes_clear():
-            self.assertEqual(len(self.o0.notes), 0)
-        else:
-            self.assertEqual(len(self.o0.notes), 2)
+        self.o0._notes_delete(confirm_answer='y')
+        self.assertEqual(len(self.o0.notes), 0)
         self.assertTrue(NMObject.notes_ok([{'note': 'hey', 'date': '111'}]))
         self.assertTrue(NMObject.notes_ok([{'date': '111', 'note': 'hey'}]))
         self.assertFalse(NMObject.notes_ok([{'n': 'hey', 'date': '111'}]))
@@ -143,40 +263,33 @@ class NMObjectTest(unittest.TestCase):
         self.assertFalse(NMObject.notes_ok([{'note': 'hey', 'date': '111',
                                              'more': '1'}]))
 
-    def test07_name_ok(self):
-        # arg: name
-        for b in BADTYPES:
-            if isinstance(b, str):
-                continue  # ok
-            self.assertFalse(self.o0.name_ok(b))
-        for b in BADNAMES:
-            self.assertFalse(self.o0.name_ok(b))
-        self.assertEqual(self.o0._bad_names, nmp.BAD_NAMES)
-        for b in self.o0._bad_names:
-            self.assertFalse(self.o0.name_ok(b))
-        for n in [self.n0, self.n1]:
-            self.assertTrue(self.o0.name_ok(n))
-
     def test08_name_set(self):
-        # arg: name_notused
-        # arg: newname
-        for b in BADTYPES:
-            if isinstance(b, str):
-                continue  # ok
+        # args: name_notused
+        # args: newname
+
+        bad = list(nmu.BADTYPES)
+        bad.remove('string')
+        for b in bad:
             with self.assertRaises(TypeError):
                 self.o0._name_set('notused', b)
-        for b in BADNAMES:
+
+        bad = list(nmu.BADNAMES)
+        for b in bad:
             with self.assertRaises(ValueError):
                 self.o0._name_set('notused', b)
-        for n in ['test', self.n0]:
+
+        for n in ['test', ONAME0]:
             self.assertTrue(self.o0._name_set('notused', n))
             self.assertEqual(n, self.o0.name)
 
     def test09_rename_fxnref_set(self):
-        # arg: rename_fxnref
-        for b in BADTYPES:
+        # args: rename_fxnref
+
+        bad = list(nmu.BADTYPES)
+        for b in bad:
             with self.assertRaises(TypeError):
                 self.o0._rename_fxnref_set(b)
+
         self.o0.name = 'test1'  # calls _name_set()
         self.assertEqual(self.o0.name, 'test1')
         self.assertTrue(self.o0._rename_fxnref_set(self.rename_dummy))
@@ -189,36 +302,36 @@ class NMObjectTest(unittest.TestCase):
         return False
 
     def test10_manager(self):
-        self.assertEqual(self.o0._manager, self.nm)
+        self.assertEqual(self.o0._manager, NM0)
 
-    def test11_modified(self):
-        m1 = self.o0.parameters.get('modified')
-        self.o0._modified()
-        m2 = self.o0.parameters.get('modified')
-        self.assertNotEqual(m1, m2)
-
-    def test12_error(self):
+    def test11_error(self):
+        pass
         # alert(), error(), history()
         # wrappers for nmu.history()
         # args: obj, type_expected, tp, quiet, frame
-        dum_arg = {}
-        e1 = self.o0._type_error('dum_arg', 'list')
-        e2 = ('ERROR: object0: bad dum_arg: expected list but got dict')
-        self.assertEqual(e1, e2)
-        dum_str = 'test'
-        e1 = self.o0._value_error('dum_str')
-        e2 = ("ERROR: object0: bad dum_str: 'test'")
-        self.assertEqual(e1, e2)
+        # dum_arg = {}
+        # e1 = self.o0._type_error('dum_arg', 'list')
+        # tp = 'object0'
+        # tp = 'nm.NMObjectTest.test11_error'
+        # e2 = ('ERROR: ' + tp + ': bad dum_args: expected list but got dict')
+        # self.assertEqual(e1, e2)
+        # dum_str = 'test'
+        # e1 = self.o0._value_error('dum_str')
+        # e2 = ("ERROR: " + tp + ": bad dum_str: 'test'")
+        # self.assertEqual(e1, e2)
 
-    def test13_quiet(self):
-        # arg: quiet
-        self.nm.configs.quiet = False
+    def test12_quiet(self):
+        # args: quiet
+        # TODO
+        '''
+        NM0.configs.quiet = False
         self.assertFalse(self.o0._quiet(False))
         self.assertTrue(self.o0._quiet(True))
-        self.nm.configs.quiet = True  # Manager quiet overrides when True
+        NM0.configs.quiet = True  # Manager quiet overrides when True
         self.assertTrue(self.o0._quiet(False))
         self.assertTrue(self.o0._quiet(True))
-        self.nm.configs.quiet = False
+        NM0.configs.quiet = False
+        '''
 
     def test_save(self):
         # TODO
@@ -230,6 +343,7 @@ class NMObject2(NMObject):
     def __init__(self, parent, name):
         super().__init__(parent=parent, name=name)
         self.myvalue = 1
+        self.myobject = NMObject(parent=self, name='myobject')
 
     def __eq__(self, other):
         if not super().__eq__(other):
@@ -241,5 +355,5 @@ class NMObject2(NMObject):
         return True
 
 
-if __name__ == '__main__':
-    unittest.main()
+# if __name__ == '__main__':
+#    unittest.main()

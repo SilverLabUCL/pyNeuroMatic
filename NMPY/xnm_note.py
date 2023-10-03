@@ -4,12 +4,9 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 from nm_object import NMObject, NMObjectType
-from nm_object_container import NMObjectContainer, NMObjectContainerType 
+from nm_object_container import NMObjectContainer
 import nm_utilities as nmu
 from typing import Dict, List, NewType
-
-NMNoteType = NewType('NMNote', NMObjectType)
-NMNoteContainerType = NewType('NMNoteContainer', NMObjectContainerType)
 
 NOTE_PREFIX = 'Note'
 
@@ -34,7 +31,7 @@ class NMNote(NMObject):
             self.__thenote = str(thenote)
 
     # override, no super
-    def copy(self) -> NMNoteType:
+    def copy(self) -> nmu.NMNoteType:
         return NMNote(self._parent, self.name, thenote=self.__thenote)
 
     # override
@@ -79,8 +76,13 @@ class NMNoteContainer(NMObjectContainer):
         **copy
     ) -> None:
         n = NMNote(parent=parent, name='ContainerUtility')
-        super().__init__(parent, name, nmobject=n, prefix=NOTE_PREFIX,
-                         rename=False, **copy)
+        super().__init__(
+            parent,
+            name,
+            nmobject=n,
+            prefix=NOTE_PREFIX,
+            rename=False,
+            **copy)
         self.__off = False
 
     # override, no super
@@ -95,7 +97,7 @@ class NMNoteContainer(NMObjectContainer):
         thenote: str = '',
         select: bool = True,
         quiet: bool = True
-    ) -> NMNoteType:
+    ) -> nmu.NMNoteType:
         # notes should be quiet
         if self.__off:
             return None
