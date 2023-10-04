@@ -30,10 +30,9 @@ class NMProject(NMObject):
     def __init__(
         self,
         parent: Union[object, None] = None,
-        name: str = 'NMProject',
-        copy: Union[nmu.NMProjectType, None] = None  # see copy()
+        name: str = "NMProject",
+        copy: Union[nmu.NMProjectType, None] = None,  # see copy()
     ) -> None:
-
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__folder_container = None
@@ -44,7 +43,7 @@ class NMProject(NMObject):
             self.__folder_container = copy.folders.copy()
             self.__folder_container._parent = self
         else:
-            e = nmu.typeerror(copy, 'copy', 'NMProject')
+            e = nmu.typeerror(copy, "copy", "NMProject")
             raise TypeError(e)
 
         if not isinstance(self.__folder_container, NMFolderContainer):
@@ -53,10 +52,7 @@ class NMProject(NMObject):
         return None
 
     # override
-    def __eq__(
-        self,
-        other: nmu.NMProjectType
-    ) -> bool:
+    def __eq__(self, other: nmu.NMProjectType) -> bool:
         if not super().__eq__(other):
             return False
         return self.folders == other.folders
@@ -85,11 +81,11 @@ class NMProjectContainer(NMObjectContainer):
     def __init__(
         self,
         parent: Union[object, None] = None,
-        name: str = 'NMProjectContainer',
+        name: str = "NMProjectContainer",
         rename_on: bool = True,
-        name_prefix: str = 'project',
-        name_seq_format: str = '0',
-        copy: Union[nmu.NMProjectContainerType, None] = None  # see copy()
+        name_prefix: str = "project",
+        name_seq_format: str = "0",
+        copy: Union[nmu.NMProjectContainerType, None] = None,  # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -97,7 +93,7 @@ class NMProjectContainer(NMObjectContainer):
             rename_on=rename_on,
             name_prefix=name_prefix,
             name_seq_format=name_seq_format,
-            copy=copy
+            copy=copy,
         )  # NMObjectContainer
 
     # override, no super
@@ -111,7 +107,7 @@ class NMProjectContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = 'default',
+        name: str = "default",
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> nmu.NMProjectType:

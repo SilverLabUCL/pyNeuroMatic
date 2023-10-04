@@ -15,48 +15,45 @@ NM = NMManager(quiet=QUIET)
 
 
 class NMUtilitiesTest(unittest.TestCase):
-
     def setUp(self):  # executed before each test
         pass
 
     def test00_name_ok(self):
-
         bad = list(nmu.BADTYPES)
-        bad.remove('string')
+        bad.remove("string")
         for b in bad:
             self.assertFalse(nmu.name_ok(b))
 
         bad = list(nmu.BADTYPES)
-        bad.remove('string')
+        bad.remove("string")
         bad.remove([])
         for b in bad:
             with self.assertRaises(TypeError):
-                nmu.name_ok('test', ok_names=b)
+                nmu.name_ok("test", ok_names=b)
             with self.assertRaises(TypeError):
-                nmu.name_ok('test', ok_strings=b)
+                nmu.name_ok("test", ok_strings=b)
 
         bad = list(nmu.BADNAMES)
         for b in bad:
             self.assertFalse(nmu.name_ok(b))
 
-        self.assertFalse(nmu.name_ok('_'))
-        self.assertFalse(nmu.name_ok('*'))
-        self.assertFalse(nmu.name_ok('0'))
-        self.assertTrue(nmu.name_ok('test'))
-        self.assertTrue(nmu.name_ok('test1234567890'))
+        self.assertFalse(nmu.name_ok("_"))
+        self.assertFalse(nmu.name_ok("*"))
+        self.assertFalse(nmu.name_ok("0"))
+        self.assertTrue(nmu.name_ok("test"))
+        self.assertTrue(nmu.name_ok("test1234567890"))
 
         # NM preferences: NAME_SYMBOLS_OK = ['_']
-        self.assertTrue(nmu.name_ok('test_'))
-        self.assertTrue(nmu.name_ok('test_OK'))
-        self.assertTrue(nmu.name_ok('test_OK_OK'))
+        self.assertTrue(nmu.name_ok("test_"))
+        self.assertTrue(nmu.name_ok("test_OK"))
+        self.assertTrue(nmu.name_ok("test_OK_OK"))
 
-        self.assertFalse(nmu.name_ok('test*'))
-        self.assertFalse(nmu.name_ok('@test'))
-        self.assertFalse(nmu.name_ok('te.st'))
-        self.assertTrue(nmu.name_ok('te.st', ok_strings=['.']))
+        self.assertFalse(nmu.name_ok("test*"))
+        self.assertFalse(nmu.name_ok("@test"))
+        self.assertFalse(nmu.name_ok("te.st"))
+        self.assertTrue(nmu.name_ok("te.st", ok_strings=["."]))
 
     def test00_number_ok(self):
-
         bad = list(nmu.BADTYPES)
         bad.remove(3)
         bad.remove(3.14)
@@ -71,12 +68,12 @@ class NMUtilitiesTest(unittest.TestCase):
         self.assertFalse(nmu.number_ok(1.34, must_be_integer=True))
         self.assertTrue(nmu.number_ok(1, must_be_integer=True))
         self.assertFalse(nmu.number_ok(False, must_be_integer=True))
-        self.assertFalse(nmu.number_ok(float('inf')))
-        self.assertTrue(nmu.number_ok(float('inf'), inf_is_ok=True))
-        self.assertFalse(nmu.number_ok(float('-inf')))
-        self.assertTrue(nmu.number_ok(float('-inf'), inf_is_ok=True))
-        self.assertFalse(nmu.number_ok(float('nan')))
-        self.assertTrue(nmu.number_ok(float('nan'), nan_is_ok=True))
+        self.assertFalse(nmu.number_ok(float("inf")))
+        self.assertTrue(nmu.number_ok(float("inf"), inf_is_ok=True))
+        self.assertFalse(nmu.number_ok(float("-inf")))
+        self.assertTrue(nmu.number_ok(float("-inf"), inf_is_ok=True))
+        self.assertFalse(nmu.number_ok(float("nan")))
+        self.assertTrue(nmu.number_ok(float("nan"), nan_is_ok=True))
         self.assertTrue(nmu.number_ok(0, neg_is_ok=False))
         self.assertTrue(nmu.number_ok(1.34, neg_is_ok=False))
         self.assertFalse(nmu.number_ok(-1.34, neg_is_ok=False))
@@ -89,17 +86,17 @@ class NMUtilitiesTest(unittest.TestCase):
         self.assertTrue(nmu.number_ok(-1.34, zero_is_ok=False))
         self.assertFalse(nmu.number_ok(complex(1, -1)))
         self.assertTrue(nmu.number_ok(complex(1, -1), complex_is_ok=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, 'one']))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, "one"]))
         self.assertFalse(nmu.number_ok([0, -5, 1.34, None]))
         self.assertFalse(nmu.number_ok([0, -5, 1.34, False]))
         self.assertTrue(nmu.number_ok([0, -5, 1.34]))
         self.assertFalse(nmu.number_ok([0, -5, 1.34], must_be_integer=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('inf')]))
-        self.assertTrue(nmu.number_ok([0, -5, float('inf')], inf_is_ok=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('-inf')]))
-        self.assertTrue(nmu.number_ok([0, -5, float('-inf')], inf_is_ok=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('nan')]))
-        self.assertTrue(nmu.number_ok([0, -5, float('nan')], nan_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float("inf")]))
+        self.assertTrue(nmu.number_ok([0, -5, float("inf")], inf_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float("-inf")]))
+        self.assertTrue(nmu.number_ok([0, -5, float("-inf")], inf_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float("nan")]))
+        self.assertTrue(nmu.number_ok([0, -5, float("nan")], nan_is_ok=True))
         self.assertTrue(nmu.number_ok([0, 3, 4], neg_is_ok=False))
         self.assertFalse(nmu.number_ok([-1, 3, 4], neg_is_ok=False))
         self.assertFalse(nmu.number_ok([0, 3, 4], pos_is_ok=False))
@@ -107,13 +104,13 @@ class NMUtilitiesTest(unittest.TestCase):
         self.assertFalse(nmu.number_ok([0, 3, 4], zero_is_ok=False))
         self.assertTrue(nmu.number_ok([-4, 4], zero_is_ok=False))
         self.assertFalse(nmu.number_ok([0, -5, 1.34, complex(1, -1)]))
-        self.assertTrue(nmu.number_ok([0, -5, 1.34, complex(1, -1)],
-                        complex_is_ok=True))
+        self.assertTrue(
+            nmu.number_ok([0, -5, 1.34, complex(1, -1)], complex_is_ok=True)
+        )
 
     def test03_keys_equal(self):
-
-        klist1 = ['one', 'two', 'three']
-        klist2 = ['ONE', 'TWO', 'THREE']
+        klist1 = ["one", "two", "three"]
+        klist2 = ["ONE", "TWO", "THREE"]
 
         bad = list(nmu.BADTYPES)
         for b in bad:
@@ -121,46 +118,43 @@ class NMUtilitiesTest(unittest.TestCase):
             self.assertFalse(nmu.keys_are_equal(klist1, b))
 
         self.assertTrue(nmu.keys_are_equal(klist1, klist2))
-        self.assertFalse(nmu.keys_are_equal(klist1, klist2,
-                                            case_insensitive=False))
+        self.assertFalse(nmu.keys_are_equal(klist1, klist2, case_insensitive=False))
         klist2.reverse()
         self.assertTrue(nmu.keys_are_equal(klist1, klist2))
 
         dlist1 = {}
-        dlist1.update({'one': 1})
-        dlist1.update({'two': 2})
-        dlist1.update({'three': 3})
+        dlist1.update({"one": 1})
+        dlist1.update({"two": 2})
+        dlist1.update({"three": 3})
         klist1 = dlist1.keys()
 
         dlist2 = {}
-        dlist2.update({'ONE': 1})
-        dlist2.update({'TWO': 2})
-        dlist2.update({'THREE': 3})
+        dlist2.update({"ONE": 1})
+        dlist2.update({"TWO": 2})
+        dlist2.update({"THREE": 3})
         klist2 = dlist2.keys()
 
         self.assertTrue(nmu.keys_are_equal(klist1, klist2))
-        self.assertFalse(nmu.keys_are_equal(klist1, klist2,
-                                            case_insensitive=False))
+        self.assertFalse(nmu.keys_are_equal(klist1, klist2, case_insensitive=False))
 
         klist2 = list(klist2)
         klist2.reverse()
         self.assertTrue(nmu.keys_are_equal(klist1, klist2))
 
-        klist1 = ['one', 'two', 3]
-        klist2 = ['ONE', 'TWO', 'THREE']
+        klist1 = ["one", "two", 3]
+        klist2 = ["ONE", "TWO", "THREE"]
         self.assertFalse(nmu.keys_are_equal(klist1, klist2))
 
     def test04_input_yesno(self):
-        self.assertEqual(nmu.input_yesno('test', answer=''), 'error')
-        self.assertEqual(nmu.input_yesno('test', answer='YES'), 'y')
-        self.assertEqual(nmu.input_yesno('test', answer='Y'), 'y')
-        self.assertEqual(nmu.input_yesno('test', answer='NO'), 'n')
-        self.assertEqual(nmu.input_yesno('test', answer='N'), 'n')
-        self.assertEqual(nmu.input_yesno('test', answer='CANCEL'), 'c')
-        self.assertEqual(nmu.input_yesno('test', answer='C'), 'c')
-        self.assertEqual(nmu.input_yesno('test', cancel=False, answer='C'),
-                         'error')
-        p = nmu.input_yesno('testprompt')
+        self.assertEqual(nmu.input_yesno("test", answer=""), "error")
+        self.assertEqual(nmu.input_yesno("test", answer="YES"), "y")
+        self.assertEqual(nmu.input_yesno("test", answer="Y"), "y")
+        self.assertEqual(nmu.input_yesno("test", answer="NO"), "n")
+        self.assertEqual(nmu.input_yesno("test", answer="N"), "n")
+        self.assertEqual(nmu.input_yesno("test", answer="CANCEL"), "c")
+        self.assertEqual(nmu.input_yesno("test", answer="C"), "c")
+        self.assertEqual(nmu.input_yesno("test", cancel=False, answer="C"), "error")
+        p = nmu.input_yesno("testprompt")
         print(p)
 
     """

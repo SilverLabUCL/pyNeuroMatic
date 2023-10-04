@@ -17,27 +17,28 @@ import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
 NM = NMManager(quiet=QUIET)
-DNAME0 = 'data0'
-DNAME1 = 'record1'
-NPARRAY0 = numpy.full([4], 3.14, dtype=numpy.float64, order='C')
-NPARRAY1 = numpy.full([5], 6.28, dtype=numpy.float64, order='C')
-YSCALE0 = {'label': 'Vm', 'units': 'mV'}
-XSCALE0 = {'label': 'time', 'units': 'ms', 'start': 10, 'delta': 0.01}
-YSCALE1 = {'label': 'Im', 'units': 'pA'}
-XSCALE1 = {'label': 'time', 'units': 's', 'start': -10, 'delta': 0.2}
+DNAME0 = "data0"
+DNAME1 = "record1"
+NPARRAY0 = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
+NPARRAY1 = numpy.full([5], 6.28, dtype=numpy.float64, order="C")
+YSCALE0 = {"label": "Vm", "units": "mV"}
+XSCALE0 = {"label": "time", "units": "ms", "start": 10, "delta": 0.01}
+YSCALE1 = {"label": "Im", "units": "pA"}
+XSCALE1 = {"label": "time", "units": "s", "start": -10, "delta": 0.2}
 
 
 class NMDataTest(unittest.TestCase):
-
     def setUp(self):
-        self.d0 = NMData(parent=NM, name=DNAME0, np_array=NPARRAY0,
-                         xscale=XSCALE0, yscale=YSCALE0)
-        self.d1 = NMData(parent=NM, name=DNAME1, np_array=NPARRAY1,
-                         xscale=XSCALE1, yscale=YSCALE1)
+        self.d0 = NMData(
+            parent=NM, name=DNAME0, np_array=NPARRAY0, xscale=XSCALE0, yscale=YSCALE0
+        )
+        self.d1 = NMData(
+            parent=NM, name=DNAME1, np_array=NPARRAY1, xscale=XSCALE1, yscale=YSCALE1
+        )
         self.d0_copy = NMData(copy=self.d0)
-        self.d1_copy = NMData(parent=NM, name='record1_c', copy=self.d1)
+        self.d1_copy = NMData(parent=NM, name="record1_c", copy=self.d1)
 
-        self.ds0 = NMDataSeries(parent=NM, name='dataseries0')
+        self.ds0 = NMDataSeries(parent=NM, name="dataseries0")
 
     # def tearDown(self):
     #    pass
@@ -87,42 +88,42 @@ class NMDataTest(unittest.TestCase):
         self.assertFalse(self.d0_copy.np_array is NPARRAY0)
         self.assertTrue(isinstance(self.d0_copy.np_array, numpy.ndarray))
         # self.assertEqual(self.d0_copy.np_array, NPARRAY0)  # TODO
-        
+
         # print(type(NPARRAY0))
         # print(list(self.data0.keys()))
         # self.data0.sets.add('set1', DNAME0)
-        
+
     def xtest01_eq(self):
         self.assertTrue(self.d0 == self.d0)
         self.assertFalse(self.d0 == self.d1)
         self.assertTrue(self.d0_copy == self.d0)
 
         x = XSCALE0.copy()
-        d0 = NMData(parent=None, name=DNAME0, np_array=NPARRAY0,
-                    xscale=x, yscale=YSCALE0)
+        d0 = NMData(
+            parent=None, name=DNAME0, np_array=NPARRAY0, xscale=x, yscale=YSCALE0
+        )
         self.assertTrue(d0 == self.d0)
         d0.x.delta = 0.05
         self.assertFalse(d0 == self.d0)
-        d0.x.delta = XSCALE0['delta']
+        d0.x.delta = XSCALE0["delta"]
         self.assertTrue(d0 == self.d0)
-        d0.y.units = 'test'
+        d0.y.units = "test"
         self.assertFalse(d0 == self.d0)
-        d0.y.units = YSCALE0['units']
+        d0.y.units = YSCALE0["units"]
         self.assertTrue(d0 == self.d0)
 
-        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float64, order='C')
+        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
         self.assertTrue(d0 == self.d0)
-        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float64, order='C')
+        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
         d0.np_array[-1] = 0
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([5], 3.14, dtype=numpy.float64, order='C')
+        d0.np_array = numpy.full([5], 3.14, dtype=numpy.float64, order="C")
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([4], 3.143, dtype=numpy.float64, order='C')
+        d0.np_array = numpy.full([4], 3.143, dtype=numpy.float64, order="C")
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float16, order='C')
+        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float16, order="C")
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([4], numpy.nan, dtype=numpy.float64,
-                                 order='C')
+        d0.np_array = numpy.full([4], numpy.nan, dtype=numpy.float64, order="C")
         self.assertFalse(d0 == self.d0)
         self.d0.np_array.fill(numpy.nan)
         if nmp.NAN_EQ_NAN:
@@ -140,11 +141,11 @@ class NMDataTest(unittest.TestCase):
         self.assertEqual(self.d0.name, c.name)
         p0 = self.d0.parameters
         p = c.parameters
-        self.assertNotEqual(p0.get('created'), p.get('created'))
+        self.assertNotEqual(p0.get("created"), p.get("created"))
 
     def xtest03_parameters(self):
-        plist = ['name', 'created', 'copy of']
-        plist += ['xscale', 'yscale', 'np_array', 'dataseries']
+        plist = ["name", "created", "copy of"]
+        plist += ["xscale", "yscale", "np_array", "dataseries"]
         klist = list(self.d0.parameters.keys())
         self.assertEqual(klist, plist)
 
@@ -153,8 +154,8 @@ class NMDataTest(unittest.TestCase):
             self.d0.x = None
         self.assertIsInstance(self.d0.x, NMScaleX)
         start = 100
-        self.d0.x.scale['start'] = start  # no change
-        self.assertEqual(self.d0.x.start, XSCALE0['start'])
+        self.d0.x.scale["start"] = start  # no change
+        self.assertEqual(self.d0.x.start, XSCALE0["start"])
         self.d0.x.start = start
         self.assertEqual(self.d0.x.start, start)
 
@@ -162,9 +163,9 @@ class NMDataTest(unittest.TestCase):
         with self.assertRaises(AttributeError):
             self.d0.y = None
         self.assertIsInstance(self.d0.y, NMScale)
-        label = 'test'
-        self.d0.y.scale['label'] = label  # no change
-        self.assertEqual(self.d0.y.label, YSCALE0['label'])
+        label = "test"
+        self.d0.y.scale["label"] = label  # no change
+        self.assertEqual(self.d0.y.label, YSCALE0["label"])
         self.d0.y.label = label
         self.assertEqual(self.d0.y.label, label)
 
@@ -185,44 +186,46 @@ class NMDataTest(unittest.TestCase):
                 self.d0.np_array = b
 
     def xtest07_datacontainer(self):
-        c0 = NMDataContainer(parent=NM, name='DataContainer0')
+        c0 = NMDataContainer(parent=NM, name="DataContainer0")
         dnlist0 = []
         dolist0 = []
         ndata = 10
         for i in range(ndata):
-            n = 'data'+str(i)
-            d = NMData(parent=NM, name=n, np_array=NPARRAY0,
-                       xscale=XSCALE0, yscale=YSCALE0)
+            n = "data" + str(i)
+            d = NMData(
+                parent=NM, name=n, np_array=NPARRAY0, xscale=XSCALE0, yscale=YSCALE0
+            )
             c0.update(d)
             dnlist0.append(n)
             dolist0.append(d)
         nlist = [dnlist0[i] for i in range(0, ndata, 2)]
-        c0.sets.add('set0', nlist)
+        c0.sets.add("set0", nlist)
         nlist = [dnlist0[i] for i in range(1, ndata, 2)]
-        c0.sets.add('set1', nlist)
-        nlist = ['set0', '|', 'set1']
-        c0.sets.add('set2', nlist)
+        c0.sets.add("set1", nlist)
+        nlist = ["set0", "|", "set1"]
+        c0.sets.add("set2", nlist)
         klist = list(c0.sets.keys())
-        self.assertEqual(klist, ['set0', 'set1', 'set2'])
+        self.assertEqual(klist, ["set0", "set1", "set2"])
 
-        c1 = NMDataContainer(parent=NM, name='DataContainer1')
+        c1 = NMDataContainer(parent=NM, name="DataContainer1")
         dnlist1 = []
         dolist1 = []
         ndata = 13
         for i in range(ndata):
-            n = 'record'+str(i)
-            d = NMData(parent=NM, name=n, np_array=NPARRAY1,
-                       xscale=XSCALE1, yscale=YSCALE1)
+            n = "record" + str(i)
+            d = NMData(
+                parent=NM, name=n, np_array=NPARRAY1, xscale=XSCALE1, yscale=YSCALE1
+            )
             c1.update(d)
             dnlist1.append(n)
             dolist1.append(d)
         nlist = [dnlist1[i] for i in range(0, ndata, 2)]
-        c1.sets.add('set0', nlist)
+        c1.sets.add("set0", nlist)
         nlist = [dnlist1[i] for i in range(1, ndata, 2)]
-        c1.sets.add('set1', nlist)
-        nlist = ['set0', '|', 'set1']
-        c1.sets.add('set2', nlist)
-        
+        c1.sets.add("set1", nlist)
+        nlist = ["set0", "|", "set1"]
+        c1.sets.add("set2", nlist)
+
         # eq
         self.assertFalse(c0 == c1)
 
@@ -231,19 +234,19 @@ class NMDataTest(unittest.TestCase):
         self.assertTrue(c0_copy == c0)
 
         # content_type
-        self.assertEqual(c0.content_type(), 'NMData')
+        self.assertEqual(c0.content_type(), "NMData")
 
         # new
-        dnew = c0.new('test')
+        dnew = c0.new("test")
         self.assertTrue(isinstance(dnew, NMData))
         self.assertFalse(c0_copy == c0)
         with self.assertRaises(KeyError):
-            dnew = c0.new('test')
-        c0.pop('test', confirm_answer='y')
+            dnew = c0.new("test")
+        c0.pop("test", confirm_answer="y")
         self.assertTrue(c0_copy == c0)
-        c0.sets.remove('set0', dnlist0[0])
+        c0.sets.remove("set0", dnlist0[0])
         self.assertFalse(c0_copy == c0)
-        c0.sets.add('set0', dnlist0[0])
+        c0.sets.add("set0", dnlist0[0])
         self.assertTrue(c0_copy == c0)
 
     """
@@ -403,4 +406,3 @@ class NMDataTest(unittest.TestCase):
         # wrapper for NMObjectContainer.remove()
         # TODO, test if Data is removed from dataseries and sets
     """
-    

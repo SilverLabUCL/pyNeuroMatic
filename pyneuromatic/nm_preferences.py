@@ -3,7 +3,7 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-DATASERIES_SET_LIST = ['all', 'set1', 'set2', 'setX']
+DATASERIES_SET_LIST = ["all", "set1", "set2", "setX"]
 DELETE_CONFIRM = True
 QUIET = False
 GUI = False

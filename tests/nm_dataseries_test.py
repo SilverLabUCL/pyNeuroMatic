@@ -17,19 +17,18 @@ import pyneuromatic.nm_utilities as nmu
 
 NM = NMManager(quiet=True)
 
-YSCALE = [{'label': 'current', 'units': 'pA'},
-          {'label': 'voltage', 'units': 'mV'},
-          {'label': 'TTL1', 'units': 'V'},
-          {'label': 'TTL2', 'units': 'V'}
-          ]
-XSCALE = {'label': 'sample', 'units': '#', 'start': 0, 'delta': 0.01}
+YSCALE = [
+    {"label": "current", "units": "pA"},
+    {"label": "voltage", "units": "mV"},
+    {"label": "TTL1", "units": "V"},
+    {"label": "TTL2", "units": "V"},
+]
+XSCALE = {"label": "sample", "units": "#", "start": 0, "delta": 0.01}
 
 
 class NMDataSeriesTest(unittest.TestCase):
-
     def setUp(self):  # executed before each test
-
-        self.dataprefix = 'data'
+        self.dataprefix = "data"
 
         num_epochs = 10
         num_chans = len(YSCALE)
@@ -50,23 +49,23 @@ class NMDataSeriesTest(unittest.TestCase):
                 e.data.append(d)
                 c.data.append(d)
 
-        self.ds0.channels.select_key = 'B'
-        self.ds0.epochs.select_key = 'E2'
+        self.ds0.channels.select_key = "B"
+        self.ds0.epochs.select_key = "E2"
         print(self.ds0.get_select(get_keys=True))
 
         # create sets
 
         for i in range(0, num_epochs, 2):
-            self.ds0.epochs.sets.add('set0', 'E' + str(i))
+            self.ds0.epochs.sets.add("set0", "E" + str(i))
         for i in range(1, num_epochs, 2):
-            self.ds0.epochs.sets.add('set1', 'E' + str(i))
-        self.ds0.epochs.sets.add('set2', ['set0', '|', 'set1'])
+            self.ds0.epochs.sets.add("set1", "E" + str(i))
+        self.ds0.epochs.sets.add("set2", ["set0", "|", "set1"])
 
-        self.ds0.channels.sets.add('set0', 'A')
-        self.ds0.channels.sets.add('set0', 'B')
-        self.ds0.channels.sets.add('set1', 'C')
-        self.ds0.channels.sets.add('set1', 'D')
-        self.ds0.channels.sets.add('set2', ['set0', '|', 'set1'])
+        self.ds0.channels.sets.add("set0", "A")
+        self.ds0.channels.sets.add("set0", "B")
+        self.ds0.channels.sets.add("set1", "C")
+        self.ds0.channels.sets.add("set1", "D")
+        self.ds0.channels.sets.add("set2", ["set0", "|", "set1"])
 
     def test00_init(self):
         with self.assertRaises(TypeError):

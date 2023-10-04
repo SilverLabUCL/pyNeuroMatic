@@ -20,7 +20,7 @@ import pyneuromatic.nm_utilities as nmu
 QUIET = True
 NUMPROJECTS = 3
 NUMFOLDERS = 5
-DATASERIES = ['data', 'avg', 'stim']
+DATASERIES = ["data", "avg", "stim"]
 NUMDATA = [8, 9, 10]
 NUMCHANNELS = [2, 3, 4]
 NUMEPOCHS = [5, 6, 7]
@@ -28,10 +28,8 @@ ISELECT = 0  # 0, 1, -1
 
 
 class NMManagerTest(unittest.TestCase):
-
     def setUp(self):
-
-        self.nm = NMManager(name='NM', quiet=QUIET)
+        self.nm = NMManager(name="NM", quiet=QUIET)
         ilast = ISELECT == -1
         self.select_values = {}
         self.select_keys = {}
@@ -39,8 +37,8 @@ class NMManagerTest(unittest.TestCase):
         for iproject in range(NUMPROJECTS):
             if ilast or iproject == ISELECT:
                 p = self.nm.projects.new(select=True)
-                self.select_values['project'] = p
-                self.select_keys['project'] = p.name
+                self.select_values["project"] = p
+                self.select_keys["project"] = p.name
                 pselect = True
             else:
                 p = self.nm.projects.new(select=False)
@@ -50,8 +48,8 @@ class NMManagerTest(unittest.TestCase):
                 if ilast or ifolder == ISELECT:
                     f = p.folders.new(select=True)
                     if pselect:
-                        self.select_values['folder'] = f
-                        self.select_keys['folder'] = f.name
+                        self.select_values["folder"] = f
+                        self.select_keys["folder"] = f.name
                         fselect = True
                 else:
                     f = p.folders.new(select=False)
@@ -64,8 +62,8 @@ class NMManagerTest(unittest.TestCase):
                         if ilast or jdata == ISELECT:
                             d = f.data.new(n, select=True)
                             if fselect:
-                                self.select_values['data'] = d
-                                self.select_keys['data'] = d.name
+                                self.select_values["data"] = d
+                                self.select_keys["data"] = d.name
                         else:
                             d = f.data.new(n, select=False)
                         jdata += 1
@@ -74,8 +72,8 @@ class NMManagerTest(unittest.TestCase):
                     if ilast or idataseries == ISELECT:
                         ds = f.dataseries.new(prefix, select=True)
                         if fselect:
-                            self.select_values['dataseries'] = ds
-                            self.select_keys['dataseries'] = ds.name
+                            self.select_values["dataseries"] = ds
+                            self.select_keys["dataseries"] = ds.name
                             dsselect = True
                     else:
                         ds = f.dataseries.new(prefix, select=False)
@@ -83,44 +81,44 @@ class NMManagerTest(unittest.TestCase):
                         if ilast or ichannel == ISELECT:
                             c = ds.channels.new(select=True)
                             if dsselect:
-                                self.select_values['channel'] = c
-                                self.select_keys['channel'] = c.name
+                                self.select_values["channel"] = c
+                                self.select_keys["channel"] = c.name
                         else:
                             c = ds.channels.new(select=False)
                     for iepoch in range(NUMEPOCHS[idataseries]):
                         if ilast or iepoch == ISELECT:
                             e = ds.epochs.new(select=True)
                             if dsselect:
-                                self.select_values['epoch'] = e
-                                self.select_keys['epoch'] = e.name
+                                self.select_values["epoch"] = e
+                                self.select_keys["epoch"] = e.name
                         else:
                             e = ds.epochs.new(select=False)
-                    ds.channels.sets.add('set0', ['A', 'B'])
-                    ds.epochs.sets.add('set0', ['E0', 'E1'])
-                self.data_set0 = ['data0', 'avg0', 'stim0']
-                f.data.sets.add('set0', self.data_set0)
-                f.dataseries.sets.add('set0', ['data', 'avg'])
-            p.folders.sets.add('set0', ['folder0', 'folder1'])
-        self.nm.projects.sets.add('set0', ['project0', 'project1'])
+                    ds.channels.sets.add("set0", ["A", "B"])
+                    ds.epochs.sets.add("set0", ["E0", "E1"])
+                self.data_set0 = ["data0", "avg0", "stim0"]
+                f.data.sets.add("set0", self.data_set0)
+                f.dataseries.sets.add("set0", ["data", "avg"])
+            p.folders.sets.add("set0", ["folder0", "folder1"])
+        self.nm.projects.sets.add("set0", ["project0", "project1"])
 
     def test00_init(self):
         # args: name, project_name, quiet
 
         bad = list(nmu.BADTYPES)
-        bad.remove('string')
+        bad.remove("string")
         for b in bad:
             with self.assertRaises(TypeError):
                 NMManager(name=b, quiet=True)
 
         bad = list(nmu.BADTYPES)
-        bad.remove('string')
+        bad.remove("string")
         bad.remove(None)
         for b in bad:
             with self.assertRaises(TypeError):
                 NMManager(project_name=b, quiet=True)
 
         bad = list(nmu.BADNAMES)
-        bad.remove('default')
+        bad.remove("default")
         for b in bad:
             with self.assertRaises(ValueError):
                 NMManager(name=b, quiet=True)
@@ -131,8 +129,8 @@ class NMManagerTest(unittest.TestCase):
 
     def test01_parameters(self):
         d = self.nm.parameters
-        self.assertEqual(d['name'], 'NM')
-        self.assertEqual(list(d.keys()), ['name', 'created'])
+        self.assertEqual(d["name"], "NM")
+        self.assertEqual(list(d.keys()), ["name", "created"])
 
     def test02_select(self):
         # select_values
@@ -150,51 +148,51 @@ class NMManagerTest(unittest.TestCase):
                 self.nm.select_keys = b
 
         s1 = {
-            'project': 'project0',
-            'folder': 'folder1',
-            'data': 'data3',
-            'dataseries': 'data',
-            'channel': 'A',
-            'epoch': 'E3'
+            "project": "project0",
+            "folder": "folder1",
+            "data": "data3",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "E3",
         }
         self.nm.select_keys = s1
         self.assertEqual(self.nm.select_keys, s1)
 
         s2 = {
-            'project': 'project0',
-            'folder': 'folder1',
-            'data': 'data3',
-            'dataseries': 'avg',
-            'channel': 'B',
-            'epoch': 'E1'
+            "project": "project0",
+            "folder": "folder1",
+            "data": "data3",
+            "dataseries": "avg",
+            "channel": "B",
+            "epoch": "E1",
         }
         self.nm.select_keys = s2
         self.assertEqual(self.nm.select_keys, s2)
 
-        self.nm.select_keys = {'dataseries': 'data'}
+        self.nm.select_keys = {"dataseries": "data"}
         self.assertEqual(self.nm.select_keys, s1)
 
-        self.nm.select_keys = {'dataseries': 'avg'}
+        self.nm.select_keys = {"dataseries": "avg"}
         self.assertEqual(self.nm.select_keys, s2)
 
         with self.assertRaises(KeyError):
-            self.nm.select_keys = {'project': 'test'}
+            self.nm.select_keys = {"project": "test"}
         with self.assertRaises(KeyError):
-            self.nm.select_keys = {'folder': 'test'}
+            self.nm.select_keys = {"folder": "test"}
         with self.assertRaises(KeyError):
-            self.nm.select_keys = {'data': 'test'}
+            self.nm.select_keys = {"data": "test"}
         with self.assertRaises(KeyError):
-            self.nm.select_keys = {'dataseries': 'test'}
+            self.nm.select_keys = {"dataseries": "test"}
         with self.assertRaises(KeyError):
-            self.nm.select_keys = {'channel': 'test'}
+            self.nm.select_keys = {"channel": "test"}
         with self.assertRaises(KeyError):
-            self.nm.select_keys = {'epoch': 'test'}
+            self.nm.select_keys = {"epoch": "test"}
 
     def test03_execute(self):
         # execute_values()
         # execute_keys()
         s = self.nm.select_keys
-        s.pop('data')
+        s.pop("data")
         elist = self.nm.execute_keys(dataseries_priority=True)
         self.assertEqual(elist, [s])
         if False:
@@ -202,26 +200,26 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         s = self.nm.select_keys
-        s.pop('dataseries')
-        s.pop('channel')
-        s.pop('epoch')
+        s.pop("dataseries")
+        s.pop("channel")
+        s.pop("epoch")
         elist = self.nm.execute_keys(dataseries_priority=False)
         self.assertEqual(elist, [s])
         if False:
             for e in elist:
                 print(e)
 
-        self.nm.projects.execute_key = 'set0'
+        self.nm.projects.execute_key = "set0"
         slist = []
-        for p in self.nm.projects.sets.get('set0'):
+        for p in self.nm.projects.sets.get("set0"):
             f = p.folders.select_value
             ds = f.dataseries.select_value
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -230,17 +228,17 @@ class NMManagerTest(unittest.TestCase):
             for e in elist:
                 print(e)
 
-        self.nm.projects.execute_key = 'all'
+        self.nm.projects.execute_key = "all"
         slist = []
         for p in self.nm.projects.values():
             f = p.folders.select_value
             ds = f.dataseries.select_value
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -252,11 +250,11 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         s = self.nm.select_keys
         s = {
-            'project': s['project'],
-            'folder': s['folder'],
-            'dataseries': s['dataseries'],
-            'channel': s['channel'],
-            'epoch': s['epoch']
+            "project": s["project"],
+            "folder": s["folder"],
+            "dataseries": s["dataseries"],
+            "channel": s["channel"],
+            "epoch": s["epoch"],
         }
         elist = self.nm.execute_keys(dataseries_priority=True)
         self.assertEqual(elist, [s])
@@ -265,16 +263,16 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         p = self.nm.projects.select_value
-        p.folders.execute_key = 'set0'
+        p.folders.execute_key = "set0"
         slist = []
-        for f in p.folders.sets.get('set0'):
+        for f in p.folders.sets.get("set0"):
             ds = f.dataseries.select_value
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -284,16 +282,16 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         p = self.nm.projects.select_value
-        p.folders.execute_key = 'all'
+        p.folders.execute_key = "all"
         slist = []
         for f in p.folders.values():
             ds = f.dataseries.select_value
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -305,13 +303,13 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         p = self.nm.projects.select_value
         f = p.folders.select_value
-        f.data.execute_key = 'set0'
+        f.data.execute_key = "set0"
         slist = []
-        for d in f.data.sets.get('set0'):
+        for d in f.data.sets.get("set0"):
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'data': d.name,
+                "project": p.name,
+                "folder": f.name,
+                "data": d.name,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=False)
@@ -323,13 +321,13 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         p = self.nm.projects.select_value
         f = p.folders.select_value
-        f.data.execute_key = 'all'
+        f.data.execute_key = "all"
         slist = []
         for d in f.data.values():
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'data': d.name,
+                "project": p.name,
+                "folder": f.name,
+                "data": d.name,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=False)
@@ -341,15 +339,15 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         p = self.nm.projects.select_value
         f = p.folders.select_value
-        f.dataseries.execute_key = 'set0'
+        f.dataseries.execute_key = "set0"
         slist = []
-        for ds in f.dataseries.sets.get('set0'):
+        for ds in f.dataseries.sets.get("set0"):
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -361,15 +359,15 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         p = self.nm.projects.select_value
         f = p.folders.select_value
-        f.dataseries.execute_key = 'all'
+        f.dataseries.execute_key = "all"
         slist = []
         for ds in f.dataseries.values():
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -382,15 +380,15 @@ class NMManagerTest(unittest.TestCase):
         p = self.nm.projects.select_value
         f = p.folders.select_value
         ds = f.dataseries.select_value
-        ds.channels.execute_key = 'set0'
+        ds.channels.execute_key = "set0"
         slist = []
-        for c in ds.channels.sets.get('set0'):
+        for c in ds.channels.sets.get("set0"):
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': c.name,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": c.name,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -403,15 +401,15 @@ class NMManagerTest(unittest.TestCase):
         p = self.nm.projects.select_value
         f = p.folders.select_value
         ds = f.dataseries.select_value
-        ds.channels.execute_key = 'all'
+        ds.channels.execute_key = "all"
         slist = []
         for c in ds.channels.values():
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': c.name,
-                'epoch': ds.epochs.select_key
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": c.name,
+                "epoch": ds.epochs.select_key,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -424,15 +422,15 @@ class NMManagerTest(unittest.TestCase):
         p = self.nm.projects.select_value
         f = p.folders.select_value
         ds = f.dataseries.select_value
-        ds.epochs.execute_key = 'set0'
+        ds.epochs.execute_key = "set0"
         slist = []
-        for e in ds.epochs.sets.get('set0'):
+        for e in ds.epochs.sets.get("set0"):
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': e.name
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": e.name,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -445,15 +443,15 @@ class NMManagerTest(unittest.TestCase):
         p = self.nm.projects.select_value
         f = p.folders.select_value
         ds = f.dataseries.select_value
-        ds.epochs.execute_key = 'all'
+        ds.epochs.execute_key = "all"
         slist = []
         for e in ds.epochs.values():
             s = {
-                'project': p.name,
-                'folder': f.name,
-                'dataseries': ds.name,
-                'channel': ds.channels.select_key,
-                'epoch': e.name
+                "project": p.name,
+                "folder": f.name,
+                "dataseries": ds.name,
+                "channel": ds.channels.select_key,
+                "epoch": e.name,
             }
             slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
@@ -471,116 +469,106 @@ class NMManagerTest(unittest.TestCase):
                 self.nm.execute_keys_set(b)
 
         bad = list(nmu.BADTYPES)
-        bad.remove('string')
+        bad.remove("string")
         for b in bad:
             with self.assertRaises(TypeError):
-                self.nm.execute_keys_set({b: ''})
+                self.nm.execute_keys_set({b: ""})
             with self.assertRaises(TypeError):
-                self.nm.execute_keys_set({'project': b})
+                self.nm.execute_keys_set({"project": b})
 
         with self.assertRaises(KeyError):
-            self.nm.execute_keys_set({'test': ''})
+            self.nm.execute_keys_set({"test": ""})
         with self.assertRaises(KeyError):
-            self.nm.execute_keys_set({'data': '', 'dataseries': ''})
+            self.nm.execute_keys_set({"data": "", "dataseries": ""})
+
+        e0 = {"folder": "folder1", "dataseries": "stim", "channel": "A", "epoch": "E0"}
+
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
 
         e0 = {
-            'folder': 'folder1',
-            'dataseries': 'stim',
-            'channel': 'A',
-            'epoch': 'E0'
+            "project": "project2",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "E0",
+        }
+
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+
+        e0 = {"project": "project2", "folder": "folder1", "channel": "A", "epoch": "E0"}
+
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+
+        e0 = {
+            "project": "project2",
+            "folder": "folder1",
+            "data": "stim",
+            "channel": "A",
+            "epoch": "E0",
         }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            'project': 'project2',
-            'dataseries': 'stim',
-            'channel': 'A',
-            'epoch': 'E0'
+            "project": "project2",
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "E0",
         }
 
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'channel': 'A',
-            'epoch': 'E0'
-        }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'data': 'stim',
-            'channel': 'A',
-            'epoch': 'E0'
-        }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'dataseries': 'stim',
-            'channel': 'A',
-            'epoch': 'E0'
-        }
-
-        e0.update({'project': 'all'})
+        e0.update({"project": "all"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'project': 'set0'})
+        e0.update({"project": "set0"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'project': 'test'})
+        e0.update({"project": "test"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'project': 'project2'})
+        e0.update({"project": "project2"})
 
-        e0.update({'folder': 'all'})
+        e0.update({"folder": "all"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'folder': 'set0'})
+        e0.update({"folder": "set0"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'folder': 'test'})
+        e0.update({"folder": "test"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'folder': 'folder1'})
+        e0.update({"folder": "folder1"})
 
-        e0.update({'dataseries': 'all'})
+        e0.update({"dataseries": "all"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'dataseries': 'set0'})
+        e0.update({"dataseries": "set0"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
-        e0.update({'dataseries': 'test'})
+        e0.update({"dataseries": "test"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'data': 'all',
+            "project": "project2",
+            "folder": "folder1",
+            "data": "all",
             # 'dataseries': 'stim',
-            'channel': 'A',
-            'epoch': 'E0'
+            "channel": "A",
+            "epoch": "E0",
         }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'dataseries': 'stim',
-            'channel': 'A',
+            "project": "project2",
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
             # 'epoch': 'E0',
         }
 
@@ -588,47 +576,47 @@ class NMManagerTest(unittest.TestCase):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'dataseries': 'stim',
+            "project": "project2",
+            "folder": "folder1",
+            "dataseries": "stim",
             # 'channel': 'A',
-            'epoch': 'E0',
+            "epoch": "E0",
         }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'dataseries': 'stim',
-            'channel': 'A',
-            'epoch': 'E0'
+            "project": "project2",
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "E0",
         }
 
         elist = self.nm.execute_keys_set(e0)
         self.assertEqual(elist, [e0])
         select = self.nm.select_keys
-        select.pop('data')
+        select.pop("data")
         self.assertEqual(elist, [select])
 
         e1 = {
-            'project': 'select',
-            'folder': 'select',
-            'dataseries': 'select',
-            'channel': 'select',
-            'epoch': 'select'
+            "project": "select",
+            "folder": "select",
+            "dataseries": "select",
+            "channel": "select",
+            "epoch": "select",
         }
 
         elist = self.nm.execute_keys_set(e1)
         self.assertEqual(elist, [e0])
 
         e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'dataseries': 'stim',
-            'channel': 'all',
-            'epoch': 'E0'
+            "project": "project2",
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "all",
+            "epoch": "E0",
         }
 
         elist = self.nm.execute_keys_set(e0)
@@ -636,31 +624,31 @@ class NMManagerTest(unittest.TestCase):
         for i in range(NUMCHANNELS[2]):
             c = nmu.CHANNEL_LIST[i]
             e0c = e0.copy()
-            e0c.update({'channel': c})
+            e0c.update({"channel": c})
             e1.append(e0c)
         self.assertEqual(elist, e1)
 
         e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'dataseries': 'stim',
-            'channel': 'A',
-            'epoch': 'all'
+            "project": "project2",
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "all",
         }
 
         elist = self.nm.execute_keys_set(e0)
         e1 = []
         for i in range(NUMEPOCHS[2]):
-            ename = 'E' + str(i)
+            ename = "E" + str(i)
             e0c = e0.copy()
-            e0c.update({'epoch': ename})
+            e0c.update({"epoch": ename})
             e1.append(e0c)
         self.assertEqual(elist, e1)
 
         e0 = {
-            'project': 'project2',
-            'folder': 'folder1',
-            'data': 'set0',
+            "project": "project2",
+            "folder": "folder1",
+            "data": "set0",
         }
 
         elist = self.nm.execute_keys_set(e0)
@@ -668,6 +656,6 @@ class NMManagerTest(unittest.TestCase):
         e1 = []
         for d in self.data_set0:
             e0c = e0.copy()
-            e0c.update({'data': d})
+            e0c.update({"data": d})
             e1.append(e0c)
         self.assertEqual(elist, e1)

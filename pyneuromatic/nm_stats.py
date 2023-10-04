@@ -20,5 +20,5 @@ class Stats(object):
         self.x0 = 0
         self.x1 = 5
 
-    def max_(self, select='default'):
+    def max_(self, select="default"):
         print(select)

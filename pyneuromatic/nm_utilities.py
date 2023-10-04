@@ -9,37 +9,74 @@ import inspect
 from colorama import Fore, Back, Style
 from typing import Union, List, NewType
 
-CHANNEL_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
-                'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-                'Y', 'Z']
+CHANNEL_LIST = [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+]
 
-CONFIRM_LIST = ['y', 'yes', 'n', 'no', 'c', 'cancel']  # see input_yesno()
+CONFIRM_LIST = ["y", "yes", "n", "no", "c", "cancel"]  # see input_yesno()
 
 # for testing
-BADTYPES = [None, 3, 3.14, True, [], (), {}, set(), 'string', Fore]
-BADNAMES = [n.lower() for n in ['', 'all', 'default', 'none', 'select',
-            'self', 'nan', 'inf', '-inf', 'b&dn@me!']]
+BADTYPES = [None, 3, 3.14, True, [], (), {}, set(), "string", Fore]
+BADNAMES = [
+    n.lower()
+    for n in [
+        "",
+        "all",
+        "default",
+        "none",
+        "select",
+        "self",
+        "nan",
+        "inf",
+        "-inf",
+        "b&dn@me!",
+    ]
+]
 
 # NM Class types
-NMObjectType = NewType('NMObject', object)
-NMObjectContainerType = NewType('NMObjectContainer', NMObjectType)
-NMSetsType = NewType('NMSets', NMObjectType)
-NMManagerType = NewType('NMManager', object)
-NMProjectType = NewType('NMProject', NMObjectType)
-NMProjectContainerType = NewType('NMProjectContainer', NMObjectContainerType)
-NMFolderType = NewType('NMFolder', NMObjectType)
-NMFolderContainerType = NewType('NMFolderContainer', NMObjectContainerType)
-NMDataType = NewType('NMData', NMObjectType)
-NMDataContainerType = NewType('NMDataContainer', NMObjectContainerType)
-NMDataSeriesType = NewType('NMDataSeries', NMObjectType)
-NMDataSeriesContainerType = NewType('NMDataSeriesContainer',
-                                    NMObjectContainerType)
-NMChannelType = NewType('NMChannel', NMObjectType)
-NMChannelContainerType = NewType('NMChannelContainer', NMObjectContainerType)
-NMEpochType = NewType('NMEpoch', NMObjectType)
-NMEpochContainerType = NewType('NMEpochContainer', NMObjectContainerType)
-NMScaleType = NewType('NMScale', NMObjectType)
-NMScaleXType = NewType('NMScaleX', NMScaleType)
+NMObjectType = NewType("NMObject", object)
+NMObjectContainerType = NewType("NMObjectContainer", NMObjectType)
+NMSetsType = NewType("NMSets", NMObjectType)
+NMManagerType = NewType("NMManager", object)
+NMProjectType = NewType("NMProject", NMObjectType)
+NMProjectContainerType = NewType("NMProjectContainer", NMObjectContainerType)
+NMFolderType = NewType("NMFolder", NMObjectType)
+NMFolderContainerType = NewType("NMFolderContainer", NMObjectContainerType)
+NMDataType = NewType("NMData", NMObjectType)
+NMDataContainerType = NewType("NMDataContainer", NMObjectContainerType)
+NMDataSeriesType = NewType("NMDataSeries", NMObjectType)
+NMDataSeriesContainerType = NewType("NMDataSeriesContainer", NMObjectContainerType)
+NMChannelType = NewType("NMChannel", NMObjectType)
+NMChannelContainerType = NewType("NMChannelContainer", NMObjectContainerType)
+NMEpochType = NewType("NMEpoch", NMObjectType)
+NMEpochContainerType = NewType("NMEpochContainer", NMObjectContainerType)
+NMScaleType = NewType("NMScale", NMObjectType)
+NMScaleXType = NewType("NMScaleX", NMScaleType)
 
 
 def number_ok(
@@ -50,7 +87,7 @@ def number_ok(
     zero_is_ok: bool = True,
     neg_is_ok: bool = True,
     pos_is_ok: bool = True,
-    complex_is_ok: bool = False
+    complex_is_ok: bool = False,
 ) -> bool:
     """
     Check if object(s) is a number.
@@ -114,7 +151,7 @@ def number_ok(
 def name_ok(
     name: str,
     ok_names: Union[str, List[str]] = [],
-    ok_strings: Union[str, List[str]] = ['_']
+    ok_strings: Union[str, List[str]] = ["_"],
 ) -> bool:
     """Check if name is alpha-numeric.
 
@@ -135,11 +172,11 @@ def name_ok(
     if isinstance(ok_names, str):
         ok_names = [ok_names]
     elif not isinstance(ok_names, list):
-        e = typeerror(ok_names, 'ok_names', 'string or list')
+        e = typeerror(ok_names, "ok_names", "string or list")
         raise TypeError(e)
     for ok_name in ok_names:
         if not isinstance(ok_name, str):
-            e = typeerror(ok_name, 'ok_names: list item', 'string')
+            e = typeerror(ok_name, "ok_names: list item", "string")
             raise TypeError(e)
         if name.lower() == ok_name.lower():
             return True
@@ -147,13 +184,13 @@ def name_ok(
     if isinstance(ok_strings, str):
         ok_strings = [ok_strings]
     elif not isinstance(ok_strings, list):
-        e = typeerror(ok_strings, 'ok_strings', 'string or list')
+        e = typeerror(ok_strings, "ok_strings", "string or list")
         raise TypeError(e)
     for ok_str in ok_strings:
         if not isinstance(ok_str, str):
-            e = typeerror(ok_strings, 'ok_strings: list item', 'string')
+            e = typeerror(ok_strings, "ok_strings: list item", "string")
             raise TypeError(e)
-        name = name.replace(ok_str, '')  # remove ok strings from name
+        name = name.replace(ok_str, "")  # remove ok strings from name
 
     if not name.isalnum():
         return False
@@ -165,7 +202,7 @@ def name_next_seq(
     self,
     names: List[str],  # existing names, e.g. ['RecordA0', 'RecordA1'...]
     prefix: str,  # prefix of names, e.g. 'A'
-    first: int = 0  # first number of sequence
+    first: int = 0,  # first number of sequence
 ) -> int:  # e.g. 3
     """Find next sequence number of a list of names.
     Names are case insensitive.
@@ -180,28 +217,28 @@ def name_next_seq(
     :rtype: int
     """
     if not isinstance(names, list):
-        e = self._type_error('names', 'List[string]')
+        e = self._type_error("names", "List[string]")
         raise TypeError(e)
     if not isinstance(prefix, str):
-        e = self._type_error('prefix', 'string')
+        e = self._type_error("prefix", "string")
         raise TypeError(e)
     if not prefix or not name_ok(prefix):
-        e = self._value_error('prefix')
+        e = self._value_error("prefix")
         raise ValueError(e)
     if not isinstance(first, int):
-        e = self._type_error('first', 'integer')
+        e = self._type_error("first", "integer")
         raise TypeError(e)
     if first < 0:
-        e = self._value_error('first')
+        e = self._value_error("first")
         raise ValueError(e)
 
     imax = -1
     for name in names:
         if not isinstance(name, str):
-            e = self._type_error('name', 'string')
+            e = self._type_error("name", "string")
             raise TypeError(e)
         name = name.lower()
-        istr = name.replace(prefix.lower(), '')
+        istr = name.replace(prefix.lower(), "")
         if str.isdigit(istr):
             imax = max(imax, int(istr))
     if imax >= first:
@@ -212,7 +249,7 @@ def name_next_seq(
 def keys_are_equal(
     keys1: Union[str, List[str]],
     keys2: Union[str, List[str]],
-    case_insensitive: bool = True
+    case_insensitive: bool = True,
 ) -> bool:
     """Determine if two lists contain the same keys.
     Comparison can be either case sensitive or insensitive (default).
@@ -227,9 +264,9 @@ def keys_are_equal(
     :return: True if key lists are the same, otherwise False.
     :rtype: bool
     """
-    if not hasattr(keys1, '__iter__'):
+    if not hasattr(keys1, "__iter__"):
         return False
-    if not hasattr(keys2, '__iter__'):
+    if not hasattr(keys2, "__iter__"):
         return False
     if not isinstance(keys1, list):
         keys1 = list(keys1)
@@ -258,9 +295,7 @@ def keys_are_equal(
 
 
 def remove_special_char(
-    text: Union[str, List[str]],
-    ok_char: List[str] = [],
-    bad_char: List[str] = []
+    text: Union[str, List[str]], ok_char: List[str] = [], bad_char: List[str] = []
 ) -> Union[str, List[str]]:
     """Remove non-alpha-numeric characters from text.
 
@@ -274,9 +309,9 @@ def remove_special_char(
     :rtype: str or list
     """
     if not text:
-        return ''
+        return ""
     if isinstance(text, str):
-        ostr = ''
+        ostr = ""
         for c in text:
             if c in bad_char:
                 continue
@@ -286,7 +321,7 @@ def remove_special_char(
     if isinstance(text, list):
         olist = []
         for t in text:
-            ostr = ''
+            ostr = ""
             if isinstance(t, str):
                 for c in t:
                     if c in bad_char:
@@ -295,13 +330,11 @@ def remove_special_char(
                         ostr += c
             olist.append(ostr)
         return olist
-    return ''
+    return ""
 
 
 def int_list_to_seq_str(
-    int_list: List[int],
-    seperator: str = ', ',
-    seperator_at_end: bool = False
+    int_list: List[int], seperator: str = ", ", seperator_at_end: bool = False
 ) -> str:
     """Convert list of integers to a sequence string.
 
@@ -315,18 +348,18 @@ def int_list_to_seq_str(
     :rtype: str
     """
     if not isinstance(seperator, str):
-        seperator = ', '
+        seperator = ", "
     if not isinstance(int_list, list):
         if isinstance(int_list, int):
             return str(int_list)
         else:
-            return ''
+            return ""
     if len(int_list) == 1:
         i = int_list[0]
         if isinstance(i, int):
             return str(i)
         else:
-            return ''
+            return ""
     ilist = []
     for i in int_list:
         if isinstance(i, int):
@@ -344,7 +377,7 @@ def int_list_to_seq_str(
                         slist.append(str(sfirst))
                         slist.append(str(i))
                     else:
-                        slist.append(str(sfirst) + '-' + str(i))
+                        slist.append(str(sfirst) + "-" + str(i))
             else:
                 if i == imax:  # last integer
                     slist.append(str(i))
@@ -359,7 +392,7 @@ def int_list_to_seq_str(
                 slist.append(str(sfirst))
                 slist.append(str(slast))
             else:
-                slist.append(str(sfirst) + '-' + str(slast))
+                slist.append(str(sfirst) + "-" + str(slast))
             seq_started = False
     seqstr = seperator.join(slist)
     if seperator_at_end:
@@ -368,8 +401,7 @@ def int_list_to_seq_str(
 
 
 def channel_char(
-    chan_num: Union[int, List[int]],
-    char_list: List[str] = CHANNEL_LIST
+    chan_num: Union[int, List[int]], char_list: List[str] = CHANNEL_LIST
 ) -> Union[str, List[str]]:
     """Convert channel number(s) to character.
 
@@ -387,7 +419,7 @@ def channel_char(
             cc = char_list[chan_num]
             return cc.upper()
         else:
-            return ''
+            return ""
     if isinstance(chan_num, list):
         clist = []
         for i in chan_num:
@@ -395,14 +427,13 @@ def channel_char(
                 cc = char_list[i]
                 clist.append(cc.upper())
             else:
-                clist.append('')
+                clist.append("")
         return clist
-    return ''
+    return ""
 
 
 def channel_num(
-    chan_char: Union[str, List[str]],
-    char_list: List[str] = CHANNEL_LIST
+    chan_char: Union[str, List[str]], char_list: List[str] = CHANNEL_LIST
 ) -> Union[int, List[int]]:
     """Convert channel character(s) to number.
 
@@ -437,8 +468,7 @@ def channel_num(
 
 
 def channel_char_check(
-    chan_char: Union[str, List[str]],
-    char_list: List[str] = CHANNEL_LIST
+    chan_char: Union[str, List[str]], char_list: List[str] = CHANNEL_LIST
 ) -> Union[str, List[str]]:
     """Check channel character
 
@@ -458,15 +488,12 @@ def channel_char_check(
             if channel_num(c, char_list=char_list) >= 0:
                 clist.append(c)
             else:
-                clist.append('')
+                clist.append("")
         return clist
-    return ''
+    return ""
 
 
-def channel_char_search(
-    text: str,
-    chan_char: str
-) -> int:
+def channel_char_search(text: str, chan_char: str) -> int:
     """Search for channel character in text (backwards search).
 
     :param text: text to search, e.g. 'RecordA127'.
@@ -482,7 +509,7 @@ def channel_char_search(
     if not chan_char or not isinstance(chan_char, str):
         return -1
     if not chan_char.isalpha():
-        e = ("bad chan_char: " + "channel character is not alphabetical")
+        e = "bad chan_char: " + "channel character is not alphabetical"
         raise TypeError(e)
     irange = reversed(range(len(text)))  # search backwards for first alpha
     ifound = -1
@@ -497,20 +524,16 @@ def channel_char_search(
     return -1
 
 
-def typeerror(
-    obj: object,
-    obj_name: str,
-    type_str: str
-) -> str:
-    return (obj_name + ': expected ' + type_str + ' but got %s %s'
-            % (type(obj).__name__, obj))
+def typeerror(obj: object, obj_name: str, type_str: str) -> str:
+    return (
+        obj_name
+        + ": expected "
+        + type_str
+        + " but got %s %s" % (type(obj).__name__, obj)
+    )
 
 
-def history_change(
-    param_name: str,
-    old_value: object,
-    new_value: object
-) -> str:
+def history_change(param_name: str, old_value: object, new_value: object) -> str:
     """Create history text for variables that have changed
 
     :param param_name: name of parameter that has changed.
@@ -526,25 +549,25 @@ def history_change(
         param_name = str(param_name)
     if not isinstance(old_value, str):
         if old_value is None:
-            old_value = 'None'
+            old_value = "None"
         else:
             old_value = "'%s'" % old_value
     if not isinstance(new_value, str):
         if new_value is None:
-            new_value = 'None'
+            new_value = "None"
         else:
             new_value = "'%s'" % new_value
-    h = 'changed ' + param_name + ' from ' + old_value + ' to ' + new_value
+    h = "changed " + param_name + " from " + old_value + " to " + new_value
     return h
 
 
 def history(
     message: str,
-    title: str = '',
-    tp: str = '',
+    title: str = "",
+    tp: str = "",
     frame: int = 1,
     red: bool = False,
-    quiet: bool = False
+    quiet: bool = False,
 ) -> str:
     """Print message to NM history.
 
@@ -564,21 +587,21 @@ def history(
     :rtype: str
     """
     if not isinstance(message, str):
-        return ''
+        return ""
     if not isinstance(frame, int) or frame < 0:
         frame = 1
-    if tp.upper() == 'NONE':
-        path = ''
-    elif len(tp) == 0 or tp.upper() == 'DEFAULT':
+    if tp.upper() == "NONE":
+        path = ""
+    elif len(tp) == 0 or tp.upper() == "DEFAULT":
         path = get_treepath(inspect.stack(), frame=frame)
     else:
         path = tp
     if path:
-        h = path + ': ' + message
+        h = path + ": " + message
     else:
         h = message
     if isinstance(title, str) and len(title) > 0:
-        h = title + ': ' + h
+        h = title + ": " + h
     if not quiet:
         if red:
             print(Fore.RED + h + Fore.BLACK)
@@ -589,9 +612,7 @@ def history(
 
 
 def get_treepath(
-    stack: list,
-    frame: int = 1,  # stack frame
-    package: str = 'nm'
+    stack: list, frame: int = 1, package: str = "nm"  # stack frame
 ) -> str:
     """Create function ancestry treepath.
 
@@ -605,7 +626,7 @@ def get_treepath(
     :rtype: str
     """
     if not stack:
-        return ''
+        return ""
     if not isinstance(frame, int) or frame < 0:
         frame = 1
     if isinstance(package, str) and len(package) > 0:
@@ -618,14 +639,10 @@ def get_treepath(
         path.append(c)
     if m:
         path.append(m)
-    return '.'.join(path)  # e.g. 'nm.myparent.mychild.mymethod
+    return ".".join(path)  # e.g. 'nm.myparent.mychild.mymethod
 
 
-def get_class_from_stack(
-    stack: list,
-    frame: int = 1,
-    module: bool = False
-) -> str:
+def get_class_from_stack(stack: list, frame: int = 1, module: bool = False) -> str:
     """Extract class from stack
 
     :param stack: stack list.
@@ -638,25 +655,25 @@ def get_class_from_stack(
     :rtype: str
     """
     if not stack:
-        return ''
+        return ""
     if not isinstance(frame, int) or frame < 0:
         frame = 1
     if len(stack) <= frame or len(stack[0]) == 0:
-        return ''
+        return ""
     f = stack[frame][0]
     if not inspect.isframe(f):
-        return ''
-    if 'self' not in f.f_locals:
-        return ''
-    class_tree = str(stack[frame][0].f_locals['self'].__class__)
-    class_tree = class_tree.replace('<class ', '')
-    class_tree = class_tree.replace("\'", '')
-    class_tree = class_tree.replace('>', '')
-    class_tree = class_tree.split('.')
+        return ""
+    if "self" not in f.f_locals:
+        return ""
+    class_tree = str(stack[frame][0].f_locals["self"].__class__)
+    class_tree = class_tree.replace("<class ", "")
+    class_tree = class_tree.replace("'", "")
+    class_tree = class_tree.replace(">", "")
+    class_tree = class_tree.split(".")
     m = class_tree[0]
     c = class_tree[1]
     if module:
-        return m + '.' + c
+        return m + "." + c
     return c
 
 
@@ -674,24 +691,24 @@ def get_method_from_stack(
     :rtype: str
     """
     if not stack:
-        return ''
+        return ""
     if not isinstance(frame, int) or frame < 0:
         frame = 1
     if len(stack) <= frame or len(stack[0]) == 0:
-        return ''
+        return ""
     f = stack[frame][0]
     if not inspect.isframe(f):
-        return ''
+        return ""
     return f.f_code.co_name
 
 
 def input_yesno(
     prompt: str,
-    title: str = '',
-    treepath: str = 'default',
+    title: str = "",
+    treepath: str = "default",
     frame: int = 1,
     cancel: bool = True,
-    answer: Union[str, None] = None  # for testing, bypasses input()
+    answer: Union[str, None] = None,  # for testing, bypasses input()
 ):
     """Get user yes/no/cancel input
 
@@ -711,28 +728,28 @@ def input_yesno(
     :rtype: str
     """
     if not isinstance(prompt, str):
-        prompt = ''
+        prompt = ""
     if cancel:
-        txt = prompt + '\n' + '(y)es (n)o (c)ancel: '
-        ok = ['y', 'yes', 'n', 'no', 'c', 'cancel']
+        txt = prompt + "\n" + "(y)es (n)o (c)ancel: "
+        ok = ["y", "yes", "n", "no", "c", "cancel"]
     else:
-        txt = prompt + '\n' + '(y)es, (n)o: '
-        ok = ['y', 'yes', 'n', 'no']
+        txt = prompt + "\n" + "(y)es, (n)o: "
+        ok = ["y", "yes", "n", "no"]
     if not isinstance(treepath, str):
-        path = ''
-    elif treepath.lower() == 'default':
+        path = ""
+    elif treepath.lower() == "default":
         path = get_treepath(inspect.stack(), frame=frame)
     else:
-        path = treepath # + '.userinput'
+        path = treepath  # + '.userinput'
     if path:
-        txt = path + ':\n' + txt
+        txt = path + ":\n" + txt
     if title:
-        txt = title + ':\n' + txt
-    if prompt.lower() == 'testprompt':
+        txt = title + ":\n" + txt
+    if prompt.lower() == "testprompt":
         return txt
     if not isinstance(answer, str):
         answer = input(txt)
     a = answer.lower()
     if a in ok:
         return a[:1]  # 'y', 'n' or 'c'
-    return 'error'
+    return "error"

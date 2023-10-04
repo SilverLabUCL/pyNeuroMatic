@@ -13,36 +13,31 @@ from pyneuromatic.nm_object_container import NMObjectContainer
 import pyneuromatic.nm_preferences as nmp
 
 NM = NMManager(quiet=True)
-BADTYPES = [None, 1, 3.14, True, [], (), {}, set(), 'string', NM]
+BADTYPES = [None, 1, 3.14, True, [], (), {}, set(), "string", NM]
 # BADTYPES: all types, use remove() to ignore ok types
 ALERT = True
 CONFIRM = False
 
 
 class NMObjectContainerTest(unittest.TestCase):
-
     def setUp(self):
         self.nm = NMManager(quiet=True)
-        self.n0 = 'container0'
-        self.n1 = 'container1'
-        self.p0 = 'TestA'
-        self.p1 = 'TestB'
+        self.n0 = "container0"
+        self.n1 = "container1"
+        self.p0 = "TestA"
+        self.p1 = "TestB"
         self.select0 = 0
         self.select1 = 1
         self.nlist0 = [self.p0 + str(i) for i in range(6)]
         self.nlist1 = [self.p1 + str(i) for i in range(3)]
-        self.o0 = NMObject(parent=None, name='dummy')
-        self.o1 = NMObject(parent=None, name='dummy')
-        self.c0 = NMObjectContainer(parent=self.nm,
-                                    name=self.n0,
-                                    nmobject=self.o0,
-                                    prefix=self.p0,
-                                    rename=True)
-        self.c1 = NMObjectContainer(parent=self.nm,
-                                    name=self.n1,
-                                    nmobject=self.o1,
-                                    prefix=self.p1,
-                                    rename=False)
+        self.o0 = NMObject(parent=None, name="dummy")
+        self.o1 = NMObject(parent=None, name="dummy")
+        self.c0 = NMObjectContainer(
+            parent=self.nm, name=self.n0, nmobject=self.o0, prefix=self.p0, rename=True
+        )
+        self.c1 = NMObjectContainer(
+            parent=self.nm, name=self.n1, nmobject=self.o1, prefix=self.p1, rename=False
+        )
         for n in self.nlist0:
             self.c0.new(n)
         for n in self.nlist1:
@@ -60,23 +55,28 @@ class NMObjectContainerTest(unittest.TestCase):
             if b is None or isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                NMObjectContainer(parent=self.nm, name=self.n0,
-                                  nmobject=self.o0, prefix=b)
+                NMObjectContainer(
+                    parent=self.nm, name=self.n0, nmobject=self.o0, prefix=b
+                )
         for b in BADNAMES:  # prefix
-            if b == '' or b == 'default':
+            if b == "" or b == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
-                NMObjectContainer(parent=self.nm, name=self.n0,
-                                  nmobject=self.o0, prefix=b)
-        c0 = NMObjectContainer(parent=self.nm, name=self.n0, nmobject=self.o0,
-                               prefix='')
-        self.assertEqual(c0.prefix, '')  # '' is ok
-        c0 = NMObjectContainer(parent=self.nm, name=self.n0, nmobject=self.o0,
-                               prefix=None)
-        self.assertEqual(c0.prefix, '')  # None is ok
-        c0 = NMObjectContainer(parent=self.nm, name=self.n0, nmobject=self.o0,
-                               prefix='default')
-        self.assertEqual(c0.prefix, 'NMObject')
+                NMObjectContainer(
+                    parent=self.nm, name=self.n0, nmobject=self.o0, prefix=b
+                )
+        c0 = NMObjectContainer(
+            parent=self.nm, name=self.n0, nmobject=self.o0, prefix=""
+        )
+        self.assertEqual(c0.prefix, "")  # '' is ok
+        c0 = NMObjectContainer(
+            parent=self.nm, name=self.n0, nmobject=self.o0, prefix=None
+        )
+        self.assertEqual(c0.prefix, "")  # None is ok
+        c0 = NMObjectContainer(
+            parent=self.nm, name=self.n0, nmobject=self.o0, prefix="default"
+        )
+        self.assertEqual(c0.prefix, "NMObject")
 
         # test self.c0 and self.c1
         self.assertTrue(isinstance(self.c0._nmobject, NMObject))
@@ -87,10 +87,8 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(self.c1.prefix, self.p1)
         self.assertEqual(self.c0.select.name, self.p0 + str(self.select0))
         self.assertEqual(self.c1.select.name, self.p1 + str(self.select1))
-        self.assertEqual(len(self.c0._NMObjectContainer__container),
-                         len(self.nlist0))
-        self.assertEqual(len(self.c1._NMObjectContainer__container),
-                         len(self.nlist1))
+        self.assertEqual(len(self.c0._NMObjectContainer__container), len(self.nlist0))
+        self.assertEqual(len(self.c1._NMObjectContainer__container), len(self.nlist1))
 
     def test01_eq_ne(self):
         for b in BADTYPES:
@@ -110,8 +108,9 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(self.c0.name, c.name)
         self.assertTrue(self.c0._nmobject == c._nmobject)  # __eq__
         self.assertEqual(self.c0.prefix, c.prefix)
-        self.assertEqual(self.c0._NMObjectContainer__rename,
-                         c._NMObjectContainer__rename)
+        self.assertEqual(
+            self.c0._NMObjectContainer__rename, c._NMObjectContainer__rename
+        )
         fr0 = self.c0._NMObject__rename_fxnref
         frc = c._NMObject__rename_fxnref
         # self.assertNotEqual(fr0, frc)
@@ -119,7 +118,7 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(self.c0._name_set, c._name_set)
         p0 = self.c0.parameters
         p = c.parameters
-        self.assertNotEqual(p0.get('created'), p.get('created'))
+        self.assertNotEqual(p0.get("created"), p.get("created"))
         self.assertTrue(self.c0.select == c.select)  # __eq__
         self.assertEqual(self.c0.select.name, c.select.name)
         for i in range(self.c0.count):
@@ -135,8 +134,7 @@ class NMObjectContainerTest(unittest.TestCase):
             self.assertEqual(self.c0.rename, c.rename)
 
     def test03_parameters(self):
-        plist = ['name', 'created', 'copy of', 'type', 'prefix',
-                 'rename', 'select']
+        plist = ["name", "created", "copy of", "type", "prefix", "rename", "select"]
         self.assertEqual(self.c0.parameter_list, plist)
 
     def test04_content_type(self):
@@ -150,13 +148,13 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0._prefix_set(newprefix=b)
         for b in BADNAMES:  # newprefix
-            if b == '':
+            if b == "":
                 continue  # ok
             with self.assertRaises(ValueError):
                 self.c0._prefix_set(newprefix=b)
-        for p in [None, self.p1, '', self.p0]:
+        for p in [None, self.p1, "", self.p0]:
             self.assertTrue(self.c0._prefix_set(newprefix=p))
-            if p == '':
+            if p == "":
                 self.assertEqual(self.c0.prefix, None)
             else:
                 self.assertEqual(self.c0.prefix, p)
@@ -177,7 +175,7 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0.new(name=b)
         for b in BADNAMES:  # name
-            if b.lower() == 'default':
+            if b.lower() == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
                 self.c0.new(name=b)
@@ -225,7 +223,7 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(self.c1.names, self.nlist1)
 
     def test10_content(self):
-        content_name = 'NMObjects'
+        content_name = "NMObjects"
         c = self.c0.content
         self.assertEqual(list(c.keys()), [content_name])
         self.assertEqual(c[content_name], self.c0.names)
@@ -241,14 +239,14 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0.index(b)
         for b in BADNAMES:  # name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             self.assertEqual(self.c0.index(b), -1)
-        self.assertEqual(self.c0.index('doesnotexist'), -1)
+        self.assertEqual(self.c0.index("doesnotexist"), -1)
         for i in range(len(self.nlist0)):
             self.assertEqual(self.c0.index(self.nlist0[i]), i)
-        self.assertEqual(self.c0.index('select'), self.select0)
-        self.assertEqual(self.c1.index('select'), self.select1)
+        self.assertEqual(self.c0.index("select"), self.select0)
+        self.assertEqual(self.c1.index("select"), self.select1)
 
     def test12_exists(self):
         # arg: name
@@ -258,11 +256,11 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0.exists(b)
         for b in BADNAMES:  # name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 self.assertTrue(self.c0.exists(b))
             else:
                 self.assertFalse(self.c0.exists(b))
-        self.assertFalse(self.c0.exists('doesnotexist'))
+        self.assertFalse(self.c0.exists("doesnotexist"))
         for i in range(len(self.nlist0)):
             self.assertTrue(self.c0.exists(self.nlist0[i]))
 
@@ -273,15 +271,15 @@ class NMObjectContainerTest(unittest.TestCase):
                 continue  # ok
             self.assertIsNone(self.c0.getitem(name=b))
         for b in BADNAMES:  # name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             self.assertIsNone(self.c0.getitem(name=b))
         for b in BADTYPES:  # index
             if isinstance(b, int):
                 continue  # ok
             self.assertIsNone(self.c0.getitem(index=b))
-        self.assertIsNone(self.c0.getitem(name=''))
-        self.assertEqual(self.c0.getitem(name='select'), self.c0.select)
+        self.assertIsNone(self.c0.getitem(name=""))
+        self.assertEqual(self.c0.getitem(name="select"), self.c0.select)
         for i in range(len(self.nlist0)):
             o = self.c0.getitem(name=self.nlist0[i])
             self.assertIsInstance(o, NMObject)
@@ -315,7 +313,7 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0.getitems(names=[b])
         for b in BADNAMES:  # names
-            if b.lower() == 'select' or b.lower() == 'all' or b == '':
+            if b.lower() == "select" or b.lower() == "all" or b == "":
                 continue  # ok
             with self.assertRaises(ValueError):
                 self.c0.getitems(names=[b])
@@ -336,16 +334,17 @@ class NMObjectContainerTest(unittest.TestCase):
         for b in [self.c0.count, 50, i]:
             with self.assertRaises(IndexError):
                 olist1 = self.c0.getitems(indexes=[b])
-        olist0 = self.c0.getitems(names=[self.nlist0[0], self.nlist0[1],
-                                  self.nlist0[2], self.nlist0[4]])
+        olist0 = self.c0.getitems(
+            names=[self.nlist0[0], self.nlist0[1], self.nlist0[2], self.nlist0[4]]
+        )
         olist1 = self.c0.getitems(indexes=[0, 1, 2, 3])
         self.assertEqual(olist0, olist1)
         olist1 = self.c0.getitems(indexes=[-5, -4, -3, -2])
         self.assertEqual(olist0, olist1)
-        olist0 = self.c0.getitems(names='all')
+        olist0 = self.c0.getitems(names="all")
         self.assertEqual(len(olist0), self.c0.count)
         olist0.pop()  # pop should NOT change container list
-        self.assertEqual(len(olist0), self.c0.count-1)
+        self.assertEqual(len(olist0), self.c0.count - 1)
 
     def test15_select_set(self):
         # args: name, index, failure_alert
@@ -355,7 +354,7 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0._select_set(name=b)
         for b in BADNAMES:  # test name
-            if b == '' or b == 'none' or b == 'select':
+            if b == "" or b == "none" or b == "select":
                 continue  # ok
             with self.assertRaises(ValueError):
                 self.c0._select_set(name=b)
@@ -367,13 +366,12 @@ class NMObjectContainerTest(unittest.TestCase):
         sname = self.c0.select.name
         self.assertIsNone(self.c0._select_set())
         self.assertIsNone(self.c0._select_set(name=None))
-        self.assertIsNone(self.c0._select_set(name=''))
+        self.assertIsNone(self.c0._select_set(name=""))
         self.assertIsNone(self.c0._select_set(index=None))
         self.assertIsNone(self.c0._select_set(name=self.nlist0[3]))  # 'no'
         if self.nm.configs.quiet:
             self.assertEqual(self.c0.select.name, sname)
-        self.assertIsInstance(self.c0._select_set(name=self.nlist0[0]),
-                              NMObject)
+        self.assertIsInstance(self.c0._select_set(name=self.nlist0[0]), NMObject)
         self.assertEqual(self.c0.select.name, self.nlist0[0])
 
     def test16_rename(self):
@@ -384,7 +382,7 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0.rename(b, self.nlist0[3])
         for b in BADNAMES:  # test name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             with self.assertRaises(ValueError):
                 self.c0.rename(b, self.nlist0[3])
@@ -394,37 +392,42 @@ class NMObjectContainerTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.c0.rename(self.nlist0[4], b)
         for b in BADNAMES:  # test newname
-            if b.lower() == 'default':
+            if b.lower() == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
                 self.c0.rename(self.nlist0[4], b)
         with self.assertRaises(RuntimeError):
-            self.c0.rename('select', self.nlist0[0])  # name already used
+            self.c0.rename("select", self.nlist0[0])  # name already used
         with self.assertRaises(RuntimeError):
-            self.c1.rename('select', 'test')  # rename = False
+            self.c1.rename("select", "test")  # rename = False
         # c0.names = ['TestA0', 'TestA1', 'TestA2', 'TestA4', 'TestA5']
-        s = self.c0.rename('select', self.nlist0[3])
+        s = self.c0.rename("select", self.nlist0[3])
         self.assertIsInstance(s, str)
         self.assertEqual(s, self.nlist0[3])
         # c0.names = ['TestA3', 'TestA1', 'TestA2', 'TestA4', 'TestA5']
         i = self.c0.index(self.nlist0[4])  # 'TestA4', i = 3
         nnext = self.c0.name_next()
-        self.assertEqual(nnext, 'TestA6')
-        s = self.c0.rename(self.nlist0[4], 'default')
+        self.assertEqual(nnext, "TestA6")
+        s = self.c0.rename(self.nlist0[4], "default")
         self.assertEqual(s, nnext)
         # c0.names = ['TestA3', 'TestA1', 'TestA2', 'TestA6', 'TestA5']
         for i in range(5):
             o = self.c0.getitem(index=i)
-            self.c0.rename(o.name, 'temp' + str(i))
+            self.c0.rename(o.name, "temp" + str(i))
         for i in range(5):
             o = self.c0.getitem(index=i)
             self.c0.rename(o.name, self.nlist0[i])
         # c0.names = ['TestA0', 'TestA1', 'TestA2', 'TestA3', 'TestA4']
-        self.assertEqual(self.c0.names, [self.nlist0[0],
-                                         self.nlist0[1],
-                                         self.nlist0[2],
-                                         self.nlist0[3],
-                                         self.nlist0[4]])
+        self.assertEqual(
+            self.c0.names,
+            [
+                self.nlist0[0],
+                self.nlist0[1],
+                self.nlist0[2],
+                self.nlist0[3],
+                self.nlist0[4],
+            ],
+        )
 
     def test17_duplicate(self):
         # args: name, newname, select
@@ -432,19 +435,19 @@ class NMObjectContainerTest(unittest.TestCase):
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                self.c0.duplicate(b, 'default')
+                self.c0.duplicate(b, "default")
         for b in BADNAMES:  # test name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             with self.assertRaises(ValueError):
-                self.c0.duplicate(b, 'default')
+                self.c0.duplicate(b, "default")
         for b in BADTYPES:  # test newname
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
                 self.c0.duplicate(self.nlist0[0], b)
         for b in BADNAMES:  # test newname
-            if b.lower() == 'default':
+            if b.lower() == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
                 self.c0.duplicate(self.nlist0[0], b)
@@ -454,7 +457,7 @@ class NMObjectContainerTest(unittest.TestCase):
         icount = self.c0.count
         o = self.c0.getitem(name=self.nlist0[0])
         nnext = self.c0.name_next()  # 'TestA5'
-        c = self.c0.duplicate(self.nlist0[0], 'default')
+        c = self.c0.duplicate(self.nlist0[0], "default")
         self.assertIsInstance(c, NMObject)
         self.assertEqual(c.name, nnext)
         self.assertEqual(c._NMObject__rename_fxnref, self.c0.rename)
@@ -474,7 +477,7 @@ class NMObjectContainerTest(unittest.TestCase):
         # uses getitems, so no need to test BADTYPES and BADNAMES
         self.assertEqual(self.c0.remove(), [])  # nothing killed
         select = self.c0.select
-        klist = self.c0.remove(names='select', confirm=CONFIRM)
+        klist = self.c0.remove(names="select", confirm=CONFIRM)
         self.assertEqual(klist, [select])
         self.assertIsNone(self.c0.getitem(name=select.name))
         self.assertEqual(self.c0.select.name, self.nlist0[0])
@@ -484,7 +487,7 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertIsNone(self.c0.getitem(name=self.nlist0[0]))
         self.assertEqual(self.c0.select.name, self.nlist0[1])
         names = self.c0.names
-        klist = self.c0.remove(names='all', confirm=CONFIRM)
+        klist = self.c0.remove(names="all", confirm=CONFIRM)
         self.assertEqual(len(klist), len(names))
         self.assertEqual(self.c0.count, 0)
         self.assertIsNone(self.c0.select)

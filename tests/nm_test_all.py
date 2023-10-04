@@ -21,8 +21,7 @@ import nm_sets_test
 import nm_utilities_test
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
 

@@ -8,7 +8,7 @@ from pyneuromatic.nm_object_container import NMObjectContainer
 import pyneuromatic.nm_utilities as nmu
 from typing import Dict, List, NewType
 
-NOTE_PREFIX = 'Note'
+NOTE_PREFIX = "Note"
 
 
 class NMNote(NMObject):
@@ -17,13 +17,7 @@ class NMNote(NMObject):
     TODO: change notes to Dictionary within NMObject
     """
 
-    def __init__(
-        self,
-        parent: object,
-        name: str,
-        thenote: str = '',
-        **copy
-    ) -> None:
+    def __init__(self, parent: object, name: str, thenote: str = "", **copy) -> None:
         super().__init__(parent, name)
         if isinstance(thenote, str):
             self.__thenote = thenote
@@ -38,7 +32,7 @@ class NMNote(NMObject):
     @property
     def parameters(self) -> Dict[str, object]:
         k = super().parameters
-        k.update({'thenote': self.__thenote})
+        k.update({"thenote": self.__thenote})
         return k
 
     @property
@@ -59,7 +53,7 @@ class NMNote(NMObject):
         else:
             self.__thenote = str(thenote)
         self._modified()
-        h = nmu.history_change('thenote', old, self.__thenote)
+        h = nmu.history_change("thenote", old, self.__thenote)
         self._history(h, quiet=quiet)
         return True
 
@@ -69,34 +63,26 @@ class NMNoteContainer(NMObjectContainer):
     Container for NM Note objects
     """
 
-    def __init__(
-        self,
-        parent: object,
-        name: str,
-        **copy
-    ) -> None:
-        n = NMNote(parent=parent, name='ContainerUtility')
+    def __init__(self, parent: object, name: str, **copy) -> None:
+        n = NMNote(parent=parent, name="ContainerUtility")
         super().__init__(
-            parent,
-            name,
-            nmobject=n,
-            prefix=NOTE_PREFIX,
-            rename=False,
-            **copy)
+            parent, name, nmobject=n, prefix=NOTE_PREFIX, rename=False, **copy
+        )
         self.__off = False
 
     # override, no super
     def copy(self) -> NMNoteContainerType:
-        return NMNoteContainer(self._parent, self.name, c_prefix=self.prefix,
-                               c_rename=self.parameters['rename'],
-                               c_container=self._container_copy())
+        return NMNoteContainer(
+            self._parent,
+            self.name,
+            c_prefix=self.prefix,
+            c_rename=self.parameters["rename"],
+            c_container=self._container_copy(),
+        )
 
     # override
     def new(
-        self,
-        thenote: str = '',
-        select: bool = True,
-        quiet: bool = True
+        self, thenote: str = "", select: bool = True, quiet: bool = True
     ) -> nmu.NMNoteType:
         # notes should be quiet
         if self.__off:
@@ -112,7 +98,7 @@ class NMNoteContainer(NMObjectContainer):
     def all_(self) -> List[str]:
         notes = []
         for p in self.content_parameters:
-            notes.append(p['thenote'])
+            notes.append(p["thenote"])
         return notes
 
     def print_all(self):
@@ -131,5 +117,5 @@ class NMNoteContainer(NMObjectContainer):
 
     # override, no super
     def duplicate(self) -> None:
-        e = self._error('notes cannot be duplicated')
+        e = self._error("notes cannot be duplicated")
         raise RuntimeError(e)

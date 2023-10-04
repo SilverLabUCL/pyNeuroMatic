@@ -44,12 +44,11 @@ class NMChannel(NMObject):
     def __init__(
         self,
         parent: Union[object, None] = None,
-        name: str = 'NMChannel',
+        name: str = "NMChannel",
         xscale: Union[dict, nmu.NMScaleXType] = {},
         yscale: Union[dict, nmu.NMScaleType] = {},
-        copy: Union[nmu.NMChannelType, None] = None
+        copy: Union[nmu.NMChannelType, None] = None,
     ) -> None:
-
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__x = None
@@ -76,7 +75,7 @@ class NMChannel(NMObject):
                     o = data.get(d.name)
                     self.__thedata.append(o)
         else:
-            e = nmu.typeerror(copy, 'copy', 'NMChannel')
+            e = nmu.typeerror(copy, "copy", "NMChannel")
             raise TypeError(e)
 
         if xscale is None:
@@ -84,9 +83,9 @@ class NMChannel(NMObject):
         elif isinstance(xscale, NMScaleX):
             self.__x = xscale
         elif isinstance(xscale, dict):
-            self.__x = NMScaleX(parent=self, name='xscale', scale=xscale)
+            self.__x = NMScaleX(parent=self, name="xscale", scale=xscale)
         else:
-            e = nmu.typeerror(xscale, 'xscale', 'dictionary or NMScaleX')
+            e = nmu.typeerror(xscale, "xscale", "dictionary or NMScaleX")
             raise TypeError(e)
 
         if yscale is None:
@@ -94,24 +93,21 @@ class NMChannel(NMObject):
         elif isinstance(yscale, NMScale):
             self.__y = yscale
         elif isinstance(yscale, dict):
-            self.__y = NMScale(parent=self, name='yscale', scale=yscale)
+            self.__y = NMScale(parent=self, name="yscale", scale=yscale)
         else:
-            e = nmu.typeerror(yscale, 'yscale', 'dictionary or NMScale')
+            e = nmu.typeerror(yscale, "yscale", "dictionary or NMScale")
             raise TypeError(e)
 
         if not isinstance(self.__x, NMScaleX):
-            self.__x = NMScaleX(parent=self, name='xscale')
+            self.__x = NMScaleX(parent=self, name="xscale")
 
         if not isinstance(self.__y, NMScale):
-            self.__y = NMScale(parent=self, name='yscale')
+            self.__y = NMScale(parent=self, name="yscale")
 
         return None
 
     # override
-    def __eq__(
-        self,
-        other: nmu.NMChannelType
-    ) -> bool:
+    def __eq__(self, other: nmu.NMChannelType) -> bool:
         if not super().__eq__(other):
             return False
         if self.x.scale != other.x.scale:
@@ -132,8 +128,8 @@ class NMChannel(NMObject):
     @property
     def parameters(self) -> Dict[str, object]:
         k = super().parameters
-        k.update({'xscale': self.__x.scale})
-        k.update({'yscale': self.__y.scale})
+        k.update({"xscale": self.__x.scale})
+        k.update({"yscale": self.__y.scale})
         # k.update({'graphXY': self.__graphXY})
         # k.update({'transform': self.__transform})
         return k
@@ -159,15 +155,20 @@ class NMChannelContainer(NMObjectContainer):
     def __init__(
         self,
         parent: object = None,
-        name: str = 'NMChannelContainer',
+        name: str = "NMChannelContainer",
         rename_on: bool = False,
-        name_prefix: str = '',  # default is no prefix
-        name_seq_format: str = 'A',
-        copy: nmu.NMChannelContainerType = None
+        name_prefix: str = "",  # default is no prefix
+        name_seq_format: str = "A",
+        copy: nmu.NMChannelContainerType = None,
     ) -> None:
-        return super().__init__(parent=parent, name=name, rename_on=rename_on,
-                                name_prefix=name_prefix,
-                                name_seq_format=name_seq_format, copy=copy)
+        return super().__init__(
+            parent=parent,
+            name=name,
+            rename_on=rename_on,
+            name_prefix=name_prefix,
+            name_seq_format=name_seq_format,
+            copy=copy,
+        )
 
     # override, no super
     def copy(self) -> nmu.NMChannelContainerType:
@@ -187,7 +188,6 @@ class NMChannelContainer(NMObjectContainer):
         # quiet: bool = nmp.QUIET
     ) -> nmu.NMChannelType:
         name = self.name_next()
-        c = NMChannel(parent=self._parent, name=name, xscale=xscale,
-                      yscale=yscale)
+        c = NMChannel(parent=self._parent, name=name, xscale=xscale, yscale=yscale)
         super().new(c, select=select)
         return c

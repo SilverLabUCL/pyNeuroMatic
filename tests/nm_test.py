@@ -25,25 +25,21 @@ import pyneuromatic.nm_utilities as nmu
 
 nm = NMManager(quiet=True)
 PARENT = nm
-BADTYPES = [None, 1, 3.14, True, [], (), {}, set(), 'string', NM]
+BADTYPES = [None, 1, 3.14, True, [], (), {}, set(), "string", NM]
 # BADTYPES: all types, use remove() to ignore ok types
 BADNAMES = nmu.BADNAMES
-PLIST = ['name', 'created', 'copy of']  # NMObject parameter list
-YSCALE0 = {'offset': 0, 'label': 'Vmem', 'units': 'mV'}
-XSCALE0 = {'offset': 0, 'start': 10, 'delta': 0.01, 'label': 'time',
-           'units': 'ms'}
-YSCALE1 = {'offset': 0, 'label': 'Imem', 'units': 'pA'}
-XSCALE1 = {'offset': 0, 'start': -10, 'delta': 0.2, 'label': 't',
-           'units': 'seconds'}
-YSCALEx = {'offset': 0, 'label': 'time interval', 'units': 'usec'}
-XSCALEx = {'offset': 0, 'start': 0, 'delta': 1, 'label': 'sample',
-           'units': '#'}
+PLIST = ["name", "created", "copy of"]  # NMObject parameter list
+YSCALE0 = {"offset": 0, "label": "Vmem", "units": "mV"}
+XSCALE0 = {"offset": 0, "start": 10, "delta": 0.01, "label": "time", "units": "ms"}
+YSCALE1 = {"offset": 0, "label": "Imem", "units": "pA"}
+XSCALE1 = {"offset": 0, "start": -10, "delta": 0.2, "label": "t", "units": "seconds"}
+YSCALEx = {"offset": 0, "label": "time interval", "units": "usec"}
+XSCALEx = {"offset": 0, "start": 0, "delta": 1, "label": "sample", "units": "#"}
 ALERT = True
 CONFIRM = False
 
 
 class Test(unittest.TestCase):
-
     # unittest runs any function beginning with 'test'
     # test_all is only function that is run
     def test_all(self):
@@ -64,7 +60,6 @@ class Test(unittest.TestCase):
         # breakpoint()
 
     def _test_nmobject(self):
-
         # __init__()
         # arg: parent, not testing since it can be any object
         # arg: name
@@ -76,8 +71,8 @@ class Test(unittest.TestCase):
         for b in BADNAMES:
             with self.assertRaises(ValueError):
                 o0 = NMObject(parent=PARENT, name=b)
-        n0 = 'object0'
-        n1 = 'object1'
+        n0 = "object0"
+        n1 = "object1"
         o0 = NMObject(parent=PARENT, name=n0)
         o1 = NMObject(parent=PARENT, name=n1)
         self.assertEqual(o0._parent, nm)
@@ -88,49 +83,50 @@ class Test(unittest.TestCase):
         self.assertEqual(o0.parameter_list, PLIST)
 
         # content()
-        content_name = 'nmobject'
+        content_name = "nmobject"
         self.assertEqual(o0.content, {content_name: o0.name})
         self.assertEqual(o0.content_tree, {content_name: o0.name})
 
         # treepath()
         self.assertEqual(o0._tp, o0.name)
-        self.assertEqual(o0._tp_check(0), '')
-        self.assertEqual(o0._tp_check(None), '')
-        self.assertEqual(o0._tp_check(''), '')
-        self.assertEqual(o0._tp_check('self'), o0.name)
-        self.assertEqual(o0._tp_check('nm.test'), 'nm.test')
+        self.assertEqual(o0._tp_check(0), "")
+        self.assertEqual(o0._tp_check(None), "")
+        self.assertEqual(o0._tp_check(""), "")
+        self.assertEqual(o0._tp_check("self"), o0.name)
+        self.assertEqual(o0._tp_check("nm.test"), "nm.test")
         self.assertEqual(o0.treepath(), o0.name)
         self.assertEqual(o0.treepath_list(), [o0.name])
 
         # notes()
         self.assertTrue(o0.notes_on)
-        o0.note = 'added TTX'
-        self.assertTrue(o0._notes_append('added AP5'))
+        o0.note = "added TTX"
+        self.assertTrue(o0._notes_append("added AP5"))
         o0.notes_on = None
         self.assertFalse(o0.notes_on)
         o0.notes_on = True
         self.assertTrue(o0.notes_on)
         o0.notes_on = False
         self.assertFalse(o0.notes_on)
-        self.assertFalse(o0._notes_append('added NBQX'))
+        self.assertFalse(o0._notes_append("added NBQX"))
         self.assertTrue(isinstance(o0.notes, list))
         self.assertEqual(len(o0.notes), 2)
-        self.assertEqual(o0.notes[0].get('note'), 'added TTX')
-        self.assertEqual(o0.notes[1].get('note'), 'added AP5')
+        self.assertEqual(o0.notes[0].get("note"), "added TTX")
+        self.assertEqual(o0.notes[1].get("note"), "added AP5")
         if o0._notes_delete():
             self.assertEqual(len(o0.notes), 0)
         else:
             self.assertEqual(len(o0.notes), 2)
-        self.assertTrue(NMObject.notes_ok([{'note': 'hey', 'date': '111'}]))
-        self.assertTrue(NMObject.notes_ok([{'date': '111', 'note': 'hey'}]))
-        self.assertFalse(NMObject.notes_ok([{'n': 'hey', 'date': '111'}]))
-        self.assertFalse(NMObject.notes_ok([{'note': 'hey', 'd': '111'}]))
-        self.assertFalse(NMObject.notes_ok([{'note': 'hey', 'date': None}]))
-        self.assertTrue(NMObject.notes_ok([{'note': 'hey', 'date': 'None'}]))
-        self.assertFalse(NMObject.notes_ok([{'note': 'hey'}]))
-        self.assertFalse(NMObject.notes_ok([{'date': '111'}]))
-        self.assertFalse(NMObject.notes_ok([{'note': 'hey', 'date': '111',
-                                             'more': '1'}]))
+        self.assertTrue(NMObject.notes_ok([{"note": "hey", "date": "111"}]))
+        self.assertTrue(NMObject.notes_ok([{"date": "111", "note": "hey"}]))
+        self.assertFalse(NMObject.notes_ok([{"n": "hey", "date": "111"}]))
+        self.assertFalse(NMObject.notes_ok([{"note": "hey", "d": "111"}]))
+        self.assertFalse(NMObject.notes_ok([{"note": "hey", "date": None}]))
+        self.assertTrue(NMObject.notes_ok([{"note": "hey", "date": "None"}]))
+        self.assertFalse(NMObject.notes_ok([{"note": "hey"}]))
+        self.assertFalse(NMObject.notes_ok([{"date": "111"}]))
+        self.assertFalse(
+            NMObject.notes_ok([{"note": "hey", "date": "111", "more": "1"}])
+        )
 
         # name_ok()
         # arg: name
@@ -153,12 +149,12 @@ class Test(unittest.TestCase):
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                o0._name_set('notused', b)
+                o0._name_set("notused", b)
         for b in BADNAMES:
             with self.assertRaises(ValueError):
-                o0._name_set('notused', b)
-        for n in ['test', n0]:
-            self.assertTrue(o0._name_set('notused', n))
+                o0._name_set("notused", b)
+        for n in ["test", n0]:
+            self.assertTrue(o0._name_set("notused", n))
             self.assertEqual(n, o0.name)
 
         # rename_fxnref_set()
@@ -166,11 +162,11 @@ class Test(unittest.TestCase):
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 o0._rename_fxnref_set(b)
-        o0.name = 'test1'  # calls _name_set()
-        self.assertEqual(o0.name, 'test1')
+        o0.name = "test1"  # calls _name_set()
+        self.assertEqual(o0.name, "test1")
         self.assertTrue(o0._rename_fxnref_set(self.rename_dummy))
-        o0.name = 'test2'
-        self.assertEqual(o0.name, 'test1')  # name of o0 does not change
+        o0.name = "test2"
+        self.assertEqual(o0.name, "test1")  # name of o0 does not change
 
         # manager()
         self.assertEqual(o0._manager, nm)
@@ -191,8 +187,8 @@ class Test(unittest.TestCase):
         o0.myvalue = 1
         o1.myvalue = 2
         self.assertFalse(o0._isequivalent(o1, alert=ALERT))
-        o0.myvalue = float('nan')
-        o1.myvalue = float('nan')
+        o0.myvalue = float("nan")
+        o1.myvalue = float("nan")
         self.assertTrue(o0._isequivalent(o1, alert=ALERT))
 
         # copy()
@@ -206,7 +202,7 @@ class Test(unittest.TestCase):
         self.assertEqual(o0.name, c.name)
         p0 = o0.parameters
         p = c.parameters
-        self.assertEqual(p0.get('created'), p.get('created'))
+        self.assertEqual(p0.get("created"), p.get("created"))
         self.assertEqual(c._NMObject__rename_fxnref, c._name_set)
         fr0 = o0._NMObject__rename_fxnref
         frc = c._NMObject__rename_fxnref
@@ -222,12 +218,12 @@ class Test(unittest.TestCase):
         # wrappers for nmu.history()
         # args: obj, type_expected, tp, quiet, frame
         dum_arg = {}
-        e1 = o0._type_error('dum_arg', 'list')
-        e2 = ('ERROR: object0: bad dum_arg: expected list but got dict')
+        e1 = o0._type_error("dum_arg", "list")
+        e2 = "ERROR: object0: bad dum_arg: expected list but got dict"
         self.assertEqual(e1, e2)
-        dum_str = 'test'
-        e1 = o0._value_error('dum_str')
-        e2 = ("ERROR: object0: bad dum_str: 'test'")
+        dum_str = "test"
+        e1 = o0._value_error("dum_str")
+        e2 = "ERROR: object0: bad dum_str: 'test'"
         self.assertEqual(e1, e2)
 
         # quiet()
@@ -244,21 +240,20 @@ class Test(unittest.TestCase):
 
     def rename_dummy(self, oldname, newname, quiet=nmp.QUIET):
         # dummy function to test NMObject._rename_fxnref_set()
-        print('test rename: ' + oldname + ' -> ' + newname)
+        print("test rename: " + oldname + " -> " + newname)
         return False
 
     def _test_nmobject_container(self):
-
         # __init__()
         # arg: parent, not testing since it can be any object
         # arg: name, see _test_nmobject()
         # arg: type_, prefix, rename, copy
-        n0 = 'container0'
-        n1 = 'container1'
-        p0 = 'TestA'
-        p1 = 'TestB'
+        n0 = "container0"
+        n1 = "container1"
+        p0 = "TestA"
+        p1 = "TestB"
         # type_ = 'NMObject'
-        o0 = NMObject(None, 'dummy')
+        o0 = NMObject(None, "dummy")
         # print(type(o0.__class__.__bases__[0]))
         nlist0 = [p0 + str(i) for i in range(0, 6)]
         nlist1 = [p1 + str(i) for i in range(0, 3)]
@@ -270,30 +265,28 @@ class Test(unittest.TestCase):
             if b is None or isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0,
-                                       prefix=b)
+                c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0, prefix=b)
         for b in BADNAMES:  # test prefix
-            if b == '' or b == 'default':
+            if b == "" or b == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
-                c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0,
-                                       prefix=b)
-        c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0, prefix='')
-        self.assertEqual(c0.prefix, '')  # '' is ok
-        c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0,
-                               prefix=None)
-        self.assertEqual(c0.prefix, '')  # None is ok
-        c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0,
-                               prefix='default')
-        self.assertEqual(c0.prefix, 'NMObject')
-        c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0, prefix=p0,
-                               rename=True)
-        c1 = NMObjectContainer(parent=PARENT, name=n1, nmobject=o0, prefix=p1,
-                               rename=False)
-        self.assertEqual(c0.parameters['type'], 'NMObject')
-        self.assertEqual(c1.parameters['type'], 'NMObject')
-        self.assertTrue(c0.parameters['rename'])
-        self.assertFalse(c1.parameters['rename'])
+                c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0, prefix=b)
+        c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0, prefix="")
+        self.assertEqual(c0.prefix, "")  # '' is ok
+        c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0, prefix=None)
+        self.assertEqual(c0.prefix, "")  # None is ok
+        c0 = NMObjectContainer(parent=PARENT, name=n0, nmobject=o0, prefix="default")
+        self.assertEqual(c0.prefix, "NMObject")
+        c0 = NMObjectContainer(
+            parent=PARENT, name=n0, nmobject=o0, prefix=p0, rename=True
+        )
+        c1 = NMObjectContainer(
+            parent=PARENT, name=n1, nmobject=o0, prefix=p1, rename=False
+        )
+        self.assertEqual(c0.parameters["type"], "NMObject")
+        self.assertEqual(c1.parameters["type"], "NMObject")
+        self.assertTrue(c0.parameters["rename"])
+        self.assertFalse(c1.parameters["rename"])
         self.assertEqual(c0.prefix, p0)
         self.assertEqual(c1.prefix, p1)
         self.assertIsNone(c0.select)
@@ -304,11 +297,11 @@ class Test(unittest.TestCase):
         self.assertEqual(c1.count, 0)
 
         # parameters()
-        plist = PLIST + ['type', 'prefix', 'rename', 'select']
+        plist = PLIST + ["type", "prefix", "rename", "select"]
         self.assertEqual(c0.parameter_list, plist)
 
         # content_type()
-        self.assertEqual(c0.content_type, 'NMObject')
+        self.assertEqual(c0.content_type, "NMObject")
 
         # prefix_set()
         # arg: newprefix
@@ -318,11 +311,11 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0._prefix_set(newprefix=b)
         for b in BADNAMES:
-            if b == '':
+            if b == "":
                 continue  # ok
             with self.assertRaises(ValueError):
                 c0._prefix_set(newprefix=b)
-        self.assertTrue(c0._prefix_set(newprefix=''))
+        self.assertTrue(c0._prefix_set(newprefix=""))
         self.assertEqual(c0.prefix, None)
         for p in [None, p1, p0]:
             self.assertTrue(c0._prefix_set(newprefix=p))
@@ -344,7 +337,7 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0.new(name=b)
         for b in BADNAMES:  # test name
-            if b.lower() == 'default':
+            if b.lower() == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
                 c0.new(name=b)
@@ -399,7 +392,7 @@ class Test(unittest.TestCase):
         self.assertEqual(c1.names, nlist1)
 
         # content()
-        content_name = 'NMObjects'
+        content_name = "NMObjects"
         c = c0.content
         self.assertEqual(list(c.keys()), [content_name])
         self.assertEqual(c[content_name], c0.names)
@@ -415,7 +408,7 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0.index(b)
         for b in BADNAMES:
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             self.assertEqual(c0.index(b), -1)
         self.assertEqual(c0.index(nlist0[0]), 0)
@@ -424,8 +417,8 @@ class Test(unittest.TestCase):
         self.assertEqual(c0.index(nlist0[3]), -1)  # does not exist
         self.assertEqual(c0.index(nlist0[4]), 3)
         self.assertEqual(c0.index(nlist0[5]), 4)
-        self.assertEqual(c0.index('select'), 4)
-        self.assertEqual(c1.index('select'), 2)
+        self.assertEqual(c0.index("select"), 4)
+        self.assertEqual(c1.index("select"), 2)
 
         # exists()
         # arg: name
@@ -435,7 +428,7 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0.exists(b)
         for b in BADNAMES:
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 self.assertTrue(c0.exists(b))
             else:
                 self.assertFalse(c0.exists(b))
@@ -452,15 +445,15 @@ class Test(unittest.TestCase):
                 continue  # ok
             self.assertIsNone(c0.getitem(name=b))
         for b in BADNAMES:  # test name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             self.assertIsNone(c0.getitem(name=b))
         for b in BADTYPES:  # test index
             if isinstance(b, int):
                 continue  # ok
             self.assertIsNone(c0.getitem(index=b))
-        self.assertIsNone(c0.getitem(name=''))
-        self.assertEqual(c0.getitem(name='select'), c0.select)
+        self.assertIsNone(c0.getitem(name=""))
+        self.assertEqual(c0.getitem(name="select"), c0.select)
         for i in range(0, len(nlist0)):
             o = c0.getitem(name=nlist0[i])
             if i == 3:
@@ -475,7 +468,7 @@ class Test(unittest.TestCase):
             if i <= 2:
                 self.assertEqual(o.name, nlist0[i])
             else:
-                self.assertEqual(o.name, nlist0[i+1])
+                self.assertEqual(o.name, nlist0[i + 1])
         for i in range(-1, -1 * (c0.count + 1)):
             o = c0.getitem(index=i)
             self.assertIsInstance(o, NMObject)
@@ -499,7 +492,7 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0.getitems(names=[b])
         for b in BADNAMES:  # test names
-            if b.lower() == 'select' or b.lower() == 'all' or b == '':
+            if b.lower() == "select" or b.lower() == "all" or b == "":
                 continue  # ok
             with self.assertRaises(ValueError):
                 c0.getitems(names=[b])
@@ -520,16 +513,15 @@ class Test(unittest.TestCase):
         for b in [c0.count, 50, i]:
             with self.assertRaises(IndexError):
                 olist1 = c0.getitems(indexes=[b])
-        olist0 = c0.getitems(names=[nlist0[0], nlist0[1], nlist0[2],
-                                    nlist0[4]])
+        olist0 = c0.getitems(names=[nlist0[0], nlist0[1], nlist0[2], nlist0[4]])
         olist1 = c0.getitems(indexes=[0, 1, 2, 3])
         self.assertEqual(olist0, olist1)
         olist1 = c0.getitems(indexes=[-5, -4, -3, -2])
         self.assertEqual(olist0, olist1)
-        olist0 = c0.getitems(names='all')
+        olist0 = c0.getitems(names="all")
         self.assertEqual(len(olist0), c0.count)
         olist0.pop()  # pop should NOT change container list
-        self.assertEqual(len(olist0), c0.count-1)
+        self.assertEqual(len(olist0), c0.count - 1)
 
         # select_set()
         # args: name, index, failure_alert
@@ -539,7 +531,7 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0._select_set(name=b)
         for b in BADNAMES:  # test name
-            if b == '' or b == 'none' or b == 'select':
+            if b == "" or b == "none" or b == "select":
                 continue  # ok
             with self.assertRaises(ValueError):
                 c0._select_set(name=b)
@@ -551,7 +543,7 @@ class Test(unittest.TestCase):
         sname = c0.select.name
         self.assertIsNone(c0._select_set())
         self.assertIsNone(c0._select_set(name=None))
-        self.assertIsNone(c0._select_set(name=''))
+        self.assertIsNone(c0._select_set(name=""))
         self.assertIsNone(c0._select_set(index=None))
         self.assertIsNone(c0._select_set(name=nlist0[3]))  # enter 'no'
         if nm.configs.quiet:
@@ -567,7 +559,7 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0.rename(b, nlist0[3])
         for b in BADNAMES:  # test name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             with self.assertRaises(ValueError):
                 c0.rename(b, nlist0[3])
@@ -577,34 +569,35 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 c0.rename(nlist0[4], b)
         for b in BADNAMES:  # test newname
-            if b.lower() == 'default':
+            if b.lower() == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
                 c0.rename(nlist0[4], b)
         with self.assertRaises(RuntimeError):
-            c0.rename('select', nlist0[0])  # name already used
+            c0.rename("select", nlist0[0])  # name already used
         with self.assertRaises(RuntimeError):
-            c1.rename('select', 'test')  # rename = False
+            c1.rename("select", "test")  # rename = False
         # c0.names = ['TestA0', 'TestA1', 'TestA2', 'TestA4', 'TestA5']
-        s = c0.rename('select', nlist0[3])
+        s = c0.rename("select", nlist0[3])
         self.assertIsInstance(s, str)
         self.assertEqual(s, nlist0[3])
         # c0.names = ['TestA3', 'TestA1', 'TestA2', 'TestA4', 'TestA5']
         i = c0.index(nlist0[4])  # 'TestA4', i = 3
         nnext = c0.name_next()
-        self.assertEqual(nnext, 'TestA6')
-        s = c0.rename(nlist0[4], 'default')
+        self.assertEqual(nnext, "TestA6")
+        s = c0.rename(nlist0[4], "default")
         self.assertEqual(s, nnext)
         # c0.names = ['TestA3', 'TestA1', 'TestA2', 'TestA6', 'TestA5']
         for i in range(5):
             o = c0.getitem(index=i)
-            c0.rename(o.name, 'temp' + str(i))
+            c0.rename(o.name, "temp" + str(i))
         for i in range(5):
             o = c0.getitem(index=i)
             c0.rename(o.name, nlist0[i])
         # c0.names = ['TestA0', 'TestA1', 'TestA2', 'TestA3', 'TestA4']
-        self.assertEqual(c0.names, [nlist0[0], nlist0[1], nlist0[2], nlist0[3],
-                                    nlist0[4]])
+        self.assertEqual(
+            c0.names, [nlist0[0], nlist0[1], nlist0[2], nlist0[3], nlist0[4]]
+        )
 
         # duplicate()
         # args: name, newname, select
@@ -612,19 +605,19 @@ class Test(unittest.TestCase):
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                c0.duplicate(b, 'default')
+                c0.duplicate(b, "default")
         for b in BADNAMES:  # test name
-            if b.lower() == 'select':
+            if b.lower() == "select":
                 continue  # ok
             with self.assertRaises(ValueError):
-                c0.duplicate(b, 'default')
+                c0.duplicate(b, "default")
         for b in BADTYPES:  # test newname
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
                 c0.duplicate(nlist0[0], b)
         for b in BADNAMES:  # test newname
-            if b.lower() == 'default':
+            if b.lower() == "default":
                 continue  # ok
             with self.assertRaises(ValueError):
                 c0.duplicate(nlist0[0], b)
@@ -634,7 +627,7 @@ class Test(unittest.TestCase):
         icount = c0.count
         o = c0.getitem(name=nlist0[0])
         nnext = c0.name_next()  # 'TestA5'
-        c = c0.duplicate(nlist0[0], 'default')
+        c = c0.duplicate(nlist0[0], "default")
         self.assertIsInstance(c, NMObject)
         self.assertEqual(c.name, nnext)
         self.assertEqual(c._NMObject__rename_fxnref, c0.rename)
@@ -660,16 +653,16 @@ class Test(unittest.TestCase):
         self.assertTrue(c0._isequivalent(c, alert=ALERT))
         self.assertEqual(c0._parent, c._parent)
         self.assertEqual(c0.name, c.name)
-        self.assertEqual(c0.parameters['type'], c.parameters['type'])
+        self.assertEqual(c0.parameters["type"], c.parameters["type"])
         self.assertEqual(c0.prefix, c.prefix)
-        self.assertEqual(c0.parameters['rename'], c.parameters['rename'])
+        self.assertEqual(c0.parameters["rename"], c.parameters["rename"])
         fr0 = c0._NMObject__rename_fxnref
         frc = c._NMObject__rename_fxnref
         p0 = c0.parameters
         p = c.parameters
         self.assertNotEqual(fr0, frc)
-        self.assertEqual(p0.get('created'), p.get('created'))
-        self.assertEqual(p0.get('modified'), p.get('modified'))
+        self.assertEqual(p0.get("created"), p.get("created"))
+        self.assertEqual(p0.get("modified"), p.get("modified"))
         self.assertNotEqual(c0.select, c.select)  # refs not equal
         self.assertEqual(c0.select.name, c.select.name)  # but names equal
         for i in range(0, c0.count):
@@ -690,7 +683,7 @@ class Test(unittest.TestCase):
         # uses getitems, so no need to test BADTYPES and BADNAMES
         self.assertEqual(c0.remove(), [])  # nothing killed
         select = c0.select
-        klist = c0.remove(names='select', confirm=CONFIRM)
+        klist = c0.remove(names="select", confirm=CONFIRM)
         self.assertEqual(klist, [select])
         self.assertIsNone(c0.getitem(name=select.name))
         self.assertEqual(c0.select.name, nlist0[0])
@@ -700,7 +693,7 @@ class Test(unittest.TestCase):
         self.assertIsNone(c0.getitem(name=nlist0[0]))
         self.assertEqual(c0.select.name, nlist0[1])
         names = c0.names
-        klist = c0.remove(names='all', confirm=CONFIRM)
+        klist = c0.remove(names="all", confirm=CONFIRM)
         self.assertEqual(len(klist), len(names))
         self.assertEqual(c0.count, 0)
         self.assertIsNone(c0.select)
@@ -710,37 +703,36 @@ class Test(unittest.TestCase):
         self.assertIsNone(c1.select)
 
     def _test_scale(self):
-
         # __init__()
         # args: parent, name, scale, copy
         for b in BADTYPES:
             if b is None or isinstance(b, dict):
                 continue  # ok
             with self.assertRaises(TypeError):
-                y0 = NMScale(parent=PARENT, name='yscale0', scale=b)
+                y0 = NMScale(parent=PARENT, name="yscale0", scale=b)
         # notes = NMNoteContainer(parent=PARENT, 'Notes')
-        y0 = NMScale(parent=PARENT, name='yscale0', scale=YSCALE0)
-        x0 = NMScaleX(parent=PARENT, name='xscale0', scale=XSCALE0)
+        y0 = NMScale(parent=PARENT, name="yscale0", scale=YSCALE0)
+        x0 = NMScaleX(parent=PARENT, name="xscale0", scale=XSCALE0)
         # y1 = NMScale(parent=PARENT, name='yscale1', scale=YSCALE1)
         # x1 = NMScaleX(parent=PARENT, 'name=xscale1', scale=XSCALE1)
         # self.assertEqual(y0._NMScale__notes_container, notes)
-        self.assertEqual(y0.offset, YSCALE0['offset'])
-        self.assertEqual(y0.label, YSCALE0['label'])
-        self.assertEqual(y0.units, YSCALE0['units'])
+        self.assertEqual(y0.offset, YSCALE0["offset"])
+        self.assertEqual(y0.label, YSCALE0["label"])
+        self.assertEqual(y0.units, YSCALE0["units"])
         # self.assertIsNone(y0.master)
         # self.assertEqual(x0._NMScale__notes_container, notes)
-        self.assertEqual(x0.offset, XSCALE0['offset'])
-        self.assertEqual(x0.start, XSCALE0['start'])
-        self.assertEqual(x0.delta, XSCALE0['delta'])
-        self.assertEqual(x0.label, XSCALE0['label'])
-        self.assertEqual(x0.units, XSCALE0['units'])
+        self.assertEqual(x0.offset, XSCALE0["offset"])
+        self.assertEqual(x0.start, XSCALE0["start"])
+        self.assertEqual(x0.delta, XSCALE0["delta"])
+        self.assertEqual(x0.label, XSCALE0["label"])
+        self.assertEqual(x0.units, XSCALE0["units"])
         # self.assertIsNone(x0._master)
         # self.assertIsNone(x0._xdata)
 
         # parameters()
-        plist = PLIST + ['offset', 'label', 'units']
+        plist = PLIST + ["offset", "label", "units"]
         self.assertEqual(y0.parameter_list, plist)
-        xplist = PLIST + ['offset', 'start', 'delta', 'label', 'units']
+        xplist = PLIST + ["offset", "start", "delta", "label", "units"]
         self.assertEqual(x0.parameter_list, xplist)
 
         # note_new()
@@ -828,7 +820,7 @@ class Test(unittest.TestCase):
                 y0._scale_set(b)
             with self.assertRaises(TypeError):
                 x0._scale_set(b)
-        bad_scale = {'label': 'Vmem', 'units': 'mV', 'test': 0}
+        bad_scale = {"label": "Vmem", "units": "mV", "test": 0}
         with self.assertRaises(KeyError):
             y0._scale_set(bad_scale)
         with self.assertRaises(KeyError):
@@ -851,7 +843,7 @@ class Test(unittest.TestCase):
                 x0._start_set(b)
             with self.assertRaises(TypeError):
                 x0._delta_set(b)
-        badvalues = [float('nan'), float('inf')]
+        badvalues = [float("nan"), float("inf")]
         for b in badvalues:
             with self.assertRaises(ValueError):
                 y0._offset_set(b)
@@ -884,13 +876,13 @@ class Test(unittest.TestCase):
             with self.assertRaises(TypeError):
                 y0._units_set(b)
         self.assertTrue(y0._label_set(None))
-        self.assertEqual(y0.label, '')
-        self.assertTrue(y0._label_set('test'))
-        self.assertEqual(y0.label, 'test')
+        self.assertEqual(y0.label, "")
+        self.assertTrue(y0._label_set("test"))
+        self.assertEqual(y0.label, "test")
         self.assertTrue(y0._units_set(None))
-        self.assertEqual(y0.units, '')
-        self.assertTrue(y0._units_set('test'))
-        self.assertEqual(y0.units, 'test')
+        self.assertEqual(y0.units, "")
+        self.assertTrue(y0._units_set("test"))
+        self.assertEqual(y0.units, "test")
         # with self.assertRaises(RuntimeError):
         #     y1._label_set('test')  # master on
         # with self.assertRaises(RuntimeError):
@@ -930,13 +922,12 @@ class Test(unittest.TestCase):
         self.assertTrue(x0._isequivalent(c, alert=ALERT))
 
     def _test_data(self):
-
         # __init__()
         # args: parent, name, np_array, xscale, yscale, copy
         # dataseries, dataseries_channel, dataseries_epoch
-        n0 = 'RecordA0'
-        n1 = 'RecordA1'
-        ds = NMDataSeries(parent=PARENT, name='Record')
+        n0 = "RecordA0"
+        n1 = "RecordA1"
+        ds = NMDataSeries(parent=PARENT, name="Record")
         for b in BADTYPES:
             if b is None:
                 continue  # ok
@@ -961,32 +952,38 @@ class Test(unittest.TestCase):
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = NMData(parent=PARENT, name=n0, dataseries=ds,
-                            dataseries_channel=b)
+                d0 = NMData(parent=PARENT, name=n0, dataseries=ds, dataseries_channel=b)
         for b in BADTYPES:
             if isinstance(b, int):
                 continue  # ok
             with self.assertRaises(TypeError):
-                d0 = NMData(parent=PARENT, name=n0, dataseries=ds,
-                            dataseries_channel='A', dataseries_epoch=b)
-        nparray0 = np.full([4], 3.14, dtype=np.float64, order='C')
-        nparray1 = np.full([5], 6.28, dtype=np.float64, order='C')
+                d0 = NMData(
+                    parent=PARENT,
+                    name=n0,
+                    dataseries=ds,
+                    dataseries_channel="A",
+                    dataseries_epoch=b,
+                )
+        nparray0 = np.full([4], 3.14, dtype=np.float64, order="C")
+        nparray1 = np.full([5], 6.28, dtype=np.float64, order="C")
         # nparrayx = np.full([6], 12.56, dtype=np.float64, order='C')
-        d0 = NMData(parent=PARENT, name=n0, np_array=nparray0, xscale=XSCALE0,
-                    yscale=YSCALE0)
-        d1 = NMData(parent=PARENT, name=n1, np_array=nparray1, xscale=XSCALE1,
-                    yscale=YSCALE1)
+        d0 = NMData(
+            parent=PARENT, name=n0, np_array=nparray0, xscale=XSCALE0, yscale=YSCALE0
+        )
+        d1 = NMData(
+            parent=PARENT, name=n1, np_array=nparray1, xscale=XSCALE1, yscale=YSCALE1
+        )
         # xdata = NMData(parent=PARENT, name='xdata', np_array=nparrayx,
         #               xscale=XSCALEx, yscale=YSCALEx)
         self.assertTrue(np.array_equal(d0._NMData__np_array, nparray0))
         self.assertTrue(np.array_equal(d1._NMData__np_array, nparray1))
 
         # parameters()
-        plist = PLIST + ['xscale', 'yscale', 'dataseries']
+        plist = PLIST + ["xscale", "yscale", "dataseries"]
         self.assertEqual(d0.parameter_list, plist)
 
         # content()
-        content_name = 'nmdata'
+        content_name = "nmdata"
         c = d0.content
         self.assertIsInstance(c, dict)
         self.assertEqual(list(c.keys()), [content_name])
@@ -996,36 +993,44 @@ class Test(unittest.TestCase):
         # isequivalent()
         # args: NMData
         self.assertFalse(d0._isequivalent(d1, alert=ALERT))
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray0,
-                     xscale=XSCALE0, yscale=YSCALE0)
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=nparray0, xscale=XSCALE0, yscale=YSCALE0
+        )
         self.assertTrue(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = np.full([4], 3.14, dtype=np.float64, order='F')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
+        nparray00 = np.full([4], 3.14, dtype=np.float64, order="F")
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0
+        )
         self.assertTrue(d0._isequivalent(d00, alert=ALERT))
         nparray0[2] = 5
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
         nparray0[2] = 0
-        d00 = NMData(parent=PARENT, name=n0, np_array=None,
-                     xscale=XSCALE0, yscale=YSCALE0)
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=None, xscale=XSCALE0, yscale=YSCALE0
+        )
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = np.full([5, 2], 3.14, dtype=np.float64, order='C')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
+        nparray00 = np.full([5, 2], 3.14, dtype=np.float64, order="C")
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0
+        )
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = np.full([5], 3.14, dtype=np.int32, order='C')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
+        nparray00 = np.full([5], 3.14, dtype=np.int32, order="C")
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0
+        )
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = np.full([5], 3.14, dtype=np.float64, order='F')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
+        nparray00 = np.full([5], 3.14, dtype=np.float64, order="F")
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=nparray00, xscale=XSCALE0, yscale=YSCALE0
+        )
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray0,
-                     xscale=XSCALE1, yscale=YSCALE0)
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=nparray0, xscale=XSCALE1, yscale=YSCALE0
+        )
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray0,
-                     xscale=XSCALE0, yscale=YSCALE1)
+        d00 = NMData(
+            parent=PARENT, name=n0, np_array=nparray0, xscale=XSCALE0, yscale=YSCALE1
+        )
         self.assertFalse(d0._isequivalent(d00, alert=ALERT))
 
         # copy()
@@ -1057,19 +1062,21 @@ class Test(unittest.TestCase):
         # TODO x- and y-scale
 
     def _test_data_container(self):
-        c0 = NMDataContainer(parent=PARENT, name='Data')
-        c1 = NMDataContainer(parent=PARENT, name='Data')
-        self.assertEqual(c0.parameters['type'], 'NMData')
+        c0 = NMDataContainer(parent=PARENT, name="Data")
+        c1 = NMDataContainer(parent=PARENT, name="Data")
+        self.assertEqual(c0.parameters["type"], "NMData")
         self.assertEqual(c0.prefix, nmp.DATA_PREFIX)
-        self.assertTrue(c0.parameters['rename'])
+        self.assertTrue(c0.parameters["rename"])
         # new, args: name, np_array, xscale=, yscale, dataseries, select
         # wrapper for Data.new() and NMObjectContainer.new()
-        nlist = ['RecordA0', 'WaveA0', 'Xdata']
+        nlist = ["RecordA0", "WaveA0", "Xdata"]
         for n in nlist:
-            self.assertIsInstance(c0.new(name=n, xscale=XSCALE0,
-                                         yscale=YSCALE0), NMData)
-            self.assertIsInstance(c1.new(name=n, xscale=XSCALE0,
-                                         yscale=YSCALE0), NMData)
+            self.assertIsInstance(
+                c0.new(name=n, xscale=XSCALE0, yscale=YSCALE0), NMData
+            )
+            self.assertIsInstance(
+                c1.new(name=n, xscale=XSCALE0, yscale=YSCALE0), NMData
+            )
         # append(), args: data, select
         # wrapper for NMObjectContainer.new()
         for b in BADTYPES:
@@ -1077,9 +1084,14 @@ class Test(unittest.TestCase):
                 continue  # ok
             with self.assertRaises(TypeError):
                 c0.append(b)
-        nparray0 = np.full([4], 3.14, dtype=np.float64, order='C')
-        d0 = NMData(parent=PARENT, name='RecordA1', np_array=nparray0,
-                    xscale=XSCALE0, yscale=YSCALE0)
+        nparray0 = np.full([4], 3.14, dtype=np.float64, order="C")
+        d0 = NMData(
+            parent=PARENT,
+            name="RecordA1",
+            np_array=nparray0,
+            xscale=XSCALE0,
+            yscale=YSCALE0,
+        )
         self.assertTrue(c0.append(d0))
 
         # copy()
@@ -1088,12 +1100,17 @@ class Test(unittest.TestCase):
         self.assertTrue(c._isequivalent(c0, alert=ALERT))
         # isequivalent, args: DataContainer
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
-        d1 = NMData(parent=PARENT, name='RecordA1', np_array=nparray0,
-                    xscale=XSCALE0, yscale=YSCALE0)
+        d1 = NMData(
+            parent=PARENT,
+            name="RecordA1",
+            np_array=nparray0,
+            xscale=XSCALE0,
+            yscale=YSCALE0,
+        )
         c1.append(d1)
         self.assertTrue(c0._isequivalent(c1, alert=ALERT))
-        self.assertIsInstance(c0._select_set('WaveA0'), NMData)
-        self.assertIsInstance(c1._select_set('RecordA0'), NMData)
+        self.assertIsInstance(c0._select_set("WaveA0"), NMData)
+        self.assertIsInstance(c1._select_set("RecordA0"), NMData)
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
         # remove(), args: names, indexes, confirm
         # wrapper for NMObjectContainer.remove()
@@ -1103,13 +1120,13 @@ class Test(unittest.TestCase):
         # args: parent, name, xscale, yscale, copy
         # yscale tested by NMScale
         # xscale tested by NMScaleX
-        c0 = NMChannel(parent=PARENT, name='A', xscale=XSCALE0, yscale=YSCALE0)
+        c0 = NMChannel(parent=PARENT, name="A", xscale=XSCALE0, yscale=YSCALE0)
         for k in XSCALE0.keys():
             self.assertEqual(c0.x.scale[k], XSCALE0[k])
         for k in YSCALE0.keys():
             self.assertEqual(c0.y.scale[k], YSCALE0[k])
         # parameters
-        plist = PLIST + ['xscale', 'yscale']
+        plist = PLIST + ["xscale", "yscale"]
         self.assertEqual(c0.parameter_list, plist)
 
         # copy()
@@ -1119,53 +1136,53 @@ class Test(unittest.TestCase):
         self.assertTrue(c0.y._isequivalent(c.y, alert=ALERT))
 
         # isequivalent, args: Channel
-        c1 = NMChannel(parent=PARENT, name='A', xscale=XSCALE0, yscale=YSCALE0)
+        c1 = NMChannel(parent=PARENT, name="A", xscale=XSCALE0, yscale=YSCALE0)
         self.assertTrue(c0._isequivalent(c1, alert=ALERT))
         self.assertTrue(c0.x._isequivalent(c1.x, alert=ALERT))
         self.assertTrue(c0.y._isequivalent(c1.y, alert=ALERT))
-        c1.name = 'B'
+        c1.name = "B"
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
 
     def _test_channel_container(self):
         # args: parent, name, copy
-        c0 = NMChannelContainer(parent=PARENT, name='channels')
-        self.assertEqual(c0.parameters['type'], 'Channel')
-        self.assertEqual(c0.prefix, '')
-        self.assertFalse(c0.parameters['rename'])
+        c0 = NMChannelContainer(parent=PARENT, name="channels")
+        self.assertEqual(c0.parameters["type"], "Channel")
+        self.assertEqual(c0.prefix, "")
+        self.assertFalse(c0.parameters["rename"])
         # name
         self.assertEqual(c0.name_next_seq(), 0)
-        self.assertEqual(c0.name_next(), 'A')
+        self.assertEqual(c0.name_next(), "A")
         c0._NMObjectContainer__rename = True
-        self.assertTrue(c0._prefix_set('Test'))
-        self.assertEqual(c0.prefix, 'Test')
-        self.assertEqual(c0.name_next(), 'A')  # prefix not used
-        self.assertTrue(c0._prefix_set(''))  # reset
+        self.assertTrue(c0._prefix_set("Test"))
+        self.assertEqual(c0.prefix, "Test")
+        self.assertEqual(c0.name_next(), "A")  # prefix not used
+        self.assertTrue(c0._prefix_set(""))  # reset
         c0._NMObjectContainer__rename = False
         # new
         self.assertEqual(c0.name_next_seq(), 0)
-        self.assertEqual(c0.name_next(), 'A')
+        self.assertEqual(c0.name_next(), "A")
         c = c0.new(xscale=XSCALE0, yscale=YSCALE0)
         self.assertIsInstance(c, NMChannel)
-        self.assertEqual(c.name, 'A')
+        self.assertEqual(c.name, "A")
         self.assertEqual(c0.name_next_seq(), 1)
-        self.assertEqual(c0.name_next(), 'B')
+        self.assertEqual(c0.name_next(), "B")
         c = c0.new(xscale=XSCALE0, yscale=YSCALE1)
-        self.assertEqual(c.name, 'B')
+        self.assertEqual(c.name, "B")
         self.assertEqual(c0.name_next_seq(), 2)
-        self.assertEqual(c0.name_next(), 'C')
+        self.assertEqual(c0.name_next(), "C")
         # copy
         c = c0.copy()
         self.assertTrue(c0._isequivalent(c, alert=ALERT))
         # isequivalent, args: NMChannelContainer
-        c00 = NMChannelContainer(parent=PARENT, name='channels')
+        c00 = NMChannelContainer(parent=PARENT, name="channels")
         c00.new(xscale=XSCALE0, yscale=YSCALE0)
         c00.new(xscale=XSCALE0, yscale=YSCALE1)
         self.assertTrue(c0._isequivalent(c00, alert=ALERT))
-        c00 = NMChannelContainer(parent=PARENT, name='channels')
+        c00 = NMChannelContainer(parent=PARENT, name="channels")
         c00.new(xscale=XSCALE0, yscale=YSCALE0)
         c00.new(xscale=XSCALE0, yscale=YSCALE0)
         self.assertFalse(c0._isequivalent(c00, alert=ALERT))
-        c00 = NMChannelContainer(parent=PARENT, name='chans')
+        c00 = NMChannelContainer(parent=PARENT, name="chans")
         c00.new(xscale=XSCALE0, yscale=YSCALE0)
         c00.new(xscale=XSCALE0, yscale=YSCALE1)
         self.assertFalse(c0._isequivalent(c00, alert=ALERT))
@@ -1176,10 +1193,10 @@ class Test(unittest.TestCase):
     def _test_dataseries_set(self):
         # args: parent, name, copy
         quiet = True
-        s_all = NMSet(parent=PARENT, name='All')
-        s1 = NMSet(parent=PARENT, name='Set1')
-        s2 = NMSet(parent=PARENT, name='Set2')
-        s3 = NMSet(parent=PARENT, name='Set3')
+        s_all = NMSet(parent=PARENT, name="All")
+        s1 = NMSet(parent=PARENT, name="Set1")
+        s2 = NMSet(parent=PARENT, name="Set2")
+        s3 = NMSet(parent=PARENT, name="Set3")
         num_epochs = 10
         data_a = []
         data_a_c = []
@@ -1187,9 +1204,9 @@ class Test(unittest.TestCase):
         data_c = []
         epoch = []
         for ep in range(0, num_epochs):
-            da = NMData(parent=PARENT, name='RecordA' + str(ep))
-            db = NMData(parent=PARENT, name='RecordB' + str(ep))
-            dc = NMData(parent=PARENT, name='RecordC' + str(ep))
+            da = NMData(parent=PARENT, name="RecordA" + str(ep))
+            db = NMData(parent=PARENT, name="RecordB" + str(ep))
+            dc = NMData(parent=PARENT, name="RecordC" + str(ep))
             da.np_array_make_random_normal(10, mean=0, stdv=1)
             da_c = da.copy()
             db.np_array_make_random_normal(10, mean=0, stdv=1)
@@ -1198,7 +1215,7 @@ class Test(unittest.TestCase):
             data_a_c.append(da_c)
             data_b.append(db)
             data_c.append(dc)
-            epoch.append({'A': da, 'B': db, 'C': dc})
+            epoch.append({"A": da, "B": db, "C": dc})
         self.assertEqual(s1.channel_count, 0)
         self.assertEqual(s1.epoch_count, 0)
         self.assertEqual(s1.data_names, {})
@@ -1207,13 +1224,13 @@ class Test(unittest.TestCase):
         self.assertFalse(s1.locked)
         self.assertTrue(s1.isempty)
         self.assertTrue(s2.isempty)
-        self.assertEqual(s_all.data_names, {'ALL'})
+        self.assertEqual(s_all.data_names, {"ALL"})
         # parameters
-        plist = PLIST + ['sort_template', 'eq_lock']
+        plist = PLIST + ["sort_template", "eq_lock"]
         self.assertEqual(s1.parameter_list, plist)
 
         # bad_names
-        self.assertEqual(s1._bad_names, ['select', 'default'])
+        self.assertEqual(s1._bad_names, ["select", "default"])
         # data_dict_check, args: data_dict, chan_default
         for b in BADTYPES:
             if isinstance(b, list) or isinstance(b, dict):
@@ -1223,20 +1240,20 @@ class Test(unittest.TestCase):
         for b in BADTYPES:
             with self.assertRaises(TypeError):
                 s1._data_dict_check([b])
-        for b in [None, True, 1, 3.14, 'test', nm, '', '0', '&']:
+        for b in [None, True, 1, 3.14, "test", nm, "", "0", "&"]:
             with self.assertRaises(ValueError):
                 s1._data_dict_check({b: data_a})
         for b in BADTYPES:
             if isinstance(b, list):
                 continue  # ok
             with self.assertRaises(TypeError):
-                s1._data_dict_check({'A': b})
+                s1._data_dict_check({"A": b})
         for b in BADTYPES:
             if isinstance(b, str):
                 continue  # ok
             with self.assertRaises(TypeError):
                 s1._data_dict_check(data_a, chan_default=b)
-        for b in ['test', '', '0', '&']:
+        for b in ["test", "", "0", "&"]:
             with self.assertRaises(ValueError):
                 s1._data_dict_check(data_a, chan_default=b)
         self.assertEqual(s1._data_dict_check({}), {})
@@ -1244,29 +1261,29 @@ class Test(unittest.TestCase):
         dA0 = data_a[0]
         dB0 = data_b[0]
         dd = s1._data_dict_check(dA0)
-        self.assertEqual(dd, {'A': [dA0]})
-        dd = s1._data_dict_check(dA0, chan_default='c')
-        self.assertEqual(dd, {'C': [dA0]})
-        dd = s1._data_dict_check(dA0, chan_default='ALL_EXISTING')
+        self.assertEqual(dd, {"A": [dA0]})
+        dd = s1._data_dict_check(dA0, chan_default="c")
+        self.assertEqual(dd, {"C": [dA0]})
+        dd = s1._data_dict_check(dA0, chan_default="ALL_EXISTING")
         self.assertEqual(dd, {})  # nothing because theset is empty
         dd = s1._data_dict_check([dA0])
-        self.assertEqual(dd, {'A': [dA0]})
-        dd = s1._data_dict_check([dA0], chan_default='c')
-        self.assertEqual(dd, {'C': [dA0]})
-        dd = s1._data_dict_check([dA0], chan_default='ALL_EXISTING')
+        self.assertEqual(dd, {"A": [dA0]})
+        dd = s1._data_dict_check([dA0], chan_default="c")
+        self.assertEqual(dd, {"C": [dA0]})
+        dd = s1._data_dict_check([dA0], chan_default="ALL_EXISTING")
         self.assertEqual(dd, {})  # nothing because theset is empty
-        dd = s1._data_dict_check({'A': dA0}, chan_default='c')
-        self.assertEqual(dd, {'A': [dA0]})
-        dd = s1._data_dict_check({'A': dA0, 'B': dB0}, chan_default='c')
-        self.assertEqual(dd, {'A': [dA0], 'B': [dB0]})
-        dd = s1._data_dict_check({'A': dA0, 'B': [dB0]}, chan_default='c')
-        self.assertEqual(dd, {'A': [dA0], 'B': [dB0]})
+        dd = s1._data_dict_check({"A": dA0}, chan_default="c")
+        self.assertEqual(dd, {"A": [dA0]})
+        dd = s1._data_dict_check({"A": dA0, "B": dB0}, chan_default="c")
+        self.assertEqual(dd, {"A": [dA0], "B": [dB0]})
+        dd = s1._data_dict_check({"A": dA0, "B": [dB0]}, chan_default="c")
+        self.assertEqual(dd, {"A": [dA0], "B": [dB0]})
         # theset_clear_if_empty
         self.assertTrue(s1.clear(confirm=False, quiet=quiet))
-        self.assertTrue(s1.add({'A': [dA0], 'B': [dB0]}, quiet=quiet))
+        self.assertTrue(s1.add({"A": [dA0], "B": [dB0]}, quiet=quiet))
         self.assertFalse(s1._theset_clear_if_empty())
-        self.assertEqual(s1._NMSet__theset, {'A': [dA0], 'B': [dB0]})
-        s1._NMSet__theset = {'A': [], 'B': []}
+        self.assertEqual(s1._NMSet__theset, {"A": [dA0], "B": [dB0]})
+        s1._NMSet__theset = {"A": [], "B": []}
         self.assertTrue(s1._theset_clear_if_empty())
         self.assertEqual(s1._NMSet__theset, {})
         # add, args: data_dict
@@ -1276,12 +1293,12 @@ class Test(unittest.TestCase):
         self.assertTrue(s1.add(data_a, quiet=quiet))  # added to chan 'A'
         self.assertFalse(s1.add(data_a, quiet=quiet))  # already exists
         for ep in range(0, num_epochs):
-            self.assertTrue(data_a[ep] in s1._NMSet__theset['A'])
+            self.assertTrue(data_a[ep] in s1._NMSet__theset["A"])
         nlist_a = [data_a[ep].name for ep in range(0, num_epochs)]
-        self.assertEqual(s1.data_names, {'A': nlist_a})
+        self.assertEqual(s1.data_names, {"A": nlist_a})
         self.assertTrue(s1.discard(data_a[1], quiet=quiet))
         nlist_a.remove(data_a[1].name)
-        self.assertEqual(s1.data_names, {'A': nlist_a})
+        self.assertEqual(s1.data_names, {"A": nlist_a})
         self.assertFalse(s1.discard(data_b[1], quiet=quiet))
         self.assertTrue(s1.discard(data_a, quiet=quiet))
         self.assertEqual(s1.data_names, {})
@@ -1290,14 +1307,13 @@ class Test(unittest.TestCase):
         for ep in range(0, num_epochs):
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
         for ep in range(0, num_epochs):
-            self.assertTrue(data_a[ep] in s1._NMSet__theset['A'])
-            self.assertTrue(data_b[ep] in s1._NMSet__theset['B'])
-            self.assertTrue(data_c[ep] in s1._NMSet__theset['C'])
+            self.assertTrue(data_a[ep] in s1._NMSet__theset["A"])
+            self.assertTrue(data_b[ep] in s1._NMSet__theset["B"])
+            self.assertTrue(data_c[ep] in s1._NMSet__theset["C"])
         nlist_a = [data_a[ep].name for ep in range(0, num_epochs)]
         nlist_b = [data_b[ep].name for ep in range(0, num_epochs)]
         nlist_c = [data_c[ep].name for ep in range(0, num_epochs)]
-        self.assertEqual(s1.data_names, {'A': nlist_a, 'B': nlist_b,
-                                         'C': nlist_c})
+        self.assertEqual(s1.data_names, {"A": nlist_a, "B": nlist_b, "C": nlist_c})
         self.assertEqual(s1.channel_count, 3)
         self.assertEqual(s1.epoch_count, num_epochs)
         self.assertTrue(s1.discard(epoch[1], quiet=quiet))
@@ -1305,14 +1321,13 @@ class Test(unittest.TestCase):
         nlist_a.remove(data_a[1].name)
         nlist_b.remove(data_b[1].name)
         nlist_c.remove(data_c[1].name)
-        self.assertEqual(s1.data_names, {'A': nlist_a, 'B': nlist_b,
-                                         'C': nlist_c})
-        self.assertEqual(s1.epoch_count, num_epochs-1)
+        self.assertEqual(s1.data_names, {"A": nlist_a, "B": nlist_b, "C": nlist_c})
+        self.assertEqual(s1.epoch_count, num_epochs - 1)
         # data_dict_check (ALL_EXISTING)
-        dd = s1._data_dict_check(dA0, chan_default='ALL_EXISTING')
-        self.assertEqual(dd, {'A': [dA0], 'B': [dA0], 'C': [dA0]})
-        dd = s1._data_dict_check(data_a, chan_default='ALL_EXISTING')
-        self.assertEqual(dd, {'A': data_a, 'B': data_a, 'C': data_a})
+        dd = s1._data_dict_check(dA0, chan_default="ALL_EXISTING")
+        self.assertEqual(dd, {"A": [dA0], "B": [dA0], "C": [dA0]})
+        dd = s1._data_dict_check(data_a, chan_default="ALL_EXISTING")
+        self.assertEqual(dd, {"A": data_a, "B": data_a, "C": data_a})
         # chan_list_check, args: chan_list
         for b in BADTYPES:
             if isinstance(b, list) or isinstance(b, str):
@@ -1326,26 +1341,22 @@ class Test(unittest.TestCase):
                 s1._chan_list_check(chan_list=[b])
         # reverse, args: chan_list
         # see chan_list_check()
-        self.assertTrue(s1.reverse(chan_list=['A', 'C'], quiet=quiet))
+        self.assertTrue(s1.reverse(chan_list=["A", "C"], quiet=quiet))
         nlist_a.reverse()
         nlist_c.reverse()
-        self.assertEqual(s1.data_names,
-                         {'A': nlist_a, 'B': nlist_b, 'C': nlist_c})
+        self.assertEqual(s1.data_names, {"A": nlist_a, "B": nlist_b, "C": nlist_c})
         self.assertTrue(s1.reverse(quiet=quiet))
         nlist_a.reverse()
         nlist_b.reverse()
         nlist_c.reverse()
-        self.assertEqual(s1.data_names,
-                         {'A': nlist_a, 'B': nlist_b, 'C': nlist_c})
-        self.assertTrue(s1.reverse(chan_list=['B'], quiet=quiet))
+        self.assertEqual(s1.data_names, {"A": nlist_a, "B": nlist_b, "C": nlist_c})
+        self.assertTrue(s1.reverse(chan_list=["B"], quiet=quiet))
         nlist_b.reverse()
-        self.assertEqual(s1.data_names,
-                         {'A': nlist_a, 'B': nlist_b, 'C': nlist_c})
+        self.assertEqual(s1.data_names, {"A": nlist_a, "B": nlist_b, "C": nlist_c})
         # clear, args: chan_list, confirm
         # see chan_list_check()
-        self.assertTrue(s1.clear(chan_list=['A', 'C'], confirm=CONFIRM,
-                                 quiet=quiet))
-        self.assertEqual(s1.data_names, {'A': [], 'B': nlist_b, 'C': []})
+        self.assertTrue(s1.clear(chan_list=["A", "C"], confirm=CONFIRM, quiet=quiet))
+        self.assertEqual(s1.data_names, {"A": [], "B": nlist_b, "C": []})
         self.assertTrue(s1.clear(confirm=CONFIRM, quiet=quiet))
         self.assertEqual(s1.data_names, {})
         # contains, args: data_dict
@@ -1355,15 +1366,15 @@ class Test(unittest.TestCase):
         self.assertTrue(s1.add(data_a, quiet=quiet))
         self.assertTrue(s1.contains(data_a, alert=ALERT))
         self.assertFalse(s1.contains(data_b, alert=ALERT))
-        self.assertFalse(s1.contains({'B': data_a}, alert=ALERT))
+        self.assertFalse(s1.contains({"B": data_a}, alert=ALERT))
         self.assertTrue(s1.discard(data_a[1], quiet=quiet))
         self.assertFalse(s1.contains(data_a[1], alert=ALERT))
         for ep in range(0, num_epochs):
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
-        self.assertTrue(s2.contains({'A': data_a}, alert=ALERT))
-        self.assertTrue(s2.contains({'B': data_b}, alert=ALERT))
-        self.assertTrue(s2.contains({'C': data_c}, alert=ALERT))
-        self.assertFalse(s2.contains({'D': data_c}, alert=ALERT))
+        self.assertTrue(s2.contains({"A": data_a}, alert=ALERT))
+        self.assertTrue(s2.contains({"B": data_b}, alert=ALERT))
+        self.assertTrue(s2.contains({"C": data_c}, alert=ALERT))
+        self.assertFalse(s2.contains({"D": data_c}, alert=ALERT))
         self.assertTrue(s2.discard(epoch[1], quiet=quiet))
         self.assertFalse(s2.contains(epoch[1], alert=ALERT))
         # get_channel, args: chan_char
@@ -1375,47 +1386,47 @@ class Test(unittest.TestCase):
         s1.clear(confirm=False, quiet=quiet)
         for ep in range(0, num_epochs):
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        dlist = s1.get_channel('A')
+        dlist = s1.get_channel("A")
         self.assertEqual(dlist, data_a)
-        dlist = s1.get_channel('B')
+        dlist = s1.get_channel("B")
         self.assertEqual(dlist, data_b)
-        dlist = s1.get_channel('C')
+        dlist = s1.get_channel("C")
         self.assertEqual(dlist, data_c)
-        dlist = s1.get_channel('D')
+        dlist = s1.get_channel("D")
         self.assertEqual(dlist, [])
         self.assertTrue(s1.discard(epoch[0], quiet=quiet))
-        self.assertEqual(s1.epoch_count, num_epochs-1)
-        dlist = s1.get_channel('A')
+        self.assertEqual(s1.epoch_count, num_epochs - 1)
+        dlist = s1.get_channel("A")
         self.assertNotEqual(dlist, data_a)
         dlist.append(data_a[0])  # should not change theset
-        dlist = s1.get_channel('A')
-        self.assertFalse(data_a[0].name in s1.data_names['A'])
+        dlist = s1.get_channel("A")
+        self.assertFalse(data_a[0].name in s1.data_names["A"])
         # get, args: chan_list
         # see chan_list_check()
         s1.clear(confirm=False, quiet=quiet)
         for ep in range(0, num_epochs):
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        s = s1.get('A')
-        self.assertEqual(s, {'A': data_a})
-        s = s1.get('B')
-        self.assertEqual(s, {'B': data_b})
-        s = s1.get('C')
-        self.assertEqual(s, {'C': data_c})
-        s = s1.get('D')
+        s = s1.get("A")
+        self.assertEqual(s, {"A": data_a})
+        s = s1.get("B")
+        self.assertEqual(s, {"B": data_b})
+        s = s1.get("C")
+        self.assertEqual(s, {"C": data_c})
+        s = s1.get("D")
         self.assertEqual(s, {})
         self.assertTrue(s1.discard(epoch[0], quiet=quiet))
-        s = s1.get('A')
-        dlist = s['A']
-        self.assertEqual(len(dlist), num_epochs-1)
+        s = s1.get("A")
+        dlist = s["A"]
+        self.assertEqual(len(dlist), num_epochs - 1)
         dlist.append(data_a[0])  # should not change theset
-        s = s1.get('A')
-        dlist = s['A']
-        self.assertEqual(len(dlist), num_epochs-1)
-        self.assertFalse(data_a[0].name in s1.data_names['A'])
-        s.update({'A': data_a[0]})  # should not change theset
-        s = s1.get('A')
-        dlist = s['A']
-        self.assertEqual(len(dlist), num_epochs-1)
+        s = s1.get("A")
+        dlist = s["A"]
+        self.assertEqual(len(dlist), num_epochs - 1)
+        self.assertFalse(data_a[0].name in s1.data_names["A"])
+        s.update({"A": data_a[0]})  # should not change theset
+        s = s1.get("A")
+        dlist = s["A"]
+        self.assertEqual(len(dlist), num_epochs - 1)
         # difference, args: NMSet, alert
         for b in BADTYPES:
             with self.assertRaises(TypeError):
@@ -1424,11 +1435,11 @@ class Test(unittest.TestCase):
         s2.clear(confirm=False, quiet=quiet)
         for ep in range(0, num_epochs):  # 0-9
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        for ep in range(0, num_epochs-3):  # 0-6
+        for ep in range(0, num_epochs - 3):  # 0-6
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.difference(s2, quiet=quiet))  # 7-9
         for ep in range(0, num_epochs):
-            if ep < num_epochs-3:
+            if ep < num_epochs - 3:
                 self.assertFalse(s1.contains(epoch[ep], alert=ALERT))
             else:
                 self.assertTrue(s1.contains(epoch[ep], alert=ALERT))
@@ -1436,7 +1447,7 @@ class Test(unittest.TestCase):
         s2.clear(confirm=False, quiet=quiet)
         for ep in range(0, num_epochs):  # 0-9
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        for ep in range(0, num_epochs-3):  # 0-6
+        for ep in range(0, num_epochs - 3):  # 0-6
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s2.difference(s1, quiet=quiet))  # empty
         self.assertEqual(s2.data_names, {})
@@ -1446,23 +1457,23 @@ class Test(unittest.TestCase):
                 s1.intersection(b)
         s1.clear(confirm=False, quiet=quiet)
         s2.clear(confirm=False, quiet=quiet)
-        for ep in range(0, num_epochs-2):  # 0-7
+        for ep in range(0, num_epochs - 2):  # 0-7
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        for ep in range(num_epochs-5, num_epochs):  # 5-9
+        for ep in range(num_epochs - 5, num_epochs):  # 5-9
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.intersection(s2, quiet=quiet))  # 5-7
         for ep in range(0, num_epochs):
-            if ep < num_epochs-5:
+            if ep < num_epochs - 5:
                 self.assertFalse(s1.contains(epoch[ep], alert=ALERT))
-            elif ep < num_epochs-2:
+            elif ep < num_epochs - 2:
                 self.assertTrue(s1.contains(epoch[ep], alert=ALERT))
             else:
                 self.assertFalse(s1.contains(epoch[ep], alert=ALERT))
         s1.clear(confirm=False, quiet=quiet)
         s2.clear(confirm=False, quiet=quiet)
-        for ep in range(0, num_epochs-5):  # 0-4
+        for ep in range(0, num_epochs - 5):  # 0-4
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        for ep in range(num_epochs-5, num_epochs):  # 5-9
+        for ep in range(num_epochs - 5, num_epochs):  # 5-9
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.intersection(s2, quiet=quiet))
         self.assertTrue(s1.isempty)
@@ -1473,21 +1484,21 @@ class Test(unittest.TestCase):
                 s1.symmetric_difference(b)
         s1.clear(confirm=False, quiet=quiet)
         s2.clear(confirm=False, quiet=quiet)
-        for ep in range(0, num_epochs-3):  # 0-6
+        for ep in range(0, num_epochs - 3):  # 0-6
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        for ep in range(num_epochs-6, num_epochs):  # 4-9
+        for ep in range(num_epochs - 6, num_epochs):  # 4-9
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.symmetric_difference(s2, quiet=quiet))  # 0-3, 7-9
         for ep in range(0, num_epochs):
-            if ep < num_epochs-6:
+            if ep < num_epochs - 6:
                 self.assertTrue(s1.contains(epoch[ep], alert=ALERT))
-            elif ep < num_epochs-3:
+            elif ep < num_epochs - 3:
                 self.assertFalse(s1.contains(epoch[ep], alert=ALERT))
             else:
                 self.assertTrue(s1.contains(epoch[ep], alert=ALERT))
         s1.clear(confirm=False, quiet=quiet)
         s2.clear(confirm=False, quiet=quiet)
-        for ep in range(0, num_epochs-3):  # 0-6
+        for ep in range(0, num_epochs - 3):  # 0-6
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.symmetric_difference(s2, quiet=quiet))
@@ -1507,9 +1518,9 @@ class Test(unittest.TestCase):
             self.assertTrue(s1.contains(epoch[ep], alert=ALERT))
         s1.clear(confirm=False, quiet=quiet)
         s2.clear(confirm=False, quiet=quiet)
-        for ep in range(0, num_epochs-3):  # 0-6
+        for ep in range(0, num_epochs - 3):  # 0-6
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
-        for ep in range(num_epochs-6, num_epochs):  # 4-9
+        for ep in range(num_epochs - 6, num_epochs):  # 4-9
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.union(s2, quiet=quiet))
         for ep in range(0, num_epochs):
@@ -1557,15 +1568,15 @@ class Test(unittest.TestCase):
             self.assertTrue(s1.add(epoch[ep], quiet=quiet))
             self.assertTrue(s2.add(epoch[ep], quiet=quiet))
         self.assertTrue(s1.isequal(s2, alert=ALERT))
-        s2.discard({'A': data_a[0]}, quiet=quiet)
+        s2.discard({"A": data_a[0]}, quiet=quiet)
         self.assertFalse(s1.isequal(s2, alert=ALERT))
-        s2.add({'A': data_a[0]}, quiet=quiet)
+        s2.add({"A": data_a[0]}, quiet=quiet)
         self.assertTrue(s1.isequal(s2, alert=ALERT))  # order does not matter
-        s2.add({'B': data_a[0]}, quiet=quiet)
+        s2.add({"B": data_a[0]}, quiet=quiet)
         self.assertFalse(s1.isequal(s2, alert=ALERT))
-        s2.discard({'B': data_a[0]}, quiet=quiet)
+        s2.discard({"B": data_a[0]}, quiet=quiet)
         self.assertTrue(s1.isequal(s2, alert=ALERT))
-        s2.add({'D': data_a[0]}, quiet=quiet)
+        s2.add({"D": data_a[0]}, quiet=quiet)
         self.assertFalse(s1.isequal(s2, alert=ALERT))
         s1.clear(confirm=False, quiet=quiet)
         self.assertFalse(s1.isequal(s2, alert=ALERT))
@@ -1578,18 +1589,18 @@ class Test(unittest.TestCase):
             self.assertTrue(s1.add(data_a[ep], quiet=quiet))
             self.assertTrue(s2.add(data_a[ep], quiet=quiet))  # not copies
         self.assertFalse(s1._isequivalent(s2, alert=ALERT))  # different names
-        s2.name = 'Set1'
+        s2.name = "Set1"
         self.assertFalse(s1._isequivalent(s2, alert=ALERT))
         s2.clear(confirm=False, quiet=quiet)
         for ep in range(0, num_epochs, 2):  # 0, 2, 4...
             self.assertTrue(s2.add(data_a_c[ep], quiet=quiet))  # copies
         self.assertTrue(s1._isequivalent(s2, alert=ALERT))
         self.assertFalse(s1.isequal(s2, alert=ALERT))  # different refs
-        s2.discard({'A': data_a_c[0]}, quiet=quiet)
+        s2.discard({"A": data_a_c[0]}, quiet=quiet)
         self.assertFalse(s1._isequivalent(s2, alert=ALERT))
-        s2.add({'A': data_a_c[0]}, quiet=quiet)
+        s2.add({"A": data_a_c[0]}, quiet=quiet)
         self.assertFalse(s1._isequivalent(s2, alert=ALERT))  # different order
-        s2.name = 'Set2'
+        s2.name = "Set2"
         # eq_list_check, args: eq_list, lock
         for b in BADTYPES:
             if b is None or isinstance(b, list):
@@ -1602,16 +1613,16 @@ class Test(unittest.TestCase):
         with self.assertRaises(TypeError):
             s1._eq_list_check([nm], False)
         with self.assertRaises(ValueError):
-            s1._eq_list_check([s1, '|'], False)  # missing another set
+            s1._eq_list_check([s1, "|"], False)  # missing another set
         with self.assertRaises(TypeError):
-            s1._eq_list_check(['|', s1, s2], False)
+            s1._eq_list_check(["|", s1, s2], False)
         with self.assertRaises(TypeError):
             s1._eq_list_check([s1, 0, s2], False)
         with self.assertRaises(ValueError):
-            s1._eq_list_check([s1, 'a', s2], False)
+            s1._eq_list_check([s1, "a", s2], False)
         with self.assertRaises(ValueError):
-            s1._eq_list_check([s1, '|', s2], True)
-        eq_list = [s1, '|', s2]
+            s1._eq_list_check([s1, "|", s2], True)
+        eq_list = [s1, "|", s2]
         self.assertEqual(s1._eq_list_check(eq_list, False), eq_list)
         # equation, args: eq_list, lock
         # see eq_list_check()
@@ -1629,7 +1640,7 @@ class Test(unittest.TestCase):
         for ep in range(0, num_epochs):
             self.assertTrue(s3.contains(epoch[ep], alert=ALERT))
         self.assertEqual(s3.equation_lock, eq_list)
-        self.assertEqual(s3.equation_lock_str, s1.name + ' | ' + s2.name)
+        self.assertEqual(s3.equation_lock_str, s1.name + " | " + s2.name)
         self.assertTrue(s3.locked)
         with self.assertRaises(RuntimeError):
             s3._equation(eq_list, lock=False)  # locked
@@ -1660,12 +1671,9 @@ class Test(unittest.TestCase):
         self.assertTrue(s3._equation(eq_list, lock=True, quiet=quiet))
         for ep in range(0, num_epochs):
             self.assertTrue(s3.contains(epoch[ep], alert=ALERT))
-        self.assertEqual(s3.data_names['A'], s1.data_names['A'] +
-                         s2.data_names['A'])
-        self.assertEqual(s3.data_names['B'], s1.data_names['B'] +
-                         s2.data_names['B'])
-        self.assertEqual(s3.data_names['C'], s1.data_names['C'] +
-                         s2.data_names['C'])
+        self.assertEqual(s3.data_names["A"], s1.data_names["A"] + s2.data_names["A"])
+        self.assertEqual(s3.data_names["B"], s1.data_names["B"] + s2.data_names["B"])
+        self.assertEqual(s3.data_names["C"], s1.data_names["C"] + s2.data_names["C"])
         self.assertTrue(s1.discard(epoch[2]))
         self.assertFalse(s1.contains(epoch[2]))
         self.assertTrue(s2.discard(epoch[5]))
@@ -1683,12 +1691,9 @@ class Test(unittest.TestCase):
                 self.assertFalse(s3.contains(epoch[ep], alert=ALERT))
             else:
                 self.assertTrue(s3.contains(epoch[ep], alert=ALERT))
-        self.assertEqual(s3.data_names['A'], s1.data_names['A'] +
-                         s2.data_names['A'])
-        self.assertEqual(s3.data_names['B'], s1.data_names['B'] +
-                         s2.data_names['B'])
-        self.assertEqual(s3.data_names['C'], s1.data_names['C'] +
-                         s2.data_names['C'])
+        self.assertEqual(s3.data_names["A"], s1.data_names["A"] + s2.data_names["A"])
+        self.assertEqual(s3.data_names["B"], s1.data_names["B"] + s2.data_names["B"])
+        self.assertEqual(s3.data_names["C"], s1.data_names["C"] + s2.data_names["C"])
         # sort_template_set, args: NMSet
         for b in BADTYPES + [nm]:
             with self.assertRaises(TypeError):
@@ -1702,19 +1707,19 @@ class Test(unittest.TestCase):
         nlist_a.remove(data_a[2].name)
         nlist_b.remove(data_b[2].name)
         nlist_c.remove(data_c[2].name)
-        self.assertEqual(s3.data_names['A'], nlist_a)
-        self.assertEqual(s3.data_names['B'], nlist_b)
-        self.assertEqual(s3.data_names['C'], nlist_c)
+        self.assertEqual(s3.data_names["A"], nlist_a)
+        self.assertEqual(s3.data_names["B"], nlist_b)
+        self.assertEqual(s3.data_names["C"], nlist_c)
         # sort, args: NMSet
         for b in BADTYPES + [nm]:
             with self.assertRaises(TypeError):
                 s3.sort(b)
-        s_all.reverse(chan_list=['B'], quiet=quiet)
+        s_all.reverse(chan_list=["B"], quiet=quiet)
         s3.sort(s_all)
         nlist_b.reverse()
-        self.assertEqual(s3.data_names['A'], nlist_a)
-        self.assertEqual(s3.data_names['B'], nlist_b)
-        self.assertEqual(s3.data_names['C'], nlist_c)
+        self.assertEqual(s3.data_names["A"], nlist_a)
+        self.assertEqual(s3.data_names["B"], nlist_b)
+        self.assertEqual(s3.data_names["C"], nlist_c)
         # copy
         """
         c = s3.copy()
@@ -1747,25 +1752,25 @@ class Test(unittest.TestCase):
         # name_ok
         self.assertFalse(nmu.name_ok(None))
         self.assertFalse(nmu.name_ok(0))
-        self.assertFalse(nmu.name_ok(''))
-        self.assertTrue(nmu.name_ok('test'))
-        self.assertFalse(nmu.name_ok('_'))
-        self.assertFalse(nmu.name_ok('*'))
-        self.assertFalse(nmu.name_ok('0'))
-        self.assertTrue(nmu.name_ok('test1234567890'))
+        self.assertFalse(nmu.name_ok(""))
+        self.assertTrue(nmu.name_ok("test"))
+        self.assertFalse(nmu.name_ok("_"))
+        self.assertFalse(nmu.name_ok("*"))
+        self.assertFalse(nmu.name_ok("0"))
+        self.assertTrue(nmu.name_ok("test1234567890"))
         # NM preferences: NAME_SYMBOLS_OK = ['_']
-        self.assertTrue(nmu.name_ok('test_'))
-        self.assertTrue(nmu.name_ok('test_OK'))
-        self.assertTrue(nmu.name_ok('test_OK_OK'))
-        self.assertFalse(nmu.name_ok('test*'))
-        self.assertFalse(nmu.name_ok('@test'))
-        self.assertFalse(nmu.name_ok('te.st'))
-        self.assertTrue(nmu.name_ok('te.st', ok=['.']))
+        self.assertTrue(nmu.name_ok("test_"))
+        self.assertTrue(nmu.name_ok("test_OK"))
+        self.assertTrue(nmu.name_ok("test_OK_OK"))
+        self.assertFalse(nmu.name_ok("test*"))
+        self.assertFalse(nmu.name_ok("@test"))
+        self.assertFalse(nmu.name_ok("te.st"))
+        self.assertTrue(nmu.name_ok("te.st", ok=["."]))
         self.assertFalse(nmu.name_ok([]))
-        self.assertTrue(nmu.name_ok(['test0', 'test1', 'test2']))
-        self.assertFalse(nmu.name_ok(['test0', 'test1', 'test2?']))
-        self.assertFalse(nmu.name_ok(['test0', 1, 'test2']))
-        self.assertFalse(nmu.name_ok(['test0', '', 'test2']))
+        self.assertTrue(nmu.name_ok(["test0", "test1", "test2"]))
+        self.assertFalse(nmu.name_ok(["test0", "test1", "test2?"]))
+        self.assertFalse(nmu.name_ok(["test0", 1, "test2"]))
+        self.assertFalse(nmu.name_ok(["test0", "", "test2"]))
         # number_ok
         self.assertFalse(nmu.number_ok(None))
         self.assertFalse(nmu.number_ok("one"))
@@ -1773,12 +1778,12 @@ class Test(unittest.TestCase):
         self.assertTrue(nmu.number_ok(-5))
         self.assertTrue(nmu.number_ok(1.34))
         self.assertFalse(nmu.number_ok(1.34, must_be_integer=True))
-        self.assertFalse(nmu.number_ok(float('inf')))
-        self.assertTrue(nmu.number_ok(float('inf'), inf_is_ok=True))
-        self.assertFalse(nmu.number_ok(float('-inf')))
-        self.assertTrue(nmu.number_ok(float('-inf'), inf_is_ok=True))
-        self.assertFalse(nmu.number_ok(float('nan')))
-        self.assertTrue(nmu.number_ok(float('nan'), nan_is_ok=True))
+        self.assertFalse(nmu.number_ok(float("inf")))
+        self.assertTrue(nmu.number_ok(float("inf"), inf_is_ok=True))
+        self.assertFalse(nmu.number_ok(float("-inf")))
+        self.assertTrue(nmu.number_ok(float("-inf"), inf_is_ok=True))
+        self.assertFalse(nmu.number_ok(float("nan")))
+        self.assertTrue(nmu.number_ok(float("nan"), nan_is_ok=True))
         self.assertTrue(nmu.number_ok(0, neg_is_ok=False))
         self.assertTrue(nmu.number_ok(1.34, neg_is_ok=False))
         self.assertFalse(nmu.number_ok(-1.34, neg_is_ok=False))
@@ -1791,17 +1796,17 @@ class Test(unittest.TestCase):
         self.assertTrue(nmu.number_ok(-1.34, zero_is_ok=False))
         self.assertFalse(nmu.number_ok(complex(1, -1)))
         self.assertTrue(nmu.number_ok(complex(1, -1), complex_is_ok=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, 'one']))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, "one"]))
         self.assertFalse(nmu.number_ok([0, -5, 1.34, None]))
         self.assertFalse(nmu.number_ok([0, -5, 1.34, False]))
         self.assertTrue(nmu.number_ok([0, -5, 1.34]))
         self.assertFalse(nmu.number_ok([0, -5, 1.34], must_be_integer=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('inf')]))
-        self.assertTrue(nmu.number_ok([0, -5, float('inf')], inf_is_ok=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('-inf')]))
-        self.assertTrue(nmu.number_ok([0, -5, float('-inf')], inf_is_ok=True))
-        self.assertFalse(nmu.number_ok([0, -5, 1.34, float('nan')]))
-        self.assertTrue(nmu.number_ok([0, -5, float('nan')], nan_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float("inf")]))
+        self.assertTrue(nmu.number_ok([0, -5, float("inf")], inf_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float("-inf")]))
+        self.assertTrue(nmu.number_ok([0, -5, float("-inf")], inf_is_ok=True))
+        self.assertFalse(nmu.number_ok([0, -5, 1.34, float("nan")]))
+        self.assertTrue(nmu.number_ok([0, -5, float("nan")], nan_is_ok=True))
         self.assertTrue(nmu.number_ok([0, 3, 4], neg_is_ok=False))
         self.assertFalse(nmu.number_ok([-1, 3, 4], neg_is_ok=False))
         self.assertFalse(nmu.number_ok([0, 3, 4], pos_is_ok=False))
@@ -1809,158 +1814,155 @@ class Test(unittest.TestCase):
         self.assertFalse(nmu.number_ok([0, 3, 4], zero_is_ok=False))
         self.assertTrue(nmu.number_ok([-4, 4], zero_is_ok=False))
         self.assertFalse(nmu.number_ok([0, -5, 1.34, complex(1, -1)]))
-        self.assertTrue(nmu.number_ok([0, -5, 1.34, complex(1, -1)],
-                        complex_is_ok=True))
+        self.assertTrue(
+            nmu.number_ok([0, -5, 1.34, complex(1, -1)], complex_is_ok=True)
+        )
         # quotes
-        self.assertEqual(nmu.quotes('test'), "'test'")
-        self.assertEqual(nmu.quotes('test', single=False), '"test"')
+        self.assertEqual(nmu.quotes("test"), "'test'")
+        self.assertEqual(nmu.quotes("test", single=False), '"test"')
         self.assertEqual(nmu.quotes(None), "'None'")
         self.assertEqual(nmu.quotes(False), "'False'")
         self.assertEqual(nmu.quotes(0), "'0'")
         self.assertEqual(nmu.quotes(nm), "'" + str(nm) + "'")
         # remove_special_char
-        self.assertEqual(nmu.remove_special_char('test*'), 'test')
-        self.assertEqual(nmu.remove_special_char('test'), 'test')
-        self.assertEqual(nmu.remove_special_char('t@st*'), 'tst')
-        self.assertEqual(nmu.remove_special_char(''), '')
+        self.assertEqual(nmu.remove_special_char("test*"), "test")
+        self.assertEqual(nmu.remove_special_char("test"), "test")
+        self.assertEqual(nmu.remove_special_char("t@st*"), "tst")
+        self.assertEqual(nmu.remove_special_char(""), "")
+        self.assertEqual(nmu.remove_special_char(["test*", "t@st*"]), ["test", "tst"])
         self.assertEqual(
-            nmu.remove_special_char(['test*', 't@st*']), ['test', 'tst'])
+            nmu.remove_special_char(["test", None, False]), ["test", "", ""]
+        )
+        self.assertEqual(nmu.remove_special_char(None), "")
+        self.assertEqual(nmu.remove_special_char(False), "")
+        self.assertEqual(nmu.remove_special_char("test_*"), "test")
+        self.assertEqual(nmu.remove_special_char("test_*", ok_char=["_"]), "test_")
         self.assertEqual(
-            nmu.remove_special_char(['test', None, False]), ['test', '', ''])
-        self.assertEqual(nmu.remove_special_char(None), '')
-        self.assertEqual(nmu.remove_special_char(False), '')
-        self.assertEqual(nmu.remove_special_char('test_*'), 'test')
+            nmu.remove_special_char("test_*", ok_char=["_", "*"]), "test_*"
+        )
         self.assertEqual(
-            nmu.remove_special_char('test_*', ok_char=['_']), 'test_')
+            nmu.remove_special_char("test_*", ok_char=["_", "*"], bad_char=["_", "*"]),
+            "test",
+        )
+        self.assertEqual(nmu.remove_special_char("test0_*", bad_char=["t", "0"]), "es")
         self.assertEqual(
-            nmu.remove_special_char('test_*', ok_char=['_', '*']), 'test_*')
-        self.assertEqual(
-            nmu.remove_special_char(
-                'test_*',
-                ok_char=['_', '*'],
-                bad_char=['_', '*']),
-            'test')
-        self.assertEqual(
-            nmu.remove_special_char('test0_*', bad_char=['t', '0']), 'es')
-        self.assertEqual(
-            nmu.remove_special_char('test0_*', ok_char=['_', '*'],
-                                    bad_char=['t', '0']), 'es_*')
+            nmu.remove_special_char("test0_*", ok_char=["_", "*"], bad_char=["t", "0"]),
+            "es_*",
+        )
         # int_list_to_seq_str
         i = [1, 2, 3, 4, 6]
-        s = '1-4, 6'
+        s = "1-4, 6"
         self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, 1, 2, 16, 145]
-        s = '0-2, 16, 145'
+        s = "0-2, 16, 145"
         self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, 2, 4, 6]
-        s = '0, 2, 4, 6'
+        s = "0, 2, 4, 6"
         self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, 1, 5, 6, 7, 12, 19, 20, 21, 22, 124]
-        s = '0, 1, 5-7, 12, 19-22, 124'
+        s = "0, 1, 5-7, 12, 19-22, 124"
         self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, 4, 5.0, 6]
-        s = '0, 4, 6'
+        s = "0, 4, 6"
         self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, None, 4, 5, 6]
-        s = '0, 4-6'
+        s = "0, 4-6"
         self.assertEqual(nmu.int_list_to_seq_str(i), s)
-        i = [0, float('nan'), 4, 5, 6]
-        s = '0, 4-6'
+        i = [0, float("nan"), 4, 5, 6]
+        s = "0, 4-6"
         self.assertEqual(nmu.int_list_to_seq_str(i), s)
         i = [0, 2, 4, 5, 6]
-        s = '0,2,4-6'
-        self.assertEqual(nmu.int_list_to_seq_str(i, seperator=','), s)
+        s = "0,2,4-6"
+        self.assertEqual(nmu.int_list_to_seq_str(i, seperator=","), s)
         i = [0, 2, 3, 4, 6]
-        s = '0$2-4$6'
-        self.assertEqual(nmu.int_list_to_seq_str(i, seperator='$'), s)
+        s = "0$2-4$6"
+        self.assertEqual(nmu.int_list_to_seq_str(i, seperator="$"), s)
         i = [0, 2, 3, 4, 6]
-        s = '0, 2-4, 6, '
+        s = "0, 2-4, 6, "
         self.assertEqual(nmu.int_list_to_seq_str(i, seperator_at_end=True), s)
         # channel_char
-        self.assertEqual(nmu.channel_char(0), 'A')
-        self.assertEqual(nmu.channel_char(1), 'B')
-        self.assertEqual(nmu.channel_char(2), 'C')
-        self.assertEqual(nmu.channel_char(10), 'K')
-        self.assertEqual(nmu.channel_char(26), '')
-        self.assertEqual(nmu.channel_char(-2), '')
-        self.assertEqual(nmu.channel_char(float('inf')), '')
-        self.assertEqual(nmu.channel_char(float('nan')), '')
-        self.assertEqual(nmu.channel_char(None), '')
+        self.assertEqual(nmu.channel_char(0), "A")
+        self.assertEqual(nmu.channel_char(1), "B")
+        self.assertEqual(nmu.channel_char(2), "C")
+        self.assertEqual(nmu.channel_char(10), "K")
+        self.assertEqual(nmu.channel_char(26), "")
+        self.assertEqual(nmu.channel_char(-2), "")
+        self.assertEqual(nmu.channel_char(float("inf")), "")
+        self.assertEqual(nmu.channel_char(float("nan")), "")
+        self.assertEqual(nmu.channel_char(None), "")
         self.assertEqual(nmu.channel_char([]), [])
-        self.assertEqual(nmu.channel_char([0, 1, 3]), ['A', 'B', 'D'])
-        self.assertEqual(nmu.channel_char([0, 1, 26]), ['A', 'B', ''])
-        clist = ['w', 'x', 'y', 'z']
-        self.assertEqual(nmu.channel_char(0, char_list=clist), 'W')
-        self.assertEqual(nmu.channel_char(3, char_list=clist), 'Z')
-        self.assertEqual(nmu.channel_char(4, char_list=clist), '')
-        self.assertEqual(nmu.channel_char([0, 1, 3], char_list=clist),
-                         ['W', 'X', 'Z'])
-        clist = ['AA', 'BB', 'CC', 'DD']
-        self.assertEqual(nmu.channel_char(3, char_list=clist), 'DD')
+        self.assertEqual(nmu.channel_char([0, 1, 3]), ["A", "B", "D"])
+        self.assertEqual(nmu.channel_char([0, 1, 26]), ["A", "B", ""])
+        clist = ["w", "x", "y", "z"]
+        self.assertEqual(nmu.channel_char(0, char_list=clist), "W")
+        self.assertEqual(nmu.channel_char(3, char_list=clist), "Z")
+        self.assertEqual(nmu.channel_char(4, char_list=clist), "")
+        self.assertEqual(nmu.channel_char([0, 1, 3], char_list=clist), ["W", "X", "Z"])
+        clist = ["AA", "BB", "CC", "DD"]
+        self.assertEqual(nmu.channel_char(3, char_list=clist), "DD")
         # channel_num
         self.assertEqual(nmu.channel_num(None), -1)
-        self.assertEqual(nmu.channel_num('A'), 0)
-        self.assertEqual(nmu.channel_num('a'), 0)
-        self.assertEqual(nmu.channel_num('b'), 1)
-        self.assertEqual(nmu.channel_num('K'), 10)
-        self.assertEqual(nmu.channel_num(''), -1)
-        self.assertEqual(nmu.channel_num('AA'), -1)
-        clist = ['AA', 'BB', 'CC', 'DD']
-        self.assertEqual(nmu.channel_num('AA', char_list=clist), 0)
-        clist = ['w', 'x', 'y', 'z']
-        self.assertEqual(nmu.channel_num('A', char_list=clist), -1)
-        self.assertEqual(nmu.channel_num('Y', char_list=clist), 2)
+        self.assertEqual(nmu.channel_num("A"), 0)
+        self.assertEqual(nmu.channel_num("a"), 0)
+        self.assertEqual(nmu.channel_num("b"), 1)
+        self.assertEqual(nmu.channel_num("K"), 10)
+        self.assertEqual(nmu.channel_num(""), -1)
+        self.assertEqual(nmu.channel_num("AA"), -1)
+        clist = ["AA", "BB", "CC", "DD"]
+        self.assertEqual(nmu.channel_num("AA", char_list=clist), 0)
+        clist = ["w", "x", "y", "z"]
+        self.assertEqual(nmu.channel_num("A", char_list=clist), -1)
+        self.assertEqual(nmu.channel_num("Y", char_list=clist), 2)
         self.assertEqual(nmu.channel_num([]), [])
-        self.assertEqual(nmu.channel_num(['A', 'B', 'D']), [0, 1, 3])
-        self.assertEqual(nmu.channel_num(['A', 'B', '@']), [0, 1, -1])
-        self.assertEqual(nmu.channel_num(['c', 'a', 'f']), [2, 0, 5])
-        self.assertEqual(nmu.channel_num(['A', 'B', 'C'], char_list=clist),
-                         [-1, -1, -1])
-        self.assertEqual(nmu.channel_num(['w', 'z', 'x'], char_list=clist),
-                         [0, 3, 1])
+        self.assertEqual(nmu.channel_num(["A", "B", "D"]), [0, 1, 3])
+        self.assertEqual(nmu.channel_num(["A", "B", "@"]), [0, 1, -1])
+        self.assertEqual(nmu.channel_num(["c", "a", "f"]), [2, 0, 5])
+        self.assertEqual(
+            nmu.channel_num(["A", "B", "C"], char_list=clist), [-1, -1, -1]
+        )
+        self.assertEqual(nmu.channel_num(["w", "z", "x"], char_list=clist), [0, 3, 1])
         # channel_char_check
-        self.assertEqual(nmu.channel_char_check(None), '')
-        self.assertEqual(nmu.channel_char_check('A'), 'A')
-        self.assertEqual(nmu.channel_char_check('Z'), 'Z')
-        clist = ['w', 'x', 'y', 'z']
-        self.assertEqual(nmu.channel_char_check('A', char_list=clist), '')
-        self.assertEqual(nmu.channel_char_check('Z', char_list=clist), 'Z')
+        self.assertEqual(nmu.channel_char_check(None), "")
+        self.assertEqual(nmu.channel_char_check("A"), "A")
+        self.assertEqual(nmu.channel_char_check("Z"), "Z")
+        clist = ["w", "x", "y", "z"]
+        self.assertEqual(nmu.channel_char_check("A", char_list=clist), "")
+        self.assertEqual(nmu.channel_char_check("Z", char_list=clist), "Z")
         self.assertEqual(nmu.channel_char_check([]), [])
-        self.assertEqual(nmu.channel_char_check(['A', 'B', 'D']),
-                         ['A', 'B', 'D'])
-        self.assertEqual(nmu.channel_char_check(['A', 'B', 'DD']),
-                         ['A', 'B', ''])
-        self.assertEqual(nmu.channel_char_check(['A', 'B', 'D'],
-                         char_list=clist), ['', '', ''])
+        self.assertEqual(nmu.channel_char_check(["A", "B", "D"]), ["A", "B", "D"])
+        self.assertEqual(nmu.channel_char_check(["A", "B", "DD"]), ["A", "B", ""])
+        self.assertEqual(
+            nmu.channel_char_check(["A", "B", "D"], char_list=clist), ["", "", ""]
+        )
         # channel_char_search
-        self.assertEqual(nmu.channel_char_search(None, 'A'), -1)
-        self.assertEqual(nmu.channel_char_search('testA1', None), -1)
+        self.assertEqual(nmu.channel_char_search(None, "A"), -1)
+        self.assertEqual(nmu.channel_char_search("testA1", None), -1)
         with self.assertRaises(TypeError):
-            self.assertEqual(nmu.channel_char_search('testA1', 'A1'), -1)
+            self.assertEqual(nmu.channel_char_search("testA1", "A1"), -1)
         with self.assertRaises(TypeError):
-            self.assertEqual(nmu.channel_char_search('testA1', 'A$'), -1)
-        self.assertEqual(nmu.channel_char_search('testA1', 'a'), 4)
-        self.assertEqual(nmu.channel_char_search('testa111', 'A'), 4)
-        self.assertEqual(nmu.channel_char_search('testA', 'A'), 4)
-        self.assertEqual(nmu.channel_char_search('A', 'A'), 0)
-        self.assertEqual(nmu.channel_char_search('testA111', 'B'), -1)
-        self.assertEqual(nmu.channel_char_search('A', 'B'), -1)
-        self.assertEqual(nmu.channel_char_search('taste', 'A'), -1)
-        self.assertEqual(nmu.channel_char_search('testAA12', 'AA'), 4)
-        self.assertEqual(nmu.channel_char_search('testAAA1267', 'AAA'), 4)
-        self.assertEqual(nmu.channel_char_search('testAAA@1267', 'AAA'), 4)
-        self.assertEqual(nmu.channel_char_search('testA@1267', 'A'), 4)
-        self.assertEqual(nmu.channel_char_search('A@1267', 'A'), 0)
+            self.assertEqual(nmu.channel_char_search("testA1", "A$"), -1)
+        self.assertEqual(nmu.channel_char_search("testA1", "a"), 4)
+        self.assertEqual(nmu.channel_char_search("testa111", "A"), 4)
+        self.assertEqual(nmu.channel_char_search("testA", "A"), 4)
+        self.assertEqual(nmu.channel_char_search("A", "A"), 0)
+        self.assertEqual(nmu.channel_char_search("testA111", "B"), -1)
+        self.assertEqual(nmu.channel_char_search("A", "B"), -1)
+        self.assertEqual(nmu.channel_char_search("taste", "A"), -1)
+        self.assertEqual(nmu.channel_char_search("testAA12", "AA"), 4)
+        self.assertEqual(nmu.channel_char_search("testAAA1267", "AAA"), 4)
+        self.assertEqual(nmu.channel_char_search("testAAA@1267", "AAA"), 4)
+        self.assertEqual(nmu.channel_char_search("testA@1267", "A"), 4)
+        self.assertEqual(nmu.channel_char_search("A@1267", "A"), 0)
         # history_change
         # history
         quiet = False
-        fxn = '_test_utilities'
-        c = 'Test'  # this class
-        h = 'history message'
-        r = 'nm.' + c + '.' + fxn + ': ' + h
+        fxn = "_test_utilities"
+        c = "Test"  # this class
+        h = "history message"
+        r = "nm." + c + "." + fxn + ": " + h
         self.assertEqual(nmu.history(h, quiet=quiet), r)
-        tp = 'nm.one.two.three'
-        r = tp + ': ' + h
+        tp = "nm.one.two.three"
+        r = tp + ": " + h
         self.assertEqual(nmu.history(h, tp=tp, quiet=quiet), r)
         """
         # get_treepath
@@ -2062,7 +2064,6 @@ class Test(unittest.TestCase):
 
 
 class NMObjectTest(NMObject):
-
     def __init__(self, parent, name):
         super().__init__(parent=parent, name=name)
         self.myvalue = 1
@@ -2071,7 +2072,7 @@ class NMObjectTest(NMObject):
     @property
     def parameters(self):
         k = super().parameters
-        k.update({'myvalue': self.myvalue})
+        k.update({"myvalue": self.myvalue})
         return k
 
 

@@ -36,10 +36,9 @@ class NMFolder(NMObject):
     def __init__(
         self,
         parent: Union[object, None] = None,
-        name: str = 'NMFolder',
-        copy: Union[nmu.NMFolderType, None] = None  # see copy()
+        name: str = "NMFolder",
+        copy: Union[nmu.NMFolderType, None] = None,  # see copy()
     ) -> None:
-
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__data_container = None
@@ -51,7 +50,7 @@ class NMFolder(NMObject):
             self.__data_container = copy.data.copy()
             self.__dataseries_container = copy.dataseries.copy()
         else:
-            e = nmu.typeerror(copy, 'copy', 'NMFolder')
+            e = nmu.typeerror(copy, "copy", "NMFolder")
             raise TypeError(e)
 
         if not isinstance(self.__data_container, NMDataContainer):
@@ -60,10 +59,7 @@ class NMFolder(NMObject):
             self.__dataseries_container = NMDataSeriesContainer(parent=self)
 
     # override
-    def __eq__(
-        self,
-        other: nmu.NMFolderType
-    ) -> bool:
+    def __eq__(self, other: nmu.NMFolderType) -> bool:
         if not super().__eq__(other):
             return False
         if self.__data_container != other._NMFolder__data_container:
@@ -101,11 +97,11 @@ class NMFolderContainer(NMObjectContainer):
     def __init__(
         self,
         parent: object = None,
-        name: str = 'NMFolderContainer',
+        name: str = "NMFolderContainer",
         rename_on: bool = True,
-        name_prefix: str = 'folder',
-        name_seq_format: str = '0',
-        copy: nmu.NMFolderContainerType = None  # see copy()
+        name_prefix: str = "folder",
+        name_seq_format: str = "0",
+        copy: nmu.NMFolderContainerType = None,  # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -113,7 +109,7 @@ class NMFolderContainer(NMObjectContainer):
             rename_on=rename_on,
             name_prefix=name_prefix,
             name_seq_format=name_seq_format,
-            copy=copy
+            copy=copy,
         )
 
     # override, no super
@@ -127,7 +123,7 @@ class NMFolderContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = 'default',
+        name: str = "default",
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> nmu.NMFolderType:
@@ -137,16 +133,16 @@ class NMFolderContainer(NMObjectContainer):
         return f
 
     def open_hdf5(self):
-        dataseries = 'Record'
-        with h5py.File('nmFolder0.hdf5', 'r') as f:
+        dataseries = "Record"
+        with h5py.File("nmFolder0.hdf5", "r") as f:
             # print(f.keys())
             data = []
             for k in f.keys():
-                if k[0:len(dataseries)] == dataseries:
+                if k[0 : len(dataseries)] == dataseries:
                     print(k)
             # for name in f:
-                # print(name)
-            d = f['RecordA0']
+            # print(name)
+            d = f["RecordA0"]
 
             for i in d.attrs.keys():
                 print(i)
@@ -156,11 +152,11 @@ class NMFolderContainer(NMObjectContainer):
             # IGORWaveType
             # print(d.attrs.__getitem__('IGORWaveNote'))
             # for a in d.attrs:
-                # print(item + ":", d.attrs[item])
-                # print(item + ":", d.attrs.get(item))
-                # print(a.shape)
+            # print(item + ":", d.attrs[item])
+            # print(item + ":", d.attrs.get(item))
+            # print(a.shape)
             # for k in a.keys():
-                # print(k)
+            # print(k)
             # print(a)
             # pf = f['NMPrefix_Record']
             # print(pf)

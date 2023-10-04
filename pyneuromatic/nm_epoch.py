@@ -44,11 +44,10 @@ class NMEpoch(NMObject):
     def __init__(
         self,
         parent: Union[object, None] = None,
-        name: str = 'NMEpoch',
+        name: str = "NMEpoch",
         number: int = -1,
-        copy: Union[nmu.NMEpochType, None] = None
+        copy: Union[nmu.NMEpochType, None] = None,
     ) -> None:
-
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__thedata = []  # list of NMData references
@@ -69,11 +68,11 @@ class NMEpoch(NMObject):
                     o = data.get(d.name)
                     self.__thedata.append(o)
         else:
-            e = nmu.typeerror(copy, 'copy', 'NMEpoch')
+            e = nmu.typeerror(copy, "copy", "NMEpoch")
             raise TypeError(e)
 
         if not isinstance(number, int):
-            e = nmu.typeerror(number, 'number', 'int')
+            e = nmu.typeerror(number, "number", "int")
             raise TypeError(e)
 
         self.__number = number
@@ -81,10 +80,7 @@ class NMEpoch(NMObject):
         return None
 
     # override
-    def __eq__(
-        self,
-        other: nmu.NMEpochType
-    ) -> bool:
+    def __eq__(self, other: nmu.NMEpochType) -> bool:
         if not super().__eq__(other):
             return False
         if self.__number != other.number:
@@ -128,15 +124,20 @@ class NMEpochContainer(NMObjectContainer):
     def __init__(
         self,
         parent: Union[object, None] = None,
-        name: str = 'NMEpochContainer',
+        name: str = "NMEpochContainer",
         rename_on: bool = False,
-        name_prefix: str = 'E',
-        name_seq_format: str = '0',
-        copy: Union[nmu.NMEpochContainerType, None] = None
+        name_prefix: str = "E",
+        name_seq_format: str = "0",
+        copy: Union[nmu.NMEpochContainerType, None] = None,
     ) -> None:
-        return super().__init__(parent=parent, name=name, rename_on=rename_on,
-                                name_prefix=name_prefix,
-                                name_seq_format=name_seq_format, copy=copy)
+        return super().__init__(
+            parent=parent,
+            name=name,
+            rename_on=rename_on,
+            name_prefix=name_prefix,
+            name_seq_format=name_seq_format,
+            copy=copy,
+        )
 
     # override, no super
     def copy(self) -> nmu.NMEpochContainerType:
@@ -154,7 +155,7 @@ class NMEpochContainer(NMObjectContainer):
         # quiet: bool = nmp.QUIET
     ) -> nmu.NMEpochType:
         name = self.name_next()
-        istr = name.replace(self.name_prefix, '')
+        istr = name.replace(self.name_prefix, "")
         if str.isdigit(istr):
             iseq = int(istr)
         else:
