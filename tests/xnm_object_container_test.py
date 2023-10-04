@@ -7,10 +7,10 @@ Created on Sun Dec 15 09:23:07 2019
 """
 import unittest
 
-from nm_manager import NMManager
-from nm_object import NMObject
-from nm_object_container import NMObjectContainer
-import nm_preferences as nmp
+from pyneuromatic.nm_manager import NMManager
+from pyneuromatic.nm_object import NMObject
+from pyneuromatic.nm_object_container import NMObjectContainer
+import pyneuromatic.nm_preferences as nmp
 
 NM = NMManager(quiet=True)
 BADTYPES = [None, 1, 3.14, True, [], (), {}, set(), 'string', NM]

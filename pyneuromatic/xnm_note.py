@@ -3,9 +3,9 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-from nm_object import NMObject, NMObjectType
-from nm_object_container import NMObjectContainer
-import nm_utilities as nmu
+from pyneuromatic.nm_object import NMObject, NMObjectType
+from pyneuromatic.nm_object_container import NMObjectContainer
+import pyneuromatic.nm_utilities as nmu
 from typing import Dict, List, NewType
 
 NOTE_PREFIX = 'Note'

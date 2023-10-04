@@ -8,12 +8,12 @@ Created on Sat Aug  5 14:00:26 2023
 import numpy
 import unittest
 
-from nm_data import NMData, NMDataContainer
-from nm_dataseries import NMDataSeries
-from nm_manager import NMManager
-import nm_preferences as nmp
-from nm_scale import NMScale, NMScaleX
-import nm_utilities as nmu
+from pyneuromatic.nm_data import NMData, NMDataContainer
+from pyneuromatic.nm_dataseries import NMDataSeries
+from pyneuromatic.nm_manager import NMManager
+import pyneuromatic.nm_preferences as nmp
+from pyneuromatic.nm_scale import NMScale, NMScaleX
+import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
 NM = NMManager(quiet=QUIET)

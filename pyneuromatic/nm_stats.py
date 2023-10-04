@@ -5,8 +5,8 @@ Created on Fri Nov  1 08:22:44 2019
 
 @author: jason
 """
-import nm_preferences as nmp
-import nm_utilities as nmu
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
 
 
 class Stats(object):

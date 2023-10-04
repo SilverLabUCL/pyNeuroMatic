@@ -6,11 +6,11 @@ Copyright 2019 Jason Rothman
 # import matplotlib
 from typing import Dict, List, Union
 
-from nm_object import NMObject
-import nm_preferences as nmp
-from nm_project import NMProject, NMProjectContainer
-from nm_stats import Stats
-import nm_utilities as nmu
+from pyneuromatic.nm_object import NMObject
+import pyneuromatic.nm_preferences as nmp
+from pyneuromatic.nm_project import NMProject, NMProjectContainer
+from pyneuromatic.nm_stats import Stats
+import pyneuromatic.nm_utilities as nmu
 
 nm = None  # holds Manager, accessed via console
 

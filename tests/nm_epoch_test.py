@@ -7,10 +7,10 @@ Created on Tue Aug  8 21:35:21 2023
 """
 import unittest
 
-from nm_data import NMData
-from nm_epoch import NMEpoch, NMEpochContainer
-from nm_manager import NMManager
-import nm_utilities as nmu
+from pyneuromatic.nm_data import NMData
+from pyneuromatic.nm_epoch import NMEpoch, NMEpochContainer
+from pyneuromatic.nm_manager import NMManager
+import pyneuromatic.nm_utilities as nmu
 
 NM = NMManager(quiet=True)
 ENAME0 = 'E0'

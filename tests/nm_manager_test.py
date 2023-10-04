@@ -7,15 +7,15 @@ Created on Thu Aug  3 11:30:25 2023
 """
 import unittest
 
-from nm_channel import NMChannelContainer
-from nm_data import NMDataContainer
-from nm_dataseries import NMDataSeriesContainer
-from nm_epoch import NMEpochContainer
-from nm_folder import NMFolderContainer
-from nm_manager import NMManager
+from pyneuromatic.nm_channel import NMChannelContainer
+from pyneuromatic.nm_data import NMDataContainer
+from pyneuromatic.nm_dataseries import NMDataSeriesContainer
+from pyneuromatic.nm_epoch import NMEpochContainer
+from pyneuromatic.nm_folder import NMFolderContainer
+from pyneuromatic.nm_manager import NMManager
 
-from nm_project import NMProjectContainer
-import nm_utilities as nmu
+from pyneuromatic.nm_project import NMProjectContainer
+import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
 NUMPROJECTS = 3

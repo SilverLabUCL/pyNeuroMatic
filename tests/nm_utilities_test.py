@@ -7,8 +7,8 @@ Created on Mon Jul 17 17:23:44 2023
 """
 import unittest
 
-from nm_manager import NMManager
-import nm_utilities as nmu
+from pyneuromatic.nm_manager import NMManager
+import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
 NM = NMManager(quiet=QUIET)

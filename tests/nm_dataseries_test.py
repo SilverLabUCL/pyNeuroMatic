@@ -7,13 +7,13 @@ Created on Tue Aug  8 21:36:01 2023
 """
 import unittest
 
-from nm_channel import NMChannel, NMChannelContainer
-from nm_data import NMData, NMDataContainer
-from nm_dataseries import NMDataSeries, NMDataSeriesContainer
-from nm_epoch import NMEpoch, NMEpochContainer
-from nm_manager import NMManager
-import nm_preferences as nmp
-import nm_utilities as nmu
+from pyneuromatic.nm_channel import NMChannel, NMChannelContainer
+from pyneuromatic.nm_data import NMData, NMDataContainer
+from pyneuromatic.nm_dataseries import NMDataSeries, NMDataSeriesContainer
+from pyneuromatic.nm_epoch import NMEpoch, NMEpochContainer
+from pyneuromatic.nm_manager import NMManager
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
 
 NM = NMManager(quiet=True)
 

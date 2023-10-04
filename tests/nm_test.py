@@ -10,17 +10,18 @@ import unittest
 import numpy as np
 import time
 
-from nm_manager import NMManager
-from nm_object import NMObject
-from nm_object_container import NMObjectContainer
-from nm_channel import NMChannel, NMChannelContainer
-from nm_data import NMData, NMDataContainer
-from nm_dataseries import NMDataSeries, NMDataSeriesContainer
-from nm_set import NMSet, NMSetContainer
-from nm_scale import NMScale, NMScaleX
-from nm_project import NMProject
-import nm_preferences as nmp
-import nm_utilities as nmu
+from pyneuromatic.nm_manager import NMManager
+from pyneuromatic.nm_object import NMObject
+from pyneuromatic.nm_object_container import NMObjectContainer
+from pyneuromatic.nm_channel import NMChannel, NMChannelContainer
+from pyneuromatic.nm_data import NMData, NMDataContainer
+from pyneuromatic.nm_dataseries import NMDataSeries, NMDataSeriesContainer
+from pyneuromatic.nm_scale import NMScale, NMScaleX
+from pyneuromatic.nm_project import NMProject
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
+
+# from pyneuromatic.xnm_set import NMSet, NMSetContainer
 
 nm = NMManager(quiet=True)
 PARENT = nm

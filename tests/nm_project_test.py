@@ -8,10 +8,10 @@ Created on Sat Jul  8 07:56:04 2023
 
 import unittest
 
-from nm_folder import NMFolder, NMFolderContainer
-from nm_manager import NMManager
-from nm_project import NMProject, NMProjectContainer
-import nm_utilities as nmu
+from pyneuromatic.nm_folder import NMFolder, NMFolderContainer
+from pyneuromatic.nm_manager import NMManager
+from pyneuromatic.nm_project import NMProject, NMProjectContainer
+import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
 NM = NMManager(quiet=QUIET)

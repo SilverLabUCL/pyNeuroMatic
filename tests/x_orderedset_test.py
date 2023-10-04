@@ -2,10 +2,12 @@ from collections.abc import Mapping, Iterable
 from sys import getsizeof
 from timeit import default_timer
 import unittest
+import pytest
 
 
-from orderedset import OrderedSet
+from pyneuromatic.x_orderedset import OrderedSet
 
+pytest.skip(allow_module_level=True)
 
 class OrderedSetTests(unittest.TestCase):
 

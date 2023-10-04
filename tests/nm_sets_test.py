@@ -8,11 +8,11 @@ Created on Sun Jul  9 10:56:59 2023
 import unittest
 import random
 
-from nm_manager import NMManager
-from nm_object import NMObject
+from pyneuromatic.nm_manager import NMManager
+from pyneuromatic.nm_object import NMObject
+from pyneuromatic.nm_sets import NMSets
+import pyneuromatic.nm_utilities as nmu
 from nm_object_test import NMObject2
-from nm_sets import NMSets
-import nm_utilities as nmu
 
 QUIET = True
 NM = NMManager(quiet=QUIET)

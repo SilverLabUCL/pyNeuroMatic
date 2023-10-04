@@ -7,9 +7,9 @@ Created on Sat Jan 18 15:24:16 2020
 """
 from typing import Dict, Union
 
-from nm_object import NMObject
-import nm_preferences as nmp
-import nm_utilities as nmu
+from pyneuromatic.nm_object import NMObject
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
 
 
 class NMScale(NMObject):

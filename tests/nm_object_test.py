@@ -7,10 +7,10 @@ Created on Sun Dec 15 09:23:07 2019
 """
 import unittest
 
-from nm_manager import NMManager
-from nm_object import NMObject
-import nm_preferences as nmp
-import nm_utilities as nmu
+from pyneuromatic.nm_manager import NMManager
+from pyneuromatic.nm_object import NMObject
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
 NM = NMManager(quiet=QUIET)

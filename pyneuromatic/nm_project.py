@@ -5,10 +5,10 @@ Copyright 2019 Jason Rothman
 """
 from typing import Dict, Union
 
-from nm_folder import NMFolderContainer
-from nm_object import NMObject
-from nm_object_container import NMObjectContainer
-import nm_utilities as nmu
+from pyneuromatic.nm_folder import NMFolderContainer
+from pyneuromatic.nm_object import NMObject
+from pyneuromatic.nm_object_container import NMObjectContainer
+import pyneuromatic.nm_utilities as nmu
 
 """
 NM class tree:

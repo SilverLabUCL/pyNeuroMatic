@@ -5,10 +5,10 @@ Created on Tue Nov  1 13:51:13 2022
 
 @author: jason
 """
-from nm_object import NMObject
-import nm_preferences as nmp
-import nm_utilities as nmu
-from nm_utilities import NMObjectType, NMObjectContainerType
+from pyneuromatic.nm_object import NMObject
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
+from pyneuromatic.nm_utilities import NMObjectType, NMObjectContainerType
 from typing import Dict, List, Optional
 
 
