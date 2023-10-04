@@ -1,5 +1,5 @@
-NMPY
-=========
+PyNeuroMatic
+==============
 
 [![GitHub CI](https://github.com/jasonsethrothman/NMPY/actions/workflows/ci.yml/badge.svg)](https://github.com/jasonsethrothman/NMPY/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/NMPY)](https://pypi.org/project/NMPY/)
@@ -16,17 +16,17 @@ Installation
 
 ### Pip
 
-NMPY can be installed with pip (preferably in a [virtual environment](https://docs.python.org/3/tutorial/venv.html)):
+PyNeuroMatic can be installed with pip (preferably in a [virtual environment](https://docs.python.org/3/tutorial/venv.html)):
 
-    pip install nmpy
+    pip install pyneuromatic
 
 
 ### Installation from source
 
 Clone the repository:
 
-    git clone https://github.com/jasonsethrothman/NMPY.git
-    cd NMPY
+    git clone https://github.com/jasonsethrothman/pyneuromatic.git
+    cd pyneuromatic
 
 It should be possible to install NMPY using just:
 
@@ -34,8 +34,8 @@ It should be possible to install NMPY using just:
 
 To develop NMPY, you can use the `dev` extra and the `development` branch:
 
-    git clone https://github.com/jasonsethrothman/NMPY.git
-    cd NMPY
+    git clone https://github.com/jasonsethrothman/pyneuromatic.git
+    cd pyneuromatic
     git checkout development
     pip install .[dev]
 
