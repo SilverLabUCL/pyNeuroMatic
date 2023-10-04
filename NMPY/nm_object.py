@@ -81,6 +81,19 @@ class NMObject(object):
         notes_on: bool = True,
         copy: Union[nmu.NMObjectType, None] = None  # see copy()
     ) -> None:
+        """Initialise a NMObject.
+
+        :param parent: parent of this NMObject (see NM class tree)
+        :type parent: object, optional
+        :param name: name of this NMObject
+        :type name: str, optional
+        :param notes_on: turn notes on/off for this NMObect
+        :type notes_on: bool, optional
+        :param copy: pass a NMObect here to create a copy of it (see copy())
+        :type copy: NMObject, optional
+        :return: None
+        :rtype: None
+        """
 
         date_time = str(datetime.datetime.now())
         self.__created = date_time  # NOT COPIED
@@ -136,6 +149,7 @@ class NMObject(object):
     ) -> bool:
         # executed with '==' but not 'is'
         # can use 'is' to test if objects are the same
+
         # if not super().__eq__(other):  # not sure this is needed (object)
         #    return False
         if not isinstance(other, type(self)):
@@ -158,6 +172,15 @@ class NMObject(object):
         nmobject_list1: List[nmu.NMObjectType],
         nmobject_list2: List[nmu.NMObjectType]
     ) -> bool:
+        """Compare lists of NMObjects.
+
+        :param nmobject_list1: first list of NMObjects
+        :type nmobject_list1: list[NMObject]
+        :param nmobject_list2: second list of NMObjects
+        :type nmobject_list2: list[NMObject]
+        :return: true if lists of NMObjects are equal, otherwise false
+        :rtype: bool
+        """
         if nmobject_list1 is None:
             return nmobject_list2 is None
         elif nmobject_list2 is None:
@@ -235,6 +258,20 @@ class NMObject(object):
         # True: list of names or NMObjects, e.g. ['nm', 'project0', 'folder0']
         # False: concatenated names, e.g. 'nm.project0.folder0'
     ) -> Union[str, List[nmu.NMObjectType]]:
+        """returns the NM tree path of this NMObject.
+
+        The NM tree path can be a list of NMObject names or references.
+        By default, the list of names is concatenated via '.'
+        Example of list of names: ['nm', 'project0', 'folder0']
+        Concatenated list of names: 'nm.project0.folder0'
+
+        :param names: return NMObject names, otherwise return NMObject refs
+        :type names: bool, optional
+        :param list_format: return list of names, otherwise return '.' concat
+        :type list_format: bool, optional
+        :return: list of names or NMObjects
+        :rtype: str, list[str], list[NMObject]
+        """
         if not names:
             list_format = True
         # create treepath list
@@ -268,7 +305,11 @@ class NMObject(object):
         self,
         newname: str
     ) -> None:
-        # calls _name_set() or NMObjectContainer.rename()
+        # Name setter is called via function reference self.__rename_fxnref
+        # By default, self.__rename_fxnref points to
+        # NMObject._name_set(name, newname) (see below)
+        # Otherwise, it may point to
+        # NMObjectContainer.rename(key, newkey)
         return self.__rename_fxnref(self.__name, newname)
 
     def _name_set(
@@ -277,8 +318,20 @@ class NMObject(object):
         # name_notused, dummy argument to be consistent with
         # NMObjectContainer.rename(key, newkey)
         newname: Union[str, None] = None,
+        # coding newname as optional (None)
+        # since preceding param name_notused is optional
         quiet: bool = nmp.QUIET
-    ) -> bool:
+    ) -> None:
+        """Set the name of the this NMObject.
+
+        :param name_notused: name of this NMObject, but param is NOT USED
+            since name is known.
+        :type name_notused: str, optional
+        :param newname: a new name for this NMObject
+        :type newname: str
+        :return: None
+        :rtype: None
+        """
         if not isinstance(newname, str):
             e = nmu.typeerror(newname, 'newname', 'string')
             raise TypeError(e)
@@ -295,14 +348,14 @@ class NMObject(object):
     def _rename_fxnref_set(
         self,
         rename_fxnref  # fxn reference
-    ) -> bool:
+    ) -> None:
         # rename fxn must have this format: fxn(oldname, newname)
         if not isinstance(rename_fxnref, types.MethodType):
             e = nmu.typeerror(rename_fxnref, 'rename_fxnref', 'MethodType')
             raise TypeError(e)
         # TODO: test if function has 2 arguments?
         self.__rename_fxnref = rename_fxnref
-        return True
+        return None
 
     def modified(
         self,
