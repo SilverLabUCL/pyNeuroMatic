@@ -16,7 +16,7 @@ Installation
 
 ### Pip
 
-PyNeuroMatic can be installed with pip (preferably in a [virtual environment](https://docs.python.org/3/tutorial/venv.html)):
+PyNeuroMatic releases, when made, can be installed with pip (preferably in a [virtual environment](https://docs.python.org/3/tutorial/venv.html)):
 
     pip install pyneuromatic
 
@@ -39,3 +39,9 @@ To develop NMPY, you can use the `dev` extra and the `development` branch:
     git checkout development
     pip install .[dev]
 
+Please use pre-commit to run the pre-commit hooks.
+You will need to install the hooks once:
+
+    pre-commit install
+
+They will then run before each commit.
