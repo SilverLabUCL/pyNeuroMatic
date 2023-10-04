@@ -1,2 +1,12 @@
-
 *.pyc
+*.*~
+*.egg-info
+build
+dist
+
+.venv/
+
+.mypy_cache/
+/.coverage
+
+.DS_Store

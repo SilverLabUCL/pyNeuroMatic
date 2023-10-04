@@ -1,0 +1,57 @@
+name: Continuous builds
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - development
+      - experimental
+      - 'test*'
+  pull_request:
+    branches:
+      - master
+      - main
+      - development
+      - experimental
+      - 'test*'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+      fail-fast: false
+
+    steps:
+
+    - uses: actions/checkout@v3
+    - name: Set up Python  ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version:  ${{ matrix.python-version }}
+
+    - name: Print refs
+      run: |
+        echo "github.ref is: ${{ github.ref }}"
+        echo "github.base_ref is: ${{ github.base_ref }}"
+
+    - name: Upgrade pip, install inspyred
+      run: |
+        python -m pip install --upgrade pip
+        pip install .[dev]
+
+    - name: List packages so far
+      run: |
+        pip list
+
+    - name: Run tests
+      run: |
+        pytest 
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        flake8 . --count --exit-zero --show-source --max-line-length=127 --statistics
