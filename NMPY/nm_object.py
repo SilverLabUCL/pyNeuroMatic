@@ -347,9 +347,15 @@ class NMObject(object):
 
     def _rename_fxnref_set(
         self,
-        rename_fxnref  # fxn reference
+        rename_fxnref
     ) -> None:
-        # rename fxn must have this format: fxn(oldname, newname)
+        """Set the rename function reference for this NMObject.
+
+        The rename function must have the following format:
+            fxn(oldname, newname)
+        See NMObject._name_set(name, newname)
+        See NMObjectContainer.rename(key, newkey)
+        """
         if not isinstance(rename_fxnref, types.MethodType):
             e = nmu.typeerror(rename_fxnref, 'rename_fxnref', 'MethodType')
             raise TypeError(e)
@@ -361,6 +367,7 @@ class NMObject(object):
         self,
         date_time: Union[str, None] = None
     ) -> str:
+        """Update modified dates within NM tree class."""
         if not isinstance(date_time, str):
             date_time = str(datetime.datetime.now())
         if isinstance(self.__parent, NMObject):

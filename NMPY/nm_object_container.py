@@ -588,7 +588,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         key: str,
         newkey: str = 'default'
-    ) -> bool:
+    ) -> None:
         """
         Cannot change map key names.
         """
@@ -606,7 +606,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__map.clear()
         self.__map.update(new_map)
         self.modified()
-        return True
+        return None
 
     def reorder(
         self,
