@@ -11,7 +11,7 @@ pyNeuroMatic
 Python implementation of [NeuroMatic](https://github.com/SilverLabUCL/NeuroMatic).
 This is currently a work in progress.
 
-pyNeuroMatic is a collection of Python tools for analyzing electrophysiological data.
+pyNeuroMatic is a collection of Python tools for acquiring, analysing and simulating electrophysiological data.
 
 Installation
 ------------
