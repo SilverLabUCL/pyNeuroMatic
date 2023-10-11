@@ -544,7 +544,6 @@ class NMObject(object):
         self,
         obj_name: str,  # name of object that is of the wrong type
         type_expected: str,  # expected type of the object
-        # TODO: can pass type
         tp: Union[str, None] = None,  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2
