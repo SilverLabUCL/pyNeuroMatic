@@ -6,11 +6,11 @@ Copyright 2019 Jason Rothman
 # import matplotlib
 from typing import Dict, List, Union
 
-from pyneuromatic.nm_object import NMObject
-import pyneuromatic.nm_preferences as nmp
-from pyneuromatic.nm_project import NMProject, NMProjectContainer
-from pyneuromatic.nm_stats import Stats
-import pyneuromatic.nm_utilities as nmu
+from nm_object import NMObject
+import nm_preferences as nmp
+from nm_project import NMProjectContainer
+from nm_stats import Stats
+import nm_utilities as nmu
 
 nm = None  # holds Manager, accessed via console
 
@@ -113,7 +113,10 @@ class NMManager(NMObject):
         return s2
 
     @select_keys.setter
-    def select_keys(self, select: Dict[str, str]) -> None:
+    def select_keys(
+        self,
+        select: Dict[str, str]
+    ) -> None:
         return self._select_keys_set(select)
 
     def _select_keys_set(
@@ -149,7 +152,8 @@ class NMManager(NMObject):
         return None
 
     def execute_values(
-        self, dataseries_priority: bool = True
+        self,
+        dataseries_priority: bool = True
     ) -> List[Dict[str, nmu.NMObjectType]]:
         elist = []
         for p in self.__project_container.execute_values:
@@ -177,7 +181,10 @@ class NMManager(NMObject):
                         elist.append(x)
         return elist
 
-    def execute_keys(self, dataseries_priority: bool = True) -> List[Dict[str, str]]:
+    def execute_keys(
+        self,
+        dataseries_priority: bool = True
+    ) -> List[Dict[str, str]]:
         elist = []
         elist2 = self.execute_values(dataseries_priority)
         for e in elist2:
@@ -187,7 +194,10 @@ class NMManager(NMObject):
             elist.append(e2)
         return elist
 
-    def execute_keys_set(self, execute: Dict[str, str]) -> List[Dict[str, str]]:
+    def execute_keys_set(
+        self,
+        execute: Dict[str, str]
+    ) -> List[Dict[str, str]]:
         # sets are not allowed with project, folder, dataseries - too complex
         # can specify 'data' or 'dataseries' but not both
 
@@ -224,11 +234,13 @@ class NMManager(NMObject):
             raise KeyError(e)
 
         if "data" in execute and "channel" in execute:
-            e = "execute 'channel' key should be used with 'dataseries', " "not 'data'"
+            e = "execute 'channel' key should be used with 'dataseries', "
+            "not 'data'"
             raise KeyError(e)
 
         if "data" in execute and "epoch" in execute:
-            e = "execute 'epoch' key should be used with 'dataseries', " "not 'data'"
+            e = "execute 'epoch' key should be used with 'dataseries', "
+            "not 'data'"
             raise KeyError(e)
 
         if "project" not in execute:
@@ -361,5 +373,5 @@ class NMManager(NMObject):
 
 if __name__ == "__main__":
     nm = NMManager(name="NeuroMaticManager")
-    p = nm.projects.new("project0")
-    p.folders.new("folder0")
+    # p = nm.projects.new("project0")
+    # p.folders.new("folder0")

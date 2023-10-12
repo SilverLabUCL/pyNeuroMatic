@@ -5,12 +5,12 @@ Copyright 2019 Jason Rothman
 """
 import numpy as np
 
-from pyneuromatic.nm_object import NMObject
-from pyneuromatic.nm_object_container import NMObjectContainer
-from pyneuromatic.nm_channel import NMChannelContainer
-from pyneuromatic.nm_epoch import NMEpochContainer
-import pyneuromatic.nm_preferences as nmp
-import pyneuromatic.nm_utilities as nmu
+from nm_object import NMObject
+from nm_object_container import NMObjectContainer
+from nm_channel import NMChannelContainer
+from nm_epoch import NMEpochContainer
+import nm_preferences as nmp
+import nm_utilities as nmu
 from typing import Dict, List, Union
 
 ALLSTR = "all".upper()

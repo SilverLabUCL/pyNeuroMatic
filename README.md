@@ -2,11 +2,13 @@ pyNeuroMatic
 ==============
 
 [![GitHub CI](https://github.com/jasonsethrothman/NMPY/actions/workflows/ci.yml/badge.svg)](https://github.com/jasonsethrothman/NMPY/actions/workflows/ci.yml)
+<!--
 [![PyPI](https://img.shields.io/pypi/v/pyneuromatic)](https://pypi.org/project/pyneuromatic/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyneuromatic)](https://pypi.org/project/pyneuromatic/)
-[![GitHub](https://img.shields.io/github/license/jasonsethrothman/NMPY)](https://github.com/jasonsethrothman/NMPY/blob/master/LICENSE)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/jasonsethrothman/NMPY)](https://github.com/jasonsethrothman/NMPY/pulls)
-[![GitHub issues](https://img.shields.io/github/issues/jasonsethrothman/NMPY)](https://github.com/jasonsethrothman/NMPY/issues)
+[![GitHub](https://img.shields.io/github/license/jasonsethrothman/pyNeuroMatic)](https://github.com/jasonsethrothman/pyNeuroMatic/blob/master/LICENSE)
+-->
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/jasonsethrothman/pyNeuroMatic)](https://github.com/jasonsethrothman/pyNeuroMatic/pulls)
+[![GitHub issues](https://img.shields.io/github/issues/jasonsethrothman/pyNeuroMatic)](https://github.com/jasonsethrothman/pyNeuroMatic/issues)
 
 Python implementation of [NeuroMatic](https://github.com/SilverLabUCL/NeuroMatic).
 This is currently a work in progress.
