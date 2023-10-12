@@ -87,7 +87,7 @@ In the future, users will be able to instruct NM to perform a given task on the 
 
 (3) NM container 'execute' items. Each NMObjectContainer has one 'execute' item. By default the execute item is the 'select' item, just described (2). However, users have the option to set the 'execute' item to a NM container key (e.g. nm.projects.execute_key = 'project0') or a NMSet (e.g. nm.projects.execute_key = 'set3').
 
-(4) GUI and channel graphs.
+(4) GUI built with pyQt6 and channel graphs.
 
 (5) Demo module/tab. A simple module/tab that provides a template for creating a user-defined module/tab.
 
