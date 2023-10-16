@@ -10,8 +10,8 @@ import inspect
 import types
 from typing import Dict, List, Union
 
-import nm_preferences as nmp
-import nm_utilities as nmu
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
 
 
 class NMObject(object):
@@ -74,12 +74,13 @@ class NMObject(object):
         __eq__()
         parameters()
     """
+
     def __init__(
         self,
         parent: Union[object, None] = None,  # for creating NM class tree
-        name: str = 'NMObject0',  # name of this NMObject
+        name: str = "NMObject0",  # name of this NMObject
         notes_on: bool = True,
-        copy: Union[nmu.NMObjectType, None] = None  # see copy()
+        copy: Union[nmu.NMObjectType, None] = None,  # see copy()
     ) -> None:
         """Initialise a NMObject.
 
@@ -119,14 +120,14 @@ class NMObject(object):
                     self.__notes.append(dict(n))  # append a copy
             self.__copy_of = copy
         else:
-            e = nmu.typeerror(copy, 'copy', 'NMObject')
+            e = nmu.typeerror(copy, "copy", "NMObject")
             raise TypeError(e)
 
         self.__parent = parent  # family tree 'parent' and 'child'
         # nothing to test, parent can be any object
 
         if not isinstance(name, str):
-            e = nmu.typeerror(name, 'name', 'string')
+            e = nmu.typeerror(name, "name", "string")
             raise TypeError(e)
 
         self._name_set(newname=name, quiet=True)
@@ -154,12 +155,12 @@ class NMObject(object):
         #    return False
         if not isinstance(other, type(self)):
             return False
-        if 'parent' in self._eq_list:
+        if "parent" in self._eq_list:
             if not isinstance(other._parent, type(self.__parent)):
                 return False
         if self.name.lower() != other.name.lower():  # case insensitive
             return False
-        if 'notes' in self._eq_list:
+        if "notes" in self._eq_list:
             if self.notes_on != other.notes_on:
                 return False
             if len(self.notes) != len(other.notes):
@@ -169,8 +170,7 @@ class NMObject(object):
         return True
 
     def lists_are_equal(
-        nmobject_list1: List[nmu.NMObjectType],
-        nmobject_list2: List[nmu.NMObjectType]
+        nmobject_list1: List[nmu.NMObjectType], nmobject_list2: List[nmu.NMObjectType]
     ) -> bool:
         """Compare lists of NMObjects.
 
@@ -211,13 +211,13 @@ class NMObject(object):
     # similar to __dict__
     @property
     def parameters(self) -> Dict[str, object]:
-        p = {'name': self.__name}
-        p.update({'created': self.__created})
-        p.update({'modified': self.__modified})
+        p = {"name": self.__name}
+        p.update({"created": self.__created})
+        p.update({"modified": self.__modified})
         if isinstance(self.__copy_of, type(self)):
-            p.update({'copy of': self.__copy_of.treepath()})
+            p.update({"copy of": self.__copy_of.treepath()})
         else:
-            p.update({'copy of': None})
+            p.update({"copy of": None})
         return p
 
     @property
@@ -225,10 +225,7 @@ class NMObject(object):
         return self.__parent
 
     @_parent.setter
-    def _parent(
-        self,
-        parent: object
-    ) -> None:
+    def _parent(self, parent: object) -> None:
         self.__parent = parent
         self.modified()
         return None
@@ -291,7 +288,7 @@ class NMObject(object):
             return tplist
         # concat list using '.' seperator
         if len(tplist) > 0:
-            tpstr = '.'.join(tplist)
+            tpstr = ".".join(tplist)
         else:
             tpstr = self.__name
         return tpstr
@@ -301,10 +298,7 @@ class NMObject(object):
         return self.__name
 
     @name.setter
-    def name(
-        self,
-        newname: str
-    ) -> None:
+    def name(self, newname: str) -> None:
         # Name setter is called via function reference self.__rename_fxnref
         # By default, self.__rename_fxnref points to
         # NMObject._name_set(name, newname) (see below)
@@ -320,7 +314,7 @@ class NMObject(object):
         newname: Union[str, None] = None,
         # coding newname as optional (None)
         # since preceding param name_notused is optional
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET,
     ) -> None:
         """Set the name of the this NMObject.
 
@@ -333,7 +327,7 @@ class NMObject(object):
         :rtype: None
         """
         if not isinstance(newname, str):
-            e = nmu.typeerror(newname, 'newname', 'string')
+            e = nmu.typeerror(newname, "newname", "string")
             raise TypeError(e)
         if not newname or not nmu.name_ok(newname):
             raise ValueError("newname: %s" % newname)
@@ -341,14 +335,11 @@ class NMObject(object):
         self.__name = newname
         self.modified()
         self.note = "renamed to '%s'" % self.__name
-        h = nmu.history_change('name', oldname, self.__name)
+        h = nmu.history_change("name", oldname, self.__name)
         self._history(h, tp=self.treepath(), quiet=quiet)
         return True
 
-    def _rename_fxnref_set(
-        self,
-        rename_fxnref
-    ) -> None:
+    def _rename_fxnref_set(self, rename_fxnref) -> None:
         """Set the rename function reference for this NMObject.
 
         The rename function must have the following format:
@@ -357,16 +348,13 @@ class NMObject(object):
         See NMObjectContainer.rename(key, newkey)
         """
         if not isinstance(rename_fxnref, types.MethodType):
-            e = nmu.typeerror(rename_fxnref, 'rename_fxnref', 'MethodType')
+            e = nmu.typeerror(rename_fxnref, "rename_fxnref", "MethodType")
             raise TypeError(e)
         # TODO: test if function has 2 arguments?
         self.__rename_fxnref = rename_fxnref
         return None
 
-    def modified(
-        self,
-        date_time: Union[str, None] = None
-    ) -> str:
+    def modified(self, date_time: Union[str, None] = None) -> str:
         """Update modified dates within NM tree class."""
         if not isinstance(date_time, str):
             date_time = str(datetime.datetime.now())
@@ -381,32 +369,26 @@ class NMObject(object):
         return self.__notes
 
     def notes_print(self) -> None:
-        note_seperator = '  '
+        note_seperator = "  "
         if isinstance(self.__notes, list):
             for n in self.__notes:
                 keys = n.keys()
-                if isinstance(n, dict) and 'date' in keys and 'note' in keys:
-                    print(n['date'] + note_seperator + n['note'])
+                if isinstance(n, dict) and "date" in keys and "note" in keys:
+                    print(n["date"] + note_seperator + n["note"])
         return None
 
     @property
     def note(self) -> str:
         if isinstance(self.__notes, list) and len(self.__notes) > 0:
             return self.__notes[-1]
-        return ''
+        return ""
 
     @note.setter
-    def note(
-        self,
-        thenote: str
-    ) -> None:
+    def note(self, thenote: str) -> None:
         self._notes_append(thenote)
         return None
 
-    def _notes_append(
-        self,
-        thenote: str
-    ) -> bool:
+    def _notes_append(self, thenote: str) -> bool:
         if not self.__notes_on:
             # self._alert('notes are off')
             return False
@@ -416,26 +398,24 @@ class NMObject(object):
             return False
         if not isinstance(thenote, str):
             thenote = str(thenote)
-        n = {'date': str(datetime.datetime.now())}
-        n.update({'note': thenote})
+        n = {"date": str(datetime.datetime.now())}
+        n.update({"note": thenote})
         self.__notes.append(n)
         return True
 
     def _notes_delete(
-        self,
-        confirm_answer: Union[str, None] = None  # to skip confirm prompt
+        self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
     ) -> bool:
         if nmp.DELETE_CONFIRM:
             if confirm_answer in nmu.CONFIRM_LIST:
                 ync = confirm_answer
             else:
-                q = ("are you sure you want to delete all notes for '%s'?" %
-                     self.__name)
+                q = "are you sure you want to delete all notes for '%s'?" % self.__name
                 ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == 'y' or ync.lower() == 'yes':
+            if ync.lower() == "y" or ync.lower() == "yes":
                 pass
             else:
-                print('cancel delete all notes')
+                print("cancel delete all notes")
                 return False
         self.__notes = []
         return True
@@ -445,19 +425,14 @@ class NMObject(object):
         return self.__notes_on
 
     @notes_on.setter
-    def notes_on(
-        self,
-        on: bool
-    ) -> None:
+    def notes_on(self, on: bool) -> None:
         if isinstance(on, bool):
             self.__notes_on = on
         else:
             self.__notes_on = True
         return None
 
-    def notes_ok(
-        notes: List[Dict]
-    ) -> bool:
+    def notes_ok(notes: List[Dict]) -> bool:
         # test notes type format
         if not isinstance(notes, list):
             return False
@@ -465,7 +440,7 @@ class NMObject(object):
             if not isinstance(n, dict):
                 return False
             keys = n.keys()
-            if len(keys) == 2 and 'date' in keys and 'note' in keys:
+            if len(keys) == 2 and "date" in keys and "note" in keys:
                 pass  # ok
             else:
                 return False
@@ -476,20 +451,17 @@ class NMObject(object):
 
     @property
     def _manager(self) -> nmu.NMManagerType:  # find NMManager of this NMObject
-        return self._find_parent('NMManager')
+        return self._find_parent("NMManager")
 
     @property
     def _project(self) -> nmu.NMProjectType:  # find NMProject of this NMObject
-        return self._find_parent('NMProject')
+        return self._find_parent("NMProject")
 
     @property
     def _folder(self) -> nmu.NMFolderType:  # find NMFolder of this NMObject
-        return self._find_parent('NMFolder')
+        return self._find_parent("NMFolder")
 
-    def _find_parent(
-        self,
-        classname: str
-    ) -> object:
+    def _find_parent(self, classname: str) -> object:
         if self.__parent is None or not isinstance(classname, str):
             return None
         if self.__parent.__class__.__name__ == classname:
@@ -499,46 +471,55 @@ class NMObject(object):
             return self.__parent._find_parent(classname)
         return None
 
-    def save(
-        self,
-        path: str = '',
-        quiet: bool = nmp.QUIET
-    ):
+    def save(self, path: str = "", quiet: bool = nmp.QUIET):
         # TODO
-        raise RuntimeError('save under construction')
+        raise RuntimeError("save under construction")
 
     def _alert(
         self,
         message: str,
         tp: Union[str, None] = None,
         quiet: bool = False,
-        frame: int = 2
+        frame: int = 2,
     ) -> str:
         # wrapper, see nmu.history
-        return nmu.history(message, title='ALERT', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
+        return nmu.history(
+            message,
+            title="ALERT",
+            tp=tp,
+            frame=frame,
+            red=True,
+            quiet=self._quiet(quiet),
+        )
 
     def _error(
         self,
         message: str,
         tp: Union[str, None] = None,
         quiet: bool = False,
-        frame: int = 2
+        frame: int = 2,
     ) -> str:
         # wrapper, see nmu.history
-        return nmu.history(message, title='ERROR', tp=tp, frame=frame,
-                           red=True, quiet=self._quiet(quiet))
+        return nmu.history(
+            message,
+            title="ERROR",
+            tp=tp,
+            frame=frame,
+            red=True,
+            quiet=self._quiet(quiet),
+        )
 
     def _history(
         self,
         message: str,
         tp: Union[str, None] = None,
         quiet: bool = False,
-        frame: int = 2
+        frame: int = 2,
     ) -> str:
         # wrapper, see nmu.history
-        return nmu.history(message, tp=tp, frame=frame, red=False,
-                           quiet=self._quiet(quiet))
+        return nmu.history(
+            message, tp=tp, frame=frame, red=False, quiet=self._quiet(quiet)
+        )
 
     def _type_error(
         self,
@@ -546,10 +527,9 @@ class NMObject(object):
         type_expected: str,  # expected type of the object
         tp: Union[str, None] = None,  # history treepath
         quiet: bool = False,  # history quiet
-        frame: int = 2
+        frame: int = 2,
     ) -> str:
-        raise RuntimeError('function NMObject._type_error '
-                           'has been deprecated')
+        raise RuntimeError("function NMObject._type_error " "has been deprecated")
         """
         callers_local_vars = inspect.currentframe().f_back.f_locals.items()
         found_variable = False
@@ -573,10 +553,9 @@ class NMObject(object):
         obj_name: str,  # name of function variable with bad value
         tp: Union[str, None] = None,  # history treepath
         quiet: bool = False,  # history quiet
-        frame: int = 2
+        frame: int = 2,
     ) -> str:
-        raise RuntimeError('function NMObject._value_error '
-                           'has been deprecated')
+        raise RuntimeError("function NMObject._value_error " "has been deprecated")
         """
         callers_local_vars = inspect.currentframe().f_back.f_locals.items()
         found_variable = False
@@ -597,12 +576,9 @@ class NMObject(object):
                            frame=frame, red=True, quiet=self._quiet(quiet))
         """
 
-    def _quiet(
-        self,
-        quiet: bool
-    ) -> bool:
+    def _quiet(self, quiet: bool) -> bool:
         m = self._manager
-        if m and m.__class__.__name__ == 'NMManager':
+        if m and m.__class__.__name__ == "NMManager":
             return m._quiet(quiet)
         if nmp.QUIET:  # this quiet overrides
             return True
