@@ -9,14 +9,14 @@ import numpy
 # import numpy.typing as npt # No module named 'numpy.typing
 from typing import Dict, Union
 
-from nm_channel import NMChannel
-from nm_dataseries import NMDataSeries, NMDataSeriesContainer
-from nm_epoch import NMEpoch
-from nm_object import NMObject
-from nm_object_container import NMObjectContainer
-import nm_preferences as nmp
-from nm_scale import NMScale, NMScaleX
-import nm_utilities as nmu
+from pyneuromatic.nm_channel import NMChannel
+from pyneuromatic.nm_dataseries import NMDataSeries, NMDataSeriesContainer
+from pyneuromatic.nm_epoch import NMEpoch
+from pyneuromatic.nm_object import NMObject
+from pyneuromatic.nm_object_container import NMObjectContainer
+import pyneuromatic.nm_preferences as nmp
+from pyneuromatic.nm_scale import NMScale, NMScaleX
+import pyneuromatic.nm_utilities as nmu
 
 
 NP_ORDER = "C"

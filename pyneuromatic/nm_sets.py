@@ -8,9 +8,9 @@ Created on Sun Jul  9 07:45:13 2023
 from collections.abc import MutableMapping
 from typing import Callable, Dict, List, Tuple, Union
 
-from nm_object import NMObject
-import nm_preferences as nmp
-import nm_utilities as nmu
+from pyneuromatic.nm_object import NMObject
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
 
 
 class NMSets(NMObject, MutableMapping):

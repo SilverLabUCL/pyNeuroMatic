@@ -10,8 +10,8 @@ import inspect
 import types
 from typing import Dict, List, Union
 
-import nm_preferences as nmp
-import nm_utilities as nmu
+import pyneuromatic.nm_preferences as nmp
+import pyneuromatic.nm_utilities as nmu
 
 
 class NMObject(object):

@@ -14,8 +14,8 @@ from pyneuromatic.nm_epoch import NMEpochContainer
 from pyneuromatic.nm_folder import NMFolderContainer
 from pyneuromatic.nm_manager import NMManager
 
-from pyneuromatic.nm_project import NMProjectContainer
-import pyneuromatic.nm_utilities as nmu
+from nm_project import NMProjectContainer
+import nm_utilities as nmu
 
 QUIET = True
 NUMPROJECTS = 3

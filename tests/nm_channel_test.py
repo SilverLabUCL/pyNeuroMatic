@@ -11,7 +11,7 @@ from pyneuromatic.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.nm_data import NMData
 from pyneuromatic.nm_manager import NMManager
 from pyneuromatic.nm_scale import NMScale, NMScaleX
-import pyneuromatic.nm_utilities as nmu
+from pyneuromatic import nm_utilities as nmu
 
 NM = NMManager(quiet=True)
 
