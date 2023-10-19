@@ -1,14 +1,14 @@
 pyNeuroMatic
 ==============
 
-[![GitHub CI](https://github.com/jasonsethrothman/NMPY/actions/workflows/ci.yml/badge.svg)](https://github.com/jasonsethrothman/NMPY/actions/workflows/ci.yml)
 <!--
 [![PyPI](https://img.shields.io/pypi/v/pyneuromatic)](https://pypi.org/project/pyneuromatic/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyneuromatic)](https://pypi.org/project/pyneuromatic/)
-[![GitHub](https://img.shields.io/github/license/jasonsethrothman/pyNeuroMatic)](https://github.com/jasonsethrothman/pyNeuroMatic/blob/master/LICENSE)
 -->
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/jasonsethrothman/pyNeuroMatic)](https://github.com/jasonsethrothman/pyNeuroMatic/pulls)
-[![GitHub issues](https://img.shields.io/github/issues/jasonsethrothman/pyNeuroMatic)](https://github.com/jasonsethrothman/pyNeuroMatic/issues)
+[![GitHub CI](https://github.com/SilverLabUCL/pyNeuroMatic/actions/workflows/ci.yml/badge.svg)](https://github.com/SilverLabUCL/pyNeuroMatic/actions/workflows/ci.yml)
+[![GitHub](https://img.shields.io/github/license/SilverLabUCL/pyNeuroMatic)](https://github.com/SilverLabUCL/pyNeuroMatic/blob/master/LICENSE)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/SilverLabUCL/pyNeuroMatic)](https://github.com/SilverLabUCL/pyNeuroMatic/pulls)
+[![GitHub issues](https://img.shields.io/github/issues/SilverLabUCL/pyNeuroMatic)](https://github.com/SilverLabUCL/pyNeuroMatic/issues)
 
 Python implementation of [NeuroMatic](https://github.com/SilverLabUCL/NeuroMatic).
 This is currently a work in progress.
@@ -29,8 +29,8 @@ pyNeuroMatic releases, when made, can be installed with pip (preferably in a [vi
 
 Clone the repository:
 
-    git clone https://github.com/jasonsethrothman/pyneuromatic.git
-    cd 
+    git clone https://github.com/SilverLabUCL/pyneuromatic.git
+    cd
 
 It should be possible to install NMPY using just:
 
@@ -38,8 +38,8 @@ It should be possible to install NMPY using just:
 
 To develop NMPY, you can use the `dev` extra and the `development` branch:
 
-    git clone https://github.com/jasonsethrothman/.git
-    cd 
+    git clone https://github.com/SilverLabUCL/pyneuromatic.git
+    cd
     git checkout development
     pip install .[dev]
 
@@ -99,7 +99,7 @@ In the future, users will be able to instruct NM to perform a given task on the 
 
 (8) Spike module/tab. Spike analysis module/tab for computing raster plots, peristimulus time (PST) histograms and inter-spike-interval (ISI) histograms. Spike occurrences are determined by a y-threshold level detector on positive or negative slope deflections.
 
-(9) Event module/tab. Module/tab for detection of spontaneous events such as excitory post-synaptic currents (EPSCs). The search algorithm can be either a simple level detector, a threshold-above-baseline detector similar to that described by Kudoh and Taguchi 2002, or a template-matching detector as described by Clements and Bekkers 1997. 
+(9) Event module/tab. Module/tab for detection of spontaneous events such as excitory post-synaptic currents (EPSCs). The search algorithm can be either a simple level detector, a threshold-above-baseline detector similar to that described by Kudoh and Taguchi 2002, or a template-matching detector as described by Clements and Bekkers 1997.
 
 (10) ROI module/tab. Florescence image region-of-interest (ROI) analysis, including line scans. Users will be able to define ROIs using a graphical interface.
 
