@@ -32,11 +32,11 @@ Clone the repository:
     git clone https://github.com/SilverLabUCL/pyneuromatic.git
     cd
 
-It should be possible to install NMPY using just:
+It should be possible to install pyNeuroMatic using just:
 
     pip install .
 
-To develop NMPY, you can use the `dev` extra and the `development` branch:
+To develop pyNeuroMatic, you can use the `dev` extra and the `development` branch:
 
     git clone https://github.com/SilverLabUCL/pyneuromatic.git
     cd
