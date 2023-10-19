@@ -59,7 +59,7 @@ Current/Future Features
 
 NMObjectContainer is the parent class of all NM containers (NMProjectContainer, NMFolderContainer, NMDataContainer...). Each NMObjectContainer holds one or more NMObjects (NMProject, NMFolder, NMData...).
 
-Each NMObjectContainer also contains sets (NMSets). NMObjects can be placed in NMSets and these NMSets can then be used to specify what projects, folders and data is to be analysed. NMSets can be functions of each other (.e.g. 'Set3' = ['Set1', '&', 'Set2'])
+Each NMObjectContainer also contains sets (NMSets). NMObjects can be placed in NMSets and these NMSets can then be used to specify what projects, folders and data is to be analysed. NMSets can be functions of each other, for example: 'Set3' = ['Set1', '&', 'Set2'].
 
 NMObjects contain functions for creating notes and log histories.
 
