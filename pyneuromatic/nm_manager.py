@@ -113,10 +113,7 @@ class NMManager(NMObject):
         return s2
 
     @select_keys.setter
-    def select_keys(
-        self,
-        select: Dict[str, str]
-    ) -> None:
+    def select_keys(self, select: Dict[str, str]) -> None:
         return self._select_keys_set(select)
 
     def _select_keys_set(
@@ -152,8 +149,7 @@ class NMManager(NMObject):
         return None
 
     def execute_values(
-        self,
-        dataseries_priority: bool = True
+        self, dataseries_priority: bool = True
     ) -> List[Dict[str, nmu.NMObjectType]]:
         elist = []
         for p in self.__project_container.execute_values:
@@ -181,10 +177,7 @@ class NMManager(NMObject):
                         elist.append(x)
         return elist
 
-    def execute_keys(
-        self,
-        dataseries_priority: bool = True
-    ) -> List[Dict[str, str]]:
+    def execute_keys(self, dataseries_priority: bool = True) -> List[Dict[str, str]]:
         elist = []
         elist2 = self.execute_values(dataseries_priority)
         for e in elist2:
@@ -194,10 +187,7 @@ class NMManager(NMObject):
             elist.append(e2)
         return elist
 
-    def execute_keys_set(
-        self,
-        execute: Dict[str, str]
-    ) -> List[Dict[str, str]]:
+    def execute_keys_set(self, execute: Dict[str, str]) -> List[Dict[str, str]]:
         # sets are not allowed with project, folder, dataseries - too complex
         # can specify 'data' or 'dataseries' but not both
 
