@@ -53,7 +53,7 @@ They will then run before each commit.
 Current/Future Features
 -----------------------
 
-(1) The foundational structure of NeuroMatic (NM) has been created using Python containers (Mutable Mappings). NM's structural container hierarchy is as follows: Project > Folder > Data. The hierarchy is currently accessed via a command line interface (CLI) but will also be accessible via a GUI. Here is a command to create a new project:
+(1) The foundational structure of NeuroMatic (NM) has been created using Python containers (Mutable Mappings). NM's structural container hierarchy is as follows: Manager > Project > Folder > Data. The hierarchy is currently accessed via a command line interface (CLI) but will also be accessible via a GUI. Here is a command to create a new project:
 
     In [1]: nm.projects.new('MyProject0')
 
