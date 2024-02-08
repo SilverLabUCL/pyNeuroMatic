@@ -40,7 +40,7 @@ class NMObject(object):
 
     Known children of NMObject:
         NMChannel, NMData, NMDataSeries, NMEpoch, NMFolder, NMObjectContainer,
-        NMProject, NMScale, NMSets
+        NMProject, NMDimension, NMSets
 
     Attributes:
         __created (str): creation date of NMObject.
@@ -60,7 +60,6 @@ class NMObject(object):
         _parent
         content
         content_tree
-        _tp (tree path)
         name
         notes
         note
@@ -98,7 +97,6 @@ class NMObject(object):
 
         date_time = str(datetime.datetime.now())
         self.__created = date_time  # NOT COPIED
-        self.__modified = date_time  # NOT COPIED
         self.__parent = None
         self.__name = None
         self.__notes_on = False  # turn off during __init__
@@ -213,7 +211,6 @@ class NMObject(object):
     def parameters(self) -> Dict[str, object]:
         p = {"name": self.__name}
         p.update({"created": self.__created})
-        p.update({"modified": self.__modified})
         if isinstance(self.__copy_of, type(self)):
             p.update({"copy of": self.__copy_of.treepath()})
         else:
@@ -227,7 +224,6 @@ class NMObject(object):
     @_parent.setter
     def _parent(self, parent: object) -> None:
         self.__parent = parent
-        self.modified()
         return None
 
     # @property
@@ -333,7 +329,6 @@ class NMObject(object):
             raise ValueError("newname: %s" % newname)
         oldname = self.__name
         self.__name = newname
-        self.modified()
         self.note = "renamed to '%s'" % self.__name
         h = nmu.history_change("name", oldname, self.__name)
         self._history(h, tp=self.treepath(), quiet=quiet)
@@ -353,16 +348,6 @@ class NMObject(object):
         # TODO: test if function has 2 arguments?
         self.__rename_fxnref = rename_fxnref
         return None
-
-    def modified(self, date_time: Union[str, None] = None) -> str:
-        """Update modified dates within NM tree class."""
-        if not isinstance(date_time, str):
-            date_time = str(datetime.datetime.now())
-        if isinstance(self.__parent, NMObject):
-            self.__parent.modified(date_time=date_time)
-            # goes up NM class tree
-        self.__modified = date_time
-        return date_time
 
     @property
     def notes(self) -> List[Dict]:
@@ -407,7 +392,7 @@ class NMObject(object):
         self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
     ) -> bool:
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_LIST:
+            if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete all notes for '%s'?" % self.__name

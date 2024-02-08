@@ -15,6 +15,7 @@ NM = NMManager(quiet=QUIET)
 
 
 class NMUtilitiesTest(unittest.TestCase):
+
     def setUp(self):  # executed before each test
         pass
 
@@ -53,7 +54,7 @@ class NMUtilitiesTest(unittest.TestCase):
         self.assertFalse(nmu.name_ok("te.st"))
         self.assertTrue(nmu.name_ok("te.st", ok_strings=["."]))
 
-    def test00_number_ok(self):
+    def test01_number_ok(self):
         bad = list(nmu.BADTYPES)
         bad.remove(3)
         bad.remove(3.14)
@@ -108,7 +109,7 @@ class NMUtilitiesTest(unittest.TestCase):
             nmu.number_ok([0, -5, 1.34, complex(1, -1)], complex_is_ok=True)
         )
 
-    def test03_keys_equal(self):
+    def test02_keys_equal(self):
         klist1 = ["one", "two", "three"]
         klist2 = ["ONE", "TWO", "THREE"]
 
@@ -118,7 +119,7 @@ class NMUtilitiesTest(unittest.TestCase):
             self.assertFalse(nmu.keys_are_equal(klist1, b))
 
         self.assertTrue(nmu.keys_are_equal(klist1, klist2))
-        self.assertFalse(nmu.keys_are_equal(klist1, klist2, case_insensitive=False))
+        self.assertFalse(nmu.keys_are_equal(klist1, klist2, case_sensitive=True))
         klist2.reverse()
         self.assertTrue(nmu.keys_are_equal(klist1, klist2))
 
@@ -135,7 +136,7 @@ class NMUtilitiesTest(unittest.TestCase):
         klist2 = dlist2.keys()
 
         self.assertTrue(nmu.keys_are_equal(klist1, klist2))
-        self.assertFalse(nmu.keys_are_equal(klist1, klist2, case_insensitive=False))
+        self.assertFalse(nmu.keys_are_equal(klist1, klist2, case_sensitive=True))
 
         klist2 = list(klist2)
         klist2.reverse()
@@ -145,7 +146,7 @@ class NMUtilitiesTest(unittest.TestCase):
         klist2 = ["ONE", "TWO", "THREE"]
         self.assertFalse(nmu.keys_are_equal(klist1, klist2))
 
-    def test04_input_yesno(self):
+    def test03_input_yesno(self):
         self.assertEqual(nmu.input_yesno("test", answer=""), "error")
         self.assertEqual(nmu.input_yesno("test", answer="YES"), "y")
         self.assertEqual(nmu.input_yesno("test", answer="Y"), "y")
@@ -154,8 +155,10 @@ class NMUtilitiesTest(unittest.TestCase):
         self.assertEqual(nmu.input_yesno("test", answer="CANCEL"), "c")
         self.assertEqual(nmu.input_yesno("test", answer="C"), "c")
         self.assertEqual(nmu.input_yesno("test", cancel=False, answer="C"), "error")
-        p = nmu.input_yesno("testprompt")
-        print(p)
+        p1 = nmu.input_yesno("testprompt", title='MyTitle', treepath='my.path')
+        p2 = "MyTitle:" + "\n" + "my.path:" + "\n" + "testprompt" + "\n" + "(y)es (n)o (c)ancel: "
+        self.assertEqual(p1, p2)
+        # print(p1)
 
     """
         # remove_special_char
@@ -319,3 +322,7 @@ class NMUtilitiesTest(unittest.TestCase):
         stack = inspect.stack()
         self.assertEqual(nmu.get_method_from_stack(stack), fxn)
     """
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

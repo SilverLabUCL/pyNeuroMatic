@@ -10,7 +10,7 @@ import unittest
 
 from pyneuromatic.nm_folder import NMFolder
 from pyneuromatic.nm_manager import NMManager
-from pyneuromatic.nm_scale import NMScale, NMScaleX
+from pyneuromatic.nm_scale import NMDimension, NMDimensionX
 import pyneuromatic.nm_utilities as nmu
 
 NM = NMManager(quiet=True)
@@ -26,17 +26,17 @@ YSCALE1 = {"label": "Im", "units": "pA"}
 XSCALE1 = {"label": "time", "units": "s", "start": -10, "delta": 0.2}
 
 
-class NMScaleTest(unittest.TestCase):
+class NMDimensionTest(unittest.TestCase):
     def setUp(self):  # executed before each test
-        self.y0 = NMScale(parent=NM, name=YSNAME0, scale=YSCALE0)
-        self.x0 = NMScaleX(parent=NM, name=XSNAME0, scale=XSCALE0)
-        self.y1 = NMScale(parent=NM, name=YSNAME1, scale=YSCALE1)
-        self.x1 = NMScaleX(parent=NM, name=XSNAME1, scale=XSCALE1)
+        self.y0 = NMDimension(parent=NM, name=YSNAME0, scale=YSCALE0)
+        self.x0 = NMDimensionX(parent=NM, name=XSNAME0, scale=XSCALE0)
+        self.y1 = NMDimension(parent=NM, name=YSNAME1, scale=YSCALE1)
+        self.x1 = NMDimensionX(parent=NM, name=XSNAME1, scale=XSCALE1)
 
-        self.y0_copy = NMScale(copy=self.y0)
-        self.x0_copy = NMScaleX(copy=self.x0)
-        self.y1_copy = NMScale(copy=self.y1)
-        self.x1_copy = NMScaleX(copy=self.x1)
+        self.y0_copy = NMDimension(copy=self.y0)
+        self.x0_copy = NMDimensionX(copy=self.x0)
+        self.y1_copy = NMDimension(copy=self.y1)
+        self.x1_copy = NMDimensionX(copy=self.x1)
 
     def test00_init(self):
         # args: parent, name, copy (see NMObject)
@@ -47,13 +47,13 @@ class NMScaleTest(unittest.TestCase):
         bad.remove({})
         for b in bad:
             with self.assertRaises(TypeError):
-                NMScale(scale=b)
+                NMDimension(scale=b)
 
         f = NMFolder()
         with self.assertRaises(TypeError):
-            NMScale(copy=f)
+            NMDimension(copy=f)
 
-        NMScale(copy=self.x0)  # ok to copy x-scale
+        NMDimension(copy=self.x0)  # ok to copy x-scale
 
         self.assertEqual(self.y0.name, YSNAME0)
         self.assertEqual(self.y0.label, YSCALE0["label"])
@@ -115,11 +115,11 @@ class NMScaleTest(unittest.TestCase):
 
     def test02_copy(self):
         # copy overrides other inputs
-        c = NMScale(parent=NM, name=YSNAME0, scale=YSCALE0, copy=self.y1)
+        c = NMDimension(parent=NM, name=YSNAME0, scale=YSCALE0, copy=self.y1)
         self.assertTrue(c == self.y1)
         self.assertFalse(c == self.y0)
 
-        c = NMScale(parent=NM, name=YSNAME0, scale=YSCALE0)
+        c = NMDimension(parent=NM, name=YSNAME0, scale=YSCALE0)
         self.assertFalse(c == self.y1)
         self.assertTrue(c == self.y0)
 

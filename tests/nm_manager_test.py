@@ -7,18 +7,19 @@ Created on Thu Aug  3 11:30:25 2023
 """
 import unittest
 
-from pyneuromatic.nm_channel import NMChannelContainer
-from pyneuromatic.nm_data import NMDataContainer
-from pyneuromatic.nm_dataseries import NMDataSeriesContainer
-from pyneuromatic.nm_epoch import NMEpochContainer
-from pyneuromatic.nm_folder import NMFolderContainer
+# from pyneuromatic.nm_channel import NMChannelContainer
+# from pyneuromatic.nm_data import NMDataContainer
+# from pyneuromatic.nm_dataseries import NMDataSeriesContainer
+# from pyneuromatic.nm_epoch import NMEpochContainer
+# from pyneuromatic.nm_folder import NMFolderContainer
 from pyneuromatic.nm_manager import NMManager
-
-from nm_project import NMProjectContainer
-import nm_utilities as nmu
+# from pyneuromatic.nm_project import NMProjectContainer
+from pyneuromatic.nm_project import NMProject
+import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
-NUMPROJECTS = 3
+NUMPROJECTS = 1  # 3 # for now, only one project
+PROJECTNAME = "ManagerTest"
 NUMFOLDERS = 5
 DATASERIES = ["data", "avg", "stim"]
 NUMDATA = [8, 9, 10]
@@ -28,13 +29,20 @@ ISELECT = 0  # 0, 1, -1
 
 
 class NMManagerTest(unittest.TestCase):
+
     def setUp(self):
-        self.nm = NMManager(name="NM", quiet=QUIET)
+        self.nm = NMManager(name="NM", project_name=PROJECTNAME, quiet=QUIET)
         ilast = ISELECT == -1
         self.select_values = {}
         self.select_keys = {}
 
+        p = self.nm.project
+        pselect = True
+        self.select_values["project"] = p
+        self.select_keys["project"] = p.name
+
         for iproject in range(NUMPROJECTS):
+            """
             if ilast or iproject == ISELECT:
                 p = self.nm.projects.new(select=True)
                 self.select_values["project"] = p
@@ -43,6 +51,7 @@ class NMManagerTest(unittest.TestCase):
             else:
                 p = self.nm.projects.new(select=False)
                 pselect = False
+            """
             for ifolder in range(NUMFOLDERS):
                 fselect = False
                 if ilast or ifolder == ISELECT:
@@ -99,7 +108,7 @@ class NMManagerTest(unittest.TestCase):
                 f.data.sets.add("set0", self.data_set0)
                 f.dataseries.sets.add("set0", ["data", "avg"])
             p.folders.sets.add("set0", ["folder0", "folder1"])
-        self.nm.projects.sets.add("set0", ["project0", "project1"])
+        # self.nm.projects.sets.add("set0", ["project0", "project1"])
 
     def test00_init(self):
         # args: name, project_name, quiet
@@ -125,12 +134,14 @@ class NMManagerTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 NMManager(project_name=b, quiet=True)
 
-        self.assertTrue(isinstance(self.nm.projects, NMProjectContainer))
+        # self.assertTrue(isinstance(self.nm.projects, NMProjectContainer))
+        self.assertTrue(isinstance(self.nm.project, NMProject))
 
     def test01_parameters(self):
         d = self.nm.parameters
         self.assertEqual(d["name"], "NM")
-        self.assertEqual(list(d.keys()), ["name", "created"])
+        keys = ["name", "created", "modified", "copy of"]
+        self.assertEqual(list(d.keys()), keys)
 
     def test02_select(self):
         # select_values
@@ -148,7 +159,7 @@ class NMManagerTest(unittest.TestCase):
                 self.nm.select_keys = b
 
         s1 = {
-            "project": "project0",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "data": "data3",
             "dataseries": "data",
@@ -159,7 +170,7 @@ class NMManagerTest(unittest.TestCase):
         self.assertEqual(self.nm.select_keys, s1)
 
         s2 = {
-            "project": "project0",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "data": "data3",
             "dataseries": "avg",
@@ -209,6 +220,7 @@ class NMManagerTest(unittest.TestCase):
             for e in elist:
                 print(e)
 
+        """
         self.nm.projects.execute_key = "set0"
         slist = []
         for p in self.nm.projects.sets.get("set0"):
@@ -246,6 +258,8 @@ class NMManagerTest(unittest.TestCase):
         if False:
             for e in elist:
                 print(e)
+        """
+        p = self.nm.project
 
         self.nm.execute_reset_all()
         s = self.nm.select_keys
@@ -262,7 +276,8 @@ class NMManagerTest(unittest.TestCase):
             for e in elist:
                 print(e)
 
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        # p = self.nm.project
         p.folders.execute_key = "set0"
         slist = []
         for f in p.folders.sets.get("set0"):
@@ -281,7 +296,8 @@ class NMManagerTest(unittest.TestCase):
             for e in elist:
                 print(e)
 
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        # p = self.nm.project
         p.folders.execute_key = "all"
         slist = []
         for f in p.folders.values():
@@ -301,7 +317,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        # p = self.nm.project
         f = p.folders.select_value
         f.data.execute_key = "set0"
         slist = []
@@ -319,7 +336,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        p = self.nm.project
         f = p.folders.select_value
         f.data.execute_key = "all"
         slist = []
@@ -337,7 +355,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        p = self.nm.project
         f = p.folders.select_value
         f.dataseries.execute_key = "set0"
         slist = []
@@ -357,7 +376,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        p = self.nm.project
         f = p.folders.select_value
         f.dataseries.execute_key = "all"
         slist = []
@@ -377,7 +397,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        p = self.nm.project
         f = p.folders.select_value
         ds = f.dataseries.select_value
         ds.channels.execute_key = "set0"
@@ -398,7 +419,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        p = self.nm.project
         f = p.folders.select_value
         ds = f.dataseries.select_value
         ds.channels.execute_key = "all"
@@ -419,7 +441,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        p = self.nm.project
         f = p.folders.select_value
         ds = f.dataseries.select_value
         ds.epochs.execute_key = "set0"
@@ -440,7 +463,8 @@ class NMManagerTest(unittest.TestCase):
                 print(e)
 
         self.nm.execute_reset_all()
-        p = self.nm.projects.select_value
+        # p = self.nm.projects.select_value
+        p = self.nm.project
         f = p.folders.select_value
         ds = f.dataseries.select_value
         ds.epochs.execute_key = "all"
@@ -481,45 +505,57 @@ class NMManagerTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set({"data": "", "dataseries": ""})
 
-        e0 = {"folder": "folder1", "dataseries": "stim", "channel": "A", "epoch": "E0"}
+        """
+        e0 = {"folder": "folder1",
+              "dataseries": "stim",
+              "channel": "A",
+              "epoch": "E0"
+              }
+
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+        """
+
+        e0 = {
+              # "project": "project2",
+              "dataseries": "stim",
+              "channel": "A",
+              "epoch": "E0",
+              }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            "project": "project2",
-            "dataseries": "stim",
-            "channel": "A",
-            "epoch": "E0",
-        }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {"project": "project2", "folder": "folder1", "channel": "A", "epoch": "E0"}
+              # "project": "project2",
+              "folder": "folder1",
+              "channel": "A",
+              "epoch": "E0"
+              }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            "project": "project2",
+            # "project": "project2",
             "folder": "folder1",
             "data": "stim",
             "channel": "A",
             "epoch": "E0",
-        }
+            }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            "project": "project2",
+            # "project": "project2",
             "folder": "folder1",
             "dataseries": "stim",
             "channel": "A",
             "epoch": "E0",
-        }
+            }
 
+        """
         e0.update({"project": "all"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
@@ -530,6 +566,7 @@ class NMManagerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
         e0.update({"project": "project2"})
+        """
 
         e0.update({"folder": "all"})
         with self.assertRaises(ValueError):
@@ -553,30 +590,30 @@ class NMManagerTest(unittest.TestCase):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            "project": "project2",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "data": "all",
             # 'dataseries': 'stim',
             "channel": "A",
             "epoch": "E0",
-        }
+            }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            "project": "project2",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "dataseries": "stim",
             "channel": "A",
             # 'epoch': 'E0',
-        }
+            }
 
         with self.assertRaises(KeyError):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            "project": "project2",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "dataseries": "stim",
             # 'channel': 'A',
@@ -587,7 +624,7 @@ class NMManagerTest(unittest.TestCase):
             self.nm.execute_keys_set(e0)
 
         e0 = {
-            "project": "project2",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "dataseries": "stim",
             "channel": "A",
@@ -612,7 +649,7 @@ class NMManagerTest(unittest.TestCase):
         self.assertEqual(elist, [e0])
 
         e0 = {
-            "project": "project2",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "dataseries": "stim",
             "channel": "all",
@@ -629,7 +666,7 @@ class NMManagerTest(unittest.TestCase):
         self.assertEqual(elist, e1)
 
         e0 = {
-            "project": "project2",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "dataseries": "stim",
             "channel": "A",
@@ -646,7 +683,7 @@ class NMManagerTest(unittest.TestCase):
         self.assertEqual(elist, e1)
 
         e0 = {
-            "project": "project2",
+            "project": PROJECTNAME,
             "folder": "folder1",
             "data": "set0",
         }
@@ -659,3 +696,7 @@ class NMManagerTest(unittest.TestCase):
             e0c.update({"data": d})
             e1.append(e0c)
         self.assertEqual(elist, e1)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -3,6 +3,7 @@
 NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+import datetime
 import h5py
 from typing import Dict, Union
 
@@ -10,6 +11,7 @@ from pyneuromatic.nm_data import NMDataContainer
 from pyneuromatic.nm_dataseries import NMDataSeriesContainer
 from pyneuromatic.nm_object import NMObject
 from pyneuromatic.nm_object_container import NMObjectContainer
+from pyneuromatic.nm_tool_folder import NMToolFolderContainer
 import pyneuromatic.nm_utilities as nmu
 
 
@@ -43,12 +45,16 @@ class NMFolder(NMObject):
 
         self.__data_container = None
         self.__dataseries_container = None
+        self.__toolfolder_container = None  # tool results saved to NumPy arrays
+        self.__toolresults = {}  # tool results saved to dict
 
         if copy is None:
             pass
         elif isinstance(copy, NMFolder):
             self.__data_container = copy.data.copy()
             self.__dataseries_container = copy.dataseries.copy()
+            self.__toolfolder_container = copy.toolfolder.copy()
+            self.__toolresults = copy.toolresults.copy()
         else:
             e = nmu.typeerror(copy, "copy", "NMFolder")
             raise TypeError(e)
@@ -57,6 +63,8 @@ class NMFolder(NMObject):
             self.__data_container = NMDataContainer(parent=self)
         if not isinstance(self.__dataseries_container, NMDataSeriesContainer):
             self.__dataseries_container = NMDataSeriesContainer(parent=self)
+        if not isinstance(self.__toolfolder_container, NMToolFolderContainer):
+            self.__toolfolder_container = NMToolFolderContainer(parent=self)
 
     # override
     def __eq__(self, other: nmu.NMFolderType) -> bool:
@@ -78,15 +86,51 @@ class NMFolder(NMObject):
         k = super().content
         k.update(self.__data_container.content)
         k.update(self.__dataseries_container.content)
+        k.update(self.__toolfolder_container.content)
         return k
 
     @property
-    def data(self):
+    def data(self) -> nmu.NMDataContainerType:
         return self.__data_container
 
     @property
-    def dataseries(self):
+    def dataseries(self) -> nmu.NMDataSeriesContainerType:
         return self.__dataseries_container
+
+    @property
+    def toolfolder(self) -> nmu.NMToolFolderContainerType:
+        return self.__toolfolder_container
+
+    @property
+    def toolresults(self) -> Dict[str, object]:
+        return self.__toolresults
+
+    def toolresults_save(self, tool: str, results) -> str:
+        imax_keys = 99
+        if not isinstance(tool, str):
+            e = nmu.typeerror(tool, "tool", "string")
+            raise TypeError(e)
+
+        tp = self.treepath()
+        foundkey = False
+        for i in range(imax_keys):
+            newkey = tool + str(i)
+            if newkey not in self.__toolresults:
+                foundkey = True
+                break
+        if not foundkey:
+            e = "failed to find unused key for %s results in %s" % (tool, tp)
+            raise KeyError(e)
+
+        t = str(datetime.datetime.now())
+        r = {}
+        r["tool"] = tool
+        r["date"] = t
+        r["results"] = results
+        self.__toolresults[newkey] = r
+        print("saved %s results to %s via key '%s' (%s)" %
+              (tool, tp, newkey, t))
+        return newkey
 
 
 class NMFolderContainer(NMObjectContainer):

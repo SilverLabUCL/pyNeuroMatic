@@ -392,7 +392,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # removed 'default' parameter
         key = self._getkey(key)
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_LIST:
+            if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 prompt = "are you sure you want to delete '%s'?" % key
@@ -407,7 +407,6 @@ class NMObjectContainer(NMObject, MutableMapping):
                 self.select_key = None
         self.sets.remove_from_all(key)
         o = self.__map.pop(key)
-        self.modified()
         return o
 
     # override MutableMapping mixin method
@@ -435,7 +434,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if len(self) == 0:
             return None
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_LIST:
+            if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete the following?\n" + ", ".join(
@@ -450,7 +449,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.select_key = None
         self.sets.empty_all(confirm_answer="y")
         self.__map.clear()
-        self.modified()
         return None
 
     # override MutableMapping mixin method
@@ -501,7 +499,6 @@ class NMObjectContainer(NMObject, MutableMapping):
                 if key is None:
                     key = self._newkey(o.name)
                 self.__map[key] = o
-                self.modified()
                 update = True
             else:
                 e = "nmobjects: list item"
@@ -591,7 +588,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         # self.__map = new_map  # reference change
         self.__map.clear()
         self.__map.update(new_map)
-        self.modified()
         return None
 
     def reorder(self, newkeyorder: List[str]) -> None:
@@ -621,7 +617,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         # self.__map = new_map  # reference change
         self.__map.clear()
         self.__map.update(new_map)
-        self.modified()
         return None
 
     def duplicate(
@@ -636,7 +631,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         # c.name = newkey  # double history
         c._name_set(newname=newkey, quiet=True)  # no history
         self.__map[c.name] = c
-        self.modified()
         self.__update_nmobject_references()
         return c
 
@@ -653,7 +647,6 @@ class NMObjectContainer(NMObject, MutableMapping):
             raise TypeError(e)
         newkey = self._newkey(nmobject.name)
         self.__map[newkey] = nmobject
-        self.modified()
         self.__update_nmobject_references()
         if len(self.__map) == 1:
             select = True  # select first entry
@@ -680,7 +673,6 @@ class NMObjectContainer(NMObject, MutableMapping):
             return True  # nothing to do
         oldprefix = self.__name_prefix
         self.__name_prefix = prefix
-        self.modified()
         """
         if self.__name_prefix is None:
             h = 'prefix = None'
@@ -724,7 +716,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         if self.__name_seq_format == slist:
             return None  # no change
         self.__name_seq_format = slist
-        self.modified()
         self._name_seq_counter_reset()
         return None
 
@@ -787,7 +778,6 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     def _name_seq_counter_reset(self) -> None:
         self.__name_seq_counter = self.__name_seq_format
-        self.modified()
         return None
 
     def _name_seq_counter_increment(self) -> List[str]:
@@ -815,7 +805,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         if seq_next == self.__name_seq_format:
             raise RuntimeError("name sequence reached upper limit")
         self.__name_seq_counter = seq_next
-        self.modified()
         return seq_next
 
     def name_next(self, use_counter: bool = False, trials: int = 100) -> str:
@@ -853,7 +842,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         if key is None or key == "":
             if self.__select_key is not None:
                 self.__select_key = None
-                self.modified()
             return None
         if not isinstance(key, str):
             e = nmu.typeerror(key, "key", "string")
@@ -862,7 +850,6 @@ class NMObjectContainer(NMObject, MutableMapping):
             raise KeyError("invalid key 'select'")
         key = self._getkey(key)
         self.__select_key = key
-        self.modified()
         return key
 
     def is_select_key(self, key: str) -> bool:
@@ -910,7 +897,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         if key is None or key == "":
             if self.__execute_key is not None:
                 self.__execute_key = None
-                self.modified()
             return None
         elif not isinstance(key, str):
             e = nmu.typeerror(key, "key", "string")
@@ -918,18 +904,15 @@ class NMObjectContainer(NMObject, MutableMapping):
         if key.lower() == "select":
             if self.__execute_key.lower() != "select":
                 self.__execute_key = "select"
-                self.modified()
             return "select"
         if key.lower() == "all":
             if self.__execute_key.lower() != "all":
                 self.__execute_key = "all"
-                self.modified()
             return "all"
         k = self._getkey(key, error2=False)
         if k is None:
             k = self.sets._getkey(key)  # try sets, throw error
         self.__execute_key = k
-        self.modified()
         return k
 
     def is_execute_key(self, key: str) -> bool:

@@ -9,60 +9,22 @@ import inspect
 from colorama import Fore, Back, Style
 from typing import Union, List, NewType
 
-CHANNEL_LIST = [
-    "A",
-    "B",
-    "C",
-    "D",
-    "E",
-    "F",
-    "G",
-    "H",
-    "I",
-    "J",
-    "K",
-    "L",
-    "M",
-    "N",
-    "O",
-    "P",
-    "Q",
-    "R",
-    "S",
-    "T",
-    "U",
-    "V",
-    "W",
-    "X",
-    "Y",
-    "Z",
-]
+CHANNEL_LIST = ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
+                "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
+                "W", "X", "Y", "Z")
 
-CONFIRM_LIST = ["y", "yes", "n", "no", "c", "cancel"]  # see input_yesno()
+CONFIRM_YNC = ("y", "yes", "n", "no", "c", "cancel")  # see input_yesno()
 
 # for testing
-BADTYPES = [None, 3, 3.14, True, [], (), {}, set(), "string", Fore]
-BADNAMES = [
-    n.lower()
-    for n in [
-        "",
-        "all",
-        "default",
-        "none",
-        "select",
-        "self",
-        "nan",
-        "inf",
-        "-inf",
-        "b&dn@me!",
-    ]
-]
+BADTYPES = (None, 3, 3.14, True, [], (), {}, set(), "string", Fore)
+BADNAMES = ("", "all", "default", "none", "select", "self", "nan",
+            "inf", "-inf", "b&dn@me!")
 
 # NM Class types
 NMObjectType = NewType("NMObject", object)
 NMObjectContainerType = NewType("NMObjectContainer", NMObjectType)
 NMSetsType = NewType("NMSets", NMObjectType)
-NMManagerType = NewType("NMManager", object)
+NMManagerType = NewType("NMManager", NMObjectType)
 NMProjectType = NewType("NMProject", NMObjectType)
 NMProjectContainerType = NewType("NMProjectContainer", NMObjectContainerType)
 NMFolderType = NewType("NMFolder", NMObjectType)
@@ -75,8 +37,23 @@ NMChannelType = NewType("NMChannel", NMObjectType)
 NMChannelContainerType = NewType("NMChannelContainer", NMObjectContainerType)
 NMEpochType = NewType("NMEpoch", NMObjectType)
 NMEpochContainerType = NewType("NMEpochContainer", NMObjectContainerType)
-NMScaleType = NewType("NMScale", NMObjectType)
-NMScaleXType = NewType("NMScaleX", NMScaleType)
+NMDimensionType = NewType("NMDimension", NMObjectType)
+NMDimensionXType = NewType("NMDimensionX", NMDimensionType)
+NMStatsType = NewType("NMStats", NMObjectType)
+NMStatsWinType = NewType("NMStatsWin", NMObjectType)
+NMStatsWinContainerType = NewType("NMStatsWinContainer", NMObjectContainerType)
+NMToolType = NewType("NMTool", object)
+NMToolFolderType = NewType("NMToolFolder", NMObjectType)
+NMToolFolderContainerType = NewType("NMToolFolderContainer", NMObjectContainerType)
+
+
+def badtypes(
+        ok: list = []  # list of items that are ok (not bad)
+) -> list:
+    badlist = [None, 3, 3.14, True, [], (), {}, set(), "string", Union]
+    for o in ok:
+        badlist.remove(o)
+    return badlist
 
 
 def number_ok(
@@ -115,7 +92,7 @@ def number_ok(
         return False
     if not isinstance(number, list):
         number = [number]  # convert to list of numbers
-    if len(number) == 0:  # no number is not OK
+    if len(number) == 0:  # no number
         return False
     for n in number:
         if must_be_integer and not isinstance(n, int):
@@ -249,7 +226,7 @@ def name_next_seq(
 def keys_are_equal(
     keys1: Union[str, List[str]],
     keys2: Union[str, List[str]],
-    case_insensitive: bool = True,
+    case_sensitive: bool = False,
 ) -> bool:
     """Determine if two lists contain the same keys.
     Comparison can be either case sensitive or insensitive (default).
@@ -281,12 +258,12 @@ def keys_are_equal(
         for k2 in keys2:
             if not isinstance(k2, str):
                 return False
-            if case_insensitive:
-                if k1.lower() == k2.lower():
+            if case_sensitive:
+                if k1 == k2:
                     found = True
                     break
             else:
-                if k1 == k2:
+                if k1.lower() == k2.lower():
                     found = True
                     break
         if not found:
@@ -727,14 +704,15 @@ def input_yesno(
     :return: user input, 'y', 'n', 'c' or 'error'
     :rtype: str
     """
+    ok = list(CONFIRM_YNC)
     if not isinstance(prompt, str):
         prompt = ""
     if cancel:
         txt = prompt + "\n" + "(y)es (n)o (c)ancel: "
-        ok = ["y", "yes", "n", "no", "c", "cancel"]
     else:
         txt = prompt + "\n" + "(y)es, (n)o: "
-        ok = ["y", "yes", "n", "no"]
+        ok.remove("c")
+        ok.remove("cancel")
     if not isinstance(treepath, str):
         path = ""
     elif treepath.lower() == "default":

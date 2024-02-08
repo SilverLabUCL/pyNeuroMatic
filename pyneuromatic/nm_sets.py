@@ -243,7 +243,6 @@ class NMSets(NMObject, MutableMapping):
             else:
                 olist_old.clear()
                 olist_old.extend(olist_new)
-            self.modified()
             return None  # finished equation
 
         allkeys = True
@@ -267,7 +266,6 @@ class NMSets(NMObject, MutableMapping):
             else:
                 olist_old.clear()
                 olist_old.extend(olist_new)
-            self.modified()
             return None  # finished keys
 
         # else: olist contains NMObjects
@@ -302,7 +300,6 @@ class NMSets(NMObject, MutableMapping):
         else:
             olist_old.clear()
             olist_old.extend(olist_new)
-        self.modified()
         return None
 
     # MutableMapping required abstract method
@@ -455,7 +452,7 @@ class NMSets(NMObject, MutableMapping):
         # removed 'default' parameter
         key = self._getkey(key)
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_LIST:
+            if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete '%s'?" % key
@@ -466,7 +463,6 @@ class NMSets(NMObject, MutableMapping):
                 print("cancel pop '%s'" % key)
                 return None
         o = self.__map.pop(key)
-        self.modified()
         return o
 
     # override MutableMapping mixin method
@@ -494,7 +490,7 @@ class NMSets(NMObject, MutableMapping):
         if len(self) == 0:
             return None
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_LIST:
+            if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete the following?\n" + ", ".join(
@@ -507,7 +503,6 @@ class NMSets(NMObject, MutableMapping):
                 print("cancel delete all")
                 return None
         self.__map.clear()
-        self.modified()
         return None
 
     # update() NO OVERRIDE
@@ -679,7 +674,6 @@ class NMSets(NMObject, MutableMapping):
         newkey = self._newkey(newkey)
         olist = []
         self.__map[newkey] = olist  # empty set
-        self.modified()
         return (newkey, olist)
 
     def duplicate(
@@ -692,7 +686,6 @@ class NMSets(NMObject, MutableMapping):
             if o not in clist:
                 clist.append(o)
         self.__map[newkey] = clist
-        self.modified()
         return (newkey, clist)
 
     def rename(self, key: str, newkey: str = "default") -> str:
@@ -706,7 +699,6 @@ class NMSets(NMObject, MutableMapping):
                 new_map.update({k: olist})
         self.__map.clear()
         self.__map.update(new_map)
-        self.modified()
         return newkey
 
     def reorder(self, newkeyorder: List[str]) -> None:
@@ -733,7 +725,6 @@ class NMSets(NMObject, MutableMapping):
             new_map[k] = self.__map[k]
         self.__map.clear()
         self.__map.update(new_map)
-        self.modified()
         return None
 
     def empty(
@@ -743,7 +734,7 @@ class NMSets(NMObject, MutableMapping):
     ) -> None:
         key = self._getkey(key)
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_LIST:
+            if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 q = "are you sure you want to empty '%s'?" % key
@@ -755,14 +746,13 @@ class NMSets(NMObject, MutableMapping):
                 return None
         olist = self.__map[key]
         olist.clear()
-        self.modified()
         return None
 
     def empty_all(
         self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
     ) -> None:
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_LIST:
+            if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 q = "are you sure you want to empty the following?\n" + ", ".join(
@@ -775,8 +765,7 @@ class NMSets(NMObject, MutableMapping):
                 print("cancel empty all")
                 return None
         for olist in self.__map.values():
-            olist.clear()
-            self.modified()
+            olist.clear()    
         return None
 
     def add(
@@ -845,7 +834,6 @@ class NMSets(NMObject, MutableMapping):
                 return []
         for o in remove_list:
             olist_old.remove(o)
-            self.modified()
         return remove_list
 
     def remove_from_all(

@@ -10,7 +10,7 @@ import unittest
 from pyneuromatic.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.nm_data import NMData
 from pyneuromatic.nm_manager import NMManager
-from pyneuromatic.nm_scale import NMScale, NMScaleX
+from pyneuromatic.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic import nm_utilities as nmu
 
 NM = NMManager(quiet=True)
@@ -48,7 +48,7 @@ class NMChannelTest(unittest.TestCase):
 
     def test00_init(self):
         # args: parent, name, copy (see NMObject)
-        # args: xscale, yscale (see NMScale, NMScaleX)
+        # args: xscale, yscale (see NMDimension, NMDimensionX)
         bad = list(nmu.BADTYPES)
         bad.remove(None)
         bad.remove({})
@@ -76,10 +76,10 @@ class NMChannelTest(unittest.TestCase):
         self.assertEqual(self.c0_copy.name, CNAME0)
         self.assertEqual(self.c0_copy.x, self.c0.x)
         self.assertEqual(self.c0_copy.y, self.c0.y)
-        self.assertTrue(isinstance(self.c0_copy.x, NMScaleX))
-        self.assertTrue(isinstance(self.c0_copy.x, NMScale))
-        self.assertTrue(isinstance(self.c0_copy.y, NMScale))
-        self.assertFalse(isinstance(self.c0_copy.y, NMScaleX))
+        self.assertTrue(isinstance(self.c0_copy.x, NMDimensionX))
+        self.assertTrue(isinstance(self.c0_copy.x, NMDimension))
+        self.assertTrue(isinstance(self.c0_copy.y, NMDimension))
+        self.assertFalse(isinstance(self.c0_copy.y, NMDimensionX))
 
         for i, o in enumerate(self.c0_copy.data):
             self.assertEqual(o.name, DNLIST0[i])

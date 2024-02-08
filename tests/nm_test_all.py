@@ -16,7 +16,7 @@ import tests.nm_manager_test as nm_manager_test
 import tests.nm_object_test as nm_object_test
 import tests.nm_object_container_test as nm_object_container_test
 import tests.nm_project_test as nm_project_test
-import tests.nm_scale_test as nm_scale_test
+import tests.nm_dimension_test as nm_dimension_test
 import tests.nm_sets_test as nm_sets_test
 import tests.nm_utilities_test as nm_utilities_test
 
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # suite.addTests(loader.loadTestsFromModule(nm_object_test))
     # suite.addTests(loader.loadTestsFromModule(nm_object_container_test))
     # suite.addTests(loader.loadTestsFromModule(nm_manager_test))
-    # suite.addTests(loader.loadTestsFromModule(nm_scale_test))
+    # suite.addTests(loader.loadTestsFromModule(nm_dimension_test))
     # suite.addTests(loader.loadTestsFromModule(nm_sets_test))
     # suite.addTests(loader.loadTestsFromModule(nm_data_test))
     # suite.addTests(loader.loadTestsFromModule(nm_dataseries_test))
@@ -41,5 +41,5 @@ if __name__ == "__main__":
     # suite.addTests(loader.loadTestsFromModule(nm_channel_test))
     # suite.addTests(loader.loadTestsFromModule(nm_epoch_test))
 
-    runner = unittest.TextTestRunner(verbosity=3)
+    runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)

@@ -23,36 +23,8 @@ OPREFIX0 = "object"
 OPREFIX1 = "obj"
 OSEQFORMAT0 = "0"
 OSEQFORMAT1 = "A"
-CHARLIST = [
-    "A",
-    "B",
-    "C",
-    "D",
-    "E",
-    "F",
-    "G",
-    "H",
-    "I",
-    "J",
-    "K",
-    "L",
-    "M",
-    "N",
-    "O",
-    "P",
-    "Q",
-    "R",
-    "S",
-    "T",
-    "U",
-    "V",
-    "W",
-    "X",
-    "Y",
-    "Z",
-]
 ONLIST0 = [OPREFIX0 + str(i) for i in range(6)]
-ONLIST1 = [OPREFIX1 + CHARLIST[i] for i in range(6)]
+ONLIST1 = [OPREFIX1 + nmu.CHANNEL_LIST[i] for i in range(6)]
 SETS_NLIST0 = ["set" + str(i) for i in range(3)]
 SETS_NLIST1 = ["s" + str(i) for i in range(3)]
 
@@ -815,7 +787,7 @@ class NMObjectContainerTest(unittest.TestCase):
 
         seq_str = self.map1._name_seq_next_str()
         seq_next = len(ONLIST1)
-        seq_next_str = CHARLIST[seq_next]
+        seq_next_str = nmu.CHANNEL_LIST[seq_next]
         self.assertEqual(seq_str, seq_next_str)
         seq_str = self.map1._name_seq_counter()
         self.assertEqual(seq_str, "A")  # first seq using counter
@@ -851,7 +823,7 @@ class NMObjectContainerTest(unittest.TestCase):
                 self.map0._name_seq_counter_increment()
         self.assertEqual(self.map0._name_seq_counter(), "999")
 
-        for s in CHARLIST:
+        for s in nmu.CHANNEL_LIST:
             self.assertEqual(self.map1._name_seq_counter(), s)
             if s == "Z":
                 with self.assertRaises(RuntimeError):
@@ -860,8 +832,8 @@ class NMObjectContainerTest(unittest.TestCase):
                 self.map1._name_seq_counter_increment()
 
         self.map1.name_seq_format = "AA"
-        for s1 in CHARLIST:
-            for s0 in CHARLIST:
+        for s1 in nmu.CHANNEL_LIST:
+            for s0 in nmu.CHANNEL_LIST:
                 self.assertEqual(self.map1._name_seq_counter(), s1 + s0)
                 if s1 == "Z" and s0 == "Z":
                     with self.assertRaises(RuntimeError):
@@ -883,20 +855,20 @@ class NMObjectContainerTest(unittest.TestCase):
 
         name = self.map1.name_next()
         i = len(ONLIST1)
-        seq_str = CHARLIST[i]
+        seq_str = nmu.CHANNEL_LIST[i]
         self.assertEqual(name, OPREFIX1 + seq_str)
         name = self.map1.name_next(use_counter=True)
         n = 6
-        self.assertEqual(name, OPREFIX1 + CHARLIST[n])
+        self.assertEqual(name, OPREFIX1 + nmu.CHANNEL_LIST[n])
         self.map1._name_seq_counter_increment()
         name = self.map1.name_next(use_counter=True)
         n += 1
-        self.assertEqual(name, OPREFIX1 + CHARLIST[n])
+        self.assertEqual(name, OPREFIX1 + nmu.CHANNEL_LIST[n])
         for i in range(10):
             self.map1._name_seq_counter_increment()
             n += 1
         name = self.map1.name_next(use_counter=True)
-        self.assertEqual(name, OPREFIX1 + CHARLIST[n])
+        self.assertEqual(name, OPREFIX1 + nmu.CHANNEL_LIST[n])
 
     def test33_select(self):
         # args: key

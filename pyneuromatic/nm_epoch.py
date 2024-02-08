@@ -51,7 +51,7 @@ class NMEpoch(NMObject):
         super().__init__(parent=parent, name=name, copy=copy)
 
         self.__thedata = []  # list of NMData references
-        self.__number = -1
+        # self.__number = -1
 
         if copy is None:
             pass
@@ -103,7 +103,6 @@ class NMEpoch(NMObject):
     def number(self, integer: int) -> None:
         if isinstance(integer, int):
             self.__number = integer
-            self.modified()
 
     # override
     # @property

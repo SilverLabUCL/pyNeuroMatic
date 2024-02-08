@@ -12,7 +12,7 @@ from pyneuromatic.nm_data import NMData, NMDataContainer
 from pyneuromatic.nm_dataseries import NMDataSeries
 from pyneuromatic.nm_manager import NMManager
 import pyneuromatic.nm_preferences as nmp
-from pyneuromatic.nm_scale import NMScale, NMScaleX
+from pyneuromatic.nm_dimension import NMDimension, NMDimensionX
 import pyneuromatic.nm_utilities as nmu
 
 QUIET = True
@@ -28,6 +28,7 @@ XSCALE1 = {"label": "time", "units": "s", "start": -10, "delta": 0.2}
 
 
 class NMDataTest(unittest.TestCase):
+
     def setUp(self):
         self.d0 = NMData(
             parent=NM, name=DNAME0, np_array=NPARRAY0, xscale=XSCALE0, yscale=YSCALE0
@@ -68,7 +69,7 @@ class NMDataTest(unittest.TestCase):
             with self.assertRaises(TypeError):
                 NMData(yscale=b)
 
-        s = NMScale()
+        s = NMDimension()
         with self.assertRaises(TypeError):
             NMData(copy=s)
 
@@ -152,7 +153,7 @@ class NMDataTest(unittest.TestCase):
     def xtest03_x(self):
         with self.assertRaises(AttributeError):
             self.d0.x = None
-        self.assertIsInstance(self.d0.x, NMScaleX)
+        self.assertIsInstance(self.d0.x, NMDimensionX)
         start = 100
         self.d0.x.scale["start"] = start  # no change
         self.assertEqual(self.d0.x.start, XSCALE0["start"])
@@ -162,7 +163,7 @@ class NMDataTest(unittest.TestCase):
     def xtest04_y(self):
         with self.assertRaises(AttributeError):
             self.d0.y = None
-        self.assertIsInstance(self.d0.y, NMScale)
+        self.assertIsInstance(self.d0.y, NMDimension)
         label = "test"
         self.d0.y.scale["label"] = label  # no change
         self.assertEqual(self.d0.y.label, YSCALE0["label"])

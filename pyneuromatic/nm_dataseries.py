@@ -171,7 +171,6 @@ class NMDataSeries(NMObject):
     def channel_scale_lock(self, on: bool) -> None:
         if isinstance(on, bool):
             self.__channel_scale_lock = on
-            self.modified()
         else:
             e = self._type_error("channel_scale_lock", "boolean")
             raise TypeError(e)
@@ -187,7 +186,6 @@ class NMDataSeries(NMObject):
     def xscale_lock(self, on: bool) -> None:
         if isinstance(on, bool):
             self.__xscale_lock = on
-            self.modified()
         else:
             e = self._type_error("xscale_lock", "boolean")
             raise TypeError(e)

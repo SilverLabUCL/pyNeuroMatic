@@ -3,7 +3,7 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-# import math
+import math
 import numpy
 
 # import numpy.typing as npt # No module named 'numpy.typing
@@ -11,11 +11,11 @@ from typing import Dict, Union
 
 from pyneuromatic.nm_channel import NMChannel
 from pyneuromatic.nm_dataseries import NMDataSeries, NMDataSeriesContainer
+from pyneuromatic.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.nm_epoch import NMEpoch
 from pyneuromatic.nm_object import NMObject
 from pyneuromatic.nm_object_container import NMObjectContainer
 import pyneuromatic.nm_preferences as nmp
-from pyneuromatic.nm_scale import NMScale, NMScaleX
 import pyneuromatic.nm_utilities as nmu
 
 
@@ -45,27 +45,21 @@ NMManager
 class NMData(NMObject):
     """
     NM Data class
-
-    np_array: NumPy N-dimensional array (ndarray)
     """
 
     def __init__(
         self,
         parent: object = None,
         name: str = "NMData",
-        np_array=None,  # TODO: typing
-        xscale: Union[dict, nmu.NMScaleXType] = {},
-        yscale: Union[dict, nmu.NMScaleType] = {},
-        # pass dictionary for independent scale
-        # pass reference to NMscale (master)
+        xdim: Union[nmu.NMDimensionXType, None] = None,
+        ydim: Union[nmu.NMDimensionType, None] = None,
         # dataseries: Union[nmu.NMDataSeriesType, None] = None,
         dataseries_channel: Union[nmu.NMChannelType, None] = None,
         dataseries_epoch: Union[nmu.NMEpochType, None] = None,
-        copy: nmu.NMDataType = None,  # see copy()
+        copy: nmu.NMDataType = None  # see copy()
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)  # NMObject
 
-        self.__np_array = None
         # self.__dataseries = None
         self.__dataseries_channel = None
         self.__dataseries_epoch = None
@@ -73,10 +67,8 @@ class NMData(NMObject):
         if copy is None:
             pass
         elif isinstance(copy, NMData):
-            if isinstance(copy.np_array, numpy.ndarray):
-                np_array = copy.np_array.copy()
-            xscale = copy._NMData__x.scale
-            yscale = copy._NMData__y.scale
+            xdim = copy.x.copy()
+            ydim = copy.y.copy()
             # TODO
             # dataseries = copy._NMData__dataseries
             # dataseries_channel = copy._NMData__dataseries_channel
@@ -85,33 +77,25 @@ class NMData(NMObject):
             e = nmu.typeerror(copy, "copy", "NMData")
             raise TypeError(e)
 
-        if np_array is None:
-            pass
-        elif isinstance(np_array, numpy.ndarray):
-            self.__np_array = np_array
+        if xdim is None:
+            self.__x = NMDimensionX(self, "xscale")
+            self.__x.start = 0
+            self.__x.delta = 1
+        elif isinstance(xdim, NMDimensionX):
+            self.__x = xdim
         else:
-            e = nmu.typeerror(np_array, "np_array", "NumPy.ndarray")
+            e = nmu.typeerror(xdim, "xdim", "NMDimensionX")
             raise TypeError(e)
 
-        if isinstance(xscale, NMScaleX):
-            self.__x = xscale
-        elif xscale is None:
-            self.__x = NMScaleX(self, "xscale")
-        elif isinstance(xscale, dict):
-            self.__x = NMScaleX(self, "xscale", scale=xscale)
+        if ydim is None:
+            self.__y = NMDimension(self, "yscale")
+        elif isinstance(ydim, NMDimension):
+            self.__y = ydim
         else:
-            e = nmu.typeerror(xscale, "xscale", "dictionary or NMScaleX")
+            e = nmu.typeerror(ydim, "ydim", "NMDimension")
             raise TypeError(e)
 
-        if isinstance(yscale, NMScale):
-            self.__y = yscale
-        elif yscale is None:
-            self.__y = NMScale(self, "yscale")
-        elif isinstance(yscale, dict):
-            self.__y = NMScale(self, "yscale", scale=yscale)
-        else:
-            e = nmu.typeerror(yscale, "yscale", "dictionary or NMScale")
-            raise TypeError(e)
+        self.__x.ypair = self.__y.nparray
 
         self._dataseries_set(dataseries_channel, dataseries_epoch)
 
@@ -131,38 +115,10 @@ class NMData(NMObject):
         if not super().__eq__(other):
             return False
 
-        if self.x != other.x:
+        if self.__x != other.x:
             return False
-        if self.y != other.y:
+        if self.__y != other.y:
             return False
-        # print(isinstance(self.__np_array, numpy.ndarray))
-        if isinstance(self.__np_array, numpy.ndarray):
-            if isinstance(other.__np_array, numpy.ndarray):
-                if self.__np_array.dtype != other.np_array.dtype:
-                    return False
-                if self.__np_array.shape != other.np_array.shape:
-                    return False
-                if self.__np_array.nbytes != other.np_array.nbytes:
-                    return False
-                if not numpy.array_equal(self.__np_array, other.np_array):
-                    # array_equal returns false if both arrays filled with NANs
-                    if nmp.NAN_EQ_NAN:
-                        # compare array elements within a tolerance
-                        if not numpy.allclose(
-                            self.__np_array,
-                            other.np_array,
-                            rtol=0,
-                            atol=0,
-                            equal_nan=True,
-                        ):
-                            return False
-                    else:
-                        return False
-            else:
-                return False
-        elif isinstance(other.__np_array, numpy.ndarray):
-            return False
-
         if self._dataseries_channel != other._dataseries_channel:
             return False
         if self._dataseries_epoch != other._dataseries_epoch:
@@ -174,12 +130,8 @@ class NMData(NMObject):
     @property
     def parameters(self) -> Dict[str, object]:
         k = super().parameters
-        k.update({"xscale": self.x.scale})
-        k.update({"yscale": self.y.scale})
-        if isinstance(self.__np_array, numpy.ndarray):
-            k.update({"np_array": self.__np_array.dtype})
-        else:
-            k.update({"np_array": None})
+        k.update({"x": self.x.parameters})
+        k.update({"y": self.y.parameters})
         ds = self._dataseries
         if isinstance(ds, NMDataSeries):
             k.update({"dataseries": ds.name})
@@ -196,101 +148,18 @@ class NMData(NMObject):
         return k
 
     @property
-    def x(self) -> nmu.NMScaleXType:
+    def x(self) -> nmu.NMDimensionXType:
         if isinstance(self.__dataseries_channel, NMChannel):
-            if isinstance(self.__dataseries_channel.x, NMScaleX):
+            if isinstance(self.__dataseries_channel.x, NMDimensionX):
                 return self.__dataseries_channel.x
         return self.__x
 
     @property
-    def y(self) -> nmu.NMScaleType:
+    def y(self) -> nmu.NMDimensionType:
         if isinstance(self.__dataseries_channel, NMChannel):
-            if isinstance(self.__dataseries_channel.y, NMScale):
+            if isinstance(self.__dataseries_channel.y, NMDimension):
                 return self.__dataseries_channel.y
         return self.__y
-
-    @property
-    def np_array(self):
-        return self.__np_array
-
-    @np_array.setter
-    def np_array(self, np_array) -> None:
-        return self._np_array_set(np_array)
-
-    def _np_array_set(
-        self,
-        np_array,
-        # quiet=nmp.QUIET
-    ) -> None:
-        if np_array is None:
-            pass  # ok
-        elif not isinstance(np_array, numpy.ndarray):
-            e = nmu.typeerror(np_array, "np_array", "NumPy.ndarray")
-            raise TypeError(e)
-        if self.__np_array is None:
-            old = None
-        else:
-            old = self.__np_array.__array_interface__["data"][0]
-        self.__np_array = np_array
-        self.modified()
-        if self.__np_array is None:
-            new = None
-        else:
-            new = self.__np_array.__array_interface__["data"][0]
-        h = nmu.history_change("np_array reference", old, new)
-        # self.__notes_container.new(h)
-        # self._history(h, quiet=quiet)
-        return None
-
-    def np_array_make(
-        self,
-        shape,
-        fill_value=NP_FILL_VALUE,
-        dtype=NP_DTYPE,
-        order=NP_ORDER,
-        # quiet=nmp.QUIET
-    ):
-        # wrapper for NumPy.full
-        self.__np_array = numpy.full(shape, fill_value, dtype=dtype, order=order)
-        self.modified()
-        if not isinstance(self.__np_array, numpy.ndarray):
-            raise RuntimeError("failed to create numpy array")
-        n = (
-            "created numpy array (numpy.full): shape="
-            + str(shape)
-            + ", fill_value="
-            + str(fill_value)
-            + ", dtype="
-            + str(dtype)
-        )
-        # self.__notes_container.new(n)
-        # self._history(n, quiet=quiet)
-        return True
-
-    def np_array_make_random_normal(
-        self,
-        shape,
-        mean=0,
-        stdv=1,
-        # quiet=nmp.QUIET
-    ):
-        # wrapper for NumPy.random.normal
-        # dtype = float64
-        self.__np_array = numpy.random.normal(mean, stdv, shape)
-        self.modified()
-        if not isinstance(self.__np_array, numpy.ndarray):
-            raise RuntimeError("failed to create numpy array")
-        n = (
-            "created data array (numpy.random.normal): shape="
-            + str(shape)
-            + ", mean="
-            + str(mean)
-            + ", stdv="
-            + str(stdv)
-        )
-        # self.__notes_container.new(n)
-        # self._history(n, quiet=quiet)
-        return True
 
     @property
     def _dataseries(self) -> Union[nmu.NMDataSeriesType, None]:
@@ -370,10 +239,8 @@ class NMDataContainer(NMObjectContainer):
     def new(
         self,
         name: str = "default",
-        np_array=None,  # TODO: typing
-        xscale: Union[dict, nmu.NMScaleXType] = {},
-        # TODO: can also be NMData?
-        yscale: Union[dict, nmu.NMScaleType] = {},
+        xdim: Union[nmu.NMDimensionXType, None] = None,
+        ydim: Union[nmu.NMDimensionType, None] = None,
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> nmu.NMDataType:
@@ -381,9 +248,8 @@ class NMDataContainer(NMObjectContainer):
         d = NMData(
             parent=self._parent,
             name=name,
-            np_array=np_array,
-            xscale=xscale,
-            yscale=yscale,
+            xdim=xdim,
+            ydim=ydim
         )
         super().new(d, select=select)
         return d

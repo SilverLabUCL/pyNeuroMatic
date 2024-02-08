@@ -6,7 +6,7 @@ Copyright 2019 Jason Rothman
 """
 from pyneuromatic.nm_object import NMObject
 from pyneuromatic.nm_object_container import NMObjectContainer
-from pyneuromatic.nm_scale import NMScale, NMScaleX
+from pyneuromatic.nm_dimension import NMDimension, NMDimensionX
 import pyneuromatic.nm_utilities as nmu
 from typing import Dict, List, Union
 
@@ -45,8 +45,8 @@ class NMChannel(NMObject):
         self,
         parent: Union[object, None] = None,
         name: str = "NMChannel",
-        xscale: Union[dict, nmu.NMScaleXType] = {},
-        yscale: Union[dict, nmu.NMScaleType] = {},
+        xscale: Union[dict, nmu.NMDimensionXType] = {},
+        yscale: Union[dict, nmu.NMDimensionType] = {},
         copy: Union[nmu.NMChannelType, None] = None,
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
@@ -63,7 +63,6 @@ class NMChannel(NMObject):
         elif isinstance(copy, NMChannel):
             xscale = copy._NMChannel__x.scale
             yscale = copy._NMChannel__y.scale
-
             if self._folder is None:
                 # direct copy
                 self.__thedata = list(copy._NMChannel__thedata)
@@ -80,29 +79,29 @@ class NMChannel(NMObject):
 
         if xscale is None:
             pass
-        elif isinstance(xscale, NMScaleX):
+        elif isinstance(xscale, NMDimensionX):
             self.__x = xscale
         elif isinstance(xscale, dict):
-            self.__x = NMScaleX(parent=self, name="xscale", scale=xscale)
+            self.__x = NMDimensionX(parent=self, name="xscale", scale=xscale)
         else:
-            e = nmu.typeerror(xscale, "xscale", "dictionary or NMScaleX")
+            e = nmu.typeerror(xscale, "xscale", "dictionary or NMDimensionX")
             raise TypeError(e)
 
         if yscale is None:
             pass
-        elif isinstance(yscale, NMScale):
+        elif isinstance(yscale, NMDimension):
             self.__y = yscale
         elif isinstance(yscale, dict):
-            self.__y = NMScale(parent=self, name="yscale", scale=yscale)
+            self.__y = NMDimension(parent=self, name="yscale", scale=yscale)
         else:
-            e = nmu.typeerror(yscale, "yscale", "dictionary or NMScale")
+            e = nmu.typeerror(yscale, "yscale", "dictionary or NMDimension")
             raise TypeError(e)
 
-        if not isinstance(self.__x, NMScaleX):
-            self.__x = NMScaleX(parent=self, name="xscale")
+        if not isinstance(self.__x, NMDimensionX):
+            self.__x = NMDimensionX(parent=self, name="xscale")
 
-        if not isinstance(self.__y, NMScale):
-            self.__y = NMScale(parent=self, name="yscale")
+        if not isinstance(self.__y, NMDimension):
+            self.__y = NMDimension(parent=self, name="yscale")
 
         return None
 
@@ -139,11 +138,11 @@ class NMChannel(NMObject):
         return self.__thedata
 
     @property
-    def x(self) -> nmu.NMScaleXType:
+    def x(self) -> nmu.NMDimensionXType:
         return self.__x
 
     @property
-    def y(self) -> nmu.NMScaleType:
+    def y(self) -> nmu.NMDimensionType:
         return self.__y
 
 
@@ -182,8 +181,8 @@ class NMChannelContainer(NMObjectContainer):
     def new(
         self,
         # name: str = 'A',  use name_next()
-        xscale: Union[dict, nmu.NMScaleXType] = {},
-        yscale: Union[dict, nmu.NMScaleType] = {},
+        xscale: Union[dict, nmu.NMDimensionXType] = {},
+        yscale: Union[dict, nmu.NMDimensionType] = {},
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> nmu.NMChannelType:
