@@ -8,10 +8,10 @@ Created on Sun Dec 25 14:43:19 2022
 
 import unittest
 
+import pyneuromatic.nm_utilities as nmu
+from pyneuromatic.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.nm_folder import NMFolder
 from pyneuromatic.nm_manager import NMManager
-from pyneuromatic.nm_scale import NMDimension, NMDimensionX
-import pyneuromatic.nm_utilities as nmu
 
 NM = NMManager(quiet=True)
 
