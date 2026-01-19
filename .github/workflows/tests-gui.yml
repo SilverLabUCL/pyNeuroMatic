@@ -1,0 +1,67 @@
+name: Test GUI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - development
+  pull_request:
+    branches:
+      - master
+      - main
+      - development
+
+jobs:
+  test-gui:
+    name: GUI Tests - Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system dependencies for Qt
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          xvfb \
+          libxkbcommon-x11-0 \
+          libxcb-icccm4 \
+          libxcb-image0 \
+          libxcb-keysyms1 \
+          libxcb-randr0 \
+          libxcb-render-util0 \
+          libxcb-xinerama0 \
+          libxcb-xfixes0 \
+          x11-utils
+
+    - name: Install GUI dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[gui]"
+        pip install pytest pytest-qt pytest-cov
+
+    - name: Verify GUI available
+      run: |
+        python -c "from pyneuromatic.gui import check_gui_available; check_gui_available(); print('✓ GUI dependencies available')"
+
+    - name: Run GUI tests with xvfb
+      run: |
+        xvfb-run -a pytest tests/test_gui/ -v --cov=pyneuromatic.gui --cov-report=xml --cov-report=term -m "gui or not core"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: gui
+        name: gui-${{ matrix.python-version }}
+      continue-on-error: true

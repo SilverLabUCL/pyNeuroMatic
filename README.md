@@ -11,102 +11,313 @@ pyNeuroMatic
 [![GitHub issues](https://img.shields.io/github/issues/SilverLabUCL/pyNeuroMatic)](https://github.com/SilverLabUCL/pyNeuroMatic/issues)
 
 Python implementation of [NeuroMatic](https://github.com/SilverLabUCL/NeuroMatic).
-This is currently a work in progress.
 
 pyNeuroMatic is a collection of Python tools for acquiring, analysing and simulating electrophysiological data.
+
+**Note:** This is currently a work in progress. Core data structures are functional, with analysis tools and GUI implementation in development.
+
+Requirements
+------------
+
+- **Python**: 3.9 or higher (3.11 recommended)
+- **Core dependencies**: numpy, h5py, colorama
+- **GUI dependencies** (optional): PyQt6
 
 Installation
 ------------
 
-### Pip
+### Recommended: Virtual Environment
 
-pyNeuroMatic releases, when made, can be installed with pip (preferably in a [virtual environment](https://docs.python.org/3/tutorial/venv.html)):
+We strongly recommend using a virtual environment:
 
-    pip install pyneuromatic
+```bash
+# Create virtual environment
+python3 -m venv pyneuromatic_env
 
+# Activate it
+source pyneuromatic_env/bin/activate  # On macOS/Linux
+# or
+pyneuromatic_env\Scripts\activate     # On Windows
+```
 
-### Installation from source
+### Option 1: Install from PyPI (when available)
+
+```bash
+# Core functionality only
+pip install pyneuromatic
+
+# With GUI support
+pip install pyneuromatic[gui]
+
+# For development
+pip install pyneuromatic[dev]
+```
+
+### Option 2: Install from Source
 
 Clone the repository:
 
-    git clone https://github.com/SilverLabUCL/pyneuromatic.git
-    cd
+```bash
+git clone https://github.com/SilverLabUCL/pyNeuroMatic.git
+cd pyNeuroMatic
+```
 
-It should be possible to install pyNeuroMatic using just:
+**Core installation** (analysis and data structures, no GUI):
 
-    pip install .
+```bash
+pip install -e .
+```
 
-To develop pyNeuroMatic, you can use the `dev` extra and the `development` branch:
+**With GUI support** (includes PyQt6):
 
-    git clone https://github.com/SilverLabUCL/pyneuromatic.git
-    cd
-    git checkout development
-    pip install .[dev]
+```bash
+pip install -e ".[gui]"
+```
 
-Please use pre-commit to run the pre-commit hooks.
-You will need to install the hooks once:
+**For development** (includes testing and formatting tools):
 
-    pre-commit install
+```bash
+pip install -e ".[dev]"
+```
 
-They will then run before each commit.
+### Verifying Installation
 
-Current/Future Features
------------------------
+```python
+# Test core functionality
+import pyneuromatic as pnm
+print(pnm.__version__)
 
-(1) The foundational structure of NeuroMatic (NM) has been created using Python containers (Mutable Mappings). NM's structural container hierarchy is as follows: Manager > Project > Folder > Data. The hierarchy is currently accessed via a command line interface (CLI) but will also be accessible via a GUI. Here is a command to create a new project:
+# Test GUI availability (only if installed with [gui])
+from pyneuromatic.gui import check_gui_available
+check_gui_available()
+```
 
-    In [1]: nm.projects.new('MyProject0')
+Quick Start
+-----------
 
-NMObjectContainer is the parent class of all NM containers (NMProjectContainer, NMFolderContainer, NMDataContainer...). Each NMObjectContainer holds one or more NMObjects (NMProject, NMFolder, NMData...).
+```python
+import pyneuromatic as pnm
 
-Each NMObjectContainer also contains sets (NMSets). NMObjects can be placed in NMSets and these NMSets can then be used to specify what projects, folders and data is to be analysed. NMSets can be functions of each other, for example: 'Set3' = ['Set1', '&', 'Set2'].
+# Create a new project
+nm = pnm.NMManager()
+nm.projects.new('MyProject0')
 
-NMObjects contain functions for creating notes and log histories.
+# Work with the container hierarchy
+# Manager > Project > Folder > Data
+```
 
-A NMDataSeries define data acquired from data acquisition (DAQ) devices, allowing multiple ADC input channels (A, B, C...) and epochs/episodes (E0, E1, E2...).
+Development Setup
+-----------------
 
-NM's container tree hierarchy is as follows:
+For contributors:
 
-    NMManager (nm)
-        NMProjectContainer
-            NMProject (e.g. 'MyProject0', 'MyProject1'...)
-                NMFolderContainer
-                    NMFolder (e.g. 'MyFolder0', 'MyFolder1'...)
-                        NMDataContainer
-                            NMData (e.g. 'RecordA0', 'RecordA1'... 'AvgA0', 'AvgB0')
-                        NMDataSeriesContainer
-                            NMDataSeries (e.g. 'Record', 'Avg'...)
-                                NMChannelContainer
-                                    NMChannel ('A', 'B', 'C'...)
-                                NMEpochContainer
-                                    NMEpoch ('E0', 'E1', 'E2'...)
+```bash
+# Clone and checkout development branch
+git clone https://github.com/SilverLabUCL/pyNeuroMatic.git
+cd pyNeuroMatic
+git checkout development
 
-(2) NM container 'select' items. Each NMObjectContainer has one selected item (e.g. nm.projects.select_key = 'MyProject0'). The selected items in NM's container tree create a unique path through the tree. The selected items are accessible via NM's manager (nm): nm.select_values or nm.select_keys. Here is an example of printing nm.select_keys via CLI:
+# Install with development dependencies
+pip install -e ".[dev]"
 
-    {'project': 'MyProject0', 'folder': 'MyFolder3', 'data': 'RecordA5'}.
+# Install pre-commit hooks
+pre-commit install
+```
 
-In the future, users will be able to instruct NM to perform a given task on the selected items, such as baselining or filtering.
+The pre-commit hooks will run automatically before each commit to ensure code quality.
 
-(3) NM container 'execute' items. Each NMObjectContainer has one 'execute' item. By default the execute item is the 'select' item, just described (2). However, users have the option to set the 'execute' item to a NM container key (e.g. nm.projects.execute_key = 'project0') or a NMSet (e.g. nm.projects.execute_key = 'set3').
+Running Tests
+-------------
 
-(4) GUI built with pyQt6 and channel graphs.
+```bash
+# Run all tests
+pytest
 
-(5) Demo module/tab. A simple module/tab that provides a template for creating a user-defined module/tab.
+# Run only core tests (fast, no GUI required)
+pytest tests/test_core/ tests/test_analysis/
 
-(6) Main module/tab. NM's main module/tab that performs basic Display, Edit and X-scale data functions, basic data operations such as Scale and Normalize, and data analysis functions such as Avarage and Sum.
+# Run with coverage
+pytest --cov=pyneuromatic --cov-report=html
+```
 
-(7) Stats module/tab. Compute statistical data measures such as Max, Min, Average, Slope, Rise Time, etc, within any number of predefined time windows.
+Package Structure
+-----------------
 
-(8) Spike module/tab. Spike analysis module/tab for computing raster plots, peristimulus time (PST) histograms and inter-spike-interval (ISI) histograms. Spike occurrences are determined by a y-threshold level detector on positive or negative slope deflections.
+```
+pyNeuroMatic/
+├── pyneuromatic/          # Main package
+│   ├── core/             # Core data structures (NMManager, NMProject, NMFolder, NMData)
+│   ├── analysis/         # Analysis tools and statistics
+│   ├── gui/             # GUI components (optional, requires PyQt6)
+│   └── __init__.py      # Package exports
+├── tests/                # Test suite
+├── examples/             # Example scripts and notebooks (coming soon)
+└── docs/                 # Documentation (coming soon)
+```
 
-(9) Event module/tab. Module/tab for detection of spontaneous events such as excitory post-synaptic currents (EPSCs). The search algorithm can be either a simple level detector, a threshold-above-baseline detector similar to that described by Kudoh and Taguchi 2002, or a template-matching detector as described by Clements and Bekkers 1997.
+Implemented Features
+--------------------
 
-(10) ROI module/tab. Florescence image region-of-interest (ROI) analysis, including line scans. Users will be able to define ROIs using a graphical interface.
+### Core Architecture (✅ Implemented)
 
-(11) Fit module/tab. Curve fitting.
+The foundational structure of NeuroMatic has been implemented using Python containers (Mutable Mappings). The structural container hierarchy is: **Manager > Project > Folder > Data**.
 
-(12) Pulse module/tab. Generate waves with added pulse waveforms such as a square, ramp, exponential, alpha, sine, cosine, etc. Simulate stochastic (binomial) synaptic release using synaptic-like exponential waveforms. Simulate trains of synaptic currents/conductances that exhibit short-term plasticity (i.e. facilitation and/or depression).
+The hierarchy is currently accessed via a command line interface (CLI) and will also be accessible via a GUI.
 
-(13) Art module/tab. Artifact subtraction.
+**Example:**
 
-(14) Clamp module/tab. Data acquisition. National Instruments (NI) boards.
+```python
+import pyneuromatic as pnm
+
+# Create manager
+nm = pnm.NMManager()
+
+# Create a new project
+nm.projects.new('MyProject0')
+```
+
+**Container Classes:**
+
+- `NMObjectContainer` is the parent class of all NM containers
+- Each `NMObjectContainer` holds one or more `NMObjects` (NMProject, NMFolder, NMData...)
+- Each `NMObjectContainer` contains sets (`NMSets`) for grouping and filtering objects
+- `NMSets` can be functions of each other, for example: `Set3 = ['Set1', '&', 'Set2']`
+- `NMObjects` contain functions for creating notes and log histories
+
+**Data Series:**
+
+`NMDataSeries` defines data acquired from data acquisition (DAQ) devices, supporting multiple ADC input channels (A, B, C...) and epochs/episodes (E0, E1, E2...).
+
+**Container Hierarchy:**
+
+```
+NMManager (nm)
+    NMProjectContainer
+        NMProject (e.g. 'MyProject0', 'MyProject1'...)
+            NMFolderContainer
+                NMFolder (e.g. 'MyFolder0', 'MyFolder1'...)
+                    NMDataContainer
+                        NMData (e.g. 'RecordA0', 'RecordA1'... 'AvgA0', 'AvgB0')
+                    NMDataSeriesContainer
+                        NMDataSeries (e.g. 'Record', 'Avg'...)
+                            NMChannelContainer
+                                NMChannel ('A', 'B', 'C'...)
+                            NMEpochContainer
+                                NMEpoch ('E0', 'E1', 'E2'...)
+```
+
+### Selection and Execution (✅ Implemented)
+
+**Select Items:**
+
+Each `NMObjectContainer` has one selected item (e.g., `nm.projects.select_key = 'MyProject0'`). The selected items create a unique path through the container tree, accessible via the manager:
+
+```python
+nm.select_values  # or nm.select_keys
+# Example output: {'project': 'MyProject0', 'folder': 'MyFolder3', 'data': 'RecordA5'}
+```
+
+Users can perform tasks on selected items, such as baselining or filtering.
+
+**Execute Items:**
+
+Each `NMObjectContainer` has one 'execute' item. By default, this is the 'select' item, but users can set the execute item to a container key (e.g., `nm.projects.execute_key = 'project0'`) or a `NMSet` (e.g., `nm.projects.execute_key = 'set3'`).
+
+### Analysis Tools
+
+**Stats module** - Compute statistical data measures such as Max, Min, Average, Slope, Rise Time, etc., within predefined time windows.
+
+Planned Features
+----------------
+
+The following features are planned for future releases:
+
+### GUI (🔧 In Progress)
+
+**(4)** GUI built with PyQt6 and channel graphs.
+
+**(5)** Demo module/tab - A template for creating user-defined modules.
+
+### Analysis Modules
+
+**(6)** **Main module/tab** - Basic Display, Edit and X-scale data functions, data operations such as Scale and Normalize, and analysis functions such as Average and Sum.
+
+**(8)** **Spike module/tab** - Spike analysis for computing raster plots, peristimulus time (PST) histograms and inter-spike-interval (ISI) histograms. Spike detection using y-threshold level detector on positive or negative slope deflections.
+
+**(9)** **Event module/tab** - Detection of spontaneous events such as excitatory post-synaptic currents (EPSCs). Search algorithms include:
+  - Simple level detector
+  - Threshold-above-baseline detector (Kudoh and Taguchi 2002)
+  - Template-matching detector (Clements and Bekkers 1997)
+
+**(10)** **ROI module/tab** - Fluorescence image region-of-interest (ROI) analysis, including line scans with graphical interface for ROI definition.
+
+**(11)** **Fit module/tab** - Curve fitting tools.
+
+### Data Generation and Acquisition
+
+**(12)** **Pulse module/tab** - Generate waves with pulse waveforms (square, ramp, exponential, alpha, sine, cosine, etc.). Simulate stochastic (binomial) synaptic release and trains of synaptic currents/conductances with short-term plasticity (facilitation/depression).
+
+**(13)** **Art module/tab** - Artifact subtraction.
+
+**(14)** **Clamp module/tab** - Data acquisition with National Instruments (NI) boards.
+
+Troubleshooting
+---------------
+
+### GUI Import Errors
+
+If you see:
+```
+ImportError: GUI dependencies not available
+```
+
+Install GUI dependencies:
+```bash
+pip install -e ".[gui]"
+```
+
+### Python Version Issues
+
+PyQt6 requires Python 3.8 or higher. If you're using Python 3.7 or older, please upgrade:
+
+```bash
+# Check your Python version
+python --version
+
+# Upgrade if needed (example with Homebrew on macOS)
+brew install python@3.11
+```
+
+Contributing
+------------
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+For major changes, please open an issue first to discuss what you would like to change.
+
+License
+-------
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Citation
+--------
+
+If you use pyNeuroMatic in your research, please cite:
+
+```
+Rothman JR, Silver RS (2024). pyNeuroMatic: Python tools for electrophysiology analysis.
+GitHub repository, https://github.com/SilverLabUCL/pyNeuroMatic
+```
+
+Acknowledgments
+---------------
+
+pyNeuroMatic is a Python implementation of [NeuroMatic](https://github.com/SilverLabUCL/NeuroMatic), originally developed for Igor Pro.
+
+Contact
+-------
+
+- **Author**: Jason Rothman
+- **Email**: j.rothman@ucl.ac.uk
+- **Issues**: [GitHub Issues](https://github.com/SilverLabUCL/pyNeuroMatic/issues)

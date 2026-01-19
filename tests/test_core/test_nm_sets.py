@@ -12,7 +12,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_sets import NMSets
 import pyneuromatic.core.nm_utilities as nmu
-from tests.test_core.nm_object_test import NMObject2
+from tests.test_core.test_nm_object import NMObject2
 
 QUIET = True
 NM = NMManager(quiet=QUIET)
