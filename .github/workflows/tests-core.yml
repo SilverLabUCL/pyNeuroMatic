@@ -1,0 +1,59 @@
+name: Test Core (No GUI)
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - development
+  pull_request:
+    branches:
+      - master
+      - main
+      - development
+
+jobs:
+  test-core:
+    name: Core Tests - Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install core dependencies only
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest pytest-cov
+
+    - name: Verify GUI not imported
+      run: |
+        python -c "import pyneuromatic; print('✓ Core imported successfully')"
+        python -c "import sys; import pyneuromatic; assert 'PyQt6' not in sys.modules, 'PyQt6 should not be imported'"
+
+    - name: Run core tests
+      run: |
+        pytest tests/test_core/ tests/test_analysis/ -v --cov=pyneuromatic --cov-report=xml --cov-report=term -m "not gui"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: core
+        name: core-${{ matrix.os }}-${{ matrix.python-version }}
+      continue-on-error: true
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        flake8 pyneuromatic/core/ pyneuromatic/analysis/ --count --show-source --max-line-length=127 --statistics
