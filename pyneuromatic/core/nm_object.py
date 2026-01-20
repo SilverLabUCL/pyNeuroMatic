@@ -8,9 +8,12 @@ Copyright 2019 Jason Rothman
 import datetime
 import inspect
 import types
-from typing import Dict, List, Union
+from __future__ import annotations
 
+from pyneuromatic.core.nm_folder import NMFolder
+from pyneuromatic.core.nm_manager import NMManager
 import pyneuromatic.core.nm_preferences as nmp
+from pyneuromatic.core.nm_project import NMProject
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -76,10 +79,10 @@ class NMObject(object):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,  # for creating NM class tree
+        parent: object | None = None,  # for creating NM class tree
         name: str = "NMObject0",  # name of this NMObject
         notes_on: bool = True,
-        copy: Union[nmu.NMObjectType, None] = None,  # see copy()
+        copy: NMObject | None = None,  # see copy()
     ) -> None:
         """Initialise a NMObject.
 
@@ -118,7 +121,7 @@ class NMObject(object):
                     self.__notes.append(dict(n))  # append a copy
             self.__copy_of = copy
         else:
-            e = nmu.typeerror(copy, "copy", "NMObject")
+            e = nmu.typeerror(copy, "copy", NMObject)
             raise TypeError(e)
 
         self.__parent = parent  # family tree 'parent' and 'child'
@@ -138,13 +141,13 @@ class NMObject(object):
         return None
 
     # children should override
-    def copy(self) -> nmu.NMObjectType:
+    def copy(self) -> NMObject:
         return NMObject(copy=self)
 
     # children should override
     def __eq__(
         self,
-        other: nmu.NMObjectType,
+        other: object,
     ) -> bool:
         # executed with '==' but not 'is'
         # can use 'is' to test if objects are the same
@@ -168,7 +171,7 @@ class NMObject(object):
         return True
 
     def lists_are_equal(
-        nmobject_list1: List[nmu.NMObjectType], nmobject_list2: List[nmu.NMObjectType]
+        nmobject_list1: list[NMObject], nmobject_list2: list[NMObject]
     ) -> bool:
         """Compare lists of NMObjects.
 
@@ -208,7 +211,7 @@ class NMObject(object):
     # children should override, call super() and add class parameters
     # similar to __dict__
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         p = {"name": self.__name}
         p.update({"created": self.__created})
         if isinstance(self.__copy_of, type(self)):
@@ -231,12 +234,12 @@ class NMObject(object):
     #    return list(self.parameters.keys())
 
     @property
-    def content(self) -> Dict[str, str]:
+    def content(self) -> dict[str, str]:
         cname = self.__class__.__name__.lower()
         return {cname: self.__name}
 
     @property
-    def content_tree(self) -> Dict[str, str]:
+    def content_tree(self) -> dict[str, str]:
         if isinstance(self.__parent, NMObject):
             k = {}
             k.update(self.__parent.content_tree)  # goes up NM class tree
@@ -250,7 +253,7 @@ class NMObject(object):
         list_format: bool = False
         # True: list of names or NMObjects, e.g. ['nm', 'project0', 'folder0']
         # False: concatenated names, e.g. 'nm.project0.folder0'
-    ) -> Union[str, List[nmu.NMObjectType]]:
+    ) -> str | list[NMObject]:
         """returns the NM tree path of this NMObject.
 
         The NM tree path can be a list of NMObject names or references.
@@ -304,10 +307,10 @@ class NMObject(object):
 
     def _name_set(
         self,
-        name_notused: Union[str, None] = None,
+        name_notused: str | None = None,
         # name_notused, dummy argument to be consistent with
         # NMObjectContainer.rename(key, newkey)
-        newname: Union[str, None] = None,
+        newname: str | None = None,
         # coding newname as optional (None)
         # since preceding param name_notused is optional
         quiet: bool = nmp.QUIET,
@@ -350,7 +353,7 @@ class NMObject(object):
         return None
 
     @property
-    def notes(self) -> List[Dict]:
+    def notes(self) -> list[dict]:
         return self.__notes
 
     def notes_print(self) -> None:
@@ -389,7 +392,7 @@ class NMObject(object):
         return True
 
     def _notes_delete(
-        self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
+        self, confirm_answer: str | None = None  # to skip confirm prompt
     ) -> bool:
         if nmp.DELETE_CONFIRM:
             if confirm_answer in nmu.CONFIRM_YNC:
@@ -417,7 +420,7 @@ class NMObject(object):
             self.__notes_on = True
         return None
 
-    def notes_ok(notes: List[Dict]) -> bool:
+    def notes_ok(notes: list[dict]) -> bool:
         # test notes type format
         if not isinstance(notes, list):
             return False
@@ -435,15 +438,15 @@ class NMObject(object):
         return True
 
     @property
-    def _manager(self) -> nmu.NMManagerType:  # find NMManager of this NMObject
+    def _manager(self) -> NMManager:  # find NMManager of this NMObject
         return self._find_parent("NMManager")
 
     @property
-    def _project(self) -> nmu.NMProjectType:  # find NMProject of this NMObject
+    def _project(self) -> NMProject:  # find NMProject of this NMObject
         return self._find_parent("NMProject")
 
     @property
-    def _folder(self) -> nmu.NMFolderType:  # find NMFolder of this NMObject
+    def _folder(self) -> NMFolder:  # find NMFolder of this NMObject
         return self._find_parent("NMFolder")
 
     def _find_parent(self, classname: str) -> object:
@@ -463,7 +466,7 @@ class NMObject(object):
     def _alert(
         self,
         message: str,
-        tp: Union[str, None] = None,
+        tp: str | None = None,
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -480,7 +483,7 @@ class NMObject(object):
     def _error(
         self,
         message: str,
-        tp: Union[str, None] = None,
+        tp: str | None = None,
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -497,7 +500,7 @@ class NMObject(object):
     def _history(
         self,
         message: str,
-        tp: Union[str, None] = None,
+        tp: str | None = None,
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -510,7 +513,7 @@ class NMObject(object):
         self,
         obj_name: str,  # name of object that is of the wrong type
         type_expected: str,  # expected type of the object
-        tp: Union[str, None] = None,  # history treepath
+        tp: str | None = None,  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:
@@ -536,7 +539,7 @@ class NMObject(object):
     def _value_error(
         self,
         obj_name: str,  # name of function variable with bad value
-        tp: Union[str, None] = None,  # history treepath
+        tp: str | None = None,  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:

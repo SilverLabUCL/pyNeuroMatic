@@ -1,0 +1,562 @@
+pyneuromatic/core/nm_utilities.py:19: error: Need type annotation for "BADTYPES"  [var-annotated]
+pyneuromatic/core/nm_utilities.py:27: error: Need type annotation for "badlist"  [var-annotated]
+pyneuromatic/core/nm_utilities.py:355: error: Incompatible default for argument "char_list" (default has type "tuple[str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str]", argument has type "list[str]")  [assignment]
+pyneuromatic/core/nm_utilities.py:387: error: Incompatible default for argument "char_list" (default has type "tuple[str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str]", argument has type "list[str]")  [assignment]
+pyneuromatic/core/nm_utilities.py:422: error: Incompatible default for argument "char_list" (default has type "tuple[str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str, str]", argument has type "list[str]")  [assignment]
+pyneuromatic/core/nm_utilities.py:434: error: Unsupported operand types for >= ("list[int]" and "int")  [operator]
+pyneuromatic/core/nm_utilities.py:434: note: Left operand is of type "Union[int, list[int]]"
+pyneuromatic/core/nm_utilities.py:439: error: Unsupported operand types for >= ("list[int]" and "int")  [operator]
+pyneuromatic/core/nm_utilities.py:439: note: Left operand is of type "Union[int, list[int]]"
+pyneuromatic/core/nm_utilities.py:623: error: Incompatible types in assignment (expression has type "list[str]", variable has type "str")  [assignment]
+pyneuromatic/core/nm_sets.py:40: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:48: error: Argument "name" to "__init__" of "NMObject" has incompatible type "Optional[str]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_sets.py:53: error: Need type annotation for "__map" (hint: "__map: dict[<type>, <type>] = ...")  [var-annotated]
+pyneuromatic/core/nm_sets.py:128: error: Item "str" of "Union[Any, str]" has no attribute "name"  [union-attr]
+pyneuromatic/core/nm_sets.py:137: error: Item "str" of "Union[Any, str]" has no attribute "name"  [union-attr]
+pyneuromatic/core/nm_sets.py:152: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:155: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:161: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:177: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:185: note: "__setitem__" of "NMSets" defined here
+pyneuromatic/core/nm_sets.py:188: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:257: error: Item "str" of "Union[str, Any]" has no attribute "name"  [union-attr]
+pyneuromatic/core/nm_sets.py:311: error: No return value expected  [return-value]
+pyneuromatic/core/nm_sets.py:332: error: Argument 1 of "__contains__" is incompatible with supertype "typing.Mapping"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_sets.py:332: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_sets.py:332: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_sets.py:332: error: Argument 1 of "__contains__" is incompatible with supertype "typing.Container"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_sets.py:346: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:357: error: Need type annotation for "set0" (hint: "set0: set[<type>] = ...")  [var-annotated]
+pyneuromatic/core/nm_sets.py:363: error: Item "str" of "Union[Any, str]" has no attribute "name"  [union-attr]
+pyneuromatic/core/nm_sets.py:371: error: Item "str" of "Union[Any, str]" has no attribute "name"  [union-attr]
+pyneuromatic/core/nm_sets.py:402: error: Item "str" of "Union[Any, str]" has no attribute "name"  [union-attr]
+pyneuromatic/core/nm_sets.py:410: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_sets.py:410: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_sets.py:410: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_sets.py:410: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_sets.py:410: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_sets.py:410: note:         if not isinstance(other, NMSets):
+pyneuromatic/core/nm_sets.py:410: note:             return NotImplemented
+pyneuromatic/core/nm_sets.py:410: note:         return <logic to compare two NMSets instances>
+pyneuromatic/core/nm_sets.py:410: error: Argument 1 of "__eq__" is incompatible with supertype "typing.Mapping"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_sets.py:410: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_sets.py:415: error: Argument 1 to "keys_are_equal" has incompatible type "KeysView[Any]"; expected "Union[str, list[str]]"  [arg-type]
+pyneuromatic/core/nm_sets.py:415: error: Argument 2 to "keys_are_equal" has incompatible type "KeysView[Any]"; expected "Union[str, list[str]]"  [arg-type]
+pyneuromatic/core/nm_sets.py:431: error: Argument 1 to "lists_are_equal" of "NMObject" has incompatible type "Union[list[Any], list[str]]"; expected "list[NMObject]"  [arg-type]
+pyneuromatic/core/nm_sets.py:431: error: Argument 2 to "lists_are_equal" of "NMObject" has incompatible type "Union[list[Any], list[str]]"; expected "list[NMObject]"  [arg-type]
+pyneuromatic/core/nm_sets.py:447: error: Signature of "pop" incompatible with supertype "typing.MutableMapping"  [override]
+pyneuromatic/core/nm_sets.py:447: note:      Superclass:
+pyneuromatic/core/nm_sets.py:447: note:          @overload
+pyneuromatic/core/nm_sets.py:447: note:          def pop(self, Any, /) -> Any
+pyneuromatic/core/nm_sets.py:447: note:          @overload
+pyneuromatic/core/nm_sets.py:447: note:          def pop(self, Any, /, default: Any) -> Any
+pyneuromatic/core/nm_sets.py:447: note:          @overload
+pyneuromatic/core/nm_sets.py:447: note:          def [_T] pop(self, Any, /, default: _T) -> Union[Any, _T]
+pyneuromatic/core/nm_sets.py:447: note:      Subclass:
+pyneuromatic/core/nm_sets.py:447: note:          def pop(self, key: str, confirm_answer: Optional[str] = ...) -> list[Any]
+pyneuromatic/core/nm_sets.py:451: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:459: error: Argument "treepath" to "input_yesno" has incompatible type "Union[str, list[NMObject]]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_sets.py:464: error: Incompatible return value type (got "None", expected "list[Any]")  [return-value]
+pyneuromatic/core/nm_sets.py:471: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:477: error: Incompatible return value type (got "tuple[()]", expected "tuple[str, list[Any]]")  [return-value]
+pyneuromatic/core/nm_sets.py:483: error: Incompatible return value type (got "tuple[()]", expected "tuple[str, list[Any]]")  [return-value]
+pyneuromatic/core/nm_sets.py:499: error: Argument "treepath" to "input_yesno" has incompatible type "Union[str, list[NMObject]]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_sets.py:538: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_sets.py:583: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_sets.py:588: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:652: error: Self argument missing for a non-static method (or an invalid type for self)  [misc]
+pyneuromatic/core/nm_sets.py:675: error: Need type annotation for "olist" (hint: "olist: list[<type>] = ...")  [var-annotated]
+pyneuromatic/core/nm_sets.py:677: error: Incompatible return value type (got "tuple[str, list[Any]]", expected "str")  [return-value]
+pyneuromatic/core/nm_sets.py:681: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:689: error: Incompatible return value type (got "tuple[str, list[Union[Any, str]]]", expected "dict[str, list[Any]]")  [return-value]
+pyneuromatic/core/nm_sets.py:741: error: Argument "treepath" to "input_yesno" has incompatible type "Union[str, list[NMObject]]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_sets.py:761: error: Argument "treepath" to "input_yesno" has incompatible type "Union[str, list[NMObject]]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_sets.py:774: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:776: error: Unexpected keyword argument "add" for "__setitem__" of "NMSets"  [call-arg]
+pyneuromatic/core/nm_sets.py:782: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:784: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_sets.py:836: error: Argument 1 to "remove" of "list" has incompatible type "NMObject"; expected "str"  [arg-type]
+pyneuromatic/core/nm_sets.py:841: error: Name "nmu.NMObjectType" is not defined  [name-defined]
+pyneuromatic/core/nm_project.py:55: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_project.py:55: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_project.py:55: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_project.py:55: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_project.py:55: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_project.py:55: note:         if not isinstance(other, NMProject):
+pyneuromatic/core/nm_project.py:55: note:             return NotImplemented
+pyneuromatic/core/nm_project.py:55: note:         return <logic to compare two NMProject instances>
+pyneuromatic/core/nm_project.py:55: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_project.py:68: error: Item "None" of "Optional[NMFolderContainer]" has no attribute "content"  [union-attr]
+pyneuromatic/core/nm_project.py:73: error: Incompatible return value type (got "Optional[NMFolderContainer]", expected "NMFolderContainer")  [return-value]
+pyneuromatic/core/nm_project.py:110: error: Argument 1 of "new" is incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_project.py:110: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_project.py:110: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_object_container.py:149: error: "NMObjectContainer" has no attribute "_NMObjectContainer__rename_on"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:150: error: "NMObjectContainer" has no attribute "_NMObjectContainer__name_prefix"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:151: error: "NMObjectContainer" has no attribute "_NMObjectContainer__name_seq_format"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:152: error: "NMObjectContainer" has no attribute "_NMObjectContainer__select_key"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:153: error: "NMObjectContainer" has no attribute "_NMObjectContainer__execute_key"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:157: error: "NMObjectContainer" has no attribute "_NMObjectContainer__sets"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:181: error: Need type annotation for "__map" (hint: "__map: dict[<type>, <type>] = ...")  [var-annotated]
+pyneuromatic/core/nm_object_container.py:231: error: Dict entry 0 has incompatible type "str": "list[Any]"; expected "str": "str"  [dict-item]
+pyneuromatic/core/nm_object_container.py:292: error: No return value expected  [return-value]
+pyneuromatic/core/nm_object_container.py:308: error: Argument 1 of "__contains__" is incompatible with supertype "typing.Mapping"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_object_container.py:308: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_object_container.py:308: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_object_container.py:308: error: Argument 1 of "__contains__" is incompatible with supertype "typing.Container"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_object_container.py:331: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_object_container.py:331: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_object_container.py:331: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_object_container.py:331: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_object_container.py:331: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_object_container.py:331: note:         if not isinstance(other, NMObjectContainer):
+pyneuromatic/core/nm_object_container.py:331: note:             return NotImplemented
+pyneuromatic/core/nm_object_container.py:331: note:         return <logic to compare two NMObjectContainer instances>
+pyneuromatic/core/nm_object_container.py:331: error: Argument 1 of "__eq__" is incompatible with supertype "typing.Mapping"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_object_container.py:331: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_object_container.py:339: error: Argument 1 to "keys_are_equal" has incompatible type "dict_keys[Any, Any]"; expected "Union[str, list[str]]"  [arg-type]
+pyneuromatic/core/nm_object_container.py:339: error: Argument 2 to "keys_are_equal" has incompatible type "KeysView[Any]"; expected "Union[str, list[str]]"  [arg-type]
+pyneuromatic/core/nm_object_container.py:351: error: "NMObjectContainer" has no attribute "_NMObjectContainer__rename_on"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:354: error: Incompatible types in assignment (expression has type "str", variable has type "NMObject")  [assignment]
+pyneuromatic/core/nm_object_container.py:355: error: "NMObjectContainer" has no attribute "_NMObjectContainer__name_prefix"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:359: error: Incompatible types in assignment (expression has type "str", variable has type "NMObject")  [assignment]
+pyneuromatic/core/nm_object_container.py:360: error: "NMObjectContainer" has no attribute "_NMObjectContainer__name_seq_format"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:387: error: Signature of "pop" incompatible with supertype "typing.MutableMapping"  [override]
+pyneuromatic/core/nm_object_container.py:387: note:      Superclass:
+pyneuromatic/core/nm_object_container.py:387: note:          @overload
+pyneuromatic/core/nm_object_container.py:387: note:          def pop(self, Any, /) -> Any
+pyneuromatic/core/nm_object_container.py:387: note:          @overload
+pyneuromatic/core/nm_object_container.py:387: note:          def pop(self, Any, /, default: Any) -> Any
+pyneuromatic/core/nm_object_container.py:387: note:          @overload
+pyneuromatic/core/nm_object_container.py:387: note:          def [_T] pop(self, Any, /, default: _T) -> Union[Any, _T]
+pyneuromatic/core/nm_object_container.py:387: note:      Subclass:
+pyneuromatic/core/nm_object_container.py:387: note:          def pop(self, key: str, confirm_answer: Optional[str] = ...) -> NMObject
+pyneuromatic/core/nm_object_container.py:399: error: Argument "treepath" to "input_yesno" has incompatible type "Union[str, list[NMObject]]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_object_container.py:404: error: Incompatible return value type (got "None", expected "NMObject")  [return-value]
+pyneuromatic/core/nm_object_container.py:407: error: Incompatible types in assignment (expression has type "None", variable has type "str")  [assignment]
+pyneuromatic/core/nm_object_container.py:421: error: Incompatible return value type (got "tuple[()]", expected "tuple[str, NMObject]")  [return-value]
+pyneuromatic/core/nm_object_container.py:427: error: Incompatible return value type (got "tuple[()]", expected "tuple[str, NMObject]")  [return-value]
+pyneuromatic/core/nm_object_container.py:443: error: Argument "treepath" to "input_yesno" has incompatible type "Union[str, list[NMObject]]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_object_container.py:449: error: Incompatible types in assignment (expression has type "None", variable has type "str")  [assignment]
+pyneuromatic/core/nm_object_container.py:456: error: Signature of "update" incompatible with supertype "typing.MutableMapping"  [override]
+pyneuromatic/core/nm_object_container.py:456: note:      Superclass:
+pyneuromatic/core/nm_object_container.py:456: note:          @overload
+pyneuromatic/core/nm_object_container.py:456: note:          def update(self, SupportsKeysAndGetItem[Any, Any], /) -> None
+pyneuromatic/core/nm_object_container.py:456: note:          @overload
+pyneuromatic/core/nm_object_container.py:456: note:          def update(self, SupportsKeysAndGetItem[str, Any], /, **kwargs: Any) -> None
+pyneuromatic/core/nm_object_container.py:456: note:          @overload
+pyneuromatic/core/nm_object_container.py:456: note:          def update(self, Iterable[tuple[Any, Any]], /) -> None
+pyneuromatic/core/nm_object_container.py:456: note:          @overload
+pyneuromatic/core/nm_object_container.py:456: note:          def update(self, Iterable[tuple[str, Any]], /, **kwargs: Any) -> None
+pyneuromatic/core/nm_object_container.py:456: note:          @overload
+pyneuromatic/core/nm_object_container.py:456: note:          def update(self, **kwargs: Any) -> None
+pyneuromatic/core/nm_object_container.py:456: note:      Subclass:
+pyneuromatic/core/nm_object_container.py:456: note:          def update(self, nmobjects: Union[NMObject, list[NMObject], dict[str, NMObject], NMObjectContainer] = ...) -> None
+pyneuromatic/core/nm_object_container.py:465: error: Argument 1 to "content_type_ok" of "NMObjectContainer" has incompatible type "Union[NMObject, list[NMObject], dict[str, NMObject], NMObjectContainer]"; expected "NMObject"  [arg-type]
+pyneuromatic/core/nm_object_container.py:468: error: Incompatible types in assignment (expression has type "list[NMObject]", variable has type "list[Union[NMObject, list[NMObject], dict[str, NMObject], NMObjectContainer]]")  [assignment]
+pyneuromatic/core/nm_object_container.py:468: note: "list" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+pyneuromatic/core/nm_object_container.py:468: note: Consider using "Sequence" instead, which is covariant
+pyneuromatic/core/nm_object_container.py:470: error: "NMObjectContainer" has no attribute "_NMObjectContainer__map"  [attr-defined]
+pyneuromatic/core/nm_object_container.py:496: error: Incompatible types in assignment (expression has type "Union[NMObject, list[NMObject], dict[str, NMObject], NMObjectContainer]", variable has type "NMObject")  [assignment]
+pyneuromatic/core/nm_object_container.py:550: error: Incompatible return value type (got "Optional[Any]", expected "str")  [return-value]
+pyneuromatic/core/nm_object_container.py:550: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_object_container.py:556: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_object_container.py:641: error: Incompatible default for argument "nmobject" (default has type "None", argument has type "NMObject")  [assignment]
+pyneuromatic/core/nm_object_container.py:641: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_object_container.py:641: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_object_container.py:654: error: Incompatible types in assignment (expression has type "str", variable has type "None")  [assignment]
+pyneuromatic/core/nm_object_container.py:673: error: No return value expected  [return-value]
+pyneuromatic/core/nm_object_container.py:685: error: No return value expected  [return-value]
+pyneuromatic/core/nm_object_container.py:722: error: Method must have at least one argument. Did you forget the "self" argument?  [misc]
+pyneuromatic/core/nm_object_container.py:808: error: Incompatible return value type (got "str", expected "list[str]")  [return-value]
+pyneuromatic/core/nm_object_container.py:828: error: Incompatible return value type (got "None", expected "NMObject")  [return-value]
+pyneuromatic/core/nm_object_container.py:834: error: Incompatible return value type (got "Optional[Any]", expected "str")  [return-value]
+pyneuromatic/core/nm_object_container.py:845: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_object_container.py:885: error: Incompatible return value type (got "Union[list[Any], list[str]]", expected "list[NMObject]")  [return-value]
+pyneuromatic/core/nm_object_container.py:894: error: No return value expected  [return-value]
+pyneuromatic/core/nm_object_container.py:899: error: Incompatible types in assignment (expression has type "None", variable has type "str")  [assignment]
+pyneuromatic/core/nm_object_container.py:900: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_object.py:111: error: Need type annotation for "_eq_list" (hint: "_eq_list: list[<type>] = ...")  [var-annotated]
+pyneuromatic/core/nm_object.py:119: error: "NMObject" has no attribute "_NMObject__notes"  [attr-defined]
+pyneuromatic/core/nm_object.py:120: error: "NMObject" has no attribute "_NMObject__notes"  [attr-defined]
+pyneuromatic/core/nm_object.py:150: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_object.py:150: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_object.py:150: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_object.py:150: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_object.py:150: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_object.py:150: note:         if not isinstance(other, NMObject):
+pyneuromatic/core/nm_object.py:150: note:             return NotImplemented
+pyneuromatic/core/nm_object.py:150: note:         return <logic to compare two NMObject instances>
+pyneuromatic/core/nm_object.py:173: error: Self argument missing for a non-static method (or an invalid type for self)  [misc]
+pyneuromatic/core/nm_object.py:216: error: Dict entry 0 has incompatible type "str": "str"; expected "str": "None"  [dict-item]
+pyneuromatic/core/nm_object.py:218: error: Dict entry 0 has incompatible type "str": "Union[str, list[NMObject]]"; expected "str": "None"  [dict-item]
+pyneuromatic/core/nm_object.py:221: error: Incompatible return value type (got "dict[str, None]", expected "dict[str, object]")  [return-value]
+pyneuromatic/core/nm_object.py:221: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+pyneuromatic/core/nm_object.py:221: note: Consider using "Mapping" instead, which is covariant in the value type
+pyneuromatic/core/nm_object.py:221: note: Perhaps you need a type annotation for "p"? Suggestion: "dict[str, object]"
+pyneuromatic/core/nm_object.py:239: error: Dict entry 0 has incompatible type "str": "None"; expected "str": "str"  [dict-item]
+pyneuromatic/core/nm_object.py:278: error: Item "str" of "Union[str, list[NMObject]]" has no attribute "append"  [union-attr]
+pyneuromatic/core/nm_object.py:278: error: Argument 1 to "append" of "list" has incompatible type "None"; expected "NMObject"  [arg-type]
+pyneuromatic/core/nm_object.py:280: error: Item "str" of "Union[str, list[NMObject]]" has no attribute "append"  [union-attr]
+pyneuromatic/core/nm_object.py:283: error: List item 0 has incompatible type "None"; expected "NMObject"  [list-item]
+pyneuromatic/core/nm_object.py:290: error: Argument 1 to "join" of "str" has incompatible type "Union[str, list[NMObject]]"; expected "Iterable[str]"  [arg-type]
+pyneuromatic/core/nm_object.py:292: error: Incompatible types in assignment (expression has type "None", variable has type "str")  [assignment]
+pyneuromatic/core/nm_object.py:297: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_object.py:334: error: Incompatible types in assignment (expression has type "str", variable has type "None")  [assignment]
+pyneuromatic/core/nm_object.py:337: error: Argument "tp" to "_history" of "NMObject" has incompatible type "Union[str, list[NMObject]]"; expected "Optional[str]"  [arg-type]
+pyneuromatic/core/nm_object.py:338: error: No return value expected  [return-value]
+pyneuromatic/core/nm_object.py:371: error: Incompatible return value type (got "dict[Any, Any]", expected "str")  [return-value]
+pyneuromatic/core/nm_object.py:402: error: Argument "treepath" to "input_yesno" has incompatible type "Union[str, list[NMObject]]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_object.py:423: error: Self argument missing for a non-static method (or an invalid type for self)  [misc]
+pyneuromatic/core/nm_object.py:442: error: Incompatible return value type (got "object", expected "NMManager")  [return-value]
+pyneuromatic/core/nm_object.py:446: error: Incompatible return value type (got "object", expected "NMProject")  [return-value]
+pyneuromatic/core/nm_object.py:450: error: Incompatible return value type (got "object", expected "NMFolder")  [return-value]
+pyneuromatic/core/nm_object.py:477: error: Argument "tp" to "history" has incompatible type "Optional[str]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_object.py:494: error: Argument "tp" to "history" has incompatible type "Optional[str]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_object.py:509: error: Argument "tp" to "history" has incompatible type "Optional[str]"; expected "str"  [arg-type]
+pyneuromatic/core/nm_manager.py:66: error: Need type annotation for "__toolkit" (hint: "__toolkit: dict[<type>, <type>] = ...")  [var-annotated]
+pyneuromatic/core/nm_manager.py:102: error: Incompatible default for argument "tool" (default has type "None", argument has type "NMTool")  [assignment]
+pyneuromatic/core/nm_manager.py:102: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_manager.py:102: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_manager.py:135: error: Incompatible return value type (got "Optional[str]", expected "str")  [return-value]
+pyneuromatic/core/nm_manager.py:158: error: Need type annotation for "s" (hint: "s: dict[<type>, <type>] = ...")  [var-annotated]
+pyneuromatic/core/nm_manager.py:174: error: Incompatible types in assignment (expression has type "NMObject", target has type "NMProject")  [assignment]
+pyneuromatic/core/nm_manager.py:176: error: Incompatible return value type (got "dict[str, NMProject]", expected "dict[str, NMObject]")  [return-value]
+pyneuromatic/core/nm_manager.py:176: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+pyneuromatic/core/nm_manager.py:176: note: Consider using "Mapping" instead, which is covariant in the value type
+pyneuromatic/core/nm_manager.py:176: note: Perhaps you need a type annotation for "s"? Suggestion: "dict[str, NMObject]"
+pyneuromatic/core/nm_manager.py:177: error: "NMObject" has no attribute "data"  [attr-defined]
+pyneuromatic/core/nm_manager.py:180: error: "NMObject" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:184: error: Incompatible return value type (got "dict[str, NMProject]", expected "dict[str, NMObject]")  [return-value]
+pyneuromatic/core/nm_manager.py:184: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+pyneuromatic/core/nm_manager.py:184: note: Consider using "Mapping" instead, which is covariant in the value type
+pyneuromatic/core/nm_manager.py:184: note: Perhaps you need a type annotation for "s"? Suggestion: "dict[str, NMObject]"
+pyneuromatic/core/nm_manager.py:191: error: Incompatible return value type (got "dict[str, NMProject]", expected "dict[str, NMObject]")  [return-value]
+pyneuromatic/core/nm_manager.py:191: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+pyneuromatic/core/nm_manager.py:191: note: Consider using "Mapping" instead, which is covariant in the value type
+pyneuromatic/core/nm_manager.py:191: note: Perhaps you need a type annotation for "s"? Suggestion: "dict[str, NMObject]"
+pyneuromatic/core/nm_manager.py:238: error: "NMObject" has no attribute "data"  [attr-defined]
+pyneuromatic/core/nm_manager.py:240: error: "NMObject" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:241: error: "NMObject" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:257: error: "NMObject" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:264: error: Incompatible types in assignment (expression has type "NMObject", target has type "NMProject")  [assignment]
+pyneuromatic/core/nm_manager.py:270: error: "NMObject" has no attribute "data"  [attr-defined]
+pyneuromatic/core/nm_manager.py:274: error: Incompatible types in assignment (expression has type "NMObject", target has type "NMProject")  [assignment]
+pyneuromatic/core/nm_manager.py:277: error: Incompatible return value type (got "list[dict[str, NMProject]]", expected "list[dict[str, NMObject]]")  [return-value]
+pyneuromatic/core/nm_manager.py:406: error: Incompatible types in assignment (expression has type "NMObject", variable has type "str")  [assignment]
+pyneuromatic/core/nm_manager.py:412: error: "str" has no attribute "data"  [attr-defined]
+pyneuromatic/core/nm_manager.py:420: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:421: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:422: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:429: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:430: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:431: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:432: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:438: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:439: error: "str" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/core/nm_manager.py:477: error: Incompatible types in assignment (expression has type "Optional[str]", variable has type "str")  [assignment]
+pyneuromatic/core/nm_folder.py:70: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_folder.py:70: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_folder.py:70: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_folder.py:70: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_folder.py:70: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_folder.py:70: note:         if not isinstance(other, NMFolder):
+pyneuromatic/core/nm_folder.py:70: note:             return NotImplemented
+pyneuromatic/core/nm_folder.py:70: note:         return <logic to compare two NMFolder instances>
+pyneuromatic/core/nm_folder.py:70: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_folder.py:73: error: "NMFolder" has no attribute "_NMFolder__data_container"; maybe "__data_container"?  [attr-defined]
+pyneuromatic/core/nm_folder.py:76: error: "NMFolder" has no attribute "_NMFolder__dataseries_container"; maybe "__dataseries_container"?  [attr-defined]
+pyneuromatic/core/nm_folder.py:87: error: Item "None" of "Optional[NMDataContainer]" has no attribute "content"  [union-attr]
+pyneuromatic/core/nm_folder.py:88: error: Item "None" of "Optional[NMDataSeriesContainer]" has no attribute "content"  [union-attr]
+pyneuromatic/core/nm_folder.py:89: error: Item "None" of "Optional[NMToolFolderContainer]" has no attribute "content"  [union-attr]
+pyneuromatic/core/nm_folder.py:94: error: Incompatible return value type (got "Optional[NMDataContainer]", expected "NMDataContainer")  [return-value]
+pyneuromatic/core/nm_folder.py:98: error: Incompatible return value type (got "Optional[NMDataSeriesContainer]", expected "NMDataSeriesContainer")  [return-value]
+pyneuromatic/core/nm_folder.py:102: error: Incompatible return value type (got "Optional[NMToolFolderContainer]", expected "NMToolFolderContainer")  [return-value]
+pyneuromatic/core/nm_folder.py:148: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMFolderContainer")  [assignment]
+pyneuromatic/core/nm_folder.py:148: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_folder.py:148: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_folder.py:170: error: Argument 1 of "new" is incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_folder.py:170: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_folder.py:170: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_epoch.py:84: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_epoch.py:84: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_epoch.py:84: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_epoch.py:84: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_epoch.py:84: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_epoch.py:84: note:         if not isinstance(other, NMEpoch):
+pyneuromatic/core/nm_epoch.py:84: note:             return NotImplemented
+pyneuromatic/core/nm_epoch.py:84: note:         return <logic to compare two NMEpoch instances>
+pyneuromatic/core/nm_epoch.py:84: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_epoch.py:116: error: Incompatible return value type (got "list[Optional[Any]]", expected "list[NMData]")  [return-value]
+pyneuromatic/core/nm_epoch.py:151: error: Signature of "new" incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"  [override]
+pyneuromatic/core/nm_epoch.py:151: note:      Superclass:
+pyneuromatic/core/nm_epoch.py:151: note:          def new(self, nmobject: NMObject = ..., select: bool = ...) -> NMObject
+pyneuromatic/core/nm_epoch.py:151: note:      Subclass:
+pyneuromatic/core/nm_epoch.py:151: note:          def new(self, select: bool = ...) -> NMEpoch
+pyneuromatic/core/nm_dimension.py:30: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMDimension")  [assignment]
+pyneuromatic/core/nm_dimension.py:30: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_dimension.py:30: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_dimension.py:71: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_dimension.py:71: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_dimension.py:71: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_dimension.py:71: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_dimension.py:71: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_dimension.py:71: note:         if not isinstance(other, NMDimension):
+pyneuromatic/core/nm_dimension.py:71: note:             return NotImplemented
+pyneuromatic/core/nm_dimension.py:71: note:         return <logic to compare two NMDimension instances>
+pyneuromatic/core/nm_dimension.py:71: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_dimension.py:74: error: "None" has no attribute "lower"  [attr-defined]
+pyneuromatic/core/nm_dimension.py:76: error: "None" has no attribute "lower"  [attr-defined]
+pyneuromatic/core/nm_dimension.py:144: error: Argument 1 to "_label_set" of "NMDimension" has incompatible type "object"; expected "str"  [arg-type]
+pyneuromatic/core/nm_dimension.py:146: error: Argument 1 to "_units_set" of "NMDimension" has incompatible type "object"; expected "str"  [arg-type]
+pyneuromatic/core/nm_dimension.py:153: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_dimension.py:168: error: Incompatible types in assignment (expression has type "str", variable has type "None")  [assignment]
+pyneuromatic/core/nm_dimension.py:176: error: Incompatible return value type (got "None", expected "str")  [return-value]
+pyneuromatic/core/nm_dimension.py:191: error: Incompatible types in assignment (expression has type "str", variable has type "None")  [assignment]
+pyneuromatic/core/nm_dimension.py:234: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMDimensionX")  [assignment]
+pyneuromatic/core/nm_dimension.py:234: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_dimension.py:234: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_dimension.py:256: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_dimension.py:256: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_dimension.py:256: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_dimension.py:256: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_dimension.py:256: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_dimension.py:256: note:         if not isinstance(other, NMDimensionX):
+pyneuromatic/core/nm_dimension.py:256: note:             return NotImplemented
+pyneuromatic/core/nm_dimension.py:256: note:         return <logic to compare two NMDimensionX instances>
+pyneuromatic/core/nm_dimension.py:256: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_dimension.py:259: error: "NMDimension" has no attribute "start"  [attr-defined]
+pyneuromatic/core/nm_dimension.py:261: error: "NMDimension" has no attribute "delta"  [attr-defined]
+pyneuromatic/core/nm_dimension.py:263: error: "NMDimension" has no attribute "points"  [attr-defined]
+pyneuromatic/core/nm_dimension.py:281: error: Argument 1 to "_start_set" of "NMDimensionX" has incompatible type "object"; expected "Optional[float]"  [arg-type]
+pyneuromatic/core/nm_dimension.py:283: error: Argument 1 to "_delta_set" of "NMDimensionX" has incompatible type "object"; expected "Optional[float]"  [arg-type]
+pyneuromatic/core/nm_dimension.py:285: error: Argument 1 to "_points_set" of "NMDimensionX" has incompatible type "object"; expected "Optional[int]"  [arg-type]
+pyneuromatic/core/nm_dimension.py:324: error: Incompatible types in assignment (expression has type "float", variable has type "None")  [assignment]
+pyneuromatic/core/nm_dimension.py:366: error: Incompatible types in assignment (expression has type "float", variable has type "None")  [assignment]
+pyneuromatic/core/nm_dimension.py:378: error: Incompatible return value type (got "None", expected "int")  [return-value]
+pyneuromatic/core/nm_dimension.py:397: error: Module has no attribute "float"  [attr-defined]
+pyneuromatic/core/nm_dimension.py:413: error: Incompatible types in assignment (expression has type "int", variable has type "None")  [assignment]
+pyneuromatic/core/nm_dimension.py:471: error: Unsupported operand types for - ("float" and "None")  [operator]
+pyneuromatic/core/nm_dimension.py:471: error: Unsupported operand types for / ("float" and "None")  [operator]
+pyneuromatic/core/nm_dimension.py:513: error: Unsupported operand types for + ("None" and "int")  [operator]
+pyneuromatic/core/nm_dimension.py:513: error: Unsupported operand types for * ("int" and "None")  [operator]
+pyneuromatic/core/nm_dataseries.py:53: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMDataSeries")  [assignment]
+pyneuromatic/core/nm_dataseries.py:53: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_dataseries.py:53: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_dataseries.py:98: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_dataseries.py:98: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_dataseries.py:98: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_dataseries.py:98: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_dataseries.py:98: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_dataseries.py:98: note:         if not isinstance(other, NMDataSeries):
+pyneuromatic/core/nm_dataseries.py:98: note:             return NotImplemented
+pyneuromatic/core/nm_dataseries.py:98: note:         return <logic to compare two NMDataSeries instances>
+pyneuromatic/core/nm_dataseries.py:98: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_dataseries.py:140: error: Incompatible return value type (got "Optional[NMChannelContainer]", expected "NMChannelContainer")  [return-value]
+pyneuromatic/core/nm_dataseries.py:144: error: Incompatible return value type (got "Optional[NMEpochContainer]", expected "NMEpochContainer")  [return-value]
+pyneuromatic/core/nm_dataseries.py:155: error: Item "None" of "Optional[Any]" has no attribute "data"  [union-attr]
+pyneuromatic/core/nm_dataseries.py:156: error: Item "None" of "Optional[Any]" has no attribute "data"  [union-attr]
+pyneuromatic/core/nm_dataseries.py:233: error: Name "dims" already defined on line 193  [no-redef]
+pyneuromatic/core/nm_dataseries.py:233: error: "Callable[[NMDataSeries], Any]" has no attribute "setter"  [attr-defined]
+pyneuromatic/core/nm_dataseries.py:706: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMDataSeriesContainer")  [assignment]
+pyneuromatic/core/nm_dataseries.py:706: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_dataseries.py:706: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_dataseries.py:732: error: Argument 1 of "new" is incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_dataseries.py:732: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_dataseries.py:732: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_data.py:59: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMData")  [assignment]
+pyneuromatic/core/nm_data.py:59: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_data.py:59: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_data.py:85: error: Cannot determine type of "__x"  [has-type]
+pyneuromatic/core/nm_data.py:93: error: Cannot determine type of "__y"  [has-type]
+pyneuromatic/core/nm_data.py:98: error: Cannot determine type of "__x"  [has-type]
+pyneuromatic/core/nm_data.py:98: error: Cannot determine type of "__y"  [has-type]
+pyneuromatic/core/nm_data.py:113: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_data.py:113: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_data.py:113: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_data.py:113: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_data.py:113: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_data.py:113: note:         if not isinstance(other, NMData):
+pyneuromatic/core/nm_data.py:113: note:             return NotImplemented
+pyneuromatic/core/nm_data.py:113: note:         return <logic to compare two NMData instances>
+pyneuromatic/core/nm_data.py:113: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_data.py:118: error: Cannot determine type of "__x"  [has-type]
+pyneuromatic/core/nm_data.py:120: error: Cannot determine type of "__y"  [has-type]
+pyneuromatic/core/nm_data.py:155: error: Cannot determine type of "__x"  [has-type]
+pyneuromatic/core/nm_data.py:162: error: Cannot determine type of "__y"  [has-type]
+pyneuromatic/core/nm_data.py:173: error: Incompatible return value type (got "object", expected "Optional[NMDataSeries]")  [return-value]
+pyneuromatic/core/nm_data.py:177: error: "object" has no attribute "name"  [attr-defined]
+pyneuromatic/core/nm_data.py:219: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMDataContainer")  [assignment]
+pyneuromatic/core/nm_data.py:219: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_data.py:219: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_data.py:239: error: Signature of "new" incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"  [override]
+pyneuromatic/core/nm_data.py:239: note:      Superclass:
+pyneuromatic/core/nm_data.py:239: note:          def new(self, nmobject: NMObject = ..., select: bool = ...) -> NMObject
+pyneuromatic/core/nm_data.py:239: note:      Subclass:
+pyneuromatic/core/nm_data.py:239: note:          def new(self, name: str = ..., xdim: Optional[NMDimensionX] = ..., ydim: Optional[NMDimension] = ..., select: bool = ...) -> NMData
+pyneuromatic/core/nm_channel.py:65: error: "NMChannel" has no attribute "_NMChannel__x"  [attr-defined]
+pyneuromatic/core/nm_channel.py:66: error: "NMChannel" has no attribute "_NMChannel__y"  [attr-defined]
+pyneuromatic/core/nm_channel.py:74: error: "NMChannel" has no attribute "_NMChannel__thedata"  [attr-defined]
+pyneuromatic/core/nm_channel.py:110: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/core/nm_channel.py:110: note: This violates the Liskov substitution principle
+pyneuromatic/core/nm_channel.py:110: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/core/nm_channel.py:110: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/core/nm_channel.py:110: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/core/nm_channel.py:110: note:         if not isinstance(other, NMChannel):
+pyneuromatic/core/nm_channel.py:110: note:             return NotImplemented
+pyneuromatic/core/nm_channel.py:110: note:         return <logic to compare two NMChannel instances>
+pyneuromatic/core/nm_channel.py:110: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/core/nm_channel.py:131: error: Item "None" of "Optional[NMDimensionX]" has no attribute "scale"  [union-attr]
+pyneuromatic/core/nm_channel.py:132: error: Item "None" of "Optional[NMDimension]" has no attribute "scale"  [union-attr]
+pyneuromatic/core/nm_channel.py:139: error: Incompatible return value type (got "list[Optional[Any]]", expected "list[NMData]")  [return-value]
+pyneuromatic/core/nm_channel.py:143: error: Incompatible return value type (got "Optional[NMDimensionX]", expected "NMDimensionX")  [return-value]
+pyneuromatic/core/nm_channel.py:147: error: Incompatible return value type (got "Optional[NMDimension]", expected "NMDimension")  [return-value]
+pyneuromatic/core/nm_channel.py:162: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMChannelContainer")  [assignment]
+pyneuromatic/core/nm_channel.py:162: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/core/nm_channel.py:162: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/core/nm_channel.py:182: error: Signature of "new" incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"  [override]
+pyneuromatic/core/nm_channel.py:182: note:      Superclass:
+pyneuromatic/core/nm_channel.py:182: note:          def new(self, nmobject: NMObject = ..., select: bool = ...) -> NMObject
+pyneuromatic/core/nm_channel.py:182: note:      Subclass:
+pyneuromatic/core/nm_channel.py:182: note:          def new(self, xscale: Union[dict[Any, Any], NMDimensionX] = ..., yscale: Union[dict[Any, Any], NMDimension] = ..., select: bool = ...) -> NMChannel
+pyneuromatic/analysis/nm_tool_stats.py:102: error: Need type annotation for "__results" (hint: "__results: dict[<type>, <type>] = ...")  [var-annotated]
+pyneuromatic/analysis/nm_tool_stats.py:164: error: "NMObject" has no attribute "on"  [attr-defined]
+pyneuromatic/analysis/nm_tool_stats.py:166: error: "NMObject" has no attribute "compute"  [attr-defined]
+pyneuromatic/analysis/nm_tool_stats.py:169: error: "NMObject" has no attribute "results"  [attr-defined]
+pyneuromatic/analysis/nm_tool_stats.py:172: error: "NMObject" has no attribute "results"  [attr-defined]
+pyneuromatic/analysis/nm_tool_stats.py:174: error: "NMObject" has no attribute "results"  [attr-defined]
+pyneuromatic/analysis/nm_tool_stats.py:184: error: Self argument missing for a non-static method (or an invalid type for self)  [misc]
+pyneuromatic/analysis/nm_tool_stats.py:309: error: Need type annotation for "__results" (hint: "__results: list[<type>] = ...")  [var-annotated]
+pyneuromatic/analysis/nm_tool_stats.py:345: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/analysis/nm_tool_stats.py:345: note: This violates the Liskov substitution principle
+pyneuromatic/analysis/nm_tool_stats.py:345: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/analysis/nm_tool_stats.py:345: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/analysis/nm_tool_stats.py:345: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/analysis/nm_tool_stats.py:345: note:         if not isinstance(other, NMStatsWin):
+pyneuromatic/analysis/nm_tool_stats.py:345: note:             return NotImplemented
+pyneuromatic/analysis/nm_tool_stats.py:345: note:         return <logic to compare two NMStatsWin instances>
+pyneuromatic/analysis/nm_tool_stats.py:345: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/analysis/nm_tool_stats.py:396: error: Argument 1 to "_on_set" of "NMStatsWin" has incompatible type "object"; expected "bool"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:398: error: Argument 1 to "_func_set" of "NMStatsWin" has incompatible type "object"; expected "Union[dict[Any, Any], str, None]"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:400: error: Argument 2 to "_x_set" of "NMStatsWin" has incompatible type "object"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:402: error: Argument 2 to "_x_set" of "NMStatsWin" has incompatible type "object"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:404: error: Argument 1 to "_transform_set" of "NMStatsWin" has incompatible type "object"; expected "Optional[list[Any]]"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:406: error: Argument 1 to "_bsln_on_set" of "NMStatsWin" has incompatible type "object"; expected "bool"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:408: error: Argument 1 to "_bsln_func_set" of "NMStatsWin" has incompatible type "object"; expected "Union[dict[Any, Any], str, None]"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:410: error: Argument 2 to "_x_set" of "NMStatsWin" has incompatible type "object"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:412: error: Argument 2 to "_x_set" of "NMStatsWin" has incompatible type "object"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:758: error: Incompatible types in assignment (expression has type "dict[Any, Any]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:759: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:760: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:780: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:783: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:799: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:800: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:801: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:813: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:814: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:815: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:827: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:828: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:829: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:841: error: Incompatible types in assignment (expression has type "dict[Any, Any]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:842: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:843: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:857: error: Unsupported right operand type for in ("Optional[dict[str, str]]")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:858: error: Value of type "Optional[dict[str, str]]" is not indexable  [index]
+pyneuromatic/analysis/nm_tool_stats.py:862: error: Invalid index type "str" for "str"; expected type "Union[SupportsIndex, slice[Any, Any, Any]]"  [index]
+pyneuromatic/analysis/nm_tool_stats.py:864: error: Incompatible types in assignment (expression has type "float", variable has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:865: error: Argument 1 to "badvalue" has incompatible type "Union[str, Any]"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:865: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:866: error: Unsupported left operand type for - ("str")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:866: note: Right operand is of type "Union[str, Any]"
+pyneuromatic/analysis/nm_tool_stats.py:867: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:916: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:917: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:924: error: Argument "x1" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:930: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:937: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:938: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:945: error: Argument "x1" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:951: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:955: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:959: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:962: error: Unsupported left operand type for - ("str")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:971: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:978: error: Argument "x0" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:979: error: Argument "x1" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1028: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1030: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1035: error: Argument "x0" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1042: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1049: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1052: error: Unsupported left operand type for - ("str")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:1060: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1062: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1067: error: Argument "x0" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1074: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1078: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1082: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1085: error: Unsupported left operand type for - ("str")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:1098: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1105: error: Argument "x0" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1106: error: Argument "x1" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1161: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1162: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1169: error: Argument "x1" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1175: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1188: error: Incompatible types in assignment (expression has type "dict[str, str]", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1190: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1195: error: Argument "x0" to "stats" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1202: error: Argument 1 to "badvalue" has incompatible type "str"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1206: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1210: error: Incompatible types in assignment (expression has type "float", target has type "str")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1212: error: Unsupported left operand type for - ("str")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:1254: error: Signature of "new" incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"  [override]
+pyneuromatic/analysis/nm_tool_stats.py:1254: note:      Superclass:
+pyneuromatic/analysis/nm_tool_stats.py:1254: note:          def new(self, nmobject: NMObject = ..., select: bool = ...) -> NMObject
+pyneuromatic/analysis/nm_tool_stats.py:1254: note:      Subclass:
+pyneuromatic/analysis/nm_tool_stats.py:1254: note:          def new(self, select: bool = ...) -> NMStatsWin
+pyneuromatic/analysis/nm_tool_stats.py:1386: error: Unsupported operand types for < ("int" and "None")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:1386: note: Left operand is of type "Optional[float]"
+pyneuromatic/analysis/nm_tool_stats.py:1616: error: List item 0 has incompatible type "float"; expected "int"  [list-item]
+pyneuromatic/analysis/nm_tool_stats.py:1616: error: List item 1 has incompatible type "None"; expected "int"  [list-item]
+pyneuromatic/analysis/nm_tool_stats.py:1705: error: Incompatible default for argument "results" (default has type "None", argument has type "dict[Any, Any]")  [assignment]
+pyneuromatic/analysis/nm_tool_stats.py:1705: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/analysis/nm_tool_stats.py:1705: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/analysis/nm_tool_stats.py:1840: error: Argument 1 to "get_xvalue" of "NMDimensionX" has incompatible type "signedinteger[Any]"; expected "int"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1892: error: Argument "xstart" to "find_level_crossings" has incompatible type "Optional[float]"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1893: error: Argument "xdelta" to "find_level_crossings" has incompatible type "Optional[float]"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1923: error: Argument "xstart" to "linear_regression" has incompatible type "Optional[float]"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:1924: error: Argument "xdelta" to "linear_regression" has incompatible type "Optional[float]"; expected "float"  [arg-type]
+pyneuromatic/analysis/nm_tool_stats.py:2020: error: Unsupported operand types for ** ("None" and "int")  [operator]
+pyneuromatic/analysis/nm_tool_stats.py:2020: note: Left operand is of type "Optional[float]"
+pyneuromatic/analysis/nm_tool_folder.py:29: error: "NMToolFolder" has no attribute "dataseries"  [attr-defined]
+pyneuromatic/analysis/nm_tool_folder.py:38: error: Missing return statement  [return]
+pyneuromatic/analysis/nm_tool_folder.py:38: error: Argument 1 of "__eq__" is incompatible with supertype "pyneuromatic.core.nm_object.NMObject"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/analysis/nm_tool_folder.py:38: note: This violates the Liskov substitution principle
+pyneuromatic/analysis/nm_tool_folder.py:38: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/analysis/nm_tool_folder.py:38: note: It is recommended for "__eq__" to work with arbitrary objects, for example:
+pyneuromatic/analysis/nm_tool_folder.py:38: note:     def __eq__(self, other: object) -> bool:
+pyneuromatic/analysis/nm_tool_folder.py:38: note:         if not isinstance(other, NMToolFolder):
+pyneuromatic/analysis/nm_tool_folder.py:38: note:             return NotImplemented
+pyneuromatic/analysis/nm_tool_folder.py:38: note:         return <logic to compare two NMToolFolder instances>
+pyneuromatic/analysis/nm_tool_folder.py:38: error: Argument 1 of "__eq__" is incompatible with supertype "builtins.object"; supertype defines the argument type as "object"  [override]
+pyneuromatic/analysis/nm_tool_folder.py:41: error: "NMToolFolder" has no attribute "_NMToolFolder__data_container"  [attr-defined]
+pyneuromatic/analysis/nm_tool_folder.py:52: error: Item "None" of "Optional[Any]" has no attribute "content"  [union-attr]
+pyneuromatic/analysis/nm_tool_folder.py:72: error: Incompatible default for argument "copy" (default has type "None", argument has type "NMToolFolderContainer")  [assignment]
+pyneuromatic/analysis/nm_tool_folder.py:72: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+pyneuromatic/analysis/nm_tool_folder.py:72: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+pyneuromatic/analysis/nm_tool_folder.py:94: error: Argument 1 of "new" is incompatible with supertype "pyneuromatic.core.nm_object_container.NMObjectContainer"; supertype defines the argument type as "NMObject"  [override]
+pyneuromatic/analysis/nm_tool_folder.py:94: note: This violates the Liskov substitution principle
+pyneuromatic/analysis/nm_tool_folder.py:94: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+pyneuromatic/analysis/nm_tool.py:38: error: Incompatible types in assignment (expression has type "NMProject", variable has type "None")  [assignment]
+pyneuromatic/analysis/nm_tool.py:156: error: Need type annotation for "s" (hint: "s: dict[<type>, <type>] = ...")  [var-annotated]
+pyneuromatic/analysis/nm_tool.py:172: error: Incompatible types in assignment (expression has type "NMObject", variable has type "NMProject")  [assignment]
+pyneuromatic/analysis/nm_tool.py:174: error: Incompatible types in assignment (expression has type "NMObject", variable has type "NMFolder")  [assignment]
+pyneuromatic/analysis/nm_tool.py:176: error: Incompatible types in assignment (expression has type "NMObject", variable has type "NMData")  [assignment]
+pyneuromatic/analysis/nm_tool.py:178: error: Incompatible types in assignment (expression has type "NMObject", variable has type "NMDataSeries")  [assignment]
+pyneuromatic/analysis/nm_tool.py:180: error: Incompatible types in assignment (expression has type "NMObject", variable has type "NMChannel")  [assignment]
+pyneuromatic/analysis/nm_tool.py:182: error: Incompatible types in assignment (expression has type "NMObject", variable has type "NMEpoch")  [assignment]
+pyneuromatic/analysis/nm_tool.py:186: error: Need type annotation for "s" (hint: "s: dict[<type>, <type>] = ...")  [var-annotated]
+Found 367 errors in 15 files (checked 21 source files)

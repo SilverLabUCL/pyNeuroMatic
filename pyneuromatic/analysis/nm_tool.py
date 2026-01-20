@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from typing import Dict
+from __future__ import annotations
 
+from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_project import NMProject
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_data import NMData
@@ -151,7 +152,7 @@ class NMTool(object):
         return None
 
     @property
-    def select_values(self) -> Dict[str, nmu.NMObjectType]:
+    def select_values(self) -> dict[str, NMObject]:
         s = {}
         s["project"] = self.__project
         s["folder"] = self.__folder
@@ -164,7 +165,7 @@ class NMTool(object):
     @select_values.setter
     def select_values(
         self,
-        select_values: Dict[str, nmu.NMObjectType]
+        select_values: dict[str, NMObject]
         # see NMManager.select_values
     ) -> None:
         if "project" in select_values:
@@ -181,7 +182,7 @@ class NMTool(object):
             self.epoch = select_values["epoch"]
 
     @property
-    def select_keys(self) -> Dict[str, str]:
+    def select_keys(self) -> dict[str, str]:
         s = {}
         if self.__project:
             s["project"] = self.__project.name

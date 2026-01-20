@@ -44,7 +44,7 @@ class NMDataSeriesTest(unittest.TestCase):
             e = self.ds0.epochs.new()
             for j in range(num_chans):
                 c = chanlist[j]
-                n = self.dataprefix + nmu.CHANNEL_LIST[j] + str(i)
+                n = self.dataprefix + nmu.CHANNEL_CHARS[j] + str(i)
                 d = NMData(parent=NM, name=n, yscale=YSCALE[j], xscale=XSCALE)
                 e.data.append(d)
                 c.data.append(d)

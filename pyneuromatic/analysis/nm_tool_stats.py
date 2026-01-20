@@ -8,8 +8,9 @@ Created on Fri Nov 1 08:22:44 2019
 import math
 import numpy as np
 import warnings
-from typing import Dict, List, Tuple, Union
+from __future__ import annotations
 
+from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_folder import NMFolder
@@ -109,7 +110,7 @@ class NMToolStats(NMTool):
         # e.g. baseline, main, p0, p1, slope, etc.
 
     @property
-    def windows(self) -> nmu.NMStatsWinContainerType:
+    def windows(self) -> NMStatsWinContainer:
         return self.__win_container
 
     @property
@@ -180,7 +181,7 @@ class NMToolStats(NMTool):
         self.results_save_as_numpy()
         return True  # ok
 
-    def results_print(results: Dict[str, list]) -> None:
+    def results_print(results: dict[str, list]) -> None:
         if not isinstance(results, dict):
             return None
         for kwin, vlist in results.items():  # windows
@@ -194,14 +195,14 @@ class NMToolStats(NMTool):
                     print(rdict)
         return None
 
-    def results_save(self) -> Union[str, None]:
+    def results_save(self) -> str | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
             raise RuntimeError("there are no results to save")
         return self.folder.toolresults_save("stats", self.__results)
 
-    def results_save_as_numpy(self) -> Union[nmu.NMToolFolderType, None]:
+    def results_save_as_numpy(self) -> NMToolFolder | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
@@ -293,10 +294,10 @@ class NMStatsWin(NMObject):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMStatsWin",
-        win: Dict[str, object] = {},
-        copy: Union[nmu.NMStatsWinType, None] = None,
+        parent: object | None = None,
+        name: str = "NMStatsWin0",
+        win: dict[str, object] = {},
+        copy: NMStatsWin | None = None,
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
@@ -326,7 +327,7 @@ class NMStatsWin(NMObject):
             self.__bsln_x0 = copy.bsln_x0
             self.__bsln_x1 = copy.bsln_x1
         else:
-            e = nmu.typeerror(copy, "copy", "NMStatsWin")
+            e = nmu.typeerror(copy, "copy", NMStatsWin)
             raise TypeError(e)
 
         if win is None:
@@ -341,7 +342,7 @@ class NMStatsWin(NMObject):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMStatsWinType) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not super().__eq__(other):
             return False
         if self.win != other.win:
@@ -349,12 +350,12 @@ class NMStatsWin(NMObject):
         return True
 
     # override, no super
-    def copy(self) -> nmu.NMStatsWinType:
+    def copy(self) -> NMStatsWin:
         return NMStatsWin(copy=self)
 
     # override
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
         k.update(self.win)
         return k
@@ -375,12 +376,12 @@ class NMStatsWin(NMObject):
         return r
 
     @win.setter
-    def win(self, win: Dict[str, object]) -> None:
+    def win(self, win: dict[str, object]) -> None:
         return self._win_set(win)
 
     def _win_set(
         self,
-        win: Dict[str, object],
+        win: dict[str, object],
         quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(win, dict):
@@ -433,13 +434,13 @@ class NMStatsWin(NMObject):
         return self.__func
 
     @func.setter
-    def func(self, func: Union[dict, str]) -> None:
+    def func(self, func: dict | str) -> None:
         self._func_set(func)
         return None
 
     def _func_set(
         self,
-        func: Union[dict, str, None],
+        func: dict | str | None,
         getinput: bool = True,
         quiet: bool = nmp.QUIET
     ) -> None:
@@ -560,7 +561,7 @@ class NMStatsWin(NMObject):
         return self._x_set("x1", x1)
 
     @property
-    def transform(self) -> Union[list, None]:
+    def transform(self) -> list | None:
         return self.__transform
 
     @transform.setter
@@ -569,7 +570,7 @@ class NMStatsWin(NMObject):
 
     def _transform_set(
         self,
-        transform_list: Union[list, None],
+        transform_list: list | None,
         quiet: bool = nmp.QUIET
     ) -> None:
         if transform_list is None:
@@ -600,13 +601,13 @@ class NMStatsWin(NMObject):
         return self.__bsln_func
 
     @bsln_func.setter
-    def bsln_func(self, func: Union[dict, str]) -> None:
+    def bsln_func(self, func: dict | str) -> None:
         self._bsln_func_set(func)
         return None
 
     def _bsln_func_set(
         self,
-        func: Union[dict, str, None],
+        func: dict | str | None,
         quiet: bool = nmp.QUIET
     ) -> None:
 
@@ -663,12 +664,12 @@ class NMStatsWin(NMObject):
         return self._x_set("bsln_x1", x1)
 
     @property
-    def results(self) -> List[dict]:
+    def results(self) -> list[dict]:
         return self.__results
 
     def compute(
         self,
-        data: nmu.NMDataType,
+        data: NMData,
         xclip: bool = False,  # if x0|x1 OOB, clip to data x-scale limits
         ignore_nans: bool = False
     ) -> list:
@@ -1225,12 +1226,12 @@ class NMStatsWinContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMStatsWinContainer",
+        parent: object | None = None,
+        name: str = "NMStatsWinContainer0",
         rename_on: bool = False,
         name_prefix: str = "w",
         name_seq_format: str = "0",
-        copy: Union[nmu.NMStatsWinContainerType, None] = None,
+        copy: NMStatsWinContainer | None = None,
     ) -> None:
         return super().__init__(
             parent=parent,
@@ -1242,7 +1243,7 @@ class NMStatsWinContainer(NMObjectContainer):
         )
 
     # override, no super
-    def copy(self) -> nmu.NMStatsWinContainerType:
+    def copy(self) -> NMStatsWinContainer:
         return NMStatsWinContainer(copy=self)
 
     # override, no super
@@ -1255,7 +1256,7 @@ class NMStatsWinContainer(NMObjectContainer):
         # name: str = 'A',  use name_next()
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMStatsWinType:
+    ) -> NMStatsWin:
         name = self.name_next()
         istr = name.replace(self.name_prefix, "")
         if str.isdigit(istr):
@@ -1323,7 +1324,7 @@ def check_meanatmaxmin(
 
 def input_meanatmaxmin(
     func_name: str,  # "mean@max" or "mean@min"
-    test_input: Union[str, None] = None
+    test_input: str | None = None
 ) -> dict:
     if not isinstance(func_name, str):
         e = nmu.typeerror(func_name, "func_name", "string")
@@ -1351,7 +1352,7 @@ def input_meanatmaxmin(
 
 
 def check_level(
-    func: Union[dict, str],
+    func: dict | str,
     option: int = 0,
     getinput: bool = True
 ) -> dict:
@@ -1445,7 +1446,7 @@ def check_level(
 def input_level(
     func_name: str,
     option: int = 0,
-    test_input: Union[str, None] = None  # for ylevel or nstd
+    test_input: str | None = None  # for ylevel or nstd
 ) -> dict:
     fnames = ["level", "level+", "level-"]
     options = {1: "absolute level (ylevel)",
@@ -1510,7 +1511,7 @@ def input_level(
 
 
 def check_risefall(
-    func: Union[dict, str],
+    func: dict | str,
     getinput: bool = True,
 ) -> dict:
     # check func dictionary is ok
@@ -1593,7 +1594,7 @@ def check_risefall(
 
 def input_risefall(
     func_name: str,
-    test_input: Union[str, None] = None
+    test_input: str | None = None
 ) -> dict:
     # get input for p0 and p1
     fnames = ["risetime+", "risetime-", "risetimeslope+", "risetimeslope-",
@@ -1641,7 +1642,7 @@ def input_risefall(
 
 
 def check_fwhm(
-    func: Union[dict, str]
+    func: dict | str
 ) -> dict:
     # check func dictionary is ok
     func_name = None
@@ -1695,7 +1696,7 @@ def check_fwhm(
 
 
 def stats(
-    data: nmu.NMDataType,
+    data: NMData,
     func: dict,
     x0: float = -math.inf,
     x1: float = math.inf,  # math.inf denotes xclip = True
@@ -2097,7 +2098,7 @@ def find_level_crossings(
     # method uses linear interpoloation
     # otherwise returns x-values at corresponding i-values (e.g. x1 at i1)
     ignore_nans: bool = True
-) -> Tuple:
+) -> tuple:
     #                         y y y y y
     #                    y1 y
     #
@@ -2259,7 +2260,7 @@ def linear_regression(
     xstart: float = 0,
     xdelta: float = 1,
     ignore_nans: bool = True
-) -> Tuple:  # (m, b)
+) -> tuple:  # (m, b)
 
     if not isinstance(yarray, np.ndarray):
         e = nmu.typeerror(yarray, "yarray", "NumPy.ndarray")

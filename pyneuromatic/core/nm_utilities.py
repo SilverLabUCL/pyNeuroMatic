@@ -7,57 +7,34 @@ Copyright 2019 Jason Rothman
 import math
 import inspect
 from colorama import Fore, Back, Style
-from typing import Union, List, NewType
+from __future__ import annotations
+from typing import Callable
 
-CHANNEL_LIST = ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
+CHANNEL_CHARS: tuple = ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
                 "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
                 "W", "X", "Y", "Z")
 
-CONFIRM_YNC = ("y", "yes", "n", "no", "c", "cancel")  # see input_yesno()
+CONFIRM_YNC: tuple = ("y", "yes", "n", "no", "c", "cancel")  # see input_yesno()
 
 # for testing
-BADTYPES = (None, 3, 3.14, True, [], (), {}, set(), "string", Fore)
-BADNAMES = ("", "all", "default", "none", "select", "self", "nan",
+BADTYPES: tuple = (None, 3, 3.14, True, [], (), {}, set(), "string", Fore)
+BADNAMES: tuple = ("", "all", "default", "none", "select", "self", "nan",
             "inf", "-inf", "b&dn@me!")
 
-# NM Class types
-NMObjectType = NewType("NMObject", object)
-NMObjectContainerType = NewType("NMObjectContainer", NMObjectType)
-NMSetsType = NewType("NMSets", NMObjectType)
-NMManagerType = NewType("NMManager", NMObjectType)
-NMProjectType = NewType("NMProject", NMObjectType)
-NMProjectContainerType = NewType("NMProjectContainer", NMObjectContainerType)
-NMFolderType = NewType("NMFolder", NMObjectType)
-NMFolderContainerType = NewType("NMFolderContainer", NMObjectContainerType)
-NMDataType = NewType("NMData", NMObjectType)
-NMDataContainerType = NewType("NMDataContainer", NMObjectContainerType)
-NMDataSeriesType = NewType("NMDataSeries", NMObjectType)
-NMDataSeriesContainerType = NewType("NMDataSeriesContainer", NMObjectContainerType)
-NMChannelType = NewType("NMChannel", NMObjectType)
-NMChannelContainerType = NewType("NMChannelContainer", NMObjectContainerType)
-NMEpochType = NewType("NMEpoch", NMObjectType)
-NMEpochContainerType = NewType("NMEpochContainer", NMObjectContainerType)
-NMDimensionType = NewType("NMDimension", NMObjectType)
-NMDimensionXType = NewType("NMDimensionX", NMDimensionType)
-NMStatsType = NewType("NMStats", NMObjectType)
-NMStatsWinType = NewType("NMStatsWin", NMObjectType)
-NMStatsWinContainerType = NewType("NMStatsWinContainer", NMObjectContainerType)
-NMToolType = NewType("NMTool", object)
-NMToolFolderType = NewType("NMToolFolder", NMObjectType)
-NMToolFolderContainerType = NewType("NMToolFolderContainer", NMObjectContainerType)
+
 
 
 def badtypes(
         ok: list = []  # list of items that are ok (not bad)
 ) -> list:
-    badlist = [None, 3, 3.14, True, [], (), {}, set(), "string", Union]
+    badlist: list = [None, 3, 3.14, True, [], (), {}, set(), "string", Callable]
     for o in ok:
         badlist.remove(o)
     return badlist
 
 
 def number_ok(
-    number: Union[object, List[object]],
+    number: object | list[object],
     must_be_integer: bool = False,
     inf_is_ok: bool = False,
     nan_is_ok: bool = False,
@@ -127,8 +104,8 @@ def number_ok(
 
 def name_ok(
     name: str,
-    ok_names: Union[str, List[str]] = [],
-    ok_strings: Union[str, List[str]] = ["_"],
+    ok_names: str | list[str] = [],
+    ok_strings: str | list[str] = ["_"],
 ) -> bool:
     """Check if name is alpha-numeric.
 
@@ -177,7 +154,7 @@ def name_ok(
 
 def name_next_seq(
     self,
-    names: List[str],  # existing names, e.g. ['RecordA0', 'RecordA1'...]
+    names: list[str],  # existing names, e.g. ['RecordA0', 'RecordA1'...]
     prefix: str,  # prefix of names, e.g. 'A'
     first: int = 0,  # first number of sequence
 ) -> int:  # e.g. 3
@@ -224,8 +201,8 @@ def name_next_seq(
 
 
 def keys_are_equal(
-    keys1: Union[str, List[str]],
-    keys2: Union[str, List[str]],
+    keys1: str | list[str],
+    keys2: str | list[str],
     case_sensitive: bool = False,
 ) -> bool:
     """Determine if two lists contain the same keys.
@@ -272,8 +249,8 @@ def keys_are_equal(
 
 
 def remove_special_char(
-    text: Union[str, List[str]], ok_char: List[str] = [], bad_char: List[str] = []
-) -> Union[str, List[str]]:
+    text: str | list[str], ok_char: list[str] = [], bad_char: list[str] = []
+) -> str | list[str]:
     """Remove non-alpha-numeric characters from text.
 
     :param text: text.
@@ -311,7 +288,7 @@ def remove_special_char(
 
 
 def int_list_to_seq_str(
-    int_list: List[int], seperator: str = ", ", seperator_at_end: bool = False
+    int_list: list[int], seperator: str = ", ", seperator_at_end: bool = False
 ) -> str:
     """Convert list of integers to a sequence string.
 
@@ -378,8 +355,8 @@ def int_list_to_seq_str(
 
 
 def channel_char(
-    chan_num: Union[int, List[int]], char_list: List[str] = CHANNEL_LIST
-) -> Union[str, List[str]]:
+    chan_num: int | list[int], char_list: tuple[str] = CHANNEL_CHARS
+) -> str | list[str]:
     """Convert channel number(s) to character.
 
     :param chan_num: channel number, e.g. 0.
@@ -390,7 +367,7 @@ def channel_char(
     :rtype: str or list
     """
     if not isinstance(char_list, list):
-        char_list = CHANNEL_LIST  # use default NM list
+        char_list = CHANNEL_CHARS  # use default NM list
     if isinstance(chan_num, int):
         if chan_num >= 0 and chan_num < len(char_list):
             cc = char_list[chan_num]
@@ -410,8 +387,8 @@ def channel_char(
 
 
 def channel_num(
-    chan_char: Union[str, List[str]], char_list: List[str] = CHANNEL_LIST
-) -> Union[int, List[int]]:
+    chan_char: str | list[str], char_list: tuple[str] = CHANNEL_CHARS
+) -> int | list[int]:
     """Convert channel character(s) to number.
 
     :param chan_char: channel character, e.g. 'A', or list of characters.
@@ -422,7 +399,7 @@ def channel_num(
     :rtype: int or list
     """
     if not isinstance(char_list, list):
-        char_list = CHANNEL_LIST
+        char_list = CHANNEL_CHARS
     if isinstance(chan_char, str):
         for i, c in enumerate(char_list):
             if chan_char.upper() == c.upper():
@@ -445,8 +422,8 @@ def channel_num(
 
 
 def channel_char_check(
-    chan_char: Union[str, List[str]], char_list: List[str] = CHANNEL_LIST
-) -> Union[str, List[str]]:
+    chan_char: str | list[str], char_list: tuple[str] = CHANNEL_CHARS
+) -> str | list[str]:
     """Check channel character
 
     :param chan_char: channel character, e.g. 'A', or list of characters.
@@ -685,7 +662,7 @@ def input_yesno(
     treepath: str = "default",
     frame: int = 1,
     cancel: bool = True,
-    answer: Union[str, None] = None,  # for testing, bypasses input()
+    answer: str | None = None,  # for testing, bypasses input()
 ):
     """Get user yes/no/cancel input
 

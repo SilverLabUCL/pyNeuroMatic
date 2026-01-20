@@ -4,11 +4,14 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+from __future__ import annotations
+
+from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 import pyneuromatic.core.nm_utilities as nmu
-from typing import Dict, List, Union
+
 
 """
 NM class tree:
@@ -43,11 +46,11 @@ class NMChannel(NMObject):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMChannel",
-        xscale: Union[dict, nmu.NMDimensionXType] = {},
-        yscale: Union[dict, nmu.NMDimensionType] = {},
-        copy: Union[nmu.NMChannelType, None] = None,
+        parent: object | None = None,
+        name: str = "NMChannel0",
+        xscale: dict | NMDimensionX = {},
+        yscale: dict | NMDimension = {},
+        copy: NMChannel | None = None,
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
@@ -74,7 +77,7 @@ class NMChannel(NMObject):
                     o = data.get(d.name)
                     self.__thedata.append(o)
         else:
-            e = nmu.typeerror(copy, "copy", "NMChannel")
+            e = nmu.typeerror(copy, "copy", NMChannel)
             raise TypeError(e)
 
         if xscale is None:
@@ -106,7 +109,7 @@ class NMChannel(NMObject):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMChannelType) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not super().__eq__(other):
             return False
         if self.x.scale != other.x.scale:
@@ -120,12 +123,12 @@ class NMChannel(NMObject):
         return True
 
     # override, no super
-    def copy(self) -> nmu.NMChannelType:
+    def copy(self) -> NMChannel:
         return NMChannel(copy=self)
 
     # override
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
         k.update({"xscale": self.__x.scale})
         k.update({"yscale": self.__y.scale})
@@ -134,15 +137,15 @@ class NMChannel(NMObject):
         return k
 
     @property
-    def data(self) -> List[nmu.NMDataType]:
+    def data(self) -> list[NMData]:
         return self.__thedata
 
     @property
-    def x(self) -> nmu.NMDimensionXType:
+    def x(self) -> NMDimensionX:
         return self.__x
 
     @property
-    def y(self) -> nmu.NMDimensionType:
+    def y(self) -> NMDimension:
         return self.__y
 
 
@@ -154,11 +157,11 @@ class NMChannelContainer(NMObjectContainer):
     def __init__(
         self,
         parent: object = None,
-        name: str = "NMChannelContainer",
+        name: str = "NMChannelContainer0",
         rename_on: bool = False,
         name_prefix: str = "",  # default is no prefix
         name_seq_format: str = "A",
-        copy: nmu.NMChannelContainerType = None,
+        copy: NMChannelContainer = None,
     ) -> None:
         return super().__init__(
             parent=parent,
@@ -170,7 +173,7 @@ class NMChannelContainer(NMObjectContainer):
         )
 
     # override, no super
-    def copy(self) -> nmu.NMChannelContainerType:
+    def copy(self) -> NMChannelContainer:
         return NMChannelContainer(copy=self)
 
     # override, no super
@@ -181,11 +184,11 @@ class NMChannelContainer(NMObjectContainer):
     def new(
         self,
         # name: str = 'A',  use name_next()
-        xscale: Union[dict, nmu.NMDimensionXType] = {},
-        yscale: Union[dict, nmu.NMDimensionType] = {},
+        xscale: dict | NMDimensionX = {},
+        yscale: dict | NMDimension = {},
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMChannelType:
+    ) -> NMChannel:
         name = self.name_next()
         c = NMChannel(parent=self._parent, name=name, xscale=xscale, yscale=yscale)
         super().new(c, select=select)

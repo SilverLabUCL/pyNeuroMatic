@@ -7,7 +7,7 @@ Created on Sat Jan 18 15:24:16 2020
 """
 import math
 import numpy as np
-from typing import Dict, Union
+from __future__ import annotations
 
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
@@ -24,10 +24,10 @@ class NMDimension(NMObject):
     def __init__(
         self,
         parent: object = None,
-        name: str = "NMDimension",
+        name: str = "NMDimension0",
         nparray=None,  # 1D TODO: typing
-        scale: Union[dict, None] = None,  # "label" and "units"
-        copy: nmu.NMDimensionType = None,  # see copy()
+        scale: dict | None = None,  # "label" and "units"
+        copy: NMDimension | None = None,  # see copy()
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
@@ -38,7 +38,7 @@ class NMDimension(NMObject):
                 nparray = copy.nparray.copy()
             scale = copy.scale
         else:
-            e = nmu.typeerror(copy, "copy", "NMDimension")
+            e = nmu.typeerror(copy, "copy", NMDimension)
             raise TypeError(e)
 
         if nparray is None:
@@ -68,7 +68,7 @@ class NMDimension(NMObject):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMDimensionType) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not super().__eq__(other):
             return False
         if self.__label.lower() != other.label.lower():
@@ -108,12 +108,12 @@ class NMDimension(NMObject):
         return False
 
     # override, no super
-    def copy(self) -> nmu.NMDimensionType:
+    def copy(self) -> NMDimension:
         return NMDimension(copy=self)
 
     # override
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
         if isinstance(self.__nparray, np.ndarray):
             k.update({"nparray": self.__nparray.dtype})
@@ -123,16 +123,16 @@ class NMDimension(NMObject):
         return k
 
     @property
-    def scale(self) -> Dict[str, object]:
+    def scale(self) -> dict[str, object]:
         return {"label": self.__label, "units": self.__units}
 
     @scale.setter
-    def scale(self, scale: Dict[str, object]) -> None:
+    def scale(self, scale: dict[str, object]) -> None:
         self._scale_set(scale)
 
     def _scale_set(
         self,
-        scale: Dict[str, object],
+        scale: dict[str, object],
         quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(scale, dict):
@@ -226,12 +226,12 @@ class NMDimensionX(NMDimension):
     def __init__(
         self,
         parent: object = None,
-        name: str = "NMDimensionX",
+        name: str = "NMDimensionX0",
         nparray=None,  # TODO: typing
         ypair=None,  # TODO: typing
-        scale: Union[dict, None] = None,
+        scale: dict | None = None,
         # "label", "units", "start", "delta", "points"
-        copy: nmu.NMDimensionXType = None,  # see copy()
+        copy: NMDimensionX = None,  # see copy()
     ) -> None:
 
         # declare parameters before calling super (so scale_set() is OK)
@@ -253,7 +253,7 @@ class NMDimensionX(NMDimension):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMDimensionType) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not super().__eq__(other):
             return False
         if self.start != other.start:
@@ -265,13 +265,13 @@ class NMDimensionX(NMDimension):
         return True
 
     # override, no super
-    def copy(self) -> nmu.NMDimensionXType:
+    def copy(self) -> NMDimensionX:
         return NMDimensionX(copy=self)
 
     # override, no super
     def _scale_set(
         self,
-        scale: Dict[str, object],
+        scale: dict[str, object],
         quiet: bool = nmp.QUIET
     ) -> None:
         super()._scale_set(scale)
@@ -288,7 +288,7 @@ class NMDimensionX(NMDimension):
         return None
 
     @property
-    def start(self) -> Union[float, None]:
+    def start(self) -> float | None:
         if isinstance(self.nparray, np.ndarray):
             if self.nparray.size > 0:
                 return self.nparray[0]
@@ -297,12 +297,12 @@ class NMDimensionX(NMDimension):
         return self.__start
 
     @start.setter
-    def start(self, start: Union[float, None]) -> None:
+    def start(self, start: float | None) -> None:
         return self._start_set(start)
 
     def _start_set(
         self,
-        start: Union[float, None],
+        start: float | None,
         quiet: bool = nmp.QUIET
     ) -> None:
         if isinstance(self.nparray, np.ndarray):
@@ -328,7 +328,7 @@ class NMDimensionX(NMDimension):
         return None
 
     @property
-    def delta(self) -> Union[float, None]:
+    def delta(self) -> float | None:
         if isinstance(self.nparray, np.ndarray):
             if self.nparray.size > 1:
                 return self.nparray[1] - self.nparray[0]
@@ -337,12 +337,12 @@ class NMDimensionX(NMDimension):
         return self.__delta
 
     @delta.setter
-    def delta(self, delta: Union[float, None]) -> None:
+    def delta(self, delta: float | None) -> None:
         return self._delta_set(delta)
 
     def _delta_set(
         self,
-        delta: Union[float, None],
+        delta: float | None,
         quiet: bool = nmp.QUIET
     ) -> None:
         if isinstance(self.nparray, np.ndarray):
@@ -378,12 +378,12 @@ class NMDimensionX(NMDimension):
         return self.__points
 
     @points.setter
-    def points(self, points: Union[int, None]) -> None:
+    def points(self, points: int | None) -> None:
         return self._points_set(points)
 
     def _points_set(
         self,
-        points: Union[int, None],
+        points: int | None,
         quiet: bool = nmp.QUIET
     ) -> None:
         if isinstance(self.nparray, np.ndarray):
@@ -443,7 +443,7 @@ class NMDimensionX(NMDimension):
         self.__ypair = nparray
         return None
 
-    def get_index(self, xvalue: float, clip: bool = False) -> Union[int, None]:
+    def get_index(self, xvalue: float, clip: bool = False) -> int | None:
 
         if isinstance(xvalue, float):
             pass

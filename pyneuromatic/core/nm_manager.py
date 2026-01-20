@@ -7,7 +7,7 @@ Copyright 2019 Jason Rothman
 import datetime
 # import math
 import numpy as np
-from typing import Dict, List, Union
+from __future__ import annotations
 
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_object import NMObject
@@ -49,7 +49,7 @@ class NMManager(NMObject):
         name: str = "nm",
         project_name: str = "project0",
         quiet: bool = False,
-        # copy: Union[nmu.NMObjectType, None] = None,  # see copy()
+        # copy: NMObject | None = None,  # see copy()
     ) -> None:
         super().__init__(parent=None, name=name)  # NMObject
 
@@ -99,7 +99,7 @@ class NMManager(NMObject):
     def tool_add(
         self,
         toolname: str,
-        tool: nmu.NMToolType = None,
+        tool: NMTool = None,
         select: bool = False
     ) -> None:
         if not isinstance(toolname, str):
@@ -146,15 +146,15 @@ class NMManager(NMObject):
             raise KeyError("NM tool key '%s' does not exist" % tname)
 
     # @property
-    # def projects(self) -> nmu.NMProjectContainerType:
+    # def projects(self) -> NMProjectContainer:
     #     return self.__project_container
 
     @property
-    def project(self) -> nmu.NMProjectType:
+    def project(self) -> NMProject:
         return self.__project
 
     @property
-    def select_values(self) -> Dict[str, nmu.NMObjectType]:
+    def select_values(self) -> dict[str, NMObject]:
         s = {}
         s["project"] = None
         s["folder"] = None
@@ -191,7 +191,7 @@ class NMManager(NMObject):
         return s
 
     @property
-    def select_keys(self) -> Dict[str, str]:
+    def select_keys(self) -> dict[str, str]:
         s1 = self.select_values
         s2 = {}
         for k, v in s1.items():
@@ -202,12 +202,12 @@ class NMManager(NMObject):
         return s2
 
     @select_keys.setter
-    def select_keys(self, select: Dict[str, str]) -> None:
+    def select_keys(self, select: dict[str, str]) -> None:
         return self._select_keys_set(select)
 
     def _select_keys_set(
         self,
-        select: Dict[str, str]
+        select: dict[str, str]
         # quiet
     ) -> None:
         if not isinstance(select, dict):
@@ -248,7 +248,7 @@ class NMManager(NMObject):
     def execute_values(
         self,
         dataseries_priority: bool = True
-    ) -> List[Dict[str, nmu.NMObjectType]]:
+    ) -> list[dict[str, NMObject]]:
         elist = []
         # for p in self.__project_container.execute_values:
         p = self.__project
@@ -279,7 +279,7 @@ class NMManager(NMObject):
     def execute_keys(
         self,
         dataseries_priority: bool = True
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         elist = []
         elist2 = self.execute_values(dataseries_priority)
         for e in elist2:
@@ -291,8 +291,8 @@ class NMManager(NMObject):
 
     def execute_keys_set(
         self,
-        execute: Dict[str, str]
-    ) -> List[Dict[str, str]]:
+        execute: dict[str, str]
+    ) -> list[dict[str, str]]:
         # sets are not allowed with project, folder, dataseries - too complex
         # can specify 'data' or 'dataseries' but not both
 

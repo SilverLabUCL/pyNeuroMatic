@@ -4,6 +4,7 @@ nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
 import numpy as np
+from __future__ import annotations
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
@@ -11,7 +12,7 @@ from pyneuromatic.core.nm_channel import NMChannelContainer
 from pyneuromatic.core.nm_epoch import NMEpochContainer
 import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
-from typing import Dict, List, Union
+
 
 ALLSTR = "all".upper()
 
@@ -49,8 +50,8 @@ class NMDataSeries(NMObject):
     def __init__(
         self,
         parent: object = None,
-        name: str = "NMDataSeries",  # dataseries name/prefix
-        copy: nmu.NMDataSeriesType = None,  # see copy()
+        name: str = "NMDataSeries0",  # dataseries name/prefix
+        copy: NMDataSeries = None,  # see copy()
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
@@ -95,7 +96,7 @@ class NMDataSeries(NMObject):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMDataSeriesType) -> bool:
+    def __eq__(self, other: object) -> bool:
         # TODO
         return super().__eq__(other)
 
@@ -114,13 +115,13 @@ class NMDataSeries(NMObject):
         return True
 
     # override, no super
-    def copy(self) -> nmu.NMDataSeriesType:
+    def copy(self) -> NMDataSeries:
         return NMDataSeries(copy=self)
 
     # override
     # TODO: finish
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
         # k.update({'channel_select': self.__channel_select})
         # k.update({'epoch_select': self.__epoch_select})
@@ -129,7 +130,7 @@ class NMDataSeries(NMObject):
 
     # override
     @property
-    def content(self) -> Dict[str, str]:
+    def content(self) -> dict[str, str]:
         k = super().content
         k.update(self.channels.content)
         k.update(self.epochs.content)
@@ -240,7 +241,7 @@ class NMDataSeries(NMObject):
             raise TypeError(e)
         keys = dims.keys()
         for k in keys:
-            if k not in nmd.DIM_LIST + ["channel"]:
+            if k not in ["xdata", "xstart", "xdelta", "xlabel", "xunits", "ylabel", "yunits"]:
                 raise KeyError("unknown dimensions key: " + k)
         if "xdata" in keys:
             self._xdata_set(dims["xdata"], quiet=quiet)
@@ -702,8 +703,8 @@ class NMDataSeriesContainer(NMObjectContainer):
     def __init__(
         self,
         parent: object = None,
-        name: str = "NMDataSeriesContainer",
-        copy: nmu.NMDataSeriesContainerType = None,
+        name: str = "NMDataSeriesContainer0",
+        copy: NMDataSeriesContainer = None,
     ):
         rename_on = False
         name_prefix = ""  # no prefix
@@ -719,7 +720,7 @@ class NMDataSeriesContainer(NMObjectContainer):
         # TODO: copy
 
     # override, no super
-    def copy(self) -> nmu.NMDataSeriesContainerType:
+    def copy(self) -> NMDataSeriesContainer:
         return NMDataSeriesContainer(copy=self)
 
     # override, no super
@@ -732,7 +733,7 @@ class NMDataSeriesContainer(NMObjectContainer):
         name: str = "",  # dataseries name/prefix
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMDataSeriesType:
+    ) -> NMDataSeries:
         name = self._newkey(name)
         s = NMDataSeries(parent=self, name=name)
         super().new(s, select=select)
