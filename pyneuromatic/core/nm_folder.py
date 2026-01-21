@@ -3,9 +3,9 @@
 NMPY - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+from __future__ import annotations
 import datetime
 import h5py
-from __future__ import annotations
 
 from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeriesContainer

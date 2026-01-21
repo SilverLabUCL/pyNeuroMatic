@@ -5,10 +5,9 @@ Created on Fri Nov 1 08:22:44 2019
 
 @author: jason
 """
+from __future__ import annotations
 import math
 import numpy as np
-import warnings
-from __future__ import annotations
 
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData

@@ -5,9 +5,9 @@ Created on Sun Jul  9 07:45:13 2023
 
 @author: jason
 """
-from collections.abc import MutableMapping
 from __future__ import annotations
-from typing import Callable
+from collections.abc import MutableMapping
+from typing import Callable, Any
 
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
@@ -44,14 +44,15 @@ class NMSets(NMObject, MutableMapping):
         # e.g. NMObjectContainer rename() or reorder()
         copy: NMSets | None = None,  # see copy()
     ) -> None:
+        actual_name = name if name is not None else "NMSets0"
         super().__init__(
             parent=parent,
-            name=name,
+            name=actual_name,
             notes_on=False,  # turn notes off during __init__
             copy=copy,
         )  # NMObject
-
-        self.__map = {}  # {key: [NMObject]} or {key: [Equation]}
+  
+        self.__map: dict[str, Any] = {} # {key: [NMObject]} or {key: [Equation]}
         self.__nmobjects = {}  # {keys: [NMObjects]}
         self.__nmobjects_fxnref = self._nmobjects_dict_default
 
@@ -330,9 +331,11 @@ class NMSets(NMObject, MutableMapping):
     # no way to obtain set equation via items() or values()
 
     # override MutableMapping mixin method
-    def __contains__(self, key: str) -> bool:
+    def __contains__(self, key: object) -> bool:
         # called by 'in'
         # print('__contains__ ' + str(key))
+        if not isinstance(key, str):
+            return False
         key = self._getkey(key, error1=False, error2=False)
         return key is not None
 
@@ -355,7 +358,7 @@ class NMSets(NMObject, MutableMapping):
             if get_equation:
                 return olist  # equation is saved in map
 
-            set0 = set()
+            set0: set[str] = set() # set0 = set()
             for i, eq_item in enumerate(olist):
                 if i == 0:
                     key0 = self._getkey(eq_item)
@@ -367,7 +370,7 @@ class NMSets(NMObject, MutableMapping):
                     op = eq_item
                 elif op:
                     key1 = self._getkey(eq_item)
-                    set1 = set()
+                    set1: set[str] = set()
                     for nmobject in self.__map[key1]:
                         set1.add(nmobject.name)
                     if op == "&":
@@ -409,6 +412,8 @@ class NMSets(NMObject, MutableMapping):
     # override MutableMapping mixin method
     # children should override if new parameters are declared
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMSets):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         # first compare self.__map
@@ -458,7 +463,7 @@ class NMSets(NMObject, MutableMapping):
             else:
                 q = "are you sure you want to delete '%s'?" % key
                 ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel pop '%s'" % key)
@@ -469,19 +474,19 @@ class NMSets(NMObject, MutableMapping):
     # override MutableMapping mixin method
     def popitem(  # delete last item
         self, confirm_answer: str | None = None  # to skip confirm prompt
-    ) -> tuple[str, list[NMObject]]:
+    ) -> tuple[str, list[NMObject]] | None:
         """
         Must override, otherwise first item is deleted rather than last.
         Consider deprecating to prevent accidental deletes.
         """
         if len(self.__map) == 0:
-            return ()
+            return None
         klist = list(self.__map.keys())
         key = klist[-1]  # last key
         olist = self.pop(key=key, confirm_answer=confirm_answer)
         if olist:
             return (key, olist)
-        return ()  # return tuple to be consistent with Python
+        return None
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
@@ -498,7 +503,7 @@ class NMSets(NMObject, MutableMapping):
                     self.__map.keys()
                 )
                 ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel delete all")
@@ -650,8 +655,9 @@ class NMSets(NMObject, MutableMapping):
             return False
         return NMSets.listisequation(self.__map[key])
 
+    @staticmethod
     def listisequation(
-        equation: list[str],  # e.g. ['set1', '&', 'set2']
+        equation: list[str] | list[NMObject]  # e.g. ['set1', '&', 'set2']
     ) -> bool:
         # checks format of list items
         # does not check if sets exist
@@ -671,15 +677,15 @@ class NMSets(NMObject, MutableMapping):
                 return False
         return found_symbol
 
-    def new(self, newkey: str = "default") -> str:
+    def new(self, newkey: str = "default") -> tuple[str, list[NMObject]]:
         newkey = self._newkey(newkey)
-        olist = []
+        olist: list[Any] = []
         self.__map[newkey] = olist  # empty set
         return (newkey, olist)
 
     def duplicate(
         self, key: str, newkey: str = "default"
-    ) -> dict[str, list[NMObject]]:
+    ) -> tuple[str, list[NMObject]]:
         key = self._getkey(key)
         newkey = self._newkey(newkey)
         clist = []
@@ -740,7 +746,7 @@ class NMSets(NMObject, MutableMapping):
             else:
                 q = "are you sure you want to empty '%s'?" % key
                 ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel empty '%s'" % key)
@@ -760,7 +766,7 @@ class NMSets(NMObject, MutableMapping):
                     self.__map.keys()
                 )
                 ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel empty all")

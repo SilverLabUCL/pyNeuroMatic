@@ -5,9 +5,9 @@ Created on Sat Jan 18 15:24:16 2020
 
 @author: jason
 """
+from __future__ import annotations
 import math
 import numpy as np
-from __future__ import annotations
 
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp

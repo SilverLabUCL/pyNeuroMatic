@@ -3,8 +3,8 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import numpy as np
 from __future__ import annotations
+import numpy as np
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer

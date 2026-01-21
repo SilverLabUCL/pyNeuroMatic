@@ -4,8 +4,8 @@ Created on Fri Dec 23 20:25:27 2022
 
 @author: jason
 """
-from collections.abc import MutableMapping
 from __future__ import annotations
+from collections.abc import MutableMapping
 
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp

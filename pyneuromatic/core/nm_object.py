@@ -4,11 +4,10 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
+from __future__ import annotations
 # import copy
 import datetime
-import inspect
 import types
-from __future__ import annotations
 
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager

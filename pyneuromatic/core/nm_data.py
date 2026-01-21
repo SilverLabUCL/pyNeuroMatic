@@ -3,11 +3,9 @@
 nmpy - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-import math
-import numpy
-
-# import numpy.typing as npt # No module named 'numpy.typing
 from __future__ import annotations
+import numpy
+# import numpy.typing as npt # No module named 'numpy.typing
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer

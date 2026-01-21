@@ -4,10 +4,10 @@ nmpy - NeuroMatic in Python
 NM utility functions
 Copyright 2019 Jason Rothman
 """
-import math
-import inspect
-from colorama import Fore, Back, Style
 from __future__ import annotations
+from colorama import Fore, Back, Style
+import inspect
+import math
 from typing import Callable
 
 CHANNEL_CHARS: tuple = ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",

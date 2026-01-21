@@ -3,11 +3,11 @@
 pyNeuroMatic - NeuroMatic in Python
 Copyright 2019 Jason Rothman
 """
-# import matplotlib
+from __future__ import annotations
 import datetime
 # import math
+# import matplotlib
 import numpy as np
-from __future__ import annotations
 
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_object import NMObject
