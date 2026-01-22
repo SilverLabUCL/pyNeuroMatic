@@ -736,7 +736,7 @@ class NMDataSeriesContainer(NMObjectContainer):
     ) -> NMDataSeries:
         name = self._newkey(name)
         s = NMDataSeries(parent=self, name=name)
-        super().new(s, select=select)
+        super()._new(s, select=select)
         return s
 
     # @property

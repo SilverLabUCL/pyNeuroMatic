@@ -249,7 +249,7 @@ class NMDataContainer(NMObjectContainer):
             xdim=xdim,
             ydim=ydim
         )
-        super().new(d, select=select)
+        super()._new(d, select=select)
         return d
 
     # @property

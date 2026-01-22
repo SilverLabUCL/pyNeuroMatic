@@ -442,16 +442,25 @@ class NMObject(object):
         return True
 
     @property
-    def _manager(self) -> object:  # find NMManager of this NMObject
-        return self._find_parent("NMManager")
+    def _manager(self) -> NMManager | None:  # find NMManager of this NMObject
+        o = self._find_parent("NMManager")
+        if isinstance(o, NMManager):
+            return o
+        return None
 
     @property
-    def _project(self) -> object:  # find NMProject of this NMObject
-        return self._find_parent("NMProject")
+    def _project(self) -> NMProject | None:  # find NMProject of this NMObject
+        o = self._find_parent("NMProject")
+        if isinstance(o, NMProject):
+            return o
+        return None
 
     @property
-    def _folder(self) -> object:  # find NMFolder of this NMObject
-        return self._find_parent("NMFolder")
+    def _folder(self) -> NMFolder | None:  # find NMFolder of this NMObject
+        o = self._find_parent("NMFolder")
+        if isinstance(o, NMFolder):
+            return o
+        return None
 
     def _find_parent(self, classname: str) -> object:
         if self.__parent is None or not isinstance(classname, str):

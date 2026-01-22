@@ -97,5 +97,5 @@ class NMToolFolderContainer(NMObjectContainer):
     ) -> NMToolFolder:
         name = self._newkey(name)
         f = NMToolFolder(parent=self, name=name)
-        super().new(f, select=select)
+        super()._new(f, select=select)
         return f

@@ -191,5 +191,5 @@ class NMChannelContainer(NMObjectContainer):
     ) -> NMChannel:
         name = self.name_next()
         c = NMChannel(parent=self._parent, name=name, xscale=xscale, yscale=yscale)
-        super().new(c, select=select)
+        super()._new(c, select=select)
         return c

@@ -1263,7 +1263,7 @@ class NMStatsWinContainer(NMObjectContainer):
         else:
             iseq = -1
         c = NMStatsWin(parent=self._parent, name=name)
-        super().new(c, select=select)
+        super()._new(c, select=select)
         return c
 
 

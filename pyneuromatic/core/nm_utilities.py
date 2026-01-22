@@ -479,12 +479,36 @@ def channel_char_search(text: str, chan_char: str) -> int:
 
 
 def typeerror(obj: object, obj_name: str, type_str: str) -> str:
-    return (
-        obj_name
-        + ": expected "
-        + type_str
-        + " but got %s %s" % (type(obj).__name__, obj)
-    )
+    """Create error message for TypeError.
+
+    :param obj: the object with invalid type.
+    :type obj: object
+    :param obj_name: name of the parameter/variable.
+    :type obj_name: str
+    :param type_str: expected type string.
+    :type type_str: str
+    :return: error message string.
+    :rtype: str
+    """
+    return f"{obj_name}: expected {type_str} but got {type(obj).__name__} {obj}"
+
+
+def valueerror(obj: object, obj_name: str, constraint_str: str = "") -> str:
+    """Create error message for ValueError.
+
+    :param obj: the object with invalid value.
+    :type obj: object
+    :param obj_name: name of the parameter/variable.
+    :type obj_name: str
+    :param constraint_str: optional description of valid values or constraint.
+    :type constraint_str: str
+    :return: error message string.
+    :rtype: str
+    """
+    if constraint_str:
+        return f"{obj_name}: expected {constraint_str} but got {obj}"
+    else:
+        return f"{obj_name}: {obj}"
 
 
 def history_change(param_name: str, old_value: object, new_value: object) -> str:

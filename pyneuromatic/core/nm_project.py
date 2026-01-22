@@ -113,5 +113,5 @@ class NMProjectContainer(NMObjectContainer):
     ) -> NMProject:
         name = self._newkey(name)
         p = NMProject(parent=self, name=name)
-        super().new(p, select=select)
+        super()._new(p, select=select)
         return p
