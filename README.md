@@ -303,17 +303,29 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Citation
 --------
 
-If you use pyNeuroMatic in your research, please cite:
+If you use pyNeuroMatic in your research, please cite the original NeuroMatic paper:
 
-```
-Rothman JR, Silver RS (2024). pyNeuroMatic: Python tools for electrophysiology analysis.
-GitHub repository, https://github.com/SilverLabUCL/pyNeuroMatic
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source Software Toolkit for Acquisition, Analysis and Simulation of Electrophysiological Data. *Front. Neuroinform.* 12:14. doi: [10.3389/fninf.2018.00014](https://doi.org/10.3389/fninf.2018.00014)
+
+**BibTeX:**
+
+```bibtex
+@article{rothman2018neuromatic,
+  title={NeuroMatic: An Integrated Open-Source Software Toolkit for Acquisition, Analysis and Simulation of Electrophysiological Data},
+  author={Rothman, Jason S and Silver, R Angus},
+  journal={Frontiers in Neuroinformatics},
+  volume={12},
+  pages={14},
+  year={2018},
+  publisher={Frontiers Media SA},
+  doi={10.3389/fninf.2018.00014}
+}
 ```
 
 Acknowledgments
 ---------------
 
-pyNeuroMatic is a Python implementation of [NeuroMatic](https://github.com/SilverLabUCL/NeuroMatic), originally developed for Igor Pro.
+pyNeuroMatic is a Python implementation of [NeuroMatic](https://github.com/SilverLabUCL/NeuroMatic), originally developed for Igor Pro by Jason Rothman and the Silver Lab at UCL.
 
 Contact
 -------

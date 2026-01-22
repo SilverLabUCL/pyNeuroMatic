@@ -1,7 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-NMPY - NeuroMatic in Python
-Copyright 2019 Jason Rothman
+[Module description].
+
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
@@ -40,8 +55,9 @@ class NMProject(NMObject):
         if copy is None:
             pass
         elif isinstance(copy, NMProject):
-            self.__folder_container = copy.folders.copy()
-            self.__folder_container._parent = self
+            if isinstance(copy.folders, NMFolderContainer):
+                self.__folder_container = copy.folders.copy()
+                self.__folder_container._parent = self
         else:
             e = nmu.typeerror(copy, "copy", NMProject)
             raise TypeError(e)
@@ -53,6 +69,8 @@ class NMProject(NMObject):
 
     # override
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMProject):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         return self.folders == other.folders
@@ -65,11 +83,12 @@ class NMProject(NMObject):
     @property
     def content(self) -> dict[str, str]:
         k = super().content
-        k.update(self.__folder_container.content)
+        if self.__folder_container is not None:
+            k.update(self.__folder_container.content)
         return k
 
     @property
-    def folders(self) -> "NMFolderContainer":
+    def folders(self) -> NMFolderContainer | None:
         return self.__folder_container
 
 
