@@ -7,7 +7,9 @@ Copyright 2019 Jason Rothman
 from __future__ import annotations
 # import copy
 import datetime
+from tkinter.font import names
 import types
+from typing import overload
 
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
@@ -99,41 +101,47 @@ class NMObject(object):
 
         date_time = str(datetime.datetime.now())
         self.__created = date_time  # NOT COPIED
-        self.__parent = None
-        self.__name = None
-        self.__notes_on = False  # turn off during __init__
-        self.__notes = []  # [{'date': 'date', 'note': 'note'}]
+        self.__parent: object | None = None
+        self.__name: str = "NMObject0"
+        self.__notes_on: bool = False  # turn off during __init__
+        self.__notes: list[dict] = []  # [{'date': 'date', 'note': 'note'}]
         self.__rename_fxnref = self._name_set  # NOT COPIED
         # fxn ref for name setter
-        self.__copy_of = None
+        self.__copy_of: NMObject | None = None
         # self._eq_list = ['parent', notes']
-        self._eq_list = []
+        self._eq_list: list[str] = []
+
+        # Determine actual values to use
+        actual_parent = parent
+        actual_name = name
+        actual_notes_on = notes_on
 
         if copy is None:
             pass
         elif isinstance(copy, NMObject):
-            parent = copy._parent
-            name = copy.name
-            notes_on = copy.notes_on
-            if NMObject.notes_ok(copy._NMObject__notes):
-                for n in copy._NMObject__notes:
+            # When copying, use values from the copy object
+            actual_parent = copy._parent
+            actual_name = copy.name
+            actual_notes_on = copy.notes_on
+            if NMObject.notes_ok(copy.notes):
+                for n in copy.notes:
                     self.__notes.append(dict(n))  # append a copy
             self.__copy_of = copy
         else:
-            e = nmu.typeerror(copy, "copy", NMObject)
+            e = nmu.typeerror(copy, "copy", "NMObject")
             raise TypeError(e)
 
-        self.__parent = parent  # family tree 'parent' and 'child'
+        self.__parent = actual_parent  # family tree 'parent' and 'child'
         # nothing to test, parent can be any object
 
-        if not isinstance(name, str):
-            e = nmu.typeerror(name, "name", "string")
+        if not isinstance(actual_name, str):
+            e = nmu.typeerror(actual_name, "name", "string")
             raise TypeError(e)
 
-        self._name_set(newname=name, quiet=True)
+        self._name_set(newname=actual_name, quiet=True)
 
-        if isinstance(notes_on, bool):
-            self.__notes_on = notes_on
+        if isinstance(actual_notes_on, bool):
+            self.__notes_on = actual_notes_on
         else:
             self.__notes_on = True
 
@@ -154,7 +162,7 @@ class NMObject(object):
         # if not super().__eq__(other):  # not sure this is needed (object)
         #    return False
         if not isinstance(other, type(self)):
-            return False
+            return NotImplemented
         if "parent" in self._eq_list:
             if not isinstance(other._parent, type(self.__parent)):
                 return False
@@ -169,6 +177,7 @@ class NMObject(object):
                 return False
         return True
 
+    @staticmethod
     def lists_are_equal(
         nmobject_list1: list[NMObject], nmobject_list2: list[NMObject]
     ) -> bool:
@@ -211,10 +220,10 @@ class NMObject(object):
     # similar to __dict__
     @property
     def parameters(self) -> dict[str, object]:
-        p = {"name": self.__name}
+        p: dict[str, object] = {"name": self.__name} # Tell mypy the correct type
         p.update({"created": self.__created})
         if isinstance(self.__copy_of, type(self)):
-            p.update({"copy of": self.__copy_of.treepath()})
+            p.update({"copy of": self.__copy_of._treepath_str()})
         else:
             p.update({"copy of": None})
         return p
@@ -249,54 +258,47 @@ class NMObject(object):
     def treepath(  # NM class tree path
         self,
         names: bool = True,  # True: names, False: NMObjects
-        list_format: bool = False
-        # True: list of names or NMObjects, e.g. ['nm', 'project0', 'folder0']
-        # False: concatenated names, e.g. 'nm.project0.folder0'
-    ) -> str | list[NMObject]:
+    ) -> list[str] | list[NMObject]:
         """returns the NM tree path of this NMObject.
 
         The NM tree path can be a list of NMObject names or references.
-        By default, the list of names is concatenated via '.'
         Example of list of names: ['nm', 'project0', 'folder0']
-        Concatenated list of names: 'nm.project0.folder0'
 
         :param names: return NMObject names, otherwise return NMObject refs
         :type names: bool, optional
-        :param list_format: return list of names, otherwise return '.' concat
-        :type list_format: bool, optional
         :return: list of names or NMObjects
-        :rtype: str, list[str], list[NMObject]
+        :rtype: list[str], list[NMObject]
         """
-        if not names:
-            list_format = True
-        # create treepath list
-        if isinstance(self.__parent, NMObject):
-            tplist = self.__parent.treepath(names=names, list_format=True)
-            # goes up NM class tree
-            if names:
-                tplist.append(self.__name)
-            else:
-                tplist.append(self)
+        if names:
+            tplist_names: list[str] = []
+            
+            if isinstance(self.__parent, NMObject):
+                parent_path = self.__parent.treepath(names=True)
+                if isinstance(parent_path, list):
+                    tplist_names.extend(parent_path)  # type: ignore[arg-type]
+            
+            tplist_names.append(self.__name)
+        
+            return tplist_names
+                
         else:
-            if names:
-                tplist = [self.__name]
-            else:
-                tplist = [self]
-        if list_format:
-            return tplist
-        # concat list using '.' seperator
-        if len(tplist) > 0:
-            tpstr = ".".join(tplist)
-        else:
-            tpstr = self.__name
-        return tpstr
+            tplist_objects: list[NMObject] = []
+            
+            if isinstance(self.__parent, NMObject):
+                parent_path = self.__parent.treepath(names=False)
+                if isinstance(parent_path, list):
+                    tplist_objects.extend(parent_path)  # type: ignore[arg-type]
+            
+            tplist_objects.append(self)
 
+            return tplist_objects
+        
     @property
     def name(self) -> str:
         return self.__name
 
     @name.setter
-    def name(self, newname: str) -> None:
+    def name(self, newname: str) -> bool:
         # Name setter is called via function reference self.__rename_fxnref
         # By default, self.__rename_fxnref points to
         # NMObject._name_set(name, newname) (see below)
@@ -313,7 +315,7 @@ class NMObject(object):
         # coding newname as optional (None)
         # since preceding param name_notused is optional
         quiet: bool = nmp.QUIET,
-    ) -> None:
+    ) -> bool:
         """Set the name of the this NMObject.
 
         :param name_notused: name of this NMObject, but param is NOT USED
@@ -333,7 +335,7 @@ class NMObject(object):
         self.__name = newname
         self.note = "renamed to '%s'" % self.__name
         h = nmu.history_change("name", oldname, self.__name)
-        self._history(h, tp=self.treepath(), quiet=quiet)
+        self._history(h, tp=self._treepath_str(), quiet=quiet)
         return True
 
     def _rename_fxnref_set(self, rename_fxnref) -> None:
@@ -367,7 +369,9 @@ class NMObject(object):
     @property
     def note(self) -> str:
         if isinstance(self.__notes, list) and len(self.__notes) > 0:
-            return self.__notes[-1]
+            last_note = self.__notes[-1]
+            if isinstance(last_note, dict) and "note" in last_note:
+                return last_note["note"]
         return ""
 
     @note.setter
@@ -398,8 +402,8 @@ class NMObject(object):
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete all notes for '%s'?" % self.__name
-                ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+            if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel delete all notes")
@@ -419,6 +423,7 @@ class NMObject(object):
             self.__notes_on = True
         return None
 
+    @staticmethod
     def notes_ok(notes: list[dict]) -> bool:
         # test notes type format
         if not isinstance(notes, list):
@@ -437,15 +442,15 @@ class NMObject(object):
         return True
 
     @property
-    def _manager(self) -> NMManager:  # find NMManager of this NMObject
+    def _manager(self) -> object:  # find NMManager of this NMObject
         return self._find_parent("NMManager")
 
     @property
-    def _project(self) -> NMProject:  # find NMProject of this NMObject
+    def _project(self) -> object:  # find NMProject of this NMObject
         return self._find_parent("NMProject")
 
     @property
-    def _folder(self) -> NMFolder:  # find NMFolder of this NMObject
+    def _folder(self) -> object:  # find NMFolder of this NMObject
         return self._find_parent("NMFolder")
 
     def _find_parent(self, classname: str) -> object:
@@ -465,7 +470,7 @@ class NMObject(object):
     def _alert(
         self,
         message: str,
-        tp: str | None = None,
+        tp: str = "None",  # history treepath
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -482,7 +487,7 @@ class NMObject(object):
     def _error(
         self,
         message: str,
-        tp: str | None = None,
+        tp: str = "None",  # history treepath
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -499,7 +504,7 @@ class NMObject(object):
     def _history(
         self,
         message: str,
-        tp: str | None = None,
+        tp: str = "None",  # history treepath
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -512,7 +517,7 @@ class NMObject(object):
         self,
         obj_name: str,  # name of object that is of the wrong type
         type_expected: str,  # expected type of the object
-        tp: str | None = None,  # history treepath
+        tp: str = "None",  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:
@@ -538,7 +543,7 @@ class NMObject(object):
     def _value_error(
         self,
         obj_name: str,  # name of function variable with bad value
-        tp: str | None = None,  # history treepath
+        tp: str = "None",  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:
@@ -564,9 +569,19 @@ class NMObject(object):
         """
 
     def _quiet(self, quiet: bool) -> bool:
-        m = self._manager
-        if m and m.__class__.__name__ == "NMManager":
-            return m._quiet(quiet)
+        # m = self._manager
+        # if m and m.__class__.__name__ == "NMManager":
+        #    return m._quiet(quiet)
         if nmp.QUIET:  # this quiet overrides
             return True
         return quiet
+
+    def _treepath_str(self) -> str:
+        # NM treepath list of names is concatenated via '.'
+        # Concatenated list of names: 'nm.project0.folder0'
+        tp_return = ""
+        tp = self.treepath(names=True)
+        for item in tp:
+            if isinstance(item, str):
+                tp_return += "." + item
+        return tp_return if tp_return else self.__name

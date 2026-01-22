@@ -336,8 +336,8 @@ class NMSets(NMObject, MutableMapping):
         # print('__contains__ ' + str(key))
         if not isinstance(key, str):
             return False
-        key = self._getkey(key, error1=False, error2=False)
-        return key is not None
+        key = self._getkey(key)
+        return key != "none"
 
     # override MutableMapping mixin method
     def get(
@@ -347,9 +347,9 @@ class NMSets(NMObject, MutableMapping):
         get_equation: bool = False,  # extra parameter
         # return equation if one exists, otherwise returns NMObject list
         get_keys: bool = False,  # extra parameter
-    ) -> list[NMObject] | list[str]:
-        key = self._getkey(key, error1=False, error2=False)
-        if key is None:
+    ) -> list[NMObject] | list[str] | None:
+        key = self._getkey(key)
+        if key == "none":
             return default
 
         olist = self.__map[key]
@@ -438,8 +438,8 @@ class NMSets(NMObject, MutableMapping):
                     return False
         if "nmobjects" in self._eq_list:
             for s_key in self._nmobjects_dict.keys():
-                o_key = other._get_nmobject_key(s_key, error1=False, error2=False)
-                if o_key is None:
+                o_key = other._get_nmobject_key(s_key)
+                if o_key == "none":
                     return False
                 s = self._nmobjects_dict[s_key]
                 o = other._nmobjects_dict[o_key]
@@ -462,7 +462,7 @@ class NMSets(NMObject, MutableMapping):
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete '%s'?" % key
-                ync = nmu.input_yesno(q, treepath=self.treepath())
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -502,7 +502,7 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to delete the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self.treepath())
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -516,8 +516,8 @@ class NMSets(NMObject, MutableMapping):
     # override MutableMapping mixin method
     def setdefault(self, key, default=None):
         # have to override to get default option to work
-        k = self._getkey(key, error1=False, error2=False)
-        if k is None:
+        k = self._getkey(key)
+        if k == "none":
             if default is None:
                 return None
             self.__setitem__(key, default)
@@ -527,21 +527,17 @@ class NMSets(NMObject, MutableMapping):
     # NMSets methods...
 
     def _getkey(
-        self, key: str, error1: bool = True, error2: bool = True  # set key
+        self,
+        key: str
     ) -> str:
         # wrapper function for input parameter key
         # forces keys/names to be case insensitive
         if not isinstance(key, str):
-            if error1:
-                e = nmu.typeerror(key, "key", "string")
-                raise TypeError(e)
-            return None
+            return "none"
         for k in self.__map.keys():
             if k.lower() == key.lower():  # keys are case insensitive
                 return k  # return key from self.__map
-        if error2:
-            raise KeyError("key '%s' does not exist" % key)
-        return None
+        return "none"
 
     def _newkey(
         self,
@@ -593,8 +589,8 @@ class NMSets(NMObject, MutableMapping):
         key: str,
         olist: str | list[str] | NMObject | list[NMObject]
     ) -> bool:
-        key = self._getkey(key, error1=False, error2=False)
-        if key is None:
+        key = self._getkey(key)
+        if key == "none":
             return False
         if isinstance(olist, str) or isinstance(olist, NMObject):
             olist = [olist]
@@ -650,8 +646,8 @@ class NMSets(NMObject, MutableMapping):
         self,
         key: str,
     ) -> bool:
-        key = self._getkey(key, error1=False, error2=False)
-        if not key:
+        key = self._getkey(key)
+        if key == "none":
             return False
         return NMSets.listisequation(self.__map[key])
 
@@ -745,7 +741,7 @@ class NMSets(NMObject, MutableMapping):
                 ync = confirm_answer
             else:
                 q = "are you sure you want to empty '%s'?" % key
-                ync = nmu.input_yesno(q, treepath=self.treepath())
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -765,7 +761,7 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to empty the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self.treepath())
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:

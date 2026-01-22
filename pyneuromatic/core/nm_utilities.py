@@ -663,7 +663,7 @@ def input_yesno(
     frame: int = 1,
     cancel: bool = True,
     answer: str | None = None,  # for testing, bypasses input()
-):
+) -> str:
     """Get user yes/no/cancel input
 
     :param prompt: prompt message.
