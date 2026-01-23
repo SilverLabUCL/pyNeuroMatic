@@ -127,8 +127,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # e.g. '00' ->  00, 01, 02, 03...
         # e.g. 'A'  ->  A, B, C, D...
         # e.g. 'AA' ->  AA, AB, AC, AD...
-        copy: NMObjectContainer | None = None
-        # see copy()
+        copy: NMObjectContainer | None = None # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -146,17 +145,17 @@ class NMObjectContainer(NMObject, MutableMapping):
         # select_key: key of selected NMObject
         # 'current' project, folder, data, dataseries, channel, epoch...
         # only one value
-        self.__select_key = "none"
+        self.__select_key: str | None = None
 
         # execute_key: key of selected NMObject or set
         # for function execution, e.g. computing stats
         # if 'select', then equals self.__select_key (default)
         # if 'all', then all NMObjects are executed
-        self.__execute_key = "select"
+        self.__execute_key: str | None = "select"
 
         nmobjects = []
-        select_key = "none"
-        execute_key = "select"
+        select_key: str | None = None
+        execute_key: str | None = "select"
         sets_copy = None
 
         actual_rename_on: bool = rename_on
@@ -202,11 +201,11 @@ class NMObjectContainer(NMObject, MutableMapping):
             self.update(nmobjects)  # add NMObjects to self.__map
 
         if select_key:
-            self._select_key_set(select_key, quiet=True)
+            self._select_key_set(select_key)
             # self.__select_key
 
         if execute_key:
-            self._execute_key_set(execute_key, quiet=True)
+            self._execute_key_set(execute_key)
             # self.__execute_key
 
         self.__sets = NMSets(
@@ -286,7 +285,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         """
         # print('__getitem__ ' + str(key))
         k = self._getkey(key)
-        if k == "none":
+        if k is None:
             return None
         return self.__map[k]
 
@@ -344,7 +343,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             if key_or_value.lower() == "select":
                 return False
             key = self._getkey(key_or_value)
-            return key != "none"
+            return key is not None
         return False
 
     # keys() NO OVERRIDE
@@ -423,7 +422,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     ) -> NMObject | None:
         # Check if key exists, return default if not
         actual_key = self._getkey(key)
-        if actual_key == "none":
+        if actual_key is None:
             return default
         if nmp.DELETE_CONFIRM:
             if confirm_answer in nmu.CONFIRM_YNC:
@@ -438,7 +437,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 return default
         if isinstance(self.select_key, str):
             if self.select_key.lower() == actual_key.lower():
-                self.select_key = "none"
+                self.select_key = None
         self.sets.remove_from_all(actual_key)
         o = self.__map.pop(actual_key)
         return o
@@ -484,7 +483,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             else:
                 print("cancel delete all")
                 return None
-        self.select_key = "none"
+        self.select_key = None
         self.sets.empty_all(confirm_answer="y")
         self.__map.clear()
         return None
@@ -532,7 +531,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         for o in olist:
             if self.content_type_ok(o):
                 key = self._getkey(o.name)
-                if key == "none":
+                if key is None:
                     key = self._newkey(o.name)
                 self.__map[key] = o
                 update = True
@@ -562,7 +561,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if default is None:
             return self.__getitem__(key)
         actual_key = self._getkey(key)
-        if actual_key == "none":
+        if actual_key is None:
             return default
         return self.__map[actual_key]
 
@@ -574,22 +573,22 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     def _getkey(
         self,
-        key: str,  # key or 'select' for selected key
-    ) -> str:
+        key: str | None = None,  # key or 'select' for selected key
+    ) -> str | None:
         if not isinstance(key, str):
-            return "none"
+            return None
         if key.lower() == "select":
-            if self.__select_key == "" or self.__select_key.lower() == "none":
-                return "none"
+            if self.__select_key is None or self.__select_key == "" or self.__select_key.lower() == "none":
+                return None
             return self.__select_key
         for k in self.__map.keys():
             if k.lower() == key.lower():  # keys are case insensitive
                 return k  # return key from self.__map
-        return "none"
+        return None
 
     def _newkey(
         self,
-        newkey: str,
+        newkey: str = "default",
     ) -> str:
         if not isinstance(newkey, str):
             e = nmu.typeerror(newkey, "newkey", "string")
@@ -610,7 +609,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if not self.__rename_on:
             raise RuntimeError("key names are locked.")
         actual_key = self._getkey(key)
-        if actual_key == "none":
+        if actual_key is None:
             raise KeyError("key '%s' does not exist" % key)
         newkey = self._newkey(newkey)
         new_map = {}
@@ -647,7 +646,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         new_map = {}
         for k in newkeyorder:
             actual_key = self._getkey(k)
-            if actual_key == "none":
+            if actual_key is None:
                 raise KeyError("key '%s' does not exist" % k)
             new_map[actual_key] = self.__map[actual_key]
         # self.__map = new_map  # reference change
@@ -661,7 +660,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         newkey: str = "default",
     ) -> NMObject | None:
         actual_key = self._getkey(key)
-        if actual_key == "none":
+        if actual_key is None:
             raise KeyError("key '%s' does not exist" % key)
         newkey = self._newkey(newkey)
         o = self.__getitem__(actual_key)
@@ -856,48 +855,50 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     @property
     def select_value(self) -> NMObject | None:
-        if self.__select_key.lower() == "none":
-            return None
         key = self._getkey(self.__select_key)
+        if key is None:
+            return None
         return self.__map[key]
 
     @property
-    def select_key(self) -> str:
+    def select_key(self) -> str | None:
         return self.__select_key
 
     @select_key.setter
-    def select_key(self, key: str) -> None:
+    def select_key(self, key: str | None) -> None:
         self._select_key_set(key)
         return None
 
-    def _select_key_set(self, key: str, quiet: bool = nmp.QUIET) -> str:
+    def _select_key_set(
+        self, 
+        key: str | None, 
+    ) -> bool:
+        if key is None:
+            self.__select_key = None
+            return True
         if not isinstance(key, str):
             e = nmu.typeerror(key, "key", "string")
             raise TypeError(e)
         if key == "" or key.lower() == "none":
-            self.__select_key = "none"
-            return "none"
-        if not isinstance(key, str):
-            e = nmu.typeerror(key, "key", "string")
-            raise TypeError(e)
+            self.__select_key = None
+            return True
         if key.lower() == "select":
             raise KeyError("invalid key 'select'")
         actual_key = self._getkey(key)
+        if actual_key is None:
+            return False
         self.__select_key = actual_key
-        return actual_key
+        return True
 
-    def is_select_key(self, key: str) -> bool:
+    def is_select_key(self, key: str | None) -> bool:
+        if key is None:
+            return self.__select_key is None
         if not isinstance(key, str):
             return False
-        if self.__select_key == "none":
-            if key == "" or key.lower() == "none":
-                return True
+        if key == "" or key.lower() == "none":
+            return self.__select_key is None
+        if self.__select_key is None:
             return False
-        if self.__select_key.lower() == "select":
-            if key.lower() == "select":
-                return True
-            k = self._getkey("select")
-            return key.lower() == k.lower()
         return key.lower() == self.__select_key.lower()
 
     @property
@@ -906,50 +907,60 @@ class NMObjectContainer(NMObject, MutableMapping):
             return []
         if self.__execute_key.lower() == "select":
             key = self._getkey("select")
-            if key != "none":
-                o = self.__map[key]
-                return [o]
-            return []
+            if key is None:
+                return []
+            o = self.__map[key]
+            return [o]
         if self.__execute_key.lower() == "all":
             return list(self.values())
         key = self._getkey(self.__execute_key)
-        if key != "none":
+        if key is not None:
             o = self.__map[key]
             return [o]
         key = self.sets._getkey(self.__execute_key)  # try sets
-        if key != "none":
+        if key is not None:
             s = self.sets.get(key)
         return []
 
     @property
-    def execute_key(self) -> str:
+    def execute_key(self) -> str | None:
         return self.__execute_key
 
     @execute_key.setter
-    def execute_key(self, key: str) -> None:
+    def execute_key(self, key: str | None) -> None:
         self._execute_key_set(key)
         return None
 
-    def _execute_key_set(self, key: str, quiet: bool = nmp.QUIET) -> str:
+    def _execute_key_set(
+        self, 
+        key: str | None = None, 
+    ) -> bool:
+        if key is None:
+            self.__execute_key = None
+            return True
         if not isinstance(key, str):
             e = nmu.typeerror(key, "key", "string")
             raise TypeError(e)
         if key == "" or key.lower() == "none":
-            self.__execute_key = "none"
-            return "none"
-        if key.lower() == self.__execute_key.lower():
-            return self.__execute_key # nothing to do
+            self.__execute_key = None
+            return True
+        if isinstance(self.__execute_key, str) and \
+        key.lower() == self.__execute_key.lower():
+            # nothing to do
+            return True
         if key.lower() == "select":
             self.__execute_key = "select"
-            return "select"
+            return True
         if key.lower() == "all":
             self.__execute_key = "all"
-            return "all"
+            return True
         k = self._getkey(key)
-        if k == "none":
+        if k is None:
             k = self.sets._getkey(key)  # try sets
+            if k is None:
+                return False
         self.__execute_key = k
-        return k
+        return True
 
     def is_execute_key(self, key: str) -> bool:
         if key is None:
@@ -960,9 +971,9 @@ class NMObjectContainer(NMObject, MutableMapping):
             if key.lower() == "select":
                 return True
             k = self._getkey("select")
-            if k != "none":
-                return key.lower() == k.lower()
-            return False
+            if k is None:
+                return False
+            return key.lower() == k.lower()
         if self.__execute_key.lower() == "all":
             if key.lower() == "all":
                 return True

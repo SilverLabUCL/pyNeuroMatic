@@ -129,8 +129,9 @@ class NMProjectContainer(NMObjectContainer):
         name: str = "default",
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> NMProject:
+    ) -> NMProject | None:
         name = self._newkey(name)
         p = NMProject(parent=self, name=name)
-        super()._new(p, select=select)
-        return p
+        if super()._new(p, select=select):
+            return p
+        return None

@@ -36,9 +36,9 @@ class NMDimension(NMObject):
 
     def __init__(
         self,
-        parent: object = None,
+        parent: object | None = None,
         name: str = "NMDimension0",
-        nparray=None,  # 1D TODO: typing
+        nparray = None,  # 1D TODO: typing
         scale: dict | None = None,  # "label" and "units"
         copy: NMDimension | None = None,  # see copy()
     ) -> None:
@@ -81,7 +81,12 @@ class NMDimension(NMObject):
         return None
 
     # override
-    def __eq__(self, other: object) -> bool:
+    def __eq__(
+        self, 
+        other: object
+    ) -> bool:
+        if not isinstance(other, NMDimension):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         if self.__label.lower() != other.label.lower():
@@ -169,7 +174,11 @@ class NMDimension(NMObject):
     def label(self, label: str) -> None:
         return self._label_set(label)
 
-    def _label_set(self, label: str, quiet: bool = nmp.QUIET) -> None:
+    def _label_set(
+        self, 
+        label: str, 
+        quiet: bool = nmp.QUIET
+    ) -> None:
         if label is None:
             pass
         elif not isinstance(label, str):
@@ -192,7 +201,11 @@ class NMDimension(NMObject):
     def units(self, units: str) -> None:
         return self._units_set(units)
 
-    def _units_set(self, units: str, quiet: bool = nmp.QUIET) -> None:
+    def _units_set(
+        self, 
+        units: str, 
+        quiet: bool = nmp.QUIET
+    ) -> None:
         if units is None:
             pass
         elif not isinstance(units, str):
@@ -238,13 +251,13 @@ class NMDimensionX(NMDimension):
 
     def __init__(
         self,
-        parent: object = None,
+        parent: object | None = None,
         name: str = "NMDimensionX0",
         nparray=None,  # TODO: typing
         ypair=None,  # TODO: typing
         scale: dict | None = None,
         # "label", "units", "start", "delta", "points"
-        copy: NMDimensionX = None,  # see copy()
+        copy: NMDimensionX | None = None,  # see copy()
     ) -> None:
 
         # declare parameters before calling super (so scale_set() is OK)
@@ -266,7 +279,12 @@ class NMDimensionX(NMDimension):
         return None
 
     # override
-    def __eq__(self, other: object) -> bool:
+    def __eq__(
+        self, 
+        other: object
+    ) -> bool:
+        if not isinstance(other, NMDimensionX):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         if self.start != other.start:
@@ -456,7 +474,11 @@ class NMDimensionX(NMDimension):
         self.__ypair = nparray
         return None
 
-    def get_index(self, xvalue: float, clip: bool = False) -> int | None:
+    def get_index(
+        self, 
+        xvalue: float, 
+        clip: bool = False
+    ) -> int | None:
 
         if isinstance(xvalue, float):
             pass
@@ -494,8 +516,11 @@ class NMDimensionX(NMDimension):
             else:
                 return None
 
-    def get_xvalue(self, index: int, clip: bool = False) -> float:
-
+    def get_xvalue(
+        self, 
+        index: int, 
+        clip: bool = False
+    ) -> float:
         if isinstance(index, int) and not isinstance(index, bool):
             i = index
         elif isinstance(index, np.integer):

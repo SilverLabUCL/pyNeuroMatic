@@ -493,7 +493,7 @@ class NMObject(object):
     def _alert(
         self,
         message: str,
-        tp: str = "None",  # history treepath
+        tp: str = "NONE",  # history treepath
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -510,7 +510,7 @@ class NMObject(object):
     def _error(
         self,
         message: str,
-        tp: str = "None",  # history treepath
+        tp: str = "NONE",  # history treepath
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -527,7 +527,7 @@ class NMObject(object):
     def _history(
         self,
         message: str,
-        tp: str = "None",  # history treepath
+        tp: str = "NONE",  # history treepath
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -540,7 +540,7 @@ class NMObject(object):
         self,
         obj_name: str,  # name of object that is of the wrong type
         type_expected: str,  # expected type of the object
-        tp: str = "None",  # history treepath
+        tp: str = "NONE",  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:
@@ -566,7 +566,7 @@ class NMObject(object):
     def _value_error(
         self,
         obj_name: str,  # name of function variable with bad value
-        tp: str = "None",  # history treepath
+        tp: str = "NONE",  # history treepath
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:

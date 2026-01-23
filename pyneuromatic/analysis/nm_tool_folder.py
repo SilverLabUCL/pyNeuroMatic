@@ -55,6 +55,8 @@ class NMToolFolder(NMObject):
 
     # override
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMToolFolder):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         if self.__data_container != other._NMToolFolder__data_container:
@@ -83,7 +85,7 @@ class NMToolFolderContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: object = None,
+        parent: object | None = None,
         name: str = "NMToolFolderContainer0",
         rename_on: bool = True,
         name_prefix: str = "toolfolder",
@@ -113,8 +115,9 @@ class NMToolFolderContainer(NMObjectContainer):
         name: str = "default",
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> NMToolFolder:
+    ) -> NMToolFolder | None:
         name = self._newkey(name)
         f = NMToolFolder(parent=self, name=name)
-        super()._new(f, select=select)
-        return f
+        if super()._new(f, select=select):
+            return f
+        return None

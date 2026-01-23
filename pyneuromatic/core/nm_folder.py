@@ -192,11 +192,12 @@ class NMFolderContainer(NMObjectContainer):
         name: str = "default",
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> NMFolder:
+    ) -> NMFolder | None:
         name = self._newkey(name)
         f = NMFolder(parent=self, name=name)
-        super()._new(f, select=select)
-        return f
+        if super()._new(f, select=select):
+            return f
+        return None
 
     def open_hdf5(self):
         dataseries = "Record"

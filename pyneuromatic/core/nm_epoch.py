@@ -67,8 +67,8 @@ class NMEpoch(NMObject):
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__thedata = []  # list of NMData references
-        self.__number = -1
+        self.__thedata: list[NMData] = []  # list of NMData references
+        self.__number: int = -1
 
         if copy is None:
             pass
@@ -185,10 +185,10 @@ class NMEpochContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = "NOTUSED",  # not used, instead name = name_next()
+        name: str = "default",  # not used, instead name = name_next()
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> NMEpoch:
+    ) -> NMEpoch | None:
         name = self.name_next()
         istr = name.replace(self.name_prefix, "")
         if str.isdigit(istr):
@@ -196,5 +196,6 @@ class NMEpochContainer(NMObjectContainer):
         else:
             iseq = -1
         c = NMEpoch(parent=self._parent, name=name, number=iseq)
-        super()._new(c, select=select)
-        return c
+        if super()._new(c, select=select):
+            return c
+        return None

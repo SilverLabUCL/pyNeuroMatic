@@ -355,6 +355,8 @@ class NMStatsWin(NMObject):
 
     # override
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMStatsWin):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         if self.win != other.win:
@@ -1268,7 +1270,7 @@ class NMStatsWinContainer(NMObjectContainer):
         # name: str = 'A',  use name_next()
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> NMStatsWin:
+    ) -> NMStatsWin | None:
         name = self.name_next()
         istr = name.replace(self.name_prefix, "")
         if str.isdigit(istr):
@@ -1276,8 +1278,9 @@ class NMStatsWinContainer(NMObjectContainer):
         else:
             iseq = -1
         c = NMStatsWin(parent=self._parent, name=name)
-        super()._new(c, select=select)
-        return c
+        if super()._new(c, select=select):
+            return c
+        return None
 
 
 def badvalue(n: float) -> bool:

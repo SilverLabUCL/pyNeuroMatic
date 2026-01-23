@@ -68,9 +68,9 @@ class NMChannel(NMObject):
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__x = None
-        self.__y = None
-        self.__thedata = []  # list of NMData refs for this channel
+        self.__x : NMDimensionX
+        self.__y : NMDimension
+        self.__thedata: list[NMData] = []  # list of NMData refs for this channel
 
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         # self.__transform = []
@@ -78,18 +78,19 @@ class NMChannel(NMObject):
         if copy is None:
             pass
         elif isinstance(copy, NMChannel):
-            xscale = copy._NMChannel__x.scale
-            yscale = copy._NMChannel__y.scale
+            xscale = copy.__x.scale
+            yscale = copy.__y.scale
             if self._folder is None:
                 # direct copy
-                self.__thedata = list(copy._NMChannel__thedata)
+                self.__thedata = list(copy.__thedata)
             else:
                 # grab NMData refs from copied NMDataContainer
                 # NMDataContainer should be copied before this copy
                 data = self._folder.data
-                for d in copy._NMChannel__thedata:
+                for d in copy.__thedata:
                     o = data.get(d.name)
-                    self.__thedata.append(o)
+                    if isinstance(o, NMData):
+                        self.__thedata.append(o)
         else:
             e = nmu.typeerror(copy, "copy", NMChannel)
             raise TypeError(e)
@@ -124,6 +125,8 @@ class NMChannel(NMObject):
 
     # override
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMChannel):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         if self.x.scale != other.x.scale:
@@ -144,8 +147,14 @@ class NMChannel(NMObject):
     @property
     def parameters(self) -> dict[str, object]:
         k = super().parameters
-        k.update({"xscale": self.__x.scale})
-        k.update({"yscale": self.__y.scale})
+        if isinstance(self.__x, NMDimensionX):
+            k.update({"xscale": self.__x.scale})
+        else:
+            k.update({"xscale": {}})
+        if isinstance(self.__y, NMDimension):
+            k.update({"yscale": self.__y.scale})
+        else:
+            k.update({"yscale": {}})
         # k.update({'graphXY': self.__graphXY})
         # k.update({'transform': self.__transform})
         return k
@@ -170,12 +179,12 @@ class NMChannelContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: object = None,
+        parent: object | None = None,
         name: str = "NMChannelContainer0",
         rename_on: bool = False,
         name_prefix: str = "",  # default is no prefix
         name_seq_format: str = "A",
-        copy: NMChannelContainer = None,
+        copy: NMChannelContainer | None = None,
     ) -> None:
         return super().__init__(
             parent=parent,
@@ -197,13 +206,14 @@ class NMChannelContainer(NMObjectContainer):
     # override
     def new(
         self,
-        # name: str = 'A',  use name_next()
+        name: str = "default",  # not used, instead name = name_next()
+        select: bool = False,
         xscale: dict | NMDimensionX = {},
         yscale: dict | NMDimension = {},
-        select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> NMChannel:
+    ) -> NMChannel | None:
         name = self.name_next()
         c = NMChannel(parent=self._parent, name=name, xscale=xscale, yscale=yscale)
-        super()._new(c, select=select)
-        return c
+        if super()._new(c, select=select):
+            return c
+        return None

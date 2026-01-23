@@ -62,20 +62,20 @@ class NMData(NMObject):
 
     def __init__(
         self,
-        parent: object = None,
+        parent: object | None = None,
         name: str = "NMData0",
         xdim: NMDimensionX | None = None,
         ydim: NMDimension | None = None,
         # dataseries: NMDataSeries | None = None,
         dataseries_channel: NMChannel | None = None,
         dataseries_epoch: NMEpoch | None = None,
-        copy: NMData = None  # see copy()
+        copy: NMData | None = None  # see copy()
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)  # NMObject
 
         # self.__dataseries = None
-        self.__dataseries_channel = None
-        self.__dataseries_epoch = None
+        self.__dataseries_channel: NMChannel | None = None
+        self.__dataseries_epoch: NMEpoch | None = None
 
         if copy is None:
             pass
@@ -125,6 +125,8 @@ class NMData(NMObject):
         self,
         other: object,
     ) -> bool:
+        if not isinstance(other, NMData):
+            return NotImplemented
         if not super().__eq__(other):
             return False
 
@@ -176,12 +178,20 @@ class NMData(NMObject):
 
     @property
     def _dataseries(self) -> NMDataSeries | None:
+        if self.__dataseries_channel is None:
+            return None
         if not isinstance(self.__dataseries_channel, NMChannel):
+            return None
+        if self.__dataseries_epoch is None:
             return None
         if not isinstance(self.__dataseries_epoch, NMEpoch):
             return None
         dataseries_c = self.__dataseries_channel._parent
+        if not isinstance(dataseries_c, NMDataSeries):
+            return None
         dataseries_e = self.__dataseries_epoch._parent
+        if not isinstance(dataseries_e, NMDataSeries):
+            return None
         if dataseries_c is dataseries_e:
             return dataseries_c
         else:
@@ -224,12 +234,12 @@ class NMDataContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: object = None,
+        parent: object | None = None,
         name: str = "NMDataContainer0",
         rename_on: bool = True,
         name_prefix: str = "data",
         name_seq_format: str = "0",
-        copy: NMDataContainer = None,
+        copy: NMDataContainer | None = None,
     ) -> None:
         super().__init__(
             parent=parent,
@@ -252,11 +262,11 @@ class NMDataContainer(NMObjectContainer):
     def new(
         self,
         name: str = "default",
+        select: bool = False,
         xdim: NMDimensionX | None = None,
         ydim: NMDimension | None = None,
-        select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> NMData:
+    ) -> NMData | None:
         name = self._newkey(name)
         d = NMData(
             parent=self._parent,
@@ -264,8 +274,9 @@ class NMDataContainer(NMObjectContainer):
             xdim=xdim,
             ydim=ydim
         )
-        super()._new(d, select=select)
-        return d
+        if super()._new(d, select=select):
+            return d
+        return None
 
     # @property
     # def dataseries(self):  # use self._folder.dataseries

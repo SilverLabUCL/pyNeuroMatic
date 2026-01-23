@@ -114,7 +114,7 @@ class NMManager(NMObject):
     def tool_add(
         self,
         toolname: str,
-        tool: NMTool = None,
+        tool: NMTool | None = None,
         select: bool = False
     ) -> None:
         if not isinstance(toolname, str):
