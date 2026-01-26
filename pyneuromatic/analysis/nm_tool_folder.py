@@ -39,28 +39,37 @@ class NMToolFolder(NMObject):
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__data_container = None  # save results to NumPy arrays
-
+        self.__data_container: NMDataContainer | None = None  # save results to NumPy arrays
+        self.__dataseries_container: NMDataContainer | None = None  # save results to NumPy arrays
+        
         if copy is None:
             pass
         elif isinstance(copy, NMToolFolder):
-            self.__data_container = copy.data.copy()
-            self.__dataseries_container = copy.dataseries.copy()
+            if copy.data is not None:
+                self.__data_container = copy.data.copy()
+            if copy.dataseries is not None:
+                self.__dataseries_container = copy.dataseries.copy()
         else:
             e = nmu.typeerror(copy, "copy", NMToolFolder)
             raise TypeError(e)
 
         if not isinstance(self.__data_container, NMDataContainer):
             self.__data_container = NMDataContainer(parent=self)
+        
+        return None
 
     # override
-    def __eq__(self, other: object) -> bool:
+    def __eq__(
+        self,
+        other: object
+    ) -> bool:
         if not isinstance(other, NMToolFolder):
             return NotImplemented
         if not super().__eq__(other):
             return False
-        if self.__data_container != other._NMToolFolder__data_container:
+        if self.__data_container != other.data:
             return False
+        return True
 
     # override, no super
     def copy(self) -> NMToolFolder:
@@ -70,12 +79,17 @@ class NMToolFolder(NMObject):
     @property
     def content(self) -> dict[str, str]:
         k = super().content
-        k.update(self.__data_container.content)
+        if self.__data_container is not None:
+            k.update(self.__data_container.content)
         return k
 
     @property
-    def data(self):
+    def data(self) -> NMDataContainer | None:
         return self.__data_container
+
+    @property
+    def dataseries(self) -> NMDataContainer | None:
+        return self.__dataseries_container
 
 
 class NMToolFolderContainer(NMObjectContainer):
@@ -90,7 +104,7 @@ class NMToolFolderContainer(NMObjectContainer):
         rename_on: bool = True,
         name_prefix: str = "toolfolder",
         name_seq_format: str = "0",
-        copy: NMToolFolderContainer = None,  # see copy()
+        copy: NMToolFolderContainer | None = None,  # see copy()
     ) -> None:
         super().__init__(
             parent=parent,

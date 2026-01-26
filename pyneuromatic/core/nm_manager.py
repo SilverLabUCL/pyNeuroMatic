@@ -29,8 +29,7 @@ from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
-# from pyneuromatic.core.nm_project import NMProjectContainer
-from pyneuromatic.core.nm_project import NMProject
+from pyneuromatic.core.nm_project import NMProject, NMProjectContainer
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_stats import NMToolStats
 import pyneuromatic.core.nm_utilities as nmu
