@@ -1,13 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-nmpy - NeuroMatic in Python
-Copyright 2019 Jason Rothman
-"""
-import math
-import numpy
+[Module description].
 
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
+"""
+from __future__ import annotations
+import numpy
 # import numpy.typing as npt # No module named 'numpy.typing
-from typing import Dict, Union
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
@@ -49,20 +62,20 @@ class NMData(NMObject):
 
     def __init__(
         self,
-        parent: object = None,
-        name: str = "NMData",
-        xdim: Union[nmu.NMDimensionXType, None] = None,
-        ydim: Union[nmu.NMDimensionType, None] = None,
-        # dataseries: Union[nmu.NMDataSeriesType, None] = None,
-        dataseries_channel: Union[nmu.NMChannelType, None] = None,
-        dataseries_epoch: Union[nmu.NMEpochType, None] = None,
-        copy: nmu.NMDataType = None  # see copy()
+        parent: object | None = None,
+        name: str = "NMData0",
+        xdim: NMDimensionX | None = None,
+        ydim: NMDimension | None = None,
+        # dataseries: NMDataSeries | None = None,
+        dataseries_channel: NMChannel | None = None,
+        dataseries_epoch: NMEpoch | None = None,
+        copy: NMData | None = None  # see copy()
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)  # NMObject
 
         # self.__dataseries = None
-        self.__dataseries_channel = None
-        self.__dataseries_epoch = None
+        self.__dataseries_channel: NMChannel | None = None
+        self.__dataseries_epoch: NMEpoch | None = None
 
         if copy is None:
             pass
@@ -74,7 +87,7 @@ class NMData(NMObject):
             # dataseries_channel = copy._NMData__dataseries_channel
             # dataseries_epoch = copy._NMData__dataseries_epoch
         else:
-            e = nmu.typeerror(copy, "copy", "NMData")
+            e = nmu.typeerror(copy, "copy", NMData)
             raise TypeError(e)
 
         if xdim is None:
@@ -104,14 +117,16 @@ class NMData(NMObject):
         # TODO: option that x-scale is an array (ref to NMData)
 
     # override, no super
-    def copy(self) -> nmu.NMDataType:
+    def copy(self) -> NMData:
         return NMData(copy=self)
 
     # override
     def __eq__(
         self,
-        other: nmu.NMDataType,
+        other: object,
     ) -> bool:
+        if not isinstance(other, NMData):
+            return NotImplemented
         if not super().__eq__(other):
             return False
 
@@ -128,7 +143,7 @@ class NMData(NMObject):
 
     # override
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
         k.update({"x": self.x.parameters})
         k.update({"y": self.y.parameters})
@@ -148,27 +163,35 @@ class NMData(NMObject):
         return k
 
     @property
-    def x(self) -> nmu.NMDimensionXType:
+    def x(self) -> NMDimensionX:
         if isinstance(self.__dataseries_channel, NMChannel):
             if isinstance(self.__dataseries_channel.x, NMDimensionX):
                 return self.__dataseries_channel.x
         return self.__x
 
     @property
-    def y(self) -> nmu.NMDimensionType:
+    def y(self) -> NMDimension:
         if isinstance(self.__dataseries_channel, NMChannel):
             if isinstance(self.__dataseries_channel.y, NMDimension):
                 return self.__dataseries_channel.y
         return self.__y
 
     @property
-    def _dataseries(self) -> Union[nmu.NMDataSeriesType, None]:
+    def _dataseries(self) -> NMDataSeries | None:
+        if self.__dataseries_channel is None:
+            return None
         if not isinstance(self.__dataseries_channel, NMChannel):
+            return None
+        if self.__dataseries_epoch is None:
             return None
         if not isinstance(self.__dataseries_epoch, NMEpoch):
             return None
         dataseries_c = self.__dataseries_channel._parent
+        if not isinstance(dataseries_c, NMDataSeries):
+            return None
         dataseries_e = self.__dataseries_epoch._parent
+        if not isinstance(dataseries_e, NMDataSeries):
+            return None
         if dataseries_c is dataseries_e:
             return dataseries_c
         else:
@@ -179,18 +202,18 @@ class NMData(NMObject):
             raise ValueError(e)
 
     @property
-    def _dataseries_channel(self) -> Union[nmu.NMChannelType, None]:
+    def _dataseries_channel(self) -> NMChannel | None:
         return self.__dataseries_channel
 
     @property
-    def _dataseries_epoch(self) -> Union[nmu.NMEpochType, None]:
+    def _dataseries_epoch(self) -> NMEpoch | None:
         return self.__dataseries_epoch
 
     def _dataseries_set(
         self,
-        channel: Union[nmu.NMChannelType, None],
-        epoch: Union[nmu.NMEpochType, None],
-    ) -> Union[nmu.NMDataSeriesType, None]:
+        channel: NMChannel | None,
+        epoch: NMEpoch | None,
+    ) -> NMDataSeries | None:
         if channel is None or isinstance(channel, NMChannel):
             self.__dataseries_channel = channel
         else:
@@ -211,12 +234,12 @@ class NMDataContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: object = None,
-        name: str = "NMDataContainer",
+        parent: object | None = None,
+        name: str = "NMDataContainer0",
         rename_on: bool = True,
         name_prefix: str = "data",
         name_seq_format: str = "0",
-        copy: nmu.NMDataContainerType = None,
+        copy: NMDataContainer | None = None,
     ) -> None:
         super().__init__(
             parent=parent,
@@ -228,7 +251,7 @@ class NMDataContainer(NMObjectContainer):
         )
 
     # override, no super
-    def copy(self) -> nmu.NMDataContainerType:
+    def copy(self) -> NMDataContainer:
         return NMDataContainer(copy=self)
 
     # override, no super
@@ -239,11 +262,11 @@ class NMDataContainer(NMObjectContainer):
     def new(
         self,
         name: str = "default",
-        xdim: Union[nmu.NMDimensionXType, None] = None,
-        ydim: Union[nmu.NMDimensionType, None] = None,
         select: bool = False,
+        xdim: NMDimensionX | None = None,
+        ydim: NMDimension | None = None,
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMDataType:
+    ) -> NMData | None:
         name = self._newkey(name)
         d = NMData(
             parent=self._parent,
@@ -251,8 +274,9 @@ class NMDataContainer(NMObjectContainer):
             xdim=xdim,
             ydim=ydim
         )
-        super().new(d, select=select)
-        return d
+        if super()._new(d, select=select):
+            return d
+        return None
 
     # @property
     # def dataseries(self):  # use self._folder.dataseries

@@ -1,9 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-NMPY - NeuroMatic in Python
-Copyright 2019 Jason Rothman
+[Module description].
+
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
 """
-from typing import Dict, Union
+from __future__ import annotations
 
 from pyneuromatic.core.nm_folder import NMFolderContainer
 from pyneuromatic.core.nm_object import NMObject
@@ -29,9 +44,9 @@ class NMProject(NMObject):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMProject",
-        copy: Union[nmu.NMProjectType, None] = None,  # see copy()
+        parent: object | None = None,
+        name: str = "NMProject0",
+        copy: NMProject | None = None,  # see copy()
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
@@ -40,10 +55,11 @@ class NMProject(NMObject):
         if copy is None:
             pass
         elif isinstance(copy, NMProject):
-            self.__folder_container = copy.folders.copy()
-            self.__folder_container._parent = self
+            if isinstance(copy.folders, NMFolderContainer):
+                self.__folder_container = copy.folders.copy()
+                self.__folder_container._parent = self
         else:
-            e = nmu.typeerror(copy, "copy", "NMProject")
+            e = nmu.typeerror(copy, "copy", NMProject)
             raise TypeError(e)
 
         if not isinstance(self.__folder_container, NMFolderContainer):
@@ -52,24 +68,27 @@ class NMProject(NMObject):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMProjectType) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMProject):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         return self.folders == other.folders
 
     # override, no super
-    def copy(self) -> nmu.NMProjectType:
+    def copy(self) -> NMProject:
         return NMProject(copy=self)
 
     # override
     @property
-    def content(self) -> Dict[str, str]:
+    def content(self) -> dict[str, str]:
         k = super().content
-        k.update(self.__folder_container.content)
+        if self.__folder_container is not None:
+            k.update(self.__folder_container.content)
         return k
 
     @property
-    def folders(self) -> nmu.NMFolderContainerType:
+    def folders(self) -> NMFolderContainer | None:
         return self.__folder_container
 
 
@@ -80,12 +99,12 @@ class NMProjectContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMProjectContainer",
+        parent: object | None = None,
+        name: str = "NMProjectContainer0",
         rename_on: bool = True,
         name_prefix: str = "project",
         name_seq_format: str = "0",
-        copy: Union[nmu.NMProjectContainerType, None] = None,  # see copy()
+        copy: NMProjectContainer | None = None,  # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -97,7 +116,7 @@ class NMProjectContainer(NMObjectContainer):
         )  # NMObjectContainer
 
     # override, no super
-    def copy(self) -> nmu.NMProjectContainerType:
+    def copy(self) -> NMProjectContainer:
         return NMProjectContainer(copy=self)
 
     # override, no super
@@ -110,8 +129,9 @@ class NMProjectContainer(NMObjectContainer):
         name: str = "default",
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMProjectType:
+    ) -> NMProject | None:
         name = self._newkey(name)
         p = NMProject(parent=self, name=name)
-        super().new(p, select=select)
-        return p
+        if super()._new(p, select=select):
+            return p
+        return None

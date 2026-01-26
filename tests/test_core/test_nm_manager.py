@@ -659,7 +659,7 @@ class NMManagerTest(unittest.TestCase):
         elist = self.nm.execute_keys_set(e0)
         e1 = []
         for i in range(NUMCHANNELS[2]):
-            c = nmu.CHANNEL_LIST[i]
+            c = nmu.CHANNEL_CHARS[i]
             e0c = e0.copy()
             e0c.update({"channel": c})
             e1.append(e0c)

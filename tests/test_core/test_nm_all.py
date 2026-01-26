@@ -28,7 +28,7 @@ if __name__ == "__main__":
     # c = 'nm_object_test.NMObjectTest.'
     # suite.addTests(loader.loadTestsFromName(c+'test00_init'))
 
-    suite.addTests(loader.loadTestsFromModule(nm_utilities_test))
+    suite.addTests(loader.loadTestsFromModule(test_nm_utilities))
     # suite.addTests(loader.loadTestsFromModule(nm_object_test))
     # suite.addTests(loader.loadTestsFromModule(nm_object_container_test))
     # suite.addTests(loader.loadTestsFromModule(nm_manager_test))

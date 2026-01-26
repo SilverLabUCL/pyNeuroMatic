@@ -308,7 +308,7 @@ class NMStatsTest(unittest.TestCase):
         for k in keys:
             self.assertTrue(k in r[0])
         self.assertEqual(r[0]["id"], "bsln")
-        self.assertEqual(r[0]["data"], self.datanan.treepath())
+        self.assertEqual(r[0]["data"], self.datanan._treepath_str())
         keys = ['win', 'id', 'func', 'x0', 'x1', 'data', 'i0', 'i1',
                 'n', 'nans', 'infs', 's', 'sunits', 'i',
                 'x', 'xunits', 'Δs']
@@ -544,7 +544,7 @@ class NMStatsTest(unittest.TestCase):
         keys = ['data', 'i0', 'i1', 'n', 'nans', 'infs', 's', 'sunits',
                 'i', 'x', 'xunits']
         self.assertEqual(list(r.keys()), keys)
-        self.assertEqual(r["data"], self.datanan.treepath())
+        self.assertEqual(r["data"], self.datanan._treepath_str())
         self.assertEqual(r["i0"], 0)  # xclip = True
         pnts = len(self.datanan.y.nparray)
         self.assertEqual(r["i1"], pnts-1)  # xclip = True

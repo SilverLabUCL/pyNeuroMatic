@@ -1,12 +1,26 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Jul  9 07:45:13 2023
+[Module description].
 
-@author: jason
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
 """
+from __future__ import annotations
 from collections.abc import MutableMapping
-from typing import Callable, Dict, List, Tuple, Union
+from typing import Callable, Any
 
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
@@ -34,23 +48,24 @@ class NMSets(NMObject, MutableMapping):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: Union[str, None] = "NMSets0",
-        nmobjects_fxnref: Union[Callable, None] = None,
-        nmobjects: Union[Dict[str, nmu.NMObjectType], None] = None,
+        parent: object | None = None,
+        name: str | None = "NMSets0",
+        nmobjects_fxnref: Callable | None = None,
+        nmobjects: dict[str, NMObject] | None = None,
         # it is safer to use nmobjects_fxnref than nmobjects
         # to avoid problems of reference change of dictionary
         # e.g. NMObjectContainer rename() or reorder()
-        copy: Union[nmu.NMSetsType, None] = None,  # see copy()
+        copy: NMSets | None = None,  # see copy()
     ) -> None:
+        actual_name = name if name is not None else "NMSets0"
         super().__init__(
             parent=parent,
-            name=name,
+            name=actual_name,
             notes_on=False,  # turn notes off during __init__
             copy=copy,
         )  # NMObject
-
-        self.__map = {}  # {key: [NMObject]} or {key: [Equation]}
+  
+        self.__map: dict[str, Any] = {} # {key: [NMObject]} or {key: [Equation]}
         self.__nmobjects = {}  # {keys: [NMObjects]}
         self.__nmobjects_fxnref = self._nmobjects_dict_default
 
@@ -109,9 +124,13 @@ class NMSets(NMObject, MutableMapping):
                 if NMSets.listisequation(olist):
                     self.__map[key] = olist.copy()
                     continue
-                # else copy normal set
+                # else copy normal set (list of NMObjects)
+                obj_list: list[NMObject] = []
+                for item in olist:
+                    if isinstance(item, NMObject):
+                        obj_list.append(item)
                 olist_new = []
-                finished = olist.copy()
+                finished_objs: list[NMObject] = obj_list.copy()
                 for k, o1 in self._nmobjects_dict.items():
                     # maintain list order of self._nmobjects_dict
                     if not isinstance(o1, NMObject):
@@ -119,7 +138,7 @@ class NMSets(NMObject, MutableMapping):
                         e = nmu.typeerror(o1, e, "NMObject")
                         raise TypeError(e)
                     found = False
-                    for o2 in olist:
+                    for o2 in obj_list:
                         # want matching type, so do not use isinstance()
                         if type(o2) != type(o1):
                             e = "copy: '%s' value" % key
@@ -130,14 +149,14 @@ class NMSets(NMObject, MutableMapping):
                             break
                     if found:
                         olist_new.append(o1)
-                        finished.remove(o2)
-                if len(finished) > 0:
-                    nlist = []
-                    for o in finished:
+                        finished_objs.remove(o2)
+                if len(finished_objs) > 0:
+                    nlist: list[str] = []
+                    for o in finished_objs:
                         nlist.append(o.name)
                     raise KeyError(
                         "copy: '%s': the following list "
-                        "items do not exist: " + str(nlist) % key
+                        "items do not exist: %s" % (key, str(nlist))
                     )
                 self.__map[key] = olist_new
         else:
@@ -149,23 +168,23 @@ class NMSets(NMObject, MutableMapping):
         return None
 
     @property
-    def _nmobjects_dict(self) -> Dict[str, nmu.NMObjectType]:
+    def _nmobjects_dict(self) -> dict[str, NMObject]:
         return self.__nmobjects_fxnref()
 
-    def _nmobjects_dict_default(self) -> Dict[str, nmu.NMObjectType]:
+    def _nmobjects_dict_default(self) -> dict[str, NMObject]:
         return self.__nmobjects
 
     # override, no super
     def copy(
         self,
-        nmobjects: Union[Dict[str, nmu.NMObjectType], None] = None,
-        nmobjects_fxnref: Union[Callable, None] = None,
-    ) -> nmu.NMSetsType:
+        nmobjects: dict[str, NMObject] | None = None,
+        nmobjects_fxnref: Callable | None = None,
+    ) -> NMSets:
         return NMSets(nmobjects=nmobjects, nmobjects_fxnref=nmobjects_fxnref, copy=self)
 
     # override
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
         k.update({"sets": list(self.__map.keys())})
         return k
@@ -174,34 +193,38 @@ class NMSets(NMObject, MutableMapping):
     # __getitem__, __setitem__, __delitem__, __iter__, __len__
 
     # MutableMapping required abstract method
-    def __getitem__(self, key: str) -> List[nmu.NMObjectType]:
+    def __getitem__(self, key: str) -> list[NMObject]:
         """
         called by:
             get(), setdefault(), items(), values(), pop(), popitem(), clear()
         """
-        return self.get(key)  # return list of nmobjects
+        return self.get(key)  # type: ignore[return-value]  # returns list of nmobjects
 
     # MutableMapping required abstract method
     def __setitem__(
         self,
         key: str,
-        olist: Union[str, List[str], nmu.NMObjectType, List[nmu.NMObjectType]],
-        add: bool = False  # extra parameter
-        # NMObject names or set equation or NMObjects
+        olist: str | list[str] | NMObject | list[NMObject],
     ) -> None:
-        # print('__setitem__: ' + key + ', ' + str(olist))
         """
         called by '=' and update()
         e.g. sets['Set1'] = ['RecordA0', 'RecordA3']
         e.g. sets['Set3'] = ['Set1', '&', 'Set2']
         ['&', '|', '-', '^']
         """
+        self._setitem(key, olist, add=False)
 
-        k = self._getkey(key, error2=False)
-        if k is None:  # new key
+    def _setitem(
+        self,
+        key: str,
+        olist: str | list[str] | NMObject | list[NMObject],
+        add: bool = False,
+    ) -> None:
+        k = self._getkey(key)
+        if k == "none":  # new key
             key = self._newkey(key)
             new = True
-            olist_old = None
+            olist_old: list[Any] | None = None
             add = False
         else:  # key exists
             key = k
@@ -217,13 +240,16 @@ class NMSets(NMObject, MutableMapping):
                 if len(olist_old) == 0:
                     add = False
 
-        if isinstance(olist, str) or isinstance(olist, NMObject):
-            olist = [olist]
-        elif not isinstance(olist, list):
+        items: list[Any]
+        if isinstance(olist, (str, NMObject)):
+            items = [olist]
+        elif isinstance(olist, list):
+            items = list(olist)
+        else:
             e = nmu.typeerror(olist, "olist", "string or NMObject or list")
             raise TypeError(e)
 
-        if NMSets.listisequation(olist):
+        if NMSets.listisequation(items):
             # equation is saved, not NMObjects
             # this is important since sets can change
             if not new:  # can only overwrite an existing equation
@@ -231,46 +257,52 @@ class NMSets(NMObject, MutableMapping):
                     raise ValueError("cannot 'add' to an existing equation")
                 if olist_old and not NMSets.listisequation(olist_old):
                     raise ValueError("set '%s' exists and is not an equation" % key)
-            olist_new = []
-            for istr in olist:
-                if istr in ["&", "|", "-", "^"]:
+            olist_new: list[Any] = []
+            for istr in items:
+                if isinstance(istr, str) and istr in ["&", "|", "-", "^"]:
                     pass  # ok
-                else:
+                elif isinstance(istr, str):
                     istr = self._getkey(istr)
                 olist_new.append(istr)
             if new:
                 self.__map[key] = olist_new
             else:
+                assert olist_old is not None
                 olist_old.clear()
                 olist_old.extend(olist_new)
             return None  # finished equation
 
         allkeys = True
-        for o in olist:
+        for o in items:
             if not isinstance(o, str):
                 allkeys = False
                 break
 
         if allkeys:  # convert keys to NMObjects
+            str_items: list[str] = [
+                s for s in items if isinstance(s, str)
+            ]
             if add:
+                assert olist_old is not None
                 for o in olist_old:
-                    olist.append(o.name)
-            klist = self.__match_to_nmobject_keys(olist)
+                    str_items.append(o.name)
+            klist = self.__match_to_nmobject_keys(str_items)
             olist_new = []
             for k in klist:
-                o = self._nmobjects_dict.get(k)
-                if o not in olist_new:
-                    olist_new.append(o)
+                nmobj = self._nmobjects_dict.get(k)
+                if nmobj not in olist_new:
+                    olist_new.append(nmobj)
             if new:
                 self.__map[key] = olist_new
             else:
+                assert olist_old is not None
                 olist_old.clear()
                 olist_old.extend(olist_new)
             return None  # finished keys
 
-        # else: olist contains NMObjects
-
-        for o in olist:
+        # else: items contains NMObjects
+        obj_items: list[NMObject] = []
+        for o in items:
             if not isinstance(o, NMObject):
                 e = nmu.typeerror(o, "olist: list item", "NMObject")
                 raise TypeError(e)
@@ -281,13 +313,15 @@ class NMSets(NMObject, MutableMapping):
                     break
             if not found:
                 raise ValueError("olist: list item '%s' does not exist" % o.name)
+            obj_items.append(o)
 
         if add:
-            olist += olist_old
+            assert olist_old is not None
+            obj_items += olist_old
         olist_new = []  # match order to self._nmobjects_dict
-        finished = olist.copy()
+        finished = obj_items.copy()
         for o in self._nmobjects_dict.values():
-            if o in olist and o not in olist_new:
+            if o in obj_items and o not in olist_new:
                 olist_new.append(o)
                 finished.remove(o)
         for o in finished:  # finished may contain duplicate NMObjects
@@ -298,6 +332,7 @@ class NMSets(NMObject, MutableMapping):
         if new:
             self.__map[key] = olist_new
         else:
+            assert olist_old is not None
             olist_old.clear()
             olist_old.extend(olist_new)
         return None
@@ -308,7 +343,7 @@ class NMSets(NMObject, MutableMapping):
         called by: 'del', pop(), popitem(), clear()
         # e.g. del self.__map[key]
         """
-        return self.pop(key)  # allows delete confirmation
+        self.pop(key)  # allows delete confirmation
 
     # MutableMapping required abstract method
     def __iter__(self):
@@ -329,11 +364,13 @@ class NMSets(NMObject, MutableMapping):
     # no way to obtain set equation via items() or values()
 
     # override MutableMapping mixin method
-    def __contains__(self, key: str) -> bool:
+    def __contains__(self, key: object) -> bool:
         # called by 'in'
         # print('__contains__ ' + str(key))
-        key = self._getkey(key, error1=False, error2=False)
-        return key is not None
+        if not isinstance(key, str):
+            return False
+        key = self._getkey(key)
+        return key != "none"
 
     # override MutableMapping mixin method
     def get(
@@ -343,9 +380,9 @@ class NMSets(NMObject, MutableMapping):
         get_equation: bool = False,  # extra parameter
         # return equation if one exists, otherwise returns NMObject list
         get_keys: bool = False,  # extra parameter
-    ) -> Union[List[nmu.NMObjectType], List[str]]:
-        key = self._getkey(key, error1=False, error2=False)
-        if key is None:
+    ) -> list[NMObject] | list[str] | None:
+        key = self._getkey(key)
+        if key == "none":
             return default
 
         olist = self.__map[key]
@@ -354,7 +391,7 @@ class NMSets(NMObject, MutableMapping):
             if get_equation:
                 return olist  # equation is saved in map
 
-            set0 = set()
+            set0: set[str] = set() # set0 = set()
             for i, eq_item in enumerate(olist):
                 if i == 0:
                     key0 = self._getkey(eq_item)
@@ -366,7 +403,7 @@ class NMSets(NMObject, MutableMapping):
                     op = eq_item
                 elif op:
                     key1 = self._getkey(eq_item)
-                    set1 = set()
+                    set1: set[str] = set()
                     for nmobject in self.__map[key1]:
                         set1.add(nmobject.name)
                     if op == "&":
@@ -407,33 +444,43 @@ class NMSets(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     # children should override if new parameters are declared
-    def __eq__(self, other: nmu.NMSetsType) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMSets):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         # first compare self.__map
         s_keys = self.keys()
-        if not nmu.keys_are_equal(s_keys, other.keys()):
+        if not nmu.keys_are_equal(list(s_keys), list(other.keys())):
             return False
         for s_key in s_keys:
             s_olist = self.__map[s_key]
             if NMSets.listisequation(s_olist):
-                o_olist = other.get(s_key, get_equation=True)
-                if not NMSets.listisequation(o_olist):
+                o_olist_eq = other.get(s_key, get_equation=True)
+                if not NMSets.listisequation(o_olist_eq):
+                    return False
+                if not isinstance(s_olist, list) or not isinstance(o_olist_eq, list):
                     return False
                 for i, sstr in enumerate(s_olist):
                     # items need to be in same sequence
                     # set names are case insensitive
-                    ostr = o_olist[i]
-                    if sstr.lower() != ostr.lower():
-                        return False
+                    ostr = o_olist_eq[i]
+                    if isinstance(sstr, str) and isinstance(ostr, str):
+                        if sstr.lower() != ostr.lower():
+                            return False
             else:
-                o_olist = other.get(s_key)
-                if not NMObject.lists_are_equal(s_olist, o_olist):
+                o_olist_obj = other.get(s_key)
+                if not isinstance(o_olist_obj, list):
+                    return False
+                if not NMObject.lists_are_equal(
+                    s_olist,
+                    o_olist_obj,  # type: ignore[arg-type]
+                ):
                     return False
         if "nmobjects" in self._eq_list:
             for s_key in self._nmobjects_dict.keys():
-                o_key = other._get_nmobject_key(s_key, error1=False, error2=False)
-                if o_key is None:
+                o_key = other._get_nmobject_key(s_key)
+                if o_key is None or o_key == "none":
                     return False
                 s = self._nmobjects_dict[s_key]
                 o = other._nmobjects_dict[o_key]
@@ -444,11 +491,11 @@ class NMSets(NMObject, MutableMapping):
     # MutableMapping Mixin Methods: pop, popitem, clear, update, setdefault
 
     # override MutableMapping mixin method
-    def pop(
+    def pop(  # type: ignore[override]
         self,
         key: str,
-        confirm_answer: Union[str, None] = None,  # to skip confirm prompt
-    ) -> List[nmu.NMObjectType]:
+        confirm_answer: str | None = None,  # to skip confirm prompt
+    ) -> list[NMObject] | None:
         # removed 'default' parameter
         key = self._getkey(key)
         if nmp.DELETE_CONFIRM:
@@ -456,8 +503,8 @@ class NMSets(NMObject, MutableMapping):
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete '%s'?" % key
-                ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel pop '%s'" % key)
@@ -466,26 +513,26 @@ class NMSets(NMObject, MutableMapping):
         return o
 
     # override MutableMapping mixin method
-    def popitem(  # delete last item
-        self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
-    ) -> Tuple[str, List[nmu.NMObjectType]]:
+    def popitem(  # type: ignore[override]  # delete last item
+        self, confirm_answer: str | None = None  # to skip confirm prompt
+    ) -> tuple[str, list[NMObject]] | None:
         """
         Must override, otherwise first item is deleted rather than last.
         Consider deprecating to prevent accidental deletes.
         """
         if len(self.__map) == 0:
-            return ()
+            return None
         klist = list(self.__map.keys())
         key = klist[-1]  # last key
         olist = self.pop(key=key, confirm_answer=confirm_answer)
         if olist:
             return (key, olist)
-        return ()  # return tuple to be consistent with Python
+        return None
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
     def clear(
-        self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
+        self, confirm_answer: str | None = None  # to skip confirm prompt
     ) -> None:
         if len(self) == 0:
             return None
@@ -496,8 +543,8 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to delete the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel delete all")
@@ -510,8 +557,8 @@ class NMSets(NMObject, MutableMapping):
     # override MutableMapping mixin method
     def setdefault(self, key, default=None):
         # have to override to get default option to work
-        k = self._getkey(key, error1=False, error2=False)
-        if k is None:
+        k = self._getkey(key)
+        if k == "none":
             if default is None:
                 return None
             self.__setitem__(key, default)
@@ -521,21 +568,17 @@ class NMSets(NMObject, MutableMapping):
     # NMSets methods...
 
     def _getkey(
-        self, key: str, error1: bool = True, error2: bool = True  # set key
+        self,
+        key: str
     ) -> str:
         # wrapper function for input parameter key
         # forces keys/names to be case insensitive
         if not isinstance(key, str):
-            if error1:
-                e = nmu.typeerror(key, "key", "string")
-                raise TypeError(e)
-            return None
+            return "none"
         for k in self.__map.keys():
             if k.lower() == key.lower():  # keys are case insensitive
                 return k  # return key from self.__map
-        if error2:
-            raise KeyError("key '%s' does not exist" % key)
-        return None
+        return "none"
 
     def _newkey(
         self,
@@ -559,15 +602,15 @@ class NMSets(NMObject, MutableMapping):
             raise TypeError(e)
         for i in range(trials):
             newkey = prefix + str(i)
-            key = self._getkey(newkey, error2=False)
-            if key is None:
+            key = self._getkey(newkey)
+            if key == "none":
                 newkey = self._newkey(newkey)
                 return newkey
         raise ValueError("failed to find next name for NMSets '%s'" % self.name)
 
     def _get_nmobject_key(
         self, nmobject_key: str, error1: bool = True, error2: bool = True
-    ) -> str:
+    ) -> str | None:
         # wrapper function for nmobject_key
         # forces keys/names to be case insensitive
         if not isinstance(nmobject_key, str):
@@ -585,17 +628,22 @@ class NMSets(NMObject, MutableMapping):
     def contains(
         self,
         key: str,
-        olist: Union[str, List[str], nmu.NMObjectType, List[nmu.NMObjectType]],
+        olist: str | list[str] | NMObject | list[NMObject]
     ) -> bool:
-        key = self._getkey(key, error1=False, error2=False)
-        if key is None:
+        key = self._getkey(key)
+        if key == "none":
             return False
-        if isinstance(olist, str) or isinstance(olist, NMObject):
-            olist = [olist]
-        elif not isinstance(olist, list):
+        items: list[Any]
+        if isinstance(olist, (str, NMObject)):
+            items = [olist]
+        elif isinstance(olist, list):
+            items = list(olist)
+        else:
             return False
         klist = self.get(key, get_keys=True)
-        for o in olist:
+        if not isinstance(klist, list):
+            return False
+        for o in items:
             if isinstance(o, NMObject):
                 k1 = o.name
             elif isinstance(o, str):
@@ -604,14 +652,14 @@ class NMSets(NMObject, MutableMapping):
                 return False
             found = False
             for k2 in klist:
-                if k1.lower() == k2.lower():
+                if isinstance(k2, str) and k1.lower() == k2.lower():
                     found = True
                     break
             if not found:
                 return False
         return True
 
-    def __match_to_nmobject_keys(self, nmobject_keys: List[str]) -> List[str]:
+    def __match_to_nmobject_keys(self, nmobject_keys: list[str]) -> list[str]:
         # match key list to self.__nmobjects
         if isinstance(nmobject_keys, str):
             nmobject_keys = [nmobject_keys]
@@ -644,13 +692,14 @@ class NMSets(NMObject, MutableMapping):
         self,
         key: str,
     ) -> bool:
-        key = self._getkey(key, error1=False, error2=False)
-        if not key:
+        key = self._getkey(key)
+        if key == "none":
             return False
         return NMSets.listisequation(self.__map[key])
 
+    @staticmethod
     def listisequation(
-        equation: List[str],  # e.g. ['set1', '&', 'set2']
+        equation: object  # e.g. ['set1', '&', 'set2']
     ) -> bool:
         # checks format of list items
         # does not check if sets exist
@@ -670,15 +719,15 @@ class NMSets(NMObject, MutableMapping):
                 return False
         return found_symbol
 
-    def new(self, newkey: str = "default") -> str:
+    def new(self, newkey: str = "default") -> tuple[str, list[NMObject]]:
         newkey = self._newkey(newkey)
-        olist = []
+        olist: list[Any] = []
         self.__map[newkey] = olist  # empty set
         return (newkey, olist)
 
     def duplicate(
         self, key: str, newkey: str = "default"
-    ) -> Dict[str, List[nmu.NMObjectType]]:
+    ) -> tuple[str, list[NMObject]]:
         key = self._getkey(key)
         newkey = self._newkey(newkey)
         clist = []
@@ -701,7 +750,7 @@ class NMSets(NMObject, MutableMapping):
         self.__map.update(new_map)
         return newkey
 
-    def reorder(self, newkeyorder: List[str]) -> None:
+    def reorder(self, newkeyorder: list[str]) -> None:
         """
         Cannot change map key names.
         TODO: order by name, creation date, modified date
@@ -730,7 +779,7 @@ class NMSets(NMObject, MutableMapping):
     def empty(
         self,
         key: str,
-        confirm_answer: Union[str, None] = None,  # to skip confirm prompt
+        confirm_answer: str | None = None,  # to skip confirm prompt
     ) -> None:
         key = self._getkey(key)
         if nmp.DELETE_CONFIRM:
@@ -738,8 +787,8 @@ class NMSets(NMObject, MutableMapping):
                 ync = confirm_answer
             else:
                 q = "are you sure you want to empty '%s'?" % key
-                ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel empty '%s'" % key)
@@ -749,7 +798,7 @@ class NMSets(NMObject, MutableMapping):
         return None
 
     def empty_all(
-        self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
+        self, confirm_answer: str | None = None  # to skip confirm prompt
     ) -> None:
         if nmp.DELETE_CONFIRM:
             if confirm_answer in nmu.CONFIRM_YNC:
@@ -758,8 +807,8 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to empty the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel empty all")
@@ -771,21 +820,26 @@ class NMSets(NMObject, MutableMapping):
     def add(
         self,
         key: str,
-        olist: Union[str, List[str], nmu.NMObjectType, List[nmu.NMObjectType]] = [],
+        olist: str | list[str] | NMObject | list[NMObject] | None = None,
     ) -> None:
-        self.__setitem__(key, olist, add=True)
+        if olist is None:
+            olist = []
+        self._setitem(key, olist, add=True)
         return None
 
     def remove(
         self,
         key: str,
-        olist: Union[str, List[str], nmu.NMObjectType, List[nmu.NMObjectType]],
+        olist: str | list[str] | NMObject | list[NMObject],
         error: bool = True,
-    ) -> List[nmu.NMObjectType]:
+    ) -> list[NMObject]:
         key = self._getkey(key)
-        if isinstance(olist, str) or isinstance(olist, NMObject):
-            olist = [olist]
-        elif not isinstance(olist, list):
+        items: list[Any]
+        if isinstance(olist, (str, NMObject)):
+            items = [olist]
+        elif isinstance(olist, list):
+            items = list(olist)
+        else:
             if error:
                 e = nmu.typeerror(olist, "olist", "string or NMObject or list")
                 raise TypeError(e)
@@ -798,8 +852,8 @@ class NMSets(NMObject, MutableMapping):
                     "'%s' since it is an equation" % key
                 )
             return []
-        remove_list = []
-        for o1 in olist:
+        remove_list: list[NMObject] = []
+        for o1 in items:
             found = False
             for o2 in olist_old:
                 if not isinstance(o2, NMObject):
@@ -838,22 +892,25 @@ class NMSets(NMObject, MutableMapping):
 
     def remove_from_all(
         self,
-        olist: Union[str, List[str], nmu.NMObjectType, List[nmu.NMObjectType]],
+        olist: str | list[str] | NMObject | list[NMObject],
         error: bool = False,
     ) -> None:
-        if isinstance(olist, str) or isinstance(olist, NMObject):
-            olist = [olist]
-        elif not isinstance(olist, list):
+        items: list[Any]
+        if isinstance(olist, (str, NMObject)):
+            items = [olist]
+        elif isinstance(olist, list):
+            items = list(olist)
+        else:
             e = nmu.typeerror(olist, "olist", "string or NMObject or list")
             raise TypeError(e)
-        for o in olist:
-            if isinstance(o, str) or isinstance(o, NMObject):
+        for o in items:
+            if isinstance(o, (str, NMObject)):
                 pass
             else:
                 e = "olist: list item"
                 e = nmu.typeerror(o, e, "string or NMObject")
                 raise TypeError(e)
-            for key, olist in self.__map.items():
-                if not NMSets.listisequation(olist):
-                    self.remove(key, o, error=error)
+            for map_key, map_val in self.__map.items():
+                if not NMSets.listisequation(map_val):
+                    self.remove(map_key, o, error=error)
         return None

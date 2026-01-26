@@ -1,14 +1,31 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-nmpy - NeuroMatic in Python
-Copyright 2019 Jason Rothman
+[Module description].
+
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
 """
+from __future__ import annotations
+
+from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 import pyneuromatic.core.nm_utilities as nmu
-from typing import Dict, List, Union
+
 
 """
 NM class tree:
@@ -43,17 +60,17 @@ class NMChannel(NMObject):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMChannel",
-        xscale: Union[dict, nmu.NMDimensionXType] = {},
-        yscale: Union[dict, nmu.NMDimensionType] = {},
-        copy: Union[nmu.NMChannelType, None] = None,
+        parent: object | None = None,
+        name: str = "NMChannel0",
+        xscale: dict | NMDimensionX = {},
+        yscale: dict | NMDimension = {},
+        copy: NMChannel | None = None,
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__x = None
-        self.__y = None
-        self.__thedata = []  # list of NMData refs for this channel
+        self.__x : NMDimensionX
+        self.__y : NMDimension
+        self.__thedata: list[NMData] = []  # list of NMData refs for this channel
 
         # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
         # self.__transform = []
@@ -61,20 +78,21 @@ class NMChannel(NMObject):
         if copy is None:
             pass
         elif isinstance(copy, NMChannel):
-            xscale = copy._NMChannel__x.scale
-            yscale = copy._NMChannel__y.scale
+            xscale = copy.__x.scale
+            yscale = copy.__y.scale
             if self._folder is None:
                 # direct copy
-                self.__thedata = list(copy._NMChannel__thedata)
+                self.__thedata = list(copy.__thedata)
             else:
                 # grab NMData refs from copied NMDataContainer
                 # NMDataContainer should be copied before this copy
                 data = self._folder.data
-                for d in copy._NMChannel__thedata:
+                for d in copy.__thedata:
                     o = data.get(d.name)
-                    self.__thedata.append(o)
+                    if isinstance(o, NMData):
+                        self.__thedata.append(o)
         else:
-            e = nmu.typeerror(copy, "copy", "NMChannel")
+            e = nmu.typeerror(copy, "copy", NMChannel)
             raise TypeError(e)
 
         if xscale is None:
@@ -106,7 +124,9 @@ class NMChannel(NMObject):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMChannelType) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMChannel):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         if self.x.scale != other.x.scale:
@@ -120,29 +140,35 @@ class NMChannel(NMObject):
         return True
 
     # override, no super
-    def copy(self) -> nmu.NMChannelType:
+    def copy(self) -> NMChannel:
         return NMChannel(copy=self)
 
     # override
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
-        k.update({"xscale": self.__x.scale})
-        k.update({"yscale": self.__y.scale})
+        if isinstance(self.__x, NMDimensionX):
+            k.update({"xscale": self.__x.scale})
+        else:
+            k.update({"xscale": {}})
+        if isinstance(self.__y, NMDimension):
+            k.update({"yscale": self.__y.scale})
+        else:
+            k.update({"yscale": {}})
         # k.update({'graphXY': self.__graphXY})
         # k.update({'transform': self.__transform})
         return k
 
     @property
-    def data(self) -> List[nmu.NMDataType]:
+    def data(self) -> list[NMData]:
         return self.__thedata
 
     @property
-    def x(self) -> nmu.NMDimensionXType:
+    def x(self) -> NMDimensionX:
         return self.__x
 
     @property
-    def y(self) -> nmu.NMDimensionType:
+    def y(self) -> NMDimension:
         return self.__y
 
 
@@ -153,12 +179,12 @@ class NMChannelContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: object = None,
-        name: str = "NMChannelContainer",
+        parent: object | None = None,
+        name: str = "NMChannelContainer0",
         rename_on: bool = False,
         name_prefix: str = "",  # default is no prefix
         name_seq_format: str = "A",
-        copy: nmu.NMChannelContainerType = None,
+        copy: NMChannelContainer | None = None,
     ) -> None:
         return super().__init__(
             parent=parent,
@@ -170,7 +196,7 @@ class NMChannelContainer(NMObjectContainer):
         )
 
     # override, no super
-    def copy(self) -> nmu.NMChannelContainerType:
+    def copy(self) -> NMChannelContainer:
         return NMChannelContainer(copy=self)
 
     # override, no super
@@ -180,13 +206,14 @@ class NMChannelContainer(NMObjectContainer):
     # override
     def new(
         self,
-        # name: str = 'A',  use name_next()
-        xscale: Union[dict, nmu.NMDimensionXType] = {},
-        yscale: Union[dict, nmu.NMDimensionType] = {},
+        name: str = "default",  # not used, instead name = name_next()
         select: bool = False,
+        xscale: dict | NMDimensionX = {},
+        yscale: dict | NMDimension = {},
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMChannelType:
+    ) -> NMChannel | None:
         name = self.name_next()
         c = NMChannel(parent=self._parent, name=name, xscale=xscale, yscale=yscale)
-        super().new(c, select=select)
-        return c
+        if super()._new(c, select=select):
+            return c
+        return None

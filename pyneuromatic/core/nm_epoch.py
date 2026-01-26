@@ -1,14 +1,31 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Aug  8 19:42:59 2023
+[Module description].
 
-@author: jason
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
 """
+from __future__ import annotations
+
+from pyneuromatic.core.nm_data import NMData
+from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 import pyneuromatic.core.nm_utilities as nmu
-from typing import List, Union
+
 
 """
 NM class tree:
@@ -43,32 +60,48 @@ class NMEpoch(NMObject):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMEpoch",
+        parent: object | None = None,
+        name: str = "NMEpoch0",
         number: int = -1,
-        copy: Union[nmu.NMEpochType, None] = None,
+        copy: NMEpoch | None = None,
     ) -> None:
         super().__init__(parent=parent, name=name, copy=copy)
 
-        self.__thedata = []  # list of NMData references
-        # self.__number = -1
+        self.__thedata: list[NMData] = []  # list of NMData references
+        self.__number: int = -1
 
         if copy is None:
             pass
         elif isinstance(copy, NMEpoch):
-            if self._folder is None:
-                # direct copy
-                self.__thedata = list(copy.data)
-                number = copy.number
-            else:
+            if isinstance(self._folder, NMFolder):
                 # grab NMData refs from copied NMDataContainer
                 # NMDataContainer should be copied before this copy
                 data = self._folder.data
                 for d in copy.data:
-                    o = data.get(d.name)
-                    self.__thedata.append(o)
+                    if isinstance(d, NMData):
+                        o = data.get(d.name)
+                        if isinstance(o, NMData):
+                            self.__thedata.append(o)
+                        else:
+                            e = nmu.valueerror(
+                                d.name,
+                                "data item name not found in copied NMDataContainer",
+                            )
+                            raise ValueError(e)
+                    else:
+                        e = nmu.typeerror(d, "copy.data.item", "NMData")
+                        raise TypeError(e)
+            else:
+                # direct copy
+                for d in copy.data:
+                    if isinstance(d, NMData):
+                        self.__thedata.append(d)
+                    else:
+                        e = nmu.typeerror(d, "copy.data.item", "NMData")
+                        raise TypeError(e)
+            number = copy.number
         else:
-            e = nmu.typeerror(copy, "copy", "NMEpoch")
+            e = nmu.typeerror(copy, "copy", NMEpoch)
             raise TypeError(e)
 
         if not isinstance(number, int):
@@ -80,7 +113,9 @@ class NMEpoch(NMObject):
         return None
 
     # override
-    def __eq__(self, other: nmu.NMEpochType) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMEpoch):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         if self.__number != other.number:
@@ -92,7 +127,7 @@ class NMEpoch(NMObject):
         return True
 
     # override, no super
-    def copy(self) -> nmu.NMEpochType:
+    def copy(self) -> NMEpoch:
         return NMEpoch(copy=self)
 
     @property
@@ -103,6 +138,7 @@ class NMEpoch(NMObject):
     def number(self, integer: int) -> None:
         if isinstance(integer, int):
             self.__number = integer
+        return None
 
     # override
     # @property
@@ -111,7 +147,7 @@ class NMEpoch(NMObject):
     #     return k
 
     @property
-    def data(self) -> List[nmu.NMDataType]:
+    def data(self) -> list[NMData]:
         return self.__thedata
 
 
@@ -122,12 +158,12 @@ class NMEpochContainer(NMObjectContainer):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,
-        name: str = "NMEpochContainer",
+        parent: object | None = None,
+        name: str = "NMEpochContainer0",
         rename_on: bool = False,
         name_prefix: str = "E",
         name_seq_format: str = "0",
-        copy: Union[nmu.NMEpochContainerType, None] = None,
+        copy: NMEpochContainer | None = None,
     ) -> None:
         return super().__init__(
             parent=parent,
@@ -139,7 +175,7 @@ class NMEpochContainer(NMObjectContainer):
         )
 
     # override, no super
-    def copy(self) -> nmu.NMEpochContainerType:
+    def copy(self) -> NMEpochContainer:
         return NMEpochContainer(copy=self)
 
     # override, no super
@@ -149,10 +185,10 @@ class NMEpochContainer(NMObjectContainer):
     # override
     def new(
         self,
-        # name: str = 'A',  use name_next()
+        name: str = "default",  # not used, instead name = name_next()
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMEpochType:
+    ) -> NMEpoch | None:
         name = self.name_next()
         istr = name.replace(self.name_prefix, "")
         if str.isdigit(istr):
@@ -160,5 +196,6 @@ class NMEpochContainer(NMObjectContainer):
         else:
             iseq = -1
         c = NMEpoch(parent=self._parent, name=name, number=iseq)
-        super().new(c, select=select)
-        return c
+        if super()._new(c, select=select):
+            return c
+        return None

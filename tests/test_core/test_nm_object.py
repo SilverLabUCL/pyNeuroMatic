@@ -339,7 +339,7 @@ class NMObject2(NMObject):
         self.myvalue = 1
         self.myobject = NMObject(parent=self, name="myobject")
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not super().__eq__(other):
             return False
         if self.myvalue != other.myvalue:

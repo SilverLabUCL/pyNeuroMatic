@@ -1,11 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Dec 23 20:25:27 2022
+[Module description].
 
-@author: jason
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
 """
+from __future__ import annotations
 from collections.abc import MutableMapping
-from typing import Dict, List, Tuple, Union
 
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
@@ -102,7 +116,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     def __init__(
         self,
-        parent: Union[object, None] = None,  # for creating NM class tree
+        parent: object | None = None,  # for creating NM class tree
         name: str = "NMObjectContainer0",
         rename_on: bool = True,  # allow renaming of NMobjects
         name_prefix: str = "NMObject",
@@ -113,8 +127,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # e.g. '00' ->  00, 01, 02, 03...
         # e.g. 'A'  ->  A, B, C, D...
         # e.g. 'AA' ->  AA, AB, AC, AD...
-        copy: Union[nmu.NMObjectContainerType, None] = None
-        # see copy()
+        copy: NMObjectContainer | None = None # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -123,38 +136,42 @@ class NMObjectContainer(NMObject, MutableMapping):
             copy=copy,
         )  # NMObject
 
+        self.__rename_on = True
         self.__name_prefix = "NMObject"
         self.__name_seq_format = "0"
         self.__name_seq_counter = "0"
+        self.__sets: NMSets
 
-        # key of selected NMObject
+        # select_key: key of selected NMObject
         # 'current' project, folder, data, dataseries, channel, epoch...
         # only one value
-        self.__select_key = None
+        self.__select_key: str | None = None
 
-        # key of selected NMObject or set
+        # execute_key: key of selected NMObject or set
         # for function execution, e.g. computing stats
-        # if 'select', then equals self.__select_key
+        # if 'select', then equals self.__select_key (default)
         # if 'all', then all NMObjects are executed
-        self.__execute_key = "select"
+        self.__execute_key: str | None = "select"
 
         nmobjects = []
-        select_key = None
-        execute_key = None
+        select_key: str | None = None
+        execute_key: str | None = "select"
         sets_copy = None
+
+        actual_rename_on: bool = rename_on
 
         if copy is None:
             pass
         elif isinstance(copy, NMObjectContainer):
-            rename_on = copy._NMObjectContainer__rename_on
-            name_prefix = copy._NMObjectContainer__name_prefix
-            name_seq_format = copy._NMObjectContainer__name_seq_format
-            select_key = copy._NMObjectContainer__select_key
-            execute_key = copy._NMObjectContainer__execute_key
+            actual_rename_on = copy.__rename_on
+            name_prefix = copy.__name_prefix
+            name_seq_format = copy.__name_seq_format
+            select_key = copy.__select_key
+            execute_key = copy.__execute_key
             for v in copy.values():
                 oc = v.copy()
                 nmobjects.append(oc)
-            sets_copy = copy._NMObjectContainer__sets
+            sets_copy = copy.__sets
         else:
             e = nmu.typeerror(copy, "copy", "NMObjectContainer")
             raise TypeError(e)
@@ -166,11 +183,11 @@ class NMObjectContainer(NMObject, MutableMapping):
         self._eq_list.append("execute")
         self._eq_list.append("sets")
 
-        if not isinstance(rename_on, bool):
-            e = nmu.typeerror(rename_on, "rename_on", "boolean")
+        if not isinstance(actual_rename_on, bool):
+            e = nmu.typeerror(actual_rename_on, "rename_on", "boolean")
             raise TypeError(e)
 
-        self.__rename_on = rename_on
+        self.__rename_on = actual_rename_on
 
         self._name_prefix_set(name_prefix, quiet=True)
         # self.__name_prefix
@@ -178,17 +195,17 @@ class NMObjectContainer(NMObject, MutableMapping):
         self._name_seq_format_set(name_seq_format, quiet=True)
         # self.__name_seq_format
 
-        self.__map = {}  # where NMObjects are stored/mapped
+        self.__map: dict[str, NMObject] = {}  # where NMObjects are stored/mapped
 
         if len(nmobjects) > 0:
             self.update(nmobjects)  # add NMObjects to self.__map
 
         if select_key:
-            self._select_key_set(select_key, quiet=True)
+            self._select_key_set(select_key)
             # self.__select_key
 
         if execute_key:
-            self._execute_key_set(execute_key, quiet=True)
+            self._execute_key_set(execute_key)
             # self.__execute_key
 
         self.__sets = NMSets(
@@ -202,18 +219,18 @@ class NMObjectContainer(NMObject, MutableMapping):
 
         return None
 
-    def _get_map(self) -> Dict[str, nmu.NMObjectType]:  # see __init__()
+    def _get_map(self) -> dict[str, NMObject]:  # see __init__()
         return self.__map
 
     # override NMObject method
     # children should override
-    def copy(self) -> nmu.NMObjectContainerType:
+    def copy(self) -> NMObjectContainer:
         return NMObjectContainer(copy=self)
 
     # override NMObject method
     # children should override if new parameters are declared
     @property
-    def parameters(self) -> Dict[str, object]:
+    def parameters(self) -> dict[str, object]:
         k = super().parameters
         k.update({"content_type": self.content_type().lower()})
         k.update({"rename_on": self.__rename_on})
@@ -221,21 +238,25 @@ class NMObjectContainer(NMObject, MutableMapping):
         k.update({"name_seq_format": self.__name_seq_format})
         k.update({"select": self.__select_key})
         k.update({"execute": self.__execute_key})
-        k.update({"sets": list(self.__sets.keys())})
+        if self.__sets:
+            k.update({"sets": list(self.__sets.keys())})
         return k
 
     # override NMObject method, no super
     @property
-    def content(self) -> Dict[str, str]:
+    def content(self) -> dict[str, str]:
         cname = self.__class__.__name__.lower()
-        return {cname: list(self.__map.keys())}
+        c = {cname: self.__name}
+        for k in self.__map.keys():
+            c[k] = self.__map[k].name # key == name, so redundant
+        return c
 
     # children should override
     def content_type(self) -> str:
         # self not used
         return NMObject.__name__
 
-    def content_type_ok(self, nmobject: nmu.NMObjectType) -> bool:
+    def content_type_ok(self, nmobject: NMObject | None) -> bool:
         if isinstance(nmobject, NMObject):
             return nmobject.__class__.__name__ == self.content_type()
         return False
@@ -243,7 +264,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # want same type NOT same instance
 
     @property
-    def content_parameters(self) -> List[Dict]:
+    def content_parameters(self) -> list[dict]:
         plist = []
         for o in self.__map.values():
             plist.append(o.parameters)
@@ -256,19 +277,23 @@ class NMObjectContainer(NMObject, MutableMapping):
     def __getitem__(
         self,
         key: str,
-    ) -> nmu.NMObjectType:
+    ) -> NMObject | None:
         """
         called by:
             get(), setdefault(), items(), values(), pop(), popitem(), clear()
         override below: setdefault(), pop(), popitem(), clear()
         """
         # print('__getitem__ ' + str(key))
-        key = self._getkey(key)
-        return self.__map[key]
+        k = self._getkey(key)
+        if k is None:
+            return None
+        return self.__map[k]
 
     # MutableMapping required abstract method
     def __setitem__(
-        self, key: str, nmobject: nmu.NMObjectType  # key is equal to NMObject name
+        self,
+        key: str,
+        nmobject: NMObject  # key is equal to NMObject name
     ) -> None:
         """
         called by '=' and update()
@@ -276,7 +301,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         e.g. mymap['recorda0'] = mynmobject
         """
         # print('__setitem__, ' + str(key) + ', ' + str(nmobject))
-        return self.update({key: nmobject})  # key is not used
+        self.update({key: nmobject})  # key is not used
+        return None
 
     # MutableMapping required abstract method
     def __delitem__(
@@ -289,7 +315,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         # e.g. del self.__map[key]
         """
         # print('__delitem__ ' + str(key))
-        return self.pop(key)  # allows detele confirmation
+        self.pop(key)  # allows detele confirmation
+        return None
 
     # MutableMapping required abstract method
     def __iter__(self):
@@ -305,7 +332,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     # __contains__, keys, items, values, get, __eq__, __ne__
 
     # override MutableMapping mixin method
-    def __contains__(self, key_or_value: Union[str, nmu.NMObjectType]) -> bool:
+    def __contains__(self, key_or_value: object) -> bool:
         # called by 'in'
         # print('__contains__ ' + str(key))
         if isinstance(key_or_value, NMObject):
@@ -315,7 +342,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         elif isinstance(key_or_value, str):
             if key_or_value.lower() == "select":
                 return False
-            key = self._getkey(key_or_value, error1=False, error2=False)
+            key = self._getkey(key_or_value)
             return key is not None
         return False
 
@@ -328,15 +355,17 @@ class NMObjectContainer(NMObject, MutableMapping):
     # children should override if new parameters are declared
     def __eq__(
         self,
-        other: nmu.NMObjectContainerType,
+        other: object,
     ) -> bool:
         # called by '==' and '!=' operators
         # print("__eq__" + other.name)
         # first compare self.__map
+        if not isinstance(other, NMObjectContainer):
+            return NotImplemented
         if not super().__eq__(other):
             return False
         s_keys = self.__map.keys()
-        if not nmu.keys_are_equal(s_keys, other.keys()):
+        if not nmu.keys_are_equal(list(s_keys), list(other.keys())):
             return False
         for k in s_keys:
             s = self.__getitem__(k)
@@ -348,17 +377,17 @@ class NMObjectContainer(NMObject, MutableMapping):
             if s != o:
                 return False
         if "rename_on" in self._eq_list:
-            if self.__rename_on != other._NMObjectContainer__rename_on:
+            if self.__rename_on != other.__rename_on:
                 return False
         if "name_prefix" in self._eq_list:
-            s = self.__name_prefix.lower()
-            o = other._NMObjectContainer__name_prefix.lower()
-            if s != o:
+            s_prefix = self.__name_prefix.lower()
+            o_prefix = other.__name_prefix.lower()
+            if s_prefix != o_prefix:
                 return False
         if "name_seq_format" in self._eq_list:
-            s = self.__name_seq_format
-            o = other._NMObjectContainer__name_seq_format
-            if s != o:
+            s_format = self.__name_seq_format
+            o_format = other.__name_seq_format
+            if s_format != o_format:
                 return False
         if "select" in self._eq_list:
             if self.select_key != other.select_key:
@@ -384,52 +413,60 @@ class NMObjectContainer(NMObject, MutableMapping):
     # MutableMapping Mixin Methods: pop, popitem, clear, update, setdefault
 
     # override MutableMapping mixin method
-    def pop(
+    def pop(  # type: ignore[override]
         self,
         key: str,
-        confirm_answer: Union[str, None] = None,  # to skip confirm prompt
-    ) -> nmu.NMObjectType:
-        # removed 'default' parameter
-        key = self._getkey(key)
+        default: NMObject | None = None,
+        *,
+        confirm_answer: str | None = None,  # to skip confirm prompt (keyword-only)
+    ) -> NMObject | None:
+        # Check if key exists, return default if not
+        actual_key = self._getkey(key)
+        if actual_key is None:
+            return default
         if nmp.DELETE_CONFIRM:
             if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
-                prompt = "are you sure you want to delete '%s'?" % key
-                ync = nmu.input_yesno(prompt, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+                prompt = "are you sure you want to delete '%s'?" % actual_key
+                ync = nmu.input_yesno(prompt, treepath=self._treepath_str())
+            if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
-                print("cancel pop '%s'" % key)
-                return None
+                print("cancel pop '%s'" % actual_key)
+                return default
         if isinstance(self.select_key, str):
-            if self.select_key.lower() == key.lower():
+            if self.select_key.lower() == actual_key.lower():
                 self.select_key = None
-        self.sets.remove_from_all(key)
-        o = self.__map.pop(key)
+        self.sets.remove_from_all(actual_key)
+        o = self.__map.pop(actual_key)
         return o
 
     # override MutableMapping mixin method
-    def popitem(  # delete last item
-        self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
-    ) -> Tuple[str, nmu.NMObjectType]:
+    def popitem(  # type: ignore[override]  # delete last item
+        self,
+        *,
+        confirm_answer: str | None = None  # to skip confirm prompt (keyword-only)
+    ) -> tuple[str, NMObject] | None:
         """
         Must override, otherwise first item is deleted rather than last.
         Consider deprecating to prevent accidental deletes.
         """
         if len(self.__map) == 0:
-            return ()
+            return None # return tuple to be consistent with Python?
         klist = list(self.__map.keys())
         key = klist[-1]  # last key
         o = self.pop(key=key, confirm_answer=confirm_answer)
         if o:
             return (key, o)
-        return ()  # return tuple to be consistent with Python
+        return None # return tuple to be consistent with Python?
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
     def clear(
-        self, confirm_answer: Union[str, None] = None  # to skip confirm prompt
+        self,
+        *,
+        confirm_answer: str | None = None  # to skip confirm prompt (keyword-only)
     ) -> None:
         if len(self) == 0:
             return None
@@ -440,8 +477,8 @@ class NMObjectContainer(NMObject, MutableMapping):
                 q = "are you sure you want to delete the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self.treepath())
-            if ync.lower() == "y" or ync.lower() == "yes":
+                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+            if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
                 print("cancel delete all")
@@ -453,21 +490,19 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     # add/update NMObject to map
-    def update(
+    def update(  # type: ignore[override]
         self,
-        nmobjects: Union[
-            nmu.NMObjectType,
-            List[nmu.NMObjectType],
-            Dict[str, nmu.NMObjectType],
-            nmu.NMObjectContainerType,
-        ] = [],
+        nmobjects: NMObject | list[NMObject] | dict[str, NMObject] | NMObjectContainer | None = None
     ) -> None:
-        if self.content_type_ok(nmobjects):
+        olist: list[NMObject]
+        if nmobjects is None:
+            nmobjects = []
+        if isinstance(nmobjects, NMObject) and self.content_type_ok(nmobjects):
             olist = [nmobjects]
         elif isinstance(nmobjects, list):
             olist = nmobjects
         elif isinstance(nmobjects, NMObjectContainer):
-            olist = list(nmobjects._NMObjectContainer__map.values())
+            olist = list(nmobjects.__map.values())
         elif isinstance(nmobjects, dict):
             olist = []
             for k, o in nmobjects.items():
@@ -495,7 +530,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         update = False
         for o in olist:
             if self.content_type_ok(o):
-                key = self._getkey(o.name, error2=False)
+                key = self._getkey(o.name)
                 if key is None:
                     key = self._newkey(o.name)
                 self.__map[key] = o
@@ -514,7 +549,10 @@ class NMObjectContainer(NMObject, MutableMapping):
             o._parent = self._parent
 
     # override MutableMapping mixin method
-    def setdefault(self, key, default=None):
+    def setdefault(self,
+        key: str,
+        default: NMObject | None = None
+    ) -> NMObject | None:
         """
         Have to override to get this function to work.
         This functuion should be called get_value_or_default().
@@ -522,42 +560,35 @@ class NMObjectContainer(NMObject, MutableMapping):
         """
         if default is None:
             return self.__getitem__(key)
-        key = self._getkey(key, error1=False, error2=False)
-        if key is None:
+        actual_key = self._getkey(key)
+        if actual_key is None:
             return default
-        return self.__map[key]
+        return self.__map[actual_key]
 
     # NMObjectContainer methods:
-    # _key_check, _newkey_check
+    # _getkey, _newkey
     # rename, reorder, duplicate, new,
     # name_prefix (property), name_prefix_set, name_next,
     # select_key (property), select_value, select_item, is_selected
 
     def _getkey(
         self,
-        key: str,  # key or 'select' for selected key
-        error1: bool = True,
-        error2: bool = True,
-    ) -> str:
+        key: str | None = None,  # key or 'select' for selected key
+    ) -> str | None:
         if not isinstance(key, str):
-            if error1:
-                e = nmu.typeerror(key, "key", "string")
-                raise TypeError(e)
             return None
         if key.lower() == "select":
-            if self.__select_key is None and error2:
-                raise KeyError("select key is None")
+            if self.__select_key is None or self.__select_key == "" or self.__select_key.lower() == "none":
+                return None
             return self.__select_key
         for k in self.__map.keys():
             if k.lower() == key.lower():  # keys are case insensitive
                 return k  # return key from self.__map
-        if error2:
-            raise KeyError("key '%s' does not exist" % key)
         return None
 
     def _newkey(
         self,
-        newkey: str,
+        newkey: str = "default",
     ) -> str:
         if not isinstance(newkey, str):
             e = nmu.typeerror(newkey, "newkey", "string")
@@ -571,26 +602,28 @@ class NMObjectContainer(NMObject, MutableMapping):
                 raise KeyError("key '%s' already exists" % newkey)
         return newkey
 
-    def rename(self, key: str, newkey: str = "default") -> None:
+    def rename(self, key: str, newkey: str = "default") -> bool:
         """
         Cannot change map key names.
         """
         if not self.__rename_on:
             raise RuntimeError("key names are locked.")
-        key = self._getkey(key)
+        actual_key = self._getkey(key)
+        if actual_key is None:
+            raise KeyError("key '%s' does not exist" % key)
         newkey = self._newkey(newkey)
         new_map = {}
         for k in self.__map.keys():
             o = self.__map[k]
-            if k == key:
+            if k == actual_key:
                 o._name_set(newname=newkey, quiet=True)  # no history
             new_map[o.name] = o
         # self.__map = new_map  # reference change
         self.__map.clear()
         self.__map.update(new_map)
-        return None
+        return True
 
-    def reorder(self, newkeyorder: List[str]) -> None:
+    def reorder(self, newkeyorder: list[str]) -> None:
         """
         Cannot change map key names.
         TODO: order by name, creation date, modified date
@@ -612,8 +645,10 @@ class NMObjectContainer(NMObject, MutableMapping):
             return None  # nothing to do
         new_map = {}
         for k in newkeyorder:
-            k = self._getkey(k)
-            new_map[k] = self.__map[k]
+            actual_key = self._getkey(k)
+            if actual_key is None:
+                raise KeyError("key '%s' does not exist" % k)
+            new_map[actual_key] = self.__map[actual_key]
         # self.__map = new_map  # reference change
         self.__map.clear()
         self.__map.update(new_map)
@@ -623,10 +658,14 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         key: str,
         newkey: str = "default",
-    ) -> nmu.NMObjectType:
-        key = self._getkey(key)
+    ) -> NMObject | None:
+        actual_key = self._getkey(key)
+        if actual_key is None:
+            raise KeyError("key '%s' does not exist" % key)
         newkey = self._newkey(newkey)
-        o = self.__getitem__(key)
+        o = self.__getitem__(actual_key)
+        if o is None:
+            return None
         c = o.copy()
         # c.name = newkey  # double history
         c._name_set(newname=newkey, quiet=True)  # no history
@@ -635,24 +674,38 @@ class NMObjectContainer(NMObject, MutableMapping):
         return c
 
     # children should override
-    # and call super().new()
+    # and call super()._new()
     def new(
         self,
-        nmobject: nmu.NMObjectType = None,
+        name: str = "default",
         select: bool = False,
         # quiet: bool = nmp.QUIET
-    ) -> nmu.NMObjectType:
+    ) -> NMObject | None:
+        name = self._newkey(name)
+        o = NMObject(parent=self, name=name)
+        if self._new(o, select=select):
+            return o
+        return None
+    
+    def _new(
+        self,
+        nmobject: NMObject,
+        select: bool = False,
+        # quiet: bool = nmp.QUIET
+    ) -> bool:
         if not self.content_type_ok(nmobject):
             e = nmu.typeerror(nmobject, "nmobject", self.content_type())
             raise TypeError(e)
         newkey = self._newkey(nmobject.name)
+        if not isinstance(newkey, str) or len(newkey) == 0:
+            return False
         self.__map[newkey] = nmobject
         self.__update_nmobject_references()
         if len(self.__map) == 1:
             select = True  # select first entry
         if isinstance(select, bool) and select:
             self.__select_key = newkey
-        return nmobject
+        return True
 
     @property
     def name_prefix(self) -> str:  # see name_next())
@@ -670,7 +723,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             # '' empty string OK for channel names
             raise ValueError("prefix: %s" % prefix)
         if prefix.lower() == self.__name_prefix.lower():
-            return True  # nothing to do
+            return None  # nothing to do
         oldprefix = self.__name_prefix
         self.__name_prefix = prefix
         """
@@ -682,7 +735,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         h = nmu.history_change('prefix', oldprefix, self.__prefix)
         self._history(h, quiet=quiet)
         """
-        return True
+        return None
 
     @property
     def name_seq_format(self) -> str:
@@ -719,34 +772,12 @@ class NMObjectContainer(NMObject, MutableMapping):
         self._name_seq_counter_reset()
         return None
 
-    def __name_seq_char_list() -> List[str]:
+    @staticmethod
+    def __name_seq_char_list() -> list[str]:
         return [
-            "A",
-            "B",
-            "C",
-            "D",
-            "E",
-            "F",
-            "G",
-            "H",
-            "I",
-            "J",
-            "K",
-            "L",
-            "M",
-            "N",
-            "O",
-            "P",
-            "Q",
-            "R",
-            "S",
-            "T",
-            "U",
-            "V",
-            "W",
-            "X",
-            "Y",
-            "Z",
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+            "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+            "U", "V", "W", "X", "Y", "Z",
         ]
 
     def _name_seq_next_str(self) -> str:
@@ -780,7 +811,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__name_seq_counter = self.__name_seq_format
         return None
 
-    def _name_seq_counter_increment(self) -> List[str]:
+    def _name_seq_counter_increment(self) -> str:
         ilist = [str(x) for x in range(10)]
         clist = NMObjectContainer.__name_seq_char_list()
         increment_next = True  # increment first place
@@ -823,97 +854,113 @@ class NMObjectContainer(NMObject, MutableMapping):
         raise RuntimeError("failed to find next name")
 
     @property
-    def select_value(self) -> nmu.NMObjectType:
-        if self.__select_key is None:
-            return None
+    def select_value(self) -> NMObject | None:
         key = self._getkey(self.__select_key)
+        if key is None:
+            return None
         return self.__map[key]
 
     @property
-    def select_key(self) -> str:
+    def select_key(self) -> str | None:
         return self.__select_key
 
     @select_key.setter
-    def select_key(self, key: str) -> None:
+    def select_key(self, key: str | None) -> None:
         self._select_key_set(key)
         return None
 
-    def _select_key_set(self, key: str, quiet: bool = nmp.QUIET) -> str:
-        if key is None or key == "":
-            if self.__select_key is not None:
-                self.__select_key = None
-            return None
+    def _select_key_set(
+        self, 
+        key: str | None, 
+    ) -> bool:
+        if key is None:
+            self.__select_key = None
+            return True
         if not isinstance(key, str):
             e = nmu.typeerror(key, "key", "string")
             raise TypeError(e)
+        if key == "" or key.lower() == "none":
+            self.__select_key = None
+            return True
         if key.lower() == "select":
             raise KeyError("invalid key 'select'")
-        key = self._getkey(key)
-        self.__select_key = key
-        return key
-
-    def is_select_key(self, key: str) -> bool:
-        if key is None and self.__select_key is None:
-            return True
-        if not isinstance(key, str) or not isinstance(self.__select_key, str):
+        actual_key = self._getkey(key)
+        if actual_key is None:
             return False
-        if self.__select_key.lower() == "select":
-            if key.lower() == "select":
-                return True
-            k = self._getkey("select", error2=False)
-            return key.lower() == k.lower()
+        self.__select_key = actual_key
+        return True
+
+    def is_select_key(self, key: str | None) -> bool:
+        if key is None:
+            return self.__select_key is None
+        if not isinstance(key, str):
+            return False
+        if key == "" or key.lower() == "none":
+            return self.__select_key is None
+        if self.__select_key is None:
+            return False
         return key.lower() == self.__select_key.lower()
 
     @property
-    def execute_values(self) -> List[nmu.NMObjectType]:
+    def execute_values(self) -> list[NMObject]:
         if not isinstance(self.__execute_key, str):
             return []
         if self.__execute_key.lower() == "select":
-            key = self._getkey("select", error2=False)
-            if key:
-                o = self.__map[key]
-                return [o]
-            return []
-        if self.__execute_key.lower() == "all":
-            return list(self.values())
-        key = self._getkey(self.__execute_key, error2=False)
-        if key:
+            key = self._getkey("select")
+            if key is None:
+                return []
             o = self.__map[key]
             return [o]
-        key = self.sets._getkey(self.__execute_key, error2=False)  # try sets
-        if key:
-            return self.sets.get(key)
+        if self.__execute_key.lower() == "all":
+            return list(self.values())
+        key = self._getkey(self.__execute_key)
+        if key is not None:
+            o = self.__map[key]
+            return [o]
+        key = self.sets._getkey(self.__execute_key)  # try sets
+        if key is not None:
+            s = self.sets.get(key)
         return []
 
     @property
-    def execute_key(self) -> str:
+    def execute_key(self) -> str | None:
         return self.__execute_key
 
     @execute_key.setter
-    def execute_key(self, key: str) -> None:
-        return self._execute_key_set(key)
+    def execute_key(self, key: str | None) -> None:
+        self._execute_key_set(key)
+        return None
 
-    def _execute_key_set(self, key: str, quiet: bool = nmp.QUIET) -> str:
-        if key is None or key == "":
-            if self.__execute_key is not None:
-                self.__execute_key = None
-            return None
-        elif not isinstance(key, str):
+    def _execute_key_set(
+        self, 
+        key: str | None = None, 
+    ) -> bool:
+        if key is None:
+            self.__execute_key = None
+            return True
+        if not isinstance(key, str):
             e = nmu.typeerror(key, "key", "string")
             raise TypeError(e)
+        if key == "" or key.lower() == "none":
+            self.__execute_key = None
+            return True
+        if isinstance(self.__execute_key, str) and \
+        key.lower() == self.__execute_key.lower():
+            # nothing to do
+            return True
         if key.lower() == "select":
-            if self.__execute_key.lower() != "select":
-                self.__execute_key = "select"
-            return "select"
+            self.__execute_key = "select"
+            return True
         if key.lower() == "all":
-            if self.__execute_key.lower() != "all":
-                self.__execute_key = "all"
-            return "all"
-        k = self._getkey(key, error2=False)
+            self.__execute_key = "all"
+            return True
+        k = self._getkey(key)
         if k is None:
-            k = self.sets._getkey(key)  # try sets, throw error
+            k = self.sets._getkey(key)  # try sets
+            if k is None:
+                return False
         self.__execute_key = k
-        return k
+        return True
 
     def is_execute_key(self, key: str) -> bool:
         if key is None:
@@ -923,10 +970,10 @@ class NMObjectContainer(NMObject, MutableMapping):
         if self.__execute_key.lower() == "select":
             if key.lower() == "select":
                 return True
-            k = self._getkey("select", error2=False)
-            if isinstance(k, str):
-                return key.lower() == k.lower()
-            return False
+            k = self._getkey("select")
+            if k is None:
+                return False
+            return key.lower() == k.lower()
         if self.__execute_key.lower() == "all":
             if key.lower() == "all":
                 return True
@@ -934,7 +981,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         return key.lower() == self.__execute_key.lower()
 
     @property
-    def sets(self) -> nmu.NMSetsType:
+    def sets(self) -> NMSets:
         return self.__sets
 
 

@@ -1,19 +1,35 @@
 # -*- coding: utf-8 -*-
 """
-pyNeuroMatic - NeuroMatic in Python
-Copyright 2019 Jason Rothman
+[Module description].
+
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
+
+If you use this software in your research, please cite:
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
+Software Toolkit for Acquisition, Analysis and Simulation of 
+Electrophysiological Data. Front. Neuroinform. 12:14. 
+doi: 10.3389/fninf.2018.00014
+
+Copyright (c) 2026 The Silver Lab, University College London.
+Licensed under MIT License - see LICENSE file for details.
+
+Original NeuroMatic: https://github.com/SilverLabUCL/NeuroMatic
+Website: https://github.com/SilverLabUCL/pyNeuroMatic
+Paper: https://doi.org/10.3389/fninf.2018.00014
 """
-# import matplotlib
+from __future__ import annotations
 import datetime
 # import math
+# import matplotlib
 import numpy as np
-from typing import Dict, List, Union
 
+from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
+from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
-# from pyneuromatic.core.nm_project import NMProjectContainer
-from pyneuromatic.core.nm_project import NMProject
+from pyneuromatic.core.nm_project import NMProject, NMProjectContainer
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_stats import NMToolStats
 import pyneuromatic.core.nm_utilities as nmu
@@ -49,7 +65,7 @@ class NMManager(NMObject):
         name: str = "nm",
         project_name: str = "project0",
         quiet: bool = False,
-        # copy: Union[nmu.NMObjectType, None] = None,  # see copy()
+        # copy: NMObject | None = None,  # see copy()
     ) -> None:
         super().__init__(parent=None, name=name)  # NMObject
 
@@ -63,8 +79,8 @@ class NMManager(NMObject):
             raise TypeError(e)
         self.__project = NMProject(parent=self, name=project_name)
 
-        self.__toolkit = {}
-        self.__toolselect = None
+        self.__toolkit: dict[str, NMTool] = {}
+        self.__toolselect: str | None = None
 
         for tool in TOOL_NAMES:
             self.tool_add(tool)
@@ -99,7 +115,7 @@ class NMManager(NMObject):
     def tool_add(
         self,
         toolname: str,
-        tool: nmu.NMToolType = None,
+        tool: NMTool | None = None,
         select: bool = False
     ) -> None:
         if not isinstance(toolname, str):
@@ -131,7 +147,7 @@ class NMManager(NMObject):
                 self.__toolselect = tname
 
     @property
-    def tool_select(self) -> str:
+    def tool_select(self) -> str | None:
         return self.__toolselect
 
     @tool_select.setter
@@ -146,16 +162,16 @@ class NMManager(NMObject):
             raise KeyError("NM tool key '%s' does not exist" % tname)
 
     # @property
-    # def projects(self) -> nmu.NMProjectContainerType:
+    # def projects(self) -> NMProjectContainer:
     #     return self.__project_container
 
     @property
-    def project(self) -> nmu.NMProjectType:
+    def project(self) -> NMProject:
         return self.__project
 
     @property
-    def select_values(self) -> Dict[str, nmu.NMObjectType]:
-        s = {}
+    def select_values(self) -> dict[str, NMObject | None]:
+        s: dict[str, NMObject | None] = {}
         s["project"] = None
         s["folder"] = None
         s["data"] = None
@@ -169,19 +185,20 @@ class NMManager(NMObject):
         #     s["project"] = p
         # else:
         #     return s
-        f = p.folders.select_value
-        if f:
-            s["folder"] = f
-        else:
+        folders = p.folders
+        if folders is None:
             return s
+        f = folders.select_value
+        if not isinstance(f, NMFolder):
+            return s
+        s["folder"] = f
         d = f.data.select_value
         if d:
             s["data"] = d
         ds = f.dataseries.select_value
-        if ds:
-            s["dataseries"] = ds
-        else:
+        if not isinstance(ds, NMDataSeries):
             return s
+        s["dataseries"] = ds
         c = ds.channels.select_value
         if c:
             s["channel"] = c
@@ -191,9 +208,9 @@ class NMManager(NMObject):
         return s
 
     @property
-    def select_keys(self) -> Dict[str, str]:
+    def select_keys(self) -> dict[str, str | None]:
         s1 = self.select_values
-        s2 = {}
+        s2: dict[str, str | None] = {}
         for k, v in s1.items():
             if isinstance(v, NMObject):
                 s2.update({k: v.name})
@@ -202,12 +219,12 @@ class NMManager(NMObject):
         return s2
 
     @select_keys.setter
-    def select_keys(self, select: Dict[str, str]) -> None:
+    def select_keys(self, select: dict[str, str]) -> None:
         return self._select_keys_set(select)
 
     def _select_keys_set(
         self,
-        select: Dict[str, str]
+        select: dict[str, str]
         # quiet
     ) -> None:
         if not isinstance(select, dict):
@@ -231,14 +248,21 @@ class NMManager(NMObject):
                 raise KeyError(e)
         #     self.__project_container.select_key = select["project"]
         # p = self.__project_container.select_value
+        folders = p.folders
+        if folders is None:
+            return None
         if "folder" in select:
-            p.folders.select_key = select["folder"]
-        f = p.folders.select_value
+            folders.select_key = select["folder"]
+        f = folders.select_value
+        if not isinstance(f, NMFolder):
+            return None
         if "data" in select:
             f.data.select_key = select["data"]
         if "dataseries" in select:
             f.dataseries.select_key = select["dataseries"]
         ds = f.dataseries.select_value
+        if not isinstance(ds, NMDataSeries):
+            return None
         if "channel" in select:
             ds.channels.select_key = select["channel"]
         if "epoch" in select:
@@ -248,18 +272,25 @@ class NMManager(NMObject):
     def execute_values(
         self,
         dataseries_priority: bool = True
-    ) -> List[Dict[str, nmu.NMObjectType]]:
-        elist = []
+    ) -> list[dict[str, NMObject]]:
+        elist: list[dict[str, NMObject]] = []
         # for p in self.__project_container.execute_values:
         p = self.__project
-        flist = p.folders.execute_values
+        folders = p.folders
+        if folders is None:
+            return elist
+        flist = folders.execute_values
         for f in flist:
+            if not isinstance(f, NMFolder):
+                continue
             dslist = f.dataseries.execute_values
             if dataseries_priority and dslist:
                 for ds in dslist:
+                    if not isinstance(ds, NMDataSeries):
+                        continue
                     for c in ds.channels.execute_values:
                         for e in ds.epochs.execute_values:
-                            x = {}
+                            x: dict[str, NMObject] = {}
                             x["project"] = p
                             x["folder"] = f
                             x["dataseries"] = ds
@@ -269,17 +300,17 @@ class NMManager(NMObject):
             else:
                 dlist = f.data.execute_values
                 for d in dlist:
-                    x = {}
-                    x["project"] = p
-                    x["folder"] = f
-                    x["data"] = d
-                    elist.append(x)
+                    x2: dict[str, NMObject] = {}
+                    x2["project"] = p
+                    x2["folder"] = f
+                    x2["data"] = d
+                    elist.append(x2)
         return elist
 
     def execute_keys(
         self,
         dataseries_priority: bool = True
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         elist = []
         elist2 = self.execute_values(dataseries_priority)
         for e in elist2:
@@ -291,8 +322,8 @@ class NMManager(NMObject):
 
     def execute_keys_set(
         self,
-        execute: Dict[str, str]
-    ) -> List[Dict[str, str]]:
+        execute: dict[str, str]
+    ) -> list[dict[str, str]]:
         # sets are not allowed with project, folder, dataseries - too complex
         # can specify 'data' or 'dataseries' but not both
 
@@ -383,30 +414,35 @@ class NMManager(NMObject):
         if "folder" not in execute:
             e = "missing execute 'folder' key"
             raise KeyError(e)
+        folders = p.folders
+        if folders is None:
+            raise ValueError("project has no folder container")
         value = execute["folder"]
         if value.lower() == "select":
-            f = p.folders.select_key
-            if f in p.folders:
-                p.folders.execute_key = "select"
+            fkey = folders.select_key
+            if fkey in folders:
+                folders.execute_key = "select"
             else:
-                e = "bad folder select: %s" % f
+                e = "bad folder select: %s" % fkey
                 raise ValueError(e)
         elif value.lower() == "all":
             e = "'all' folders is not allowed in this function"
             raise ValueError(e)
-        elif value in p.folders:
-            p.folders.select_key = value
-            p.folders.execute_key = "select"
-        elif value in p.folders.sets:
+        elif value in folders:
+            folders.select_key = value
+            folders.execute_key = "select"
+        elif value in folders.sets:
             e = "folder sets are not allowed in this function"
             raise ValueError(e)
         else:
             e = "unknown folder execute value: %s" % value
             raise ValueError(e)
-        f = p.folders.select_value
-        if f not in p.folders:
+        f = folders.select_value
+        if f not in folders:
             e = "bad folder select: %s" % f
             raise ValueError(e)
+        if not isinstance(f, NMFolder):
+            raise ValueError("bad folder select")
 
         if "data" in execute:
             f.data.execute_key = execute["data"]
@@ -417,11 +453,11 @@ class NMManager(NMObject):
             raise KeyError(e)
         value = execute["dataseries"]
         if value.lower() == "select":
-            ds = f.dataseries.select_key
-            if ds in f.dataseries:
+            dskey = f.dataseries.select_key
+            if dskey in f.dataseries:
                 f.dataseries.execute_key = "select"
             else:
-                e = "bad dataseries select: %s" % ds
+                e = "bad dataseries select: %s" % dskey
                 raise ValueError(e)
         elif value.lower() == "all":
             e = "'all' dataseries is not allowed in this function"
@@ -439,6 +475,8 @@ class NMManager(NMObject):
         if ds not in f.dataseries:
             e = "bad dataseries select: %s" % ds
             raise ValueError(e)
+        if not isinstance(ds, NMDataSeries):
+            raise ValueError("bad dataseries select")
 
         if "channel" not in execute:
             e = "missing execute 'channel' key"
@@ -456,11 +494,18 @@ class NMManager(NMObject):
         # self.__project_container.execute_key = "select"
         # for p in self.__project_container.values():
         p = self.__project
-        p.folders.execute_key = "select"
-        for f in p.folders.values():
+        folders = p.folders
+        if folders is None:
+            return None
+        folders.execute_key = "select"
+        for f in folders.values():
+            if not isinstance(f, NMFolder):
+                continue
             f.data.execute_key = "select"
             f.dataseries.execute_key = "select"
             for ds in f.dataseries.values():
+                if not isinstance(ds, NMDataSeries):
+                    continue
                 ds.channels.execute_key = "select"
                 ds.epochs.execute_key = "select"
         return None
@@ -470,15 +515,18 @@ class NMManager(NMObject):
         toolname: str = "select"
     ) -> bool:
 
-        if toolname is None:
-            toolname = self.__toolselect
-        if isinstance(toolname, str):
-            if toolname.lower() == "select":
-                toolname = self.__toolselect
+        tname: str | None = toolname
+        if tname is None:
+            tname = self.__toolselect
+        if isinstance(tname, str):
+            if tname.lower() == "select":
+                tname = self.__toolselect
         else:
-            e = nmu.typeerror(toolname, "toolname", "string")
+            e = nmu.typeerror(tname, "toolname", "string")
             raise TypeError(e)
-        tname = toolname.lower()
+        if tname is None:
+            raise ValueError("no tool selected")
+        tname = tname.lower()
         if tname not in self.__toolkit:
             raise KeyError("NM tool key '%s' does not exist" % toolname)
         tool = self.__toolkit[tname]
@@ -529,9 +577,11 @@ if __name__ == "__main__":
     nm = NMManager(project_name="myproject")
     # p = nm.projects.select_value
     # p = nm.project
+    assert nm.project.folders is not None
     f0 = nm.project.folders.new("myfolder0")
     f1 = nm.project.folders.new("myfolder1")
     nm.project.folders.select_key = "myfolder1"
+    assert isinstance(f1, NMFolder)
 
     ydata = np.random.normal(loc=0, scale=1, size=pnts)
     ydim = NMDimension(nm, "y", nparray=ydata)
