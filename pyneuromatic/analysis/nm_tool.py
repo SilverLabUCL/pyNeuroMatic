@@ -171,8 +171,8 @@ class NMTool(object):
         return None
 
     @property
-    def select_values(self) -> dict[str, NMObject]:
-        s = {}
+    def select_values(self) -> dict[str, NMObject | None]:
+        s: dict[str, NMObject | None] = {}
         s["project"] = self.__project
         s["folder"] = self.__folder
         s["data"] = self.__data
@@ -184,7 +184,7 @@ class NMTool(object):
     @select_values.setter
     def select_values(
         self,
-        select_values: dict[str, NMObject]
+        select_values: dict[str, NMObject | None]
         # see NMManager.select_values
     ) -> None:
         if "project" in select_values:
