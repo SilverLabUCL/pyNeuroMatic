@@ -163,7 +163,29 @@ class NMObject(object):
 
     # children should override
     def copy(self) -> NMObject:
-        return NMObject(copy=self)
+        """Create a copy of this object using custom copy constructor."""
+        # TODO: redundant? better to use __copy__ and __deepcopy__ only?
+        return self.__class__(copy=self)
+
+    def __copy__(self) -> NMObject:
+        """Support Python's copy.copy() protocol.
+
+        This allows using the standard library:
+            import copy
+            new_obj = copy.copy(original_obj)
+        """
+        return self.copy()
+
+    def __deepcopy__(self, _memo: dict) -> NMObject:
+        """Support Python's copy.deepcopy() protocol.
+
+        For NMObject, deep copy is the same as shallow copy since
+        the copy constructor handles all necessary copying logic.
+
+        Args:
+            _memo: Dictionary to track already copied objects (unused)
+        """
+        return self.copy()
 
     # children should override
     def __eq__(
