@@ -83,7 +83,10 @@ class NMFolder(NMObject):
             self.__toolfolder_container = NMToolFolderContainer(parent=self)
 
     # override
-    def __eq__(self, other: object) -> bool:
+    def __eq__(
+        self, 
+        other: object
+    ) -> bool:
         if not isinstance(other, NMFolder):
             return NotImplemented
         if not super().__eq__(other):

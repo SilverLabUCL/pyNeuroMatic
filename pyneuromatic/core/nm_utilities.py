@@ -446,12 +446,14 @@ def channel_char_check(
     :rtype: str or list
     """
     if isinstance(chan_char, str):
-        if channel_num(chan_char, char_list=char_list) >= 0:
+        cnum = channel_num(chan_char, char_list=char_list)
+        if isinstance(cnum, int) and cnum >= 0:
             return chan_char.upper()  # enforce upper case
     if isinstance(chan_char, list):
         clist = []
         for c in chan_char:
-            if channel_num(c, char_list=char_list) >= 0:
+            cnum = channel_num(c, char_list=char_list)
+            if isinstance(cnum, int) and cnum >= 0:
                 clist.append(c)
             else:
                 clist.append("")
@@ -659,9 +661,9 @@ def get_class_from_stack(stack: list, frame: int = 1, module: bool = False) -> s
     class_tree = class_tree.replace("<class ", "")
     class_tree = class_tree.replace("'", "")
     class_tree = class_tree.replace(">", "")
-    class_tree = class_tree.split(".")
-    m = class_tree[0]
-    c = class_tree[1]
+    class_parts = class_tree.split(".")
+    m = class_parts[0]
+    c = class_parts[1]
     if module:
         return m + "." + c
     return c
