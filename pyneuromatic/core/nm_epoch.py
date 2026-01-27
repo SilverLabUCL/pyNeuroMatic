@@ -20,8 +20,12 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
-from pyneuromatic.core.nm_data import NMData
-from pyneuromatic.core.nm_folder import NMFolder
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyneuromatic.core.nm_data import NMData
+    from pyneuromatic.core.nm_folder import NMFolder
+
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 import pyneuromatic.core.nm_utilities as nmu
@@ -73,6 +77,9 @@ class NMEpoch(NMObject):
         if copy is None:
             pass
         elif isinstance(copy, NMEpoch):
+            from pyneuromatic.core.nm_data import NMData
+            from pyneuromatic.core.nm_folder import NMFolder
+
             if isinstance(self._folder, NMFolder):
                 # grab NMData refs from copied NMDataContainer
                 # NMDataContainer should be copied before this copy

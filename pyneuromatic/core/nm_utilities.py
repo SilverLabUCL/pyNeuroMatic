@@ -19,10 +19,27 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+
+import logging
 from colorama import Fore, Back, Style
 import inspect
 import math
 from typing import Callable
+
+_nm_history = None  # set by NMManager.__init__ via set_history()
+
+
+def set_history(history: object) -> None:
+    """Register the active NMHistory instance.
+
+    Called by NMManager.__init__() to connect the centralized
+    history log to the nmu.history() function.
+
+    :param history: NMHistory instance or None.
+    :type history: NMHistory | None
+    """
+    global _nm_history
+    _nm_history = history
 
 CHANNEL_CHARS: tuple = ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
                 "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
@@ -588,6 +605,22 @@ def history(
         path = get_treepath(inspect.stack(), frame=frame)
     else:
         path = tp
+
+    # determine log level from title/red
+    if isinstance(title, str) and title.upper() == "ERROR":
+        level = logging.ERROR
+    elif isinstance(title, str) and title.upper() == "ALERT" or red:
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+
+    # delegate to NMHistory if available
+    if _nm_history is not None:
+        return _nm_history.log(
+            message, title=title, tp=path, level=level, quiet=quiet
+        )
+
+    # fallback: original print() behavior (before NMManager is created)
     if path:
         h = path + ": " + message
     else:
@@ -599,7 +632,6 @@ def history(
             print(Fore.RED + h + Fore.BLACK)
         else:
             print(h)
-        # TODO: print to NM history
     return h
 
 
