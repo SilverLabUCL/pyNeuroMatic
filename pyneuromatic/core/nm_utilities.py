@@ -29,7 +29,7 @@ from typing import Callable
 _nm_history = None  # set by NMManager.__init__ via set_history()
 
 
-def set_history(history: object) -> None:
+def set_history(history: object | None) -> None:
     """Register the active NMHistory instance.
 
     Called by NMManager.__init__() to connect the centralized

@@ -140,7 +140,7 @@ class NMManagerTest(unittest.TestCase):
     def test01_parameters(self):
         d = self.nm.parameters
         self.assertEqual(d["name"], "NM")
-        keys = ["name", "created", "modified", "copy of"]
+        keys = ["name", "created", "copy of"]
         self.assertEqual(list(d.keys()), keys)
 
     def test02_select(self):

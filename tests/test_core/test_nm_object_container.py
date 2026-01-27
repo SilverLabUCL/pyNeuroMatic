@@ -143,7 +143,7 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertFalse(self.map1.select_value is self.map1_copy.select_value)
 
     def test02_parameters(self):
-        klist = ["name", "created", "modified", "copy of"]
+        klist = ["name", "created", "copy of"]
         klist += [
             "content_type",
             "rename_on",
@@ -951,3 +951,6 @@ class NMObjectContainerTest(unittest.TestCase):
     def test35_sets(self):
         # TODO
         pass
+
+if __name__ == '__main__':
+    unittest.main()

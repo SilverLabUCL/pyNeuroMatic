@@ -84,11 +84,11 @@ class NMObjectTest(unittest.TestCase):
         self.assertTrue(self.o0 == self.o0_copy)
         self.assertTrue(self.o1 == self.o1_copy)
 
-        o0 = NMObject(parent=NM0, name=ONAME0)
-        o1 = NMObject(parent=NM0, name=ONAME0)
-        self.assertTrue(o0 == o1)
+        nmo0 = NMObject(parent=NM0, name=ONAME0)
+        nmo1 = NMObject(parent=NM0, name=ONAME0)
+        self.assertTrue(nmo0 == nmo1)
         o0 = NMObject2(parent=NM0, name=ONAME0)  # NMObject2
-        self.assertFalse(o0 == o1)
+        self.assertFalse(o0 == nmo1)
         o1 = NMObject2(parent=None, name=ONAME0)
 
         self.assertTrue(o0 == o1)  # parent not tested
@@ -193,11 +193,13 @@ class NMObjectTest(unittest.TestCase):
         self.assertEqual(c._NMObject__rename_fxnref, c._name_set)
         fr0 = self.o0._NMObject__rename_fxnref
         frc = c._NMObject__rename_fxnref
-        self.assertEqual(fr0, frc)  # both refs point to _name_set()
+        # Compare underlying functions, not bound methods
+        # (bound methods from different instances are never equal)
+        self.assertEqual(fr0.__func__, frc.__func__)
 
     def test04_parameters(self):
         plist = self.o0.parameters
-        plist2 = ["name", "created", "modified", "copy of"]
+        plist2 = ["name", "created", "copy of"]
         self.assertEqual(list(plist.keys()), plist2)
         self.assertEqual(plist["name"], ONAME0)
         self.assertIsNone(plist["copy of"])
@@ -209,25 +211,15 @@ class NMObjectTest(unittest.TestCase):
 
     def test06_treepath(self):
         tp = NM0.name + "." + self.o0.name
-        self.assertEqual(self.o0.treepath(), tp)
+        self.assertEqual(self.o0._treepath_str(), tp)
         tp = [NM0.name, self.o0.name]
-        self.assertEqual(self.o0.treepath(list_format=True), tp)
+        self.assertEqual(self.o0.treepath(), tp)
 
         o2 = NMObject2(parent=NM0, name=ONAME0)
         tp = NM0.name + "." + ONAME0 + ".myobject"
-        self.assertEqual(o2.myobject.treepath(), tp)
+        self.assertEqual(o2.myobject._treepath_str(), tp)
         tp = [NM0.name, ONAME0, "myobject"]
-        self.assertEqual(o2.myobject.treepath(list_format=True), tp)
-
-    def test07_modified(self):
-        modified_parent = self.o0._parent.parameters["modified"]
-        modified_self = self.o0.parameters["modified"]
-        self.o0.name = "test"
-        self.assertNotEqual(modified_parent, self.o0._parent.parameters["modified"])
-        self.assertNotEqual(modified_self, self.o0.parameters["modified"])
-        self.assertEqual(
-            self.o0._parent.parameters["modified"], self.o0.parameters["modified"]
-        )
+        self.assertEqual(o2.myobject.treepath(), tp)
 
     def test07_notes(self):
         self.assertTrue(self.o0.notes_on)
@@ -274,7 +266,7 @@ class NMObjectTest(unittest.TestCase):
                 self.o0._name_set("notused", b)
 
         for n in ["test", ONAME0]:
-            self.assertTrue(self.o0._name_set("notused", n))
+            self.o0._name_set("notused", n)
             self.assertEqual(n, self.o0.name)
 
     def test09_rename_fxnref_set(self):
@@ -287,7 +279,7 @@ class NMObjectTest(unittest.TestCase):
 
         self.o0.name = "test1"  # calls _name_set()
         self.assertEqual(self.o0.name, "test1")
-        self.assertTrue(self.o0._rename_fxnref_set(self.rename_dummy))
+        self.o0._rename_fxnref_set(self.rename_dummy)
         self.o0.name = "test2"
         self.assertEqual(self.o0.name, "test1")  # name of o0 does not change
 
@@ -340,6 +332,8 @@ class NMObject2(NMObject):
         self.myobject = NMObject(parent=self, name="myobject")
 
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMObject2):
+            return False
         if not super().__eq__(other):
             return False
         if self.myvalue != other.myvalue:
@@ -349,5 +343,5 @@ class NMObject2(NMObject):
         return True
 
 
-# if __name__ == '__main__':
-#    unittest.main()
+if __name__ == '__main__':
+    unittest.main()

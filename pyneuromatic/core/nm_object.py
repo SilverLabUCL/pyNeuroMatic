@@ -337,13 +337,13 @@ class NMObject(object):
         return self.__name
 
     @name.setter
-    def name(self, newname: str) -> bool:
+    def name(self, newname: str) -> None:
         # Name setter is called via function reference self.__rename_fxnref
         # By default, self.__rename_fxnref points to
         # NMObject._name_set(name, newname) (see below)
         # Otherwise, it may point to
         # NMObjectContainer.rename(key, newkey)
-        return self.__rename_fxnref(self.__name, newname)
+        self.__rename_fxnref(self.__name, newname)
 
     def _name_set(
         self,
@@ -354,7 +354,7 @@ class NMObject(object):
         # coding newname as optional (None)
         # since preceding param name_notused is optional
         quiet: bool = nmp.QUIET,
-    ) -> bool:
+    ) -> None:
         """Set the name of the this NMObject.
 
         :param name_notused: name of this NMObject, but param is NOT USED
@@ -362,6 +362,8 @@ class NMObject(object):
         :type name_notused: str, optional
         :param newname: a new name for this NMObject
         :type newname: str
+        :raises TypeError: If newname is not a string
+        :raises ValueError: If newname is invalid
         :return: None
         :rtype: None
         """
@@ -375,7 +377,6 @@ class NMObject(object):
         self.note = "renamed to '%s'" % self.__name
         h = nmu.history_change("name", oldname, self.__name)
         self._history(h, tp=self._treepath_str(), quiet=quiet)
-        return True
 
     def _rename_fxnref_set(self, rename_fxnref) -> None:
         """Set the rename function reference for this NMObject.
@@ -435,20 +436,25 @@ class NMObject(object):
 
     def _notes_delete(
         self, confirm_answer: str | None = None  # to skip confirm prompt
-    ) -> bool:
+    ) -> None:
+        """Delete all notes for this object.
+        
+        :param confirm_answer: pre-answer to confirmation prompt to skip UI
+        :type confirm_answer: str, optional
+        :raises RuntimeError: If user cancels the deletion
+        :return: None
+        :rtype: None
+        """
         if nmp.DELETE_CONFIRM:
             if confirm_answer in nmu.CONFIRM_YNC:
                 ync = confirm_answer
             else:
                 q = "are you sure you want to delete all notes for '%s'?" % self.__name
                 ync = nmu.input_yesno(q, treepath=self._treepath_str())
-            if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
-                pass
-            else:
+            if not isinstance(ync, str) or (ync.lower() != "y" and ync.lower() != "yes"):
                 print("cancel delete all notes")
-                return False
+                raise RuntimeError("User cancelled note deletion")
         self.__notes = []
-        return True
 
     @property
     def notes_on(self) -> bool:
@@ -618,9 +624,6 @@ class NMObject(object):
     def _treepath_str(self) -> str:
         # NM treepath list of names is concatenated via '.'
         # Concatenated list of names: 'nm.project0.folder0'
-        tp_return = ""
         tp = self.treepath(names=True)
-        for item in tp:
-            if isinstance(item, str):
-                tp_return += "." + item
-        return tp_return if tp_return else self.__name
+        tp_strs = [item for item in tp if isinstance(item, str)]
+        return ".".join(tp_strs) if tp_strs else self.__name
