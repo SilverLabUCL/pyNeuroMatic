@@ -27,6 +27,7 @@ import numpy as np
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
+from pyneuromatic.core.nm_history import NMHistory
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
 from pyneuromatic.core.nm_project import NMProject, NMProjectContainer
@@ -69,6 +70,10 @@ class NMManager(NMObject):
     ) -> None:
         super().__init__(parent=None, name=name)  # NMObject
 
+        # initialize centralized history logging
+        self.__history = NMHistory(quiet=quiet)
+        nmu.set_history(self.__history)
+
         # self.__configs = nmp.Configs()
         # self.__configs.quiet = quiet
 
@@ -107,10 +112,11 @@ class NMManager(NMObject):
         tstr = str(datetime.datetime.now())
         h = ("created NM manager '%s' %s"
              % (self.name, tstr))
-        # self._history(h, quiet=quiet)
-        print(h)
-        print("current NM project is '%s'" % self.__project.name)
-        print("current NM tool is '%s'" % self.__toolselect)
+        self._history(h, quiet=quiet)
+        self._history("current NM project is '%s'" % self.__project.name,
+                      quiet=quiet)
+        self._history("current NM tool is '%s'" % self.__toolselect,
+                      quiet=quiet)
 
     def tool_add(
         self,
@@ -164,6 +170,11 @@ class NMManager(NMObject):
     # @property
     # def projects(self) -> NMProjectContainer:
     #     return self.__project_container
+
+    @property
+    def history(self) -> NMHistory:
+        """Access the centralized NM history log."""
+        return self.__history
 
     @property
     def project(self) -> NMProject:

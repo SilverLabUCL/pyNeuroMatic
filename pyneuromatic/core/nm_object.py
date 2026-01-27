@@ -19,16 +19,19 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+
 # import copy
 import datetime
 from tkinter.font import names
 import types
-from typing import overload
+from typing import overload, TYPE_CHECKING
 
-from pyneuromatic.core.nm_folder import NMFolder
-from pyneuromatic.core.nm_manager import NMManager
+if TYPE_CHECKING:
+    from pyneuromatic.core.nm_folder import NMFolder
+    from pyneuromatic.core.nm_manager import NMManager
+    from pyneuromatic.core.nm_project import NMProject
+
 import pyneuromatic.core.nm_preferences as nmp
-from pyneuromatic.core.nm_project import NMProject
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -479,24 +482,15 @@ class NMObject(object):
 
     @property
     def _manager(self) -> NMManager | None:  # find NMManager of this NMObject
-        o = self._find_parent("NMManager")
-        if isinstance(o, NMManager):
-            return o
-        return None
+        return self._find_parent("NMManager")
 
     @property
     def _project(self) -> NMProject | None:  # find NMProject of this NMObject
-        o = self._find_parent("NMProject")
-        if isinstance(o, NMProject):
-            return o
-        return None
+        return self._find_parent("NMProject")
 
     @property
     def _folder(self) -> NMFolder | None:  # find NMFolder of this NMObject
-        o = self._find_parent("NMFolder")
-        if isinstance(o, NMFolder):
-            return o
-        return None
+        return self._find_parent("NMFolder")
 
     def _find_parent(self, classname: str) -> object:
         if self.__parent is None or not isinstance(classname, str):

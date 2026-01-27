@@ -20,7 +20,11 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
-from pyneuromatic.core.nm_data import NMData
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyneuromatic.core.nm_data import NMData
+
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
@@ -86,6 +90,8 @@ class NMChannel(NMObject):
             else:
                 # grab NMData refs from copied NMDataContainer
                 # NMDataContainer should be copied before this copy
+                from pyneuromatic.core.nm_data import NMData
+
                 data = self._folder.data
                 for d in copy.__thedata:
                     o = data.get(d.name)
