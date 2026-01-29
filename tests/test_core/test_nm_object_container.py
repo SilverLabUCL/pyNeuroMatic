@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
-from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_object_container import NMObjectContainer, ExecuteMode
 from tests.test_core.test_nm_object import NMObject2
 
 QUIET = True
@@ -102,7 +102,8 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(self.map0._NMObjectContainer__auto_name_seq_format, OSEQFORMAT0)
         self.assertIsNone(self.map0.selected_name)
         self.assertIsNone(self.map0.selected_value)
-        self.assertEqual(self.map0.execute_target, "selected")
+        self.assertEqual(self.map0.execute_mode, ExecuteMode.SELECTED)
+        self.assertEqual(self.map0.execute_target_name, None)
         self.assertEqual(self.map0.execute_targets, [])
         self.assertEqual(list(self.map0.sets.keys()), [SETS_NLIST0[0]])
         self.assertEqual(len(self.map0._NMObjectContainer__map), len(ONLIST0))
@@ -114,7 +115,8 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(self.map1._NMObjectContainer__auto_name_seq_format, OSEQFORMAT1)
         self.assertEqual(self.map1.selected_name, ONLIST1[2])
         self.assertEqual(self.map1.selected_value, self.olist1[2])
-        self.assertEqual(self.map1.execute_target, "selected")
+        self.assertEqual(self.map1.execute_mode, ExecuteMode.SELECTED)
+        self.assertEqual(self.map1.execute_target_name, None)
         self.assertEqual(self.map1.execute_targets, [self.olist1[2]])
         self.assertEqual(list(self.map1.sets.keys()), [SETS_NLIST1[0], SETS_NLIST1[1]])
         self.assertEqual(len(self.map1._NMObjectContainer__map), len(ONLIST1))
@@ -127,7 +129,8 @@ class NMObjectContainerTest(unittest.TestCase):
             self.map1_copy._NMObjectContainer__auto_name_seq_format, OSEQFORMAT1
         )
         self.assertEqual(self.map1_copy.selected_name, ONLIST1[2])
-        self.assertEqual(self.map1_copy.execute_target, "selected")
+        self.assertEqual(self.map1_copy.execute_mode, ExecuteMode.SELECTED)
+        self.assertEqual(self.map1_copy.execute_target_name, None)
         self.assertEqual(
             list(self.map1_copy.sets.keys()), [SETS_NLIST1[0], SETS_NLIST1[1]]
         )
@@ -151,7 +154,8 @@ class NMObjectContainerTest(unittest.TestCase):
             "auto_name_prefix",
             "auto_name_seq_format",
             "selected_name",
-            "execute_target",
+            "execute_mode",
+            "execute_target_name",
             "sets",
         ]
 
@@ -164,7 +168,8 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(plist["auto_name_prefix"], OPREFIX0)
         self.assertEqual(plist["auto_name_seq_format"], OSEQFORMAT0)
         self.assertIsNone(plist["selected_name"])
-        self.assertEqual(plist["execute_target"], "selected_name")
+        self.assertEqual(plist["execute_mode"], ExecuteMode.SELECTED.name)
+        self.assertEqual(plist["execute_target_name"], None)
         self.assertEqual(plist["sets"], [SETS_NLIST0[0]])
 
         plist = self.map1.parameters
@@ -175,7 +180,8 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(plist["auto_name_prefix"], OPREFIX1)
         self.assertEqual(plist["auto_name_seq_format"], OSEQFORMAT1)
         self.assertEqual(plist["selected_name"], ONLIST1[2])
-        self.assertEqual(plist["execute_target"], "selected_name")
+        self.assertEqual(plist["execute_mode"], ExecuteMode.SELECTED.name)
+        self.assertEqual(plist["execute_target_name"], None)
         self.assertEqual(plist["sets"], [SETS_NLIST1[0], SETS_NLIST1[1]])
 
         plist = self.map1_copy.parameters
@@ -187,7 +193,8 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertEqual(plist["auto_name_prefix"], OPREFIX1)
         self.assertEqual(plist["auto_name_seq_format"], OSEQFORMAT1)
         self.assertEqual(plist["selected_name"], ONLIST1[2])
-        self.assertEqual(plist["execute_target"], "selected_name")
+        self.assertEqual(plist["execute_mode"], ExecuteMode.SELECTED.name)
+        self.assertEqual(plist["execute_target_name"], None)
         self.assertEqual(plist["sets"], [SETS_NLIST1[0], SETS_NLIST1[1]])
 
     def test03_content_type(self):
@@ -214,8 +221,11 @@ class NMObjectContainerTest(unittest.TestCase):
         # get(), items(), values()
 
         bad = list(nmu.BADTYPES)
+        bad.remove(None)
+        bad.remove("string")
         for b in bad:
-            self.assertIsNone(self.map0.get(b))
+            with self.assertRaises(TypeError):
+                self.map0.get(b)
 
         for i, n in enumerate(ONLIST0):
             o = self.map0.get(n)
@@ -326,13 +336,16 @@ class NMObjectContainerTest(unittest.TestCase):
             self.assertTrue(n in self.map0)
             self.assertTrue(n.upper() in self.map0)  # case insensitive
             self.assertFalse(n in self.map1)
-        for o in self.olist0:
-            self.assertTrue(o in self.map0)
-            self.assertFalse(o in self.map1)
         for n in ONLIST1:
             self.assertTrue(n in self.map1)
+
+    def test11_contains_value(self):  # 'in' operator
+        for o in self.olist0:
+            self.assertTrue(self.map0.contains_value(o))
+            self.assertFalse(self.map1.contains_value(o))
         for o in self.olist1:
-            self.assertTrue(o in self.map1)
+            self.assertFalse(self.map0.contains_value(o))
+            self.assertTrue(self.map1.contains_value(o))
 
     def test12_eq(self):  # '==' and '!=' and 'is' operators
         # arg; other
@@ -421,7 +434,6 @@ class NMObjectContainerTest(unittest.TestCase):
         #    self.map0.popitem()  # NOT ALLOWED
         # popitem returns a tuple
         o = self.map0.popitem(auto_confirm="n")
-        # print(o)
         self.assertEqual(o, ())
         self.assertTrue(ONLIST0[-1] in self.map0)
         o = self.map0.popitem(auto_confirm="y")
@@ -435,7 +447,6 @@ class NMObjectContainerTest(unittest.TestCase):
 
     def test19_clear(self):
         o = self.map0.clear(auto_confirm="n")
-        # print(o)
         self.assertIsNone(o)
         self.assertEqual(len(self.map0), len(ONLIST0))
         o = self.map0.clear(auto_confirm="y")
@@ -512,9 +523,11 @@ class NMObjectContainerTest(unittest.TestCase):
         # args: key, ok, error
 
         bad = list(nmu.BADTYPES)
+        bad.remove("string")
+        bad.remove(None)
         for b in bad:
-            key = self.map0._getkey(b)
-            self.assertIsNone(key)
+            with self.assertRaises(TypeError):
+                key = self.map0._getkey(b)
 
         bad = list(nmu.BADNAMES)
         for b in bad:
@@ -529,22 +542,12 @@ class NMObjectContainerTest(unittest.TestCase):
         key = self.map0._getkey(ONLIST0[1].upper())
         self.assertEqual(key, ONLIST0[1])
 
-        # test key = 'selected'
-        key = self.map0._getkey("selected")
-        self.assertIsNone(key)
-        self.map0.selected_name = ONLIST0[1]
-        key = self.map0._getkey("selected")
-        self.assertEqual(key, ONLIST0[1])
-        # select/key should be case insensitive
-        self.map0.selected_name = ONLIST0[1].upper()
-        key = self.map0._getkey("selected")
-        self.assertEqual(key, ONLIST0[1])
-
     def test23_newkey(self):
         # args: key, ok, error
 
         bad = list(nmu.BADTYPES)
         bad.remove("string")
+        bad.remove(None)
         for b in bad:
             with self.assertRaises(TypeError):
                 key = self.map0._newkey(b)
@@ -569,17 +572,17 @@ class NMObjectContainerTest(unittest.TestCase):
 
     def test24_rename(self):
         # args: key, newkey
-        bad = list((None, 3, 3.14, True, [], ()))
+        bad = list(nmu.BADTYPES)
+        bad.remove("string")  # ok
         for b in bad:  # test key
-            print(b)
-            with self.assertRaises(KeyError):
+            with self.assertRaises(TypeError):
                 self.map0.rename(b, ONLIST0[3])
+        bad.remove(None)  # ok
         for b in bad:  # test newkey
-            with self.assertRaises(KeyError):
+            with self.assertRaises(TypeError):
                 self.map0.rename(ONLIST0[4], b)
 
         bad = list(nmu.BADNAMES)
-        # bad.remove('select')  # ok
         for b in bad:  # test key
             with self.assertRaises(KeyError):
                 self.map0.rename(b, ONLIST0[3])
@@ -588,12 +591,12 @@ class NMObjectContainerTest(unittest.TestCase):
         for b in bad:  # test newkey
             with self.assertRaises(ValueError):
                 self.map0.rename(ONLIST0[4], b)
-        """
+
         with self.assertRaises(KeyError):
-            self.map0.rename('select', ONLIST0[0])  # name already used
+            self.map0.rename(ONLIST0[0], ONLIST0[0].upper())  # same name, different case
         with self.assertRaises(RuntimeError):
-            self.map1.rename('select', 'test')  # rename = False
-        """
+            self.map1.rename(ONLIST0[0], 'test')  # rename_on = False
+        
         self.map0.pop(ONLIST0[3], auto_confirm="y")
         self.assertFalse(ONLIST0[3] in self.map0)
         klist = [OPREFIX0 + str(i) for i in [0, 1, 2, 4, 5]]
@@ -665,6 +668,8 @@ class NMObjectContainerTest(unittest.TestCase):
         for b in bad:  # test key
             with self.assertRaises(TypeError):
                 self.map0.duplicate(b, None)
+        bad.remove(None)  # ok
+        for b in bad:  # test key
             with self.assertRaises(TypeError):
                 self.map0.duplicate(OPREFIX0 + "0", b)
 
@@ -695,18 +700,19 @@ class NMObjectContainerTest(unittest.TestCase):
     def test27_new(self):
         # args: nmobject
         bad = list(nmu.BADTYPES)
+        bad.remove("string")  # ok
+        bad.remove(None)
         for b in bad:
             with self.assertRaises(TypeError):
                 self.map0.new(b)
 
         with self.assertRaises(KeyError):
-            self.map0.new(self.olist0[3])  # already in container
+            self.map0.new(ONLIST0[3])  # already in container
 
         nnext = self.map0.auto_name_next()
         self.assertEqual(nnext, OPREFIX0 + "6")
         o = NMObject(parent=NM0, name=nnext)
-        o2 = self.map0.new(o)
-        self.assertEqual(o2.name, nnext)
+        self.assertTrue(self.map0._new(o))
         self.assertEqual(len(self.map0), len(ONLIST0) + 1)
         """
         old_select = self.map0.select
@@ -736,7 +742,7 @@ class NMObjectContainerTest(unittest.TestCase):
         self.map0.auto_name_prefix = "Test"
         self.assertEqual(self.map0.auto_name_prefix, "Test")
 
-    def test29_name_seq_format(self):
+    def test29_auto_name_seq_format(self):
         # args: seq_format
         bad = list(nmu.BADTYPES)
         bad.remove("string")  # ok
@@ -761,7 +767,7 @@ class NMObjectContainerTest(unittest.TestCase):
         self.map0.auto_name_seq_format = "000"
         self.assertEqual(self.map0.auto_name_seq_format, "000")
 
-    def test30_name_seq_next_str(self):  # and name_seq_counter
+    def test30_auto_name_seq_next_str(self):  # and name_seq_counter
         seq_str = self.map0._auto_name_seq_next_str()
         seq_next_str = str(len(ONLIST0))
         self.assertEqual(seq_str, seq_next_str)
@@ -784,7 +790,7 @@ class NMObjectContainerTest(unittest.TestCase):
         seq_str = self.map1._auto_name_seq_counter()
         self.assertEqual(seq_str, "AAA")
 
-    def test31_name_seq_counter_increment(self):
+    def test31_auto_name_seq_counter_increment(self):
         for i in range(10):
             self.assertEqual(self.map0._auto_name_seq_counter(), str(i))
             if i == 9:
@@ -830,7 +836,7 @@ class NMObjectContainerTest(unittest.TestCase):
                     self.map1._auto_name_seq_counter_increment()
         self.assertEqual(self.map1._auto_name_seq_counter(), "ZZ")
 
-    def test32_name_next(self):
+    def test32_auto_name_next(self):
         name = self.map0.auto_name_next()
         seq_str = str(len(ONLIST0))
         self.assertEqual(name, OPREFIX0 + seq_str)
@@ -858,7 +864,7 @@ class NMObjectContainerTest(unittest.TestCase):
         name = self.map1.auto_name_next(use_counter=True)
         self.assertEqual(name, OPREFIX1 + nmu.CHANNEL_CHARS[n])
 
-    def test33_select(self):
+    def test33_selected(self):
         # args: key
 
         bad = list(nmu.BADTYPES)
@@ -871,7 +877,6 @@ class NMObjectContainerTest(unittest.TestCase):
         self.map0.selected_name = ONLIST0[3]
         self.assertEqual(self.map0.selected_name, ONLIST0[3])
         self.assertEqual(self.map0.selected_value, self.olist0[3])
-        self.assertEqual(self.map0.get("selected"), self.olist0[3])
         self.assertTrue(self.map0.is_selected(ONLIST0[3]))
         self.assertFalse(self.map0.is_selected(ONLIST0[0]))
         self.assertFalse(self.map0.is_selected(1))
@@ -894,44 +899,43 @@ class NMObjectContainerTest(unittest.TestCase):
         # args: key
 
         bad = list(nmu.BADTYPES)
-        bad.remove(None)  # ok
-        bad.remove("string")  # ok
         for b in bad:
             with self.assertRaises(TypeError):
-                self.map0.execute_target = b
+                self.map0.execute_mode = b
 
         bad = list(nmu.BADTYPES)
         for b in bad:
             self.assertFalse(self.map0.is_execute_target(b))
 
+        self.map0.execute_mode = ExecuteMode.NAME
+        self.assertIsNone(self.map0.execute_target_name)
         with self.assertRaises(KeyError):
-            self.map0.execute_target = "test"
+            self.map0.execute_target_name = "test"
         self.assertFalse(self.map0.is_execute_target("test"))
+        self.map0.execute_target_name = ONLIST0[3]
+        self.assertTrue(self.map0.is_execute_target(ONLIST0[3]))
 
-        self.map0.execute_target = "selected"
+        self.map0.execute_mode = ExecuteMode.SELECTED
+        self.assertIsNone(self.map0.execute_target_name)
 
         self.map0.selected_name = ONLIST0[3]
         self.assertEqual(self.map0.selected_value, self.olist0[3])
-        self.assertTrue(self.map0.is_execute_target("selected"))
         self.assertTrue(self.map0.is_execute_target(ONLIST0[3]))
-        self.assertEqual(self.map0.execute_target, "selected")
         self.assertEqual(self.map0.execute_targets, [self.olist0[3]])
 
-        self.map0.execute_target = ONLIST0[4]
+        self.map0.execute_mode = ExecuteMode.NAME
+        self.map0.execute_target_name = ONLIST0[4]
         self.assertEqual(self.map0.execute_targets, [self.olist0[4]])
-        self.assertFalse(self.map0.is_execute_target("selected"))
         self.assertFalse(self.map0.is_execute_target(ONLIST0[3]))
         self.assertTrue(self.map0.is_execute_target(ONLIST0[4]))
 
-        self.map0.execute_target = SETS_NLIST0[0]
-        self.assertEqual(
-            self.map0.execute_targets, [self.olist0[0], self.olist0[2], self.olist0[3]]
-        )
+        self.map0.execute_mode = ExecuteMode.SET
+        self.map0.execute_target_name = SETS_NLIST0[0]
+        self.assertEqual(self.map0.execute_targets, [self.olist0[0], self.olist0[2], self.olist0[3]])
 
-        self.map0.execute_target = "all"
+        self.map0.execute_mode = ExecuteMode.ALL
+        self.assertIsNone(self.map0.execute_target_name)
         self.assertEqual(self.map0.execute_targets, self.olist0)
-        self.assertFalse(self.map0.is_execute_target("selected"))
-        self.assertTrue(self.map0.is_execute_target("all"))
         for n in ONLIST0:
             self.assertTrue(self.map0.is_execute_target(n))
 

@@ -49,7 +49,7 @@ CONFIRM_YNC: tuple = ("y", "yes", "n", "no", "c", "cancel")  # see input_yesno()
 
 # for testing
 BADTYPES: tuple = (None, 3, 3.14, True, [], (), {}, set(), "string", Fore)
-BADNAMES: tuple = ("", "all", "none", "self", "nan", "string""inf", "-inf", "b&dn@me!")
+BADNAMES: tuple = ("", "all", "none", "self", "nan", "string", "inf", "-inf", "b&dn@me!")
 
 
 def badtypes(

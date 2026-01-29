@@ -646,13 +646,12 @@ class NMObjectContainer(NMObject, MutableMapping):
         if not self.__rename_on:
             raise RuntimeError("key names are locked.")
         if name is None:
-            raise ValueError("key name cannot be None")
+            e = nmu.typeerror(name, "name", "string")
+            raise TypeError(e)
         key = self._getkey(name)
         if key is None:
             raise KeyError("key name '%s' does not exist" % name)
         actual_newname = self._newkey(newname)
-        if key.lower() == actual_newname.lower():
-            return False  # nothing to do
         new_map = {}
         for k in self.__map.keys():
             o = self.__map[k]
@@ -701,7 +700,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         newname: str | None = None,
     ) -> NMObject | None:
         if name is None:
-            raise ValueError("key name cannot be None")
+            e = nmu.typeerror(name, "name", "string")
+            raise TypeError(e)
         key = self._getkey(name)
         if key is None:
             raise KeyError("key name '%s' does not exist" % name)
@@ -962,7 +962,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     def execute_targets(self) -> list[NMObject]:
         """Returns the list of NMObjects to operate on based on execute_mode."""
         if self.__execute_mode == ExecuteMode.SELECTED:
-            value = self._get_selected_value()
+            value = self.selected_value
             if value is None:
                 return []
             return [value]
@@ -984,7 +984,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             s = self.sets.get(key)
             if s is None:
                 return []
-            return list(s.values())
+            return list(s)  # s is already a list[NMObject] from NMSets.get()
         return []
 
     @property
@@ -1016,7 +1016,10 @@ class NMObjectContainer(NMObject, MutableMapping):
             self.__execute_target_name = None
             return
         if target_name is None:
-            raise ValueError("target_name required for NAME or SET mode")
+            # raise ValueError("target_name required for NAME or SET mode")
+            self.__execute_mode = mode
+            self.__execute_target_name = None
+            return
         if not isinstance(target_name, str):
             e = nmu.typeerror(target_name, "target_name", "string")
             raise TypeError(e)
