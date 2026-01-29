@@ -199,21 +199,21 @@ class NMManager(NMObject):
         folders = p.folders
         if folders is None:
             return s
-        f = folders.select_value
+        f = folders.selected_value
         if not isinstance(f, NMFolder):
             return s
         s["folder"] = f
-        d = f.data.select_value
+        d = f.data.selected_value
         if d:
             s["data"] = d
-        ds = f.dataseries.select_value
+        ds = f.dataseries.selected_value
         if not isinstance(ds, NMDataSeries):
             return s
         s["dataseries"] = ds
-        c = ds.channels.select_value
+        c = ds.channels.selected_value
         if c:
             s["channel"] = c
-        e = ds.epochs.select_value
+        e = ds.epochs.selected_value
         if e:
             s["epoch"] = e
         return s
@@ -263,21 +263,21 @@ class NMManager(NMObject):
         if folders is None:
             return None
         if "folder" in select:
-            folders.select_key = select["folder"]
-        f = folders.select_value
+            folders.selected_name = select["folder"]
+        f = folders.selected_value
         if not isinstance(f, NMFolder):
             return None
         if "data" in select:
-            f.data.select_key = select["data"]
+            f.data.selected_name = select["data"]
         if "dataseries" in select:
-            f.dataseries.select_key = select["dataseries"]
-        ds = f.dataseries.select_value
+            f.dataseries.selected_name = select["dataseries"]
+        ds = f.dataseries.selected_value
         if not isinstance(ds, NMDataSeries):
             return None
         if "channel" in select:
-            ds.channels.select_key = select["channel"]
+            ds.channels.selected_name = select["channel"]
         if "epoch" in select:
-            ds.epochs.select_key = select["epoch"]
+            ds.epochs.selected_name = select["epoch"]
         return None
 
     def execute_values(
@@ -290,17 +290,17 @@ class NMManager(NMObject):
         folders = p.folders
         if folders is None:
             return elist
-        flist = folders.execute_values
+        flist = folders.execute_targets
         for f in flist:
             if not isinstance(f, NMFolder):
                 continue
-            dslist = f.dataseries.execute_values
+            dslist = f.dataseries.execute_targets
             if dataseries_priority and dslist:
                 for ds in dslist:
                     if not isinstance(ds, NMDataSeries):
                         continue
-                    for c in ds.channels.execute_values:
-                        for e in ds.epochs.execute_values:
+                    for c in ds.channels.execute_targets:
+                        for e in ds.epochs.execute_targets:
                             x: dict[str, NMObject] = {}
                             x["project"] = p
                             x["folder"] = f
@@ -309,7 +309,7 @@ class NMManager(NMObject):
                             x["epoch"] = e
                             elist.append(x)
             else:
-                dlist = f.data.execute_values
+                dlist = f.data.execute_targets
                 for d in dlist:
                     x2: dict[str, NMObject] = {}
                     x2["project"] = p
@@ -430,9 +430,9 @@ class NMManager(NMObject):
             raise ValueError("project has no folder container")
         value = execute["folder"]
         if value.lower() == "select":
-            fkey = folders.select_key
+            fkey = folders.selected_name
             if fkey in folders:
-                folders.execute_key = "select"
+                folders.execute_target = "select"
             else:
                 e = "bad folder select: %s" % fkey
                 raise ValueError(e)
@@ -440,15 +440,15 @@ class NMManager(NMObject):
             e = "'all' folders is not allowed in this function"
             raise ValueError(e)
         elif value in folders:
-            folders.select_key = value
-            folders.execute_key = "select"
+            folders.selected_name = value
+            folders.execute_target = "select"
         elif value in folders.sets:
             e = "folder sets are not allowed in this function"
             raise ValueError(e)
         else:
             e = "unknown folder execute value: %s" % value
             raise ValueError(e)
-        f = folders.select_value
+        f = folders.selected_value
         if f not in folders:
             e = "bad folder select: %s" % f
             raise ValueError(e)
@@ -456,7 +456,7 @@ class NMManager(NMObject):
             raise ValueError("bad folder select")
 
         if "data" in execute:
-            f.data.execute_key = execute["data"]
+            f.data.execute_target = execute["data"]
             return self.execute_keys(dataseries_priority=False)  # finished
 
         if "dataseries" not in execute:
@@ -464,9 +464,9 @@ class NMManager(NMObject):
             raise KeyError(e)
         value = execute["dataseries"]
         if value.lower() == "select":
-            dskey = f.dataseries.select_key
+            dskey = f.dataseries.selected_name
             if dskey in f.dataseries:
-                f.dataseries.execute_key = "select"
+                f.dataseries.execute_target = "select"
             else:
                 e = "bad dataseries select: %s" % dskey
                 raise ValueError(e)
@@ -474,15 +474,15 @@ class NMManager(NMObject):
             e = "'all' dataseries is not allowed in this function"
             raise ValueError(e)
         elif value in f.dataseries:
-            f.dataseries.select_key = value
-            f.dataseries.execute_key = "select"
+            f.dataseries.selected_name = value
+            f.dataseries.execute_target = "select"
         elif value in f.dataseries.sets:
             e = "dataseries sets are not allowed in this function"
             raise ValueError(e)
         else:
             e = "unknown dataseries execute value: %s" % value
             raise ValueError(e)
-        ds = f.dataseries.select_value
+        ds = f.dataseries.selected_value
         if ds not in f.dataseries:
             e = "bad dataseries select: %s" % ds
             raise ValueError(e)
@@ -492,12 +492,12 @@ class NMManager(NMObject):
         if "channel" not in execute:
             e = "missing execute 'channel' key"
             raise KeyError(e)
-        ds.channels.execute_key = execute["channel"]
+        ds.channels.execute_target = execute["channel"]
 
         if "epoch" not in execute:
             e = "missing execute 'epoch' key"
             raise KeyError(e)
-        ds.epochs.execute_key = execute["epoch"]
+        ds.epochs.execute_target = execute["epoch"]
 
         return self.execute_keys(dataseries_priority=True)
 
@@ -508,17 +508,17 @@ class NMManager(NMObject):
         folders = p.folders
         if folders is None:
             return None
-        folders.execute_key = "select"
+        folders.execute_target = "select"
         for f in folders.values():
             if not isinstance(f, NMFolder):
                 continue
-            f.data.execute_key = "select"
-            f.dataseries.execute_key = "select"
+            f.data.execute_target = "select"
+            f.dataseries.execute_target = "select"
             for ds in f.dataseries.values():
                 if not isinstance(ds, NMDataSeries):
                     continue
-                ds.channels.execute_key = "select"
-                ds.epochs.execute_key = "select"
+                ds.channels.execute_target = "select"
+                ds.epochs.execute_target = "select"
         return None
 
     def execute_tool(
@@ -591,7 +591,7 @@ if __name__ == "__main__":
     assert nm.project.folders is not None
     f0 = nm.project.folders.new("myfolder0")
     f1 = nm.project.folders.new("myfolder1")
-    nm.project.folders.select_key = "myfolder1"
+    nm.project.folders.selected_name = "myfolder1"
     assert isinstance(f1, NMFolder)
 
     ydata = np.random.normal(loc=0, scale=1, size=pnts)

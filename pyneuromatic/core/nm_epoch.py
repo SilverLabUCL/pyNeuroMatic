@@ -176,8 +176,8 @@ class NMEpochContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )
 
@@ -192,17 +192,17 @@ class NMEpochContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = "default",  # not used, instead name = name_next()
+        name: str | None = None,  # not used, instead name = name_next()
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> NMEpoch | None:
-        name = self.name_next()
-        istr = name.replace(self.name_prefix, "")
+        actual_name = self.auto_name_next()
+        istr = actual_name.replace(self.auto_name_prefix, "")
         if str.isdigit(istr):
             iseq = int(istr)
         else:
             iseq = -1
-        c = NMEpoch(parent=self._parent, name=name, number=iseq)
+        c = NMEpoch(parent=self._parent, name=actual_name, number=iseq)
         if super()._new(c, select=select):
             return c
         return None

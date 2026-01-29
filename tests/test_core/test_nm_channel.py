@@ -136,9 +136,9 @@ class NMChannelTest(unittest.TestCase):
         p = channels.parameters
         self.assertEqual(p["content_type"], "nmchannel")
         self.assertFalse(p["rename_on"])
-        self.assertEqual(p["name_prefix"], "")
-        self.assertEqual(p["name_seq_format"], "A")
-        self.assertEqual(p["select"], None)
+        self.assertEqual(p["auto_name_prefix"], "")
+        self.assertEqual(p["auto_name_seq_format"], "A")
+        self.assertEqual(p["selected_name"], None)
 
         # content_type
         self.assertEqual(channels.content_type(), "NMChannel")
@@ -148,34 +148,34 @@ class NMChannelTest(unittest.TestCase):
         self.assertTrue(channels.content_type_ok(self.c0))
 
         # name
-        self.assertEqual(channels.name_next(), "A")
-        channels.name_prefix = "Ch"
-        self.assertEqual(channels.name_prefix, "Ch")
-        self.assertEqual(channels.name_next(), "ChA")
-        channels.name_prefix = ""  # reset
+        self.assertEqual(channels.auto_name_next(), "A")
+        channels.auto_name_prefix = "Ch"
+        self.assertEqual(channels.auto_name_prefix, "Ch")
+        self.assertEqual(channels.auto_name_next(), "ChA")
+        channels.auto_name_prefix = ""  # reset
 
         # new
-        self.assertEqual(channels.name_next(), "A")
+        self.assertEqual(channels.auto_name_next(), "A")
         c = channels.new(xscale=XSCALE0, yscale=YSCALE0)
         self.assertIsInstance(c, NMChannel)
         self.assertEqual(c.name, "A")
-        self.assertEqual(channels.name_next(), "B")
+        self.assertEqual(channels.auto_name_next(), "B")
         c = channels.new(xscale=XSCALE1, yscale=YSCALE1)
         self.assertEqual(c.name, "B")
-        self.assertEqual(channels.name_next(), "C")
-        self.assertEqual(channels.name_next(use_counter=True), "C")
-        self.assertEqual(channels._name_seq_counter(), "C")
-        channels._name_seq_counter_increment()
-        self.assertEqual(channels._name_seq_counter(), "D")
-        self.assertEqual(channels.name_next(use_counter=True), "D")
-        self.assertEqual(channels.name_next(), "C")
+        self.assertEqual(channels.auto_name_next(), "C")
+        self.assertEqual(channels.auto_name_next(use_counter=True), "C")
+        self.assertEqual(channels._auto_name_seq_counter(), "C")
+        channels._auto_name_seq_counter_increment()
+        self.assertEqual(channels._auto_name_seq_counter(), "D")
+        self.assertEqual(channels.auto_name_next(use_counter=True), "D")
+        self.assertEqual(channels.auto_name_next(), "C")
 
         # copy
         c = channels.copy()
         self.assertTrue(channels == c)
         self.assertFalse(channels != c)
         self.assertFalse(channels is c)
-        c.name_seq_format = "0"
+        c.auto_name_seq_format = "0"
         self.assertFalse(channels == c)
 
         # equal
@@ -193,7 +193,7 @@ class NMChannelTest(unittest.TestCase):
         self.assertFalse(channels == c)
 
         # duplicate
-        c = channels.duplicate(key="A")
+        c = channels.duplicate(name="A")
         self.assertEqual(c.name, "C")
         a = channels.get("A")
         self.assertFalse(c == a)  # name is different

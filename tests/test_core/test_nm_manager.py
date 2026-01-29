@@ -127,7 +127,6 @@ class NMManagerTest(unittest.TestCase):
                 NMManager(project_name=b, quiet=True)
 
         bad = list(nmu.BADNAMES)
-        bad.remove("default")
         for b in bad:
             with self.assertRaises(ValueError):
                 NMManager(name=b, quiet=True)
@@ -278,7 +277,7 @@ class NMManagerTest(unittest.TestCase):
 
         # p = self.nm.projects.select_value
         # p = self.nm.project
-        p.folders.execute_key = "set0"
+        p.folders.execute_target = "set0"
         slist = []
         for f in p.folders.sets.get("set0"):
             ds = f.dataseries.select_value
@@ -298,7 +297,7 @@ class NMManagerTest(unittest.TestCase):
 
         # p = self.nm.projects.select_value
         # p = self.nm.project
-        p.folders.execute_key = "all"
+        p.folders.execute_target = "all"
         slist = []
         for f in p.folders.values():
             ds = f.dataseries.select_value
@@ -319,7 +318,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         # p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         f.data.execute_key = "set0"
         slist = []
         for d in f.data.sets.get("set0"):
@@ -338,7 +337,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         f.data.execute_key = "all"
         slist = []
         for d in f.data.values():
@@ -357,7 +356,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         f.dataseries.execute_key = "set0"
         slist = []
         for ds in f.dataseries.sets.get("set0"):
@@ -378,7 +377,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         f.dataseries.execute_key = "all"
         slist = []
         for ds in f.dataseries.values():
@@ -399,7 +398,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         ds = f.dataseries.select_value
         ds.channels.execute_key = "set0"
         slist = []
@@ -421,7 +420,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         ds = f.dataseries.select_value
         ds.channels.execute_key = "all"
         slist = []
@@ -443,7 +442,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         ds = f.dataseries.select_value
         ds.epochs.execute_key = "set0"
         slist = []
@@ -465,7 +464,7 @@ class NMManagerTest(unittest.TestCase):
         self.nm.execute_reset_all()
         # p = self.nm.projects.select_value
         p = self.nm.project
-        f = p.folders.select_value
+        f = p.folders.selected_value
         ds = f.dataseries.select_value
         ds.epochs.execute_key = "all"
         slist = []
@@ -638,11 +637,11 @@ class NMManagerTest(unittest.TestCase):
         self.assertEqual(elist, [select])
 
         e1 = {
-            "project": "select",
-            "folder": "select",
-            "dataseries": "select",
-            "channel": "select",
-            "epoch": "select",
+            "project": "selected",
+            "folder": "selected",
+            "dataseries": "selected",
+            "channel": "selected",
+            "epoch": "selected",
         }
 
         elist = self.nm.execute_keys_set(e1)

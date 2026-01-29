@@ -110,8 +110,8 @@ class NMToolFolderContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )
 
@@ -126,7 +126,7 @@ class NMToolFolderContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = "default",
+        name: str | None = None,
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> NMToolFolder | None:

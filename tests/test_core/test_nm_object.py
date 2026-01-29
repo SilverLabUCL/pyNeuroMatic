@@ -91,11 +91,11 @@ class NMObjectTest(unittest.TestCase):
         self.assertFalse(o0 == nmo1)
         o1 = NMObject2(parent=None, name=ONAME0)
 
-        self.assertTrue(o0 == o1)  # parent not tested
-        o0._eq_list.append("parent")
-        self.assertFalse(o0 == o1)  # parent tested
-        o1._parent = NM1
-        self.assertTrue(o0 == o1)  # parents are same type
+        self.assertTrue(o0 == o1)  # parents not tested
+        # o0._eq_list.append("parent")
+        # self.assertFalse(o0 == o1)  # parent tested
+        # o1._parent = NM1
+        # self.assertTrue(o0 == o1)  # parents are same type
 
         o0.myvalue = 1
         o1.myvalue = 2
@@ -112,10 +112,10 @@ class NMObjectTest(unittest.TestCase):
         o0.note = "my note"
         o1.note = "my note"
         self.assertTrue(o0 == o1)  # notes not tested
-        o0._eq_list.append("notes")
-        self.assertFalse(o0 == o1)  # notes tested, different time stamps
-        o0._notes_delete(confirm_answer="y")
-        o1._notes_delete(confirm_answer="y")
+        # o0._eq_list.append("notes")
+        # self.assertFalse(o0 == o1)  # notes tested, different time stamps
+        o0._notes_delete(auto_confirm="y")
+        o1._notes_delete(auto_confirm="y")
         self.assertTrue(o0 == o1)
         o0.note = "my note 0"
         o0.note = "my note 1"
@@ -236,7 +236,7 @@ class NMObjectTest(unittest.TestCase):
         self.assertEqual(len(self.o0.notes), 2)
         self.assertEqual(self.o0.notes[0].get("note"), "added TTX")
         self.assertEqual(self.o0.notes[1].get("note"), "added AP5")
-        self.o0._notes_delete(confirm_answer="y")
+        self.o0._notes_delete(auto_confirm="y")
         self.assertEqual(len(self.o0.notes), 0)
         self.assertTrue(NMObject.notes_ok([{"note": "hey", "date": "111"}]))
         self.assertTrue(NMObject.notes_ok([{"date": "111", "note": "hey"}]))

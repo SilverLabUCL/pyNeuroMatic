@@ -71,8 +71,6 @@ class NMObject(object):
             e.g. NMObject._name_set or NMObjectContainer.rename.
         __copy_of (NMObject): if NMObject is a copy of another NMObject, this
             attribute holds the reference of the other NMObject.
-        __eq_list (List[str]): names of objects to test in equality; see
-            function __eq__().
         __notes_on (bool):
         __notes (List[str]):
 
@@ -126,7 +124,7 @@ class NMObject(object):
         # fxn ref for name setter
         self.__copy_of: NMObject | None = None
         # self._eq_list = ['parent', notes']
-        self._eq_list: list[str] = []
+        # self._eq_list: list[str] = []
 
         # Determine actual values to use
         actual_parent = parent
@@ -161,8 +159,6 @@ class NMObject(object):
             self.__notes_on = actual_notes_on
         else:
             self.__notes_on = True
-
-        return None
 
     # children should override
     def copy(self) -> NMObject:
@@ -200,14 +196,15 @@ class NMObject(object):
 
         # if not super().__eq__(other):  # not sure this is needed (object)
         #    return False
+        ignore_parameters = ["parent", "notes"]
         if not isinstance(other, NMObject):
             return NotImplemented
-        if "parent" in self._eq_list:
+        if "parent" not in ignore_parameters:
             if not isinstance(other._parent, type(self.__parent)):
                 return False
         if self.name.lower() != other.name.lower():  # case insensitive
             return False
-        if "notes" in self._eq_list:
+        if "notes" not in ignore_parameters:
             if self.notes_on != other.notes_on:
                 return False
             if len(self.notes) != len(other.notes):
@@ -274,7 +271,6 @@ class NMObject(object):
     @_parent.setter
     def _parent(self, parent: object) -> None:
         self.__parent = parent
-        return None
 
     # @property
     # def parameter_list(self) -> List[str]:
@@ -391,7 +387,6 @@ class NMObject(object):
             raise TypeError(e)
         # TODO: test if function has 2 arguments?
         self.__rename_fxnref = rename_fxnref
-        return None
 
     @property
     def notes(self) -> list[dict]:
@@ -404,7 +399,6 @@ class NMObject(object):
                 keys = n.keys()
                 if isinstance(n, dict) and "date" in keys and "note" in keys:
                     print(n["date"] + note_seperator + n["note"])
-        return None
 
     @property
     def note(self) -> str:
@@ -417,7 +411,6 @@ class NMObject(object):
     @note.setter
     def note(self, thenote: str) -> None:
         self._notes_append(thenote)
-        return None
 
     def _notes_append(self, thenote: str) -> bool:
         if not self.__notes_on:
@@ -435,19 +428,19 @@ class NMObject(object):
         return True
 
     def _notes_delete(
-        self, confirm_answer: str | None = None  # to skip confirm prompt
+        self, auto_confirm: str | None = None  # to skip confirm prompt
     ) -> None:
         """Delete all notes for this object.
         
-        :param confirm_answer: pre-answer to confirmation prompt to skip UI
-        :type confirm_answer: str, optional
+        :param auto_confirm: pre-answer to confirmation prompt to skip UI
+        :type auto_confirm: str, optional
         :raises RuntimeError: If user cancels the deletion
         :return: None
         :rtype: None
         """
         if nmp.DELETE_CONFIRM:
-            if confirm_answer in nmu.CONFIRM_YNC:
-                ync = confirm_answer
+            if auto_confirm in nmu.CONFIRM_YNC:
+                ync = auto_confirm
             else:
                 q = "are you sure you want to delete all notes for '%s'?" % self.__name
                 ync = nmu.input_yesno(q, treepath=self._treepath_str())
@@ -466,7 +459,6 @@ class NMObject(object):
             self.__notes_on = on
         else:
             self.__notes_on = True
-        return None
 
     @staticmethod
     def notes_ok(notes: list[dict]) -> bool:
@@ -523,7 +515,7 @@ class NMObject(object):
         return nmu.history(
             message,
             title="ALERT",
-            tp=tp,
+            treepath=tp,
             frame=frame,
             red=True,
             quiet=self._quiet(quiet),
@@ -540,7 +532,7 @@ class NMObject(object):
         return nmu.history(
             message,
             title="ERROR",
-            tp=tp,
+            treepath=tp,
             frame=frame,
             red=True,
             quiet=self._quiet(quiet),
@@ -555,7 +547,7 @@ class NMObject(object):
     ) -> str:
         # wrapper, see nmu.history
         return nmu.history(
-            message, tp=tp, frame=frame, red=False, quiet=self._quiet(quiet)
+            message, treepath=tp, frame=frame, red=False, quiet=self._quiet(quiet)
         )
 
     def _type_error(

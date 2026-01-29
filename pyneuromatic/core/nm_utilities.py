@@ -49,8 +49,7 @@ CONFIRM_YNC: tuple = ("y", "yes", "n", "no", "c", "cancel")  # see input_yesno()
 
 # for testing
 BADTYPES: tuple = (None, 3, 3.14, True, [], (), {}, set(), "string", Fore)
-BADNAMES: tuple = ("", "all", "default", "none", "select", "self", "nan",
-            "inf", "-inf", "b&dn@me!")
+BADNAMES: tuple = ("", "all", "none", "self", "nan", "string""inf", "-inf", "b&dn@me!")
 
 
 def badtypes(
@@ -278,7 +277,9 @@ def keys_are_equal(
 
 
 def remove_special_char(
-    text: str | list[str], ok_char: list[str] = [], bad_char: list[str] = []
+    text: str | list[str], 
+    ok_char: list[str] = [], 
+    bad_char: list[str] = []
 ) -> str | list[str]:
     """Remove non-alpha-numeric characters from text.
 
@@ -317,7 +318,9 @@ def remove_special_char(
 
 
 def int_list_to_seq_str(
-    int_list: list[int], seperator: str = ", ", seperator_at_end: bool = False
+    int_list: list[int], 
+    seperator: str = ", ", 
+    seperator_at_end: bool = False
 ) -> str:
     """Convert list of integers to a sequence string.
 
@@ -384,7 +387,8 @@ def int_list_to_seq_str(
 
 
 def channel_char(
-    chan_num: int | list[int], char_list: tuple[str] = CHANNEL_CHARS
+    chan_num: int | list[int], 
+    char_list: tuple[str] = CHANNEL_CHARS
 ) -> str | list[str]:
     """Convert channel number(s) to character.
 
@@ -416,7 +420,8 @@ def channel_char(
 
 
 def channel_num(
-    chan_char: str | list[str], char_list: tuple[str] = CHANNEL_CHARS
+    chan_char: str | list[str], 
+    char_list: tuple[str] = CHANNEL_CHARS
 ) -> int | list[int]:
     """Convert channel character(s) to number.
 
@@ -451,7 +456,8 @@ def channel_num(
 
 
 def channel_char_check(
-    chan_char: str | list[str], char_list: tuple[str] = CHANNEL_CHARS
+    chan_char: str | list[str], 
+    char_list: tuple[str] = CHANNEL_CHARS
 ) -> str | list[str]:
     """Check channel character
 
@@ -478,7 +484,10 @@ def channel_char_check(
     return ""
 
 
-def channel_char_search(text: str, chan_char: str) -> int:
+def channel_char_search(
+    text: str, 
+    chan_char: str
+) -> int:
     """Search for channel character in text (backwards search).
 
     :param text: text to search, e.g. 'RecordA127'.
@@ -509,7 +518,11 @@ def channel_char_search(text: str, chan_char: str) -> int:
     return -1
 
 
-def typeerror(obj: object, obj_name: str, type_str: str) -> str:
+def typeerror(
+    obj: object, 
+    obj_name: str, 
+    type_str: str
+) -> str:
     """Create error message for TypeError.
 
     :param obj: the object with invalid type.
@@ -524,7 +537,11 @@ def typeerror(obj: object, obj_name: str, type_str: str) -> str:
     return f"{obj_name}: expected {type_str} but got {type(obj).__name__} {obj}"
 
 
-def valueerror(obj: object, obj_name: str, constraint_str: str = "") -> str:
+def valueerror(
+    obj: object, 
+    obj_name: str, 
+    constraint_str: str = ""
+) -> str:
     """Create error message for ValueError.
 
     :param obj: the object with invalid value.
@@ -542,7 +559,11 @@ def valueerror(obj: object, obj_name: str, constraint_str: str = "") -> str:
         return f"{obj_name}: {obj}"
 
 
-def history_change(param_name: str, old_value: object, new_value: object) -> str:
+def history_change(
+    param_name: str, 
+    old_value: object, 
+    new_value: object
+) -> str:
     """Create history text for variables that have changed
 
     :param param_name: name of parameter that has changed.
@@ -573,7 +594,7 @@ def history_change(param_name: str, old_value: object, new_value: object) -> str
 def history(
     message: str,
     title: str = "",
-    tp: str = "",
+    treepath: str | None = None,
     frame: int = 1,
     red: bool = False,
     quiet: bool = False,
@@ -584,8 +605,8 @@ def history(
     :type message: str
     :param title: message title (e.g. 'ALERT' or 'ERROR').
     :type title: str
-    :param tp: function treepath, pass '' for default or 'NONE' for none.
-    :type tp: str
+    :param treepath: function treepath, pass '' for default or 'NONE' for none.
+    :type treepath: str | None
     :param frame: inspect frame # for creating treepath.
     :type frame: int
     :param red: True to print red, False to print black.
@@ -599,12 +620,12 @@ def history(
         return ""
     if not isinstance(frame, int) or frame < 0:
         frame = 1
-    if tp.upper() == "NONE":
-        path = ""
-    elif len(tp) == 0 or tp.upper() == "DEFAULT":
+    if treepath is None:
         path = get_treepath(inspect.stack(), frame=frame)
+    elif not isinstance(treepath, str):
+        path = ""
     else:
-        path = tp
+        path = treepath
 
     # determine log level from title/red
     if isinstance(title, str) and title.upper() == "ERROR":
@@ -636,7 +657,9 @@ def history(
 
 
 def get_treepath(
-    stack: list, frame: int = 1, package: str = "nm"  # stack frame
+    stack: list, 
+    frame: int = 1, 
+    package: str = "nm"  # stack frame
 ) -> str:
     """Create function ancestry treepath.
 
@@ -666,7 +689,11 @@ def get_treepath(
     return ".".join(path)  # e.g. 'nm.myparent.mychild.mymethod
 
 
-def get_class_from_stack(stack: list, frame: int = 1, module: bool = False) -> str:
+def get_class_from_stack(
+    stack: list, 
+    frame: int = 1, 
+    module: bool = False
+) -> str:
     """Extract class from stack
 
     :param stack: stack list.
@@ -729,7 +756,7 @@ def get_method_from_stack(
 def input_yesno(
     prompt: str,
     title: str = "",
-    treepath: str = "default",
+    treepath: str | None = None,
     frame: int = 1,
     cancel: bool = True,
     answer: str | None = None,  # for testing, bypasses input()
@@ -760,10 +787,10 @@ def input_yesno(
         txt = prompt + "\n" + "(y)es, (n)o: "
         ok.remove("c")
         ok.remove("cancel")
+    if treepath is None:
+        path = get_treepath(inspect.stack(), frame=frame)
     if not isinstance(treepath, str):
         path = ""
-    elif treepath.lower() == "default":
-        path = get_treepath(inspect.stack(), frame=frame)
     else:
         path = treepath  # + '.userinput'
     if path:

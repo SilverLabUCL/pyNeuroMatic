@@ -243,7 +243,7 @@ class NMDataTest(unittest.TestCase):
         self.assertFalse(c0_copy == c0)
         with self.assertRaises(KeyError):
             dnew = c0.new("test")
-        c0.pop("test", confirm_answer="y")
+        c0.pop("test", auto_confirm="y")
         self.assertTrue(c0_copy == c0)
         c0.sets.remove("set0", dnlist0[0])
         self.assertFalse(c0_copy == c0)

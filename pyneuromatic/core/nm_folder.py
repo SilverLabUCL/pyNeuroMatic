@@ -176,8 +176,8 @@ class NMFolderContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )
 
@@ -192,12 +192,12 @@ class NMFolderContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = "default",
+        name: str | None = None,
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> NMFolder | None:
-        name = self._newkey(name)
-        f = NMFolder(parent=self, name=name)
+        actual_name = self._newkey(name)
+        f = NMFolder(parent=self, name=actual_name)
         if super()._new(f, select=select):
             return f
         return None
