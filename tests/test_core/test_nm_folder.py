@@ -31,7 +31,7 @@ class NMFolderTest(unittest.TestCase):
         for n in DNLIST0:
             d = self.folder0.data.new(n)
             self.dolist0.append(d)
-        self.folder0.data.select_key = DNLIST0[-1]
+        self.folder0.data.selected_name = DNLIST0[-1]
 
         n = len(DNLIST0)
         slist = [DNLIST0[i] for i in range(0, n, 2)]
@@ -47,7 +47,7 @@ class NMFolderTest(unittest.TestCase):
         for n in DNLIST1:
             d = self.folder1.data.new(n)
             self.dolist1.append(d)
-        self.folder1.data.select_key = DNLIST1[-1]
+        self.folder1.data.selected_name = DNLIST1[-1]
 
         n = len(DNLIST1)
         slist = [DNLIST1[i] for i in range(0, n - 3, 1)]
@@ -70,7 +70,7 @@ class NMFolderTest(unittest.TestCase):
         self.assertTrue(isinstance(data, NMDataContainer))
         self.assertEqual(len(data), len(DNLIST0))
         self.assertEqual(list(data.keys()), DNLIST0)
-        self.assertEqual(data.select_key, DNLIST0[-1])
+        self.assertEqual(data.selected_name, DNLIST0[-1])
 
         self.assertEqual(len(data.sets), len(DSETS_NLIST0))
         self.assertEqual(data.sets.get(DSETS_NLIST0[2]), self.dolist0)
@@ -80,7 +80,7 @@ class NMFolderTest(unittest.TestCase):
         self.assertTrue(isinstance(data, NMDataContainer))
         self.assertEqual(len(data), len(DNLIST1))
         self.assertEqual(list(data.keys()), DNLIST1)
-        self.assertEqual(data.select_key, DNLIST1[-1])
+        self.assertEqual(data.selected_name, DNLIST1[-1])
 
         self.assertEqual(len(data.sets), len(DSETS_NLIST1))
         self.assertEqual(data.sets.get(DSETS_NLIST1[2]), self.dolist1)

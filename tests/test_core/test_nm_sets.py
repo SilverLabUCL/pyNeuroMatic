@@ -381,7 +381,7 @@ class NMSetsTest(unittest.TestCase):
         olist2 = self.sets0.get("set99")
         self.assertEqual(nlist, nlist2)
         self.assertEqual(olist, olist2)
-        self.sets0.pop("set99", confirm_answer="y")
+        self.sets0.pop("set99", auto_confirm="y")
 
         for i, (k, v) in enumerate(self.sets0.items()):
             d = self.sets0_init[i]
@@ -421,7 +421,6 @@ class NMSetsTest(unittest.TestCase):
                 self.sets0[b] = ""
 
         bad = list(nmu.BADNAMES)
-        bad.remove("default")
         bad.remove("select")
         for b in bad:
             with self.assertRaises(ValueError):
@@ -510,7 +509,7 @@ class NMSetsTest(unittest.TestCase):
         sname1 = d["name"].upper()  # should be case-insensitive
         eqlist1 = d["eqlist"]
 
-        self.assertTrue(NMSets.listisequation(eqlist1))
+        self.assertTrue(NMSets.list_is_equation(eqlist1))
 
         with self.assertRaises(ValueError):
             self.sets1.add(sname1, "test")  # cannot add to an equation
@@ -679,17 +678,17 @@ class NMSetsTest(unittest.TestCase):
             self.sets0.pop("test")  # does not exist
 
         self.assertTrue(sname0 in self.sets0)
-        olist = self.sets0.pop(sname0, confirm_answer="n")
+        olist = self.sets0.pop(sname0, auto_confirm="n")
         self.assertTrue(sname0 in self.sets0)
         self.assertIsNone(olist)
 
-        olist = self.sets0.pop(sname0, confirm_answer="y")
+        olist = self.sets0.pop(sname0, auto_confirm="y")
         self.assertFalse(sname0 in self.sets0)
         self.assertEqual(olist, olist0)
         olist = self.sets0.get(sname0)
         self.assertIsNone(olist)
 
-        olist = self.sets0.pop(sname1, confirm_answer="y")
+        olist = self.sets0.pop(sname1, auto_confirm="y")
         self.assertFalse(sname1 in self.sets0)
         self.assertEqual(olist, olist1)
         olist = self.sets0.get(sname1)
@@ -710,12 +709,12 @@ class NMSetsTest(unittest.TestCase):
             self.assertTrue(sname in self.sets0)
 
             if first:
-                olist2 = self.sets0.popitem(confirm_answer="n")
+                olist2 = self.sets0.popitem(auto_confirm="n")
                 self.assertTrue(sname in self.sets0)
                 self.assertEqual(olist2, ())  # empty tuple
                 first = False
 
-            olist2 = self.sets0.popitem(confirm_answer="y")
+            olist2 = self.sets0.popitem(auto_confirm="y")
             self.assertFalse(sname in self.sets0)
             self.assertEqual(olist2, (sname, olist))  # tuple
 
@@ -734,12 +733,12 @@ class NMSetsTest(unittest.TestCase):
             self.assertTrue(sname in self.sets1)
 
             if first:
-                olist2 = self.sets1.popitem(confirm_answer="n")
+                olist2 = self.sets1.popitem(auto_confirm="n")
                 self.assertTrue(sname in self.sets1)
                 self.assertEqual(olist2, ())  # empty tuple
                 first = False
 
-            olist2 = self.sets1.popitem(confirm_answer="y")
+            olist2 = self.sets1.popitem(auto_confirm="y")
             self.assertFalse(sname in self.sets1)
             if eqlist:
                 self.assertEqual(olist2, (sname, eqlist))  # tuple
@@ -749,17 +748,17 @@ class NMSetsTest(unittest.TestCase):
         self.assertEqual(len(self.sets1), 0)
 
     def xtest16_clear(self):
-        self.sets0.clear(confirm_answer="n")
+        self.sets0.clear(auto_confirm="n")
         for d in self.sets0_init:
             sname = d["name"].upper()
             self.assertTrue(sname in self.sets0)
 
-        self.sets0.clear(confirm_answer="y")
+        self.sets0.clear(auto_confirm="y")
         for d in self.sets0_init:
             sname = d["name"].upper()
             self.assertFalse(sname in self.sets0)
 
-        self.sets1.clear(confirm_answer="y")
+        self.sets1.clear(auto_confirm="y")
         for d in self.sets1_init:
             sname = d["name"].upper()
             self.assertFalse(sname in self.sets1)
@@ -837,7 +836,6 @@ class NMSetsTest(unittest.TestCase):
                 key = self.sets0._newkey(b)
 
         bad = list(nmu.BADNAMES)
-        bad.remove("default")
         for b in bad:
             with self.assertRaises(ValueError):
                 key = self.sets0._newkey(b)
@@ -851,19 +849,19 @@ class NMSetsTest(unittest.TestCase):
             key = self.sets0._newkey(sname + "x")
             self.assertEqual(key, sname + "x")
 
-        # test key = 'default'
-        nn = self.sets0.name_next()
-        key = self.sets0._newkey("default")
+        # test key = None
+        nn = self.sets0.auto_name_next()
+        key = self.sets0._newkey(None)
         self.assertEqual(key, nn)
 
     def xtest21_namenext(self):
-        nn = self.sets0.name_next()
+        nn = self.sets0.auto_name_next()
         n = len(self.sets0)
         self.assertEqual(nn, SETS_PREFIX0 + str(n))
-        nn = self.sets0.add("default", [])
-        nn = self.sets0.name_next()
+        nn = self.sets0.add(None, [])
+        nn = self.sets0.auto_name_next()
         self.assertEqual(nn, SETS_PREFIX0 + str(len(self.sets0)))
-        nn = self.sets0.name_next(prefix="test")
+        nn = self.sets0.auto_name_next(prefix="test")
         self.assertEqual(nn, "test0")
 
     def xtest22__getnmobjectkey(self):
@@ -927,7 +925,7 @@ class NMSetsTest(unittest.TestCase):
         olist = d["olist"]
         eqlist = d["eqlist"]
 
-        self.assertTrue(NMSets.listisequation(eqlist))
+        self.assertTrue(NMSets.list_is_equation(eqlist))
 
         for n in nlist:
             self.assertTrue(self.sets1.contains(sname, n.upper()))
@@ -971,21 +969,21 @@ class NMSetsTest(unittest.TestCase):
         bad = list(nmu.BADTYPES)
         bad.remove([])
         for b in bad:
-            self.assertFalse(self.sets0.isequation(b))
+            self.assertFalse(self.sets0.is_equation(b))
 
-        self.assertFalse(self.sets0.isequation("test"))
+        self.assertFalse(self.sets0.is_equation("test"))
 
         for d in self.sets0_init:
             sname = d["name"]
-            self.assertFalse(self.sets0.isequation(sname))
+            self.assertFalse(self.sets0.is_equation(sname))
 
         for d in self.sets1_init:
             sname = d["name"]
             eqlist = d["eqlist"]
             if eqlist:
-                self.assertTrue(self.sets1.isequation(sname))
+                self.assertTrue(self.sets1.is_equation(sname))
             else:
-                self.assertFalse(self.sets1.isequation(sname))
+                self.assertFalse(self.sets1.is_equation(sname))
 
     def xtest26_listisequation(self):
         # args: equation
@@ -995,21 +993,21 @@ class NMSetsTest(unittest.TestCase):
         bad = list(nmu.BADTYPES)
         bad.remove([])
         for b in bad:
-            self.assertFalse(NMSets.listisequation(b))
+            self.assertFalse(NMSets.list_is_equation(b))
 
-        self.assertFalse(NMSets.listisequation([]))
-        self.assertFalse(NMSets.listisequation(["set1", "+", "SET2"]))
-        self.assertFalse(NMSets.listisequation(["set1", "|", 222]))
+        self.assertFalse(NMSets.list_is_equation([]))
+        self.assertFalse(NMSets.list_is_equation(["set1", "+", "SET2"]))
+        self.assertFalse(NMSets.list_is_equation(["set1", "|", 222]))
 
-        self.assertFalse(NMSets.listisequation(["set1", "SET2", "|"]))
-        self.assertTrue(NMSets.listisequation(["set1", "|", "SET2"]))
+        self.assertFalse(NMSets.list_is_equation(["set1", "SET2", "|"]))
+        self.assertTrue(NMSets.list_is_equation(["set1", "|", "SET2"]))
 
-        self.assertFalse(NMSets.listisequation(["set1", "|", "SET2", "+", "set3"]))
-        self.assertTrue(NMSets.listisequation(["set1", "|", "SET2", "^", "set3"]))
+        self.assertFalse(NMSets.list_is_equation(["set1", "|", "SET2", "+", "set3"]))
+        self.assertTrue(NMSets.list_is_equation(["set1", "|", "SET2", "^", "set3"]))
         self.assertFalse(
-            NMSets.listisequation(["set1", "|", "SET2", "^", "set3", "set4"])
+            NMSets.list_is_equation(["set1", "|", "SET2", "^", "set3", "set4"])
         )
-        self.assertTrue(NMSets.listisequation(["set1", "|", "SET2", "^", "S3", "&"]))
+        self.assertTrue(NMSets.list_is_equation(["set1", "|", "SET2", "^", "S3", "&"]))
 
     def xtest27_new(self):
         # args: key
@@ -1021,7 +1019,6 @@ class NMSetsTest(unittest.TestCase):
                 self.sets0.new(b)
 
         bad = list(nmu.BADNAMES)
-        bad.remove("default")
         for b in bad:
             with self.assertRaises(ValueError):
                 self.sets0.new(b)
@@ -1035,7 +1032,7 @@ class NMSetsTest(unittest.TestCase):
                 self.sets1.new(d["name"])
 
         klist0 = list(self.sets0.keys())
-        nn = self.sets0.name_next()
+        nn = self.sets0.auto_name_next()
         rtuple = self.sets0.new()
         newkey = rtuple[0]
         new_olist = rtuple[1]
@@ -1052,7 +1049,7 @@ class NMSetsTest(unittest.TestCase):
         olist = self.sets0.get(newkey)
         self.assertEqual(olist, [self.olist0[0], self.olist0[1]])
 
-        nn = self.sets1.name_next()
+        nn = self.sets1.auto_name_next()
         rtuple = self.sets1.new()
         newkey = rtuple[0]
         self.assertEqual(newkey, nn)
@@ -1075,7 +1072,6 @@ class NMSetsTest(unittest.TestCase):
                 self.sets0.duplicate(sname0, b)
 
         bad = list(nmu.BADNAMES)
-        bad.remove("default")
         for b in bad:
             with self.assertRaises(ValueError):
                 self.sets0.duplicate(sname0, b)
@@ -1101,7 +1097,7 @@ class NMSetsTest(unittest.TestCase):
         self.assertNotEqual(self.sets0.get(newkey), olist0)
         self.assertEqual(self.sets0.get(sname0), olist0)
 
-        nn = self.sets0.name_next()
+        nn = self.sets0.auto_name_next()
         rtuple = self.sets0.duplicate(sname0)  # default newkey
         newkey = rtuple[0]
         new_olist = rtuple[1]
@@ -1128,7 +1124,6 @@ class NMSetsTest(unittest.TestCase):
                 self.sets0.rename(sname0, b)
 
         bad = list(nmu.BADNAMES)
-        bad.remove("default")
         for b in bad:
             with self.assertRaises(ValueError):
                 self.sets0.rename(sname0, b)
@@ -1143,7 +1138,7 @@ class NMSetsTest(unittest.TestCase):
         self.assertTrue(newkey in self.sets0)
         self.assertEqual(self.sets0.get(newkey), olist0)
 
-        nn = self.sets1.name_next()
+        nn = self.sets1.auto_name_next()
         rname = self.sets0.rename(newkey)  # default newkey
         self.assertEqual(rname, nn)
         self.assertFalse(newkey in self.sets0)
@@ -1184,7 +1179,7 @@ class NMSetsTest(unittest.TestCase):
             self.sets1.reorder(newkeyorder)
 
         # add extra key
-        nn = self.sets1.name_next()
+        nn = self.sets1.auto_name_next()
         klist1 = list(self.sets1.keys())
         newkeyorder = klist1.copy()
         newkeyorder.append(nn)
@@ -1207,30 +1202,30 @@ class NMSetsTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.sets0.empty("test")
 
-        self.sets0.empty(sname0, confirm_answer="n")
+        self.sets0.empty(sname0, auto_confirm="n")
         self.assertTrue(sname0 in self.sets0)
         self.assertEqual(self.sets0.get(sname0), olist0)
 
-        self.sets0.empty(sname0, confirm_answer="y")
+        self.sets0.empty(sname0, auto_confirm="y")
         self.assertEqual(self.sets0.get(sname0), [])
 
         d = self.sets1_init[-1]
         sname1 = d["name"]
 
-        self.sets1.empty(sname1, confirm_answer="y")
+        self.sets1.empty(sname1, auto_confirm="y")
         self.assertEqual(self.sets1.get(sname1), [])
 
     def xtest32_emptyall(self):
         # args: confirm
 
-        self.sets0.empty_all(confirm_answer="n")
+        self.sets0.empty_all(auto_confirm="n")
 
         for d in self.sets0_init:
             sname = d["name"]
             olist = d["olist"]
             self.assertEqual(self.sets0.get(sname), olist)
 
-        self.sets0.empty_all(confirm_answer="y")
+        self.sets0.empty_all(auto_confirm="y")
 
         for d in self.sets0_init:
             sname = d["name"]
@@ -1295,7 +1290,7 @@ class NMSetsTest(unittest.TestCase):
         olist1 = d["olist"]
         eqlist1 = d["eqlist"]
 
-        self.assertTrue(NMSets.listisequation(eqlist1))
+        self.assertTrue(NMSets.list_is_equation(eqlist1))
         self.assertTrue(self.sets1.contains(sname1, nlist1[0]))
 
         with self.assertRaises(ValueError):
@@ -1424,7 +1419,7 @@ class NMSetsTest(unittest.TestCase):
         eqlist2 = self.sets1.get("select", get_equation=True)
         self.assertEqual(eqlist, eqlist2)
 
-        self.sets1.pop(sname, confirm_answer="y")
+        self.sets1.pop(sname, auto_confirm="y")
         self.assertIsNone(self.sets1.select_key)
 
     def xtest37_equation(self):
@@ -1443,15 +1438,15 @@ class NMSetsTest(unittest.TestCase):
         sname1 = d["name"]
         s1 = set(self.sets0.get(sname1, get_keys=True))
 
-        self.assertFalse(self.sets0.isequation(sname0.upper()))
-        self.assertFalse(self.sets0.isequation(sname1.upper()))
+        self.assertFalse(self.sets0.is_equation(sname0.upper()))
+        self.assertFalse(self.sets0.is_equation(sname1.upper()))
 
         nlist = [ONLIST0[0], ONLIST0[4], ONLIST0[7], ONLIST0[11]]
         s2 = set(nlist)
-        sname2 = self.sets0.name_next()
+        sname2 = self.sets0.auto_name_next()
         self.sets0.add(sname2, nlist)
 
-        sname3 = self.sets0.name_next()
+        sname3 = self.sets0.auto_name_next()
         eqlist = [sname0, "%", sname1]
         with self.assertRaises(KeyError):
             self.sets0.update({sname3: eqlist})  # bad equation
@@ -1463,7 +1458,7 @@ class NMSetsTest(unittest.TestCase):
         self.assertFalse(sname3 in self.sets0)
         self.sets0.update({sname3: eqlist})
         self.assertTrue(sname3.upper() in self.sets0)
-        self.assertTrue(self.sets0.isequation(sname3.upper()))
+        self.assertTrue(self.sets0.is_equation(sname3.upper()))
         eqlist2 = self.sets0.get(sname3.upper(), get_equation=True)
         self.assertEqual(eqlist, eqlist2)
         s3 = set(self.sets0.get(sname3, get_keys=True))
@@ -1473,7 +1468,7 @@ class NMSetsTest(unittest.TestCase):
             self.assertTrue(o.name in s3)
 
         self.sets0.update({sname3: eqlist})
-        self.sets0.empty(sname3, confirm_answer="y")
+        self.sets0.empty(sname3, auto_confirm="y")
         self.assertEqual(self.sets0.get(sname3), [])
 
         eqlist = [sname0, "&", sname1]

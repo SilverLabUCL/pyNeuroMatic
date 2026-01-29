@@ -168,14 +168,14 @@ class NMDataSeries(NMObject):
         self, 
         get_keys: bool = False
     ) -> list[NMObject] | list[str]:
-        if not self.channels.select_key:
+        if not self.channels.selected_name:
             return []
-        c = self.channels.get("select")
+        c = self.channels.selected_value
         if c is None:
             return []
-        if not self.epochs.select_key:
+        if not self.epochs.selected_name:
             return []
-        e = self.epochs.get("select")
+        e = self.epochs.selected_value
         if e is None:
             return []
 
@@ -800,8 +800,8 @@ class NMDataSeriesContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )
         # TODO: copy

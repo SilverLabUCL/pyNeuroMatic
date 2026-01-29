@@ -91,8 +91,7 @@ class NMHistory:
     """Centralized history log for pyNeuroMatic.
 
     Wraps Python's logging module to provide an in-memory history buffer
-    and colorama-colored console output. Analogous to Igor Pro's history
-    command window.
+    and colorama-colored console output.
 
     Access via NMManager.history property.
 

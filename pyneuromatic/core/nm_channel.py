@@ -196,8 +196,8 @@ class NMChannelContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )
 
@@ -212,14 +212,14 @@ class NMChannelContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = "default",  # not used, instead name = name_next()
+        name: str | None = None,  # not used, instead name = name_next()
         select: bool = False,
         xscale: dict | NMDimensionX = {},
         yscale: dict | NMDimension = {},
         # quiet: bool = nmp.QUIET
     ) -> NMChannel | None:
-        name = self.name_next()
-        c = NMChannel(parent=self._parent, name=name, xscale=xscale, yscale=yscale)
+        actual_name = self.auto_name_next()
+        c = NMChannel(parent=self._parent, name=actual_name, xscale=xscale, yscale=yscale)
         if super()._new(c, select=select):
             return c
         return None

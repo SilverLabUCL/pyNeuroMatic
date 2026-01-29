@@ -245,8 +245,8 @@ class NMDataContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )
 
@@ -261,16 +261,16 @@ class NMDataContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = "default",
+        name: str | None = None,
         select: bool = False,
         xdim: NMDimensionX | None = None,
         ydim: NMDimension | None = None,
         # quiet: bool = nmp.QUIET
     ) -> NMData | None:
-        name = self._newkey(name)
+        actual_name = self._newkey(name)
         d = NMData(
             parent=self._parent,
-            name=name,
+            name=actual_name,
             xdim=xdim,
             ydim=ydim
         )

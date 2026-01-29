@@ -100,7 +100,7 @@ class NMToolStats(NMTool):
 
         self.__win_container = NMStatsWinContainer(parent=self)
         self.__win_container.new(select=True)
-        self.__win_container.execute_key = "all"
+        self.__win_container.execute_target = "all"
 
         self.__xclip = True
         # if x0|x1 OOB, clip to data x-scale limits
@@ -174,11 +174,11 @@ class NMToolStats(NMTool):
     def execute(self) -> bool:
         if not isinstance(self.data, NMData):
             raise RuntimeError("no data selected")
-        for obj in self.windows.execute_values:
+        for obj in self.windows.execute_targets:
             if not isinstance(obj, NMStatsWin):
                 continue
             w: NMStatsWin = obj
-            self.windows.select_key = w.name
+            self.windows.selected_name = w.name
             if not w.on:
                 continue
             w.compute(self.data, xclip=self.__xclip,
@@ -1258,8 +1258,8 @@ class NMStatsWinContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )
 
@@ -1278,8 +1278,8 @@ class NMStatsWinContainer(NMObjectContainer):
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> NMStatsWin | None:
-        name = self.name_next()
-        istr = name.replace(self.name_prefix, "")
+        name = self.auto_name_next()
+        istr = name.replace(self.auto_name_prefix, "")
         if str.isdigit(istr):
             iseq = int(istr)
         else:

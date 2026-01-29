@@ -110,8 +110,8 @@ class NMProjectContainer(NMObjectContainer):
             parent=parent,
             name=name,
             rename_on=rename_on,
-            name_prefix=name_prefix,
-            name_seq_format=name_seq_format,
+            auto_name_prefix=name_prefix,
+            auto_name_seq_format=name_seq_format,
             copy=copy,
         )  # NMObjectContainer
 
@@ -126,12 +126,12 @@ class NMProjectContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str = "default",
+        name: str | None = None,
         select: bool = False,
         # quiet: bool = nmp.QUIET
     ) -> NMProject | None:
-        name = self._newkey(name)
-        p = NMProject(parent=self, name=name)
+        actual_name = self._newkey(name)
+        p = NMProject(parent=self, name=actual_name)
         if super()._new(p, select=select):
             return p
         return None

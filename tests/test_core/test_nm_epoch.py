@@ -93,9 +93,9 @@ class NMEpochTest(unittest.TestCase):
         p = epochs.parameters
         self.assertEqual(p["content_type"], "nmepoch")
         self.assertFalse(p["rename_on"])
-        self.assertEqual(p["name_prefix"], "E")
-        self.assertEqual(p["name_seq_format"], "0")
-        self.assertEqual(p["select"], None)
+        self.assertEqual(p["auto_name_prefix"], "E")
+        self.assertEqual(p["auto_name_seq_format"], "0")
+        self.assertEqual(p["selected_name"], None)
 
         # content_type
         self.assertEqual(epochs.content_type(), "NMEpoch")
@@ -105,29 +105,29 @@ class NMEpochTest(unittest.TestCase):
         self.assertTrue(epochs.content_type_ok(self.e0))
 
         # name
-        self.assertEqual(epochs.name_next(), "E0")
-        epochs.name_prefix = ""
-        self.assertEqual(epochs.name_prefix, "")
-        self.assertEqual(epochs.name_next(), "0")
-        epochs.name_prefix = "E"  # reset
+        self.assertEqual(epochs.auto_name_next(), "E0")
+        epochs.auto_name_prefix = ""
+        self.assertEqual(epochs.auto_name_prefix, "")
+        self.assertEqual(epochs.auto_name_next(), "0")
+        epochs.auto_name_prefix = "E"  # reset
 
         # new
-        self.assertEqual(epochs.name_next(), "E0")
+        self.assertEqual(epochs.auto_name_next(), "E0")
         e = epochs.new()
         self.assertIsInstance(e, NMEpoch)
         self.assertEqual(e.name, "E0")
         self.assertEqual(e.number, 0)
-        self.assertEqual(epochs.name_next(), "E1")
+        self.assertEqual(epochs.auto_name_next(), "E1")
         e = epochs.new()
         self.assertEqual(e.name, "E1")
         self.assertEqual(e.number, 1)
-        self.assertEqual(epochs.name_next(), "E2")
-        self.assertEqual(epochs.name_next(use_counter=True), "E2")
-        self.assertEqual(epochs._name_seq_counter(), "2")
-        epochs._name_seq_counter_increment()
-        self.assertEqual(epochs._name_seq_counter(), "3")
-        self.assertEqual(epochs.name_next(use_counter=True), "E3")
-        self.assertEqual(epochs.name_next(), "E2")
+        self.assertEqual(epochs.auto_name_next(), "E2")
+        self.assertEqual(epochs.auto_name_next(use_counter=True), "E2")
+        self.assertEqual(epochs._auto_name_seq_counter(), "2")
+        epochs._auto_name_seq_counter_increment()
+        self.assertEqual(epochs._auto_name_seq_counter(), "3")
+        self.assertEqual(epochs.auto_name_next(use_counter=True), "E3")
+        self.assertEqual(epochs.auto_name_next(), "E2")
 
         # copy
         c = epochs.copy()
@@ -144,7 +144,7 @@ class NMEpochTest(unittest.TestCase):
         self.assertFalse(epochs == c)
 
         # duplicate
-        c = epochs.duplicate(key="E0")
+        c = epochs.duplicate(name="E0")
         self.assertEqual(c.name, "E2")
         e0 = epochs.get("E0")
         self.assertFalse(c == e0)  # name is different

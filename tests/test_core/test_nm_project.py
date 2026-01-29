@@ -32,7 +32,7 @@ class NMProjectTest(unittest.TestCase):
         for n in FNLIST0:
             f = self.project0.folders.new(n)
             self.folist0.append(f)
-        self.project0.folders.select_key = FNLIST0[-1]
+        self.project0.folders.selected_name = FNLIST0[-1]
 
         n = len(FNLIST0)
         slist = [FNLIST0[i] for i in range(0, n, 2)]
@@ -48,7 +48,7 @@ class NMProjectTest(unittest.TestCase):
         for n in FNLIST1:
             f = self.project1.folders.new(n)
             self.folist1.append(f)
-        self.project1.folders.select_key = FNLIST1[-1]
+        self.project1.folders.selected_name = FNLIST1[-1]
 
         n = len(FNLIST1)
         slist = [FNLIST1[i] for i in range(0, n - 3, 1)]
@@ -60,7 +60,7 @@ class NMProjectTest(unittest.TestCase):
 
         self.projectcontainer = NMProjectContainer(parent=NM)
         self.projectcontainer.update([self.project0, self.project1])
-        self.projectcontainer.select_key = PNAME0
+        self.projectcontainer.selected_name = PNAME0
 
         self.projectcontainer.sets.add(PSETS_NLIST[0], PNAME0)
         self.projectcontainer.sets.add(PSETS_NLIST[1], PNAME1)
@@ -79,7 +79,7 @@ class NMProjectTest(unittest.TestCase):
         self.assertTrue(isinstance(folders, NMFolderContainer))
         self.assertEqual(len(folders), len(FNLIST0))
         self.assertEqual(list(folders.keys()), FNLIST0)
-        self.assertEqual(folders.select_key, FNLIST0[-1])
+        self.assertEqual(folders.selected_name, FNLIST0[-1])
 
         self.assertEqual(len(folders.sets), len(FSETS_NLIST0))
         self.assertEqual(folders.sets.get(FSETS_NLIST0[2]), self.folist0)
@@ -89,7 +89,7 @@ class NMProjectTest(unittest.TestCase):
         self.assertTrue(isinstance(folders, NMFolderContainer))
         self.assertEqual(len(folders), len(FNLIST1))
         self.assertEqual(list(folders.keys()), FNLIST1)
-        self.assertEqual(folders.select_key, FNLIST1[-1])
+        self.assertEqual(folders.selected_name, FNLIST1[-1])
 
         self.assertEqual(len(folders.sets), len(FSETS_NLIST1))
         self.assertEqual(folders.sets.get(FSETS_NLIST1[2]), self.folist1)
@@ -122,7 +122,7 @@ class NMProjectTest(unittest.TestCase):
         for n in FNLIST0:
             f = project0.folders.new(n)
             folist0.append(f)
-        project0.folders.select_key = FNLIST0[-1]
+        project0.folders.selected_name = FNLIST0[-1]
 
         self.assertFalse(self.project0 == project0)
 
@@ -137,7 +137,7 @@ class NMProjectTest(unittest.TestCase):
 
         self.assertFalse(self.project0 == project0)
 
-        project0.folders.popitem(confirm_answer="y")
+        project0.folders.popitem(auto_confirm="y")
         self.assertFalse(self.project0 == project0)
 
     def test02_copy(self):
@@ -182,7 +182,7 @@ class NMProjectTest(unittest.TestCase):
         self.assertTrue(p.name.upper() in c)
         self.assertTrue(self.project0.name.upper() in c)
         self.assertTrue(self.project1.name.upper() in c)
-        self.assertEqual(c.select_key, PNAME0)
+        self.assertEqual(c.selected_name, PNAME0)
         p = c.get(PNAME0)
         self.assertFalse(p is self.project0)
         self.assertTrue(p == self.project0)
@@ -198,7 +198,7 @@ class NMProjectTest(unittest.TestCase):
         self.assertTrue(c.sets.contains("set0", PNAME0))
         self.assertFalse(c.sets.contains("set0", PNAME1))
         self.assertTrue(c.sets.contains("set2", PNAME1))
-        self.assertTrue(c.sets.isequation("set2"))
+        self.assertTrue(c.sets.is_equation("set2"))
 
         self.assertEqual(len(p.folders), len(FNLIST1))
         for f in FNLIST1:

@@ -202,7 +202,7 @@ class NMHistoryIntegrationTest(unittest.TestCase):
 
     def test02_nmu_history_routes_to_buffer(self):
         self.nm.history.clear()
-        nmu.history("test via nmu", tp="nm.test", quiet=True)
+        nmu.history("test via nmu", treepath="nm.test", quiet=True)
         buf = self.nm.history.buffer
         self.assertEqual(len(buf), 1)
         self.assertEqual(buf[0]["message"], "test via nmu")

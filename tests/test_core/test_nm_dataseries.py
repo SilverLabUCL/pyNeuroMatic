@@ -49,8 +49,8 @@ class NMDataSeriesTest(unittest.TestCase):
                 e.data.append(d)
                 c.data.append(d)
 
-        self.ds0.channels.select_key = "B"
-        self.ds0.epochs.select_key = "E2"
+        self.ds0.channels.selected_name = "B"
+        self.ds0.epochs.selected_name = "E2"
         print(self.ds0.get_select(get_keys=True))
 
         # create sets
