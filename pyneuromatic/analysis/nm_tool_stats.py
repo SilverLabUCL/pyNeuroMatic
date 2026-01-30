@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 import math
 from typing import Any
 import numpy as np
@@ -318,6 +319,10 @@ class NMStatsWin(NMObject):
     NM Stats Window class
     """
 
+    # NMStatsWin has no special attrs beyond NMObject's - all its attrs
+    # are simple types (bool, float, dict, list) that deep copy normally
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS
+
     def __init__(
         self,
         parent: object | None = None,
@@ -377,9 +382,43 @@ class NMStatsWin(NMObject):
             return False
         return True
 
-    # override, no super
-    def copy(self) -> NMStatsWin:
-        return NMStatsWin(copy=self)
+    def __deepcopy__(self, memo: dict) -> NMStatsWin:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMStatsWin by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMStatsWin
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        # NMStatsWin's attrs are all simple types (bool, float, dict, list)
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        return result
 
     # override
     @property
@@ -1262,10 +1301,6 @@ class NMStatsWinContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
             copy=copy,
         )
-
-    # override, no super
-    def copy(self) -> NMStatsWinContainer:
-        return NMStatsWinContainer(copy=self)
 
     # override, no super
     def content_type(self) -> str:

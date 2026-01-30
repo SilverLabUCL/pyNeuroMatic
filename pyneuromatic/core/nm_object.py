@@ -225,7 +225,7 @@ class NMObject(object):
             if attr not in special_attrs:
                 setattr(result, attr, copy.deepcopy(value, memo))
 
-        # Now set NMObject's attributes with custom handling
+        # Set NMObject's attributes with custom handling
         # __created: NOT copied, gets new timestamp
         result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
         # __parent: copied (maintains reference to same parent)

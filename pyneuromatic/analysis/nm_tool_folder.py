@@ -135,10 +135,6 @@ class NMToolFolder(NMObject):
 
         return result
 
-    # override, no super
-    def copy(self) -> NMToolFolder:
-        return NMToolFolder(copy=self)
-
     # override
     @property
     def content(self) -> dict[str, str]:
@@ -178,10 +174,6 @@ class NMToolFolderContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
             copy=copy,
         )
-
-    # override, no super
-    def copy(self) -> NMToolFolderContainer:
-        return NMToolFolderContainer(copy=self)
 
     # override, no super
     def content_type(self) -> str:

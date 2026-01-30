@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 import numpy as np
 
 from pyneuromatic.core.nm_object import NMObject
@@ -120,13 +121,76 @@ class NMDataSeries(NMObject):
 
     # override
     def __eq__(
-        self, 
+        self,
         other: object
     ) -> bool:
         if not isinstance(other, NMDataSeries):
             return NotImplemented
         # TODO
         return super().__eq__(other)
+
+    def __deepcopy__(self, memo: dict) -> NMDataSeries:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMDataSeries by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMDataSeries
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMDataSeries's special attributes
+
+        # __channel_container: deep copy and update parent
+        if isinstance(self._NMDataSeries__channel_container, NMChannelContainer):
+            result._NMDataSeries__channel_container = copy.deepcopy(
+                self._NMDataSeries__channel_container, memo
+            )
+            result._NMDataSeries__channel_container._parent = result
+        else:
+            result._NMDataSeries__channel_container = NMChannelContainer(parent=result)
+
+        # __epoch_container: deep copy and update parent
+        if isinstance(self._NMDataSeries__epoch_container, NMEpochContainer):
+            result._NMDataSeries__epoch_container = copy.deepcopy(
+                self._NMDataSeries__epoch_container, memo
+            )
+            result._NMDataSeries__epoch_container._parent = result
+        else:
+            result._NMDataSeries__epoch_container = NMEpochContainer(parent=result)
+
+        # __channel_scale_lock: simple bool copy
+        result._NMDataSeries__channel_scale_lock = self._NMDataSeries__channel_scale_lock
+
+        # __xscale_lock: simple bool copy
+        result._NMDataSeries__xscale_lock = self._NMDataSeries__xscale_lock
+
+        return result
 
     # TODO: replace with __eq__()
     def _isequivalent(self, dataseries, alert=False):
