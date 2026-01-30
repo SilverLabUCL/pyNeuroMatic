@@ -20,7 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
-# import copy
+import copy
 import datetime
 from tkinter.font import names
 import types
@@ -88,7 +88,7 @@ class NMObject(object):
         _folder
 
     Children of this class should override:
-        copy()
+        __deepcopy__()
         __eq__()
         parameters()
     """
@@ -160,31 +160,83 @@ class NMObject(object):
         else:
             self.__notes_on = True
 
-    # children should override
+    # children should override __deepcopy__ instead of copy()
     def copy(self) -> NMObject:
-        """Create a copy of this object using custom copy constructor."""
-        # TODO: redundant? better to use __copy__ and __deepcopy__ only?
-        return self.__class__(copy=self)
+        """Create a copy of this NMObject.
+
+        Convenience method that calls copy.deepcopy(self).
+        Subclasses should override __deepcopy__ to customize copy behavior.
+
+        Returns:
+            A deep copy of this NMObject
+        """
+        return copy.deepcopy(self)
 
     def __copy__(self) -> NMObject:
         """Support Python's copy.copy() protocol.
 
-        This allows using the standard library:
-            import copy
-            new_obj = copy.copy(original_obj)
-        """
-        return self.copy()
+        For NMObject, shallow copy delegates to deep copy since
+        we need to copy mutable attributes like notes.
 
-    def __deepcopy__(self, _memo: dict) -> NMObject:
+        Returns:
+            A copy of this NMObject (same as deepcopy)
+        """
+        return copy.deepcopy(self)
+
+    def __deepcopy__(self, memo: dict) -> NMObject:
         """Support Python's copy.deepcopy() protocol.
 
-        For NMObject, deep copy is the same as shallow copy since
-        the copy constructor handles all necessary copying logic.
+        Creates a copy of this NMObject by bypassing __init__ and directly
+        setting attributes. This avoids the complexity of the copy parameter
+        in __init__ and provides a cleaner separation of concerns.
+
+        Subclasses should override this method to handle their own special
+        attributes, calling super().__deepcopy__(memo) to copy NMObject
+        attributes.
 
         Args:
-            _memo: Dictionary to track already copied objects (unused)
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMObject
         """
-        return self.copy()
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # NMObject attributes that need special handling (name-mangled)
+        nmobject_special_attrs = {
+            "_NMObject__created",
+            "_NMObject__parent",
+            "_NMObject__name",
+            "_NMObject__notes_on",
+            "_NMObject__notes",
+            "_NMObject__rename_fxnref",
+            "_NMObject__copy_of",
+        }
+
+        # First, deep copy all attributes that aren't NMObject's special attrs
+        for attr, value in self.__dict__.items():
+            if attr not in nmobject_special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Now set NMObject's attributes with custom handling
+        # __created: NOT copied, gets new timestamp
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        # __parent: copied (maintains reference to same parent)
+        result._NMObject__parent = self._NMObject__parent
+        # __name: copied
+        result._NMObject__name = self._NMObject__name
+        # __notes_on: copied
+        result._NMObject__notes_on = self._NMObject__notes_on
+        # __notes: deep copied (mutable list of dicts)
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        # __rename_fxnref: NOT copied, set to new instance's _name_set
+        result._NMObject__rename_fxnref = result._name_set
+        # __copy_of: set to reference the original object
+        result._NMObject__copy_of = self
+
+        return result
 
     # children should override
     def __eq__(

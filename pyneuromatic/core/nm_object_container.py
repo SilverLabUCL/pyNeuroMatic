@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 from collections.abc import MutableMapping
 from enum import Enum, auto
 
@@ -427,6 +428,78 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # __ne__() NO OVERRIDE
     # '!=' operator
+
+    def __deepcopy__(self, memo: dict) -> NMObjectContainer:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMObjectContainer by bypassing __init__ and
+        directly setting attributes. Handles special cases:
+        - Deep copies all contained NMObjects in __map
+        - Creates new NMSets with function reference to new container
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMObjectContainer
+        """
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Attributes that need special handling (name-mangled)
+        container_special_attrs = {
+            "_NMObjectContainer__map",
+            "_NMObjectContainer__sets",
+        }
+
+        # First, let NMObject.__deepcopy__ handle NMObject attributes
+        # and deep copy all other non-special attributes
+        nmobject_special_attrs = {
+            "_NMObject__created",
+            "_NMObject__parent",
+            "_NMObject__name",
+            "_NMObject__notes_on",
+            "_NMObject__notes",
+            "_NMObject__rename_fxnref",
+            "_NMObject__copy_of",
+        }
+        all_special_attrs = nmobject_special_attrs | container_special_attrs
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in all_special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        import datetime
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMObjectContainer's special attributes
+
+        # __map: deep copy all contained NMObjects
+        result._NMObjectContainer__map = {}
+        for key, nmobj in self._NMObjectContainer__map.items():
+            copied_obj = copy.deepcopy(nmobj, memo)
+            copied_obj._parent = result  # update parent to new container
+            result._NMObjectContainer__map[key] = copied_obj
+
+        # __sets: create new NMSets with function reference to new container
+        # We need to copy the sets data but with the new container's _get_map
+        result._NMObjectContainer__sets = NMSets(
+            parent=result,
+            name="NMObjectContainerSets",
+            nmobjects_fxnref=result._get_map,
+            copy=self._NMObjectContainer__sets,
+        )
+
+        return result
 
     # MutableMapping Mixin Methods: pop, popitem, clear, update, setdefault
 
