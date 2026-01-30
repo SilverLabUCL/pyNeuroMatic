@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 from collections.abc import MutableMapping
 from enum import Enum, auto
 
@@ -123,6 +124,12 @@ class NMObjectContainer(NMObject, MutableMapping):
     Dict is ordered for Python 3.7
     """
 
+    # Extend NMObject's special attrs with NMObjectContainer's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMObjectContainer__map",
+        "_NMObjectContainer__sets",
+    })
+
     def __init__(
         self,
         parent: object | None = None,  # for creating NM class tree
@@ -151,12 +158,12 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__auto_name_seq_counter = "0"
         self.__sets: NMSets
 
-        # selected_name: the currently selected/focused NMObject in this container
-        # used for navigating the NM class tree (e.g., current project, folder, data)
+        # selected_name: the selected/focused NMObject in this container
+        # used for navigating the NM class tree (e.g., selected project, folder, data)
         # only one NMObject can be selected at a time; None if nothing selected
         self.__selected_name: str | None = None
 
-        # execute_mode: specifies which NMObjects to operate on (see ExecuteMode enum)
+        # execute_mode: specifies which NMObjects to operate/execute on (see ExecuteMode enum)
         # execute_target_name: used with NAME or SET modes to specify which object/set
         # see execute_targets property for resolved NMObject list
         self.__execute_mode: ExecuteMode = ExecuteMode.SELECTED
@@ -222,11 +229,6 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     def _get_map(self) -> dict[str, NMObject]:  # see __init__()
         return self.__map
-
-    # override NMObject method
-    # children should override
-    def copy(self) -> NMObjectContainer:
-        return NMObjectContainer(copy=self)
 
     # override NMObject method
     # children should override if new parameters are declared
@@ -427,6 +429,63 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # __ne__() NO OVERRIDE
     # '!=' operator
+
+    def __deepcopy__(self, memo: dict) -> NMObjectContainer:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMObjectContainer by bypassing __init__ and
+        directly setting attributes. Handles special cases:
+        - Deep copies all contained NMObjects in __map
+        - Creates new NMSets with function reference to new container
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMObjectContainer
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMObjectContainer's special attributes
+
+        # __map: deep copy all contained NMObjects
+        result._NMObjectContainer__map = {}
+        for key, nmobj in self._NMObjectContainer__map.items():
+            copied_obj = copy.deepcopy(nmobj, memo)
+            copied_obj._parent = result  # update parent to new container
+            result._NMObjectContainer__map[key] = copied_obj
+
+        # __sets: create new NMSets with function reference to new container
+        # We need to copy the sets data but with the new container's _get_map
+        result._NMObjectContainer__sets = NMSets(
+            parent=result,
+            name="NMObjectContainerSets",
+            nmobjects_fxnref=result._get_map,
+            copy=self._NMObjectContainer__sets,
+        )
+
+        return result
 
     # MutableMapping Mixin Methods: pop, popitem, clear, update, setdefault
 

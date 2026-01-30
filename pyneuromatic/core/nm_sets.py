@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 from collections.abc import MutableMapping
 from typing import Callable, Any
 
@@ -45,6 +46,13 @@ class NMSets(NMObject, MutableMapping):
     MutableMapping Mixin Methods:
         pop, popitem, clear, update, setdefault
     """
+
+    # Extend NMObject's special attrs with NMSets's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMSets__map",
+        "_NMSets__nmobjects",
+        "_NMSets__nmobjects_fxnref",
+    })
 
     def __init__(
         self,
@@ -166,6 +174,73 @@ class NMSets(NMObject, MutableMapping):
         self.notes_on = True
 
         return None
+
+    def __deepcopy__(self, memo: dict) -> NMSets:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMSets by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMSets
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMSets's special attributes
+
+        # __nmobjects: keep as empty dict initially
+        # (will be populated by the function reference or set externally)
+        result._NMSets__nmobjects = {}
+
+        # __nmobjects_fxnref: point to the new instance's default method
+        result._NMSets__nmobjects_fxnref = result._nmobjects_dict_default
+
+        # __map: deep copy the structure, resolving NMObject references through memo
+        result._NMSets__map = {}
+        for key, olist in self._NMSets__map.items():
+            if NMSets.list_is_equation(olist):
+                # Equations are just strings, deep copy directly
+                result._NMSets__map[key] = copy.deepcopy(olist, memo)
+            else:
+                # List of NMObjects - try to resolve through memo
+                new_olist = []
+                for obj in olist:
+                    if isinstance(obj, NMObject):
+                        if id(obj) in memo:
+                            # Object was already copied, use the copy
+                            new_olist.append(memo[id(obj)])
+                        else:
+                            # Object not in memo, keep original reference
+                            new_olist.append(obj)
+                    else:
+                        new_olist.append(obj)
+                result._NMSets__map[key] = new_olist
+
+        return result
 
     @property
     def _nmobjects_dict(self) -> dict[str, NMObject]:

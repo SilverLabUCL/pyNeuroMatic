@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 
 from pyneuromatic.core.nm_folder import NMFolderContainer
 from pyneuromatic.core.nm_object import NMObject
@@ -41,6 +42,11 @@ class NMProject(NMObject):
     NM Project class
     TODO: history functions
     """
+
+    # Extend NMObject's special attrs with NMProject's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMProject__folder_container",
+    })
 
     def __init__(
         self,
@@ -75,9 +81,53 @@ class NMProject(NMObject):
             return False
         return self.folders == other.folders
 
-    # override, no super
-    def copy(self) -> NMProject:
-        return NMProject(copy=self)
+    def __deepcopy__(self, memo: dict) -> NMProject:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMProject by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMProject
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMProject's special attributes
+
+        # __folder_container: deep copy and update parent
+        if self._NMProject__folder_container is not None:
+            result._NMProject__folder_container = copy.deepcopy(
+                self._NMProject__folder_container, memo
+            )
+            result._NMProject__folder_container._parent = result
+        else:
+            result._NMProject__folder_container = NMFolderContainer(parent=result)
+
+        return result
 
     # override
     @property
@@ -114,10 +164,6 @@ class NMProjectContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
             copy=copy,
         )  # NMObjectContainer
-
-    # override, no super
-    def copy(self) -> NMProjectContainer:
-        return NMProjectContainer(copy=self)
 
     # override, no super
     def content_type(self) -> str:

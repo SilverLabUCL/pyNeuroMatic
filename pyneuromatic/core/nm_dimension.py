@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 import math
 import numpy as np
 
@@ -34,6 +35,11 @@ class NMDimension(NMObject):
     Contains data y-scale parameters
     """
 
+    # Extend NMObject's special attrs with NMDimension's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMDimension__nparray",
+    })
+    
     def __init__(
         self,
         parent: object | None = None,
@@ -101,6 +107,51 @@ class NMDimension(NMObject):
             return False
         return True
 
+    def __deepcopy__(self, memo: dict) -> NMDimension:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMDimension by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMDimension
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMDimension's special attributes
+
+        # __nparray: deep copy numpy array (if present)
+        if self._NMDimension__nparray is not None:
+            result._NMDimension__nparray = self._NMDimension__nparray.copy()
+        else:
+            result._NMDimension__nparray = None
+
+        return result
+
     def __eq_arrays(a1, a2) -> bool:
         if a1 is None and a2 is None:
             return True
@@ -128,10 +179,6 @@ class NMDimension(NMObject):
                 else:
                     return False
         return False
-
-    # override, no super
-    def copy(self) -> NMDimension:
-        return NMDimension(copy=self)
 
     # override
     @property
@@ -252,6 +299,11 @@ class NMDimensionX(NMDimension):
 
     Contains data x-scale parameters
     """
+    
+    # Extend NMDimension's special attrs with NMDimensionX's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMDimension._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMDimensionX__ypair",
+    })
 
     def __init__(
         self,
@@ -299,9 +351,58 @@ class NMDimensionX(NMDimension):
             return False
         return True
 
-    # override, no super
-    def copy(self) -> NMDimensionX:
-        return NMDimensionX(copy=self)
+    def __deepcopy__(self, memo: dict) -> NMDimensionX:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMDimensionX by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMDimensionX
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes parent's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Handle NMDimension's special attributes
+
+        # __nparray: deep copy numpy array (if present)
+        if self._NMDimension__nparray is not None:
+            result._NMDimension__nparray = self._NMDimension__nparray.copy()
+        else:
+            result._NMDimension__nparray = None
+
+        # Handle NMDimensionX's special attributes
+
+        # __ypair: deep copy numpy array (if present)
+        if self._NMDimensionX__ypair is not None:
+            result._NMDimensionX__ypair = self._NMDimensionX__ypair.copy()
+        else:
+            result._NMDimensionX__ypair = None
+
+        return result
 
     # override
     def _scale_set(
