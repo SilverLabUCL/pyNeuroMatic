@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 import numpy
 # import numpy.typing as npt # No module named 'numpy.typing
 
@@ -59,6 +60,14 @@ class NMData(NMObject):
     """
     NM Data class
     """
+
+    # Extend NMObject's special attrs with NMData's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMData__x",
+        "_NMData__y",
+        "_NMData__dataseries_channel",
+        "_NMData__dataseries_epoch",
+    })
 
     def __init__(
         self,
@@ -116,10 +125,6 @@ class NMData(NMObject):
         # TODO: turn off scale notes and divert here?
         # TODO: option that x-scale is an array (ref to NMData)
 
-    # override, no super
-    def copy(self) -> NMData:
-        return NMData(copy=self)
-
     # override
     def __eq__(
         self,
@@ -140,6 +145,79 @@ class NMData(NMObject):
             return False
 
         return True
+
+    def __deepcopy__(self, memo: dict) -> NMData:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMData by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMData
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMData's special attributes
+
+        # __x and __y: deep copy (they're NMDimension objects)
+        result._NMData__x = copy.deepcopy(self._NMData__x, memo)
+        result._NMData__x._parent = result  # update parent
+        result._NMData__y = copy.deepcopy(self._NMData__y, memo)
+        result._NMData__y._parent = result  # update parent
+
+        # Update ypair reference
+        result._NMData__x.ypair = result._NMData__y.nparray
+
+        # __dataseries_channel and __dataseries_epoch: copy references
+        # If copying within a folder context, try to resolve to copied objects
+        if result._folder is not None:
+            # Try to resolve channel reference
+            if self._NMData__dataseries_channel is not None:
+                if id(self._NMData__dataseries_channel) in memo:
+                    result._NMData__dataseries_channel = memo[id(self._NMData__dataseries_channel)]
+                else:
+                    result._NMData__dataseries_channel = self._NMData__dataseries_channel
+            else:
+                result._NMData__dataseries_channel = None
+
+            # Try to resolve epoch reference
+            if self._NMData__dataseries_epoch is not None:
+                if id(self._NMData__dataseries_epoch) in memo:
+                    result._NMData__dataseries_epoch = memo[id(self._NMData__dataseries_epoch)]
+                else:
+                    result._NMData__dataseries_epoch = self._NMData__dataseries_epoch
+            else:
+                result._NMData__dataseries_epoch = None
+        else:
+            # Direct copy: keep references
+            result._NMData__dataseries_channel = self._NMData__dataseries_channel
+            result._NMData__dataseries_epoch = self._NMData__dataseries_epoch
+
+        return result
 
     # override
     @property
@@ -249,10 +327,6 @@ class NMDataContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
             copy=copy,
         )
-
-    # override, no super
-    def copy(self) -> NMDataContainer:
-        return NMDataContainer(copy=self)
 
     # override, no super
     def content_type(self) -> str:

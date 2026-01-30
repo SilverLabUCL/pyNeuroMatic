@@ -46,6 +46,13 @@ class NMSets(NMObject, MutableMapping):
         pop, popitem, clear, update, setdefault
     """
 
+    # Extend NMObject's special attrs with NMSets's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMSets__map",
+        "_NMSets__nmobjects",
+        "_NMSets__nmobjects_fxnref",
+    })
+
     def __init__(
         self,
         parent: object | None = None,

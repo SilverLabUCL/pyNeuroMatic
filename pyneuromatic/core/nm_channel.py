@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import copy
 
 from typing import TYPE_CHECKING
 
@@ -61,6 +62,13 @@ class NMChannel(NMObject):
     """
     NM Channel class
     """
+
+    # Extend NMObject's special attrs with NMChannel's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMChannel__x",
+        "_NMChannel__y",
+        "_NMChannel__thedata",
+    })
 
     def __init__(
         self,
@@ -145,9 +153,69 @@ class NMChannel(NMObject):
             return False
         return True
 
-    # override, no super
-    def copy(self) -> NMChannel:
-        return NMChannel(copy=self)
+    def __deepcopy__(self, memo: dict) -> NMChannel:
+        """Support Python's copy.deepcopy() protocol.
+
+        Creates a copy of this NMChannel by bypassing __init__ and directly
+        setting attributes.
+
+        Args:
+            memo: Dictionary to track already copied objects (prevents cycles)
+
+        Returns:
+            A deep copy of this NMChannel
+        """
+        import datetime
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Use the class attribute for special attrs (includes NMObject's attrs)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
+
+        # Deep copy all attributes that aren't special
+        for attr, value in self.__dict__.items():
+            if attr not in special_attrs:
+                setattr(result, attr, copy.deepcopy(value, memo))
+
+        # Set NMObject's attributes with custom handling
+        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
+        result._NMObject__parent = self._NMObject__parent
+        result._NMObject__name = self._NMObject__name
+        result._NMObject__notes_on = self._NMObject__notes_on
+        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
+        result._NMObject__rename_fxnref = result._name_set
+        result._NMObject__copy_of = self
+
+        # Now handle NMChannel's special attributes
+
+        # __x and __y: deep copy (they're NMDimension objects)
+        result._NMChannel__x = copy.deepcopy(self._NMChannel__x, memo)
+        result._NMChannel__x._parent = result  # update parent
+        result._NMChannel__y = copy.deepcopy(self._NMChannel__y, memo)
+        result._NMChannel__y._parent = result  # update parent
+
+        # __thedata: copy list of references
+        # If copying within a folder context, try to resolve to copied NMData
+        if result._folder is not None:
+            from pyneuromatic.core.nm_data import NMData
+            result._NMChannel__thedata = []
+            data_container = result._folder.data
+            for d in self._NMChannel__thedata:
+                # Check if this NMData was already copied (in memo)
+                if id(d) in memo:
+                    result._NMChannel__thedata.append(memo[id(d)])
+                else:
+                    # Try to find by name in the folder's data container
+                    o = data_container.get(d.name)
+                    if isinstance(o, NMData):
+                        result._NMChannel__thedata.append(o)
+        else:
+            # Direct copy: just copy the list of references
+            result._NMChannel__thedata = list(self._NMChannel__thedata)
+
+        return result
 
     # override
     @property
@@ -200,10 +268,6 @@ class NMChannelContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
             copy=copy,
         )
-
-    # override, no super
-    def copy(self) -> NMChannelContainer:
-        return NMChannelContainer(copy=self)
 
     # override, no super
     def content_type(self) -> str:

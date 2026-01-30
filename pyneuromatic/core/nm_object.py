@@ -93,6 +93,19 @@ class NMObject(object):
         parameters()
     """
 
+    # Attributes that need special handling in __deepcopy__ (name-mangled).
+    # Subclasses should extend this by unioning with their own special attrs:
+    #   _DEEPCOPY_SPECIAL_ATTRS = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({...})
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = frozenset({
+        "_NMObject__created",
+        "_NMObject__parent",
+        "_NMObject__name",
+        "_NMObject__notes_on",
+        "_NMObject__notes",
+        "_NMObject__rename_fxnref",
+        "_NMObject__copy_of",
+    })
+
     def __init__(
         self,
         parent: object | None = None,  # for creating NM class tree
@@ -191,8 +204,8 @@ class NMObject(object):
         in __init__ and provides a cleaner separation of concerns.
 
         Subclasses should override this method to handle their own special
-        attributes, calling super().__deepcopy__(memo) to copy NMObject
-        attributes.
+        attributes. Use _DEEPCOPY_SPECIAL_ATTRS class attribute to define
+        which attributes need special handling.
 
         Args:
             memo: Dictionary to track already copied objects (prevents cycles)
@@ -204,20 +217,12 @@ class NMObject(object):
         result = cls.__new__(cls)
         memo[id(self)] = result
 
-        # NMObject attributes that need special handling (name-mangled)
-        nmobject_special_attrs = {
-            "_NMObject__created",
-            "_NMObject__parent",
-            "_NMObject__name",
-            "_NMObject__notes_on",
-            "_NMObject__notes",
-            "_NMObject__rename_fxnref",
-            "_NMObject__copy_of",
-        }
+        # Use the class attribute for special attrs (allows subclass extension)
+        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
 
-        # First, deep copy all attributes that aren't NMObject's special attrs
+        # First, deep copy all attributes that aren't special
         for attr, value in self.__dict__.items():
-            if attr not in nmobject_special_attrs:
+            if attr not in special_attrs:
                 setattr(result, attr, copy.deepcopy(value, memo))
 
         # Now set NMObject's attributes with custom handling

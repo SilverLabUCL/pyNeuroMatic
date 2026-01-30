@@ -62,6 +62,14 @@ class NMDataSeries(NMObject):
     NM DataSeries class
     """
 
+    # Extend NMObject's special attrs with NMDataSeries's own
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
+        "_NMDataSeries__channel_container",
+        "_NMDataSeries__epoch_container",
+        "_NMDataSeries__channel_scale_lock",
+        "_NMDataSeries__xscale_lock",
+    })
+
     def __init__(
         self,
         parent: object | None = None,
@@ -133,10 +141,6 @@ class NMDataSeries(NMObject):
         # if c and not c._isequivalent(c2, alert=alert):
         #    return False
         return True
-
-    # override, no super
-    def copy(self) -> NMDataSeries:
-        return NMDataSeries(copy=self)
 
     # override
     # TODO: finish
@@ -804,11 +808,6 @@ class NMDataSeriesContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
             copy=copy,
         )
-        # TODO: copy
-
-    # override, no super
-    def copy(self) -> NMDataSeriesContainer:
-        return NMDataSeriesContainer(copy=self)
 
     # override, no super
     def content_type(self) -> str:
