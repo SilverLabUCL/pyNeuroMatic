@@ -181,7 +181,6 @@ def name_ok(
 
 
 def name_next_seq(
-    self,
     names: list[str],  # existing names, e.g. ['RecordA0', 'RecordA1'...]
     prefix: str,  # prefix of names, e.g. 'A'
     first: int = 0,  # first number of sequence
@@ -199,25 +198,23 @@ def name_next_seq(
     :rtype: int
     """
     if not isinstance(names, list):
-        e = self._type_error("names", "List[string]")
+        e = typeerror(names, "names", "List[string]")
         raise TypeError(e)
     if not isinstance(prefix, str):
-        e = self._type_error("prefix", "string")
+        e = typeerror(prefix, "prefix", "string")
         raise TypeError(e)
     if not prefix or not name_ok(prefix):
-        e = self._value_error("prefix")
-        raise ValueError(e)
+        raise ValueError("prefix: %s" % prefix)
     if not isinstance(first, int):
-        e = self._type_error("first", "integer")
+        e = typeerror(first, "first", "integer")
         raise TypeError(e)
     if first < 0:
-        e = self._value_error("first")
-        raise ValueError(e)
+        raise ValueError("first: %s" % first)
 
     imax = -1
     for name in names:
         if not isinstance(name, str):
-            e = self._type_error("name", "string")
+            e = typeerror(name, "name", "string")
             raise TypeError(e)
         name = name.lower()
         istr = name.replace(prefix.lower(), "")
