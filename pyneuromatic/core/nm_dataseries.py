@@ -75,49 +75,13 @@ class NMDataSeries(NMObject):
         self,
         parent: object | None = None,
         name: str = "NMDataSeries0",  # dataseries name/prefix
-        copy: NMDataSeries | None = None,  # see copy()
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
+        super().__init__(parent=parent, name=name)
 
-        self.__channel_container: NMChannelContainer
-        self.__epoch_container: NMEpochContainer
-        self.__channel_scale_lock = None  # NMdata share channel x-y scales
-        self.__xscale_lock = None  # all NMdata share x-scale
-
-        # self.__thedata = {}  # dict, {channel: data-list}
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMDataSeries):
-            if isinstance(copy.channels, NMChannelContainer):
-                self.__channel_container = copy.channels.copy()
-            if isinstance(copy.epochs, NMEpochContainer):
-                self.__epoch_container = copy.epochs.copy()
-            self.__channel_scale_lock = copy.channel_scale_lock
-            self.__xscale_lock = copy.xscale_lock
-        else:
-            e = nmu.typeerror(copy, "copy", "NMDataSeries")
-            raise TypeError(e)
-
-            # TODO: function to create this dictionary of selected data
-            # based on channel and epoch select
-            # self.__data_select = {}  # new refs
-
-        if not isinstance(self.__channel_container, NMChannelContainer):
-            self.__channel_container = NMChannelContainer(parent=self)
-
-        if not isinstance(self.__epoch_container, NMEpochContainer):
-            self.__epoch_container = NMEpochContainer(parent=self)
-
-        if not isinstance(self.__channel_scale_lock, bool):
-            self.__channel_scale_lock = True
-
-        if not isinstance(self.__xscale_lock, bool):
-            self.__xscale_lock = True
-
-        # self._sets_init(quiet=True)
-
-        return None
+        self.__channel_container: NMChannelContainer = NMChannelContainer(parent=self)
+        self.__epoch_container: NMEpochContainer = NMEpochContainer(parent=self)
+        self.__channel_scale_lock: bool = True  # NMdata share channel x-y scales
+        self.__xscale_lock: bool = True  # all NMdata share x-scale
 
     # override
     def __eq__(
@@ -859,18 +823,13 @@ class NMDataSeriesContainer(NMObjectContainer):
         self,
         parent: object | None = None,
         name: str = "NMDataSeriesContainer0",
-        copy: NMDataSeriesContainer | None = None,
-    ):
-        rename_on = False
-        name_prefix = ""  # no prefix
-        name_seq_format = ""
+    ) -> None:
         super().__init__(
             parent=parent,
             name=name,
-            rename_on=rename_on,
-            auto_name_prefix=name_prefix,
-            auto_name_seq_format=name_seq_format,
-            copy=copy,
+            rename_on=False,
+            auto_name_prefix="",  # no prefix
+            auto_name_seq_format="",
         )
 
     # override, no super

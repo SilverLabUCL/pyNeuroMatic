@@ -75,29 +75,13 @@ class NMData(NMObject):
         name: str = "NMData0",
         xdim: NMDimensionX | None = None,
         ydim: NMDimension | None = None,
-        # dataseries: NMDataSeries | None = None,
         dataseries_channel: NMChannel | None = None,
         dataseries_epoch: NMEpoch | None = None,
-        copy: NMData | None = None  # see copy()
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)  # NMObject
+        super().__init__(parent=parent, name=name)  # NMObject
 
-        # self.__dataseries = None
         self.__dataseries_channel: NMChannel | None = None
         self.__dataseries_epoch: NMEpoch | None = None
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMData):
-            xdim = copy.x.copy()
-            ydim = copy.y.copy()
-            # TODO
-            # dataseries = copy._NMData__dataseries
-            # dataseries_channel = copy._NMData__dataseries_channel
-            # dataseries_epoch = copy._NMData__dataseries_epoch
-        else:
-            e = nmu.typeerror(copy, "copy", NMData)
-            raise TypeError(e)
 
         if xdim is None:
             self.__x = NMDimensionX(self, "xscale")
@@ -317,7 +301,6 @@ class NMDataContainer(NMObjectContainer):
         rename_on: bool = True,
         name_prefix: str = "data",
         name_seq_format: str = "0",
-        copy: NMDataContainer | None = None,
     ) -> None:
         super().__init__(
             parent=parent,
@@ -325,7 +308,6 @@ class NMDataContainer(NMObjectContainer):
             rename_on=rename_on,
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
-            copy=copy,
         )
 
     # override, no super

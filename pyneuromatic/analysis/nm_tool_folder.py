@@ -42,28 +42,11 @@ class NMToolFolder(NMObject):
         self,
         parent: object | None = None,
         name: str = "NMToolFolder0",
-        copy: NMToolFolder | None = None,  # see copy()
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
+        super().__init__(parent=parent, name=name)
 
-        self.__data_container: NMDataContainer | None = None  # save results to NumPy arrays
-        self.__dataseries_container: NMDataContainer | None = None  # save results to NumPy arrays
-        
-        if copy is None:
-            pass
-        elif isinstance(copy, NMToolFolder):
-            if copy.data is not None:
-                self.__data_container = copy.data.copy()
-            if copy.dataseries is not None:
-                self.__dataseries_container = copy.dataseries.copy()
-        else:
-            e = nmu.typeerror(copy, "copy", NMToolFolder)
-            raise TypeError(e)
-
-        if not isinstance(self.__data_container, NMDataContainer):
-            self.__data_container = NMDataContainer(parent=self)
-        
-        return None
+        self.__data_container: NMDataContainer = NMDataContainer(parent=self)
+        self.__dataseries_container: NMDataContainer | None = None
 
     # override
     def __eq__(
@@ -164,7 +147,6 @@ class NMToolFolderContainer(NMObjectContainer):
         rename_on: bool = True,
         name_prefix: str = "toolfolder",
         name_seq_format: str = "0",
-        copy: NMToolFolderContainer | None = None,  # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -172,7 +154,6 @@ class NMToolFolderContainer(NMObjectContainer):
             rename_on=rename_on,
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
-            copy=copy,
         )
 
     # override, no super

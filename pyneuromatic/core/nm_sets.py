@@ -63,23 +63,17 @@ class NMSets(NMObject, MutableMapping):
         # it is safer to use nmobjects_fxnref than nmobjects
         # to avoid problems of reference change of dictionary
         # e.g. NMObjectContainer rename() or reorder()
-        copy: NMSets | None = None,  # see copy()
     ) -> None:
         actual_name = name if name is not None else "NMSets0"
         super().__init__(
             parent=parent,
             name=actual_name,
             notes_on=False,  # turn notes off during __init__
-            copy=copy,
         )  # NMObject
-  
-        self.__map: dict[str, Any] = {} # {key: [NMObject]} or {key: [Equation]}
-        self.__nmobjects = {}  # {keys: [NMObjects]}
-        self.__nmobjects_fxnref = self._nmobjects_dict_default
 
-        # self._eq_list.append('nmobjects')
-        # probably should not test self.__nmobjects
-        # self.__nmobjects is reference to external {}
+        self.__map: dict[str, Any] = {}  # {key: [NMObject]} or {key: [Equation]}
+        self.__nmobjects: dict[str, NMObject] = {}  # {keys: [NMObjects]}
+        self.__nmobjects_fxnref = self._nmobjects_dict_default
 
         # check arguments for nmobjects_fxnref and nmobjects
         # create self.__nmobjects
@@ -108,72 +102,7 @@ class NMSets(NMObject, MutableMapping):
                 "neither" % ("nmobjects_fxnref", "nmobjects")
             )
 
-        if copy is None:
-            pass
-        elif isinstance(copy, NMSets):
-            # DO NOT COPY self.__nmobjects
-            # Use keys to grab objects from self.__nmobjects
-            # Hence, self.__nmobjects must exist before this copy
-
-            # do not use copy.values() in for-loop
-            # values() does not return set equation
-            for key in copy.keys():
-                if not isinstance(key, str):
-                    e = nmu.typeerror(key, "copy: key", "string")
-                    raise TypeError(e)
-                for k in self.__map.keys():
-                    if key.lower() == k.lower():
-                        raise KeyError("copy: found multiple keys for '%s'" % k)
-                olist = copy.get(key, get_equation=True)
-                if not isinstance(olist, list):
-                    e = "copy: '%s' value" % key
-                    e = nmu.typeerror(olist, e, "list")
-                    raise TypeError(e)
-                if NMSets.list_is_equation(olist):
-                    self.__map[key] = olist.copy()
-                    continue
-                # else copy normal set (list of NMObjects)
-                obj_list: list[NMObject] = []
-                for item in olist:
-                    if isinstance(item, NMObject):
-                        obj_list.append(item)
-                olist_new = []
-                finished_objs: list[NMObject] = obj_list.copy()
-                for k, o1 in self._nmobjects_dict.items():
-                    # maintain list order of self._nmobjects_dict
-                    if not isinstance(o1, NMObject):
-                        e = "self._nmobjects_dict: '%s' value" % k
-                        e = nmu.typeerror(o1, e, "NMObject")
-                        raise TypeError(e)
-                    found = False
-                    for o2 in obj_list:
-                        # want matching type, so do not use isinstance()
-                        if type(o2) != type(o1):
-                            e = "copy: '%s' value" % key
-                            e = nmu.typeerror(o2, e, type(o1).__name__)
-                            raise TypeError(e)
-                        if o1.name.lower() == o2.name.lower():
-                            found = True
-                            break
-                    if found:
-                        olist_new.append(o1)
-                        finished_objs.remove(o2)
-                if len(finished_objs) > 0:
-                    nlist: list[str] = []
-                    for o in finished_objs:
-                        nlist.append(o.name)
-                    raise KeyError(
-                        "copy: '%s': the following list "
-                        "items do not exist: %s" % (key, str(nlist))
-                    )
-                self.__map[key] = olist_new
-        else:
-            e = nmu.typeerror(copy, "copy", "NMSets")
-            raise TypeError(e)
-
         self.notes_on = True
-
-        return None
 
     def __deepcopy__(self, memo: dict) -> NMSets:
         """Support Python's copy.deepcopy() protocol.
@@ -249,13 +178,10 @@ class NMSets(NMObject, MutableMapping):
     def _nmobjects_dict_default(self) -> dict[str, NMObject]:
         return self.__nmobjects
 
-    # override, no super
-    def copy(
-        self,
-        nmobjects: dict[str, NMObject] | None = None,
-        nmobjects_fxnref: Callable | None = None,
-    ) -> NMSets:
-        return NMSets(nmobjects=nmobjects, nmobjects_fxnref=nmobjects_fxnref, copy=self)
+    # override NMObject.copy()
+    def copy(self) -> NMSets:
+        """Create a copy of this NMSets using deepcopy."""
+        return copy.deepcopy(self)
 
     # override
     @property

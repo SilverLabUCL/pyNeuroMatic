@@ -73,57 +73,16 @@ class NMEpoch(NMObject):
         parent: object | None = None,
         name: str = "NMEpoch0",
         number: int = -1,
-        copy: NMEpoch | None = None,
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
+        super().__init__(parent=parent, name=name)
 
         self.__thedata: list[NMData] = []  # list of NMData references
-        self.__number: int = -1
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMEpoch):
-            from pyneuromatic.core.nm_data import NMData
-            from pyneuromatic.core.nm_folder import NMFolder
-
-            if isinstance(self._folder, NMFolder):
-                # grab NMData refs from copied NMDataContainer
-                # NMDataContainer should be copied before this copy
-                data = self._folder.data
-                for d in copy.data:
-                    if isinstance(d, NMData):
-                        o = data.get(d.name)
-                        if isinstance(o, NMData):
-                            self.__thedata.append(o)
-                        else:
-                            e = nmu.valueerror(
-                                d.name,
-                                "data item name not found in copied NMDataContainer",
-                            )
-                            raise ValueError(e)
-                    else:
-                        e = nmu.typeerror(d, "copy.data.item", "NMData")
-                        raise TypeError(e)
-            else:
-                # direct copy
-                for d in copy.data:
-                    if isinstance(d, NMData):
-                        self.__thedata.append(d)
-                    else:
-                        e = nmu.typeerror(d, "copy.data.item", "NMData")
-                        raise TypeError(e)
-            number = copy.number
-        else:
-            e = nmu.typeerror(copy, "copy", NMEpoch)
-            raise TypeError(e)
 
         if not isinstance(number, int):
             e = nmu.typeerror(number, "number", "int")
             raise TypeError(e)
 
-        self.__number = number
-
-        return None
+        self.__number: int = number
 
     # override
     def __eq__(self, other: object) -> bool:
@@ -231,15 +190,13 @@ class NMEpochContainer(NMObjectContainer):
         rename_on: bool = False,
         name_prefix: str = "E",
         name_seq_format: str = "0",
-        copy: NMEpochContainer | None = None,
     ) -> None:
-        return super().__init__(
+        super().__init__(
             parent=parent,
             name=name,
             rename_on=rename_on,
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
-            copy=copy,
         )
 
     # override, no super

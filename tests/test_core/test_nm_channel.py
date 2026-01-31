@@ -5,6 +5,7 @@ Created on Sun Dec 25 14:43:19 2022
 
 @author: jason
 """
+import copy
 import unittest
 
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
@@ -44,7 +45,7 @@ class NMChannelTest(unittest.TestCase):
             self.c1.data.append(d)
             self.dolist1.append(d)
 
-        self.c0_copy = NMChannel(parent=None, name="test", copy=self.c0)
+        self.c0_copy = copy.deepcopy(self.c0)
 
     def test00_init(self):
         # args: parent, name, copy (see NMObject)
@@ -57,9 +58,6 @@ class NMChannelTest(unittest.TestCase):
                 NMChannel(xscale=b)
             with self.assertRaises(TypeError):
                 NMChannel(yscale=b)
-
-        with self.assertRaises(TypeError):
-            NMChannel(copy=NM)
 
         self.assertEqual(self.c0._parent, NM)
         self.assertEqual(self.c0.name, CNAME0)

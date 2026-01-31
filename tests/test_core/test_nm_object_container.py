@@ -5,7 +5,7 @@ Created on Sun Dec 25 14:43:19 2022
 
 @author: jason
 """
-
+import copy
 import unittest
 from unittest.mock import patch
 
@@ -68,7 +68,7 @@ class NMObjectContainerTest(unittest.TestCase):
         }
         self.map1.sets.update(self.sets1)
 
-        self.map1_copy = NMObjectContainer(copy=self.map1)
+        self.map1_copy = copy.deepcopy(self.map1)
 
     # __init__, copy (NMObject), parameters (NMObject)
     # content (NMObject), content_type, content_parameters (NMObject)
@@ -86,12 +86,6 @@ class NMObjectContainerTest(unittest.TestCase):
         for b in bad:
             with self.assertRaises(TypeError):
                 NMObjectContainer(rename_on=b)
-
-        bad = list(nmu.BADTYPES)
-        bad.remove(None)
-        for b in bad:
-            with self.assertRaises(TypeError):
-                NMObjectContainer(copy=b)
 
         NMObjectContainer()  # no arguments is ok
 

@@ -5,7 +5,7 @@ Created on Sun Dec 25 14:43:19 2022
 
 @author: jason
 """
-
+import copy
 import unittest
 
 import pyneuromatic.core.nm_utilities as nmu
@@ -33,10 +33,10 @@ class NMDimensionTest(unittest.TestCase):
         self.y1 = NMDimension(parent=NM, name=YSNAME1, scale=YSCALE1)
         self.x1 = NMDimensionX(parent=NM, name=XSNAME1, scale=XSCALE1)
 
-        self.y0_copy = NMDimension(copy=self.y0)
-        self.x0_copy = NMDimensionX(copy=self.x0)
-        self.y1_copy = NMDimension(copy=self.y1)
-        self.x1_copy = NMDimensionX(copy=self.x1)
+        self.y0_copy = copy.deepcopy(self.y0)
+        self.x0_copy = copy.deepcopy(self.x0)
+        self.y1_copy = copy.deepcopy(self.y1)
+        self.x1_copy = copy.deepcopy(self.x1)
 
     def test00_init(self):
         # args: parent, name, copy (see NMObject)
@@ -48,12 +48,6 @@ class NMDimensionTest(unittest.TestCase):
         for b in bad:
             with self.assertRaises(TypeError):
                 NMDimension(scale=b)
-
-        f = NMFolder()
-        with self.assertRaises(TypeError):
-            NMDimension(copy=f)
-
-        NMDimension(copy=self.x0)  # ok to copy x-scale
 
         self.assertEqual(self.y0.name, YSNAME0)
         self.assertEqual(self.y0.label, YSCALE0["label"])
@@ -114,9 +108,10 @@ class NMDimensionTest(unittest.TestCase):
         self.assertTrue(self.x0 == self.x0_copy)
 
     def test02_copy(self):
-        # copy overrides other inputs
-        c = NMDimension(parent=NM, name=YSNAME0, scale=YSCALE0, copy=self.y1)
+        # Test deepcopy creates an equal but separate object
+        c = copy.deepcopy(self.y1)
         self.assertTrue(c == self.y1)
+        self.assertFalse(c is self.y1)  # different object
         self.assertFalse(c == self.y0)
 
         c = NMDimension(parent=NM, name=YSNAME0, scale=YSCALE0)

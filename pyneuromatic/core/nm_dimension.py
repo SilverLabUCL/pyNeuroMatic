@@ -44,21 +44,10 @@ class NMDimension(NMObject):
         self,
         parent: object | None = None,
         name: str = "NMDimension0",
-        nparray = None,  # 1D TODO: typing
+        nparray=None,  # 1D TODO: typing
         scale: dict | None = None,  # "label" and "units"
-        copy: NMDimension | None = None,  # see copy()
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
-
-        if copy is None:
-            pass  # ok
-        elif isinstance(copy, NMDimension):
-            if isinstance(copy.nparray, np.ndarray):
-                nparray = copy.nparray.copy()
-            scale = copy.scale
-        else:
-            e = nmu.typeerror(copy, "copy", NMDimension)
-            raise TypeError(e)
+        super().__init__(parent=parent, name=name)
 
         if nparray is None:
             pass
@@ -78,13 +67,10 @@ class NMDimension(NMObject):
         if scale is None:
             pass  # ok
         elif isinstance(scale, dict):
-            if not copy:
-                self._scale_set(scale, quiet=True)
+            self._scale_set(scale, quiet=True)
         else:
             e = nmu.typeerror(scale, "scale", "dictionary")
             raise TypeError(e)
-
-        return None
 
     # override
     def __eq__(
@@ -313,7 +299,6 @@ class NMDimensionX(NMDimension):
         ypair=None,  # TODO: typing
         scale: dict | None = None,
         # "label", "units", "start", "delta", "points"
-        copy: NMDimensionX | None = None,  # see copy()
     ) -> None:
 
         # declare parameters before calling super (so scale_set() is OK)
@@ -323,16 +308,13 @@ class NMDimensionX(NMDimension):
         self.__ypair = None
 
         super().__init__(
-                parent=parent,
-                name=name,
-                nparray=nparray,
-                scale=scale,
-                copy=copy
+            parent=parent,
+            name=name,
+            nparray=nparray,
+            scale=scale,
         )
 
         self._ypair_set(ypair)
-
-        return None
 
     # override
     def __eq__(
