@@ -594,7 +594,7 @@ def history_change(
 def history(
     message: str,
     title: str = "",
-    treepath: str | None = None,
+    path: str | None = None,
     frame: int = 1,
     red: bool = False,
     quiet: bool = False,
@@ -605,9 +605,9 @@ def history(
     :type message: str
     :param title: message title (e.g. 'ALERT' or 'ERROR').
     :type title: str
-    :param treepath: function treepath, pass '' for default or 'NONE' for none.
-    :type treepath: str | None
-    :param frame: inspect frame # for creating treepath.
+    :param path: function path, pass '' for default or 'NONE' for none.
+    :type path: str | None
+    :param frame: inspect frame # for creating path.
     :type frame: int
     :param red: True to print red, False to print black.
     :type red: bool
@@ -620,12 +620,12 @@ def history(
         return ""
     if not isinstance(frame, int) or frame < 0:
         frame = 1
-    if treepath is None:
-        path = get_treepath(inspect.stack(), frame=frame)
-    elif not isinstance(treepath, str):
+    if path is None:
+        path = get_path(inspect.stack(), frame=frame)
+    elif not isinstance(path, str):
         path = ""
     else:
-        path = treepath
+        path = path
 
     # determine log level from title/red
     if isinstance(title, str) and title.upper() == "ERROR":
@@ -638,7 +638,7 @@ def history(
     # delegate to NMHistory if available
     if _nm_history is not None:
         return _nm_history.log(
-            message, title=title, tp=path, level=level, quiet=quiet
+            message, title=title, path=path, level=level, quiet=quiet
         )
 
     # fallback: original print() behavior (before NMManager is created)
@@ -656,20 +656,20 @@ def history(
     return h
 
 
-def get_treepath(
+def get_path(
     stack: list, 
     frame: int = 1, 
     package: str = "nm"  # stack frame
 ) -> str:
-    """Create function ancestry treepath.
+    """Create function ancestry path.
 
     :param stack: stack list.
     :type stack: list
-    :param frame: inspect frame # for creating treepath.
+    :param frame: inspect frame # for creating path.
     :type frame: int
     :param package: package, e.g. 'nm'
     :type package: str
-    :return: treepath string.
+    :return: path string.
     :rtype: str
     """
     if not stack:
@@ -698,7 +698,7 @@ def get_class_from_stack(
 
     :param stack: stack list.
     :type stack: list
-    :param frame: inspect frame # for creating treepath.
+    :param frame: inspect frame # for creating path.
     :type frame: int
     :param module: include module name.
     :type module: bool
@@ -736,7 +736,7 @@ def get_method_from_stack(
 
     :param stack: stack list.
     :type stack: list
-    :param frame: inspect frame # for creating treepath.
+    :param frame: inspect frame # for creating path.
     :type frame: int
     :return: method name.
     :rtype: str
@@ -756,7 +756,7 @@ def get_method_from_stack(
 def input_yesno(
     prompt: str,
     title: str = "",
-    treepath: str | None = None,
+    path: str | None = None,
     frame: int = 1,
     cancel: bool = True,
     answer: str | None = None,  # for testing, bypasses input()
@@ -767,9 +767,9 @@ def input_yesno(
     :type prompt: str
     :param title: prompt title.
     :type title: str
-    :param treepath: function treepath.
-    :type treepath: str
-    :param frame: inspect frame # for creating treepath.
+    :param path: function path.
+    :type path: str
+    :param frame: inspect frame # for creating path.
     :type frame: int
     :param cancel: include 'cancel' option.
     :type cancel: bool
@@ -787,12 +787,12 @@ def input_yesno(
         txt = prompt + "\n" + "(y)es, (n)o: "
         ok.remove("c")
         ok.remove("cancel")
-    if treepath is None:
-        path = get_treepath(inspect.stack(), frame=frame)
-    if not isinstance(treepath, str):
+    if path is None:
+        path = get_path(inspect.stack(), frame=frame)
+    if not isinstance(path, str):
         path = ""
     else:
-        path = treepath  # + '.userinput'
+        path = path  # + '.userinput'
     if path:
         txt = path + ":\n" + txt
     if title:

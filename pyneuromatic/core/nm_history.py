@@ -34,7 +34,7 @@ from colorama import Fore
 class NMHistoryBufferHandler(logging.Handler):
     """Logging handler that stores records in a fixed-size in-memory buffer.
 
-    Each record is stored as a dict with keys: date, level, treepath, message.
+    Each record is stored as a dict with keys: date, level, path, message.
     When the buffer is full, the oldest entry is discarded.
     """
 
@@ -46,7 +46,7 @@ class NMHistoryBufferHandler(logging.Handler):
         entry = {
             "date": str(datetime.datetime.now()),
             "level": record.levelname,
-            "treepath": getattr(record, "treepath", ""),
+            "path": getattr(record, "path", ""),
             "message": record.getMessage(),
         }
         self._buffer.append(entry)
@@ -64,17 +64,17 @@ class NMHistoryBufferHandler(logging.Handler):
 class NMConsoleHandler(logging.Handler):
     """Logging handler that prints to console with colorama colors.
 
-    Replicates the output format of nmu.history(): treepath prefix,
+    Replicates the output format of nmu.history(): path prefix,
     optional title, and red coloring for WARNING/ERROR levels.
     """
 
     def emit(self, record: logging.LogRecord) -> None:
-        tp = getattr(record, "treepath", "")
+        path = getattr(record, "path", "")
         title = getattr(record, "title", "")
         msg = record.getMessage()
 
-        if tp and tp.upper() != "NONE":
-            h = tp + ": " + msg
+        if path and path.upper() != "NONE":
+            h = path + ": " + msg
         else:
             h = msg
 
@@ -129,7 +129,7 @@ class NMHistory:
         self,
         message: str,
         title: str = "",
-        tp: str = "",
+        path: str = "",
         level: int = logging.INFO,
         quiet: bool = False,
     ) -> str:
@@ -139,8 +139,8 @@ class NMHistory:
         :type message: str
         :param title: message title (e.g. 'ALERT' or 'ERROR').
         :type title: str
-        :param tp: treepath string (e.g. 'nm.project0.folder0').
-        :type tp: str
+        :param path: path string (e.g. 'nm.project0.folder0').
+        :type path: str
         :param level: Python logging level (e.g. logging.INFO).
         :type level: int
         :param quiet: if True, suppress console output for this call only.
@@ -149,8 +149,8 @@ class NMHistory:
         :rtype: str
         """
         # build return string matching current nmu.history() format
-        if tp and tp.upper() != "NONE":
-            h = tp + ": " + message
+        if path and path.upper() != "NONE":
+            h = path + ": " + message
         else:
             h = message
         if title:
@@ -165,7 +165,7 @@ class NMHistory:
         self._logger.log(
             level,
             message,
-            extra={"treepath": tp, "title": title},
+            extra={"path": path, "title": title},
         )
 
         if old_level is not None:
@@ -177,7 +177,7 @@ class NMHistory:
     def buffer(self) -> list[dict[str, str]]:
         """Return a copy of the history buffer.
 
-        Each entry is a dict with keys: date, level, treepath, message.
+        Each entry is a dict with keys: date, level, path, message.
         """
         return self._buffer_handler.buffer
 
@@ -200,12 +200,12 @@ class NMHistory:
         if last_n > 0:
             entries = entries[-last_n:]
         for entry in entries:
-            tp = entry.get("treepath", "")
+            path = entry.get("path", "")
             msg = entry.get("message", "")
             level = entry.get("level", "")
 
-            if tp:
-                line = tp + ": " + msg
+            if path:
+                line = path + ": " + msg
             else:
                 line = msg
 

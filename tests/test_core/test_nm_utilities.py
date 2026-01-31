@@ -155,7 +155,7 @@ class NMUtilitiesTest(unittest.TestCase):
         self.assertEqual(nmu.input_yesno("test", answer="CANCEL"), "c")
         self.assertEqual(nmu.input_yesno("test", answer="C"), "c")
         self.assertEqual(nmu.input_yesno("test", cancel=False, answer="C"), "error")
-        p1 = nmu.input_yesno("testprompt", title='MyTitle', treepath='my.path')
+        p1 = nmu.input_yesno("testprompt", title='MyTitle', path='my.path')
         p2 = "MyTitle:" + "\n" + "my.path:" + "\n" + "testprompt" + "\n" + "(y)es (n)o (c)ancel: "
         self.assertEqual(p1, p2)
         # print(p1)
@@ -306,14 +306,14 @@ class NMUtilitiesTest(unittest.TestCase):
         r = tp + ': ' + h
         self.assertEqual(nmu.history(h, tp=tp, quiet=quiet), r)
 
-        # get_treepath
+        # get_path
         stack = inspect.stack()
         fxn = 'test_all'  # calling fxn
         r = 'nm.' + c + '.' + fxn
-        self.assertEqual(nmu.get_treepath(stack), r)
+        self.assertEqual(nmu.get_path(stack), r)
         tp = 'one.two.three'
         r = 'nm.one.two.three.' + fxn
-        self.assertEqual(nmu.get_treepath(stack, tp=tp), r)
+        self.assertEqual(nmu.get_path(stack, path=tp), r)
         # get_class
         stack = inspect.stack()
         self.assertEqual(nmu.get_class_from_stack(stack), c)

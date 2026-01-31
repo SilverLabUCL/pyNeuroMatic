@@ -520,7 +520,7 @@ class NMSets(NMObject, MutableMapping):
                 ync = auto_confirm
             else:
                 q = "are you sure you want to delete '%s'?" % key
-                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+                ync = nmu.input_yesno(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -562,7 +562,7 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to delete the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+                ync = nmu.input_yesno(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -841,7 +841,7 @@ class NMSets(NMObject, MutableMapping):
                 ync = auto_confirm
             else:
                 q = "are you sure you want to empty '%s'?" % key
-                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+                ync = nmu.input_yesno(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -862,7 +862,7 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to empty the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+                ync = nmu.input_yesno(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:

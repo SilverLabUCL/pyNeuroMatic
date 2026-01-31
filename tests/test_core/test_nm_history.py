@@ -41,12 +41,12 @@ class NMHistoryBufferHandlerTest(unittest.TestCase):
             args=None,
             exc_info=None,
         )
-        record.treepath = "nm.test"
+        record.path = "nm.test"
         self.handler.emit(record)
         self.assertEqual(len(self.handler.buffer), 1)
         entry = self.handler.buffer[0]
         self.assertEqual(entry["message"], "test message")
-        self.assertEqual(entry["treepath"], "nm.test")
+        self.assertEqual(entry["path"], "nm.test")
         self.assertEqual(entry["level"], "INFO")
         self.assertIn("date", entry)
 
@@ -62,7 +62,7 @@ class NMHistoryBufferHandlerTest(unittest.TestCase):
                 args=None,
                 exc_info=None,
             )
-            record.treepath = ""
+            record.path = ""
             h.emit(record)
         self.assertEqual(len(h.buffer), 3)
         self.assertEqual(h.buffer[0]["message"], "msg2")
@@ -78,7 +78,7 @@ class NMHistoryBufferHandlerTest(unittest.TestCase):
             args=None,
             exc_info=None,
         )
-        record.treepath = ""
+        record.path = ""
         self.handler.emit(record)
         self.assertEqual(len(self.handler.buffer), 1)
         self.handler.clear()
@@ -101,17 +101,17 @@ class NMHistoryTest(unittest.TestCase):
         self.assertEqual(self.h.buffer_size, 1000)
 
     def test01_log_info(self):
-        result = self.h.log("test message", tp="nm.test")
+        result = self.h.log("test message", path="nm.test")
         self.assertEqual(result, "nm.test: test message")
         self.assertEqual(len(self.h.buffer), 1)
         entry = self.h.buffer[0]
         self.assertEqual(entry["level"], "INFO")
         self.assertEqual(entry["message"], "test message")
-        self.assertEqual(entry["treepath"], "nm.test")
+        self.assertEqual(entry["path"], "nm.test")
 
     def test02_log_alert(self):
         result = self.h.log(
-            "alert msg", title="ALERT", tp="nm.test", level=logging.WARNING
+            "alert msg", title="ALERT", path="nm.test", level=logging.WARNING
         )
         self.assertEqual(result, "ALERT: nm.test: alert msg")
         entry = self.h.buffer[-1]
@@ -120,7 +120,7 @@ class NMHistoryTest(unittest.TestCase):
 
     def test03_log_error(self):
         result = self.h.log(
-            "error msg", title="ERROR", tp="nm.test", level=logging.ERROR
+            "error msg", title="ERROR", path="nm.test", level=logging.ERROR
         )
         self.assertEqual(result, "ERROR: nm.test: error msg")
         entry = self.h.buffer[-1]
@@ -155,18 +155,18 @@ class NMHistoryTest(unittest.TestCase):
         self.assertEqual(h.buffer[0]["message"], "msg5")
         self.assertEqual(h.buffer[4]["message"], "msg9")
 
-    def test08_no_treepath(self):
+    def test08_no_path(self):
         result = self.h.log("bare message")
         self.assertEqual(result, "bare message")
-        self.assertEqual(self.h.buffer[0]["treepath"], "")
+        self.assertEqual(self.h.buffer[0]["path"], "")
 
-    def test09_treepath_none(self):
-        result = self.h.log("msg", tp="NONE")
+    def test09_path_none(self):
+        result = self.h.log("msg", path="NONE")
         self.assertEqual(result, "msg")
-        self.assertEqual(self.h.buffer[0]["treepath"], "NONE")
+        self.assertEqual(self.h.buffer[0]["path"], "NONE")
 
     def test10_empty_title(self):
-        result = self.h.log("msg", title="", tp="nm.test")
+        result = self.h.log("msg", title="", path="nm.test")
         self.assertEqual(result, "nm.test: msg")
 
     def test11_multiple_messages(self):
@@ -202,11 +202,11 @@ class NMHistoryIntegrationTest(unittest.TestCase):
 
     def test02_nmu_history_routes_to_buffer(self):
         self.nm.history.clear()
-        nmu.history("test via nmu", treepath="nm.test", quiet=True)
+        nmu.history("test via nmu", path="nm.test", quiet=True)
         buf = self.nm.history.buffer
         self.assertEqual(len(buf), 1)
         self.assertEqual(buf[0]["message"], "test via nmu")
-        self.assertEqual(buf[0]["treepath"], "nm.test")
+        self.assertEqual(buf[0]["path"], "nm.test")
 
     def test03_object_history_routes_to_buffer(self):
         self.nm.history.clear()
