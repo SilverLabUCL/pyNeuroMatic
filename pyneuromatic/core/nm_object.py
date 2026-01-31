@@ -585,61 +585,6 @@ class NMObject(object):
             message, path=path, frame=frame, red=False, quiet=self._quiet(quiet)
         )
 
-    def _type_error(
-        self,
-        obj_name: str,  # name of object that is of the wrong type
-        type_expected: str,  # expected type of the object
-        path: str = "NONE",
-        quiet: bool = False,  # history quiet
-        frame: int = 2,
-    ) -> str:
-        raise RuntimeError("function NMObject._type_error " "has been deprecated")
-        """
-        callers_local_vars = inspect.currentframe().f_back.f_locals.items()
-        found_variable = False
-        for var_name, var_val in callers_local_vars:  # loop thru dict_items
-            if var_name == obj_name:
-                obj_val = var_val
-                found_variable = True
-                break
-        if (found_variable):
-            t = str(type(obj_val))
-            t = t.replace('<class ', '').replace('>', '').replace("'", "")
-        else:
-            t = 'NMObject_TypeError_FailedToFindVariableType'
-        e = 'bad ' + obj_name + ': expected ' + type_expected + ' but got ' + t
-        return nmu.history(e, title='ERROR', tp=tp,
-                           frame=frame, red=True, quiet=self._quiet(quiet))
-        """
-
-    def _value_error(
-        self,
-        obj_name: str,  # name of function variable with bad value
-        path: str = "NONE",
-        quiet: bool = False,  # history quiet
-        frame: int = 2,
-    ) -> str:
-        raise RuntimeError("function NMObject._value_error " "has been deprecated")
-        """
-        callers_local_vars = inspect.currentframe().f_back.f_locals.items()
-        found_variable = False
-        for var_name, var_val in callers_local_vars:  # loop thru dict_items
-            if var_name == obj_name:
-                obj_val = var_val
-                found_variable = True
-                break
-        if (found_variable):
-            if isinstance(obj_val, str):
-                v = "'%s'" % obj_val
-            else:
-                v = str(obj_val)
-        else:
-            v = 'NMObject_TypeError_FailedToFindVariableValue'
-        e = 'bad ' + obj_name + ': ' + v
-        return nmu.history(e, title='ERROR', tp=tp,
-                           frame=frame, red=True, quiet=self._quiet(quiet))
-        """
-
     def _quiet(self, quiet: bool) -> bool:
         # m = self._manager
         # if m and m.__class__.__name__ == "NMManager":

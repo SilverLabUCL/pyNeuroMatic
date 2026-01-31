@@ -304,16 +304,6 @@ class NMObjectTest(unittest.TestCase):
         # alert(), error(), history()
         # wrappers for nmu.history()
         # args: obj, type_expected, tp, quiet, frame
-        # dum_arg = {}
-        # e1 = self.o0._type_error('dum_arg', 'list')
-        # tp = 'object0'
-        # tp = 'nm.NMObjectTest.test11_error'
-        # e2 = ('ERROR: ' + tp + ': bad dum_args: expected list but got dict')
-        # self.assertEqual(e1, e2)
-        # dum_str = 'test'
-        # e1 = self.o0._value_error('dum_str')
-        # e2 = ("ERROR: " + tp + ": bad dum_str: 'test'")
-        # self.assertEqual(e1, e2)
 
     def test12_quiet(self):
         # args: quiet
