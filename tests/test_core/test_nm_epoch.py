@@ -5,6 +5,7 @@ Created on Tue Aug  8 21:35:21 2023
 
 @author: jason
 """
+import copy
 import unittest
 
 from pyneuromatic.core.nm_data import NMData
@@ -36,13 +37,10 @@ class NMEpochTest(unittest.TestCase):
             self.e1.data.append(d)
             self.dolist1.append(d)
 
-        self.e0_copy = NMEpoch(parent=None, name="test", copy=self.e0)
+        self.e0_copy = copy.deepcopy(self.e0)
 
     def test00_init(self):
-        # args: parent, name, copy (see NMObject)
-        with self.assertRaises(TypeError):
-            NMEpoch(copy=NM)
-
+        # args: parent, name (see NMObject)
         self.assertEqual(self.e0._parent, NM)
         self.assertEqual(self.e0.name, ENAME0)
         self.assertEqual(self.e0.number, 0)

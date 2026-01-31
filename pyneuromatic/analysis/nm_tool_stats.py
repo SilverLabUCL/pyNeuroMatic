@@ -328,9 +328,8 @@ class NMStatsWin(NMObject):
         parent: object | None = None,
         name: str = "NMStatsWin0",
         win: dict[str, object] | None = None,
-        copy: NMStatsWin | None = None,
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
+        super().__init__(parent=parent, name=name)
 
         self.__on = True
         self.__func: dict[str, Any] = {}
@@ -339,38 +338,19 @@ class NMStatsWin(NMObject):
         self.__transform: list[Any] | None = None
         self.__results: list[dict[str, Any]] = []  # [ {}, {} ...] list of dictionaries
 
-        # basline
+        # baseline
         self.__bsln_on = False
         self.__bsln_func: dict[str, Any] = {}
         self.__bsln_x0 = -math.inf
         self.__bsln_x1 = math.inf
 
-        if copy is None:
-            pass
-        elif isinstance(copy, NMStatsWin):
-            self.__on = copy.on
-            self.__func = copy.func
-            self.__x0 = copy.x0
-            self.__x1 = copy.x1
-            self.__transform = copy.transform
-            self.__bsln_on = copy.bsln_on
-            self.__bsln_func = copy.bsln_func
-            self.__bsln_x0 = copy.bsln_x0
-            self.__bsln_x1 = copy.bsln_x1
-        else:
-            e = nmu.typeerror(copy, "copy", "NMStatsWin")
-            raise TypeError(e)
-
         if win is None:
             pass  # ok
         elif isinstance(win, dict):
-            if not copy:
-                self._win_set(win, quiet=True)
+            self._win_set(win, quiet=True)
         else:
             e = nmu.typeerror(win, "win", "dictionary")
             raise TypeError(e)
-
-        return None
 
     # override
     def __eq__(self, other: object) -> bool:
@@ -1291,15 +1271,13 @@ class NMStatsWinContainer(NMObjectContainer):
         rename_on: bool = False,
         name_prefix: str = "w",
         name_seq_format: str = "0",
-        copy: NMStatsWinContainer | None = None,
     ) -> None:
-        return super().__init__(
+        super().__init__(
             parent=parent,
             name=name,
             rename_on=rename_on,
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
-            copy=copy,
         )
 
     # override, no super

@@ -64,32 +64,13 @@ class NMFolder(NMObject):
         self,
         parent: object | None = None,
         name: str = "NMFolder0",
-        copy: NMFolder | None = None  # see copy()
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
+        super().__init__(parent=parent, name=name)
 
-        self.__data_container: NMDataContainer
-        self.__dataseries_container: NMDataSeriesContainer
-        self.__toolfolder_container: NMToolFolderContainer
+        self.__data_container: NMDataContainer = NMDataContainer(parent=self)
+        self.__dataseries_container: NMDataSeriesContainer = NMDataSeriesContainer(parent=self)
+        self.__toolfolder_container: NMToolFolderContainer = NMToolFolderContainer(parent=self)
         self.__toolresults: dict[str, object] = {}  # tool results saved to dict
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMFolder):
-            self.__data_container = copy.data.copy()
-            self.__dataseries_container = copy.dataseries.copy()
-            self.__toolfolder_container = copy.toolfolder.copy()
-            self.__toolresults = copy.toolresults.copy()
-        else:
-            e = nmu.typeerror(copy, "copy", "NMFolder")
-            raise TypeError(e)
-
-        if not isinstance(self.__data_container, NMDataContainer):
-            self.__data_container = NMDataContainer(parent=self)
-        if not isinstance(self.__dataseries_container, NMDataSeriesContainer):
-            self.__dataseries_container = NMDataSeriesContainer(parent=self)
-        if not isinstance(self.__toolfolder_container, NMToolFolderContainer):
-            self.__toolfolder_container = NMToolFolderContainer(parent=self)
 
     # override
     def __eq__(
@@ -235,7 +216,6 @@ class NMFolderContainer(NMObjectContainer):
         rename_on: bool = True,
         name_prefix: str = "folder",
         name_seq_format: str = "0",
-        copy: NMFolderContainer | None = None  # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -243,7 +223,6 @@ class NMFolderContainer(NMObjectContainer):
             rename_on=rename_on,
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
-            copy=copy,
         )
 
     # override, no super

@@ -5,6 +5,7 @@ Created on Sat Aug  5 14:00:26 2023
 
 @author: jason
 """
+import copy
 import numpy
 import unittest
 
@@ -30,14 +31,16 @@ XSCALE1 = {"label": "time", "units": "s", "start": -10, "delta": 0.2}
 class NMDataTest(unittest.TestCase):
 
     def setUp(self):
-        self.d0 = NMData(
-            parent=NM, name=DNAME0, np_array=NPARRAY0, xscale=XSCALE0, yscale=YSCALE0
-        )
-        self.d1 = NMData(
-            parent=NM, name=DNAME1, np_array=NPARRAY1, xscale=XSCALE1, yscale=YSCALE1
-        )
-        self.d0_copy = NMData(copy=self.d0)
-        self.d1_copy = NMData(parent=NM, name="record1_c", copy=self.d1)
+        # Create dimensions with nparray
+        xdim0 = NMDimensionX(parent=None, name="xscale", scale=XSCALE0)
+        ydim0 = NMDimension(parent=None, name="yscale", nparray=NPARRAY0, scale=YSCALE0)
+        xdim1 = NMDimensionX(parent=None, name="xscale", scale=XSCALE1)
+        ydim1 = NMDimension(parent=None, name="yscale", nparray=NPARRAY1, scale=YSCALE1)
+
+        self.d0 = NMData(parent=NM, name=DNAME0, xdim=xdim0, ydim=ydim0)
+        self.d1 = NMData(parent=NM, name=DNAME1, xdim=xdim1, ydim=ydim1)
+        self.d0_copy = copy.deepcopy(self.d0)
+        self.d1_copy = copy.deepcopy(self.d1)
 
         self.ds0 = NMDataSeries(parent=NM, name="dataseries0")
 
@@ -45,54 +48,23 @@ class NMDataTest(unittest.TestCase):
     #    pass
 
     def test00_init(self):
-        # args: parent, name, copy (see NMObject)
-        # args: np_array, xscale, yscale
-        # args: dataseries, dataseries_channel, dataseries_epoch
-
-        bad = list(nmu.BADTYPES)
-        bad.remove(None)
-        for b in bad:
-            with self.assertRaises(TypeError):
-                NMData(np_array=b)
-
-        bad = list(nmu.BADTYPES)
-        bad.remove(None)
-        bad.remove({})
-        for b in bad:
-            with self.assertRaises(TypeError):
-                NMData(xscale=b)
-
-        bad = list(nmu.BADTYPES)
-        bad.remove(None)
-        bad.remove({})
-        for b in bad:
-            with self.assertRaises(TypeError):
-                NMData(yscale=b)
-
-        s = NMDimension()
-        with self.assertRaises(TypeError):
-            NMData(copy=s)
+        # args: parent, name (see NMObject)
+        # args: xdim, ydim, dataseries_channel, dataseries_epoch
 
         self.assertEqual(self.d0._parent, NM)
         self.assertEqual(self.d0.name, DNAME0)
         self.assertEqual(self.d0.y.scale, YSCALE0)
         self.assertEqual(self.d0.x.scale, XSCALE0)
-        self.assertTrue(self.d0.np_array is NPARRAY0)
-        self.assertTrue(isinstance(self.d0.np_array, numpy.ndarray))
-        # self.assertEqual(self.d0.np_array, NPARRAY0)  # TODO
+        self.assertTrue(isinstance(self.d0.y.nparray, numpy.ndarray))
 
+        # deepcopy preserves attributes
         self.assertEqual(self.d0_copy._parent, NM)
         self.assertEqual(self.d0_copy.name, DNAME0)
         self.assertEqual(self.d0_copy.y.scale, YSCALE0)
         self.assertEqual(self.d0_copy.x.scale, XSCALE0)
-        self.assertFalse(self.d0_copy.np_array is None)
-        self.assertFalse(self.d0_copy.np_array is NPARRAY0)
-        self.assertTrue(isinstance(self.d0_copy.np_array, numpy.ndarray))
-        # self.assertEqual(self.d0_copy.np_array, NPARRAY0)  # TODO
-
-        # print(type(NPARRAY0))
-        # print(list(self.data0.keys()))
-        # self.data0.sets.add('set1', DNAME0)
+        self.assertTrue(isinstance(self.d0_copy.y.nparray, numpy.ndarray))
+        # deepcopy creates a new array
+        self.assertFalse(self.d0_copy.y.nparray is self.d0.y.nparray)
 
     def xtest01_eq(self):
         self.assertTrue(self.d0 == self.d0)

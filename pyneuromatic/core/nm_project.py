@@ -52,26 +52,10 @@ class NMProject(NMObject):
         self,
         parent: object | None = None,
         name: str = "NMProject0",
-        copy: NMProject | None = None,  # see copy()
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
+        super().__init__(parent=parent, name=name)
 
-        self.__folder_container = None
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMProject):
-            if isinstance(copy.folders, NMFolderContainer):
-                self.__folder_container = copy.folders.copy()
-                self.__folder_container._parent = self
-        else:
-            e = nmu.typeerror(copy, "copy", NMProject)
-            raise TypeError(e)
-
-        if not isinstance(self.__folder_container, NMFolderContainer):
-            self.__folder_container = NMFolderContainer(parent=self)
-
-        return None
+        self.__folder_container: NMFolderContainer = NMFolderContainer(parent=self)
 
     # override
     def __eq__(self, other: object) -> bool:
@@ -154,7 +138,6 @@ class NMProjectContainer(NMObjectContainer):
         rename_on: bool = True,
         name_prefix: str = "project",
         name_seq_format: str = "0",
-        copy: NMProjectContainer | None = None,  # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
@@ -162,7 +145,6 @@ class NMProjectContainer(NMObjectContainer):
             rename_on=rename_on,
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
-            copy=copy,
         )  # NMObjectContainer
 
     # override, no super

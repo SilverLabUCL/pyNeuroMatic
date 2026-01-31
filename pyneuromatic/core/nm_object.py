@@ -111,7 +111,6 @@ class NMObject(object):
         parent: object | None = None,  # for creating NM class tree
         name: str = "NMObject0",  # name of this NMObject
         notes_on: bool = True,
-        copy: NMObject | None = None,  # see copy()
     ) -> None:
         """Initialise a NMObject.
 
@@ -121,55 +120,26 @@ class NMObject(object):
         :type name: str, optional
         :param notes_on: turn notes on/off for this NMObect
         :type notes_on: bool, optional
-        :param copy: pass a NMObect here to create a copy of it (see copy())
-        :type copy: NMObject, optional
         :return: None
         :rtype: None
         """
 
-        date_time = str(datetime.datetime.now())
-        self.__created = date_time  # NOT COPIED
-        self.__parent: object | None = None
+        self.__created = datetime.datetime.now().isoformat(" ", "seconds")
+        self.__parent: object | None = parent
         self.__name: str = "NMObject0"
         self.__notes_on: bool = False  # turn off during __init__
         self.__notes: list[dict] = []  # [{'date': 'date', 'note': 'note'}]
-        self.__rename_fxnref = self._name_set  # NOT COPIED
-        # fxn ref for name setter
+        self.__rename_fxnref = self._name_set
         self.__copy_of: NMObject | None = None
-        # self._eq_list = ['parent', notes']
-        # self._eq_list: list[str] = []
 
-        # Determine actual values to use
-        actual_parent = parent
-        actual_name = name
-        actual_notes_on = notes_on
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMObject):
-            # When copying, use values from the copy object
-            actual_parent = copy._parent
-            actual_name = copy.name
-            actual_notes_on = copy.notes_on
-            if NMObject.notes_ok(copy.notes):
-                for n in copy.notes:
-                    self.__notes.append(dict(n))  # append a copy
-            self.__copy_of = copy
-        else:
-            e = nmu.typeerror(copy, "copy", "NMObject")
+        if not isinstance(name, str):
+            e = nmu.typeerror(name, "name", "string")
             raise TypeError(e)
 
-        self.__parent = actual_parent  # family tree 'parent' and 'child'
-        # nothing to test, parent can be any object
+        self._name_set(newname=name, quiet=True)
 
-        if not isinstance(actual_name, str):
-            e = nmu.typeerror(actual_name, "name", "string")
-            raise TypeError(e)
-
-        self._name_set(newname=actual_name, quiet=True)
-
-        if isinstance(actual_notes_on, bool):
-            self.__notes_on = actual_notes_on
+        if isinstance(notes_on, bool):
+            self.__notes_on = notes_on
         else:
             self.__notes_on = True
 

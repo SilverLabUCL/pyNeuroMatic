@@ -143,13 +143,11 @@ class NMObjectContainer(NMObject, MutableMapping):
         # e.g. '00' ->  00, 01, 02, 03...
         # e.g. 'A'  ->  A, B, C, D...
         # e.g. 'AA' ->  AA, AB, AC, AD...
-        copy: NMObjectContainer | None = None # see copy()
     ) -> None:
         super().__init__(
             parent=parent,
             name=name,
             notes_on=False,  # turn notes off during __init__
-            copy=copy,
         )  # NMObject
 
         self.__rename_on = True
@@ -169,36 +167,11 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__execute_mode: ExecuteMode = ExecuteMode.SELECTED
         self.__execute_target_name: str | None = None
 
-        nmobjects = []
-        selected_name: str | None = None
-        execute_mode: ExecuteMode = ExecuteMode.SELECTED
-        execute_target_name: str | None = None
-        sets_copy = None
-
-        actual_rename_on: bool = rename_on
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMObjectContainer):
-            actual_rename_on = copy.__rename_on
-            auto_name_prefix = copy.__auto_name_prefix
-            auto_name_seq_format = copy.__auto_name_seq_format
-            selected_name = copy.__selected_name
-            execute_mode = copy.__execute_mode
-            execute_target_name = copy.__execute_target_name
-            for v in copy.values():
-                oc = v.copy()
-                nmobjects.append(oc)
-            sets_copy = copy.__sets
-        else:
-            e = nmu.typeerror(copy, "copy", "NMObjectContainer")
+        if not isinstance(rename_on, bool):
+            e = nmu.typeerror(rename_on, "rename_on", "boolean")
             raise TypeError(e)
 
-        if not isinstance(actual_rename_on, bool):
-            e = nmu.typeerror(actual_rename_on, "rename_on", "boolean")
-            raise TypeError(e)
-
-        self.__rename_on = actual_rename_on
+        self.__rename_on = rename_on
 
         self._auto_name_prefix_set(auto_name_prefix, quiet=True)
         # self.__name_prefix
@@ -208,21 +181,10 @@ class NMObjectContainer(NMObject, MutableMapping):
 
         self.__map: dict[str, NMObject] = {}  # where NMObjects are stored/mapped
 
-        if len(nmobjects) > 0:
-            self.update(nmobjects)  # add NMObjects to self.__map
-
-        if selected_name:
-            self._selected_name_set(selected_name)
-            # self.__selected_name
-
-        self._execute_mode_set(execute_mode, execute_target_name)
-        # self.__execute_mode, self.__execute_target_name
-
         self.__sets = NMSets(
             parent=self,
             name="NMObjectContainerSets",
             nmobjects_fxnref=self._get_map,
-            copy=sets_copy,
         )
 
         self.notes_on = True
@@ -476,14 +438,12 @@ class NMObjectContainer(NMObject, MutableMapping):
             copied_obj._parent = result  # update parent to new container
             result._NMObjectContainer__map[key] = copied_obj
 
-        # __sets: create new NMSets with function reference to new container
-        # We need to copy the sets data but with the new container's _get_map
-        result._NMObjectContainer__sets = NMSets(
-            parent=result,
-            name="NMObjectContainerSets",
-            nmobjects_fxnref=result._get_map,
-            copy=self._NMObjectContainer__sets,
+        # __sets: deep copy the sets and update references
+        result._NMObjectContainer__sets = copy.deepcopy(
+            self._NMObjectContainer__sets, memo
         )
+        result._NMObjectContainer__sets._parent = result
+        result._NMObjectContainer__sets._NMSets__nmobjects_fxnref = result._get_map
 
         return result
 

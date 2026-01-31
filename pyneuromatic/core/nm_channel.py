@@ -74,43 +74,16 @@ class NMChannel(NMObject):
         self,
         parent: object | None = None,
         name: str = "NMChannel0",
-        xscale: dict | NMDimensionX = {},
-        yscale: dict | NMDimension = {},
-        copy: NMChannel | None = None,
+        xscale: dict | NMDimensionX | None = None,
+        yscale: dict | NMDimension | None = None,
     ) -> None:
-        super().__init__(parent=parent, name=name, copy=copy)
+        super().__init__(parent=parent, name=name)
 
-        self.__x : NMDimensionX
-        self.__y : NMDimension
         self.__thedata: list[NMData] = []  # list of NMData refs for this channel
 
-        # self.__graphXY = {'x0': 0, 'y0': 0, 'x1': 0, 'y1': 0}
-        # self.__transform = []
-
-        if copy is None:
-            pass
-        elif isinstance(copy, NMChannel):
-            xscale = copy.__x.scale
-            yscale = copy.__y.scale
-            if self._folder is None:
-                # direct copy
-                self.__thedata = list(copy.__thedata)
-            else:
-                # grab NMData refs from copied NMDataContainer
-                # NMDataContainer should be copied before this copy
-                from pyneuromatic.core.nm_data import NMData
-
-                data = self._folder.data
-                for d in copy.__thedata:
-                    o = data.get(d.name)
-                    if isinstance(o, NMData):
-                        self.__thedata.append(o)
-        else:
-            e = nmu.typeerror(copy, "copy", NMChannel)
-            raise TypeError(e)
-
+        # Initialize __x based on xscale parameter
         if xscale is None:
-            pass
+            self.__x = NMDimensionX(parent=self, name="xscale")
         elif isinstance(xscale, NMDimensionX):
             self.__x = xscale
         elif isinstance(xscale, dict):
@@ -119,8 +92,9 @@ class NMChannel(NMObject):
             e = nmu.typeerror(xscale, "xscale", "dictionary or NMDimensionX")
             raise TypeError(e)
 
+        # Initialize __y based on yscale parameter
         if yscale is None:
-            pass
+            self.__y = NMDimension(parent=self, name="yscale")
         elif isinstance(yscale, NMDimension):
             self.__y = yscale
         elif isinstance(yscale, dict):
@@ -128,14 +102,6 @@ class NMChannel(NMObject):
         else:
             e = nmu.typeerror(yscale, "yscale", "dictionary or NMDimension")
             raise TypeError(e)
-
-        if not isinstance(self.__x, NMDimensionX):
-            self.__x = NMDimensionX(parent=self, name="xscale")
-
-        if not isinstance(self.__y, NMDimension):
-            self.__y = NMDimension(parent=self, name="yscale")
-
-        return None
 
     # override
     def __eq__(self, other: object) -> bool:
@@ -258,15 +224,13 @@ class NMChannelContainer(NMObjectContainer):
         rename_on: bool = False,
         name_prefix: str = "",  # default is no prefix
         name_seq_format: str = "A",
-        copy: NMChannelContainer | None = None,
     ) -> None:
-        return super().__init__(
+        super().__init__(
             parent=parent,
             name=name,
             rename_on=rename_on,
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
-            copy=copy,
         )
 
     # override, no super
