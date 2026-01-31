@@ -182,7 +182,7 @@ class NMFolder(NMObject):
             e = nmu.typeerror(tool, "tool", "string")
             raise TypeError(e)
 
-        tp = self._treepath_str()
+        tp = self.path_str
         foundkey = False
         for i in range(imax_keys):
             newkey = tool + str(i)

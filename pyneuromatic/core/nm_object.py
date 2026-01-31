@@ -56,8 +56,10 @@ class NMObject(object):
                                 NMEpochContainer
                                     NMEpoch (E0, E1, E2...)
 
-    Each NMObject has a treepath (tp), e.g. ['project0', 'folder0', 'recordA0']
-    or 'project0.folder0.recordA0'
+    Each NMObject has a path in the hierarchy:
+        - path: list of names, e.g. ['project0', 'folder0', 'recordA0']
+        - path_str: dotted string, e.g. 'project0.folder0.recordA0'
+        - path_objects: list of NMObject references
 
     Known children of NMObject:
         NMChannel, NMData, NMDataSeries, NMEpoch, NMFolder, NMObjectContainer,
@@ -79,6 +81,9 @@ class NMObject(object):
         _parent
         content
         content_tree
+        path
+        path_str
+        path_objects
         name
         notes
         note
@@ -286,7 +291,7 @@ class NMObject(object):
         p: dict[str, object] = {"name": self.__name} # Tell mypy the correct type
         p.update({"created": self.__created})
         if isinstance(self.__copy_of, type(self)):
-            p.update({"copy of": self.__copy_of._treepath_str()})
+            p.update({"copy of": self.__copy_of.path_str})
         else:
             p.update({"copy of": None})
         return p
@@ -317,43 +322,46 @@ class NMObject(object):
             return k
         return self.content
 
-    def treepath(  # NM class tree path
-        self,
-        names: bool = True,  # True: names, False: NMObjects
-    ) -> list[str] | list[NMObject]:
-        """returns the NM tree path of this NMObject.
+    @property
+    def path(self) -> list[str]:
+        """Hierarchy path as list of names.
 
-        The NM tree path can be a list of NMObject names or references.
-        Example of list of names: ['nm', 'project0', 'folder0']
+        Example: ['project0', 'folder0', 'recordA0']
 
-        :param names: return NMObject names, otherwise return NMObject refs
-        :type names: bool, optional
-        :return: list of names or NMObjects
-        :rtype: list[str], list[NMObject]
+        Returns:
+            List of NMObject names from root to this object.
         """
-        if names:
-            tplist_names: list[str] = []
-            
-            if isinstance(self.__parent, NMObject):
-                parent_path = self.__parent.treepath(names=True)
-                if isinstance(parent_path, list):
-                    tplist_names.extend(parent_path)  # type: ignore[arg-type]
-            
-            tplist_names.append(self.__name)
-        
-            return tplist_names
-                
-        else:
-            tplist_objects: list[NMObject] = []
-            
-            if isinstance(self.__parent, NMObject):
-                parent_path = self.__parent.treepath(names=False)
-                if isinstance(parent_path, list):
-                    tplist_objects.extend(parent_path)  # type: ignore[arg-type]
-            
-            tplist_objects.append(self)
+        result: list[str] = []
+        if isinstance(self.__parent, NMObject):
+            result.extend(self.__parent.path)
+        result.append(self.__name)
+        return result
 
-            return tplist_objects
+    @property
+    def path_str(self) -> str:
+        """Hierarchy path as dotted string.
+
+        Example: 'project0.folder0.recordA0'
+
+        Returns:
+            Dotted string path from root to this object.
+        """
+        return ".".join(self.path) if self.path else self.__name
+
+    @property
+    def path_objects(self) -> list[NMObject]:
+        """Hierarchy path as list of NMObject references.
+
+        Example: [<NMProject>, <NMFolder>, <NMData>]
+
+        Returns:
+            List of NMObject references from root to this object.
+        """
+        result: list[NMObject] = []
+        if isinstance(self.__parent, NMObject):
+            result.extend(self.__parent.path_objects)
+        result.append(self)
+        return result
         
     @property
     def name(self) -> str:
@@ -399,7 +407,7 @@ class NMObject(object):
         self.__name = newname
         self.note = "renamed to '%s'" % self.__name
         h = nmu.history_change("name", oldname, self.__name)
-        self._history(h, tp=self._treepath_str(), quiet=quiet)
+        self._history(h, path=self.path_str, quiet=quiet)
 
     def _rename_fxnref_set(self, rename_fxnref) -> None:
         """Set the rename function reference for this NMObject.
@@ -470,7 +478,7 @@ class NMObject(object):
                 ync = auto_confirm
             else:
                 q = "are you sure you want to delete all notes for '%s'?" % self.__name
-                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+                ync = nmu.input_yesno(q, path=self.path_str)
             if not isinstance(ync, str) or (ync.lower() != "y" and ync.lower() != "yes"):
                 print("cancel delete all notes")
                 raise RuntimeError("User cancelled note deletion")
@@ -534,7 +542,7 @@ class NMObject(object):
     def _alert(
         self,
         message: str,
-        tp: str = "NONE",  # history treepath
+        path: str = "NONE",
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -542,7 +550,7 @@ class NMObject(object):
         return nmu.history(
             message,
             title="ALERT",
-            treepath=tp,
+            path=path,
             frame=frame,
             red=True,
             quiet=self._quiet(quiet),
@@ -551,7 +559,7 @@ class NMObject(object):
     def _error(
         self,
         message: str,
-        tp: str = "NONE",  # history treepath
+        path: str = "NONE",
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
@@ -559,7 +567,7 @@ class NMObject(object):
         return nmu.history(
             message,
             title="ERROR",
-            treepath=tp,
+            path=path,
             frame=frame,
             red=True,
             quiet=self._quiet(quiet),
@@ -568,20 +576,20 @@ class NMObject(object):
     def _history(
         self,
         message: str,
-        tp: str = "NONE",  # history treepath
+        path: str = "NONE",
         quiet: bool = False,
         frame: int = 2,
     ) -> str:
         # wrapper, see nmu.history
         return nmu.history(
-            message, treepath=tp, frame=frame, red=False, quiet=self._quiet(quiet)
+            message, path=path, frame=frame, red=False, quiet=self._quiet(quiet)
         )
 
     def _type_error(
         self,
         obj_name: str,  # name of object that is of the wrong type
         type_expected: str,  # expected type of the object
-        tp: str = "NONE",  # history treepath
+        path: str = "NONE",
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:
@@ -607,7 +615,7 @@ class NMObject(object):
     def _value_error(
         self,
         obj_name: str,  # name of function variable with bad value
-        tp: str = "NONE",  # history treepath
+        path: str = "NONE",
         quiet: bool = False,  # history quiet
         frame: int = 2,
     ) -> str:
@@ -639,10 +647,3 @@ class NMObject(object):
         if nmp.QUIET:  # this quiet overrides
             return True
         return quiet
-
-    def _treepath_str(self) -> str:
-        # NM treepath list of names is concatenated via '.'
-        # Concatenated list of names: 'nm.project0.folder0'
-        tp = self.treepath(names=True)
-        tp_strs = [item for item in tp if isinstance(item, str)]
-        return ".".join(tp_strs) if tp_strs else self.__name

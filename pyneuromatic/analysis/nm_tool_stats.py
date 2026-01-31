@@ -1775,7 +1775,7 @@ def stats(
         raise TypeError(e)
 
     # results["func"] = f
-    results["data"] = data._treepath_str()
+    results["data"] = data.path_str
 
     if isinstance(data.x.units, str):
         xunits = data.x.units

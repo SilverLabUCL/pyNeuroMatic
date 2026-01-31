@@ -207,17 +207,27 @@ class NMObjectTest(unittest.TestCase):
         ct = {"nmmanager": "nm", "nmobject": self.o0.name}
         self.assertEqual(self.o0.content_tree, ct)
 
-    def test06_treepath(self):
-        tp = NM0.name + "." + self.o0.name
-        self.assertEqual(self.o0._treepath_str(), tp)
-        tp = [NM0.name, self.o0.name]
-        self.assertEqual(self.o0.treepath(), tp)
+    def test06_path(self):
+        # Test path property (list of names)
+        expected_path = [NM0.name, self.o0.name]
+        self.assertEqual(self.o0.path, expected_path)
 
+        # Test path_str property (dotted string)
+        expected_str = NM0.name + "." + self.o0.name
+        self.assertEqual(self.o0.path_str, expected_str)
+
+        # Test path_objects property (list of NMObject references)
+        path_objs = self.o0.path_objects
+        self.assertEqual(len(path_objs), 2)
+        self.assertIs(path_objs[0], NM0)
+        self.assertIs(path_objs[1], self.o0)
+
+        # Test nested object
         o2 = NMObject2(parent=NM0, name=ONAME0)
-        tp = NM0.name + "." + ONAME0 + ".myobject"
-        self.assertEqual(o2.myobject._treepath_str(), tp)
-        tp = [NM0.name, ONAME0, "myobject"]
-        self.assertEqual(o2.myobject.treepath(), tp)
+        expected_path = [NM0.name, ONAME0, "myobject"]
+        self.assertEqual(o2.myobject.path, expected_path)
+        expected_str = NM0.name + "." + ONAME0 + ".myobject"
+        self.assertEqual(o2.myobject.path_str, expected_str)
 
     def test07_notes(self):
         self.assertTrue(self.o0.notes_on)

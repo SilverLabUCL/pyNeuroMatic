@@ -471,7 +471,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 ync = auto_confirm
             else:
                 prompt = "are you sure you want to delete '%s'?" % actual_key
-                ync = nmu.input_yesno(prompt, treepath=self._treepath_str())
+                ync = nmu.input_yesno(prompt, path=self.path_str)
             if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -522,7 +522,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 q = "are you sure you want to delete the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, treepath=self._treepath_str())
+                ync = nmu.input_yesno(q, path=self.path_str)
             if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
