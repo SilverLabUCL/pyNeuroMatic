@@ -37,18 +37,17 @@ ALLSTR = "all".upper()
 NM class tree:
 
 NMManager
-    NMProjectContainer
-        NMProject (project0, project1...)
-            NMFolderContainer
-                NMFolder (folder0, folder1...)
-                    NMDataContainer
-                        NMData (recordA0, recordA1... avgA0, avgB0)
-                    NMDataSeriesContainer
-                        NMDataSeries (record, avg...)
-                            NMChannelContainer
-                                NMChannel (A, B, C...)
-                            NMEpochContainer
-                                NMEpoch (E0, E1, E2...)
+    NMProject (project0)
+        NMFolderContainer
+            NMFolder (folder0, folder1...)
+                NMDataContainer
+                    NMData (recordA0, recordA1... avgA0, avgB0)
+                NMDataSeriesContainer
+                    NMDataSeries (record, avg...)
+                        NMChannelContainer
+                            NMChannel (A, B, C...)
+                        NMEpochContainer
+                            NMEpoch (E0, E1, E2...)
 DataSeries:
       E0  E1  E2... (epochs)
 Ch A  A0  A1  A2...

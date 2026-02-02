@@ -13,7 +13,6 @@ import unittest
 # from pyneuromatic.core.nm_epoch import NMEpochContainer
 # from pyneuromatic.core.nm_folder import NMFolderContainer
 from pyneuromatic.core.nm_manager import NMManager
-# from pyneuromatic.core.nm_project import NMProjectContainer
 from pyneuromatic.core.nm_project import NMProject
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -133,7 +132,6 @@ class NMManagerTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 NMManager(project_name=b, quiet=True)
 
-        # self.assertTrue(isinstance(self.nm.projects, NMProjectContainer))
         self.assertTrue(isinstance(self.nm.project, NMProject))
 
     def test01_parameters(self):

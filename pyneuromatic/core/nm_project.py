@@ -23,17 +23,22 @@ import copy
 
 from pyneuromatic.core.nm_folder import NMFolderContainer
 from pyneuromatic.core.nm_object import NMObject
-from pyneuromatic.core.nm_object_container import NMObjectContainer
-import pyneuromatic.core.nm_utilities as nmu
 
 """
 NM class tree:
 
 NMManager
-    NMProjectContainer
-        NMProject (project0, project1...)
-            NMFolderContainer
-                NMFolder (folder0, folder1...)
+    NMProject (project0)
+        NMFolderContainer
+            NMFolder (folder0, folder1...)
+                NMDataContainer
+                    NMData (recordA0, recordA1... avgA0, avgB0)
+                NMDataSeriesContainer
+                    NMDataSeries (record, avg...)
+                        NMChannelContainer
+                            NMChannel (A, B, C...)
+                        NMEpochContainer
+                            NMEpoch (E0, E1, E2...)
 """
 
 
@@ -124,42 +129,3 @@ class NMProject(NMObject):
     @property
     def folders(self) -> NMFolderContainer | None:
         return self.__folder_container
-
-
-class NMProjectContainer(NMObjectContainer):
-    """
-    Container of NMProjects
-    """
-
-    def __init__(
-        self,
-        parent: object | None = None,
-        name: str = "NMProjectContainer0",
-        rename_on: bool = True,
-        name_prefix: str = "project",
-        name_seq_format: str = "0",
-    ) -> None:
-        super().__init__(
-            parent=parent,
-            name=name,
-            rename_on=rename_on,
-            auto_name_prefix=name_prefix,
-            auto_name_seq_format=name_seq_format,
-        )  # NMObjectContainer
-
-    # override, no super
-    def content_type(self) -> str:
-        return NMProject.__name__
-
-    # override
-    def new(
-        self,
-        name: str | None = None,
-        select: bool = False,
-        # quiet: bool = nmp.QUIET
-    ) -> NMProject | None:
-        actual_name = self._newkey(name)
-        p = NMProject(parent=self, name=actual_name)
-        if super()._new(p, select=select):
-            return p
-        return None

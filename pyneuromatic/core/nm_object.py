@@ -44,18 +44,17 @@ class NMObject(object):
     NM class tree:
 
     NMManager
-        NMProjectContainer
-            NMProject (project0, project1...)
-                NMFolderContainer
-                    NMFolder (folder0, folder1...)
-                        NMDataContainer
-                            NMData (recordA0, recordA1... avgA0, avgB0)
-                        NMDataSeriesContainer
-                            NMDataSeries (record, avg...)
-                                NMChannelContainer
-                                    NMChannel (A, B, C...)
-                                NMEpochContainer
-                                    NMEpoch (E0, E1, E2...)
+        NMProject (project0)
+            NMFolderContainer
+                NMFolder (folder0, folder1...)
+                    NMDataContainer
+                        NMData (recordA0, recordA1... avgA0, avgB0)
+                    NMDataSeriesContainer
+                        NMDataSeries (record, avg...)
+                            NMChannelContainer
+                                NMChannel (A, B, C...)
+                            NMEpochContainer
+                                NMEpoch (E0, E1, E2...)
 
     Each NMObject has a path in the hierarchy:
         - path: list of names, e.g. ['project0', 'folder0', 'recordA0']

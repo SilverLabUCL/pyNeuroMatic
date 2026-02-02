@@ -26,11 +26,11 @@ import numpy as np
 
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
-from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
+from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
-from pyneuromatic.core.nm_project import NMProject, NMProjectContainer
+from pyneuromatic.core.nm_project import NMProject
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_stats import NMToolStats
 import pyneuromatic.core.nm_utilities as nmu
@@ -41,18 +41,17 @@ nm = None  # holds Manager, accessed via console
 NM class tree:
 
 NMManager
-    NMProjectContainer
-        NMProject (project0, project1...)
-            NMFolderContainer
-                NMFolder (folder0, folder1...)
-                    NMDataContainer
-                        NMData (recordA0, recordA1... avgA0, avgB0)
-                    NMDataSeriesContainer
-                        NMDataSeries (record, avg...)
-                            NMChannelContainer
-                                NMChannel (A, B, C...)
-                            NMEpochContainer
-                                NMEpoch (E0, E1, E2...)
+    NMProject (project0)
+        NMFolderContainer
+            NMFolder (folder0, folder1...)
+                NMDataContainer
+                    NMData (recordA0, recordA1... avgA0, avgB0)
+                NMDataSeriesContainer
+                    NMDataSeries (record, avg...)
+                        NMChannelContainer
+                            NMChannel (A, B, C...)
+                        NMEpochContainer
+                            NMEpoch (E0, E1, E2...)
 """
 
 # TOOL_NAMES = ("Main", "Stats", "Spike", "Event")
@@ -77,8 +76,7 @@ class NMManager(NMObject):
         # self.__configs = nmp.Configs()
         # self.__configs.quiet = quiet
 
-        # for now, only one project
-        # self.__project_container = NMProjectContainer(parent=self)
+        #create project
         if not isinstance(project_name, str):
             e = nmu.type_error_str(project_name, "project_name", "string")
             raise TypeError(e)
@@ -164,10 +162,6 @@ class NMManager(NMObject):
             self.__toolselect = tname
         else:
             raise KeyError("NM tool key '%s' does not exist" % tname)
-
-    # @property
-    # def projects(self) -> NMProjectContainer:
-    #     return self.__project_container
 
     @property
     def history(self) -> nmh.NMHistory:
