@@ -147,7 +147,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         super().__init__(
             parent=parent,
             name=name,
-            notes_on=False,  # turn notes off during __init__
         )  # NMObject
 
         self.__rename_on = True
@@ -187,7 +186,6 @@ class NMObjectContainer(NMObject, MutableMapping):
             nmobjects_fxnref=self._get_map,
         )
 
-        self.notes_on = True
 
     def _get_map(self) -> dict[str, NMObject]:  # see __init__()
         return self.__map
@@ -425,8 +423,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
         result._NMObject__parent = self._NMObject__parent
         result._NMObject__name = self._NMObject__name
-        result._NMObject__notes_on = self._NMObject__notes_on
-        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
         result._NMObject__rename_fxnref = result._name_set
         result._NMObject__copy_of = self
 

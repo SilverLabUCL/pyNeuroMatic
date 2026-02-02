@@ -73,8 +73,6 @@ class NMObject(object):
             e.g. NMObject._name_set or NMObjectContainer.rename.
         __copy_of (NMObject): if NMObject is a copy of another NMObject, this
             attribute holds the reference of the other NMObject.
-        __notes_on (bool):
-        __notes (List[str]):
 
     Properties (@property):
         parameters
@@ -85,9 +83,6 @@ class NMObject(object):
         path_str
         path_objects
         name
-        notes
-        note
-        notes_on
         _manager
         _project
         _folder
@@ -105,8 +100,6 @@ class NMObject(object):
         "_NMObject__created",
         "_NMObject__parent",
         "_NMObject__name",
-        "_NMObject__notes_on",
-        "_NMObject__notes",
         "_NMObject__rename_fxnref",
         "_NMObject__copy_of",
     })
@@ -115,7 +108,6 @@ class NMObject(object):
         self,
         parent: object | None = None,  # for creating NM class tree
         name: str = "NMObject0",  # name of this NMObject
-        notes_on: bool = True,
     ) -> None:
         """Initialise a NMObject.
 
@@ -123,8 +115,6 @@ class NMObject(object):
         :type parent: object, optional
         :param name: name of this NMObject
         :type name: str, optional
-        :param notes_on: turn notes on/off for this NMObect
-        :type notes_on: bool, optional
         :return: None
         :rtype: None
         """
@@ -132,8 +122,6 @@ class NMObject(object):
         self.__created = datetime.datetime.now().isoformat(" ", "seconds")
         self.__parent: object | None = parent
         self.__name: str = "NMObject0"
-        self.__notes_on: bool = False  # turn off during __init__
-        self.__notes: list[dict] = []  # [{'date': 'date', 'note': 'note'}]
         self.__rename_fxnref = self._name_set
         self.__copy_of: NMObject | None = None
 
@@ -142,11 +130,6 @@ class NMObject(object):
             raise TypeError(e)
 
         self._name_set(newname=name, quiet=True)
-
-        if isinstance(notes_on, bool):
-            self.__notes_on = notes_on
-        else:
-            self.__notes_on = True
 
     # children should override __deepcopy__ instead of copy()
     def copy(self) -> NMObject:
@@ -163,8 +146,7 @@ class NMObject(object):
     def __copy__(self) -> NMObject:
         """Support Python's copy.copy() protocol.
 
-        For NMObject, shallow copy delegates to deep copy since
-        we need to copy mutable attributes like notes.
+        For NMObject, shallow copy delegates to deep copy.
 
         Returns:
             A copy of this NMObject (same as deepcopy)
@@ -207,10 +189,6 @@ class NMObject(object):
         result._NMObject__parent = self._NMObject__parent
         # __name: copied
         result._NMObject__name = self._NMObject__name
-        # __notes_on: copied
-        result._NMObject__notes_on = self._NMObject__notes_on
-        # __notes: deep copied (mutable list of dicts)
-        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
         # __rename_fxnref: NOT copied, set to new instance's _name_set
         result._NMObject__rename_fxnref = result._name_set
         # __copy_of: set to reference the original object
@@ -225,24 +203,10 @@ class NMObject(object):
     ) -> bool:
         # executed with '==' but not 'is'
         # can use 'is' to test if objects are the same
-
-        # if not super().__eq__(other):  # not sure this is needed (object)
-        #    return False
-        ignore_parameters = ["parent", "notes"]
         if not isinstance(other, NMObject):
             return NotImplemented
-        if "parent" not in ignore_parameters:
-            if not isinstance(other._parent, type(self.__parent)):
-                return False
         if self.name.lower() != other.name.lower():  # case insensitive
             return False
-        if "notes" not in ignore_parameters:
-            if self.notes_on != other.notes_on:
-                return False
-            if len(self.notes) != len(other.notes):
-                return False
-            if not all(s == o for s, o in zip(self.notes, other.notes)):
-                return False
         return True
 
     @staticmethod
@@ -405,7 +369,6 @@ class NMObject(object):
             raise ValueError("newname: %s" % newname)
         oldname = self.__name
         self.__name = newname
-        self.note = "renamed to '%s'" % self.__name
         h = nmh.history_change_str("name", oldname, self.__name)
         nmh.history(h, path=self.path_str, quiet=quiet)
 
@@ -422,96 +385,6 @@ class NMObject(object):
             raise TypeError(e)
         # TODO: test if function has 2 arguments?
         self.__rename_fxnref = rename_fxnref
-
-    @property
-    def notes(self) -> list[dict]:
-        return self.__notes
-
-    def notes_print(self) -> None:
-        note_seperator = "  "
-        if isinstance(self.__notes, list):
-            for n in self.__notes:
-                keys = n.keys()
-                if isinstance(n, dict) and "date" in keys and "note" in keys:
-                    print(n["date"] + note_seperator + n["note"])
-
-    @property
-    def note(self) -> str:
-        if isinstance(self.__notes, list) and len(self.__notes) > 0:
-            last_note = self.__notes[-1]
-            if isinstance(last_note, dict) and "note" in last_note:
-                return last_note["note"]
-        return ""
-
-    @note.setter
-    def note(self, thenote: str) -> None:
-        self._notes_append(thenote)
-
-    def _notes_append(self, thenote: str) -> bool:
-        if not self.__notes_on:
-            # nmh.alert('notes are off')
-            return False
-        if not isinstance(self.__notes, list):
-            self.__notes = []
-        if thenote is None:
-            return False
-        if not isinstance(thenote, str):
-            thenote = str(thenote)
-        n = {"date": str(datetime.datetime.now())}
-        n.update({"note": thenote})
-        self.__notes.append(n)
-        return True
-
-    def _notes_delete(
-        self, auto_confirm: str | None = None  # to skip confirm prompt
-    ) -> None:
-        """Delete all notes for this object.
-        
-        :param auto_confirm: pre-answer to confirmation prompt to skip UI
-        :type auto_confirm: str, optional
-        :raises RuntimeError: If user cancels the deletion
-        :return: None
-        :rtype: None
-        """
-        if nmp.DELETE_CONFIRM:
-            if auto_confirm in nmu.CONFIRM_YNC:
-                ync = auto_confirm
-            else:
-                q = "are you sure you want to delete all notes for '%s'?" % self.__name
-                ync = nmu.prompt_yes_no(q, path=self.path_str)
-            if not isinstance(ync, str) or (ync.lower() != "y" and ync.lower() != "yes"):
-                print("cancel delete all notes")
-                raise RuntimeError("User cancelled note deletion")
-        self.__notes = []
-
-    @property
-    def notes_on(self) -> bool:
-        return self.__notes_on
-
-    @notes_on.setter
-    def notes_on(self, on: bool) -> None:
-        if isinstance(on, bool):
-            self.__notes_on = on
-        else:
-            self.__notes_on = True
-
-    @staticmethod
-    def notes_ok(notes: list[dict]) -> bool:
-        # test notes type format
-        if not isinstance(notes, list):
-            return False
-        for n in notes:
-            if not isinstance(n, dict):
-                return False
-            keys = n.keys()
-            if len(keys) == 2 and "date" in keys and "note" in keys:
-                pass  # ok
-            else:
-                return False
-            for k, v in n.items():
-                if not isinstance(v, str):
-                    return False
-        return True
 
     @property
     def _manager(self) -> NMManager | None:  # find NMManager of this NMObject

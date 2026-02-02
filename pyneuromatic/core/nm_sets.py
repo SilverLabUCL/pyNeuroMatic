@@ -68,7 +68,6 @@ class NMSets(NMObject, MutableMapping):
         super().__init__(
             parent=parent,
             name=actual_name,
-            notes_on=False,  # turn notes off during __init__
         )  # NMObject
 
         self.__map: dict[str, Any] = {}  # {key: [NMObject]} or {key: [Equation]}
@@ -102,8 +101,6 @@ class NMSets(NMObject, MutableMapping):
                 "neither" % ("nmobjects_fxnref", "nmobjects")
             )
 
-        self.notes_on = True
-
     def __deepcopy__(self, memo: dict) -> NMSets:
         """Support Python's copy.deepcopy() protocol.
 
@@ -134,8 +131,6 @@ class NMSets(NMObject, MutableMapping):
         result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
         result._NMObject__parent = self._NMObject__parent
         result._NMObject__name = self._NMObject__name
-        result._NMObject__notes_on = self._NMObject__notes_on
-        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
         result._NMObject__rename_fxnref = result._name_set
         result._NMObject__copy_of = self
 
