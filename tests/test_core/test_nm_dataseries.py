@@ -10,7 +10,7 @@ import unittest
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
-from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
+from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_manager import NMManager
 import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
@@ -30,6 +30,8 @@ class NMDataSeriesTest(unittest.TestCase):
     def setUp(self):  # executed before each test
         self.dataprefix = "data"
 
+        xdim = NMDimensionX(NM, "x", scale=XSCALE)
+
         num_epochs = 10
         num_chans = len(YSCALE)
 
@@ -45,7 +47,8 @@ class NMDataSeriesTest(unittest.TestCase):
             for j in range(num_chans):
                 c = chanlist[j]
                 n = self.dataprefix + nmu.CHANNEL_CHARS[j] + str(i)
-                d = NMData(parent=NM, name=n, yscale=YSCALE[j], xscale=XSCALE)
+                ydim = NMDimension(NM, "y", scale=YSCALE[j])
+                d = NMData(parent=NM, name=n, ydim=ydim, xdim=xdim)
                 e.data.append(d)
                 c.data.append(d)
 

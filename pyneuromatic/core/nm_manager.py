@@ -411,7 +411,7 @@ class NMManager(NMObject):
         p = self.__project
         if "project" in execute:
             value = execute["project"]
-            if value.lower() == "select" or value.lower() == "all":
+            if value.lower() in ("select", "selected", "all"):
                 pass  # ok, only one project
             elif value.lower() == p.name.lower():
                 pass  # ok
@@ -427,7 +427,7 @@ class NMManager(NMObject):
         if folders is None:
             raise ValueError("project has no folder container")
         value = execute["folder"]
-        if value.lower() == "select":
+        if value.lower() in ("select", "selected"):
             fkey = folders.selected_name
             if fkey in folders:
                 folders.execute_target = "select"
@@ -461,7 +461,7 @@ class NMManager(NMObject):
             e = "missing execute 'dataseries' key"
             raise KeyError(e)
         value = execute["dataseries"]
-        if value.lower() == "select":
+        if value.lower() in ("select", "selected"):
             dskey = f.dataseries.selected_name
             if dskey in f.dataseries:
                 f.dataseries.execute_target = "select"

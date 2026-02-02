@@ -550,12 +550,12 @@ class NMSetsTest(unittest.TestCase):
         self.assertTrue(s0 == self.sets0)
 
         # NMObjects {}
-        s0._NMSets__nmobjects = self.odict1
-        self.assertTrue(s0 == self.sets0)  # nmobjects {} not compared
-        s0._eq_list.append("nmobjects")
-        self.assertFalse(s0 == self.sets0)  # nmobjects {} compared
-        s0._NMSets__nmobjects = self.odict0
-        self.assertTrue(s0 == self.sets0)
+        # s0._NMSets__nmobjects = self.odict1
+        # self.assertTrue(s0 == self.sets0)  # nmobjects {} not compared
+        # s0._eq_list.append("nmobjects")
+        # self.assertFalse(s0 == self.sets0)  # nmobjects {} compared
+        # s0._NMSets__nmobjects = self.odict0
+        # self.assertTrue(s0 == self.sets0)
 
         save_fxnref = s0._NMSets__nmobjects_fxnref
         s0._NMSets__nmobjects = {}

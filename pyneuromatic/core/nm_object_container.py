@@ -213,7 +213,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     @property
     def content(self) -> dict[str, str]:
         cname = self.__class__.__name__.lower()
-        c = {cname: self.__name}
+        c = {cname: self.name}
         for k in self.__map.keys():
             c[k] = self.__map[k].name # key == name, so redundant
         return c
@@ -304,15 +304,16 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     def __contains__(
-        self, 
+        self,
         key: object
     ) -> bool:
         # called by 'in' operator
-        # checks keys only (standard dict behavior)
-        # to check values, use: obj in container.values() or container.contains_value(obj)
+        # supports both string keys (case-insensitive) and NMObject values (by identity)
         if isinstance(key, str):
             actual_key = self._getkey(key)
             return actual_key is not None
+        if isinstance(key, NMObject):
+            return self.contains_value(key)
         return False
 
     def contains_value(
@@ -1022,6 +1023,48 @@ class NMObjectContainer(NMObject, MutableMapping):
     @execute_target_name.setter
     def execute_target_name(self, name: str | None) -> None:
         self._execute_mode_set(self.__execute_mode, name)
+
+    @property
+    def execute_target(self) -> str:
+        """Returns string representation of current execute target."""
+        if self.__execute_mode == ExecuteMode.SELECTED:
+            return "selected"
+        if self.__execute_mode == ExecuteMode.ALL:
+            return "all"
+        if self.__execute_target_name is not None:
+            return self.__execute_target_name
+        return "selected"
+
+    @execute_target.setter
+    def execute_target(self, target: str | None) -> None:
+        """Set execute mode from a string value.
+
+        Args:
+            target: One of:
+                - "select" or "selected": use the currently selected item
+                - "all": use all items in the container
+                - a specific name: use that named item
+                - a set name: use all items in that set
+        """
+        if target is None:
+            self._execute_mode_set(ExecuteMode.SELECTED)
+            return
+        if not isinstance(target, str):
+            e = nmu.type_error_str(target, "target", "string")
+            raise TypeError(e)
+        target_lower = target.lower()
+        if target_lower in ("select", "selected"):
+            self._execute_mode_set(ExecuteMode.SELECTED)
+        elif target_lower == "all":
+            self._execute_mode_set(ExecuteMode.ALL)
+        elif self._getkey(target) is not None:
+            # It's a valid name in the container
+            self._execute_mode_set(ExecuteMode.NAME, target)
+        elif self.sets._getkey(target) is not None:
+            # It's a valid set name
+            self._execute_mode_set(ExecuteMode.SET, target)
+        else:
+            raise ValueError("unknown execute target: %s" % target)
 
     def _execute_mode_set(
         self,
