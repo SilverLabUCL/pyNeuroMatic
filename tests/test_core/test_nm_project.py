@@ -127,7 +127,7 @@ class NMProjectTest(unittest.TestCase):
 
         self.assertTrue(self.project0 == project0)
 
-        project0.folders.popitem(auto_confirm="y")
+        project0.folders.popitem()
         self.assertFalse(self.project0 == project0)
 
     def test02_copy(self):

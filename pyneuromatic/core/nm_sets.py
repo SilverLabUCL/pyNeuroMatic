@@ -505,30 +505,17 @@ class NMSets(NMObject, MutableMapping):
     # override MutableMapping mixin method
     def pop(  # type: ignore[override]
         self,
-        key: str,
-        auto_confirm: str | None = None,  # to skip confirm prompt
+        key: str
     ) -> list[NMObject] | None:
         # removed 'default' parameter
         key = self._getkey(key)
-        if nmp.DELETE_CONFIRM:
-            if auto_confirm in nmu.CONFIRM_YNC:
-                ync = auto_confirm
-            else:
-                q = "are you sure you want to delete '%s'?" % key
-                ync = nmu.prompt_yes_no(q, path=self.path_str)
-            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
-                pass
-            else:
-                print("cancel pop '%s'" % key)
-                return None
         o = self.__map.pop(key)
         return o
 
     # override MutableMapping mixin method
-    def popitem(  # type: ignore[override]  # delete last item
-        self, 
-        auto_confirm: str | None = None  # to skip confirm prompt
-    ) -> tuple[str, list[NMObject]] | None:
+    # type: ignore[override]
+    # # delete last item
+    def popitem(self) -> tuple[str, list[NMObject]] | None:
         """
         Must override, otherwise first item is deleted rather than last.
         Consider deprecating to prevent accidental deletes.
@@ -537,32 +524,16 @@ class NMSets(NMObject, MutableMapping):
             return None
         klist = list(self.__map.keys())
         key = klist[-1]  # last key
-        olist = self.pop(key=key, auto_confirm=auto_confirm)
+        olist = self.pop(key=key)
         if olist:
             return (key, olist)
         return None
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
-    def clear(
-        self, 
-        auto_confirm: str | None = None  # to skip confirm prompt
-    ) -> None:
+    def clear(self) -> None:
         if len(self) == 0:
             return None
-        if nmp.DELETE_CONFIRM:
-            if auto_confirm in nmu.CONFIRM_YNC:
-                ync = auto_confirm
-            else:
-                q = "are you sure you want to delete the following?\n" + ", ".join(
-                    self.__map.keys()
-                )
-                ync = nmu.prompt_yes_no(q, path=self.path_str)
-            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
-                pass
-            else:
-                print("cancel delete all")
-                return None
         self.__map.clear()
         return None
 
@@ -827,42 +798,14 @@ class NMSets(NMObject, MutableMapping):
 
     def empty(
         self,
-        key: str,
-        auto_confirm: str | None = None,  # to skip confirm prompt
+        key: str
     ) -> None:
         key = self._getkey(key)
-        if nmp.DELETE_CONFIRM:
-            if auto_confirm in nmu.CONFIRM_YNC:
-                ync = auto_confirm
-            else:
-                q = "are you sure you want to empty '%s'?" % key
-                ync = nmu.prompt_yes_no(q, path=self.path_str)
-            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
-                pass
-            else:
-                print("cancel empty '%s'" % key)
-                return None
         olist = self.__map[key]
         olist.clear()
         return None
 
-    def empty_all(
-        self, 
-        auto_confirm: str | None = None  # to skip confirm prompt
-    ) -> None:
-        if nmp.DELETE_CONFIRM:
-            if auto_confirm in nmu.CONFIRM_YNC:
-                ync = auto_confirm
-            else:
-                q = "are you sure you want to empty the following?\n" + ", ".join(
-                    self.__map.keys()
-                )
-                ync = nmu.prompt_yes_no(q, path=self.path_str)
-            if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
-                pass
-            else:
-                print("cancel empty all")
-                return None
+    def empty_all(self) -> None:
         for olist in self.__map.values():
             olist.clear()    
         return None
