@@ -90,7 +90,7 @@ class NMData(NMObject):
         elif isinstance(xdim, NMDimensionX):
             self.__x = xdim
         else:
-            e = nmu.typeerror(xdim, "xdim", "NMDimensionX")
+            e = nmu.type_error_str(xdim, "xdim", "NMDimensionX")
             raise TypeError(e)
 
         if ydim is None:
@@ -98,7 +98,7 @@ class NMData(NMObject):
         elif isinstance(ydim, NMDimension):
             self.__y = ydim
         else:
-            e = nmu.typeerror(ydim, "ydim", "NMDimension")
+            e = nmu.type_error_str(ydim, "ydim", "NMDimension")
             raise TypeError(e)
 
         self.__x.ypair = self.__y.nparray
@@ -279,12 +279,12 @@ class NMData(NMObject):
         if channel is None or isinstance(channel, NMChannel):
             self.__dataseries_channel = channel
         else:
-            e = nmu.typeerror(channel, "channel", "NMChannel")
+            e = nmu.type_error_str(channel, "channel", "NMChannel")
             raise TypeError(e)
         if epoch is None or isinstance(epoch, NMEpoch):
             self.__dataseries_epoch = epoch
         else:
-            e = nmu.typeerror(epoch, "epoch", "NMEpoch")
+            e = nmu.type_error_str(epoch, "epoch", "NMEpoch")
             raise TypeError(e)
         return self._dataseries
 
@@ -342,7 +342,7 @@ class NMDataContainer(NMObjectContainer):
 
     # override
     # TODO: this no longer works
-    def remove(self, names=[], indexes=[], confirm=True, quiet=nmp.QUIET):
+    def remove(self, names=[], indexes=[], confirm=True, quiet=False):
         rlist = super().remove(
             names=names, indexes=indexes, confirm=confirm, quiet=quiet
         )

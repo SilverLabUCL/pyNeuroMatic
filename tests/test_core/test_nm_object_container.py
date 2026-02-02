@@ -300,12 +300,12 @@ class NMObjectContainerTest(unittest.TestCase):
             del self.map0["test"]
 
         print("\nanswer NO")
-        with patch('pyneuromatic.core.nm_utilities.input_yesno', return_value='n'):
+        with patch('pyneuromatic.core.nm_utilities.prompt_yes_no', return_value='n'):
             del self.map0[ONLIST0[1]]
         self.assertTrue(ONLIST0[1] in self.map0)
 
         print("\nanswer YES")
-        with patch('pyneuromatic.core.nm_utilities.input_yesno', return_value='y'):
+        with patch('pyneuromatic.core.nm_utilities.prompt_yes_no', return_value='y'):
             del self.map0[ONLIST0[1]]
         self.assertFalse(ONLIST0[1] in self.map0)
         with self.assertRaises(KeyError):

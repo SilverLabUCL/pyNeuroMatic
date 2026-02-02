@@ -27,7 +27,7 @@ import numpy as np
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
-from pyneuromatic.core.nm_history import NMHistory
+import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
 from pyneuromatic.core.nm_project import NMProject, NMProjectContainer
@@ -71,8 +71,8 @@ class NMManager(NMObject):
         super().__init__(parent=None, name=name)  # NMObject
 
         # initialize centralized history logging
-        self.__history = NMHistory(quiet=quiet)
-        nmu.set_history(self.__history)
+        self.__history = nmh.NMHistory(quiet=quiet)
+        nmh.set_history(self.__history)
 
         # self.__configs = nmp.Configs()
         # self.__configs.quiet = quiet
@@ -80,7 +80,7 @@ class NMManager(NMObject):
         # for now, only one project
         # self.__project_container = NMProjectContainer(parent=self)
         if not isinstance(project_name, str):
-            e = nmu.typeerror(project_name, "project_name", "string")
+            e = nmu.type_error_str(project_name, "project_name", "string")
             raise TypeError(e)
         self.__project = NMProject(parent=self, name=project_name)
 
@@ -105,18 +105,16 @@ class NMManager(NMObject):
             if p:
                 self.__project_container.select_key = project_name
         else:
-            e = nmu.typeerror(project_name, "project_name", "string")
+            e = nmu.type_error_str(project_name, "project_name", "string")
             raise TypeError(e)
         """
 
         tstr = str(datetime.datetime.now())
         h = ("created NM manager '%s' %s"
              % (self.name, tstr))
-        self._history(h, quiet=quiet)
-        self._history("current NM project is '%s'" % self.__project.name,
-                      quiet=quiet)
-        self._history("current NM tool is '%s'" % self.__toolselect,
-                      quiet=quiet)
+        nmh.history(h, quiet=quiet)
+        nmh.history("current NM project is '%s'" % self.__project.name, quiet=quiet)
+        nmh.history("current NM tool is '%s'" % self.__toolselect, quiet=quiet)
 
     def tool_add(
         self,
@@ -125,7 +123,7 @@ class NMManager(NMObject):
         select: bool = False
     ) -> None:
         if not isinstance(toolname, str):
-            e = nmu.typeerror(toolname, "toolname", "string")
+            e = nmu.type_error_str(toolname, "toolname", "string")
             raise TypeError(e)
         tname = toolname.lower()
         if tool is None:  # look for NM tool
@@ -172,7 +170,7 @@ class NMManager(NMObject):
     #     return self.__project_container
 
     @property
-    def history(self) -> NMHistory:
+    def history(self) -> nmh.NMHistory:
         """Access the centralized NM history log."""
         return self.__history
 
@@ -239,16 +237,16 @@ class NMManager(NMObject):
         # quiet
     ) -> None:
         if not isinstance(select, dict):
-            e = nmu.typeerror(select, "select", "dictionary")
+            e = nmu.type_error_str(select, "select", "dictionary")
             raise TypeError(e)
         for key, value in select.items():
             if not isinstance(key, str):
-                e = nmu.typeerror(key, "key", "string")
+                e = nmu.type_error_str(key, "key", "string")
                 raise TypeError(e)
             if value is None or isinstance(value, str):
                 pass  # ok
             else:
-                e = nmu.typeerror(value, "value", "string")
+                e = nmu.type_error_str(value, "value", "string")
                 raise TypeError(e)
         p = self.__project
         if "project" in select:
@@ -339,11 +337,11 @@ class NMManager(NMObject):
         # can specify 'data' or 'dataseries' but not both
 
         if not isinstance(execute, dict):
-            e = nmu.typeerror(execute, "execute", "dictionary")
+            e = nmu.type_error_str(execute, "execute", "dictionary")
             raise TypeError(e)
         for key, value in execute.items():
             if not isinstance(key, str):
-                e = nmu.typeerror(key, "key", "string")
+                e = nmu.type_error_str(key, "key", "string")
                 raise TypeError(e)
             if key not in [
                 "project",
@@ -356,7 +354,7 @@ class NMManager(NMObject):
                 e = "unknown execute key '%s'" % key
                 raise KeyError(e)
             if not isinstance(value, str):
-                e = nmu.typeerror(value, "value", "string")
+                e = nmu.type_error_str(value, "value", "string")
                 raise TypeError(e)
 
         if "data" in execute and "dataseries" in execute:
@@ -533,7 +531,7 @@ class NMManager(NMObject):
             if tname.lower() == "select":
                 tname = self.__toolselect
         else:
-            e = nmu.typeerror(tname, "toolname", "string")
+            e = nmu.type_error_str(tname, "toolname", "string")
             raise TypeError(e)
         if tname is None:
             raise ValueError("no tool selected")
@@ -574,10 +572,10 @@ class NMManager(NMObject):
         return None
 
     """
-    def _quiet(self, quiet=nmp.QUIET):
+    def _quiet(self) -> bool:
         if self.configs.quiet:  # config quiet overrides
             return True
-        return quiet
+        return nmp.QUIET
     """
 
 

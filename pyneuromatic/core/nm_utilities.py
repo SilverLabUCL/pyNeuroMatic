@@ -20,32 +20,19 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
-import logging
-from colorama import Fore, Back, Style
 import inspect
 import math
 from typing import Callable
 
-_nm_history = None  # set by NMManager.__init__ via set_history()
+from colorama import Fore
 
-
-def set_history(history: object | None) -> None:
-    """Register the active NMHistory instance.
-
-    Called by NMManager.__init__() to connect the centralized
-    history log to the nmu.history() function.
-
-    :param history: NMHistory instance or None.
-    :type history: NMHistory | None
-    """
-    global _nm_history
-    _nm_history = history
+import pyneuromatic.core.nm_history as nmh
 
 CHANNEL_CHARS: tuple = ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
                 "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
                 "W", "X", "Y", "Z")
 
-CONFIRM_YNC: tuple = ("y", "yes", "n", "no", "c", "cancel")  # see input_yesno()
+CONFIRM_YNC: tuple = ("y", "yes", "n", "no", "c", "cancel")  # see prompt_yes_no()
 
 # for testing
 BADTYPES: tuple = (None, 3, 3.14, True, [], (), {}, set(), "string", Fore)
@@ -154,11 +141,11 @@ def name_ok(
     if isinstance(ok_names, str):
         ok_names = [ok_names]
     elif not isinstance(ok_names, list):
-        e = typeerror(ok_names, "ok_names", "string or list")
+        e = type_error_str(ok_names, "ok_names", "string or list")
         raise TypeError(e)
     for ok_name in ok_names:
         if not isinstance(ok_name, str):
-            e = typeerror(ok_name, "ok_names: list item", "string")
+            e = type_error_str(ok_name, "ok_names: list item", "string")
             raise TypeError(e)
         if name.lower() == ok_name.lower():
             return True
@@ -166,11 +153,11 @@ def name_ok(
     if isinstance(ok_strings, str):
         ok_strings = [ok_strings]
     elif not isinstance(ok_strings, list):
-        e = typeerror(ok_strings, "ok_strings", "string or list")
+        e = type_error_str(ok_strings, "ok_strings", "string or list")
         raise TypeError(e)
     for ok_str in ok_strings:
         if not isinstance(ok_str, str):
-            e = typeerror(ok_strings, "ok_strings: list item", "string")
+            e = type_error_str(ok_strings, "ok_strings: list item", "string")
             raise TypeError(e)
         name = name.replace(ok_str, "")  # remove ok strings from name
 
@@ -198,15 +185,15 @@ def name_next_seq(
     :rtype: int
     """
     if not isinstance(names, list):
-        e = typeerror(names, "names", "List[string]")
+        e = type_error_str(names, "names", "List[string]")
         raise TypeError(e)
     if not isinstance(prefix, str):
-        e = typeerror(prefix, "prefix", "string")
+        e = type_error_str(prefix, "prefix", "string")
         raise TypeError(e)
     if not prefix or not name_ok(prefix):
         raise ValueError("prefix: %s" % prefix)
     if not isinstance(first, int):
-        e = typeerror(first, "first", "integer")
+        e = type_error_str(first, "first", "integer")
         raise TypeError(e)
     if first < 0:
         raise ValueError("first: %s" % first)
@@ -214,7 +201,7 @@ def name_next_seq(
     imax = -1
     for name in names:
         if not isinstance(name, str):
-            e = typeerror(name, "name", "string")
+            e = type_error_str(name, "name", "string")
             raise TypeError(e)
         name = name.lower()
         istr = name.replace(prefix.lower(), "")
@@ -515,7 +502,7 @@ def channel_char_search(
     return -1
 
 
-def typeerror(
+def type_error_str(
     obj: object, 
     obj_name: str, 
     type_str: str
@@ -534,7 +521,7 @@ def typeerror(
     return f"{obj_name}: expected {type_str} but got {type(obj).__name__} {obj}"
 
 
-def valueerror(
+def value_error_str(
     obj: object, 
     obj_name: str, 
     constraint_str: str = ""
@@ -556,201 +543,7 @@ def valueerror(
         return f"{obj_name}: {obj}"
 
 
-def history_change(
-    param_name: str, 
-    old_value: object, 
-    new_value: object
-) -> str:
-    """Create history text for variables that have changed
-
-    :param param_name: name of parameter that has changed.
-    :type param_name: str
-    :param old_value: old value of parameter.
-    :type old_value: object
-    :param new_value: new value of parameter.
-    :type new_value: object
-    :return: history string containing the change.
-    :rtype: str
-    """
-    if not isinstance(param_name, str):
-        param_name = str(param_name)
-    if not isinstance(old_value, str):
-        if old_value is None:
-            old_value = "None"
-        else:
-            old_value = "'%s'" % old_value
-    if not isinstance(new_value, str):
-        if new_value is None:
-            new_value = "None"
-        else:
-            new_value = "'%s'" % new_value
-    h = "changed " + param_name + " from " + old_value + " to " + new_value
-    return h
-
-
-def history(
-    message: str,
-    title: str = "",
-    path: str | None = None,
-    frame: int = 1,
-    red: bool = False,
-    quiet: bool = False,
-) -> str:
-    """Print message to NM history.
-
-    :param message: message to print.
-    :type message: str
-    :param title: message title (e.g. 'ALERT' or 'ERROR').
-    :type title: str
-    :param path: function path, pass '' for default or 'NONE' for none.
-    :type path: str | None
-    :param frame: inspect frame # for creating path.
-    :type frame: int
-    :param red: True to print red, False to print black.
-    :type red: bool
-    :param quiet: True to not print message, False to print.
-    :type quiet: bool
-    :return: history string.
-    :rtype: str
-    """
-    if not isinstance(message, str):
-        return ""
-    if not isinstance(frame, int) or frame < 0:
-        frame = 1
-    if path is None:
-        path = get_path(inspect.stack(), frame=frame)
-    elif not isinstance(path, str):
-        path = ""
-    else:
-        path = path
-
-    # determine log level from title/red
-    if isinstance(title, str) and title.upper() == "ERROR":
-        level = logging.ERROR
-    elif isinstance(title, str) and title.upper() == "ALERT" or red:
-        level = logging.WARNING
-    else:
-        level = logging.INFO
-
-    # delegate to NMHistory if available
-    if _nm_history is not None:
-        return _nm_history.log(
-            message, title=title, path=path, level=level, quiet=quiet
-        )
-
-    # fallback: original print() behavior (before NMManager is created)
-    if path:
-        h = path + ": " + message
-    else:
-        h = message
-    if isinstance(title, str) and len(title) > 0:
-        h = title + ": " + h
-    if not quiet:
-        if red:
-            print(Fore.RED + h + Fore.BLACK)
-        else:
-            print(h)
-    return h
-
-
-def get_path(
-    stack: list, 
-    frame: int = 1, 
-    package: str = "nm"  # stack frame
-) -> str:
-    """Create function ancestry path.
-
-    :param stack: stack list.
-    :type stack: list
-    :param frame: inspect frame # for creating path.
-    :type frame: int
-    :param package: package, e.g. 'nm'
-    :type package: str
-    :return: path string.
-    :rtype: str
-    """
-    if not stack:
-        return ""
-    if not isinstance(frame, int) or frame < 0:
-        frame = 1
-    if isinstance(package, str) and len(package) > 0:
-        path = [package]
-    else:
-        path = []
-    c = get_class_from_stack(stack, frame=frame)  # class ancestry
-    m = get_method_from_stack(stack, frame=frame)
-    if c:
-        path.append(c)
-    if m:
-        path.append(m)
-    return ".".join(path)  # e.g. 'nm.myparent.mychild.mymethod
-
-
-def get_class_from_stack(
-    stack: list, 
-    frame: int = 1, 
-    module: bool = False
-) -> str:
-    """Extract class from stack
-
-    :param stack: stack list.
-    :type stack: list
-    :param frame: inspect frame # for creating path.
-    :type frame: int
-    :param module: include module name.
-    :type module: bool
-    :return: class name.
-    :rtype: str
-    """
-    if not stack:
-        return ""
-    if not isinstance(frame, int) or frame < 0:
-        frame = 1
-    if len(stack) <= frame or len(stack[0]) == 0:
-        return ""
-    f = stack[frame][0]
-    if not inspect.isframe(f):
-        return ""
-    if "self" not in f.f_locals:
-        return ""
-    class_tree = str(stack[frame][0].f_locals["self"].__class__)
-    class_tree = class_tree.replace("<class ", "")
-    class_tree = class_tree.replace("'", "")
-    class_tree = class_tree.replace(">", "")
-    class_parts = class_tree.split(".")
-    m = class_parts[0]
-    c = class_parts[1]
-    if module:
-        return m + "." + c
-    return c
-
-
-def get_method_from_stack(
-    stack: list,
-    frame: int = 1,
-) -> str:
-    """Extract method from stack
-
-    :param stack: stack list.
-    :type stack: list
-    :param frame: inspect frame # for creating path.
-    :type frame: int
-    :return: method name.
-    :rtype: str
-    """
-    if not stack:
-        return ""
-    if not isinstance(frame, int) or frame < 0:
-        frame = 1
-    if len(stack) <= frame or len(stack[0]) == 0:
-        return ""
-    f = stack[frame][0]
-    if not inspect.isframe(f):
-        return ""
-    return f.f_code.co_name
-
-
-def input_yesno(
+def prompt_yes_no(
     prompt: str,
     title: str = "",
     path: str | None = None,
@@ -785,11 +578,11 @@ def input_yesno(
         ok.remove("c")
         ok.remove("cancel")
     if path is None:
-        path = get_path(inspect.stack(), frame=frame)
+        path = nmh.get_path(inspect.stack(), frame=frame)
     if not isinstance(path, str):
         path = ""
-    else:
-        path = path  # + '.userinput'
+    # else:
+        # path = path  # + '.userinput'
     if path:
         txt = path + ":\n" + txt
     if title:

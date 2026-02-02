@@ -15,6 +15,7 @@ from pyneuromatic.core.nm_history import (
 )
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_utilities as nmu
 
 QUIET = True
@@ -202,44 +203,42 @@ class NMHistoryIntegrationTest(unittest.TestCase):
 
     def test02_nmu_history_routes_to_buffer(self):
         self.nm.history.clear()
-        nmu.history("test via nmu", path="nm.test", quiet=True)
+        nmh.history("test via nmu", path="nm.test", quiet=True)
         buf = self.nm.history.buffer
         self.assertEqual(len(buf), 1)
         self.assertEqual(buf[0]["message"], "test via nmu")
         self.assertEqual(buf[0]["path"], "nm.test")
 
-    def test03_object_history_routes_to_buffer(self):
+    def test03_history_routes_to_buffer(self):
+        """Test that nmh.history() routes INFO messages to buffer."""
         self.nm.history.clear()
-        o = NMObject(parent=self.nm, name="testobj")
-        self.nm.history.clear()
-        o._history("obj history msg", quiet=True)
+        nmh.history("history msg", path="nm.test", quiet=True)
         buf = self.nm.history.buffer
         self.assertEqual(len(buf), 1)
-        self.assertIn("obj history msg", buf[0]["message"])
+        self.assertIn("history msg", buf[0]["message"])
+        self.assertEqual(buf[0]["level"], "INFO")
 
-    def test04_object_alert_routes_to_buffer(self):
+    def test04_alert_routes_to_buffer(self):
+        """Test that nmh.history() with ALERT title routes to buffer with WARNING level."""
         self.nm.history.clear()
-        o = NMObject(parent=self.nm, name="testobj")
-        self.nm.history.clear()
-        o._alert("alert msg", quiet=True)
+        nmh.history("alert msg", title="ALERT", red=True, quiet=True)
         buf = self.nm.history.buffer
         self.assertEqual(len(buf), 1)
         self.assertEqual(buf[0]["level"], "WARNING")
 
-    def test05_object_error_routes_to_buffer(self):
+    def test05_error_routes_to_buffer(self):
+        """Test that nmh.history() with ERROR title routes to buffer with ERROR level."""
         self.nm.history.clear()
-        o = NMObject(parent=self.nm, name="testobj")
-        self.nm.history.clear()
-        o._error("error msg", quiet=True)
+        nmh.history("error msg", title="ERROR", red=True, quiet=True)
         buf = self.nm.history.buffer
         self.assertEqual(len(buf), 1)
         self.assertEqual(buf[0]["level"], "ERROR")
 
     def test06_buffer_preserves_order(self):
         self.nm.history.clear()
-        nmu.history("first", quiet=True)
-        nmu.history("second", quiet=True)
-        nmu.history("third", quiet=True)
+        nmh.history("first", quiet=True)
+        nmh.history("second", quiet=True)
+        nmh.history("third", quiet=True)
         buf = self.nm.history.buffer
         messages = [e["message"] for e in buf]
         self.assertEqual(messages, ["first", "second", "third"])

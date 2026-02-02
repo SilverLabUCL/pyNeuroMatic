@@ -8,6 +8,7 @@ Created on Mon Jul 17 17:23:44 2023
 import unittest
 
 from pyneuromatic.core.nm_manager import NMManager
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_utilities as nmu
 
 QUIET = True
@@ -147,15 +148,15 @@ class NMUtilitiesTest(unittest.TestCase):
         self.assertFalse(nmu.keys_are_equal(klist1, klist2))
 
     def test03_input_yesno(self):
-        self.assertEqual(nmu.input_yesno("test", answer=""), "error")
-        self.assertEqual(nmu.input_yesno("test", answer="YES"), "y")
-        self.assertEqual(nmu.input_yesno("test", answer="Y"), "y")
-        self.assertEqual(nmu.input_yesno("test", answer="NO"), "n")
-        self.assertEqual(nmu.input_yesno("test", answer="N"), "n")
-        self.assertEqual(nmu.input_yesno("test", answer="CANCEL"), "c")
-        self.assertEqual(nmu.input_yesno("test", answer="C"), "c")
-        self.assertEqual(nmu.input_yesno("test", cancel=False, answer="C"), "error")
-        p1 = nmu.input_yesno("testprompt", title='MyTitle', path='my.path')
+        self.assertEqual(nmu.prompt_yes_no("test", answer=""), "error")
+        self.assertEqual(nmu.prompt_yes_no("test", answer="YES"), "y")
+        self.assertEqual(nmu.prompt_yes_no("test", answer="Y"), "y")
+        self.assertEqual(nmu.prompt_yes_no("test", answer="NO"), "n")
+        self.assertEqual(nmu.prompt_yes_no("test", answer="N"), "n")
+        self.assertEqual(nmu.prompt_yes_no("test", answer="CANCEL"), "c")
+        self.assertEqual(nmu.prompt_yes_no("test", answer="C"), "c")
+        self.assertEqual(nmu.prompt_yes_no("test", cancel=False, answer="C"), "error")
+        p1 = nmu.prompt_yes_no("testprompt", title='MyTitle', path='my.path')
         p2 = "MyTitle:" + "\n" + "my.path:" + "\n" + "testprompt" + "\n" + "(y)es (n)o (c)ancel: "
         self.assertEqual(p1, p2)
         # print(p1)
@@ -301,26 +302,26 @@ class NMUtilitiesTest(unittest.TestCase):
         c = 'Test'  # this class
         h = 'history message'
         r = 'nm.' + c + '.' + fxn + ': ' + h
-        self.assertEqual(nmu.history(h, quiet=quiet), r)
+        self.assertEqual(nmh.history(h, quiet=quiet), r)
         tp = 'nm.one.two.three'
         r = tp + ': ' + h
-        self.assertEqual(nmu.history(h, tp=tp, quiet=quiet), r)
+        self.assertEqual(nmh.history(h, tp=tp, quiet=quiet), r)
 
         # get_path
         stack = inspect.stack()
         fxn = 'test_all'  # calling fxn
         r = 'nm.' + c + '.' + fxn
-        self.assertEqual(nmu.get_path(stack), r)
+        self.assertEqual(nmh.get_path(stack), r)
         tp = 'one.two.three'
         r = 'nm.one.two.three.' + fxn
-        self.assertEqual(nmu.get_path(stack, path=tp), r)
+        self.assertEqual(nmh.get_path(stack, path=tp), r)
         # get_class
         stack = inspect.stack()
-        self.assertEqual(nmu.get_class_from_stack(stack), c)
-        self.assertEqual(nmu.get_class_from_stack(stack, module=True), '__main__.' + c)
+        self.assertEqual(nmh.get_class_from_stack(stack), c)
+        self.assertEqual(nmh.get_class_from_stack(stack, module=True), '__main__.' + c)
         # get_method
         stack = inspect.stack()
-        self.assertEqual(nmu.get_method_from_stack(stack), fxn)
+        self.assertEqual(nmh.get_method_from_stack(stack), fxn)
     """
 
 

@@ -24,6 +24,7 @@ import math
 import numpy as np
 
 from pyneuromatic.core.nm_object import NMObject
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -57,7 +58,7 @@ class NMDimension(NMObject):
                      nparray.ndim)
                 raise ValueError(e)
         else:
-            e = nmu.typeerror(nparray, "nparray", "np.ndarray")
+            e = nmu.type_error_str(nparray, "nparray", "np.ndarray")
             raise TypeError(e)
 
         self.__nparray = nparray
@@ -69,7 +70,7 @@ class NMDimension(NMObject):
         elif isinstance(scale, dict):
             self._scale_set(scale, quiet=True)
         else:
-            e = nmu.typeerror(scale, "scale", "dictionary")
+            e = nmu.type_error_str(scale, "scale", "dictionary")
             raise TypeError(e)
 
     # override
@@ -191,7 +192,7 @@ class NMDimension(NMObject):
         quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(scale, dict):
-            e = nmu.typeerror(scale, "scale", "dictionary")
+            e = nmu.type_error_str(scale, "scale", "dictionary")
             raise TypeError(e)
         for k, v in scale.items():
             k = k.lower()
@@ -219,16 +220,16 @@ class NMDimension(NMObject):
         quiet: bool = nmp.QUIET
     ) -> None:
         if label is not None and not isinstance(label, str):
-            e = nmu.typeerror(label, "label", "string")
+            e = nmu.type_error_str(label, "label", "string")
             raise TypeError(e)
         if isinstance(label, str):
             label = label.strip()
         if label == self.__label:
             return None  # no change
         self.__label = label
-        # h = nmu.history_change("label", old, label)
+        # h = nmh.history_change_str("label", old, label)
         # self.note = h
-        # self._history(h, quiet=quiet)
+        # nmh.history(h, quiet=quiet)
         return None
 
     @property
@@ -245,16 +246,16 @@ class NMDimension(NMObject):
         quiet: bool = nmp.QUIET
     ) -> None:
         if units is not None and not isinstance(units, str):
-            e = nmu.typeerror(units, "units", "string")
+            e = nmu.type_error_str(units, "units", "string")
             raise TypeError(e)
         if isinstance(units, str):
             units = units.strip()
         if units == self.__units:
             return None  # no change
         self.__units = units
-        # h = nmu.history_change("units", old, units)
+        # h = nmh.history_change_str("units", old, units)
         # self.note = h
-        # self._history(h, quiet=quiet)
+        # nmh.history(h, quiet=quiet)
         return None
 
     @property
@@ -268,12 +269,12 @@ class NMDimension(NMObject):
     def _nparray_set(
         self,
         nparray,
-        # quiet=nmp.QUIET
+        # quiet=False
     ) -> None:
         if nparray is None:
             pass  # ok
         elif not isinstance(nparray, np.ndarray):
-            e = nmu.typeerror(nparray, "nparray", "np.ndarray")
+            e = nmu.type_error_str(nparray, "nparray", "np.ndarray")
             raise TypeError(e)
         self.__nparray = nparray
         return None
@@ -393,7 +394,7 @@ class NMDimensionX(NMDimension):
         quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(scale, dict):
-            e = nmu.typeerror(scale, "scale", "dictionary")
+            e = nmu.type_error_str(scale, "scale", "dictionary")
             raise TypeError(e)
         for k, v in scale.items():
             k = k.lower()
@@ -442,14 +443,14 @@ class NMDimensionX(NMDimension):
                 if math.isinf(start) or math.isnan(start):
                     raise ValueError("start: %s" % start)
             elif not (isinstance(start, int) and not isinstance(start, bool)):
-                e = nmu.typeerror(start, "start", "float")
+                e = nmu.type_error_str(start, "start", "float")
                 raise TypeError(e)
         if start == self.__start:
             return None  # no change
         self.__start = start
-        # h = nmu.history_change("start", old, start)
+        # h = nmh.history_change_str("start", old, start)
         # self.note = h
-        # self._history(h, quiet=quiet)
+        # nmh.history(h, quiet=quiet)
         return None
 
     @property
@@ -478,16 +479,16 @@ class NMDimensionX(NMDimension):
                 if math.isinf(delta) or math.isnan(delta):
                     raise ValueError("delta: %s" % delta)
             elif not (isinstance(delta, int) and not isinstance(delta, bool)):
-                e = nmu.typeerror(delta, "delta", "float")
+                e = nmu.type_error_str(delta, "delta", "float")
                 raise TypeError(e)
             if delta == 0:
                 raise ValueError("delta: %s" % delta)
         if delta == self.__delta:
             return None  # no change
         self.__delta = delta
-        # h = nmu.history_change("delta", old, delta)
+        # h = nmh.history_change_str("delta", old, delta)
         # self.note = h
-        # self._history(h, quiet=quiet)
+        # nmh.history(h, quiet=quiet)
         return None
 
     @property
@@ -521,16 +522,16 @@ class NMDimensionX(NMDimension):
             elif isinstance(points, np.integer):
                 points = int(points)
             elif not (isinstance(points, int) and not isinstance(points, bool)):
-                e = nmu.typeerror(points, "points", "integer")
+                e = nmu.type_error_str(points, "points", "integer")
                 raise TypeError(e)
             if points < 0:
                 raise ValueError("points: %s" % points)
         if points == self.__points:
             return None  # no change
         self.__points = points
-        # h = nmu.history_change("points", old, points)
+        # h = nmh.history_change_str("points", old, points)
         # self.note = h
-        # self._history(h, quiet=quiet)
+        # nmh.history(h, quiet=quiet)
         return None
 
     @property
@@ -544,7 +545,7 @@ class NMDimensionX(NMDimension):
     def _ypair_set(
         self,
         nparray,
-        # quiet=nmp.QUIET
+        # quiet=False
     ) -> None:
         if nparray is None:
             pass
@@ -555,7 +556,7 @@ class NMDimensionX(NMDimension):
                          % (self.nparray.size, nparray.size))
                     raise RuntimeError(e)
         else:
-            e = nmu.typeerror(nparray, "nparray", "np.ndarray")
+            e = nmu.type_error_str(nparray, "nparray", "np.ndarray")
             raise TypeError(e)
         self.__ypair = nparray
         return None
@@ -567,7 +568,7 @@ class NMDimensionX(NMDimension):
     ) -> int | None:
 
         if not (isinstance(xvalue, (float, int)) and not isinstance(xvalue, bool)):
-            e = nmu.typeerror(xvalue, "xvalue", "float")
+            e = nmu.type_error_str(xvalue, "xvalue", "float")
             raise TypeError(e)
 
         if isinstance(self.nparray, np.ndarray):
@@ -622,7 +623,7 @@ class NMDimensionX(NMDimension):
         elif isinstance(index, float):
             i = int(index)
         else:
-            e = nmu.typeerror(index, "index", "integer")
+            e = nmu.type_error_str(index, "index", "integer")
             raise TypeError(e)
 
         if i < 0:

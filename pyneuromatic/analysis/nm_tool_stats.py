@@ -143,7 +143,7 @@ class NMToolStats(NMTool):
         if isinstance(xclip, bool):
             self.__xclip = xclip
         else:
-            e = nmu.typeerror(xclip, "xclip", "boolean")
+            e = nmu.type_error_str(xclip, "xclip", "boolean")
             raise TypeError(e)
 
     @property
@@ -162,7 +162,7 @@ class NMToolStats(NMTool):
         if isinstance(ignore_nans, bool):
             self.__ignore_nans = ignore_nans
         else:
-            e = nmu.typeerror(ignore_nans, "ignore_nans", "boolean")
+            e = nmu.type_error_str(ignore_nans, "ignore_nans", "boolean")
             raise TypeError(e)
 
     # override, no super
@@ -349,7 +349,7 @@ class NMStatsWin(NMObject):
         elif isinstance(win, dict):
             self._win_set(win, quiet=True)
         else:
-            e = nmu.typeerror(win, "win", "dictionary")
+            e = nmu.type_error_str(win, "win", "dictionary")
             raise TypeError(e)
 
     # override
@@ -432,11 +432,11 @@ class NMStatsWin(NMObject):
         quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(win, dict):
-            e = nmu.typeerror(win, "win", "dictionary")
+            e = nmu.type_error_str(win, "win", "dictionary")
             raise TypeError(e)
         for k, v in win.items():
             if not isinstance(k, str):
-                e = nmu.typeerror(k, "key", "string")
+                e = nmu.type_error_str(k, "key", "string")
                 raise TypeError(e)
             k = k.lower()
             if k == "on":
@@ -471,7 +471,7 @@ class NMStatsWin(NMObject):
 
     def _on_set(self, on: bool, quiet: bool = nmp.QUIET) -> None:
         if not isinstance(on, bool):
-            e = nmu.typeerror(on, "on", "boolean")
+            e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
         self.__on = on
         return None
@@ -511,14 +511,14 @@ class NMStatsWin(NMObject):
             func_name = func
             func = {"name": func_name}
         else:
-            e = nmu.typeerror(func, "func", "dictionary, string or None")
+            e = nmu.type_error_str(func, "func", "dictionary, string or None")
             raise TypeError(e)
 
         if func_name is None:
             self.__func.clear()
             return None
         if not isinstance(func_name, str):
-            e = nmu.typeerror(func_name, "func_name", "string")
+            e = nmu.type_error_str(func_name, "func_name", "string")
             raise TypeError(e)
 
         found = False
@@ -623,7 +623,7 @@ class NMStatsWin(NMObject):
         if transform_list is None:
             pass
         elif not isinstance(transform_list, list):
-            e = nmu.typeerror(transform_list, "transform_list", "list")
+            e = nmu.type_error_str(transform_list, "transform_list", "list")
             raise TypeError(e)
         self.__transform = transform_list
         return None
@@ -638,7 +638,7 @@ class NMStatsWin(NMObject):
 
     def _bsln_on_set(self, on: bool, quiet: bool = nmp.QUIET) -> None:
         if not isinstance(on, bool):
-            e = nmu.typeerror(on, "on", "boolean")
+            e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
         self.__bsln_on = on
         return None
@@ -672,14 +672,14 @@ class NMStatsWin(NMObject):
         elif isinstance(func, str):
             func_name = func
         else:
-            e = nmu.typeerror(func, "func", "dictionary, string or None")
+            e = nmu.type_error_str(func, "func", "dictionary, string or None")
             raise TypeError(e)
 
         if func_name is None:
             self.__bsln_func.clear()
             return None
         if not isinstance(func_name, str):
-            e = nmu.typeerror(func_name, "func_name", "string")
+            e = nmu.type_error_str(func_name, "func_name", "string")
             raise TypeError(e)
 
         found = False
@@ -738,7 +738,7 @@ class NMStatsWin(NMObject):
         f = self.__func["name"]
 
         if not isinstance(f, str):
-            e = nmu.typeerror(f, "func_name", "string")
+            e = nmu.type_error_str(f, "func_name", "string")
             raise TypeError(e)
 
         f = f.lower()
@@ -1322,7 +1322,7 @@ def check_meanatmaxmin(
                 if isinstance(v, str):
                     func_name = v
                 else:
-                    e = nmu.typeerror(v, "func name", "string")
+                    e = nmu.type_error_str(v, "func name", "string")
                     raise TypeError(e)
             elif k == "imean":
                 if v is not None:
@@ -1332,7 +1332,7 @@ def check_meanatmaxmin(
     elif isinstance(func, str):
         func_name = func
     else:
-        e = nmu.typeerror(func, "func", "dictionary or string")
+        e = nmu.type_error_str(func, "func", "dictionary or string")
         raise TypeError(e)
     if func_name is None:
         raise KeyError("missing func key 'name'")
@@ -1362,7 +1362,7 @@ def input_meanatmaxmin(
     test_input: str | None = None
 ) -> dict:
     if not isinstance(func_name, str):
-        e = nmu.typeerror(func_name, "func_name", "string")
+        e = nmu.type_error_str(func_name, "func_name", "string")
         raise TypeError(e)
     f = func_name.lower()
     fnames = ["max", "min", "mean@max", "mean@min"]
@@ -1379,7 +1379,7 @@ def input_meanatmaxmin(
     elif isinstance(test_input, str):
         imean = int(test_input)  # might raise type error
     else:
-        e = nmu.typeerror(test_input, "test_input", "string or None")
+        e = nmu.type_error_str(test_input, "test_input", "string or None")
         raise TypeError(e)
     if math.isnan(imean) or math.isinf(imean) or imean < 0:
         raise ValueError("imean: '%s'" % imean)
@@ -1407,7 +1407,7 @@ def check_level(
                 if isinstance(v, str):
                     func_name = v
                 else:
-                    e = nmu.typeerror(v, "func name", "string")
+                    e = nmu.type_error_str(v, "func name", "string")
                     raise TypeError(e)
             elif k == "option":
                 option = int(v)  # might raise type error
@@ -1427,7 +1427,7 @@ def check_level(
     elif isinstance(func, str):
         func_name = func
     else:
-        e = nmu.typeerror(func, "func", "dictionary or string")
+        e = nmu.type_error_str(func, "func", "dictionary or string")
         raise TypeError(e)
     if func_name is None:
         raise KeyError("missing func key 'name'")
@@ -1488,7 +1488,7 @@ def input_level(
                2: "# std (nstd) > baseline",
                3: "# std (nstd) < baseline"}
     if not isinstance(func_name, str):
-        e = nmu.typeerror(func_name, "func_name", "string")
+        e = nmu.type_error_str(func_name, "func_name", "string")
         raise TypeError(e)
     f = func_name.lower()
     if f not in fnames:
@@ -1498,7 +1498,7 @@ def input_level(
     if test_input is None or isinstance(test_input, str):
         pass
     else:
-        e = nmu.typeerror(test_input, "test_input", "string or None")
+        e = nmu.type_error_str(test_input, "test_input", "string or None")
         raise TypeError(e)
     t = "stats " + f + ": "
     if option not in options:
@@ -1564,7 +1564,7 @@ def check_risefall(
                 if isinstance(v, str):
                     func_name = v
                 else:
-                    e = nmu.typeerror(func_name, "func name", "string")
+                    e = nmu.type_error_str(func_name, "func name", "string")
                     raise TypeError(e)
             elif k == "p0":
                 if v is not None:
@@ -1577,7 +1577,7 @@ def check_risefall(
     elif isinstance(func, str):
         func_name = func.lower()
     else:
-        e = nmu.typeerror(func, "func", "dictionary or string")
+        e = nmu.type_error_str(func, "func", "dictionary or string")
         raise TypeError(e)
     if func_name is None:
         raise KeyError("missing func key 'name'")
@@ -1635,7 +1635,7 @@ def input_risefall(
     fnames = ["risetime+", "risetime-", "risetimeslope+", "risetimeslope-",
               "falltime+", "falltime-", "falltimeslope+", "falltimeslope-"]
     if not isinstance(func_name, str):
-        e = nmu.typeerror(func_name, "func_name", "string")
+        e = nmu.type_error_str(func_name, "func_name", "string")
         raise TypeError(e)
     f = func_name.lower()
     if f not in fnames:
@@ -1665,7 +1665,7 @@ def input_risefall(
     elif isinstance(test_input, str):
         option = int(test_input)
     else:
-        e = nmu.typeerror(test_input, "test_input", "string or None")
+        e = nmu.type_error_str(test_input, "test_input", "string or None")
         raise TypeError(e)
     if option not in options:
         keys = list(options.keys())
@@ -1692,7 +1692,7 @@ def check_fwhm(
                 if isinstance(v, str):
                     func_name = v
                 else:
-                    e = nmu.typeerror(v, "func name", "string")
+                    e = nmu.type_error_str(v, "func name", "string")
                     raise TypeError(e)
             elif k == "p0":
                 if v is not None:
@@ -1705,7 +1705,7 @@ def check_fwhm(
     elif isinstance(func, str):
         func_name = func
     else:
-        e = nmu.typeerror(func, "func", "dictionary or string")
+        e = nmu.type_error_str(func, "func", "dictionary or string")
         raise TypeError(e)
     if func_name is None:
         raise KeyError("missing func key 'name'")
@@ -1741,14 +1741,14 @@ def stats(
 ) -> dict:  # returns results
 
     if not isinstance(data, NMData):
-        e = nmu.typeerror(data, "data", "NMData")
+        e = nmu.type_error_str(data, "data", "NMData")
         raise TypeError(e)
     if not isinstance(data.y.nparray, np.ndarray):
-        e = nmu.typeerror(data.y.nparray, "nparray", "NumPy.ndarray")
+        e = nmu.type_error_str(data.y.nparray, "nparray", "NumPy.ndarray")
         raise TypeError(e)
 
     if not isinstance(func, dict):
-        e = nmu.typeerror(func, "func", "dictionary")
+        e = nmu.type_error_str(func, "func", "dictionary")
         raise TypeError(e)
     if "name" not in func:
         e = "missing key 'name' in func dictionary"
@@ -1756,7 +1756,7 @@ def stats(
 
     f = func["name"]
     if not isinstance(f, str):
-        e = nmu.typeerror(f, "func_name", "string")
+        e = nmu.type_error_str(f, "func_name", "string")
         raise TypeError(e)
     f = f.lower()
 
@@ -1771,7 +1771,7 @@ def stats(
     if results is None:
         results = {}
     elif not isinstance(results, dict):
-        e = nmu.typeerror(results, "results", "dictionary")
+        e = nmu.type_error_str(results, "results", "dictionary")
         raise TypeError(e)
 
     # results["func"] = f
@@ -2156,7 +2156,7 @@ def find_level_crossings(
     #    x-interp = 14.3333
 
     if not isinstance(func_name, str):
-        e = nmu.typeerror(func_name, "func_name", "string")
+        e = nmu.type_error_str(func_name, "func_name", "string")
         raise TypeError(e)
 
     f = func_name.lower()
@@ -2171,7 +2171,7 @@ def find_level_crossings(
         ylevel = float(ylevel)  # might raise type error
 
     if not isinstance(yarray, np.ndarray):
-        e = nmu.typeerror(yarray, "yarray", "NumPy.ndarray")
+        e = nmu.type_error_str(yarray, "yarray", "NumPy.ndarray")
         raise TypeError(e)
 
     found_xarray = False
@@ -2186,7 +2186,7 @@ def find_level_crossings(
                  % (xarray.size, yarray.size))
             raise RuntimeError(e)
     else:
-        e = nmu.typeerror(xarray, "xarray", "NumPy.ndarray")
+        e = nmu.type_error_str(xarray, "xarray", "NumPy.ndarray")
         raise TypeError(e)
 
     if isinstance(xstart, float):
@@ -2303,7 +2303,7 @@ def linear_regression(
 ) -> tuple:  # (m, b)
 
     if not isinstance(yarray, np.ndarray):
-        e = nmu.typeerror(yarray, "yarray", "NumPy.ndarray")
+        e = nmu.type_error_str(yarray, "yarray", "NumPy.ndarray")
         raise TypeError(e)
 
     found_xarray = False
@@ -2318,7 +2318,7 @@ def linear_regression(
                  % (xarray.size, yarray.size))
             raise RuntimeError(e)
     else:
-        e = nmu.typeerror(xarray, "xarray", "NumPy.ndarray")
+        e = nmu.type_error_str(xarray, "xarray", "NumPy.ndarray")
         raise TypeError(e)
 
     if not found_xarray:
@@ -2329,7 +2329,7 @@ def linear_regression(
         elif isinstance(xstart, int) and not isinstance(xstart, bool):
             pass
         else:
-            e = nmu.typeerror(xstart, "xstart", "float")
+            e = nmu.type_error_str(xstart, "xstart", "float")
             raise TypeError(e)
 
         if isinstance(xdelta, float):
@@ -2338,7 +2338,7 @@ def linear_regression(
         elif isinstance(xdelta, int) and not isinstance(xdelta, bool):
             pass
         else:
-            e = nmu.typeerror(xdelta, "xdelta", "float")
+            e = nmu.type_error_str(xdelta, "xdelta", "float")
             raise TypeError(e)
 
         x0 = xstart
