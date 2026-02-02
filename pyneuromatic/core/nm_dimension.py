@@ -197,11 +197,9 @@ class NMDimension(NMObject):
         for k, v in scale.items():
             k = k.lower()
             if k == "label":
-                if isinstance(v, str) or v is None:
-                    self._label_set(v, quiet=quiet)
+                self._label_set(v, quiet=quiet)
             elif k == "units":
-                if isinstance(v, str) or v is None:
-                    self._units_set(v, quiet=quiet)
+                self._units_set(v, quiet=quiet)
             else:
                 raise KeyError("unknown key '%s'" % k)
         return None
@@ -222,7 +220,9 @@ class NMDimension(NMObject):
         if label is not None and not isinstance(label, str):
             e = nmu.type_error_str(label, "label", "string")
             raise TypeError(e)
-        if isinstance(label, str):
+        if label is None:
+            label = ""
+        else:
             label = label.strip()
         if label == self.__label:
             return None  # no change
@@ -248,7 +248,9 @@ class NMDimension(NMObject):
         if units is not None and not isinstance(units, str):
             e = nmu.type_error_str(units, "units", "string")
             raise TypeError(e)
-        if isinstance(units, str):
+        if units is None:
+            units = ""
+        else:
             units = units.strip()
         if units == self.__units:
             return None  # no change
@@ -399,23 +401,29 @@ class NMDimensionX(NMDimension):
         for k, v in scale.items():
             k = k.lower()
             if k == "label":
-                if isinstance(v, str) or v is None:
-                    self._label_set(v, quiet=quiet)
+                self._label_set(v, quiet=quiet)
             elif k == "units":
-                if isinstance(v, str) or v is None:
-                    self._units_set(v, quiet=quiet)
+                self._units_set(v, quiet=quiet)
             elif k == "start":
-                if isinstance(v, float) or v is None:
-                    self._start_set(v, quiet=quiet)
+                self._start_set(v, quiet=quiet)
             elif k == "delta":
-                if isinstance(v, float) or v is None:
-                    self._delta_set(v, quiet=quiet)
+                self._delta_set(v, quiet=quiet)
             elif k == "points":
-                if isinstance(v, int) or v is None:
-                    self._points_set(v, quiet=quiet)
+                self._points_set(v, quiet=quiet)
             else:
                 raise KeyError("unknown key '%s'" % k)
         return None
+
+    # override
+    @property
+    def scale(self) -> dict[str, object]:
+        s = super().scale
+        s.update({"start": self.start, "delta": self.delta})
+        return s
+
+    @scale.setter
+    def scale(self, scale: dict[str, object]) -> None:
+        self._scale_set(scale)
 
     @property
     def start(self) -> float | None:
@@ -432,19 +440,18 @@ class NMDimensionX(NMDimension):
 
     def _start_set(
         self,
-        start: float | None,
+        start: float | int,
         quiet: bool = nmp.QUIET
     ) -> None:
         if isinstance(self.nparray, np.ndarray):
             e = "scaling of this x-dimension is determined by a NumPy array"
             raise RuntimeError(e)
-        if start is not None:
-            if isinstance(start, float):
-                if math.isinf(start) or math.isnan(start):
-                    raise ValueError("start: %s" % start)
-            elif not (isinstance(start, int) and not isinstance(start, bool)):
-                e = nmu.type_error_str(start, "start", "float")
-                raise TypeError(e)
+        if isinstance(start, float):
+            if math.isinf(start) or math.isnan(start):
+                raise ValueError("start: %s" % start)
+        elif not (isinstance(start, int) and not isinstance(start, bool)):
+            e = nmu.type_error_str(start, "start", "float")
+            raise TypeError(e)
         if start == self.__start:
             return None  # no change
         self.__start = start
@@ -468,21 +475,20 @@ class NMDimensionX(NMDimension):
 
     def _delta_set(
         self,
-        delta: float | None,
+        delta: float | int,
         quiet: bool = nmp.QUIET
     ) -> None:
         if isinstance(self.nparray, np.ndarray):
             e = "scaling of this x-dimension is determined by a NumPy array"
             raise RuntimeError(e)
-        if delta is not None:
-            if isinstance(delta, float):
-                if math.isinf(delta) or math.isnan(delta):
-                    raise ValueError("delta: %s" % delta)
-            elif not (isinstance(delta, int) and not isinstance(delta, bool)):
-                e = nmu.type_error_str(delta, "delta", "float")
-                raise TypeError(e)
-            if delta == 0:
+        if isinstance(delta, float):
+            if math.isinf(delta) or math.isnan(delta):
                 raise ValueError("delta: %s" % delta)
+        elif not (isinstance(delta, int) and not isinstance(delta, bool)):
+            e = nmu.type_error_str(delta, "delta", "float")
+            raise TypeError(e)
+        if delta == 0:
+            raise ValueError("delta: %s" % delta)
         if delta == self.__delta:
             return None  # no change
         self.__delta = delta
