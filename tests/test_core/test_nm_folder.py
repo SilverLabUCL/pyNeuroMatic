@@ -107,14 +107,58 @@ class NMFolderTest(unittest.TestCase):
         c.data.sets.add(DSETS_NLIST0[0], DNLIST0[0])
         self.assertTrue(c == self.folder0)
 
-    def xtest02_copy(self):
+    def test02_notes(self):
+        # Test notes property
+        self.assertTrue(isinstance(self.folder0.notes, list))
+        self.assertEqual(len(self.folder0.notes), 0)
+
+        # Test note setter and note_add
+        self.folder0.note = "added TTX"
+        self.folder0.note_add("added AP5")
+        self.assertEqual(len(self.folder0.notes), 2)
+        self.assertEqual(self.folder0.notes[0].get("note"), "added TTX")
+        self.assertEqual(self.folder0.notes[1].get("note"), "added AP5")
+
+        # Test note getter (returns last note text)
+        self.assertEqual(self.folder0.note, "added AP5")
+
+        # Test notes have timestamps
+        self.assertIn("date", self.folder0.notes[0])
+        self.assertIn("date", self.folder0.notes[1])
+
+        # Test notes_clear
+        self.folder0.notes_clear()
+        self.assertEqual(len(self.folder0.notes), 0)
+        self.assertEqual(self.folder0.note, "")
+
+        # Test notes_ok validator
+        self.assertTrue(NMFolder.notes_ok([{"note": "hey", "date": "111"}]))
+        self.assertTrue(NMFolder.notes_ok([{"date": "111", "note": "hey"}]))
+        self.assertFalse(NMFolder.notes_ok([{"n": "hey", "date": "111"}]))
+        self.assertFalse(NMFolder.notes_ok([{"note": "hey", "d": "111"}]))
+        self.assertFalse(NMFolder.notes_ok([{"note": "hey", "date": None}]))
+        self.assertTrue(NMFolder.notes_ok([{"note": "hey", "date": "None"}]))
+        self.assertFalse(NMFolder.notes_ok([{"note": "hey"}]))
+        self.assertFalse(NMFolder.notes_ok([{"date": "111"}]))
+        self.assertFalse(
+            NMFolder.notes_ok([{"note": "hey", "date": "111", "more": "1"}])
+        )
+
+        # Test notes equality
+        self.folder0.note_add("test note")
+        c = self.folder0.copy()
+        self.assertTrue(c == self.folder0)
+        c.note_add("another note")
+        self.assertFalse(c == self.folder0)
+
+    def xtest03_copy(self):
         pass
 
-    def xtest03_content(self):
+    def xtest04_content(self):
         pass
 
-    def xtest04_data(self):
+    def xtest05_data(self):
         pass
 
-    def xtest05_folder_container(self):
+    def xtest06_folder_container(self):
         pass

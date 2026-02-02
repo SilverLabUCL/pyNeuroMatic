@@ -127,8 +127,6 @@ class NMEpoch(NMObject):
         result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
         result._NMObject__parent = self._NMObject__parent
         result._NMObject__name = self._NMObject__name
-        result._NMObject__notes_on = self._NMObject__notes_on
-        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
         result._NMObject__rename_fxnref = result._name_set
         result._NMObject__copy_of = self
 

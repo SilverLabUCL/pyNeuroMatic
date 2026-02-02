@@ -61,6 +61,7 @@ class NMFolder(NMObject):
         "_NMFolder__dataseries_container",
         "_NMFolder__toolfolder_container",
         "_NMFolder__toolresults",
+        "_NMFolder__notes",
     })
 
     def __init__(
@@ -74,10 +75,11 @@ class NMFolder(NMObject):
         self.__dataseries_container: NMDataSeriesContainer = NMDataSeriesContainer(parent=self)
         self.__toolfolder_container: NMToolFolderContainer = NMToolFolderContainer(parent=self)
         self.__toolresults: dict[str, object] = {}  # tool results saved to dict
+        self.__notes: list[dict] = []  # [{'date': 'timestamp', 'note': 'text'}]
 
     # override
     def __eq__(
-        self, 
+        self,
         other: object
     ) -> bool:
         if not isinstance(other, NMFolder):
@@ -91,6 +93,8 @@ class NMFolder(NMObject):
         if self.__toolfolder_container != other.__toolfolder_container:
             return False
         if self.__toolresults != other.__toolresults:
+            return False
+        if self.__notes != other.__notes:
             return False
         return True
 
@@ -122,8 +126,6 @@ class NMFolder(NMObject):
         result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
         result._NMObject__parent = self._NMObject__parent
         result._NMObject__name = self._NMObject__name
-        result._NMObject__notes_on = self._NMObject__notes_on
-        result._NMObject__notes = copy.deepcopy(self._NMObject__notes, memo)
         result._NMObject__rename_fxnref = result._name_set
         result._NMObject__copy_of = self
 
@@ -151,6 +153,9 @@ class NMFolder(NMObject):
         result._NMFolder__toolresults = copy.deepcopy(
             self._NMFolder__toolresults, memo
         )
+
+        # __notes: deep copy the list
+        result._NMFolder__notes = copy.deepcopy(self._NMFolder__notes, memo)
 
         return result
 
@@ -205,6 +210,76 @@ class NMFolder(NMObject):
         print("saved %s results to %s via key '%s' (%s)" %
               (tool, tp, newkey, t))
         return newkey
+
+    # Notes - experiment/recording session notes
+
+    @property
+    def notes(self) -> list[dict]:
+        """Return list of notes for this folder.
+
+        Each note is a dict with 'date' (ISO timestamp) and 'note' (text).
+        """
+        return self.__notes
+
+    @property
+    def note(self) -> str:
+        """Return the text of the most recent note, or empty string if none."""
+        if self.__notes:
+            return self.__notes[-1].get("note", "")
+        return ""
+
+    @note.setter
+    def note(self, text: str) -> None:
+        """Add a new note with the given text."""
+        self.note_add(text)
+
+    def note_add(self, text: str) -> None:
+        """Add a timestamped note to this folder.
+
+        :param text: The note text to add
+        :type text: str
+        """
+        if text is None:
+            return
+        if not isinstance(text, str):
+            text = str(text)
+        entry = {
+            "date": datetime.datetime.now().isoformat(" ", "seconds"),
+            "note": text,
+        }
+        self.__notes.append(entry)
+
+    def notes_clear(self) -> None:
+        """Clear all notes from this folder."""
+        self.__notes = []
+
+    def notes_print(self) -> None:
+        """Print all notes to stdout."""
+        for n in self.__notes:
+            date = n.get("date", "")
+            text = n.get("note", "")
+            print(f"{date}  {text}")
+
+    @staticmethod
+    def notes_ok(notes: list[dict]) -> bool:
+        """Validate notes format.
+
+        :param notes: List of note dicts to validate
+        :type notes: list[dict]
+        :return: True if format is valid
+        :rtype: bool
+        """
+        if not isinstance(notes, list):
+            return False
+        for n in notes:
+            if not isinstance(n, dict):
+                return False
+            keys = n.keys()
+            if len(keys) != 2 or "date" not in keys or "note" not in keys:
+                return False
+            if not isinstance(n["date"], str) or not isinstance(n["note"], str):
+                return False
+        return True
 
 
 class NMFolderContainer(NMObjectContainer):

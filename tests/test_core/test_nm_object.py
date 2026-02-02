@@ -105,20 +105,6 @@ class NMObjectTest(unittest.TestCase):
         o1.myvalue = 2
         self.assertTrue(o0 == o1)
 
-        o0.note = "my note"
-        o1.note = "my note"
-        self.assertTrue(o0 == o1)  # notes not tested
-        # o0._eq_list.append("notes")
-        # self.assertFalse(o0 == o1)  # notes tested, different time stamps
-        o0._notes_delete(auto_confirm="y")
-        o1._notes_delete(auto_confirm="y")
-        self.assertTrue(o0 == o1)
-        o0.note = "my note 0"
-        o0.note = "my note 1"
-        for n in o0.notes:
-            o1._NMObject__notes.append(dict(n))  # notes have same time stamp
-        self.assertTrue(o0 == o1)
-
     def test02_lists_are_equal(self):
         olist0 = []
         for i in range(10):
@@ -229,36 +215,7 @@ class NMObjectTest(unittest.TestCase):
         expected_str = NM0.name + "." + ONAME0 + ".myobject"
         self.assertEqual(o2.myobject.path_str, expected_str)
 
-    def test07_notes(self):
-        self.assertTrue(self.o0.notes_on)
-        self.o0.note = "added TTX"
-        self.assertTrue(self.o0._notes_append("added AP5"))
-        self.o0.notes_on = None
-        self.assertTrue(self.o0.notes_on)
-        self.o0.notes_on = True
-        self.assertTrue(self.o0.notes_on)
-        self.o0.notes_on = False
-        self.assertFalse(self.o0.notes_on)
-        self.assertFalse(self.o0._notes_append("added NBQX"))
-        self.assertTrue(isinstance(self.o0.notes, list))
-        self.assertEqual(len(self.o0.notes), 2)
-        self.assertEqual(self.o0.notes[0].get("note"), "added TTX")
-        self.assertEqual(self.o0.notes[1].get("note"), "added AP5")
-        self.o0._notes_delete(auto_confirm="y")
-        self.assertEqual(len(self.o0.notes), 0)
-        self.assertTrue(NMObject.notes_ok([{"note": "hey", "date": "111"}]))
-        self.assertTrue(NMObject.notes_ok([{"date": "111", "note": "hey"}]))
-        self.assertFalse(NMObject.notes_ok([{"n": "hey", "date": "111"}]))
-        self.assertFalse(NMObject.notes_ok([{"note": "hey", "d": "111"}]))
-        self.assertFalse(NMObject.notes_ok([{"note": "hey", "date": None}]))
-        self.assertTrue(NMObject.notes_ok([{"note": "hey", "date": "None"}]))
-        self.assertFalse(NMObject.notes_ok([{"note": "hey"}]))
-        self.assertFalse(NMObject.notes_ok([{"date": "111"}]))
-        self.assertFalse(
-            NMObject.notes_ok([{"note": "hey", "date": "111", "more": "1"}])
-        )
-
-    def test08_name_set(self):
+    def test07_name_set(self):
         # args: name_notused
         # args: newname
 
@@ -277,7 +234,7 @@ class NMObjectTest(unittest.TestCase):
             self.o0._name_set("notused", n)
             self.assertEqual(n, self.o0.name)
 
-    def test09_rename_fxnref_set(self):
+    def test08_rename_fxnref_set(self):
         # args: rename_fxnref
 
         bad = list(nmu.BADTYPES)
@@ -296,16 +253,16 @@ class NMObjectTest(unittest.TestCase):
         print("test rename: " + oldname + " -> " + newname)
         return False
 
-    def test10_manager(self):
+    def test09_manager(self):
         self.assertEqual(self.o0._manager, NM0)
 
-    def test11_error(self):
+    def test10_error(self):
         pass
         # alert(), error(), history()
         # wrappers for history()
         # args: obj, type_expected, tp, quiet, frame
 
-    def test12_quiet(self):
+    def test11_quiet(self):
         # args: quiet
         # TODO
         """
