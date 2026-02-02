@@ -453,9 +453,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     def pop(  # type: ignore[override]
         self,
         key: str,
-        default: object = _POPDEFAULT,
-        *,
-        auto_confirm: str | None = None,  # to skip confirm prompt (keyword-only)
+        default: object = _POPDEFAULT
     ) -> NMObject | None:
         # Check if key exists, raise KeyError if not and no default provided
         actual_key = self._getkey(key)
@@ -463,18 +461,6 @@ class NMObjectContainer(NMObject, MutableMapping):
             if default is self._POPDEFAULT:
                 raise KeyError(key)
             return default  # type: ignore
-        if nmp.DELETE_CONFIRM:
-            if auto_confirm in nmu.CONFIRM_YNC:
-                ync = auto_confirm
-            else:
-                prompt = "are you sure you want to delete '%s'?" % actual_key
-                ync = nmu.prompt_yes_no(prompt, path=self.path_str)
-            if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
-                pass
-            else:
-                print("cancel pop '%s'" % actual_key)
-                # Return None when cancelled (regardless of default)
-                return None
         if isinstance(self.selected_name, str):
             if self.selected_name.lower() == actual_key.lower():
                 self.selected_name = None
@@ -483,11 +469,9 @@ class NMObjectContainer(NMObject, MutableMapping):
         return o
 
     # override MutableMapping mixin method
-    def popitem(  # type: ignore[override]  # delete last item
-        self,
-        *,
-        auto_confirm: str | None = None  # to skip confirm prompt (keyword-only)
-    ) -> tuple[str, NMObject] | tuple[()]:
+    # type: ignore[override]
+    # # delete last item
+    def popitem(self) -> tuple[str, NMObject] | tuple[()]:
         """
         Must override, otherwise first item is deleted rather than last.
         Returns empty tuple () if cancelled or failed to pop.
@@ -498,35 +482,18 @@ class NMObjectContainer(NMObject, MutableMapping):
             raise KeyError("popitem(): mapping is empty")
         klist = list(self.__map.keys())
         key = klist[-1]  # last key
-        o = self.pop(key=key, auto_confirm=auto_confirm, default=None)
+        o = self.pop(key=key, default=None)
         if o:
             return (key, o)
         return ()  # Return empty tuple if cancelled
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
-    def clear(
-        self,
-        *,
-        auto_confirm: str | None = None  # to skip confirm prompt (keyword-only)
-    ) -> None:
+    def clear(self) -> None:
         if len(self) == 0:
             return
-        if nmp.DELETE_CONFIRM:
-            if auto_confirm in nmu.CONFIRM_YNC:
-                ync = auto_confirm
-            else:
-                q = "are you sure you want to delete the following?\n" + ", ".join(
-                    self.__map.keys()
-                )
-                ync = nmu.prompt_yes_no(q, path=self.path_str)
-            if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
-                pass
-            else:
-                print("cancel delete all")
-                return
         self.selected_name = None
-        self.sets.empty_all(auto_confirm="y")
+        self.sets.empty_all()
         self.__map.clear()
 
     # override MutableMapping mixin method

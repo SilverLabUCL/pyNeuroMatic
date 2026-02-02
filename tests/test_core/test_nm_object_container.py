@@ -299,14 +299,7 @@ class NMObjectContainerTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             del self.map0["test"]
 
-        print("\nanswer NO")
-        with patch('pyneuromatic.core.nm_utilities.prompt_yes_no', return_value='n'):
-            del self.map0[ONLIST0[1]]
-        self.assertTrue(ONLIST0[1] in self.map0)
-
-        print("\nanswer YES")
-        with patch('pyneuromatic.core.nm_utilities.prompt_yes_no', return_value='y'):
-            del self.map0[ONLIST0[1]]
+        del self.map0[ONLIST0[1]]
         self.assertFalse(ONLIST0[1] in self.map0)
         with self.assertRaises(KeyError):
             del self.map0[ONLIST0[1]]
@@ -407,10 +400,7 @@ class NMObjectContainerTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.map0.pop("test")
 
-        o = self.map0.pop(ONLIST0[1], auto_confirm="n")
-        self.assertIsNone(o)
-        self.assertTrue(ONLIST0[1] in self.map0)
-        o = self.map0.pop(ONLIST0[1], auto_confirm="y")
+        o = self.map0.pop(ONLIST0[1])
         self.assertEqual(o, self.olist0[1])
         self.assertFalse(ONLIST0[1] in self.map0)
 
@@ -418,7 +408,7 @@ class NMObjectContainerTest(unittest.TestCase):
             o = self.map0.pop(ONLIST0[1])
 
         for i, n in enumerate(ONLIST1):
-            o = self.map1.pop(n, auto_confirm="y")
+            o = self.map1.pop(n)
             self.assertEqual(o, self.olist1[i])
             self.assertFalse(n in self.map1)
         self.assertEqual(len(self.map1), 0)
@@ -427,23 +417,17 @@ class NMObjectContainerTest(unittest.TestCase):
         # with self.assertRaises(RuntimeError):
         #    self.map0.popitem()  # NOT ALLOWED
         # popitem returns a tuple
-        o = self.map0.popitem(auto_confirm="n")
-        self.assertEqual(o, ())
-        self.assertTrue(ONLIST0[-1] in self.map0)
-        o = self.map0.popitem(auto_confirm="y")
+        o = self.map0.popitem()
         self.assertFalse(ONLIST0[-1] in self.map0)
         t = (ONLIST0[-1], self.olist0[-1])
         self.assertEqual(o, t)
         for i, n in reversed(list(enumerate(ONLIST1))):
-            o = self.map1.popitem(auto_confirm="y")
+            o = self.map1.popitem()
             self.assertFalse(n in self.map1)
         self.assertEqual(len(self.map1), 0)
 
     def test19_clear(self):
-        o = self.map0.clear(auto_confirm="n")
-        self.assertIsNone(o)
-        self.assertEqual(len(self.map0), len(ONLIST0))
-        o = self.map0.clear(auto_confirm="y")
+        o = self.map0.clear()
         self.assertIsNone(o)
         self.assertEqual(len(self.map0), 0)
 
@@ -591,7 +575,7 @@ class NMObjectContainerTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.map1.rename(ONLIST0[0], 'test')  # rename_on = False
         
-        self.map0.pop(ONLIST0[3], auto_confirm="y")
+        self.map0.pop(ONLIST0[3])
         self.assertFalse(ONLIST0[3] in self.map0)
         klist = [OPREFIX0 + str(i) for i in [0, 1, 2, 4, 5]]
         self.assertEqual(list(self.map0.keys()), klist)
@@ -882,7 +866,7 @@ class NMObjectContainerTest(unittest.TestCase):
         self.assertIsNone(self.map0.selected_name)
 
         self.map0.selected_name = ONLIST0[3]
-        self.map0.pop(ONLIST0[3], auto_confirm="y")
+        self.map0.pop(ONLIST0[3])
         self.assertIsNone(self.map0.selected_name)
 
         # print((nmu.quotes('test') + ' this' '1'))

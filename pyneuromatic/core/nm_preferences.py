@@ -19,7 +19,6 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 DATASERIES_SET_LIST = ["all", "set1", "set2", "setX"]
-DELETE_CONFIRM = True
 QUIET = False
 GUI = False
 NAN_EQ_NAN = True  # in Python nan != nan, use this flag so that nan == nan

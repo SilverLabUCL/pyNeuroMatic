@@ -345,7 +345,7 @@ class NMSetsTest(unittest.TestCase):
         olist2 = self.sets0.get("set99")
         self.assertEqual(nlist, nlist2)
         self.assertEqual(olist, olist2)
-        self.sets0.pop("set99", auto_confirm="y")
+        self.sets0.pop("set99")
 
         for i, (k, v) in enumerate(self.sets0.items()):
             d = self.sets0_init[i]
@@ -642,17 +642,13 @@ class NMSetsTest(unittest.TestCase):
             self.sets0.pop("test")  # does not exist
 
         self.assertTrue(sname0 in self.sets0)
-        olist = self.sets0.pop(sname0, auto_confirm="n")
-        self.assertTrue(sname0 in self.sets0)
-        self.assertIsNone(olist)
-
-        olist = self.sets0.pop(sname0, auto_confirm="y")
+        olist = self.sets0.pop(sname0)
         self.assertFalse(sname0 in self.sets0)
         self.assertEqual(olist, olist0)
         olist = self.sets0.get(sname0)
         self.assertIsNone(olist)
 
-        olist = self.sets0.pop(sname1, auto_confirm="y")
+        olist = self.sets0.pop(sname1)
         self.assertFalse(sname1 in self.sets0)
         self.assertEqual(olist, olist1)
         olist = self.sets0.get(sname1)
@@ -662,7 +658,6 @@ class NMSetsTest(unittest.TestCase):
         # pop last set
 
         n_sets = len(self.sets0)
-        first = True
         for i in range(n_sets):
             j = -1 * (i + 1)
 
@@ -672,20 +667,13 @@ class NMSetsTest(unittest.TestCase):
 
             self.assertTrue(sname in self.sets0)
 
-            if first:
-                olist2 = self.sets0.popitem(auto_confirm="n")
-                self.assertTrue(sname in self.sets0)
-                self.assertEqual(olist2, ())  # empty tuple
-                first = False
-
-            olist2 = self.sets0.popitem(auto_confirm="y")
+            olist2 = self.sets0.popitem()
             self.assertFalse(sname in self.sets0)
             self.assertEqual(olist2, (sname, olist))  # tuple
 
         self.assertEqual(len(self.sets0), 0)
 
         n_sets = len(self.sets1)
-        first = True
         for i in range(n_sets):
             j = -1 * (i + 1)
 
@@ -696,13 +684,7 @@ class NMSetsTest(unittest.TestCase):
 
             self.assertTrue(sname in self.sets1)
 
-            if first:
-                olist2 = self.sets1.popitem(auto_confirm="n")
-                self.assertTrue(sname in self.sets1)
-                self.assertEqual(olist2, ())  # empty tuple
-                first = False
-
-            olist2 = self.sets1.popitem(auto_confirm="y")
+            olist2 = self.sets1.popitem()
             self.assertFalse(sname in self.sets1)
             if eqlist:
                 self.assertEqual(olist2, (sname, eqlist))  # tuple
@@ -712,17 +694,12 @@ class NMSetsTest(unittest.TestCase):
         self.assertEqual(len(self.sets1), 0)
 
     def xtest16_clear(self):
-        self.sets0.clear(auto_confirm="n")
-        for d in self.sets0_init:
-            sname = d["name"].upper()
-            self.assertTrue(sname in self.sets0)
-
-        self.sets0.clear(auto_confirm="y")
+        self.sets0.clear()
         for d in self.sets0_init:
             sname = d["name"].upper()
             self.assertFalse(sname in self.sets0)
 
-        self.sets1.clear(auto_confirm="y")
+        self.sets1.clear()
         for d in self.sets1_init:
             sname = d["name"].upper()
             self.assertFalse(sname in self.sets1)
@@ -1166,30 +1143,17 @@ class NMSetsTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.sets0.empty("test")
 
-        self.sets0.empty(sname0, auto_confirm="n")
-        self.assertTrue(sname0 in self.sets0)
-        self.assertEqual(self.sets0.get(sname0), olist0)
-
-        self.sets0.empty(sname0, auto_confirm="y")
+        self.sets0.empty(sname0)
         self.assertEqual(self.sets0.get(sname0), [])
 
         d = self.sets1_init[-1]
         sname1 = d["name"]
 
-        self.sets1.empty(sname1, auto_confirm="y")
+        self.sets1.empty(sname1)
         self.assertEqual(self.sets1.get(sname1), [])
 
     def xtest32_emptyall(self):
-        # args: confirm
-
-        self.sets0.empty_all(auto_confirm="n")
-
-        for d in self.sets0_init:
-            sname = d["name"]
-            olist = d["olist"]
-            self.assertEqual(self.sets0.get(sname), olist)
-
-        self.sets0.empty_all(auto_confirm="y")
+        self.sets0.empty_all()
 
         for d in self.sets0_init:
             sname = d["name"]
@@ -1383,7 +1347,7 @@ class NMSetsTest(unittest.TestCase):
         eqlist2 = self.sets1.get("select", get_equation=True)
         self.assertEqual(eqlist, eqlist2)
 
-        self.sets1.pop(sname, auto_confirm="y")
+        self.sets1.pop(sname)
         self.assertIsNone(self.sets1.select_key)
 
     def xtest37_equation(self):
@@ -1432,7 +1396,7 @@ class NMSetsTest(unittest.TestCase):
             self.assertTrue(o.name in s3)
 
         self.sets0.update({sname3: eqlist})
-        self.sets0.empty(sname3, auto_confirm="y")
+        self.sets0.empty(sname3)
         self.assertEqual(self.sets0.get(sname3), [])
 
         eqlist = [sname0, "&", sname1]
