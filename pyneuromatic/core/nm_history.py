@@ -111,6 +111,7 @@ class NMHistory:
     ) -> None:
         self._logger = logging.getLogger("pyneuromatic")
         self._logger.setLevel(logging.DEBUG)
+        self._logger.propagate = False  # prevent duplicate output to root logger
 
         # prevent duplicate handlers if NMHistory is created multiple times
         self._logger.handlers.clear()

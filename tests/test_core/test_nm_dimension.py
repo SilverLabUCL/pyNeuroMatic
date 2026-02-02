@@ -120,7 +120,7 @@ class NMDimensionTest(unittest.TestCase):
 
     def test03_parameters(self):
         klist = ["name", "created", "copy of"]  # NMObject
-        klist += ["label", "units"]
+        klist += ["nparray", "label", "units"]
         plist = self.y0.parameters
         self.assertEqual(klist, list(plist.keys()))
         self.assertEqual(plist["name"], YSNAME0)
@@ -131,12 +131,13 @@ class NMDimensionTest(unittest.TestCase):
         plist = self.y0_copy.parameters
         self.assertEqual(klist, list(plist.keys()))
         self.assertEqual(plist["name"], YSNAME0)
-        self.assertEqual(plist["copy of"], YSNAME0)
+        tp = NM.name + "." + YSNAME0
+        self.assertEqual(plist["copy of"], tp)
         self.assertEqual(plist["label"], YSCALE0["label"])
         self.assertEqual(plist["units"], YSCALE0["units"])
 
         klist = ["name", "created", "copy of"]  # NMObject
-        klist += ["label", "units", "start", "delta"]
+        klist += ["nparray", "label", "units", "start", "delta"]
         plist = self.x0.parameters
         self.assertEqual(klist, list(plist.keys()))
         self.assertEqual(plist["name"], XSNAME0)

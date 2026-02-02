@@ -957,7 +957,10 @@ class NMStatsTest(unittest.TestCase):
                 p = nms.input_risefall(f, test_input=str(k))
                 self.assertEqual(p["name"], f)
                 self.assertEqual(p["p0"], v[0])
-                self.assertEqual(p["p1"], v[1])
+                if v[1] is None:
+                    self.assertTrue(numpy.isnan(p["p1"]))
+                else:
+                    self.assertEqual(p["p1"], v[1])
 
     def test99_check_fwhm(self):
         for b in nmu.badtypes(ok=[{}, "string"]):
