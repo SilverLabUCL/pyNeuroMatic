@@ -10,7 +10,7 @@ import unittest
 
 from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.core.nm_project import NMProject, NMProjectContainer
+from pyneuromatic.core.nm_project import NMProject
 import pyneuromatic.core.nm_utilities as nmu
 
 QUIET = True
@@ -57,16 +57,6 @@ class NMProjectTest(unittest.TestCase):
         self.project1.folders.sets.add(FSETS_NLIST1[1], slist)
         slist = [FSETS_NLIST1[0], "|", FSETS_NLIST1[1]]
         self.project1.folders.sets.add(FSETS_NLIST1[2], slist)
-
-        self.projectcontainer = NMProjectContainer(parent=NM)
-        self.projectcontainer.update([self.project0, self.project1])
-        self.projectcontainer.selected_name = PNAME0
-
-        self.projectcontainer.sets.add(PSETS_NLIST[0], PNAME0)
-        self.projectcontainer.sets.add(PSETS_NLIST[1], PNAME1)
-        self.projectcontainer.sets.add(
-            PSETS_NLIST[2], [PSETS_NLIST[0], "|", PSETS_NLIST[1]]
-        )
 
     def test00_init(self):
         # args: parent, name, copy (see NMObject)
@@ -156,57 +146,3 @@ class NMProjectTest(unittest.TestCase):
         self.assertTrue(isinstance(self.project0.folders, NMFolderContainer))
         with self.assertRaises(AttributeError):
             self.project0.folders = None
-
-    def test05_project_container(self):
-        self.assertEqual(len(self.projectcontainer), 2)
-        p = self.projectcontainer.new("project2")
-        self.assertEqual(len(self.projectcontainer), 3)
-        self.assertTrue(isinstance(p, NMProject))
-        self.assertEqual(p.name, "project2")
-        self.assertTrue(p in self.projectcontainer)
-        self.assertTrue(self.project0 in self.projectcontainer)
-        self.assertTrue(self.project1 in self.projectcontainer)
-        self.assertTrue(PNAME0.upper() in self.projectcontainer)
-        self.assertTrue(PNAME1.upper() in self.projectcontainer)
-        for p in self.projectcontainer.values():
-            self.assertEqual(p._parent, NM)
-        self.assertEqual(self.projectcontainer.content_type(), NMProject.__name__)
-
-        self.projectcontainer.sets.add("set0", "project2")
-        self.projectcontainer.sets.add("set1", "project2")
-
-        c = self.projectcontainer.copy()
-        self.assertTrue(c == self.projectcontainer)
-        self.assertEqual(len(c), 3)
-        self.assertFalse(p in c)
-        self.assertFalse(self.project0 in c)
-        self.assertFalse(self.project1 in c)
-        self.assertTrue(p.name.upper() in c)
-        self.assertTrue(self.project0.name.upper() in c)
-        self.assertTrue(self.project1.name.upper() in c)
-        self.assertEqual(c.selected_name, PNAME0)
-        p = c.get(PNAME0)
-        self.assertFalse(p is self.project0)
-        self.assertTrue(p == self.project0)
-        p = c.get(PNAME1)
-        self.assertFalse(p is self.project1)
-        self.assertTrue(p == self.project1)
-
-        self.assertEqual(len(c.sets), 3)
-        self.assertTrue("set0" in c.sets)
-        self.assertTrue("set1" in c.sets)
-        self.assertTrue("set2" in c.sets)
-        self.assertFalse("set3" in c.sets)
-        self.assertTrue(c.sets.contains("set0", PNAME0))
-        self.assertFalse(c.sets.contains("set0", PNAME1))
-        self.assertTrue(c.sets.contains("set2", PNAME1))
-        self.assertTrue(c.sets.is_equation("set2"))
-
-        self.assertEqual(len(p.folders), len(FNLIST1))
-        for f in FNLIST1:
-            self.assertTrue(f in p.folders)
-        for s in FSETS_NLIST1:
-            self.assertTrue(s in p.folders.sets)
-        self.assertEqual(len(p.folders.sets), len(FSETS_NLIST1))
-        for s in FSETS_NLIST1:
-            self.assertTrue(s in p.folders.sets)

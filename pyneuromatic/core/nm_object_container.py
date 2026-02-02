@@ -45,22 +45,21 @@ class NMObjectContainer(NMObject, MutableMapping):
     NM class tree:
 
     NMManager
-        NMProjectContainer
-            NMProject (project0, project1...)
-                NMFolderContainer
-                    NMFolder (folder0, folder1...)
-                        NMDataContainer
-                            NMData (recordA0, recordA1... avgA0, avgB0)
-                        NMDataSeriesContainer
-                            NMDataSeries (record, avg...)
-                                NMChannelContainer
-                                    NMChannel (A, B, C...)
-                                NMEpochContainer
-                                    NMEpoch (E0, E1, E2...)
+        NMProject (project0)
+            NMFolderContainer
+                NMFolder (folder0, folder1...)
+                    NMDataContainer
+                        NMData (recordA0, recordA1... avgA0, avgB0)
+                    NMDataSeriesContainer
+                        NMDataSeries (record, avg...)
+                            NMChannelContainer
+                                NMChannel (A, B, C...)
+                            NMEpochContainer
+                                NMEpoch (E0, E1, E2...)
 
     Known children of NMObjectContainer:
         NMChannelContainer, NMDataContainer, NMDataSeriesContainer,
-        NMEpochContainer, NMFolderContainer, NMProjectContainer
+        NMEpochContainer, NMFolderContainer
 
     A NMObjectContainer behaves like a Python dictionary, where each
     NMObject is entered with a key (k) and value (v). The NMObject name

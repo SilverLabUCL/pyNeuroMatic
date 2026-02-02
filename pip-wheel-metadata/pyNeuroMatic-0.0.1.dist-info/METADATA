@@ -91,7 +91,7 @@ Current/Future Features
 
     In [1]: nm.projects.new('MyProject0')
 
-NMObjectContainer is the parent class of all NM containers (NMProjectContainer, NMFolderContainer, NMDataContainer...). Each NMObjectContainer holds one or more NMObjects (NMProject, NMFolder, NMData...).
+NMObjectContainer is the parent class of all NM containers (NMFolderContainer, NMDataContainer...). Each NMObjectContainer holds one or more NMObjects (NMProject, NMFolder, NMData...).
 
 Each NMObjectContainer also contains sets (NMSets). NMObjects can be placed in NMSets and these NMSets can then be used to specify what projects, folders and data is to be analysed. NMSets can be functions of each other, for example: 'Set3' = ['Set1', '&', 'Set2'].
 
@@ -102,18 +102,17 @@ A NMDataSeries define data acquired from data acquisition (DAQ) devices, allowin
 NM's container tree hierarchy is as follows:
 
     NMManager (nm)
-        NMProjectContainer
-            NMProject (e.g. 'MyProject0', 'MyProject1'...)
-                NMFolderContainer
-                    NMFolder (e.g. 'MyFolder0', 'MyFolder1'...)
-                        NMDataContainer
-                            NMData (e.g. 'RecordA0', 'RecordA1'... 'AvgA0', 'AvgB0')
-                        NMDataSeriesContainer
-                            NMDataSeries (e.g. 'Record', 'Avg'...)
-                                NMChannelContainer
-                                    NMChannel ('A', 'B', 'C'...)
-                                NMEpochContainer
-                                    NMEpoch ('E0', 'E1', 'E2'...)
+        NMProject (e.g. 'MyProject0', 'MyProject1'...)
+            NMFolderContainer
+                NMFolder (e.g. 'MyFolder0', 'MyFolder1'...)
+                    NMDataContainer
+                        NMData (e.g. 'RecordA0', 'RecordA1'... 'AvgA0', 'AvgB0')
+                    NMDataSeriesContainer
+                        NMDataSeries (e.g. 'Record', 'Avg'...)
+                            NMChannelContainer
+                                NMChannel ('A', 'B', 'C'...)
+                            NMEpochContainer
+                                NMEpoch ('E0', 'E1', 'E2'...)
 
 (2) NM container 'select' items. Each NMObjectContainer has one selected item (e.g. nm.projects.select_key = 'MyProject0'). The selected items in NM's container tree create a unique path through the tree. The selected items are accessible via NM's manager (nm): nm.select_values or nm.select_keys. Here is an example of printing nm.select_keys via CLI:
 

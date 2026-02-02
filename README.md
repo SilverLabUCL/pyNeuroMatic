@@ -192,18 +192,17 @@ nm.projects.new('MyProject0')
 
 ```
 NMManager (nm)
-    NMProjectContainer
-        NMProject (e.g. 'MyProject0', 'MyProject1'...)
-            NMFolderContainer
-                NMFolder (e.g. 'MyFolder0', 'MyFolder1'...)
-                    NMDataContainer
-                        NMData (e.g. 'RecordA0', 'RecordA1'... 'AvgA0', 'AvgB0')
-                    NMDataSeriesContainer
-                        NMDataSeries (e.g. 'Record', 'Avg'...)
-                            NMChannelContainer
-                                NMChannel ('A', 'B', 'C'...)
-                            NMEpochContainer
-                                NMEpoch ('E0', 'E1', 'E2'...)
+    NMProject (e.g. 'MyProject0')
+        NMFolderContainer
+            NMFolder (e.g. 'MyFolder0', 'MyFolder1'...)
+                NMDataContainer
+                    NMData (e.g. 'RecordA0', 'RecordA1'... 'AvgA0', 'AvgB0')
+                NMDataSeriesContainer
+                    NMDataSeries (e.g. 'Record', 'Avg'...)
+                        NMChannelContainer
+                            NMChannel ('A', 'B', 'C'...)
+                        NMEpochContainer
+                            NMEpoch ('E0', 'E1', 'E2'...)
 ```
 
 ### Selection and Execution (✅ Implemented)
