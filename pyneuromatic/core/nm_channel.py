@@ -89,7 +89,7 @@ class NMChannel(NMObject):
         elif isinstance(xscale, dict):
             self.__x = NMDimensionX(parent=self, name="xscale", scale=xscale)
         else:
-            e = nmu.typeerror(xscale, "xscale", "dictionary or NMDimensionX")
+            e = nmu.type_error_str(xscale, "xscale", "dictionary or NMDimensionX")
             raise TypeError(e)
 
         # Initialize __y based on yscale parameter
@@ -100,7 +100,7 @@ class NMChannel(NMObject):
         elif isinstance(yscale, dict):
             self.__y = NMDimension(parent=self, name="yscale", scale=yscale)
         else:
-            e = nmu.typeerror(yscale, "yscale", "dictionary or NMDimension")
+            e = nmu.type_error_str(yscale, "yscale", "dictionary or NMDimension")
             raise TypeError(e)
 
     # override

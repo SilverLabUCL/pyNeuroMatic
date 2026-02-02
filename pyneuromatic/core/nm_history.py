@@ -25,10 +25,13 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 from __future__ import annotations
 
 import datetime
+import inspect
 import logging
 from collections import deque
 
 from colorama import Fore
+
+import pyneuromatic.core.nm_preferences as nmp
 
 
 class NMHistoryBufferHandler(logging.Handler):
@@ -64,7 +67,7 @@ class NMHistoryBufferHandler(logging.Handler):
 class NMConsoleHandler(logging.Handler):
     """Logging handler that prints to console with colorama colors.
 
-    Replicates the output format of nmu.history(): path prefix,
+    Replicates the output format of history(): path prefix,
     optional title, and red coloring for WARNING/ERROR levels.
     """
 
@@ -148,7 +151,7 @@ class NMHistory:
         :return: formatted history string.
         :rtype: str
         """
-        # build return string matching current nmu.history() format
+        # build return string matching current history() format
         if path and path.upper() != "NONE":
             h = path + ": " + message
         else:
@@ -226,3 +229,257 @@ class NMHistory:
             self._console_handler.setLevel(logging.CRITICAL + 1)
         else:
             self._console_handler.setLevel(logging.DEBUG)
+
+
+# Module-level history instance (set by NMManager.__init__ via set_history())
+_nm_history: NMHistory | None = None
+
+
+def set_history(history_instance: NMHistory | None) -> None:
+    """Register the active NMHistory instance.
+
+    Called by NMManager.__init__() to connect the centralized
+    history log to the history() function.
+
+    :param history_instance: NMHistory instance or None.
+    :type history_instance: NMHistory | None
+    """
+    global _nm_history
+    _nm_history = history_instance
+
+
+def history_change_str(
+    param_name: str,
+    old_value: object,
+    new_value: object,
+) -> str:
+    """Create history text for variables that have changed.
+
+    :param param_name: name of parameter that has changed.
+    :type param_name: str
+    :param old_value: old value of parameter.
+    :type old_value: object
+    :param new_value: new value of parameter.
+    :type new_value: object
+    :return: history string containing the change.
+    :rtype: str
+    """
+    if not isinstance(param_name, str):
+        param_name = str(param_name)
+    if not isinstance(old_value, str):
+        if old_value is None:
+            old_value = "None"
+        else:
+            old_value = "'%s'" % old_value
+    if not isinstance(new_value, str):
+        if new_value is None:
+            new_value = "None"
+        else:
+            new_value = "'%s'" % new_value
+    h = "changed " + param_name + " from " + old_value + " to " + new_value
+    return h
+
+
+def history(
+    message: str,
+    title: str = "",
+    path: str | None = None,
+    frame: int = 1,
+    red: bool = False,
+    quiet: bool = False,
+) -> str:
+    """Print message to NM history.
+
+    This function checks nmp.QUIET internally, so callers don't need to.
+
+    :param message: message to print.
+    :type message: str
+    :param title: message title (e.g. 'ALERT' or 'ERROR').
+    :type title: str
+    :param path: function path, pass '' for default or 'NONE' for none.
+    :type path: str | None
+    :param frame: inspect frame # for creating path.
+    :type frame: int
+    :param red: True to print red, False to print black.
+    :type red: bool
+    :param quiet: True to not print message, False to print.
+    :type quiet: bool
+    :return: history string.
+    :rtype: str
+    """
+    # Check global QUIET flag
+    if nmp.QUIET:
+        quiet = True
+
+    if not isinstance(message, str):
+        return ""
+    if not isinstance(frame, int) or frame < 0:
+        frame = 1
+    if path is None:
+        path = get_path(inspect.stack(), frame=frame)
+    elif not isinstance(path, str):
+        path = ""
+
+    # determine log level from title/red
+    if isinstance(title, str) and title.upper() == "ERROR":
+        level = logging.ERROR
+    elif isinstance(title, str) and title.upper() == "ALERT" or red:
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+
+    # delegate to NMHistory if available
+    if _nm_history is not None:
+        return _nm_history.log(
+            message, title=title, path=path, level=level, quiet=quiet
+        )
+
+    # fallback: original print() behavior (before NMManager is created)
+    if path:
+        h = path + ": " + message
+    else:
+        h = message
+    if isinstance(title, str) and len(title) > 0:
+        h = title + ": " + h
+    if not quiet:
+        if red:
+            print(Fore.RED + h + Fore.BLACK)
+        else:
+            print(h)
+    return h
+
+
+def alert(
+    message: str,
+    path: str | None = None,
+    quiet: bool = False,
+) -> str:
+    """Log an alert message.
+
+    Convenience wrapper for history() with ALERT title.
+
+    :param message: message to print.
+    :type message: str
+    :param path: function path.
+    :type path: str | None
+    :param quiet: True to not print message.
+    :type quiet: bool
+    :return: history string.
+    :rtype: str
+    """
+    return history(message, title="ALERT", path=path, red=True, quiet=quiet)
+
+
+def error(
+    message: str,
+    path: str | None = None,
+    quiet: bool = False,
+) -> str:
+    """Log an error message.
+
+    Convenience wrapper for history() with ERROR title.
+
+    :param message: message to print.
+    :type message: str
+    :param path: function path.
+    :type path: str | None
+    :param quiet: True to not print message.
+    :type quiet: bool
+    :return: history string.
+    :rtype: str
+    """
+    return history(message, title="ERROR", path=path, red=True, quiet=quiet)
+
+
+def _get_frame_from_stack(stack: list, frame: int = 1) -> inspect.FrameType | None:
+    """Extract and validate a frame from the stack.
+
+    :param stack: stack list from inspect.stack().
+    :type stack: list
+    :param frame: frame index to extract.
+    :type frame: int
+    :return: frame object or None if invalid.
+    :rtype: inspect.FrameType | None
+    """
+    if not stack:
+        return None
+    if not isinstance(frame, int) or frame < 0:
+        frame = 1
+    if len(stack) <= frame:
+        return None
+    f = stack[frame].frame
+    if not inspect.isframe(f):
+        return None
+    return f
+
+
+def get_path(
+    stack: list,
+    frame: int = 1,
+    package: str = "nm",
+) -> str:
+    """Create function ancestry path.
+
+    :param stack: stack list from inspect.stack().
+    :type stack: list
+    :param frame: frame index for creating path.
+    :type frame: int
+    :param package: package prefix, e.g. 'nm'.
+    :type package: str
+    :return: path string like 'nm.ClassName.method_name'.
+    :rtype: str
+    """
+    path = [package] if package else []
+    c = get_class_from_stack(stack, frame=frame)
+    m = get_method_from_stack(stack, frame=frame)
+    if c:
+        path.append(c)
+    if m:
+        path.append(m)
+    return ".".join(path)
+
+
+def get_class_from_stack(
+    stack: list,
+    frame: int = 1,
+    module: bool = False,
+) -> str:
+    """Extract class name from stack.
+
+    :param stack: stack list from inspect.stack().
+    :type stack: list
+    :param frame: frame index for creating path.
+    :type frame: int
+    :param module: if True, include module name as prefix.
+    :type module: bool
+    :return: class name (e.g. 'NMObject' or 'nm_object.NMObject').
+    :rtype: str
+    """
+    f = _get_frame_from_stack(stack, frame=frame)
+    if f is None:
+        return ""
+    if "self" not in f.f_locals:
+        return ""
+    cls = f.f_locals["self"].__class__
+    if module:
+        return cls.__module__ + "." + cls.__name__
+    return cls.__name__
+
+
+def get_method_from_stack(
+    stack: list,
+    frame: int = 1,
+) -> str:
+    """Extract method name from stack.
+
+    :param stack: stack list from inspect.stack().
+    :type stack: list
+    :param frame: frame index for creating path.
+    :type frame: int
+    :return: method name.
+    :rtype: str
+    """
+    f = _get_frame_from_stack(stack, frame=frame)
+    if f is None:
+        return ""
+    return f.f_code.co_name

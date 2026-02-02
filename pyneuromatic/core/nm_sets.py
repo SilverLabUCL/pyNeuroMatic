@@ -88,11 +88,11 @@ class NMSets(NMObject, MutableMapping):
         elif isinstance(nmobjects, dict):
             for k, v in nmobjects.items():
                 if not isinstance(k, str):
-                    e = nmu.typeerror(k, "nmobjects: key", "string")
+                    e = nmu.type_error_str(k, "nmobjects: key", "string")
                     raise TypeError(e)
                 if not isinstance(v, NMObject):
                     e = "nmobjects: '%s' value" % k
-                    e = nmu.typeerror(v, e, "NMObject")
+                    e = nmu.type_error_str(v, e, "NMObject")
                     raise TypeError(e)
             self.__nmobjects = nmobjects
             # reference to an existing dictionary. DO NOT COPY.
@@ -235,7 +235,7 @@ class NMSets(NMObject, MutableMapping):
             olist_old = self.__map[actual_key]
             if not isinstance(olist_old, list):
                 e = "self.__map['%s']: value" % actual_key
-                e = nmu.typeerror(olist_old, e, "list")
+                e = nmu.type_error_str(olist_old, e, "list")
                 raise TypeError(e)
             if add:
                 if NMSets.list_is_equation(olist_old):
@@ -249,7 +249,7 @@ class NMSets(NMObject, MutableMapping):
         elif isinstance(olist, list):
             items = list(olist)
         else:
-            e = nmu.typeerror(olist, "olist", "string or NMObject or list")
+            e = nmu.type_error_str(olist, "olist", "string or NMObject or list")
             raise TypeError(e)
 
         if NMSets.list_is_equation(items):
@@ -311,7 +311,7 @@ class NMSets(NMObject, MutableMapping):
         obj_items: list[NMObject] = []
         for o in items:
             if not isinstance(o, NMObject):
-                e = nmu.typeerror(o, "olist: list item", "NMObject")
+                e = nmu.type_error_str(o, "olist: list item", "NMObject")
                 raise TypeError(e)
             found = False
             for o2 in self._nmobjects_dict.values():
@@ -520,7 +520,7 @@ class NMSets(NMObject, MutableMapping):
                 ync = auto_confirm
             else:
                 q = "are you sure you want to delete '%s'?" % key
-                ync = nmu.input_yesno(q, path=self.path_str)
+                ync = nmu.prompt_yes_no(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -562,7 +562,7 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to delete the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, path=self.path_str)
+                ync = nmu.prompt_yes_no(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -599,7 +599,7 @@ class NMSets(NMObject, MutableMapping):
         if key is None:
             return None
         if not isinstance(key, str):
-            e = nmu.typeerror(key, "key", "string or None")
+            e = nmu.type_error_str(key, "key", "string or None")
             raise TypeError(e)
         for k in self.__map.keys():
             if k.lower() == key.lower():  # keys are case insensitive
@@ -613,7 +613,7 @@ class NMSets(NMObject, MutableMapping):
         if newkey is None:
             return self.auto_name_next()
         if not isinstance(newkey, str):
-            e = nmu.typeerror(newkey, "newkey", "string")
+            e = nmu.type_error_str(newkey, "newkey", "string")
             raise TypeError(e)
         if newkey.strip() == "":
             return self.auto_name_next()
@@ -630,7 +630,7 @@ class NMSets(NMObject, MutableMapping):
         trials: int = 100
     ) -> str:
         if not isinstance(prefix, str):
-            e = nmu.typeerror(prefix, "prefix", "string")
+            e = nmu.type_error_str(prefix, "prefix", "string")
             raise TypeError(e)
         for i in range(trials):
             newkey = prefix + str(i)
@@ -650,7 +650,7 @@ class NMSets(NMObject, MutableMapping):
         # forces keys/names to be case insensitive
         if not isinstance(nmobject_key, str):
             if error1:
-                e = nmu.typeerror(nmobject_key, "nmobject_key", "string")
+                e = nmu.type_error_str(nmobject_key, "nmobject_key", "string")
                 raise TypeError(e)
             return None
         for k in self._nmobjects_dict.keys():
@@ -702,17 +702,17 @@ class NMSets(NMObject, MutableMapping):
         if isinstance(nmobject_keys, str):
             nmobject_keys = [nmobject_keys]
         elif not isinstance(nmobject_keys, list):
-            e = nmu.typeerror(nmobject_keys, "nmobject_keys", "list")
+            e = nmu.type_error_str(nmobject_keys, "nmobject_keys", "list")
             raise TypeError(e)
         klist = []
         finished = nmobject_keys.copy()
         for k1 in self._nmobjects_dict.keys():
             if not isinstance(k1, str):
-                e = nmu.typeerror(k1, "self._nmobjects_dict: key", "string")
+                e = nmu.type_error_str(k1, "self._nmobjects_dict: key", "string")
                 raise TypeError(e)
             for k2 in nmobject_keys:
                 if not isinstance(k2, str):
-                    e = nmu.typeerror(k2, "nmobject_keys: list item", "string")
+                    e = nmu.type_error_str(k2, "nmobject_keys: list item", "string")
                     raise TypeError(e)
                 if k1.lower() == k2.lower():
                     if k1 not in klist:
@@ -810,11 +810,11 @@ class NMSets(NMObject, MutableMapping):
         TODO: order by name, creation date, modified date
         """
         if not isinstance(name_order, list):
-            e = nmu.typeerror(name_order, "newkeyorder", "list")
+            e = nmu.type_error_str(name_order, "newkeyorder", "list")
             raise TypeError(e)
         for name in name_order:
             if not isinstance(name, str):
-                e = nmu.typeerror(name, "newkeyorder: list item", "string")
+                e = nmu.type_error_str(name, "newkeyorder: list item", "string")
                 raise TypeError(e)
         n_new = len(name_order)
         n_old = len(self.__map)
@@ -841,7 +841,7 @@ class NMSets(NMObject, MutableMapping):
                 ync = auto_confirm
             else:
                 q = "are you sure you want to empty '%s'?" % key
-                ync = nmu.input_yesno(q, path=self.path_str)
+                ync = nmu.prompt_yes_no(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -862,7 +862,7 @@ class NMSets(NMObject, MutableMapping):
                 q = "are you sure you want to empty the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, path=self.path_str)
+                ync = nmu.prompt_yes_no(q, path=self.path_str)
             if ync is not None and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -896,7 +896,7 @@ class NMSets(NMObject, MutableMapping):
             items = list(olist)
         else:
             if error:
-                e = nmu.typeerror(olist, "olist", "string or NMObject or list")
+                e = nmu.type_error_str(olist, "olist", "string or NMObject or list")
                 raise TypeError(e)
             return []
         olist_old = self.__map[key]
@@ -914,7 +914,7 @@ class NMSets(NMObject, MutableMapping):
                 if not isinstance(o2, NMObject):
                     if error:
                         e = "self.__map['%s']: list item" % key
-                        e = nmu.typeerror(o2, e, "NMObject")
+                        e = nmu.type_error_str(o2, e, "NMObject")
                         raise TypeError(e)
                     return []
                 if isinstance(o1, str):
@@ -930,7 +930,7 @@ class NMSets(NMObject, MutableMapping):
                 else:
                     if error:
                         e = "olist: list item"
-                        e = nmu.typeerror(o1, e, "string or NMObject")
+                        e = nmu.type_error_str(o1, e, "string or NMObject")
                         raise TypeError(e)
                     return []
             if not found:
@@ -956,14 +956,14 @@ class NMSets(NMObject, MutableMapping):
         elif isinstance(olist, list):
             items = list(olist)
         else:
-            e = nmu.typeerror(olist, "olist", "string or NMObject or list")
+            e = nmu.type_error_str(olist, "olist", "string or NMObject or list")
             raise TypeError(e)
         for o in items:
             if isinstance(o, (str, NMObject)):
                 pass
             else:
                 e = "olist: list item"
-                e = nmu.typeerror(o, e, "string or NMObject")
+                e = nmu.type_error_str(o, e, "string or NMObject")
                 raise TypeError(e)
             for map_key, map_val in self.__map.items():
                 if not NMSets.list_is_equation(map_val):

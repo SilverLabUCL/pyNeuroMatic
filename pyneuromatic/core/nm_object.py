@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_manager import NMManager
     from pyneuromatic.core.nm_project import NMProject
 
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -138,7 +139,7 @@ class NMObject(object):
         self.__copy_of: NMObject | None = None
 
         if not isinstance(name, str):
-            e = nmu.typeerror(name, "name", "string")
+            e = nmu.type_error_str(name, "name", "string")
             raise TypeError(e)
 
         self._name_set(newname=name, quiet=True)
@@ -399,15 +400,15 @@ class NMObject(object):
         :rtype: None
         """
         if not isinstance(newname, str):
-            e = nmu.typeerror(newname, "newname", "string")
+            e = nmu.type_error_str(newname, "newname", "string")
             raise TypeError(e)
         if not newname or not nmu.name_ok(newname):
             raise ValueError("newname: %s" % newname)
         oldname = self.__name
         self.__name = newname
         self.note = "renamed to '%s'" % self.__name
-        h = nmu.history_change("name", oldname, self.__name)
-        self._history(h, path=self.path_str, quiet=quiet)
+        h = nmh.history_change_str("name", oldname, self.__name)
+        nmh.history(h, path=self.path_str, quiet=quiet)
 
     def _rename_fxnref_set(self, rename_fxnref) -> None:
         """Set the rename function reference for this NMObject.
@@ -418,7 +419,7 @@ class NMObject(object):
         See NMObjectContainer.rename(key, newkey)
         """
         if not isinstance(rename_fxnref, types.MethodType):
-            e = nmu.typeerror(rename_fxnref, "rename_fxnref", "MethodType")
+            e = nmu.type_error_str(rename_fxnref, "rename_fxnref", "MethodType")
             raise TypeError(e)
         # TODO: test if function has 2 arguments?
         self.__rename_fxnref = rename_fxnref
@@ -449,7 +450,7 @@ class NMObject(object):
 
     def _notes_append(self, thenote: str) -> bool:
         if not self.__notes_on:
-            # self._alert('notes are off')
+            # nmh.alert('notes are off')
             return False
         if not isinstance(self.__notes, list):
             self.__notes = []
@@ -478,7 +479,7 @@ class NMObject(object):
                 ync = auto_confirm
             else:
                 q = "are you sure you want to delete all notes for '%s'?" % self.__name
-                ync = nmu.input_yesno(q, path=self.path_str)
+                ync = nmu.prompt_yes_no(q, path=self.path_str)
             if not isinstance(ync, str) or (ync.lower() != "y" and ync.lower() != "yes"):
                 print("cancel delete all notes")
                 raise RuntimeError("User cancelled note deletion")
@@ -538,57 +539,3 @@ class NMObject(object):
     def save(self, path: str = "", quiet: bool = nmp.QUIET):
         # TODO
         raise RuntimeError("save under construction")
-
-    def _alert(
-        self,
-        message: str,
-        path: str = "NONE",
-        quiet: bool = False,
-        frame: int = 2,
-    ) -> str:
-        # wrapper, see nmu.history
-        return nmu.history(
-            message,
-            title="ALERT",
-            path=path,
-            frame=frame,
-            red=True,
-            quiet=self._quiet(quiet),
-        )
-
-    def _error(
-        self,
-        message: str,
-        path: str = "NONE",
-        quiet: bool = False,
-        frame: int = 2,
-    ) -> str:
-        # wrapper, see nmu.history
-        return nmu.history(
-            message,
-            title="ERROR",
-            path=path,
-            frame=frame,
-            red=True,
-            quiet=self._quiet(quiet),
-        )
-
-    def _history(
-        self,
-        message: str,
-        path: str = "NONE",
-        quiet: bool = False,
-        frame: int = 2,
-    ) -> str:
-        # wrapper, see nmu.history
-        return nmu.history(
-            message, path=path, frame=frame, red=False, quiet=self._quiet(quiet)
-        )
-
-    def _quiet(self, quiet: bool) -> bool:
-        # m = self._manager
-        # if m and m.__class__.__name__ == "NMManager":
-        #    return m._quiet(quiet)
-        if nmp.QUIET:  # this quiet overrides
-            return True
-        return quiet

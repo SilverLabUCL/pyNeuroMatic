@@ -291,7 +291,7 @@ class NMObjectTest(unittest.TestCase):
         self.o0.name = "test2"
         self.assertEqual(self.o0.name, "test1")  # name of o0 does not change
 
-    def rename_dummy(self, oldname, newname, quiet=nmp.QUIET):
+    def rename_dummy(self, oldname, newname, quiet=False):
         # dummy function to test NMObject._rename_fxnref_set()
         print("test rename: " + oldname + " -> " + newname)
         return False
@@ -302,7 +302,7 @@ class NMObjectTest(unittest.TestCase):
     def test11_error(self):
         pass
         # alert(), error(), history()
-        # wrappers for nmu.history()
+        # wrappers for history()
         # args: obj, type_expected, tp, quiet, frame
 
     def test12_quiet(self):

@@ -79,7 +79,7 @@ class NMEpoch(NMObject):
         self.__thedata: list[NMData] = []  # list of NMData references
 
         if not isinstance(number, int):
-            e = nmu.typeerror(number, "number", "int")
+            e = nmu.type_error_str(number, "number", "int")
             raise TypeError(e)
 
         self.__number: int = number

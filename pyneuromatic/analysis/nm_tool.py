@@ -56,7 +56,7 @@ class NMTool(object):
         elif isinstance(project, NMProject):
             self.__project = project
         else:
-            e = nmu.typeerror(project, "project", "NMProject")
+            e = nmu.type_error_str(project, "project", "NMProject")
             raise TypeError(e)
         return None
 
@@ -79,7 +79,7 @@ class NMTool(object):
                          folder.name, self.__project.name)
                     raise ValueError(e)
         else:
-            e = nmu.typeerror(folder, "folder", "NMFolder")
+            e = nmu.type_error_str(folder, "folder", "NMFolder")
             raise TypeError(e)
         return None
 
@@ -101,7 +101,7 @@ class NMTool(object):
                      data.name, self.__folder.name)
                 raise ValueError(e)
         else:
-            e = nmu.typeerror(data, "data", "NMData")
+            e = nmu.type_error_str(data, "data", "NMData")
             raise TypeError(e)
         return None
 
@@ -123,7 +123,7 @@ class NMTool(object):
                      dataseries.name, self.__folder.name)
                 raise ValueError(e)
         else:
-            e = nmu.typeerror(dataseries, "dataseries", "NMDataSeries")
+            e = nmu.type_error_str(dataseries, "dataseries", "NMDataSeries")
             raise TypeError(e)
         return None
 
@@ -145,7 +145,7 @@ class NMTool(object):
                      channel.name, self.__dataseries.name)
                 raise ValueError(e)
         else:
-            e = nmu.typeerror(channel, "channel", "NMChannel")
+            e = nmu.type_error_str(channel, "channel", "NMChannel")
             raise TypeError(e)
         return None
 
@@ -167,7 +167,7 @@ class NMTool(object):
                      epoch.name, self.__dataseries.name)
                 raise ValueError(e)
         else:
-            e = nmu.typeerror(epoch, "epoch", "NMEpoch")
+            e = nmu.type_error_str(epoch, "epoch", "NMEpoch")
             raise TypeError(e)
         return None
 
@@ -193,42 +193,42 @@ class NMTool(object):
             if v is None or isinstance(v, NMProject):
                 self.project = v
             else:
-                e = nmu.typeerror(v, "project", "NMProject")
+                e = nmu.type_error_str(v, "project", "NMProject")
                 raise TypeError(e)
         if "folder" in select_values:
             v = select_values["folder"]
             if v is None or isinstance(v, NMFolder):
                 self.folder = v
             else:
-                e = nmu.typeerror(v, "folder", "NMFolder")
+                e = nmu.type_error_str(v, "folder", "NMFolder")
                 raise TypeError(e)
         if "data" in select_values:
             v = select_values["data"]
             if v is None or isinstance(v, NMData):
                 self.data = v
             else:
-                e = nmu.typeerror(v, "data", "NMData")
+                e = nmu.type_error_str(v, "data", "NMData")
                 raise TypeError(e)
         if "dataseries" in select_values:
             v = select_values["dataseries"]
             if v is None or isinstance(v, NMDataSeries):
                 self.dataseries = v
             else:
-                e = nmu.typeerror(v, "dataseries", "NMDataSeries")
+                e = nmu.type_error_str(v, "dataseries", "NMDataSeries")
                 raise TypeError(e)
         if "channel" in select_values:
             v = select_values["channel"]
             if v is None or isinstance(v, NMChannel):
                 self.channel = v
             else:
-                e = nmu.typeerror(v, "channel", "NMChannel")
+                e = nmu.type_error_str(v, "channel", "NMChannel")
                 raise TypeError(e)
         if "epoch" in select_values:
             v = select_values["epoch"]
             if v is None or isinstance(v, NMEpoch):
                 self.epoch = v
             else:
-                e = nmu.typeerror(v, "epoch", "NMEpoch")
+                e = nmu.type_error_str(v, "epoch", "NMEpoch")
                 raise TypeError(e)
 
     @property

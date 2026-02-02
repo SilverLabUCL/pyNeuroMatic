@@ -179,7 +179,7 @@ class NMFolder(NMObject):
     def toolresults_save(self, tool: str, results: Any) -> str:
         imax_keys = 99
         if not isinstance(tool, str):
-            e = nmu.typeerror(tool, "tool", "string")
+            e = nmu.type_error_str(tool, "tool", "string")
             raise TypeError(e)
 
         tp = self.path_str

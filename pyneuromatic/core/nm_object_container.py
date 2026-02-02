@@ -24,6 +24,7 @@ from collections.abc import MutableMapping
 from enum import Enum, auto
 
 from pyneuromatic.core.nm_object import NMObject
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_preferences as nmp
 from pyneuromatic.core.nm_sets import NMSets
 import pyneuromatic.core.nm_utilities as nmu
@@ -168,7 +169,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__execute_target_name: str | None = None
 
         if not isinstance(rename_on, bool):
-            e = nmu.typeerror(rename_on, "rename_on", "boolean")
+            e = nmu.type_error_str(rename_on, "rename_on", "boolean")
             raise TypeError(e)
 
         self.__rename_on = rename_on
@@ -471,7 +472,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 ync = auto_confirm
             else:
                 prompt = "are you sure you want to delete '%s'?" % actual_key
-                ync = nmu.input_yesno(prompt, path=self.path_str)
+                ync = nmu.prompt_yes_no(prompt, path=self.path_str)
             if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -522,7 +523,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 q = "are you sure you want to delete the following?\n" + ", ".join(
                     self.__map.keys()
                 )
-                ync = nmu.input_yesno(q, path=self.path_str)
+                ync = nmu.prompt_yes_no(q, path=self.path_str)
             if isinstance(ync, str) and (ync.lower() == "y" or ync.lower() == "yes"):
                 pass
             else:
@@ -553,12 +554,12 @@ class NMObjectContainer(NMObject, MutableMapping):
                 # key is not used, key is NMObject name
                 if not self.content_type_ok(o):
                     e = "nmobjects: '%s' value" % k
-                    e = nmu.typeerror(o, e, self.content_type())
+                    e = nmu.type_error_str(o, e, self.content_type())
                     raise TypeError(e)
                 if k is None:
                     k = o.name
                 if not isinstance(k, str):
-                    e = nmu.typeerror(k, "nmobjects: key", "string")
+                    e = nmu.type_error_str(k, "nmobjects: key", "string")
                     raise TypeError(e)
                 if k.lower() != o.name.lower():
                     raise KeyError("key and name mismatch: '%s' != '%s'" % (k, o.name))
@@ -569,7 +570,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 + " or list or dictionary or "
                 + self.__class__.__name__
             )
-            e = nmu.typeerror(nmobjects, "nmobjects", e)
+            e = nmu.type_error_str(nmobjects, "nmobjects", e)
             raise TypeError(e)
         update = False
         for o in olist:
@@ -581,7 +582,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 update = True
             else:
                 e = "nmobjects: list item"
-                e = nmu.typeerror(o, e, self.content_type())
+                e = nmu.type_error_str(o, e, self.content_type())
                 raise TypeError(e)
         if update:
             self.__update_nmobject_references()
@@ -631,7 +632,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if key is None:
             return None
         if not isinstance(key, str):
-            e = nmu.typeerror(key, "key", "string or None")
+            e = nmu.type_error_str(key, "key", "string or None")
             raise TypeError(e)
         for k in self.__map.keys():
             if k.lower() == key.lower():  # keys are case insensitive
@@ -645,7 +646,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if newkey is None:
             return self.auto_name_next()
         if not isinstance(newkey, str):
-            e = nmu.typeerror(newkey, "newkey", "string")
+            e = nmu.type_error_str(newkey, "newkey", "string")
             raise TypeError(e)
         if not newkey or not nmu.name_ok(newkey):
             raise ValueError("newkey: %s" % newkey)
@@ -665,7 +666,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if not self.__rename_on:
             raise RuntimeError("key names are locked.")
         if name is None:
-            e = nmu.typeerror(name, "name", "string")
+            e = nmu.type_error_str(name, "name", "string")
             raise TypeError(e)
         key = self._getkey(name)
         if key is None:
@@ -691,11 +692,11 @@ class NMObjectContainer(NMObject, MutableMapping):
         TODO: order by name, creation date, modified date
         """
         if not isinstance(name_order, list):
-            e = nmu.typeerror(name_order, "newkeyorder", "list")
+            e = nmu.type_error_str(name_order, "newkeyorder", "list")
             raise TypeError(e)
         for name in name_order:
             if not isinstance(name, str):
-                e = nmu.typeerror(name, "newkeyorder: list item", "string")
+                e = nmu.type_error_str(name, "newkeyorder: list item", "string")
                 raise TypeError(e)
         n_new = len(name_order)
         n_old = len(self)
@@ -719,7 +720,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         newname: str | None = None,
     ) -> NMObject | None:
         if name is None:
-            e = nmu.typeerror(name, "name", "string")
+            e = nmu.type_error_str(name, "name", "string")
             raise TypeError(e)
         key = self._getkey(name)
         if key is None:
@@ -756,7 +757,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # quiet: bool = nmp.QUIET
     ) -> bool:
         if not self.content_type_ok(nmobject):
-            e = nmu.typeerror(nmobject, "nmobject", self.content_type())
+            e = nmu.type_error_str(nmobject, "nmobject", self.content_type())
             raise TypeError(e)
         newkey = self._newkey(nmobject.name)
         if not isinstance(newkey, str) or len(newkey) == 0:
@@ -788,7 +789,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if prefix is None:
             prefix = ""
         if not isinstance(prefix, str):
-            e = nmu.typeerror(prefix, "prefix", "string")
+            e = nmu.type_error_str(prefix, "prefix", "string")
             raise TypeError(e)
         if not nmu.name_ok(prefix, ok_names=[""]):
             # '' empty string OK for channel names
@@ -801,10 +802,10 @@ class NMObjectContainer(NMObject, MutableMapping):
         if self.__name_prefix is None:
             h = 'prefix = None'
         else:
-            h = "prefix = '%s'" % self.__prefix
+            h = "prefix = '%s'" % self.__auto_name_prefix
         self.note = h
-        h = nmu.history_change('prefix', oldprefix, self.__prefix)
-        self._history(h, quiet=quiet)
+        h = nmh.history_change_str('prefix', oldprefix, self.__auto_name_prefix)
+        nmh.history(h, quiet=quiet)
         """
         return
 
@@ -826,7 +827,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if isinstance(seq_format, int) and seq_format == 0:
             seq_format = "0"
         elif not isinstance(seq_format, str):
-            e = nmu.typeerror(seq_format, "seq_format", "string")
+            e = nmu.type_error_str(seq_format, "seq_format", "string")
             raise TypeError(e)
         slist = ""
         for char in seq_format:
@@ -953,7 +954,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             self.__selected_name = None
             return
         if not isinstance(name, str):
-            e = nmu.typeerror(name, "key", "string")
+            e = nmu.type_error_str(name, "key", "string")
             raise TypeError(e)
         if name == "" or name.lower() == "none":
             self.__selected_name = None
@@ -1028,7 +1029,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         target_name: str | None = None,
     ) -> None:
         if not isinstance(mode, ExecuteMode):
-            e = nmu.typeerror(mode, "mode", "ExecuteMode")
+            e = nmu.type_error_str(mode, "mode", "ExecuteMode")
             raise TypeError(e)
         if mode in (ExecuteMode.SELECTED, ExecuteMode.ALL):
             self.__execute_mode = mode
@@ -1040,7 +1041,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             self.__execute_target_name = None
             return
         if not isinstance(target_name, str):
-            e = nmu.typeerror(target_name, "target_name", "string")
+            e = nmu.type_error_str(target_name, "target_name", "string")
             raise TypeError(e)
         if mode == ExecuteMode.NAME:
             key = self._getkey(target_name)
