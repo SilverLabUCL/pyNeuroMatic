@@ -23,6 +23,8 @@ import datetime
 # import math
 # import matplotlib
 import numpy as np
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
@@ -31,9 +33,12 @@ import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_preferences as nmp
 from pyneuromatic.core.nm_project import NMProject
-from pyneuromatic.analysis.nm_tool import NMTool
-from pyneuromatic.analysis.nm_tool_stats import NMToolStats
+from pyneuromatic.core.nm_tool_registry import get_global_registry, NMToolRegistry
+from pyneuromatic.core.nm_workspace import NMWorkspace, NMWorkspaceManager
 import pyneuromatic.core.nm_utilities as nmu
+
+if TYPE_CHECKING:
+    from pyneuromatic.analysis.nm_tool import NMTool
 
 nm = None  # holds Manager, accessed via console
 
@@ -54,99 +59,158 @@ NMManager
                             NMEpoch (E0, E1, E2...)
 """
 
-# TOOL_NAMES = ("Main", "Stats", "Spike", "Event")
-TOOL_NAMES = ("Stats",)
-
-
 class NMManager(NMObject):
+    """
+    NM Manager - Central manager for pyNeuroMatic.
+
+    Manages projects, tools, and workspaces. Tools are loaded lazily from the
+    registry based on the active workspace configuration.
+
+    Args:
+        name: Manager name (default "nm")
+        project_name: Initial project name (default "project0")
+        quiet: Suppress history messages
+        workspace: Workspace name to load (None for default)
+        config_dir: Custom configuration directory (None for platform default)
+
+    Example:
+        nm = NMManager(workspace="spike_analysis")
+        nm.stats.windows.get("w0").func = "mean"
+        nm.execute_tool()
+    """
+
     def __init__(
         self,
-        # parent: Union[object, None] = None,
         name: str = "nm",
         project_name: str = "project0",
         quiet: bool = False,
-        # copy: NMObject | None = None,  # see copy()
+        workspace: str | None = None,
+        config_dir: str | Path | None = None,
     ) -> None:
         super().__init__(parent=None, name=name)  # NMObject
 
-        # initialize centralized history logging
+        # Initialize centralized history logging
         self.__history = nmh.NMHistory(quiet=quiet)
         nmh.set_history(self.__history)
 
-        # self.__configs = nmp.Configs()
-        # self.__configs.quiet = quiet
-
-        #create project
+        # Create project
         if not isinstance(project_name, str):
             e = nmu.type_error_str(project_name, "project_name", "string")
             raise TypeError(e)
         self.__project = NMProject(parent=self, name=project_name)
 
-        self.__toolkit: dict[str, NMTool] = {}
+        # Initialize tool registry and workspace manager
+        self._tool_registry: NMToolRegistry = get_global_registry()
+        self._workspace_manager: NMWorkspaceManager = NMWorkspaceManager(
+            config_dir=config_dir
+        )
+
+        self.__toolkit: dict[str, "NMTool"] = {}
         self.__toolselect: str | None = None
 
-        for tool in TOOL_NAMES:
-            self.tool_add(tool)
-
-        if "main" in self.__toolkit:
-            self.__toolselect = "main"
-        else:
-            for k in self.__toolkit.keys():
-                self.__toolselect = k
-                break  # first tool will be selected
-
-        """
-        if project_name is None:
-            pass
-        elif isinstance(project_name, str):
-            p = self.__project_container.new(project_name)
-            if p:
-                self.__project_container.select_key = project_name
-        else:
-            e = nmu.type_error_str(project_name, "project_name", "string")
-            raise TypeError(e)
-        """
+        # Load workspace (or default)
+        self._load_workspace_internal(workspace, quiet=quiet)
 
         tstr = str(datetime.datetime.now())
-        h = ("created NM manager '%s' %s"
-             % (self.name, tstr))
+        h = "created NM manager '%s' %s" % (self.name, tstr)
         nmh.history(h, quiet=quiet)
         nmh.history("current NM project is '%s'" % self.__project.name, quiet=quiet)
         nmh.history("current NM tool is '%s'" % self.__toolselect, quiet=quiet)
 
+    def _load_workspace_internal(
+        self,
+        name: str | None = None,
+        quiet: bool = False
+    ) -> None:
+        """Internal: Load workspace and enable its tools."""
+        workspace = self._workspace_manager.load(name)
+
+        # Clear existing tools
+        self.__toolkit.clear()
+        self.__toolselect = None
+
+        # Enable tools from workspace
+        for tool_name in workspace.tools:
+            if tool_name in self._tool_registry:
+                try:
+                    self.tool_add(tool_name)
+                except Exception as e:
+                    nmh.history(
+                        f"Warning: Failed to load tool '{tool_name}': {e}",
+                        quiet=quiet
+                    )
+            else:
+                nmh.history(
+                    f"Warning: Tool '{tool_name}' not found in registry, skipping",
+                    quiet=quiet
+                )
+
+        # Select first tool if any, prefer "main"
+        if "main" in self.__toolkit:
+            self.__toolselect = "main"
+        elif self.__toolkit:
+            self.__toolselect = next(iter(self.__toolkit.keys()))
+
     def tool_add(
         self,
         toolname: str,
-        tool: NMTool | None = None,
+        tool: "NMTool | None" = None,
         select: bool = False
     ) -> None:
+        """
+        Add a tool to the toolkit.
+
+        Args:
+            toolname: Name of the tool
+            tool: Optional NMTool instance. If None, loads from registry.
+            select: Whether to select this tool as active
+
+        Raises:
+            TypeError: If toolname is not a string or tool is wrong type
+            KeyError: If tool not found in registry (when tool is None)
+        """
+        from pyneuromatic.analysis.nm_tool import NMTool
+
         if not isinstance(toolname, str):
             e = nmu.type_error_str(toolname, "toolname", "string")
             raise TypeError(e)
+
         tname = toolname.lower()
-        if tool is None:  # look for NM tool
-            if tname == "mainTODO":
-                # TODO tool = NMToolMain()
-                pass
-            elif tname == "stats":
-                tool = NMToolStats()
-            elif tname == "spikeTODO":
-                # TODO tool = NMToolSpike()
-                pass
-            elif tname == "eventTODO":
-                # TODO tool = NMToolEvent()
-                pass
-            else:
-                raise KeyError("NM tool key '%s' does not exist" % tname)
-        elif isinstance(tool, NMTool):
-            pass
-        else:
-            e = "tool '%s' is not an instance of NMTool" % toolname
+
+        if tool is None:
+            # Lazy load from registry
+            if tname not in self._tool_registry:
+                raise KeyError(f"Tool '{toolname}' not found in registry")
+            tool = self._tool_registry.load(tname)
+        elif not isinstance(tool, NMTool):
+            e = f"tool '{toolname}' is not an instance of NMTool"
             raise TypeError(e)
-        if tool:
-            self.__toolkit.update({tname: tool})
-            if select:
-                self.__toolselect = tname
+
+        self.__toolkit[tname] = tool
+        if select:
+            self.__toolselect = tname
+
+    def tool_remove(self, toolname: str) -> bool:
+        """
+        Remove a tool from the toolkit.
+
+        Args:
+            toolname: Name of tool to remove
+
+        Returns:
+            True if removed, False if not found
+        """
+        tname = toolname.lower()
+        if tname in self.__toolkit:
+            del self.__toolkit[tname]
+            if self.__toolselect == tname:
+                # Select next available tool or None
+                if self.__toolkit:
+                    self.__toolselect = next(iter(self.__toolkit.keys()))
+                else:
+                    self.__toolselect = None
+            return True
+        return False
 
     @property
     def tool_select(self) -> str | None:
@@ -549,28 +613,115 @@ class NMManager(NMObject):
                 break
         return tool.execute_finish()
 
-    # @property
-    # def configs(self):
-    #     return self.__configs
+    # Workspace methods
 
     @property
-    def main(self):
-        if "main" in self.__toolkit:
-            return self.__toolkit["main"]
-        return None
+    def workspace(self) -> NMWorkspace | None:
+        """Get the current workspace configuration."""
+        return self._workspace_manager.current
+
+    def available_workspaces(self) -> list[str]:
+        """List available workspace names."""
+        return self._workspace_manager.available_workspaces()
+
+    def load_workspace(
+        self,
+        name: str,
+        preserve_state: bool = False
+    ) -> None:
+        """
+        Load a workspace configuration.
+
+        Args:
+            name: Workspace name to load
+            preserve_state: If True, preserves existing tool state
+        """
+        if not preserve_state:
+            self.__toolkit.clear()
+            self.__toolselect = None
+        self._load_workspace_internal(name)
+        nmh.history(f"Loaded workspace '{name}'")
+
+    def save_workspace(
+        self,
+        name: str | None = None,
+        description: str = ""
+    ) -> str:
+        """
+        Save current toolkit configuration as a workspace.
+
+        Args:
+            name: Workspace name (None for default)
+            description: Optional description
+
+        Returns:
+            Path to saved workspace file as string
+        """
+        workspace = NMWorkspace(
+            name=name or "default",
+            description=description,
+            tools=list(self.__toolkit.keys()),
+        )
+        path = self._workspace_manager.save(workspace, name)
+        nmh.history(f"Saved workspace to '{path}'")
+        return str(path)
+
+    def available_tools(self) -> list[str]:
+        """List all tools available in the registry."""
+        return self._tool_registry.keys()
+
+    def enabled_tools(self) -> list[str]:
+        """List currently enabled (loaded) tools."""
+        return list(self.__toolkit.keys())
+
+    # Tool access properties (backward compatibility)
 
     @property
-    def stats(self):
-        if "stats" in self.__toolkit:
-            return self.__toolkit["stats"]
-        return None
+    def main(self) -> "NMTool | None":
+        """Access the Main tool."""
+        return self.__toolkit.get("main")
 
-    """
-    def _quiet(self) -> bool:
-        if self.configs.quiet:  # config quiet overrides
-            return True
-        return nmp.QUIET
-    """
+    @property
+    def stats(self) -> "NMTool | None":
+        """Access the Stats tool."""
+        return self.__toolkit.get("stats")
+
+    def __getattr__(self, name: str) -> "NMTool":
+        """
+        Dynamic attribute access for tools.
+
+        Allows accessing tools as attributes (e.g., nm.spike, nm.event).
+        If the tool is in the registry but not loaded, it will be loaded.
+
+        Args:
+            name: Attribute name (tool name)
+
+        Returns:
+            The requested NMTool instance
+
+        Raises:
+            AttributeError: If not a valid tool name
+        """
+        # Avoid infinite recursion for private/internal attributes
+        if name.startswith("_"):
+            raise AttributeError(
+                f"'{type(self).__name__}' has no attribute '{name}'"
+            )
+
+        tool_name = name.lower()
+
+        # Check if already loaded
+        if hasattr(self, "_NMManager__toolkit") and tool_name in self.__toolkit:
+            return self.__toolkit[tool_name]
+
+        # Attempt lazy load from registry
+        if hasattr(self, "_tool_registry") and tool_name in self._tool_registry:
+            self.tool_add(tool_name)
+            return self.__toolkit[tool_name]
+
+        raise AttributeError(
+            f"'{type(self).__name__}' has no attribute '{name}'"
+        )
 
 
 if __name__ == "__main__":
