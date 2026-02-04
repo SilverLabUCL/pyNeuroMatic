@@ -28,7 +28,7 @@ from pyneuromatic.core.nm_object import NMObject
 NM class tree:
 
 NMManager
-    NMProject (project0)
+    NMProject (root)
         NMFolderContainer
             NMFolder (folder0, folder1...)
                 NMDataContainer
@@ -56,7 +56,7 @@ class NMProject(NMObject):
     def __init__(
         self,
         parent: object | None = None,
-        name: str = "NMProject0",
+        name: str = "root",
     ) -> None:
         super().__init__(parent=parent, name=name)
 

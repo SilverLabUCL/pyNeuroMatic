@@ -36,7 +36,7 @@ import pyneuromatic.core.nm_utilities as nmu
 NM class tree:
 
 NMManager
-    NMProject (project0)
+    NMProject (root)
         NMFolderContainer
             NMFolder (folder0, folder1...)
                 NMDataContainer

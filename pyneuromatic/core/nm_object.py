@@ -43,8 +43,8 @@ class NMObject(object):
 
     NM class tree:
 
-    NMManager
-        NMProject (project0)
+    NMManager (not an NMObject)
+        NMProject (root)
             NMFolderContainer
                 NMFolder (folder0, folder1...)
                     NMDataContainer
@@ -57,8 +57,8 @@ class NMObject(object):
                                 NMEpoch (E0, E1, E2...)
 
     Each NMObject has a path in the hierarchy:
-        - path: list of names, e.g. ['project0', 'folder0', 'recordA0']
-        - path_str: dotted string, e.g. 'project0.folder0.recordA0'
+        - path: list of names, e.g. ['root', 'folder0', 'recordA0']
+        - path_str: dotted string, e.g. 'root.folder0.recordA0'
         - path_objects: list of NMObject references
 
     Known children of NMObject:
@@ -290,7 +290,7 @@ class NMObject(object):
     def path(self) -> list[str]:
         """Hierarchy path as list of names.
 
-        Example: ['project0', 'folder0', 'recordA0']
+        Example: ['root', 'folder0', 'recordA0']
 
         Returns:
             List of NMObject names from root to this object.
@@ -305,7 +305,7 @@ class NMObject(object):
     def path_str(self) -> str:
         """Hierarchy path as dotted string.
 
-        Example: 'project0.folder0.recordA0'
+        Example: 'root.folder0.recordA0'
 
         Returns:
             Dotted string path from root to this object.

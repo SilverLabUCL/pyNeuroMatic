@@ -131,8 +131,8 @@ class NMDimensionTest(unittest.TestCase):
         plist = self.y0_copy.parameters
         self.assertEqual(klist, list(plist.keys()))
         self.assertEqual(plist["name"], YSNAME0)
-        tp = NM.name + "." + YSNAME0
-        self.assertEqual(plist["copy of"], tp)
+        # NMManager is not an NMObject, so path_str is just the object name
+        self.assertEqual(plist["copy of"], YSNAME0)
         self.assertEqual(plist["label"], YSCALE0["label"])
         self.assertEqual(plist["units"], YSCALE0["units"])
 

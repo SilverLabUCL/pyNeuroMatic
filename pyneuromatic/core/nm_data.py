@@ -41,7 +41,7 @@ NP_FILL_VALUE = numpy.nan
 NM class tree:
 
 NMManager
-    NMProject (project0)
+    NMProject (root)
         NMFolderContainer
             NMFolder (folder0, folder1...)
                 NMDataContainer

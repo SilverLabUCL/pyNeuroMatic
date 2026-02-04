@@ -18,7 +18,7 @@ import pyneuromatic.core.nm_utilities as nmu
 
 QUIET = True
 NUMPROJECTS = 1  # 3 # for now, only one project
-PROJECTNAME = "ManagerTest"
+PROJECTNAME = "root"  # Project is always named "root"
 NUMFOLDERS = 5
 DATASERIES = ["data", "avg", "stim"]
 NUMDATA = [8, 9, 10]
@@ -30,7 +30,7 @@ ISELECT = 0  # 0, 1, -1
 class NMManagerTest(unittest.TestCase):
 
     def setUp(self):
-        self.nm = NMManager(name="NM", project_name=PROJECTNAME, quiet=QUIET)
+        self.nm = NMManager(quiet=QUIET)
         ilast = ISELECT == -1
         self.select_values = {}
         self.select_keys = {}
@@ -110,35 +110,15 @@ class NMManagerTest(unittest.TestCase):
         # self.nm.projects.sets.add("set0", ["project0", "project1"])
 
     def test00_init(self):
-        # args: name, project_name, quiet
-
-        bad = list(nmu.BADTYPES)
-        bad.remove("string")
-        for b in bad:
-            with self.assertRaises(TypeError):
-                NMManager(name=b, quiet=True)
-
-        bad = list(nmu.BADTYPES)
-        bad.remove("string")
-        bad.remove(None)
-        for b in bad:
-            with self.assertRaises(TypeError):
-                NMManager(project_name=b, quiet=True)
-
-        bad = list(nmu.BADNAMES)
-        for b in bad:
-            with self.assertRaises(ValueError):
-                NMManager(name=b, quiet=True)
-            with self.assertRaises(ValueError):
-                NMManager(project_name=b, quiet=True)
-
+        # NMManager is a simple controller class (not an NMObject)
         self.assertTrue(isinstance(self.nm.project, NMProject))
+        self.assertEqual(self.nm.project.name, "root")
 
     def test01_parameters(self):
-        d = self.nm.parameters
-        self.assertEqual(d["name"], "NM")
-        keys = ["name", "created", "copy of"]
-        self.assertEqual(list(d.keys()), keys)
+        # NMManager is not an NMObject, so no parameters property
+        # Just verify basic properties work
+        self.assertIsNotNone(self.nm.project)
+        self.assertEqual(self.nm.project.name, "root")
 
     def test02_select(self):
         # select_values
