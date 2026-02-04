@@ -46,7 +46,7 @@ nm = None  # holds Manager, accessed via console
 NM class tree:
 
 NMManager
-    NMProject (project0)
+    NMProject (root)
         NMFolderContainer
             NMFolder (folder0, folder1...)
                 NMDataContainer
@@ -59,16 +59,18 @@ NMManager
                             NMEpoch (E0, E1, E2...)
 """
 
-class NMManager(NMObject):
+
+class NMManager:
     """
     NM Manager - Central manager for pyNeuroMatic.
 
-    Manages projects, tools, and workspaces. Tools are loaded lazily from the
+    Manages the project, tools, and workspaces. Tools are loaded lazily from the
     registry based on the active workspace configuration.
 
+    Note: NMManager is not an NMObject - it sits outside the object hierarchy.
+    The hierarchy starts at NMProject (root).
+
     Args:
-        name: Manager name (default "nm")
-        project_name: Initial project name (default "project0")
         quiet: Suppress history messages
         workspace: Workspace name to load (None for default)
         config_dir: Custom configuration directory (None for platform default)
@@ -81,23 +83,16 @@ class NMManager(NMObject):
 
     def __init__(
         self,
-        name: str = "nm",
-        project_name: str = "project0",
         quiet: bool = False,
         workspace: str | None = None,
         config_dir: str | Path | None = None,
     ) -> None:
-        super().__init__(parent=None, name=name)  # NMObject
-
         # Initialize centralized history logging
         self.__history = nmh.NMHistory(quiet=quiet)
         nmh.set_history(self.__history)
 
-        # Create project
-        if not isinstance(project_name, str):
-            e = nmu.type_error_str(project_name, "project_name", "string")
-            raise TypeError(e)
-        self.__project = NMProject(parent=self, name=project_name)
+        # Create project (root)
+        self.__project = NMProject(parent=self, name="root")
 
         # Initialize tool registry and workspace manager
         self._tool_registry: NMToolRegistry = get_global_registry()
@@ -112,8 +107,7 @@ class NMManager(NMObject):
         self._load_workspace_internal(workspace, quiet=quiet)
 
         tstr = str(datetime.datetime.now())
-        h = "created NM manager '%s' %s" % (self.name, tstr)
-        nmh.history(h, quiet=quiet)
+        nmh.history(f"created NM manager {tstr}", quiet=quiet)
         nmh.history("current NM project is '%s'" % self.__project.name, quiet=quiet)
         nmh.history("current NM tool is '%s'" % self.__toolselect, quiet=quiet)
 
@@ -728,7 +722,7 @@ if __name__ == "__main__":
 
     pnts = 30
 
-    nm = NMManager(project_name="myproject")
+    nm = NMManager()
     # p = nm.projects.select_value
     # p = nm.project
     assert nm.project.folders is not None

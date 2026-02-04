@@ -180,8 +180,8 @@ class NMObjectContainerTest(unittest.TestCase):
 
         plist = self.map1_copy.parameters
         self.assertEqual(plist["name"], CNAME1)
-        tp = NM1.name + "." + CNAME1
-        self.assertEqual(plist["copy of"], tp)
+        # NMManager is not an NMObject, so path_str is just the container name
+        self.assertEqual(plist["copy of"], CNAME1)
         self.assertEqual(plist["content_type"], "nmobject")
         self.assertFalse(plist["rename_on"])
         self.assertEqual(plist["auto_name_prefix"], OPREFIX1)
@@ -665,15 +665,15 @@ class NMObjectContainerTest(unittest.TestCase):
         o = self.map0.get(ONLIST0[1])
         self.assertFalse(c == o)  # same name
         pc = c.parameters
-        tp = NM0.name + "." + ONLIST0[1]
-        self.assertEqual(pc["copy of"], tp)
+        # NMManager is not an NMObject, so path_str is just the object name
+        self.assertEqual(pc["copy of"], ONLIST0[1])
 
         c = self.map0.duplicate(ONLIST0[0], "test")
         self.assertEqual(c.name, "test")
         self.assertEqual(len(self.map0), len(ONLIST0) + 2)
         pc = c.parameters
-        tp = NM0.name + "." + ONLIST0[0]
-        self.assertEqual(pc["copy of"], tp)
+        # NMManager is not an NMObject, so path_str is just the object name
+        self.assertEqual(pc["copy of"], ONLIST0[0])
 
     def test27_new(self):
         # args: nmobject
