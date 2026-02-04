@@ -390,168 +390,134 @@ class NMManager:
             elist.append(e2)
         return elist
 
+    def execute_count(self, dataseries_priority: bool = True) -> int:
+        """
+        Return count of execute targets without executing.
+
+        Use this to preview how many items will be targeted before
+        calling execute_tool().
+
+        Args:
+            dataseries_priority: If True, count dataseries mode targets.
+                                If False, count data mode targets.
+
+        Returns:
+            Number of execute targets
+        """
+        return len(self.execute_keys(dataseries_priority))
+
     def execute_keys_set(
         self,
-        execute: dict[str, str]
+        execute: dict[str, str],
+        max_targets: int | None = 1000
     ) -> list[dict[str, str]]:
-        # sets are not allowed with folder, dataseries - too complex
-        # can specify 'data' or 'dataseries' but not both
+        """
+        Set execute targets at each hierarchy level.
 
+        Args:
+            execute: Dictionary mapping level names to target values.
+                    Values can be: "select"/"selected", "all", a specific name,
+                    or a set name.
+                    Must include "folder" and either "data" or "dataseries".
+                    If "dataseries", must also include "channel" and "epoch".
+            max_targets: Maximum number of resulting targets allowed.
+                        Set to None for unlimited. Default is 1000.
+
+        Returns:
+            List of execute target dictionaries (same as execute_keys())
+
+        Raises:
+            TypeError: If execute is not a dict or values aren't strings
+            KeyError: If a key is not a valid selection level
+            ValueError: If target count exceeds max_targets
+        """
         if not isinstance(execute, dict):
-            e = nmu.type_error_str(execute, "execute", "dictionary")
-            raise TypeError(e)
+            raise TypeError(nmu.type_error_str(execute, "execute", "dictionary"))
+
         for key, value in execute.items():
             if not isinstance(key, str):
-                e = nmu.type_error_str(key, "key", "string")
-                raise TypeError(e)
+                raise TypeError(nmu.type_error_str(key, "key", "string"))
             if key not in SELECT_LEVELS:
-                e = "unknown execute key '%s'" % key
-                raise KeyError(e)
+                raise KeyError(f"unknown execute key '{key}'")
             if not isinstance(value, str):
-                e = nmu.type_error_str(value, "value", "string")
-                raise TypeError(e)
+                raise TypeError(nmu.type_error_str(value, "value", "string"))
 
+        # Validate mutually exclusive keys
         if "data" in execute and "dataseries" in execute:
-            e = (
-                "encounted both 'data' and 'dataseries' keys "
+            raise KeyError(
+                "encountered both 'data' and 'dataseries' keys "
                 "but only one should be defined"
             )
-            raise KeyError(e)
 
         if "data" not in execute and "dataseries" not in execute:
-            e = "missing execute 'data' or 'dataseries' key"
-            raise KeyError(e)
+            raise KeyError("missing execute 'data' or 'dataseries' key")
 
         if "data" in execute and "channel" in execute:
-            e = "execute 'channel' key should be used with 'dataseries', "
-            "not 'data'"
-            raise KeyError(e)
+            raise KeyError(
+                "execute 'channel' key should be used with 'dataseries', not 'data'"
+            )
 
         if "data" in execute and "epoch" in execute:
-            e = "execute 'epoch' key should be used with 'dataseries', "
-            "not 'data'"
-            raise KeyError(e)
+            raise KeyError(
+                "execute 'epoch' key should be used with 'dataseries', not 'data'"
+            )
 
-        """
-        if "project" not in execute:
-            e = "missing execute 'project' key"
-            raise KeyError(e)
-        value = execute["project"]
-        if value.lower() == "select":
-            p = self.__project_container.select_key
-            if p in self.__project_container:
-                self.__project_container.execute_key = "select"
-            else:
-                e = "bad project select: %s" % p
-                raise ValueError(e)
-        elif value.lower() == "all":
-            e = "'all' projects is not allowed in this function"
-            raise ValueError(e)
-        elif value in self.__project_container:
-            self.__project_container.select_key = value
-            self.__project_container.execute_key = "select"
-        elif value in self.__project_container.sets:
-            e = "project sets are not allowed in this function"
-            raise ValueError(e)
-        else:
-            e = "unknown project execute value: %s" % value
-            raise ValueError(e)
-        p = self.__project_container.select_value
-        if p not in self.__project_container:
-            e = "bad project select: %s" % p
-            raise ValueError(e)
-        """
-
-        p = self.__project
-        if "project" in execute:
-            value = execute["project"]
-            if value.lower() in ("select", "selected", "all"):
-                pass  # ok, only one project
-            elif value.lower() == p.name.lower():
-                pass  # ok
-            else:
-                e = ("NM supports only one project. " +
-                     "The current project is '%s'." % p.name)
-                raise ValueError(e)
-
+        # Folder is required
         if "folder" not in execute:
-            e = "missing execute 'folder' key"
-            raise KeyError(e)
-        folders = p.folders
+            raise KeyError("missing execute 'folder' key")
+
+        folders = self.__project.folders
         if folders is None:
             raise ValueError("project has no folder container")
-        value = execute["folder"]
-        if value.lower() in ("select", "selected"):
-            fkey = folders.selected_name
-            if fkey in folders:
-                folders.execute_target = "select"
-            else:
-                e = "bad folder select: %s" % fkey
-                raise ValueError(e)
-        elif value.lower() == "all":
-            e = "'all' folders is not allowed in this function"
-            raise ValueError(e)
-        elif value in folders:
-            folders.selected_name = value
-            folders.execute_target = "select"
-        elif value in folders.sets:
-            e = "folder sets are not allowed in this function"
-            raise ValueError(e)
-        else:
-            e = "unknown folder execute value: %s" % value
-            raise ValueError(e)
-        f = folders.selected_value
-        if f not in folders:
-            e = "bad folder select: %s" % f
-            raise ValueError(e)
-        if not isinstance(f, NMFolder):
-            raise ValueError("bad folder select")
 
+        # Set folder execute target (allows select/all/name/set)
+        folders.execute_target = execute["folder"]
+
+        # Data mode - simpler path
         if "data" in execute:
-            f.data.execute_target = execute["data"]
-            return self.execute_keys(dataseries_priority=False)  # finished
+            # Set data execute target for each folder in execute_targets
+            for f in folders.execute_targets:
+                if isinstance(f, NMFolder):
+                    f.data.execute_target = execute["data"]
 
+            result = self.execute_keys(dataseries_priority=False)
+            self._check_max_targets(result, max_targets)
+            return result
+
+        # Dataseries mode - requires dataseries, channel, epoch
         if "dataseries" not in execute:
-            e = "missing execute 'dataseries' key"
-            raise KeyError(e)
-        value = execute["dataseries"]
-        if value.lower() in ("select", "selected"):
-            dskey = f.dataseries.selected_name
-            if dskey in f.dataseries:
-                f.dataseries.execute_target = "select"
-            else:
-                e = "bad dataseries select: %s" % dskey
-                raise ValueError(e)
-        elif value.lower() == "all":
-            e = "'all' dataseries is not allowed in this function"
-            raise ValueError(e)
-        elif value in f.dataseries:
-            f.dataseries.selected_name = value
-            f.dataseries.execute_target = "select"
-        elif value in f.dataseries.sets:
-            e = "dataseries sets are not allowed in this function"
-            raise ValueError(e)
-        else:
-            e = "unknown dataseries execute value: %s" % value
-            raise ValueError(e)
-        ds = f.dataseries.selected_value
-        if ds not in f.dataseries:
-            e = "bad dataseries select: %s" % ds
-            raise ValueError(e)
-        if not isinstance(ds, NMDataSeries):
-            raise ValueError("bad dataseries select")
-
+            raise KeyError("missing execute 'dataseries' key")
         if "channel" not in execute:
-            e = "missing execute 'channel' key"
-            raise KeyError(e)
-        ds.channels.execute_target = execute["channel"]
-
+            raise KeyError("missing execute 'channel' key")
         if "epoch" not in execute:
-            e = "missing execute 'epoch' key"
-            raise KeyError(e)
-        ds.epochs.execute_target = execute["epoch"]
+            raise KeyError("missing execute 'epoch' key")
 
-        return self.execute_keys(dataseries_priority=True)
+        # Set execute targets for each folder and dataseries
+        for f in folders.execute_targets:
+            if not isinstance(f, NMFolder):
+                continue
+            f.dataseries.execute_target = execute["dataseries"]
+            for ds in f.dataseries.execute_targets:
+                if isinstance(ds, NMDataSeries):
+                    ds.channels.execute_target = execute["channel"]
+                    ds.epochs.execute_target = execute["epoch"]
+
+        result = self.execute_keys(dataseries_priority=True)
+        self._check_max_targets(result, max_targets)
+        return result
+
+    def _check_max_targets(
+        self,
+        result: list,
+        max_targets: int | None
+    ) -> None:
+        """Check if result exceeds max_targets limit."""
+        if max_targets is not None and len(result) > max_targets:
+            raise ValueError(
+                f"Execute would target {len(result)} items, exceeding limit "
+                f"of {max_targets}. Use max_targets=None to override, or use "
+                f"execute_count() to preview target count."
+            )
 
     def execute_reset_all(self) -> None:
         # self.__project_container.execute_key = "select"
