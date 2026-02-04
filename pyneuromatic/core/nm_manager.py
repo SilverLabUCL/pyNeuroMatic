@@ -45,6 +45,10 @@ nm = None  # holds Manager, accessed via console
 # Hierarchy levels for selection (folder down to epoch)
 SELECT_LEVELS = ("folder", "data", "dataseries", "channel", "epoch")
 
+# Execute target constants (consistent with ExecuteMode in NMObjectContainer)
+EXECUTE_SELECTED = "selected"
+EXECUTE_ALL = "all"
+
 """
 NM class tree:
 
@@ -520,35 +524,34 @@ class NMManager:
             )
 
     def execute_reset_all(self) -> None:
-        # self.__project_container.execute_key = "select"
-        # for p in self.__project_container.values():
+        """Reset all execute targets to use the selected item at each level."""
         p = self.__project
         folders = p.folders
         if folders is None:
             return None
-        folders.execute_target = "select"
+        folders.execute_target = EXECUTE_SELECTED
         for f in folders.values():
             if not isinstance(f, NMFolder):
                 continue
-            f.data.execute_target = "select"
-            f.dataseries.execute_target = "select"
+            f.data.execute_target = EXECUTE_SELECTED
+            f.dataseries.execute_target = EXECUTE_SELECTED
             for ds in f.dataseries.values():
                 if not isinstance(ds, NMDataSeries):
                     continue
-                ds.channels.execute_target = "select"
-                ds.epochs.execute_target = "select"
+                ds.channels.execute_target = EXECUTE_SELECTED
+                ds.epochs.execute_target = EXECUTE_SELECTED
         return None
 
     def execute_tool(
         self,
-        toolname: str = "select"
+        toolname: str = "selected"
     ) -> bool:
 
         tname: str | None = toolname
         if tname is None:
             tname = self.__toolselect
         if isinstance(tname, str):
-            if tname.lower() == "select":
+            if tname.lower() in ("select", "selected"):
                 tname = self.__toolselect
         else:
             e = nmu.type_error_str(tname, "toolname", "string")
