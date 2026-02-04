@@ -530,23 +530,15 @@ class NMManagerTest(unittest.TestCase):
         e0.update({"project": "project2"})
         """
 
-        e0.update({"folder": "all"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
-        e0.update({"folder": "set0"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
+        # "all" and "set0" are now valid for folders
+        # Invalid folder name raises ValueError from execute_target setter
         e0.update({"folder": "test"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
         e0.update({"folder": "folder1"})
 
-        e0.update({"dataseries": "all"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
-        e0.update({"dataseries": "set0"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
+        # "all" and "set0" are now valid for dataseries
+        # Invalid dataseries name raises ValueError from execute_target setter
         e0.update({"dataseries": "test"})
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0)
@@ -591,19 +583,21 @@ class NMManagerTest(unittest.TestCase):
 
         elist = self.nm.execute_keys_set(e0)
         self.assertEqual(elist, [e0])
-        select = self.nm.select_keys
-        select.pop("data")
-        self.assertEqual(elist, [select])
+        # Note: execute_keys_set no longer modifies select_keys
 
+        # Test with "selected" - should use currently selected values
+        self.nm.execute_reset_all()
         e1 = {
             "folder": "selected",
             "dataseries": "selected",
             "channel": "selected",
             "epoch": "selected",
         }
-
         elist = self.nm.execute_keys_set(e1)
-        self.assertEqual(elist, [e0])
+        # Result should match current selection (from setUp: folder0, data, A, E0)
+        select = self.nm.select_keys
+        select.pop("data")
+        self.assertEqual(elist, [select])
 
         e0 = {
             "folder": "folder1",
@@ -650,6 +644,45 @@ class NMManagerTest(unittest.TestCase):
             e0c.update({"data": d})
             e1.append(e0c)
         self.assertEqual(elist, e1)
+
+
+    def test05_execute_count(self):
+        # Test execute_count() method
+        self.nm.execute_reset_all()
+        count = self.nm.execute_count(dataseries_priority=True)
+        self.assertEqual(count, 1)  # Just selected items
+
+        # With all epochs
+        e0 = {
+            "folder": "folder0",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "all",
+        }
+        self.nm.execute_keys_set(e0)
+        count = self.nm.execute_count(dataseries_priority=True)
+        self.assertEqual(count, NUMEPOCHS[0])
+
+    def test06_max_targets(self):
+        # Test max_targets parameter
+        e0 = {
+            "folder": "folder0",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "all",
+        }
+
+        # Should succeed with high enough limit
+        elist = self.nm.execute_keys_set(e0, max_targets=100)
+        self.assertEqual(len(elist), NUMEPOCHS[0])
+
+        # Should raise ValueError when exceeding limit
+        with self.assertRaises(ValueError):
+            self.nm.execute_keys_set(e0, max_targets=1)
+
+        # Should succeed with max_targets=None (unlimited)
+        elist = self.nm.execute_keys_set(e0, max_targets=None)
+        self.assertEqual(len(elist), NUMEPOCHS[0])
 
 
 if __name__ == "__main__":
