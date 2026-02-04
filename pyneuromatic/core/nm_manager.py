@@ -42,6 +42,9 @@ if TYPE_CHECKING:
 
 nm = None  # holds Manager, accessed via console
 
+# Hierarchy levels for selection (folder down to epoch)
+SELECT_LEVELS = ("folder", "data", "dataseries", "channel", "epoch")
+
 """
 NM class tree:
 
@@ -230,105 +233,113 @@ class NMManager:
     def project(self) -> NMProject:
         return self.__project
 
+    def _iter_select_hierarchy(self):
+        """
+        Generator yielding (level_name, container, selected_value) tuples.
+
+        Traverses the selection hierarchy from folder down to epoch.
+        Stops when a required parent container has no selection.
+
+        Yields:
+            Tuples of (level_name, container, selected_value) where:
+            - level_name: one of SELECT_LEVELS
+            - container: the NMObjectContainer at this level
+            - selected_value: the currently selected object (or None)
+        """
+        folders = self.__project.folders
+        if folders is None:
+            return
+
+        f = folders.selected_value
+        yield ("folder", folders, f)
+
+        if not isinstance(f, NMFolder):
+            return
+
+        # Data and DataSeries are siblings at folder level
+        yield ("data", f.data, f.data.selected_value)
+
+        ds = f.dataseries.selected_value
+        yield ("dataseries", f.dataseries, ds)
+
+        if not isinstance(ds, NMDataSeries):
+            return
+
+        # Channel and Epoch are siblings at dataseries level
+        yield ("channel", ds.channels, ds.channels.selected_value)
+        yield ("epoch", ds.epochs, ds.epochs.selected_value)
+
     @property
     def select_values(self) -> dict[str, NMObject | None]:
-        s: dict[str, NMObject | None] = {}
-        s["project"] = None
-        s["folder"] = None
-        s["data"] = None
-        s["dataseries"] = None
-        s["channel"] = None
-        s["epoch"] = None
-        # p = self.__project_container.select_value
-        p = self.__project
-        s["project"] = p
-        # if p:
-        #     s["project"] = p
-        # else:
-        #     return s
-        folders = p.folders
-        if folders is None:
-            return s
-        f = folders.selected_value
-        if not isinstance(f, NMFolder):
-            return s
-        s["folder"] = f
-        d = f.data.selected_value
-        if d:
-            s["data"] = d
-        ds = f.dataseries.selected_value
-        if not isinstance(ds, NMDataSeries):
-            return s
-        s["dataseries"] = ds
-        c = ds.channels.selected_value
-        if c:
-            s["channel"] = c
-        e = ds.epochs.selected_value
-        if e:
-            s["epoch"] = e
-        return s
+        """Get the currently selected object at each hierarchy level."""
+        result: dict[str, NMObject | None] = {level: None for level in SELECT_LEVELS}
+        for level, container, value in self._iter_select_hierarchy():
+            result[level] = value
+        return result
 
     @property
     def select_keys(self) -> dict[str, str | None]:
-        s1 = self.select_values
-        s2: dict[str, str | None] = {}
-        for k, v in s1.items():
-            if isinstance(v, NMObject):
-                s2.update({k: v.name})
-            else:
-                s2.update({k: None})
-        return s2
+        """Get the names of currently selected objects at each hierarchy level."""
+        result: dict[str, str | None] = {level: None for level in SELECT_LEVELS}
+        for level, container, value in self._iter_select_hierarchy():
+            if isinstance(value, NMObject):
+                result[level] = value.name
+        return result
 
     @select_keys.setter
     def select_keys(self, select: dict[str, str]) -> None:
-        return self._select_keys_set(select)
+        self._select_keys_set(select)
 
-    def _select_keys_set(
-        self,
-        select: dict[str, str]
-        # quiet
-    ) -> None:
+    def _select_keys_set(self, select: dict[str, str]) -> None:
+        """
+        Set selection at each hierarchy level by name.
+
+        Args:
+            select: Dictionary mapping level names to object names.
+                    Keys must be from SELECT_LEVELS (folder, data, dataseries,
+                    channel, epoch).
+
+        Raises:
+            TypeError: If select is not a dict or values aren't strings
+            KeyError: If a key is not a valid selection level
+        """
         if not isinstance(select, dict):
-            e = nmu.type_error_str(select, "select", "dictionary")
-            raise TypeError(e)
+            raise TypeError(nmu.type_error_str(select, "select", "dictionary"))
+
         for key, value in select.items():
             if not isinstance(key, str):
-                e = nmu.type_error_str(key, "key", "string")
-                raise TypeError(e)
-            if value is None or isinstance(value, str):
-                pass  # ok
-            else:
-                e = nmu.type_error_str(value, "value", "string")
-                raise TypeError(e)
-        p = self.__project
-        if "project" in select:
-            k = select["project"]
-            if k.lower() != p.name.lower():
-                e = ("NM supports only one project. " +
-                     "The current project is '%s'." % p.name)
-                raise KeyError(e)
-        #     self.__project_container.select_key = select["project"]
-        # p = self.__project_container.select_value
-        folders = p.folders
+                raise TypeError(nmu.type_error_str(key, "key", "string"))
+            if value is not None and not isinstance(value, str):
+                raise TypeError(nmu.type_error_str(value, "value", "string"))
+            if key not in SELECT_LEVELS:
+                raise KeyError(f"'{key}' is not a valid selection level. "
+                               f"Valid levels: {SELECT_LEVELS}")
+
+        # Traverse hierarchy, setting values as we go so subsequent levels
+        # use the newly selected parent
+        folders = self.__project.folders
         if folders is None:
-            return None
+            return
+
         if "folder" in select:
             folders.selected_name = select["folder"]
         f = folders.selected_value
         if not isinstance(f, NMFolder):
-            return None
+            return
+
         if "data" in select:
             f.data.selected_name = select["data"]
         if "dataseries" in select:
             f.dataseries.selected_name = select["dataseries"]
+
         ds = f.dataseries.selected_value
         if not isinstance(ds, NMDataSeries):
-            return None
+            return
+
         if "channel" in select:
             ds.channels.selected_name = select["channel"]
         if "epoch" in select:
             ds.epochs.selected_name = select["epoch"]
-        return None
 
     def execute_values(
         self,
@@ -352,7 +363,6 @@ class NMManager:
                     for c in ds.channels.execute_targets:
                         for e in ds.epochs.execute_targets:
                             x: dict[str, NMObject] = {}
-                            x["project"] = p
                             x["folder"] = f
                             x["dataseries"] = ds
                             x["channel"] = c
@@ -362,7 +372,6 @@ class NMManager:
                 dlist = f.data.execute_targets
                 for d in dlist:
                     x2: dict[str, NMObject] = {}
-                    x2["project"] = p
                     x2["folder"] = f
                     x2["data"] = d
                     elist.append(x2)
@@ -385,7 +394,7 @@ class NMManager:
         self,
         execute: dict[str, str]
     ) -> list[dict[str, str]]:
-        # sets are not allowed with project, folder, dataseries - too complex
+        # sets are not allowed with folder, dataseries - too complex
         # can specify 'data' or 'dataseries' but not both
 
         if not isinstance(execute, dict):
@@ -395,14 +404,7 @@ class NMManager:
             if not isinstance(key, str):
                 e = nmu.type_error_str(key, "key", "string")
                 raise TypeError(e)
-            if key not in [
-                "project",
-                "folder",
-                "data",
-                "dataseries",
-                "channel",
-                "epoch",
-            ]:
+            if key not in SELECT_LEVELS:
                 e = "unknown execute key '%s'" % key
                 raise KeyError(e)
             if not isinstance(value, str):
