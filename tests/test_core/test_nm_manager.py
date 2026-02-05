@@ -444,5 +444,93 @@ class TestNMManagerExecuteMaxTargets(NMManagerTestBase):
         self.assertEqual(len(elist), NUMEPOCHS[0])
 
 
+class TestNMManagerSelectValueSet(NMManagerTestBase):
+    """Tests for select_value_set method."""
+
+    def test_rejects_non_nmobject(self):
+        bad_types = (None, 3, 3.14, True, [], (), {}, set(), "string")
+        for b in bad_types:
+            with self.assertRaises(TypeError):
+                self.nm.select_value_set(b)
+
+    def test_select_epoch(self):
+        # Get a specific epoch from a different folder/dataseries
+        f = self.nm.project.folders["folder2"]
+        ds = f.dataseries["stim"]
+        epoch = ds.epochs["E3"]
+
+        self.nm.select_value_set(epoch)
+
+        self.assertEqual(self.nm.select_keys["folder"], "folder2")
+        self.assertEqual(self.nm.select_keys["dataseries"], "stim")
+        self.assertEqual(self.nm.select_keys["epoch"], "E3")
+
+    def test_select_channel(self):
+        # Get a specific channel
+        f = self.nm.project.folders["folder1"]
+        ds = f.dataseries["avg"]
+        channel = ds.channels["B"]
+
+        self.nm.select_value_set(channel)
+
+        self.assertEqual(self.nm.select_keys["folder"], "folder1")
+        self.assertEqual(self.nm.select_keys["dataseries"], "avg")
+        self.assertEqual(self.nm.select_keys["channel"], "B")
+        # Epoch should retain its current selection within this dataseries
+        self.assertIn("epoch", self.nm.select_keys)
+
+    def test_select_dataseries(self):
+        f = self.nm.project.folders["folder3"]
+        ds = f.dataseries["stim"]
+
+        self.nm.select_value_set(ds)
+
+        self.assertEqual(self.nm.select_keys["folder"], "folder3")
+        self.assertEqual(self.nm.select_keys["dataseries"], "stim")
+        # Channel and epoch should retain selection within this dataseries
+        self.assertIn("channel", self.nm.select_keys)
+        self.assertIn("epoch", self.nm.select_keys)
+
+    def test_select_folder(self):
+        f = self.nm.project.folders["folder4"]
+
+        self.nm.select_value_set(f)
+
+        self.assertEqual(self.nm.select_keys["folder"], "folder4")
+        # Dataseries, channel, epoch should retain selection
+        self.assertIn("dataseries", self.nm.select_keys)
+        self.assertIn("channel", self.nm.select_keys)
+        self.assertIn("epoch", self.nm.select_keys)
+
+    def test_select_data(self):
+        f = self.nm.project.folders["folder1"]
+        data = f.data["data5"]
+
+        self.nm.select_value_set(data)
+
+        self.assertEqual(self.nm.select_keys["folder"], "folder1")
+        self.assertEqual(self.nm.select_keys["data"], "data5")
+
+    def test_preserves_lower_level_selection(self):
+        # First set a specific selection
+        self.nm.select_keys = {
+            "folder": "folder0",
+            "dataseries": "data",
+            "channel": "B",
+            "epoch": "E2",
+        }
+
+        # Now select a different dataseries in same folder
+        f = self.nm.project.folders["folder0"]
+        ds = f.dataseries["avg"]
+
+        self.nm.select_value_set(ds)
+
+        # Folder should be same, dataseries changed
+        self.assertEqual(self.nm.select_keys["folder"], "folder0")
+        self.assertEqual(self.nm.select_keys["dataseries"], "avg")
+        # Channel/epoch should be whatever is selected in "avg" dataseries
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
