@@ -325,5 +325,64 @@ class NMUtilitiesTest(unittest.TestCase):
     """
 
 
+class TestParseDataName(unittest.TestCase):
+    """Tests for nmu.parse_data_name() utility function."""
+
+    def test_standard_name(self):
+        result = nmu.parse_data_name("RecordA0")
+        self.assertEqual(result, ("Record", "A", 0))
+
+    def test_multi_digit_epoch(self):
+        result = nmu.parse_data_name("RecordB123")
+        self.assertEqual(result, ("Record", "B", 123))
+
+    def test_lowercase_prefix(self):
+        result = nmu.parse_data_name("avgC5")
+        self.assertEqual(result, ("avg", "C", 5))
+
+    def test_long_prefix(self):
+        result = nmu.parse_data_name("MyLongPrefixD99")
+        self.assertEqual(result, ("MyLongPrefix", "D", 99))
+
+    def test_no_trailing_digits(self):
+        result = nmu.parse_data_name("RecordA")
+        self.assertIsNone(result)
+
+    def test_no_channel_char(self):
+        # "test_123" has underscore before digits, not a channel letter
+        result = nmu.parse_data_name("test_123")
+        self.assertIsNone(result)
+
+    def test_record123_parses_d_as_channel(self):
+        # "Record123" actually has "D" as channel (Recor-D-123)
+        result = nmu.parse_data_name("Record123")
+        self.assertEqual(result, ("Recor", "D", 123))
+
+    def test_empty_prefix(self):
+        result = nmu.parse_data_name("A0")
+        self.assertIsNone(result)
+
+    def test_empty_string(self):
+        result = nmu.parse_data_name("")
+        self.assertIsNone(result)
+
+    def test_none_input(self):
+        result = nmu.parse_data_name(None)
+        self.assertIsNone(result)
+
+    def test_only_digits(self):
+        result = nmu.parse_data_name("12345")
+        self.assertIsNone(result)
+
+    def test_channel_z(self):
+        result = nmu.parse_data_name("WaveZ42")
+        self.assertEqual(result, ("Wave", "Z", 42))
+
+    def test_lowercase_channel_normalized(self):
+        # Channel should be uppercase in result
+        result = nmu.parse_data_name("Recorda0")
+        self.assertEqual(result, ("Record", "A", 0))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

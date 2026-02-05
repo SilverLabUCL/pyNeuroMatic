@@ -281,6 +281,134 @@ class NMFolder(NMObject):
                 return False
         return True
 
+    # DataSeries creation from data names
+
+    def detect_prefixes(self) -> list[str]:
+        """Detect unique data prefixes in this folder's data container.
+
+        Scans all data names and parses them to find NeuroMatic naming patterns
+        ({prefix}{channel}{epoch}). Returns a sorted list of unique prefixes.
+
+        Returns:
+            List of unique prefix strings found (e.g., ["Record", "avg"]).
+
+        Example:
+            If folder contains: RecordA0, RecordA1, RecordB0, avgA0, avgB0
+            Returns: ["Record", "avg"]
+        """
+        prefixes: set[str] = set()
+        for name in self.data.keys():
+            parsed = nmu.parse_data_name(name)
+            if parsed is not None:
+                prefix, _, _ = parsed
+                prefixes.add(prefix)
+        return sorted(prefixes)
+
+    def make_dataseries(
+        self,
+        prefix: str,
+        select: bool = False
+    ) -> NMDataSeries | None:
+        """Create a dataseries from data matching a prefix pattern.
+
+        Scans the data container for names matching the NeuroMatic pattern
+        {prefix}{channel}{epoch} and creates a dataseries with appropriate
+        channels and epochs, linking the NMData objects.
+
+        The prefix can be partial - for example, "Rec" will match "RecordA0".
+        The full detected prefix (e.g., "Record") becomes the dataseries name.
+
+        Args:
+            prefix: Prefix to match (case-insensitive). Can be partial.
+            select: Whether to select the new dataseries.
+
+        Returns:
+            The created NMDataSeries, or None if no matching data found.
+
+        Example:
+            >>> folder.make_dataseries("Record")
+            # Creates dataseries "Record" with channels A, B and epochs E0, E1
+            # if folder contains RecordA0, RecordA1, RecordB0, RecordB1
+        """
+        from pyneuromatic.core.nm_data import NMData
+        from pyneuromatic.core.nm_dataseries import NMDataSeries
+
+        if not prefix or not isinstance(prefix, str):
+            return None
+
+        # Find all data matching the prefix pattern
+        # Key: (channel_char, epoch_num), Value: NMData
+        matches: dict[tuple[str, int], NMData] = {}
+        actual_prefix: str | None = None
+
+        for name, data in self.data.items():
+            # Check if name starts with user's prefix (case-insensitive)
+            if not name.lower().startswith(prefix.lower()):
+                continue
+
+            # Parse the name from the end to find channel and epoch
+            parsed = nmu.parse_data_name(name)
+            if parsed is None:
+                continue
+
+            detected_prefix, channel_char, epoch_num = parsed
+
+            # Verify detected prefix starts with user's prefix
+            if not detected_prefix.lower().startswith(prefix.lower()):
+                continue
+
+            # Use first detected prefix as the actual prefix for dataseries name
+            if actual_prefix is None:
+                actual_prefix = detected_prefix
+            elif actual_prefix != detected_prefix:
+                # Different prefix detected, skip this data
+                continue
+
+            matches[(channel_char, epoch_num)] = data
+
+        if not matches or actual_prefix is None:
+            return None
+
+        # Check if dataseries already exists
+        if actual_prefix in self.dataseries:
+            return None  # Could also raise an error or return existing
+
+        # Create the dataseries
+        ds = self.dataseries.new(name=actual_prefix, select=select)
+        if ds is None:
+            return None
+
+        # Determine unique channels and epochs
+        channel_chars = sorted(set(ch for ch, _ in matches.keys()))
+        epoch_nums = sorted(set(ep for _, ep in matches.keys()))
+
+        # Create channels (NMChannelContainer auto-names A, B, C...)
+        # We need to create channels in order, so if data has A, B, C, we create 3
+        channel_map: dict[str, object] = {}  # channel_char -> NMChannel
+        for ch_char in channel_chars:
+            channel = ds.channels.new()
+            if channel is not None:
+                channel_map[ch_char] = channel
+
+        # Create epochs (NMEpochContainer auto-names E0, E1, E2...)
+        epoch_map: dict[int, object] = {}  # epoch_num -> NMEpoch
+        for ep_num in epoch_nums:
+            epoch = ds.epochs.new()
+            if epoch is not None:
+                epoch_map[ep_num] = epoch
+
+        # Link data to channels and epochs
+        for (ch_char, ep_num), data in matches.items():
+            channel = channel_map.get(ch_char)
+            epoch = epoch_map.get(ep_num)
+
+            if channel is not None:
+                channel.data.append(data)
+            if epoch is not None:
+                epoch.data.append(data)
+
+        return ds
+
 
 class NMFolderContainer(NMObjectContainer):
     """

@@ -502,6 +502,65 @@ def channel_char_search(
     return -1
 
 
+def parse_data_name(
+    name: str,
+    char_list: tuple[str] = CHANNEL_CHARS
+) -> tuple[str, str, int] | None:
+    """Parse a data name into prefix, channel, and epoch.
+
+    Parses from the end of the string to detect the NeuroMatic naming pattern:
+    {prefix}{channel}{epoch} where channel is a single uppercase letter and
+    epoch is a sequence of digits.
+
+    Args:
+        name: Data name like "RecordA0", "avgB12", "WaveC100".
+        char_list: Valid channel characters (default: A-Z).
+
+    Returns:
+        Tuple of (prefix, channel_char, epoch_num) if pattern found,
+        or None if name doesn't match the pattern.
+
+    Examples:
+        >>> parse_data_name("RecordA0")
+        ('Record', 'A', 0)
+        >>> parse_data_name("avgB12")
+        ('avg', 'B', 12)
+        >>> parse_data_name("nopattern")
+        None
+    """
+    if not name or not isinstance(name, str):
+        return None
+
+    # Find trailing digits (epoch) - parse from end
+    i = len(name) - 1
+    while i >= 0 and name[i].isdigit():
+        i -= 1
+
+    # Must have at least one trailing digit
+    if i == len(name) - 1:
+        return None
+
+    epoch_str = name[i + 1:]
+    epoch_num = int(epoch_str)
+
+    # Check for channel character (single uppercase letter from char_list)
+    if i < 0:
+        return None
+
+    potential_channel = name[i].upper()
+    if potential_channel not in char_list:
+        return None
+
+    channel_char = potential_channel
+    prefix = name[:i]
+
+    # Prefix cannot be empty
+    if not prefix:
+        return None
+
+    return (prefix, channel_char, epoch_num)
+
+
 def type_error_str(
     obj: object, 
     obj_name: str, 
