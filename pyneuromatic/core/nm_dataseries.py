@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-[Module description].
+NMDataSeries module for managing data series with channels and epochs.
+
+A data series represents a collection of data where names follow the pattern:
+RecordA0, RecordA1... where "Record" is the prefix, "A" is the channel,
+and "0" is the epoch number.
 
 Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
 
 If you use this software in your research, please cite:
-Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
-Software Toolkit for Acquisition, Analysis and Simulation of 
-Electrophysiological Data. Front. Neuroinform. 12:14. 
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source
+Software Toolkit for Acquisition, Analysis and Simulation of
+Electrophysiological Data. Front. Neuroinform. 12:14.
 doi: 10.3389/fninf.2018.00014
 
 Copyright (c) 2026 The Silver Lab, University College London.
@@ -20,18 +24,18 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 import copy
-import numpy as np
+import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyneuromatic.core.nm_data import NMData
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
-from pyneuromatic.core.nm_channel import NMChannelContainer
-from pyneuromatic.core.nm_epoch import NMEpochContainer
-import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
+from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
 import pyneuromatic.core.nm_utilities as nmu
 
-
-ALLSTR = "all".upper()
 
 """
 NM class tree:
@@ -60,15 +64,17 @@ Ch B  B0  B1  B2...
 
 class NMDataSeries(NMObject):
     """
-    NM DataSeries class
+    NM DataSeries class.
+
+    Coordinates channels and epochs for a data series. Data dimensions
+    are managed by individual NMData objects (source of truth) and
+    NMChannel objects (defaults/templates for new data).
     """
 
     # Extend NMObject's special attrs with NMDataSeries's own
     _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
         "_NMDataSeries__channel_container",
         "_NMDataSeries__epoch_container",
-        "_NMDataSeries__channel_scale_lock",
-        "_NMDataSeries__xscale_lock",
     })
 
     def __init__(
@@ -80,8 +86,6 @@ class NMDataSeries(NMObject):
 
         self.__channel_container: NMChannelContainer = NMChannelContainer(parent=self)
         self.__epoch_container: NMEpochContainer = NMEpochContainer(parent=self)
-        self.__channel_scale_lock: bool = True  # NMdata share channel x-y scales
-        self.__xscale_lock: bool = True  # all NMdata share x-scale
 
     # override
     def __eq__(
@@ -90,8 +94,13 @@ class NMDataSeries(NMObject):
     ) -> bool:
         if not isinstance(other, NMDataSeries):
             return NotImplemented
-        # TODO
-        return super().__eq__(other)
+        if not super().__eq__(other):
+            return False
+        if self.__channel_container != other.__channel_container:
+            return False
+        if self.__epoch_container != other.__epoch_container:
+            return False
+        return True
 
     def __deepcopy__(self, memo: dict) -> NMDataSeries:
         """Support Python's copy.deepcopy() protocol.
@@ -105,8 +114,6 @@ class NMDataSeries(NMObject):
         Returns:
             A deep copy of this NMDataSeries
         """
-        import datetime
-
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -146,36 +153,12 @@ class NMDataSeries(NMObject):
         else:
             result._NMDataSeries__epoch_container = NMEpochContainer(parent=result)
 
-        # __channel_scale_lock: simple bool copy
-        result._NMDataSeries__channel_scale_lock = self._NMDataSeries__channel_scale_lock
-
-        # __xscale_lock: simple bool copy
-        result._NMDataSeries__xscale_lock = self._NMDataSeries__xscale_lock
-
         return result
 
-    # TODO: replace with __eq__()
-    def _isequivalent(self, dataseries, alert=False):
-        if not super()._isequivalent(dataseries, alert=alert):
-            return False
-        c = self.channels
-        c2 = dataseries._NMDataSeries__channel_container
-        if c and not c._isequivalent(c2, alert=alert):
-            return False
-        # c = self.__set_container
-        # c2 = dataseries._NMDataSeries__set_container
-        # if c and not c._isequivalent(c2, alert=alert):
-        #    return False
-        return True
-
     # override
-    # TODO: finish
     @property
     def parameters(self) -> dict[str, object]:
         k = super().parameters
-        # k.update({'channel_select': self.__channel_select})
-        # k.update({'epoch_select': self.__epoch_select})
-        # k.update({'data_select': self.__data_select})
         return k
 
     # override
@@ -194,10 +177,16 @@ class NMDataSeries(NMObject):
     def epochs(self) -> NMEpochContainer:
         return self.__epoch_container
 
-    def get_select(
-        self, 
+    def get_selected(
+        self,
         get_keys: bool = False
-    ) -> list[NMObject] | list[str]:
+    ) -> list[NMData] | list[str]:
+        """Get data at the intersection of selected channel and epoch.
+
+        Returns:
+            List of NMData objects (or their names if get_keys=True) that
+            belong to both the selected channel and selected epoch.
+        """
         if not self.channels.selected_name:
             return []
         c = self.channels.selected_value
@@ -209,7 +198,7 @@ class NMDataSeries(NMObject):
         if e is None:
             return []
 
-        dlist = []
+        dlist: list = []
         for d in e.data:
             if d in c.data:
                 if get_keys:
@@ -218,615 +207,272 @@ class NMDataSeries(NMObject):
                     dlist.append(d)
         return dlist
 
-    @property
-    def channel_scale_lock(self) -> bool:
-        if isinstance(self.__channel_scale_lock, bool):
-            return self.__channel_scale_lock
-        else:
-            return True
-
-    @channel_scale_lock.setter
-    def channel_scale_lock(
+    def get_data(
         self,
-        on: bool
-    ) -> None:
-        if not isinstance(on, bool):
-            e = nmu.type_error_str(on, "channel_scale_lock", "boolean")
-            raise TypeError(e)
-        self.__channel_scale_lock = on
+        channel: str | None = None,
+        epoch: str | None = None
+    ) -> NMData | None:
+        """Get data at the intersection of a channel and epoch.
 
-    @property
-    def xscale_lock(self) -> bool:
-        if isinstance(self.__xscale_lock, bool):
-            return self.__xscale_lock
+        Args:
+            channel: Channel name (e.g., "A"). If None, uses selected channel.
+            epoch: Epoch name (e.g., "E0"). If None, uses selected epoch.
+
+        Returns:
+            NMData object at the intersection, or None if not found.
+        """
+        if channel is None:
+            c = self.channels.selected_value
         else:
-            return True
+            c = self.channels.get(channel)
+        if c is None:
+            return None
 
-    @xscale_lock.setter
-    def xscale_lock(
-        self, 
-        on: bool
-    ) -> None:
-        if not isinstance(on, bool):
-            e = nmu.type_error_str(on, "xscale_lock", "boolean")
-            raise TypeError(e)
-        self.__xscale_lock = on
+        if epoch is None:
+            e = self.epochs.selected_value
+        else:
+            e = self.epochs.get(epoch)
+        if e is None:
+            return None
 
-    @property
-    def dims(self):
-        if self.__channel_scale_lock:
-            return self.__dims
-        return self._dims_of_thedata
-
-    @dims.setter
-    def dims(
-        self, 
-        dims
-    ):
-        return self._dims_set(dims)
-
-    def _dims_set(
-        self, 
-        dims, 
-        quiet=False
-    ):
-        if not isinstance(dims, dict):
-            e = nmu.type_error_str(dims, "dims", "dimensions dictionary")
-            raise TypeError(e)
-        keys = dims.keys()
-        for k in keys:
-            if k not in ["xdata", "xstart", "xdelta", "xlabel", "xunits", "ylabel", "yunits"]:
-                raise KeyError("unknown dimensions key: " + k)
-        if "xdata" in keys:
-            self._xdata_set(dims["xdata"], quiet=quiet)
-        if "xstart" in keys:
-            self._xstart_set(dims["xstart"], quiet=quiet)
-        if "xdelta" in keys:
-            self._xdelta_set(dims["xdelta"], quiet=quiet)
-        if "xlabel" in keys:
-            self._xlabel_set(dims["xlabel"], quiet=quiet)
-        if "xunits" in keys:
-            self._xunits_set(dims["xunits"], quiet=quiet)
-        if "ylabel" in keys:
-            self._ylabel_set(dims["ylabel"], quiet=quiet)
-        if "yunits" in keys:
-            self._yunits_set(dims["yunits"], quiet=quiet)
-        return True
-
-    @property
-    def xdata(self):
-        k = "xdata"
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        self.__dims = self._dims_of_thedata()
-        if k in self.__dims.keys():
-            return self.__dims[k]
+        for d in c.data:
+            if d in e.data:
+                return d
         return None
 
-    @xdata.setter
-    def xdata(
-        self, 
-        xdata
-    ):
-        return self._xdata_set(xdata)
+    # =========================================================================
+    # Bulk dimension utility methods
+    #
+    # These methods provide convenient ways to set dimension properties across
+    # multiple data objects. NMData remains the source of truth for dimensions.
+    # =========================================================================
 
-    def _xdata_set(
-        self, 
-        xdata, 
-        quiet=False
-    ):
-        if xdata is None:
-            pass  # ok
-        elif xdata.__class__.__name__ != "NMData":  # cannot import Data class
-            e = nmu.type_error_str(xdata, "xdata", "NMData")
-            raise TypeError(e)
-        old = self.xdata
-        # if xdata == old:
-        #    return True
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d._xdata_set(xdata, alert=False, quiet=True)
-        self.__dims = {}  # reset
-        new = self.xdata
-        # h = nmh.history_change_str("xdata", old, new)
-        # nmh.history(h, quiet=quiet)
-        return True
+    def set_xstart(
+        self,
+        value: float | int,
+        channel: str | None = None
+    ) -> int:
+        """Set x-axis start value on data in this series.
 
-    @property
-    def xstart(self):
-        k = "xstart"
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        self.__dims = self._dims_of_thedata()
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        return 0
+        Args:
+            value: The x-start value to set.
+            channel: If specified, only set for this channel. If None, set for all.
 
-    @xstart.setter
-    def xstart(
-        self, 
-        xstart
-    ):
-        return self._xstart_set(xstart)
+        Returns:
+            Number of data objects modified.
+        """
+        if not isinstance(value, (float, int)) or isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "value", "number"))
 
-    def _xstart_set(
-        self, 
-        xstart, 
-        quiet=False
-    ):
-        if not isinstance(xstart, float) and not isinstance(xstart, int):
-            e = nmu.type_error_str(xstart, "xstart", "number")
-            raise TypeError(e)
-        if not nmu.number_ok(xstart):
-            raise ValueError("xstart: %s" % xstart)
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d._xstart_set(xstart, alert=False, quiet=True)
-        return True
+        count = 0
+        for ch in self._iter_channels(channel):
+            for data in ch.data:
+                data.xdim.start = value
+                count += 1
+        return count
 
-    @property
-    def xdelta(self):
-        k = "xdelta"
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        self.__dims = self._dims_of_thedata()
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        return 1
+    def set_xdelta(
+        self,
+        value: float | int,
+        channel: str | None = None
+    ) -> int:
+        """Set x-axis delta (sample interval) on data in this series.
 
-    @xdelta.setter
-    def xdelta(
-        self, 
-        xdelta
-    ):
-        return self._xdelta_set(xdelta)
+        Args:
+            value: The x-delta value to set.
+            channel: If specified, only set for this channel. If None, set for all.
 
-    def _xdelta_set(
-        self, 
-        xdelta, 
-        quiet=False
-    ):
-        if np.isinf(xdelta) or np.isnan(xdelta):
-            return False
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xdelta = xdelta
-        return True
+        Returns:
+            Number of data objects modified.
+        """
+        if not isinstance(value, (float, int)) or isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "value", "number"))
 
-    @property
-    def xlabel(self):
-        k = "xlabel"
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        self.__dims = self._dims_of_thedata()
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        return ""
+        count = 0
+        for ch in self._iter_channels(channel):
+            for data in ch.data:
+                data.xdim.delta = value
+                count += 1
+        return count
 
-    @xlabel.setter
-    def xlabel(
-        self, 
-        xlabel
-    ):
-        return self._xlabel_set(xlabel)
+    def set_xlabel(
+        self,
+        label: str,
+        channel: str | None = None
+    ) -> int:
+        """Set x-axis label on data in this series.
 
-    def _xlabel_set(
-        self, 
-        xlabel, 
-        quiet=False
-    ):
-        if not isinstance(xlabel, str):
-            e = nmu.type_error_str(xlabel, "xlabel", "string")
-            raise TypeError(e)
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xlabel = xlabel
-        return True
+        Args:
+            label: The x-axis label to set.
+            channel: If specified, only set for this channel. If None, set for all.
 
-    @property
-    def xunits(self):
-        k = "xunits"
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        self.__dims = self._dims_of_thedata()
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        return ""
+        Returns:
+            Number of data objects modified.
+        """
+        if not isinstance(label, str):
+            raise TypeError(nmu.type_error_str(label, "label", "string"))
 
-    @xunits.setter
-    def xunits(
-        self, 
-        xunits
-    ):
-        return self._xunits_set(xunits)
+        count = 0
+        for ch in self._iter_channels(channel):
+            for data in ch.data:
+                data.xdim.label = label
+                count += 1
+        return count
 
-    def _xunits_set(
-        self, 
-        xunits, 
-        quiet=False
-    ):
-        if not isinstance(xunits, str):
-            e = nmu.type_error_str(xunits, "xunits", "string")
-            raise TypeError(e)
-        for c, cdata in self.__thedata.items():
-            for d in cdata:
-                d.xunits = xunits
-        return True
+    def set_xunits(
+        self,
+        units: str,
+        channel: str | None = None
+    ) -> int:
+        """Set x-axis units on data in this series.
 
-    @property
-    def ylabel(self):
-        k = "ylabel"
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        self.__dims = self._dims_of_thedata()
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        return ""
+        Args:
+            units: The x-axis units to set (e.g., "ms", "s").
+            channel: If specified, only set for this channel. If None, set for all.
 
-    @ylabel.setter
-    def ylabel(
-        self, 
-        chan_ylabel
-    ):
-        return self._ylabel_set(chan_ylabel)
+        Returns:
+            Number of data objects modified.
+        """
+        if not isinstance(units, str):
+            raise TypeError(nmu.type_error_str(units, "units", "string"))
 
-    def _ylabel_set(
-        self, 
-        chan_ylabel, 
-        quiet=False
-    ):
-        if isinstance(chan_ylabel, str):
-            chan_ylabel = {"A": chan_ylabel}
-        elif not isinstance(chan_ylabel, dict):
-            e = nmu.type_error_str(chan_ylabel, "chan_ylabel", "channel dictionary")
-            raise TypeError(e)
-        for cc, ylabel in chan_ylabel.items():
-            if not isinstance(ylabel, str):
-                e = nmu.type_error_str(ylabel, "ylabel", "string")
-                raise TypeError(e)
-            # elif c not in self.__thedata.keys():
-            if not isinstance(cc, str):
-                e = nmu.type_error_str(cc, "channel", "character")
-                raise TypeError(e)
-            cc2 = nmu.chanel_char_check(cc)
-            if not cc2:
-                raise ValueError("channel: %s" % cc)
-            if cc2 in self.__thedata.keys():
-                cdata = self.__thedata[cc2]
-                for d in cdata:
-                    d.ylabel = ylabel
-        return True
+        count = 0
+        for ch in self._iter_channels(channel):
+            for data in ch.data:
+                data.xdim.units = units
+                count += 1
+        return count
 
-    @property
-    def _ylabel_of_thedata(self):
-        yy = {}
-        for c, cdata in self.__thedata.items():
-            y = []
-            ylower = []
-            for d in cdata:
-                if d.ylabel.lower() not in ylower:
-                    y.append(d.ylabel)
-                    ylower.append(d.ylabel.lower())
-            yy.update({c: y})
-        return yy
+    def set_ylabel(
+        self,
+        label: str,
+        channel: str | None = None
+    ) -> int:
+        """Set y-axis label on data in this series.
 
-    @property
-    def yunits(self):
-        k = "yunits"
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        self.__dims = self._dims_of_thedata()
-        if k in self.__dims.keys():
-            return self.__dims[k]
-        return ""
+        Args:
+            label: The y-axis label to set.
+            channel: If specified, only set for this channel. If None, set for all.
 
-    @yunits.setter
-    def yunits(
-        self, 
-        chan_yunits
-    ):
-        return self._yunits_set(chan_yunits)
+        Returns:
+            Number of data objects modified.
+        """
+        if not isinstance(label, str):
+            raise TypeError(nmu.type_error_str(label, "label", "string"))
 
-    def _yunits_set(
-        self, 
-        chan_yunits, 
-        quiet=False
-    ):
-        if isinstance(chan_yunits, str):
-            chan_yunits = {"A": chan_yunits}
-        elif not isinstance(chan_yunits, dict):
-            e = nmu.type_error_str(chan_yunits, "chan_yunits", "channel dictionary")
-            raise TypeError(e)
-        for c, yunits in chan_yunits.items():
-            if not isinstance(yunits, str):
-                e = nmu.type_error_str(yunits, "yunits", "string")
-                raise TypeError(e)
-            # elif c not in self.__thedata.keys():
-            elif not nmu.channel_char_check(c):
-                raise ValueError("channel: %s" % c)
-            if c in self.__thedata.keys():
-                cdata = self.__thedata[c]
-                for d in cdata:
-                    d.yunits = yunits
-        return True
+        count = 0
+        for ch in self._iter_channels(channel):
+            for data in ch.data:
+                data.ydim.label = label
+                count += 1
+        return count
 
-    def _dims_of_thedata(self):
-        xdata = []
-        xstart = []
-        xdelta = []
-        xlabel = []
-        xunits = []
-        ylabel = {}
-        yunits = {}
-        for c, cdata in self.__thedata.items():
-            yl = []
-            yu = []
-            for d in cdata:
-                if d.xdata not in xdata:
-                    xdata.append(d.xdata)
-                if d.xstart not in xstart:
-                    xstart.append(d.xstart)
-                if d.xdelta not in xdelta:
-                    xdelta.append(d.xdelta)
-                if d.xlabel not in xlabel:
-                    xlabel.append(d.xlabel)
-                if d.xunits not in xunits:
-                    xunits.append(d.xunits)
-                if d.ylabel not in yl:
-                    yl.append(d.ylabel)
-                if d.yunits not in yu:
-                    yu.append(d.yunits)
-            ylabel.update({c: yl})
-            yunits.update({c: yu})
-        dims = {"xdata": xdata}
-        dims.update({"xstart": xstart, "xdelta": xdelta})
-        dims.update({"xlabel": xlabel, "xunits": xunits})
-        dims.update({"ylabel": ylabel, "yunits": yunits})
-        return dims
-    
-    # @property
-    # def sets(self):
-    #    return self.__set_container
-    """
-    def _sets_init(self, set_list=nmp.DATASERIES_SET_LIST, select=True,
-                   quiet=False):
-        if not set_list:
-            return []
-        if not isinstance(set_list, list):
-            set_list = [set_list]
-        r = []
-        init_select = select or not self.__set_container.select
-        for s in nmp.DATASERIES_SET_LIST:
-            if not s or not isinstance(s, str):
+    def set_yunits(
+        self,
+        units: str,
+        channel: str | None = None
+    ) -> int:
+        """Set y-axis units on data in this series.
+
+        Args:
+            units: The y-axis units to set (e.g., "pA", "mV").
+            channel: If specified, only set for this channel. If None, set for all.
+
+        Returns:
+            Number of data objects modified.
+        """
+        if not isinstance(units, str):
+            raise TypeError(nmu.type_error_str(units, "units", "string"))
+
+        count = 0
+        for ch in self._iter_channels(channel):
+            for data in ch.data:
+                data.ydim.units = units
+                count += 1
+        return count
+
+    def get_xscales_summary(self) -> dict[str, dict]:
+        """Get a summary of x-scale values across all channels.
+
+        Useful for checking if all data in a channel share the same x-scale,
+        or for diagnostics after processing operations.
+
+        Returns:
+            Dict mapping channel names to their x-scale summary:
+            {
+                "A": {"start": {0.0}, "delta": {0.01}, "uniform": True},
+                "B": {"start": {0.0, 0.5}, "delta": {0.02}, "uniform": False},
+            }
+        """
+        result: dict[str, dict] = {}
+        for ch_name, channel in self.channels.items():
+            if not isinstance(channel, NMChannel):
                 continue
-            select = init_select and s.upper() == ALLSTR
-            if self.__set_container.new(name=s, select=select, quiet=quiet):
-                r.append(s)
-        if init_select and not self.__set_container.select:
-            self.__set_container.select = set_list[0]
-        return r
-    """
+            starts: set = set()
+            deltas: set = set()
+            for data in channel.data:
+                if hasattr(data, 'xdim'):
+                    if data.xdim.start is not None:
+                        starts.add(data.xdim.start)
+                    if data.xdim.delta is not None:
+                        deltas.add(data.xdim.delta)
+            result[ch_name] = {
+                "start": starts,
+                "delta": deltas,
+                "uniform": len(starts) <= 1 and len(deltas) <= 1
+            }
+        return result
 
-    def get_data_names(
-        self, 
-        chan_list=ALLSTR, 
-        epoch_list=[-2], 
-        quiet=False
-    ):
-        d = self.get_data(chan_list=chan_list, epoch_list=epoch_list, quiet=quiet)
-        n = {}
-        for c, cdata in d.items():
-            nlist = [d.name for d in cdata]
-            n.update({c: nlist})
-        return n
+    def get_yscales_summary(self) -> dict[str, dict]:
+        """Get a summary of y-scale values across all channels.
 
-    def get_data(
-        self, 
-        chan_list=ALLSTR, 
-        epoch_list=[-2], 
-        quiet=False
-    ):
-        if not self.__thedata:
-            return {}
-        clist = self._channel_list(chan_list=chan_list)
-        if not clist:
-            return {}
-        if not isinstance(epoch_list, list):
-            epoch_list = [epoch_list]
-        all_epochs = False
-        elist = []
-        for ep in epoch_list:
-            if not isinstance(ep, int):
-                epoch = ep
-                e = nmu.type_error_str(ep, "epoch", "integer")
-                raise TypeError(e)
-            if ep == -1:
-                elist = self.__epoch_select
-                break
-            if ep == -2:
-                elist = []
-                all_epochs = True
-                break
-            elist.append(ep)
-        if not elist and not all_epochs:
-            return {}
-        dd = {}
-        for c in clist:
-            cdata = self.__thedata[c]
-            dlist = []
-            if all_epochs:
-                dlist = cdata
-            else:
-                for ep in elist:
-                    if ep >= 0 and ep < len(cdata):
-                        dlist.append(cdata[ep])
-                    else:
-                        raise ValueError("epoch: %s" % ep)
-            dd.update({c: dlist})
-        return dd
+        Returns:
+            Dict mapping channel names to their y-scale summary:
+            {
+                "A": {"label": {"current"}, "units": {"pA"}},
+                "B": {"label": {"voltage"}, "units": {"mV"}},
+            }
+        """
+        result: dict[str, dict] = {}
+        for ch_name, channel in self.channels.items():
+            if not isinstance(channel, NMChannel):
+                continue
+            labels: set = set()
+            units: set = set()
+            for data in channel.data:
+                if hasattr(data, 'ydim'):
+                    if data.ydim.label:
+                        labels.add(data.ydim.label)
+                    if data.ydim.units:
+                        units.add(data.ydim.units)
+            result[ch_name] = {
+                "label": labels,
+                "units": units,
+            }
+        return result
 
-    @property
-    def data_select_names(self):
-        d = self.data_select
-        n = {}
-        for c, cdata in d.items():
-            nlist = [d.name for d in cdata]
-            n.update({c: nlist})
-        return n
+    def _iter_channels(self, channel: str | None = None):
+        """Iterate over channels, optionally filtering to a single channel.
 
-    @property
-    def data_select(self):
-        # TODO: remove sets.select
-        clist = self.channel_select_list
-        if not clist:
-            return {}
-        if not self.sets.select or not self.sets.select.name:
-            return {}
-        if not self.sets.select.theset:
-            return {}
-        sname = self.sets.select.name
-        theset = self.sets.select.theset
-        sx = self.sets.getitem("SetX")
-        if sx:
-            setx = sx.theset
+        Args:
+            channel: If specified, yield only this channel. If None, yield all.
+
+        Yields:
+            NMChannel objects.
+
+        Raises:
+            KeyError: If specified channel does not exist.
+        """
+        if channel is not None:
+            c = self.channels.get(channel)
+            if c is None:
+                raise KeyError(f"channel '{channel}' does not exist")
+            if isinstance(c, NMChannel):
+                yield c
         else:
-            setx = None
-        all_epochs = sname.upper() == ALLSTR
-        dd = {}
-        for c in clist:
-            cdata = self.__thedata[c]
-            dlist = []
-            for d in cdata:
-                if setx and d in setx:
-                    continue
-                if all_epochs or d in theset:
-                    dlist.append(d)
-            dd.update({c: dlist})
-        return dd
-
-    def _getitems(
-        self, 
-        chan_char
-    ):
-        thedata = self._folder.data._NMObjectContainer__container  # mangled
-        dlist = []
-        i = len(self.name)
-        for o in thedata:
-            if o.name[:i].casefold() == self.name.casefold():
-                if chan_char:
-                    if nmu.channel_char_search(o.name[i:], chan_char) >= 0:
-                        dlist.append(o)
-                else:
-                    dlist.append(o)
-        return dlist
-
-    def update(
-        self, 
-        quiet=False
-    ):
-        foundsomething = False
-        htxt = []
-        self.__thedata = {}
-        for i in range(0, 25):
-            cc = nmu.channel_char(i)
-            olist = self._getitems(cc)
-            if len(olist) > 0:
-                self.__thedata.append(olist)
-                foundsomething = True
-                if not self.channel.exists(cc):
-                    self.channel.new(name=cc, quiet=True)
-                htxt.append("ch=" + cc + ", n=" + str(len(olist)))
-            else:
-                break  # no more channels
-        if not foundsomething:
-            a = "failed to find data with prefix '%s'" % self.name
-            nmh.alert(a, quiet=quiet)
-        # for h in htxt:
-            # h = "found data with prefix '%s' : %s" % (self.name, h)
-            # nmh.history(h, quiet=quiet)
-        return True
-
-    def make(
-        self, 
-        channels=1, 
-        epochs=1, 
-        shape=[], 
-        fill_value=0, 
-        dims={}, 
-        quiet=False
-    ):
-        if not nmu.number_ok(channels, no_neg=True, no_zero=True):
-            raise ValueError("channels: %s" % channels)
-        if not nmu.number_ok(epochs, no_neg=True, no_zero=True):
-            raise ValueError("epochs: %s" % epochs)
-        if not nmu.number_ok(shape, no_neg=True):
-            raise ValueError("shape: %s" % shape)
-        if self.channel_count > 0 and channels != self.channel_count:
-            e = "data series '%s' requires channels = %s" % (
-                self.name,
-                self.channel_count,
-            )
-            raise ValueError(e)
-        self.__thedata = {}
-        epoch_bgn = []
-        for i in range(0, channels):
-            cc = nmu.channel_char(i)
-            dlist = self._getitems(cc)  # search for existing data
-            epoch_bgn.append(len(dlist))
-            self.__thedata.update({cc: dlist})
-            if not self.channel.exists(cc):
-                self.channel.new(name=cc, quiet=True)
-        e_bgn = max(epoch_bgn)
-        e_end = e_bgn + epochs
-        for i in range(0, channels):
-            cc = nmu.channel_char(i)
-            elist = []
-            dlist = []
-            for j in range(e_bgn, e_end):
-                name2 = self.name + cc + str(j)
-                d = self._folder.data.new(
-                    name=name2, shape=shape, fill_value=fill_value, quiet=True
-                )
-                if d:
-                    elist.append(j)
-                    dlist.append(d)
-                else:
-                    a = "failed to create '%s'" % name2
-                    nmh.alert(a, quiet=quiet)
-            dlist2 = self.__thedata[cc]
-            dlist2.extend(dlist)
-            self.__thedata[cc] = dlist2
-            ep = nmu.int_list_to_seq_str(elist, seperator=",")
-            # h = "created '%s', ch=%s, ep=%s" % (self.name, cc, ep)
-            # nmh.history(h, quiet=quiet)
-        if dims:
-            self.dims = dims
-        return True
-
-    def xdata_make(
-        self, 
-        name, 
-        shape=[], 
-        dims={}, 
-        quiet=False
-    ):
-        if not isinstance(dims, dict):
-            e = nmu.type_error_str(dims, "dims", "dimensions dictionary")
-            raise TypeError(e)
-        dims.update({"xstart": 0, "xdelta": 1})  # enforce
-        if "xlabel" in dims.keys():  # switch x and y
-            dims.update({"ylabel": dims["xlabel"]})  # NOT DICT TYPE
-            dims.update({"xlabel": ""})
-        if "xunits" in dims.keys():  # switch x and y
-            dims.update({"yunits": dims["xunits"]})  # NOT DICT TYPE
-            dims.update({"xunits": ""})
-        d = self._folder.data.new(name=name, shape=shape, dims=dims, quiet=quiet)
-        if not d:
-            return None
-        for i in range(0, shape):  # CHECK THIS WORKS WITH SHAPE
-            d.np_array[i] = i
-        self.xdata = d
-        return d
+            for ch in self.channels.values():
+                if isinstance(ch, NMChannel):
+                    yield ch
 
 
 class NMDataSeriesContainer(NMObjectContainer):
@@ -861,15 +507,10 @@ class NMDataSeriesContainer(NMObjectContainer):
         name = self._newkey(name)
         # Use self._parent (NMFolder) to skip container in parent chain,
         # consistent with NMFolder, NMData, NMChannel, NMEpoch
-        s = NMDataSeries(parent=self, name=name)
+        s = NMDataSeries(parent=self._parent, name=name)
         if super()._new(s, select=select):
             return s
         return None
-    # @property
-    # def data(self):  # use self._folder.data
-    #    if self._parent.__class__.__name__ == 'NMFolder':
-    #        return self._parent.data
-    #    return None
 
     # override, no super
     def duplicate(self):

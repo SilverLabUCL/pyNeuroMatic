@@ -54,7 +54,7 @@ class NMDataSeriesTest(unittest.TestCase):
 
         self.ds0.channels.selected_name = "B"
         self.ds0.epochs.selected_name = "E2"
-        print(self.ds0.get_select(get_keys=True))
+        print(self.ds0.get_selected(get_keys=True))
 
         # create sets
 
