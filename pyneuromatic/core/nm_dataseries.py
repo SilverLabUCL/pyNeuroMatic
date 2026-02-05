@@ -267,7 +267,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xdim.start = value
+                data.x.start = value
                 count += 1
         return count
 
@@ -291,7 +291,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xdim.delta = value
+                data.x.delta = value
                 count += 1
         return count
 
@@ -315,7 +315,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xdim.label = label
+                data.x.label = label
                 count += 1
         return count
 
@@ -339,7 +339,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xdim.units = units
+                data.x.units = units
                 count += 1
         return count
 
@@ -363,7 +363,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.ydim.label = label
+                data.y.label = label
                 count += 1
         return count
 
@@ -387,7 +387,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.ydim.units = units
+                data.y.units = units
                 count += 1
         return count
 
@@ -411,11 +411,11 @@ class NMDataSeries(NMObject):
             starts: set = set()
             deltas: set = set()
             for data in channel.data:
-                if hasattr(data, 'xdim'):
-                    if data.xdim.start is not None:
-                        starts.add(data.xdim.start)
-                    if data.xdim.delta is not None:
-                        deltas.add(data.xdim.delta)
+                if hasattr(data, 'x'):
+                    if data.x.start is not None:
+                        starts.add(data.x.start)
+                    if data.x.delta is not None:
+                        deltas.add(data.x.delta)
             result[ch_name] = {
                 "start": starts,
                 "delta": deltas,
@@ -440,11 +440,11 @@ class NMDataSeries(NMObject):
             labels: set = set()
             units: set = set()
             for data in channel.data:
-                if hasattr(data, 'ydim'):
-                    if data.ydim.label:
-                        labels.add(data.ydim.label)
-                    if data.ydim.units:
-                        units.add(data.ydim.units)
+                if hasattr(data, 'y'):
+                    if data.y.label:
+                        labels.add(data.y.label)
+                    if data.y.units:
+                        units.add(data.y.units)
             result[ch_name] = {
                 "label": labels,
                 "units": units,
