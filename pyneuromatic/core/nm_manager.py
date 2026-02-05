@@ -26,8 +26,11 @@ import numpy as np
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pyneuromatic.core.nm_channel import NMChannel
+from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
+from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_object import NMObject
@@ -349,6 +352,79 @@ class NMManager:
             ds.channels.selected_name = select["channel"]
         if "epoch" in select:
             ds.epochs.selected_name = select["epoch"]
+
+    def select_value_set(self, obj: NMObject) -> None:
+        """
+        Set selection by object reference, auto-populating parent hierarchy.
+
+        Traverses up the parent chain from the given object to set selection
+        at each hierarchy level. Items below the specified level retain their
+        current selection within the newly selected parent.
+
+        Args:
+            obj: An NMObject from the hierarchy (NMFolder, NMData, NMDataSeries,
+                 NMChannel, or NMEpoch).
+
+        Raises:
+            TypeError: If obj is not an NMObject
+            ValueError: If obj is not part of this manager's hierarchy or
+                       is not a recognized hierarchy type
+
+        Examples:
+            >>> nm.select_value_set(some_epoch)  # Sets folder, dataseries, channel, epoch
+            >>> nm.select_value_set(some_dataseries)  # Sets folder, dataseries
+        """
+        if not isinstance(obj, NMObject):
+            raise TypeError(nmu.type_error_str(obj, "obj", "NMObject"))
+
+        # Verify object belongs to this manager's hierarchy
+        obj_manager = obj._manager
+        if obj_manager is not self:
+            raise ValueError(
+                f"object '{obj.name}' is not part of this manager's hierarchy"
+            )
+
+        # Build selection dict by traversing up the parent chain
+        # Note: Objects skip their container in the parent chain:
+        # - NMEpoch._parent = NMDataSeries (not NMEpochContainer)
+        # - NMChannel._parent = NMDataSeries (not NMChannelContainer)
+        # - NMDataSeries._parent = NMFolder (not NMDataSeriesContainer)
+        # - NMData._parent = NMFolder (not NMDataContainer)
+        # - NMFolder._parent = NMFolderContainer
+        select: dict[str, str] = {}
+        current = obj
+
+        if isinstance(current, NMEpoch):
+            select["epoch"] = current.name
+            # Parent is NMDataSeries directly (skips container)
+            current = current._parent
+
+        if isinstance(current, NMChannel):
+            select["channel"] = current.name
+            # Parent is NMDataSeries directly (skips container)
+            current = current._parent
+
+        if isinstance(current, NMDataSeries):
+            select["dataseries"] = current.name
+            # Parent is NMFolder directly (skips container)
+            current = current._parent
+
+        if isinstance(current, NMData):
+            select["data"] = current.name
+            # Parent is NMFolder directly (skips container)
+            current = current._parent
+
+        if isinstance(current, NMFolder):
+            select["folder"] = current.name
+
+        if not select:
+            raise ValueError(
+                f"object type '{type(obj).__name__}' is not a recognized "
+                f"hierarchy type (NMFolder, NMData, NMDataSeries, NMChannel, NMEpoch)"
+            )
+
+        # Use existing _select_keys_set to apply the selection
+        self._select_keys_set(select)
 
     def execute_values(
         self,
