@@ -62,13 +62,13 @@ class NMDataSeriesTest(unittest.TestCase):
             self.ds0.epochs.sets.add("set0", "E" + str(i))
         for i in range(1, num_epochs, 2):
             self.ds0.epochs.sets.add("set1", "E" + str(i))
-        self.ds0.epochs.sets.add("set2", ["set0", "|", "set1"])
+        self.ds0.epochs.sets.define_or("set2", "set0", "set1")
 
         self.ds0.channels.sets.add("set0", "A")
         self.ds0.channels.sets.add("set0", "B")
         self.ds0.channels.sets.add("set1", "C")
         self.ds0.channels.sets.add("set1", "D")
-        self.ds0.channels.sets.add("set2", ["set0", "|", "set1"])
+        self.ds0.channels.sets.define_or("set2", "set0", "set1")
 
     def test00_init(self):
         with self.assertRaises(TypeError):

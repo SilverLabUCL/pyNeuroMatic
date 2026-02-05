@@ -175,8 +175,7 @@ class NMDataTest(unittest.TestCase):
         c0.sets.add("set0", nlist)
         nlist = [dnlist0[i] for i in range(1, ndata, 2)]
         c0.sets.add("set1", nlist)
-        nlist = ["set0", "|", "set1"]
-        c0.sets.add("set2", nlist)
+        c0.sets.define_or("set2", "set0", "set1")
         klist = list(c0.sets.keys())
         self.assertEqual(klist, ["set0", "set1", "set2"])
 
@@ -196,8 +195,7 @@ class NMDataTest(unittest.TestCase):
         c1.sets.add("set0", nlist)
         nlist = [dnlist1[i] for i in range(1, ndata, 2)]
         c1.sets.add("set1", nlist)
-        nlist = ["set0", "|", "set1"]
-        c1.sets.add("set2", nlist)
+        c1.sets.define_or("set2", "set0", "set1")
 
         # eq
         self.assertFalse(c0 == c1)
