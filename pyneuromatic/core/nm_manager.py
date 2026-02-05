@@ -385,12 +385,12 @@ class NMManager:
             )
 
         # Build selection dict by traversing up the parent chain
-        # Note: Objects skip their container in the parent chain:
+        # Note: All objects skip their container in the parent chain:
         # - NMEpoch._parent = NMDataSeries (not NMEpochContainer)
         # - NMChannel._parent = NMDataSeries (not NMChannelContainer)
         # - NMDataSeries._parent = NMFolder (not NMDataSeriesContainer)
         # - NMData._parent = NMFolder (not NMDataContainer)
-        # - NMFolder._parent = NMFolderContainer
+        # - NMFolder._parent = NMProject (not NMFolderContainer)
         select: dict[str, str] = {}
         current = obj
 
