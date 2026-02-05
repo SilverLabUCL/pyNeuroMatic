@@ -321,6 +321,8 @@ class NMDataContainer(NMObjectContainer):
         # quiet: bool = nmp.QUIET
     ) -> NMData | None:
         actual_name = self._newkey(name)
+        # Use self._parent (NMFolder) to skip container in parent chain,
+        # consistent with NMFolder, NMDataSeries, NMChannel, NMEpoch
         d = NMData(
             parent=self._parent,
             name=actual_name,

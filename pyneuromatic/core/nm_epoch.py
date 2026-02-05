@@ -213,7 +213,13 @@ class NMEpochContainer(NMObjectContainer):
             iseq = int(istr)
         else:
             iseq = -1
-        c = NMEpoch(parent=self._parent, name=actual_name, number=iseq)
+        # Use self._parent (NMDataSeries) to skip container in parent chain,
+        # consistent with NMFolder, NMData, NMDataSeries, NMChannel
+        c = NMEpoch(
+            parent=self._parent, 
+            name=actual_name, 
+            number=iseq
+        )
         if super()._new(c, select=select):
             return c
         return None

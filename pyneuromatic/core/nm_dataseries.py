@@ -859,6 +859,8 @@ class NMDataSeriesContainer(NMObjectContainer):
         # quiet: bool = nmp.QUIET
     ) -> NMDataSeries | None:
         name = self._newkey(name)
+        # Use self._parent (NMFolder) to skip container in parent chain,
+        # consistent with NMFolder, NMData, NMChannel, NMEpoch
         s = NMDataSeries(parent=self, name=name)
         if super()._new(s, select=select):
             return s

@@ -244,7 +244,14 @@ class NMChannelContainer(NMObjectContainer):
         # quiet: bool = nmp.QUIET
     ) -> NMChannel | None:
         actual_name = self.auto_name_next()
-        c = NMChannel(parent=self._parent, name=actual_name, xscale=xscale, yscale=yscale)
+        # Use self._parent (NMDataSeries) to skip container in parent chain,
+        # consistent with NMFolder, NMData, NMDataSeries, NMEpoch
+        c = NMChannel(
+            parent=self._parent, 
+            name=actual_name, 
+            xscale=xscale, 
+            yscale=yscale
+        )
         if super()._new(c, select=select):
             return c
         return None

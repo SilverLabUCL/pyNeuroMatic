@@ -315,7 +315,9 @@ class NMFolderContainer(NMObjectContainer):
         # quiet: bool = nmp.QUIET
     ) -> NMFolder | None:
         actual_name = self._newkey(name)
-        f = NMFolder(parent=self, name=actual_name)
+        # Use self._parent (NMProject) to skip container in parent chain,
+        # consistent with NMData, NMDataSeries, NMChannel, NMEpoch
+        f = NMFolder(parent=self._parent, name=actual_name)
         if super()._new(f, select=select):
             return f
         return None
