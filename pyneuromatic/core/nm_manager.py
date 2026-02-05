@@ -313,6 +313,11 @@ class NMManager:
         for key, value in select.items():
             if not isinstance(key, str):
                 raise TypeError(nmu.type_error_str(key, "key", "string"))
+
+        # Normalize keys to lowercase for case-insensitive matching
+        select = {k.lower(): v for k, v in select.items()}
+
+        for key, value in select.items():
             if value is not None and not isinstance(value, str):
                 raise TypeError(nmu.type_error_str(value, "value", "string"))
             if key not in SELECT_LEVELS:
@@ -441,6 +446,11 @@ class NMManager:
         for key, value in execute.items():
             if not isinstance(key, str):
                 raise TypeError(nmu.type_error_str(key, "key", "string"))
+
+        # Normalize keys to lowercase for case-insensitive matching
+        execute = {k.lower(): v for k, v in execute.items()}
+
+        for key, value in execute.items():
             if key not in SELECT_LEVELS:
                 raise KeyError(f"unknown execute key '{key}'")
             if not isinstance(value, str):

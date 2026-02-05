@@ -176,6 +176,32 @@ class TestNMManagerSelect(NMManagerTestBase):
         with self.assertRaises(KeyError):
             self.nm.select_keys = {"epoch": "test"}
 
+    def test_select_keys_case_insensitive(self):
+        # Test with uppercase keys
+        s1 = {
+            "FOLDER": "folder1",
+            "DATA": "data3",
+            "DATASERIES": "data",
+            "CHANNEL": "A",
+            "EPOCH": "E3",
+        }
+        self.nm.select_keys = s1
+        expected = {
+            "folder": "folder1",
+            "data": "data3",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "E3",
+        }
+        self.assertEqual(self.nm.select_keys, expected)
+
+    def test_select_keys_mixed_case(self):
+        # Test with mixed case keys
+        s1 = {"Folder": "folder1", "DataSeries": "data", "Channel": "A", "Epoch": "E0"}
+        self.nm.select_keys = s1
+        self.assertEqual(self.nm.select_keys["folder"], "folder1")
+        self.assertEqual(self.nm.select_keys["dataseries"], "data")
+
 
 class TestNMManagerExecuteKeys(NMManagerTestBase):
     """Tests for execute_keys and execute_values methods."""
@@ -361,6 +387,27 @@ class TestNMManagerExecuteKeysSet(NMManagerTestBase):
         }
         elist = self.nm.execute_keys_set(e0)
         self.assertEqual(len(elist), 2)  # set0 has folder0 and folder1
+
+    def test_execute_keys_set_case_insensitive(self):
+        # Test with uppercase keys
+        e0 = {
+            "FOLDER": "folder1",
+            "DATASERIES": "stim",
+            "CHANNEL": "A",
+            "EPOCH": "E0",
+        }
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(len(elist), 1)
+        self.assertEqual(elist[0]["folder"], "folder1")
+        self.assertEqual(elist[0]["dataseries"], "stim")
+
+    def test_execute_keys_set_mixed_case(self):
+        # Test with mixed case keys
+        e0 = {"Folder": "folder1", "Data": "data0"}
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(len(elist), 1)
+        self.assertEqual(elist[0]["folder"], "folder1")
+        self.assertEqual(elist[0]["data"], "data0")
 
 
 class TestNMManagerExecuteMaxTargets(NMManagerTestBase):
