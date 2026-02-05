@@ -39,8 +39,7 @@ class NMProjectTest(unittest.TestCase):
         self.project0.folders.sets.add(FSETS_NLIST0[0], slist)
         slist = [FNLIST0[i] for i in range(1, n, 2)]
         self.project0.folders.sets.add(FSETS_NLIST0[1], slist)
-        slist = [FSETS_NLIST0[0], "|", FSETS_NLIST0[1]]
-        self.project0.folders.sets.add(FSETS_NLIST0[2], slist)
+        self.project0.folders.sets.define_or(FSETS_NLIST0[2], FSETS_NLIST0[0], FSETS_NLIST0[1])
 
         self.project1 = NMProject(parent=NM, name=PNAME1)
 
@@ -55,8 +54,7 @@ class NMProjectTest(unittest.TestCase):
         self.project1.folders.sets.add(FSETS_NLIST1[0], slist)
         slist = [FNLIST1[i] for i in range(3, n, 1)]
         self.project1.folders.sets.add(FSETS_NLIST1[1], slist)
-        slist = [FSETS_NLIST1[0], "|", FSETS_NLIST1[1]]
-        self.project1.folders.sets.add(FSETS_NLIST1[2], slist)
+        self.project1.folders.sets.define_or(FSETS_NLIST1[2], FSETS_NLIST1[0], FSETS_NLIST1[1])
 
     def test00_init(self):
         # args: parent, name, copy (see NMObject)

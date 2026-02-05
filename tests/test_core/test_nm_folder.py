@@ -38,8 +38,7 @@ class NMFolderTest(unittest.TestCase):
         self.folder0.data.sets.add(DSETS_NLIST0[0], slist)
         slist = [DNLIST0[i] for i in range(1, n, 2)]
         self.folder0.data.sets.add(DSETS_NLIST0[1], slist)
-        slist = [DSETS_NLIST0[0], "|", DSETS_NLIST0[1]]
-        self.folder0.data.sets.add(DSETS_NLIST0[2], slist)
+        self.folder0.data.sets.define_or(DSETS_NLIST0[2], DSETS_NLIST0[0], DSETS_NLIST0[1])
 
         self.folder1 = NMFolder(parent=NM, name=FNAME1)
 
@@ -54,8 +53,7 @@ class NMFolderTest(unittest.TestCase):
         self.folder1.data.sets.add(DSETS_NLIST1[0], slist)
         slist = [DNLIST1[i] for i in range(3, n, 1)]
         self.folder1.data.sets.add(DSETS_NLIST1[1], slist)
-        slist = [DSETS_NLIST1[0], "|", DSETS_NLIST1[1]]
-        self.folder1.data.sets.add(DSETS_NLIST1[2], slist)
+        self.folder1.data.sets.define_or(DSETS_NLIST1[2], DSETS_NLIST1[0], DSETS_NLIST1[1])
 
         # TODO: dataseries
 

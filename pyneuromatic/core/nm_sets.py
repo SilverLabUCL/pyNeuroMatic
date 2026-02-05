@@ -28,10 +28,21 @@ import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
 
+# Valid equation operators for set combinations
+EQUATION_OPERATORS = ("and", "or")
+
+
 class NMSets(NMObject, MutableMapping):
     """
     A NM set behaves like a Python set, but is a list and therefore can have
     ordered content.
+
+    Sets can be combined using equations with AND/OR operators:
+        sets.define_and("set3", "set1", "set2")  # set3 = set1 AND set2
+        sets.define_or("set3", "set1", "set2")   # set3 = set1 OR set2
+
+    Equations are evaluated dynamically - changes to source sets are
+    automatically reflected when getting the equation set.
 
     MutableMapping
     https://docs.python.org/3/library/collections.abc.html
@@ -145,14 +156,15 @@ class NMSets(NMObject, MutableMapping):
 
         # __map: deep copy the structure, resolving NMObject references through memo
         result._NMSets__map = {}
-        for key, olist in self._NMSets__map.items():
-            if NMSets.list_is_equation(olist):
-                # Equations are just strings, deep copy directly
-                result._NMSets__map[key] = copy.deepcopy(olist, memo)
+        for key, value in self._NMSets__map.items():
+            if NMSets.tuple_is_equation(value):
+                # Equations are tuples of strings, copy directly (tuples are immutable)
+                result._NMSets__map[key] = value
             else:
                 # List of NMObjects - try to resolve through memo
-                new_olist = []
-                for obj in olist:
+                assert isinstance(value, list)
+                new_olist: list[Any] = []
+                for obj in value:
                     if isinstance(obj, NMObject):
                         if id(obj) in memo:
                             # Object was already copied, use the copy
@@ -203,40 +215,62 @@ class NMSets(NMObject, MutableMapping):
     def __setitem__(
         self,
         key: str,
-        olist: str | list[str] | NMObject | list[NMObject],
+        olist: str | list[str] | NMObject | list[NMObject] | tuple[str, str, str],
     ) -> None:
         """
         called by '=' and update()
         e.g. sets['Set1'] = ['RecordA0', 'RecordA3']
-        e.g. sets['Set3'] = ['Set1', '&', 'Set2']
-        ['&', '|', '-', '^']
+        e.g. sets['Set3'] = ('and', 'Set1', 'Set2')  # equation
         """
         self._setitem(key, olist, add=False)
 
     def _setitem(
         self,
         key: str,
-        olist: str | list[str] | NMObject | list[NMObject],
+        olist: str | list[str] | NMObject | list[NMObject] | tuple[str, str, str],
         add: bool = False,
     ) -> None:
         actual_key = self._getkey(key)
         if actual_key is None:  # new key
             actual_key = self._newkey(key)
             new = True
-            olist_old: list[Any] | None = None
+            olist_old: list[Any] | tuple[str, str, str] | None = None
             add = False
         else:  # key exists
             new = False
             olist_old = self.__map[actual_key]
-            if not isinstance(olist_old, list):
+            if not isinstance(olist_old, (list, tuple)):
                 e = "self.__map['%s']: value" % actual_key
-                e = nmu.type_error_str(olist_old, e, "list")
+                e = nmu.type_error_str(olist_old, e, "list or tuple")
                 raise TypeError(e)
             if add:
-                if NMSets.list_is_equation(olist_old):
+                if NMSets.tuple_is_equation(olist_old):
                     raise ValueError("cannot 'add' to an existing equation")
-                if len(olist_old) == 0:
+                if isinstance(olist_old, list) and len(olist_old) == 0:
                     add = False
+
+        # Handle equation tuple format: ('and', 'set1', 'set2') or ('or', 'set1', 'set2')
+        if NMSets.tuple_is_equation(olist):
+            # equation is saved, not NMObjects
+            # this is important since sets can change (dynamic evaluation)
+            if not new:  # can only overwrite an existing equation
+                if add:
+                    raise ValueError("cannot 'add' to an existing equation")
+                if olist_old and not NMSets.tuple_is_equation(olist_old):
+                    raise ValueError("set '%s' exists and is not an equation" % key)
+            # Validate that source sets exist
+            assert isinstance(olist, tuple)
+            operator, set1_name, set2_name = olist
+            set1_key = self._getkey(set1_name)
+            if set1_key is None:
+                raise KeyError(f"equation set '{set1_name}' does not exist")
+            set2_key = self._getkey(set2_name)
+            if set2_key is None:
+                raise KeyError(f"equation set '{set2_name}' does not exist")
+            # Store normalized equation tuple
+            equation_tuple: tuple[str, str, str] = (operator, set1_key, set2_key)
+            self.__map[actual_key] = equation_tuple
+            return None  # finished equation
 
         items: list[Any]
         if isinstance(olist, (str, NMObject)):
@@ -244,35 +278,8 @@ class NMSets(NMObject, MutableMapping):
         elif isinstance(olist, list):
             items = list(olist)
         else:
-            e = nmu.type_error_str(olist, "olist", "string or NMObject or list")
+            e = nmu.type_error_str(olist, "olist", "string or NMObject or list or equation tuple")
             raise TypeError(e)
-
-        if NMSets.list_is_equation(items):
-            # equation is saved, not NMObjects
-            # this is important since sets can change
-            if not new:  # can only overwrite an existing equation
-                if add:
-                    raise ValueError("cannot 'add' to an existing equation")
-                if olist_old and not NMSets.list_is_equation(olist_old):
-                    raise ValueError("set '%s' exists and is not an equation" % key)
-            olist_new: list[Any] = []
-            for istr in items:
-                if isinstance(istr, str) and istr in ["&", "|", "-", "^"]:
-                    pass  # ok
-                elif isinstance(istr, str):
-                    istr = self._getkey(istr)
-                    if istr is None:
-                        raise KeyError(
-                            "olist: equation item '%s' does not exist" % istr
-                        )
-                olist_new.append(istr)
-            if new:
-                self.__map[actual_key] = olist_new
-            else:
-                assert olist_old is not None
-                olist_old.clear()
-                olist_old.extend(olist_new)
-            return None  # finished equation
 
         allkeys = True
         for o in items:
@@ -285,11 +292,11 @@ class NMSets(NMObject, MutableMapping):
                 s for s in items if isinstance(s, str)
             ]
             if add:
-                assert olist_old is not None
+                assert olist_old is not None and isinstance(olist_old, list)
                 for o in olist_old:
                     str_items.append(o.name)
             klist = self.__match_to_nmobject_keys(str_items)
-            olist_new = []
+            olist_new: list[Any] = []
             for k in klist:
                 nmobj = self._nmobjects_dict.get(k)
                 if nmobj not in olist_new:
@@ -297,7 +304,7 @@ class NMSets(NMObject, MutableMapping):
             if new:
                 self.__map[actual_key] = olist_new
             else:
-                assert olist_old is not None
+                assert olist_old is not None and isinstance(olist_old, list)
                 olist_old.clear()
                 olist_old.extend(olist_new)
             return None  # finished keys
@@ -318,7 +325,7 @@ class NMSets(NMObject, MutableMapping):
             obj_items.append(o)
 
         if add:
-            assert olist_old is not None
+            assert olist_old is not None and isinstance(olist_old, list)
             obj_items += olist_old
         olist_new = []  # match order to self._nmobjects_dict
         finished = obj_items.copy()
@@ -334,7 +341,7 @@ class NMSets(NMObject, MutableMapping):
         if new:
             self.__map[actual_key] = olist_new
         else:
-            assert olist_old is not None
+            assert olist_old is not None and isinstance(olist_old, list)
             olist_old.clear()
             olist_old.extend(olist_new)
         return None
@@ -388,64 +395,64 @@ class NMSets(NMObject, MutableMapping):
         get_equation: bool = False,  # extra parameter
         # return equation if one exists, otherwise returns NMObject list
         get_keys: bool = False,  # extra parameter
-    ) -> list[NMObject] | list[str] | None:
+    ) -> list[NMObject] | list[str] | tuple[str, str, str] | None:
         actual_key = self._getkey(key)
         if actual_key is None:
             return default
 
-        olist = self.__map[actual_key]
+        value = self.__map[actual_key]
 
-        if NMSets.list_is_equation(olist):
+        if NMSets.tuple_is_equation(value):
             if get_equation:
-                return olist  # equation is saved in map
+                return value  # equation tuple is saved in map
 
-            set0: set[str] = set() # set0 = set()
-            for i, eq_item in enumerate(olist):
-                if i == 0:
-                    key0 = self._getkey(eq_item)
-                    set0 = set()
-                    for nmobject in self.__map[key0]:
-                        set0.add(nmobject.name)
-                    op = ""  # reset
-                elif eq_item in ["&", "|", "-", "^"]:
-                    op = eq_item
-                elif op:
-                    key1 = self._getkey(eq_item)
-                    set1: set[str] = set()
-                    for nmobject in self.__map[key1]:
-                        set1.add(nmobject.name)
-                    if op == "&":
-                        set0 = set0 & set1
-                    elif op == "|":
-                        set0 = set0 | set1
-                    elif op == "-":
-                        set0 = set0 - set1
-                    elif op == "^":
-                        set0 = set0 ^ set1
-                    op = ""  # reset
-            klist = list(set0)
-            klist = self.__match_to_nmobject_keys(klist)
+            # Evaluate the equation dynamically
+            assert isinstance(value, tuple)
+            operator, set1_key, set2_key = value
+
+            # Get items from source sets
+            set1_items = self.get(set1_key, get_keys=True)
+            set2_items = self.get(set2_key, get_keys=True)
+
+            if not isinstance(set1_items, list) or not isinstance(set2_items, list):
+                return [] if not get_keys else []
+
+            set1 = set(set1_items)
+            set2 = set(set2_items)
+
+            # Apply the operator
+            if operator == "and":
+                result_set = set1 & set2
+            elif operator == "or":
+                result_set = set1 | set2
+            else:
+                # Future extensibility: difference, symmetric_difference
+                return [] if not get_keys else []
+
+            klist = list(result_set)
+            if klist:
+                klist = self.__match_to_nmobject_keys(klist)
 
             if get_keys:
                 return klist
 
-            olist_new = []
+            olist_new: list[NMObject] = []
             for k in klist:
                 nmobject = self._nmobjects_dict.get(k)
                 if nmobject and nmobject not in olist_new:
                     olist_new.append(nmobject)
             return olist_new  # nmobjects
 
-        # else set is not an equation
-
-        # if get_equation:
-        #    return default
+        # else value is not an equation (it's a list of NMObjects)
+        assert isinstance(value, list)
+        olist = value
 
         if get_keys:
-            klist = []
+            klist: list[str] = []
             for nmobject in olist:
                 klist.append(nmobject.name)
-            klist = self.__match_to_nmobject_keys(klist)
+            if klist:
+                klist = self.__match_to_nmobject_keys(klist)
             return klist
 
         return olist
@@ -453,7 +460,7 @@ class NMSets(NMObject, MutableMapping):
     # override MutableMapping mixin method
     # children should override if new parameters are declared
     def __eq__(
-        self, 
+        self,
         other: object
     ) -> bool:
         ignore_parameters = []
@@ -466,26 +473,26 @@ class NMSets(NMObject, MutableMapping):
         if not nmu.keys_are_equal(list(s_keys), list(other.keys())):
             return False
         for s_key in s_keys:
-            s_olist = self.__map[s_key]
-            if NMSets.list_is_equation(s_olist):
-                o_olist_eq = other.get(s_key, get_equation=True)
-                if not NMSets.list_is_equation(o_olist_eq):
+            s_value = self.__map[s_key]
+            if NMSets.tuple_is_equation(s_value):
+                o_eq = other.get(s_key, get_equation=True)
+                if not NMSets.tuple_is_equation(o_eq):
                     return False
-                if not isinstance(s_olist, list) or not isinstance(o_olist_eq, list):
+                # Compare equation tuples (case insensitive for set names)
+                assert isinstance(s_value, tuple) and isinstance(o_eq, tuple)
+                if s_value[0] != o_eq[0]:  # operator must match
                     return False
-                for i, sstr in enumerate(s_olist):
-                    # items need to be in same sequence
-                    # set names are case insensitive
-                    ostr = o_olist_eq[i]
-                    if isinstance(sstr, str) and isinstance(ostr, str):
-                        if sstr.lower() != ostr.lower():
-                            return False
+                if s_value[1].lower() != o_eq[1].lower():  # set1 name
+                    return False
+                if s_value[2].lower() != o_eq[2].lower():  # set2 name
+                    return False
             else:
                 o_olist_obj = other.get(s_key)
                 if not isinstance(o_olist_obj, list):
                     return False
+                assert isinstance(s_value, list)
                 if not NMObject.lists_are_equal(
-                    s_olist,
+                    s_value,
                     o_olist_obj,  # type: ignore[arg-type]
                 ):
                     return False
@@ -506,7 +513,7 @@ class NMSets(NMObject, MutableMapping):
     def pop(  # type: ignore[override]
         self,
         key: str
-    ) -> list[NMObject] | None:
+    ) -> list[NMObject] | tuple[str, str, str] | None:
         # removed 'default' parameter
         key = self._getkey(key)
         o = self.__map.pop(key)
@@ -514,8 +521,8 @@ class NMSets(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     # type: ignore[override]
-    # # delete last item
-    def popitem(self) -> tuple[str, list[NMObject]] | None:
+    # delete last item
+    def popitem(self) -> tuple[str, list[NMObject] | tuple[str, str, str]] | None:
         """
         Must override, otherwise first item is deleted rather than last.
         Consider deprecating to prevent accidental deletes.
@@ -524,9 +531,9 @@ class NMSets(NMObject, MutableMapping):
             return None
         klist = list(self.__map.keys())
         key = klist[-1]  # last key
-        olist = self.pop(key=key)
-        if olist:
-            return (key, olist)
+        value = self.pop(key=key)
+        if value is not None:
+            return (key, value)
         return None
 
     # override MutableMapping mixin method
@@ -699,29 +706,35 @@ class NMSets(NMObject, MutableMapping):
         key = self._getkey(key)
         if key is None:
             return False
-        return NMSets.list_is_equation(self.__map[key])
+        return NMSets.tuple_is_equation(self.__map[key])
 
     @staticmethod
-    def list_is_equation(
-        equation: object  # e.g. ['set1', '&', 'set2']
+    def tuple_is_equation(
+        value: object  # e.g. ('and', 'set1', 'set2') or ('or', 'set1', 'set2')
     ) -> bool:
-        # checks format of list items
-        # does not check if sets exist
-        if not isinstance(equation, list):
+        """Check if value is a valid equation tuple.
+
+        Valid format: (operator, set1_name, set2_name)
+        where operator is 'and' or 'or'.
+
+        Args:
+            value: Value to check
+
+        Returns:
+            True if value is a valid equation tuple
+        """
+        if not isinstance(value, tuple):
             return False
-        n = len(equation)
-        if n < 3:
-            return False  # need at least 3 items
-        found_symbol = False
-        for i in range(1, n, 2):  # odd items should be symbol
-            if equation[i] in ["&", "|", "-", "^"]:
-                found_symbol = True
-            else:
-                return False
-        for i in range(0, len(equation), 2):  # even items should be names
-            if not isinstance(equation[i], str):
-                return False
-        return found_symbol
+        if len(value) != 3:
+            return False
+        operator, set1, set2 = value
+        if not isinstance(operator, str):
+            return False
+        if operator not in EQUATION_OPERATORS:
+            return False
+        if not isinstance(set1, str) or not isinstance(set2, str):
+            return False
+        return True
 
     def new(
         self, 
@@ -733,22 +746,34 @@ class NMSets(NMObject, MutableMapping):
         return (key, olist)
 
     def duplicate(
-        self, 
-        name: str, 
+        self,
+        name: str,
         newname: str | None = None
-    ) -> tuple[str, list[NMObject]]:
+    ) -> tuple[str, list[NMObject] | tuple[str, str, str]]:
+        """Duplicate a set with a new name.
+
+        For equation sets, duplicates the equation (not the evaluated result).
+        """
         if name is None:
             raise ValueError("key name cannot be None")
         key = self._getkey(name)
         if key is None:
             raise KeyError("key name '%s' does not exist" % name)
         newkey = self._newkey(newname)
-        clist = []
-        for o in self.__map[key]:
-            if o not in clist:
-                clist.append(o)
-        self.__map[newkey] = clist
-        return (newkey, clist)
+        value = self.__map[key]
+        if NMSets.tuple_is_equation(value):
+            # Copy the equation tuple (tuples are immutable, so reference is fine)
+            self.__map[newkey] = value
+            return (newkey, value)
+        else:
+            # Copy the list of NMObjects
+            assert isinstance(value, list)
+            clist: list[NMObject] = []
+            for o in value:
+                if o not in clist:
+                    clist.append(o)
+            self.__map[newkey] = clist
+            return (newkey, clist)
 
     def rename(
             self, 
@@ -800,14 +825,24 @@ class NMSets(NMObject, MutableMapping):
         self,
         key: str
     ) -> None:
+        """Clear the contents of a set, converting it to an empty list.
+
+        For equation sets, this removes the equation and creates an empty set.
+        """
         key = self._getkey(key)
-        olist = self.__map[key]
-        olist.clear()
+        value = self.__map[key]
+        if NMSets.tuple_is_equation(value):
+            # Replace equation tuple with empty list
+            self.__map[key] = []
+        else:
+            assert isinstance(value, list)
+            value.clear()
         return None
 
     def empty_all(self) -> None:
-        for olist in self.__map.values():
-            olist.clear()    
+        """Clear all sets, converting equations to empty lists."""
+        for key in list(self.__map.keys()):
+            self.empty(key)
         return None
 
     def add(
@@ -819,6 +854,64 @@ class NMSets(NMObject, MutableMapping):
             olist = []
         self._setitem(key, olist, add=True)
         return None
+
+    def define_and(
+        self,
+        name: str,
+        set1: str,
+        set2: str,
+    ) -> str:
+        """Define an equation set as the AND (intersection) of two sets.
+
+        The equation is evaluated dynamically - changes to set1 or set2
+        will be reflected when getting this set.
+
+        Args:
+            name: Name for the new equation set
+            set1: Name of first source set
+            set2: Name of second source set
+
+        Returns:
+            The actual key name used
+
+        Raises:
+            KeyError: If set1 or set2 does not exist
+            ValueError: If name already exists as a non-equation set
+
+        Example:
+            >>> sets.define_and("set3", "set1", "set2")  # set3 = set1 AND set2
+        """
+        actual_key = self._setitem(name, ("and", set1, set2), add=False)
+        return self._getkey(name) or name
+
+    def define_or(
+        self,
+        name: str,
+        set1: str,
+        set2: str,
+    ) -> str:
+        """Define an equation set as the OR (union) of two sets.
+
+        The equation is evaluated dynamically - changes to set1 or set2
+        will be reflected when getting this set.
+
+        Args:
+            name: Name for the new equation set
+            set1: Name of first source set
+            set2: Name of second source set
+
+        Returns:
+            The actual key name used
+
+        Raises:
+            KeyError: If set1 or set2 does not exist
+            ValueError: If name already exists as a non-equation set
+
+        Example:
+            >>> sets.define_or("set3", "set1", "set2")  # set3 = set1 OR set2
+        """
+        actual_key = self._setitem(name, ("or", set1, set2), add=False)
+        return self._getkey(name) or name
 
     def remove(
         self,
@@ -837,14 +930,16 @@ class NMSets(NMObject, MutableMapping):
                 e = nmu.type_error_str(olist, "olist", "string or NMObject or list")
                 raise TypeError(e)
             return []
-        olist_old = self.__map[key]
-        if NMSets.list_is_equation(olist_old):
+        value = self.__map[key]
+        if NMSets.tuple_is_equation(value):
             if error:
                 raise ValueError(
                     "cannot remove NMObject items from "
                     "'%s' since it is an equation" % key
                 )
             return []
+        olist_old = value
+        assert isinstance(olist_old, list)
         remove_list: list[NMObject] = []
         for o1 in items:
             found = False
@@ -904,6 +999,6 @@ class NMSets(NMObject, MutableMapping):
                 e = nmu.type_error_str(o, e, "string or NMObject")
                 raise TypeError(e)
             for map_key, map_val in self.__map.items():
-                if not NMSets.list_is_equation(map_val):
+                if not NMSets.tuple_is_equation(map_val):
                     self.remove(map_key, o, error=error)
         return None
