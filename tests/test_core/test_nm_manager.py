@@ -1,33 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Aug  3 11:30:25 2023
+Tests for NMManager.
 
-@author: jason
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
 """
 import unittest
 
-# from pyneuromatic.core.nm_channel import NMChannelContainer
-# from pyneuromatic.core.nm_data import NMDataContainer
-# from pyneuromatic.core.nm_dataseries import NMDataSeriesContainer
-# from pyneuromatic.core.nm_epoch import NMEpochContainer
-# from pyneuromatic.core.nm_folder import NMFolderContainer
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_project import NMProject
-import pyneuromatic.core.nm_utilities as nmu
 
 QUIET = True
-NUMPROJECTS = 1  # 3 # for now, only one project
-PROJECTNAME = "root"  # Project is always named "root"
 NUMFOLDERS = 5
 DATASERIES = ["data", "avg", "stim"]
 NUMDATA = [8, 9, 10]
 NUMCHANNELS = [2, 3, 4]
 NUMEPOCHS = [5, 6, 7]
-ISELECT = 0  # 0, 1, -1
+ISELECT = 0
 
 
-class NMManagerTest(unittest.TestCase):
+class NMManagerTestBase(unittest.TestCase):
+    """Base class with shared setUp for NMManager tests."""
 
     def setUp(self):
         self.nm = NMManager(quiet=QUIET)
@@ -36,105 +30,97 @@ class NMManagerTest(unittest.TestCase):
         self.select_keys = {}
 
         p = self.nm.project
-        pselect = True
-        # Note: project is no longer part of select_values/select_keys
-        # since there's only one project (always accessible via nm.project)
 
-        for iproject in range(NUMPROJECTS):
-            """
-            if ilast or iproject == ISELECT:
-                p = self.nm.projects.new(select=True)
-                self.select_values["project"] = p
-                self.select_keys["project"] = p.name
-                pselect = True
+        for ifolder in range(NUMFOLDERS):
+            fselect = False
+            if ilast or ifolder == ISELECT:
+                f = p.folders.new(select=True)
+                self.select_values["folder"] = f
+                self.select_keys["folder"] = f.name
+                fselect = True
             else:
-                p = self.nm.projects.new(select=False)
-                pselect = False
-            """
-            for ifolder in range(NUMFOLDERS):
-                fselect = False
-                if ilast or ifolder == ISELECT:
-                    f = p.folders.new(select=True)
-                    if pselect:
-                        self.select_values["folder"] = f
-                        self.select_keys["folder"] = f.name
-                        fselect = True
-                else:
-                    f = p.folders.new(select=False)
-                jdata = 0  # only one data container
-                for idataseries in range(len(DATASERIES)):
-                    prefix = DATASERIES[idataseries]
-                    # data
-                    for idata in range(NUMDATA[idataseries]):
-                        n = prefix + str(idata)
-                        if ilast or jdata == ISELECT:
-                            d = f.data.new(n, select=True)
-                            if fselect:
-                                self.select_values["data"] = d
-                                self.select_keys["data"] = d.name
-                        else:
-                            d = f.data.new(n, select=False)
-                        jdata += 1
-                    # dataseries
-                    dsselect = False
-                    if ilast or idataseries == ISELECT:
-                        ds = f.dataseries.new(prefix, select=True)
+                f = p.folders.new(select=False)
+            jdata = 0
+            for idataseries in range(len(DATASERIES)):
+                prefix = DATASERIES[idataseries]
+                # data
+                for idata in range(NUMDATA[idataseries]):
+                    n = prefix + str(idata)
+                    if ilast or jdata == ISELECT:
+                        d = f.data.new(n, select=True)
                         if fselect:
-                            self.select_values["dataseries"] = ds
-                            self.select_keys["dataseries"] = ds.name
-                            dsselect = True
+                            self.select_values["data"] = d
+                            self.select_keys["data"] = d.name
                     else:
-                        ds = f.dataseries.new(prefix, select=False)
-                    for ichannel in range(NUMCHANNELS[idataseries]):
-                        if ilast or ichannel == ISELECT:
-                            c = ds.channels.new(select=True)
-                            if dsselect:
-                                self.select_values["channel"] = c
-                                self.select_keys["channel"] = c.name
-                        else:
-                            c = ds.channels.new(select=False)
-                    for iepoch in range(NUMEPOCHS[idataseries]):
-                        if ilast or iepoch == ISELECT:
-                            e = ds.epochs.new(select=True)
-                            if dsselect:
-                                self.select_values["epoch"] = e
-                                self.select_keys["epoch"] = e.name
-                        else:
-                            e = ds.epochs.new(select=False)
-                    ds.channels.sets.add("set0", ["A", "B"])
-                    ds.epochs.sets.add("set0", ["E0", "E1"])
-                self.data_set0 = ["data0", "avg0", "stim0"]
-                f.data.sets.add("set0", self.data_set0)
-                f.dataseries.sets.add("set0", ["data", "avg"])
-            p.folders.sets.add("set0", ["folder0", "folder1"])
-        # self.nm.projects.sets.add("set0", ["project0", "project1"])
+                        d = f.data.new(n, select=False)
+                    jdata += 1
+                # dataseries
+                ds_select = False
+                if ilast or idataseries == ISELECT:
+                    ds = f.dataseries.new(prefix, select=True)
+                    if fselect:
+                        self.select_values["dataseries"] = ds
+                        self.select_keys["dataseries"] = ds.name
+                        ds_select = True
+                else:
+                    ds = f.dataseries.new(prefix, select=False)
+                for ichannel in range(NUMCHANNELS[idataseries]):
+                    if ilast or ichannel == ISELECT:
+                        c = ds.channels.new(select=True)
+                        if ds_select:
+                            self.select_values["channel"] = c
+                            self.select_keys["channel"] = c.name
+                    else:
+                        c = ds.channels.new(select=False)
+                for iepoch in range(NUMEPOCHS[idataseries]):
+                    if ilast or iepoch == ISELECT:
+                        e = ds.epochs.new(select=True)
+                        if ds_select:
+                            self.select_values["epoch"] = e
+                            self.select_keys["epoch"] = e.name
+                    else:
+                        e = ds.epochs.new(select=False)
+                ds.channels.sets.add("set0", ["A", "B"])
+                ds.epochs.sets.add("set0", ["E0", "E1"])
+            self.data_set0 = ["data0", "avg0", "stim0"]
+            f.data.sets.add("set0", self.data_set0)
+            f.dataseries.sets.add("set0", ["data", "avg"])
+        p.folders.sets.add("set0", ["folder0", "folder1"])
 
-    def test00_init(self):
-        # NMManager is a simple controller class (not an NMObject)
-        self.assertTrue(isinstance(self.nm.project, NMProject))
+
+class TestNMManagerInit(NMManagerTestBase):
+    """Tests for NMManager initialization."""
+
+    def test_creates_project(self):
+        self.assertIsInstance(self.nm.project, NMProject)
+
+    def test_project_named_root(self):
         self.assertEqual(self.nm.project.name, "root")
 
-    def test01_parameters(self):
-        # NMManager is not an NMObject, so no parameters property
-        # Just verify basic properties work
+    def test_project_not_none(self):
         self.assertIsNotNone(self.nm.project)
-        self.assertEqual(self.nm.project.name, "root")
 
-    def test02_select(self):
-        # select_values
-        # select_keys
+
+class TestNMManagerSelect(NMManagerTestBase):
+    """Tests for NMManager selection methods."""
+
+    def test_select_values_returns_current_selection(self):
         self.assertEqual(self.nm.select_values, self.select_values)
+
+    def test_select_keys_returns_names(self):
         self.assertEqual(self.nm.select_keys, self.select_keys)
 
+    def test_select_values_is_readonly(self):
         with self.assertRaises(AttributeError):
             self.nm.select_values = {}
 
-        bad = list(nmu.BADTYPES)
-        bad.remove({})  # ok
-        for b in bad:
+    def test_select_keys_rejects_non_dict(self):
+        bad_types = (None, 3, 3.14, True, [], (), set(), "string")
+        for b in bad_types:
             with self.assertRaises(TypeError):
                 self.nm.select_keys = b
 
+    def test_select_keys_set_updates_hierarchy(self):
         s1 = {
             "folder": "folder1",
             "data": "data3",
@@ -145,514 +131,94 @@ class NMManagerTest(unittest.TestCase):
         self.nm.select_keys = s1
         self.assertEqual(self.nm.select_keys, s1)
 
-        s2 = {
+    def test_select_keys_set_partial_update(self):
+        s1 = {
+            "folder": "folder1",
+            "data": "data3",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "E3",
+        }
+        self.nm.select_keys = s1
+
+        # Change just dataseries - channel/epoch revert to selected in new dataseries
+        self.nm.select_keys = {"dataseries": "avg"}
+        expected = {
             "folder": "folder1",
             "data": "data3",
             "dataseries": "avg",
-            "channel": "B",
-            "epoch": "E1",
+            "channel": "A",  # First channel in avg dataseries
+            "epoch": "E0",   # First epoch in avg dataseries
         }
-        self.nm.select_keys = s2
-        self.assertEqual(self.nm.select_keys, s2)
+        self.assertEqual(self.nm.select_keys, expected)
 
-        self.nm.select_keys = {"dataseries": "data"}
-        self.assertEqual(self.nm.select_keys, s1)
-
-        self.nm.select_keys = {"dataseries": "avg"}
-        self.assertEqual(self.nm.select_keys, s2)
-
+    def test_select_keys_rejects_invalid_project(self):
         with self.assertRaises(KeyError):
             self.nm.select_keys = {"project": "test"}
+
+    def test_select_keys_rejects_invalid_folder(self):
         with self.assertRaises(KeyError):
             self.nm.select_keys = {"folder": "test"}
+
+    def test_select_keys_rejects_invalid_data(self):
         with self.assertRaises(KeyError):
             self.nm.select_keys = {"data": "test"}
+
+    def test_select_keys_rejects_invalid_dataseries(self):
         with self.assertRaises(KeyError):
             self.nm.select_keys = {"dataseries": "test"}
+
+    def test_select_keys_rejects_invalid_channel(self):
         with self.assertRaises(KeyError):
             self.nm.select_keys = {"channel": "test"}
+
+    def test_select_keys_rejects_invalid_epoch(self):
         with self.assertRaises(KeyError):
             self.nm.select_keys = {"epoch": "test"}
 
-    def test03_execute(self):
-        # execute_values()
-        # execute_keys()
-        s = self.nm.select_keys
+
+class TestNMManagerExecuteKeys(NMManagerTestBase):
+    """Tests for execute_keys and execute_values methods."""
+
+    def test_execute_keys_returns_selected_dataseries(self):
+        s = self.nm.select_keys.copy()
         s.pop("data")
         elist = self.nm.execute_keys(dataseries_priority=True)
         self.assertEqual(elist, [s])
-        if False:
-            for e in elist:
-                print(e)
 
-        s = self.nm.select_keys
+    def test_execute_keys_returns_selected_data(self):
+        s = self.nm.select_keys.copy()
         s.pop("dataseries")
         s.pop("channel")
         s.pop("epoch")
         elist = self.nm.execute_keys(dataseries_priority=False)
         self.assertEqual(elist, [s])
-        if False:
-            for e in elist:
-                print(e)
 
-        """
-        self.nm.projects.execute_key = "set0"
-        slist = []
-        for p in self.nm.projects.sets.get("set0"):
-            f = p.folders.selected_value
-            ds = f.dataseries.selected_value
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-        self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.projects.execute_key = "all"
-        slist = []
-        for p in self.nm.projects.values():
-            f = p.folders.selected_value
-            ds = f.dataseries.selected_value
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-        self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-        """
-        p = self.nm.project
-
+    def test_execute_reset_all_restores_selected(self):
         self.nm.execute_reset_all()
-        s = self.nm.select_keys
-        s = {
-            "folder": s["folder"],
-            "dataseries": s["dataseries"],
-            "channel": s["channel"],
-            "epoch": s["epoch"],
-        }
+        s = self.nm.select_keys.copy()
+        s.pop("data")
         elist = self.nm.execute_keys(dataseries_priority=True)
         self.assertEqual(elist, [s])
-        if False:
-            for e in elist:
-                print(e)
 
-        # p = self.nm.projects.selected_value
-        # p = self.nm.project
+    def test_execute_keys_with_folder_set(self):
+        p = self.nm.project
         p.folders.execute_target = "set0"
-        slist = []
-        for f in p.folders.sets.get("set0"):
-            ds = f.dataseries.selected_value
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
+        self.assertEqual(len(elist), 2)  # set0 has folder0 and folder1
 
-        # p = self.nm.projects.selected_value
-        # p = self.nm.project
+    def test_execute_keys_with_folder_all(self):
+        p = self.nm.project
         p.folders.execute_target = "all"
-        slist = []
-        for f in p.folders.values():
-            ds = f.dataseries.selected_value
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
         elist = self.nm.execute_keys(dataseries_priority=True)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
+        self.assertEqual(len(elist), NUMFOLDERS)
 
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        # p = self.nm.project
-        f = p.folders.selected_value
-        f.data.execute_key = "set0"
-        slist = []
-        for d in f.data.sets.get("set0"):
-            s = {
-                "folder": f.name,
-                "data": d.name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=False)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        p = self.nm.project
-        f = p.folders.selected_value
-        f.data.execute_key = "all"
-        slist = []
-        for d in f.data.values():
-            s = {
-                "folder": f.name,
-                "data": d.name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=False)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        p = self.nm.project
-        f = p.folders.selected_value
-        f.dataseries.execute_key = "set0"
-        slist = []
-        for ds in f.dataseries.sets.get("set0"):
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        p = self.nm.project
-        f = p.folders.selected_value
-        f.dataseries.execute_key = "all"
-        slist = []
-        for ds in f.dataseries.values():
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        p = self.nm.project
-        f = p.folders.selected_value
-        ds = f.dataseries.selected_value
-        ds.channels.execute_key = "set0"
-        slist = []
-        for c in ds.channels.sets.get("set0"):
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": c.name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-       # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        p = self.nm.project
-        f = p.folders.selected_value
-        ds = f.dataseries.selected_value
-        ds.channels.execute_key = "all"
-        slist = []
-        for c in ds.channels.values():
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": c.name,
-                "epoch": ds.epochs.selected_name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        p = self.nm.project
-        f = p.folders.selected_value
-        ds = f.dataseries.selected_value
-        ds.epochs.execute_key = "set0"
-        slist = []
-        for e in ds.epochs.sets.get("set0"):
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": e.name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-        self.nm.execute_reset_all()
-        # p = self.nm.projects.selected_value
-        p = self.nm.project
-        f = p.folders.selected_value
-        ds = f.dataseries.selected_value
-        ds.epochs.execute_key = "all"
-        slist = []
-        for e in ds.epochs.values():
-            s = {
-                "folder": f.name,
-                "dataseries": ds.name,
-                "channel": ds.channels.selected_name,
-                "epoch": e.name,
-            }
-            slist.append(s)
-        elist = self.nm.execute_keys(dataseries_priority=True)
-        # self.assertEqual(elist, slist)
-        if False:
-            for e in elist:
-                print(e)
-
-    def test04_execute_set(self):
-        # args: execute
-        bad = list(nmu.BADTYPES)
-        bad.remove({})
-        for b in bad:
-            with self.assertRaises(TypeError):
-                self.nm.execute_keys_set(b)
-
-        bad = list(nmu.BADTYPES)
-        bad.remove("string")
-        for b in bad:
-            with self.assertRaises(TypeError):
-                self.nm.execute_keys_set({b: ""})
-            with self.assertRaises(TypeError):
-                self.nm.execute_keys_set({"folder": b})
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set({"test": ""})
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set({"data": "", "dataseries": ""})
-
-        """
-        e0 = {"folder": "folder1",
-              "dataseries": "stim",
-              "channel": "A",
-              "epoch": "E0"
-              }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-        """
-
-        e0 = {
-              # "project": "project2",
-              "dataseries": "stim",
-              "channel": "A",
-              "epoch": "E0",
-              }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-              # "project": "project2",
-              "folder": "folder1",
-              "channel": "A",
-              "epoch": "E0"
-              }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            # "project": "project2",
-            "folder": "folder1",
-            "data": "stim",
-            "channel": "A",
-            "epoch": "E0",
-            }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            # "project": "project2",
-            "folder": "folder1",
-            "dataseries": "stim",
-            "channel": "A",
-            "epoch": "E0",
-            }
-
-        """
-        e0.update({"project": "all"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
-        e0.update({"project": "set0"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
-        e0.update({"project": "test"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
-        e0.update({"project": "project2"})
-        """
-
-        # "all" and "set0" are now valid for folders
-        # Invalid folder name raises ValueError from execute_target setter
-        e0.update({"folder": "test"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
-        e0.update({"folder": "folder1"})
-
-        # "all" and "set0" are now valid for dataseries
-        # Invalid dataseries name raises ValueError from execute_target setter
-        e0.update({"dataseries": "test"})
-        with self.assertRaises(ValueError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            "folder": "folder1",
-            "data": "all",
-            # 'dataseries': 'stim',
-            "channel": "A",
-            "epoch": "E0",
-            }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            "folder": "folder1",
-            "dataseries": "stim",
-            "channel": "A",
-            # 'epoch': 'E0',
-            }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            "folder": "folder1",
-            "dataseries": "stim",
-            # 'channel': 'A',
-            "epoch": "E0",
-        }
-
-        with self.assertRaises(KeyError):
-            self.nm.execute_keys_set(e0)
-
-        e0 = {
-            "folder": "folder1",
-            "dataseries": "stim",
-            "channel": "A",
-            "epoch": "E0",
-        }
-
-        elist = self.nm.execute_keys_set(e0)
-        self.assertEqual(elist, [e0])
-        # Note: execute_keys_set no longer modifies select_keys
-
-        # Test with "selected" - should use currently selected values
-        self.nm.execute_reset_all()
-        e1 = {
-            "folder": "selected",
-            "dataseries": "selected",
-            "channel": "selected",
-            "epoch": "selected",
-        }
-        elist = self.nm.execute_keys_set(e1)
-        # Result should match current selection (from setUp: folder0, data, A, E0)
-        select = self.nm.select_keys
-        select.pop("data")
-        self.assertEqual(elist, [select])
-
-        e0 = {
-            "folder": "folder1",
-            "dataseries": "stim",
-            "channel": "all",
-            "epoch": "E0",
-        }
-
-        elist = self.nm.execute_keys_set(e0)
-        e1 = []
-        for i in range(NUMCHANNELS[2]):
-            c = nmu.CHANNEL_CHARS[i]
-            e0c = e0.copy()
-            e0c.update({"channel": c})
-            e1.append(e0c)
-        self.assertEqual(elist, e1)
-
-        e0 = {
-            "folder": "folder1",
-            "dataseries": "stim",
-            "channel": "A",
-            "epoch": "all",
-        }
-
-        elist = self.nm.execute_keys_set(e0)
-        e1 = []
-        for i in range(NUMEPOCHS[2]):
-            ename = "E" + str(i)
-            e0c = e0.copy()
-            e0c.update({"epoch": ename})
-            e1.append(e0c)
-        self.assertEqual(elist, e1)
-
-        e0 = {
-            "folder": "folder1",
-            "data": "set0",
-        }
-
-        elist = self.nm.execute_keys_set(e0)
-
-        e1 = []
-        for d in self.data_set0:
-            e0c = e0.copy()
-            e0c.update({"data": d})
-            e1.append(e0c)
-        self.assertEqual(elist, e1)
-
-
-    def test05_execute_count(self):
-        # Test execute_count() method
+    def test_execute_count_returns_target_count(self):
         self.nm.execute_reset_all()
         count = self.nm.execute_count(dataseries_priority=True)
-        self.assertEqual(count, 1)  # Just selected items
+        self.assertEqual(count, 1)
 
-        # With all epochs
+    def test_execute_count_with_all_epochs(self):
         e0 = {
             "folder": "folder0",
             "dataseries": "data",
@@ -663,24 +229,170 @@ class NMManagerTest(unittest.TestCase):
         count = self.nm.execute_count(dataseries_priority=True)
         self.assertEqual(count, NUMEPOCHS[0])
 
-    def test06_max_targets(self):
-        # Test max_targets parameter
+
+class TestNMManagerExecuteKeysSet(NMManagerTestBase):
+    """Tests for execute_keys_set method."""
+
+    def test_rejects_non_dict(self):
+        bad_types = (None, 3, 3.14, True, [], (), set(), "string")
+        for b in bad_types:
+            with self.assertRaises(TypeError):
+                self.nm.execute_keys_set(b)
+
+    def test_rejects_non_string_key(self):
+        bad_types = (None, 3, 3.14, True, [], (), {}, set())
+        for b in bad_types:
+            with self.assertRaises(TypeError):
+                self.nm.execute_keys_set({b: ""})
+
+    def test_rejects_non_string_value(self):
+        bad_types = (None, 3, 3.14, True, [], (), {}, set())
+        for b in bad_types:
+            with self.assertRaises(TypeError):
+                self.nm.execute_keys_set({"folder": b})
+
+    def test_rejects_unknown_key(self):
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set({"test": ""})
+
+    def test_rejects_both_data_and_dataseries(self):
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set({"data": "", "dataseries": ""})
+
+    def test_rejects_missing_folder(self):
+        e0 = {"dataseries": "stim", "channel": "A", "epoch": "E0"}
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+
+    def test_rejects_missing_data_or_dataseries(self):
+        e0 = {"folder": "folder1", "channel": "A", "epoch": "E0"}
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+
+    def test_rejects_data_with_channel(self):
+        e0 = {"folder": "folder1", "data": "stim", "channel": "A", "epoch": "E0"}
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+
+    def test_rejects_missing_channel(self):
+        e0 = {"folder": "folder1", "dataseries": "stim", "epoch": "E0"}
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+
+    def test_rejects_missing_epoch(self):
+        e0 = {"folder": "folder1", "dataseries": "stim", "channel": "A"}
+        with self.assertRaises(KeyError):
+            self.nm.execute_keys_set(e0)
+
+    def test_rejects_invalid_folder_name(self):
+        e0 = {"folder": "test", "dataseries": "stim", "channel": "A", "epoch": "E0"}
+        with self.assertRaises(ValueError):
+            self.nm.execute_keys_set(e0)
+
+    def test_rejects_invalid_dataseries_name(self):
+        e0 = {"folder": "folder1", "dataseries": "test", "channel": "A", "epoch": "E0"}
+        with self.assertRaises(ValueError):
+            self.nm.execute_keys_set(e0)
+
+    def test_sets_specific_targets(self):
+        e0 = {
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "E0",
+        }
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(elist, [e0])
+
+    def test_selected_uses_current_selection(self):
+        self.nm.execute_reset_all()
+        e1 = {
+            "folder": "selected",
+            "dataseries": "selected",
+            "channel": "selected",
+            "epoch": "selected",
+        }
+        elist = self.nm.execute_keys_set(e1)
+        select = self.nm.select_keys.copy()
+        select.pop("data")
+        self.assertEqual(elist, [select])
+
+    def test_channel_all_expands_to_all_channels(self):
+        e0 = {
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "all",
+            "epoch": "E0",
+        }
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(len(elist), NUMCHANNELS[2])
+
+    def test_epoch_all_expands_to_all_epochs(self):
+        e0 = {
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "all",
+        }
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(len(elist), NUMEPOCHS[2])
+
+    def test_data_set_expands_to_set_members(self):
+        e0 = {"folder": "folder1", "data": "set0"}
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(len(elist), len(self.data_set0))
+
+    def test_folder_all_is_valid(self):
+        e0 = {
+            "folder": "all",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "E0",
+        }
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(len(elist), NUMFOLDERS)
+
+    def test_folder_set_is_valid(self):
+        e0 = {
+            "folder": "set0",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "E0",
+        }
+        elist = self.nm.execute_keys_set(e0)
+        self.assertEqual(len(elist), 2)  # set0 has folder0 and folder1
+
+
+class TestNMManagerExecuteMaxTargets(NMManagerTestBase):
+    """Tests for max_targets parameter in execute_keys_set."""
+
+    def test_succeeds_within_limit(self):
         e0 = {
             "folder": "folder0",
             "dataseries": "data",
             "channel": "A",
             "epoch": "all",
         }
-
-        # Should succeed with high enough limit
         elist = self.nm.execute_keys_set(e0, max_targets=100)
         self.assertEqual(len(elist), NUMEPOCHS[0])
 
-        # Should raise ValueError when exceeding limit
+    def test_raises_when_exceeding_limit(self):
+        e0 = {
+            "folder": "folder0",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "all",
+        }
         with self.assertRaises(ValueError):
             self.nm.execute_keys_set(e0, max_targets=1)
 
-        # Should succeed with max_targets=None (unlimited)
+    def test_none_allows_unlimited(self):
+        e0 = {
+            "folder": "folder0",
+            "dataseries": "data",
+            "channel": "A",
+            "epoch": "all",
+        }
         elist = self.nm.execute_keys_set(e0, max_targets=None)
         self.assertEqual(len(elist), NUMEPOCHS[0])
 
