@@ -1,162 +1,406 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Aug  7 11:41:40 2023
+Tests for NMFolder and NMFolderContainer.
 
-@author: jason
+Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
+acquiring and simulating electrophysiology data.
 """
+import copy
 import unittest
 
 from pyneuromatic.core.nm_data import NMDataContainer
+from pyneuromatic.core.nm_dataseries import NMDataSeriesContainer
 from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_project import NMProject
 import pyneuromatic.core.nm_utilities as nmu
 
-QUIET = True
-NM = NMManager(quiet=QUIET)
-FNAME0 = "folder0"
-FNAME1 = "F1"
-DNLIST0 = ["data" + str(i) for i in range(8)]
-DNLIST1 = ["record" + str(i) for i in range(11)]
-DSETS_NLIST0 = ["set" + str(i) for i in range(3)]
-DSETS_NLIST1 = ["S" + str(i) for i in range(3)]
+
+class NMFolderTestBase(unittest.TestCase):
+    """Base class with common setUp for NMFolder tests."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.folder = NMFolder(parent=self.nm, name="TestFolder")
 
 
-class NMFolderTest(unittest.TestCase):
-    def setUp(self):  # executed before each test
-        self.folder0 = NMFolder(parent=NM, name=FNAME0)
+class TestNMFolderInit(NMFolderTestBase):
+    """Tests for NMFolder initialization."""
 
-        self.dolist0 = []
-        for n in DNLIST0:
-            d = self.folder0.data.new(n)
-            self.dolist0.append(d)
-        self.folder0.data.selected_name = DNLIST0[-1]
+    def test_init_with_defaults(self):
+        folder = NMFolder()
+        self.assertEqual(folder.name, "NMFolder0")
+        self.assertIsInstance(folder.data, NMDataContainer)
+        self.assertIsInstance(folder.dataseries, NMDataSeriesContainer)
 
-        n = len(DNLIST0)
-        slist = [DNLIST0[i] for i in range(0, n, 2)]
-        self.folder0.data.sets.add(DSETS_NLIST0[0], slist)
-        slist = [DNLIST0[i] for i in range(1, n, 2)]
-        self.folder0.data.sets.add(DSETS_NLIST0[1], slist)
-        self.folder0.data.sets.define_or(DSETS_NLIST0[2], DSETS_NLIST0[0], DSETS_NLIST0[1])
+    def test_init_with_name(self):
+        folder = NMFolder(parent=self.nm, name="MyFolder")
+        self.assertEqual(folder.name, "MyFolder")
+        self.assertEqual(folder._parent, self.nm)
 
-        self.folder1 = NMFolder(parent=NM, name=FNAME1)
-
-        self.dolist1 = []
-        for n in DNLIST1:
-            d = self.folder1.data.new(n)
-            self.dolist1.append(d)
-        self.folder1.data.selected_name = DNLIST1[-1]
-
-        n = len(DNLIST1)
-        slist = [DNLIST1[i] for i in range(0, n - 3, 1)]
-        self.folder1.data.sets.add(DSETS_NLIST1[0], slist)
-        slist = [DNLIST1[i] for i in range(3, n, 1)]
-        self.folder1.data.sets.add(DSETS_NLIST1[1], slist)
-        self.folder1.data.sets.define_or(DSETS_NLIST1[2], DSETS_NLIST1[0], DSETS_NLIST1[1])
-
-        # TODO: dataseries
-
-    def test00_init(self):
-        # args: parent, name, copy (see NMObject)
-
+    def test_init_rejects_invalid_copy_arg(self):
         p = NMProject()
         with self.assertRaises(TypeError):
             NMFolder(copy=p)
 
-        data = self.folder0.data
-        self.assertTrue(isinstance(data, NMDataContainer))
-        self.assertEqual(len(data), len(DNLIST0))
-        self.assertEqual(list(data.keys()), DNLIST0)
-        self.assertEqual(data.selected_name, DNLIST0[-1])
+    def test_data_property(self):
+        self.assertIsInstance(self.folder.data, NMDataContainer)
 
-        self.assertEqual(len(data.sets), len(DSETS_NLIST0))
-        self.assertEqual(data.sets.get(DSETS_NLIST0[2]), self.dolist0)
-        self.assertEqual(data.sets.get(DSETS_NLIST0[2], get_keys=True), DNLIST0)
+    def test_dataseries_property(self):
+        self.assertIsInstance(self.folder.dataseries, NMDataSeriesContainer)
 
-        data = self.folder1.data
-        self.assertTrue(isinstance(data, NMDataContainer))
-        self.assertEqual(len(data), len(DNLIST1))
-        self.assertEqual(list(data.keys()), DNLIST1)
-        self.assertEqual(data.selected_name, DNLIST1[-1])
+    def test_data_container_works(self):
+        names = ["data0", "data1", "data2"]
+        for n in names:
+            self.folder.data.new(n)
+        self.assertEqual(len(self.folder.data), 3)
+        self.assertEqual(list(self.folder.data.keys()), names)
 
-        self.assertEqual(len(data.sets), len(DSETS_NLIST1))
-        self.assertEqual(data.sets.get(DSETS_NLIST1[2]), self.dolist1)
-        self.assertEqual(data.sets.get(DSETS_NLIST1[2], get_keys=True), DNLIST1)
+    def test_data_sets_work(self):
+        for i in range(4):
+            self.folder.data.new(f"data{i}")
+        self.folder.data.sets.add("even", ["data0", "data2"])
+        self.folder.data.sets.add("odd", ["data1", "data3"])
+        self.folder.data.sets.define_or("all", "even", "odd")
 
-    def test01_eq(self):
-        # args: other
+        result = self.folder.data.sets.get("all", get_keys=True)
+        self.assertEqual(sorted(result), ["data0", "data1", "data2", "data3"])
 
-        bad = list(nmu.BADTYPES)
-        for b in bad:
-            self.assertFalse(self.folder0 == b)
 
-        self.assertTrue(self.folder0 is self.folder0)
-        self.assertFalse(self.folder0 is self.folder1)
-        self.assertFalse(self.folder0 == self.folder1)
-        self.assertTrue(self.folder0 != self.folder1)
+class TestNMFolderEquality(NMFolderTestBase):
+    """Tests for NMFolder equality comparison."""
 
-        c = self.folder0.copy()
-        self.assertFalse(c is self.folder0)
-        self.assertTrue(c == self.folder0)
+    def setUp(self):
+        super().setUp()
+        for i in range(3):
+            self.folder.data.new(f"data{i}")
 
-        c.data.sets.remove(DSETS_NLIST0[0], DNLIST0[0])
-        self.assertFalse(c == self.folder0)
-        c.data.sets.add(DSETS_NLIST0[0], DNLIST0[0])
-        self.assertTrue(c == self.folder0)
+    def test_not_equal_to_bad_types(self):
+        for bad in nmu.BADTYPES:
+            self.assertFalse(self.folder == bad)
 
-    def test02_notes(self):
-        # Test notes property
-        self.assertTrue(isinstance(self.folder0.notes, list))
-        self.assertEqual(len(self.folder0.notes), 0)
+    def test_same_instance_is_same(self):
+        self.assertTrue(self.folder is self.folder)
 
-        # Test note setter and note_add
-        self.folder0.note = "added TTX"
-        self.folder0.note_add("added AP5")
-        self.assertEqual(len(self.folder0.notes), 2)
-        self.assertEqual(self.folder0.notes[0].get("note"), "added TTX")
-        self.assertEqual(self.folder0.notes[1].get("note"), "added AP5")
+    def test_different_folders_not_equal(self):
+        other = NMFolder(parent=self.nm, name="OtherFolder")
+        self.assertFalse(self.folder == other)
 
-        # Test note getter (returns last note text)
-        self.assertEqual(self.folder0.note, "added AP5")
+    def test_copy_equals_original(self):
+        c = self.folder.copy()
+        self.assertFalse(c is self.folder)
+        self.assertTrue(c == self.folder)
 
-        # Test notes have timestamps
-        self.assertIn("date", self.folder0.notes[0])
-        self.assertIn("date", self.folder0.notes[1])
+    def test_modified_copy_not_equal(self):
+        self.folder.data.sets.add("set0", ["data0"])
+        c = self.folder.copy()
+        self.assertTrue(c == self.folder)
 
-        # Test notes_clear
-        self.folder0.notes_clear()
-        self.assertEqual(len(self.folder0.notes), 0)
-        self.assertEqual(self.folder0.note, "")
+        c.data.sets.remove("set0", "data0")
+        self.assertFalse(c == self.folder)
 
-        # Test notes_ok validator
+        c.data.sets.add("set0", "data0")
+        self.assertTrue(c == self.folder)
+
+
+class TestNMFolderNotes(NMFolderTestBase):
+    """Tests for NMFolder notes functionality."""
+
+    def test_notes_initially_empty(self):
+        self.assertIsInstance(self.folder.notes, list)
+        self.assertEqual(len(self.folder.notes), 0)
+
+    def test_note_getter_empty(self):
+        self.assertEqual(self.folder.note, "")
+
+    def test_note_setter(self):
+        self.folder.note = "added TTX"
+        self.assertEqual(len(self.folder.notes), 1)
+        self.assertEqual(self.folder.notes[0].get("note"), "added TTX")
+
+    def test_note_add(self):
+        self.folder.note_add("first note")
+        self.folder.note_add("second note")
+        self.assertEqual(len(self.folder.notes), 2)
+        self.assertEqual(self.folder.notes[0].get("note"), "first note")
+        self.assertEqual(self.folder.notes[1].get("note"), "second note")
+
+    def test_note_getter_returns_last(self):
+        self.folder.note_add("first")
+        self.folder.note_add("last")
+        self.assertEqual(self.folder.note, "last")
+
+    def test_notes_have_timestamps(self):
+        self.folder.note_add("test note")
+        self.assertIn("date", self.folder.notes[0])
+
+    def test_notes_clear(self):
+        self.folder.note_add("note1")
+        self.folder.note_add("note2")
+        self.folder.notes_clear()
+        self.assertEqual(len(self.folder.notes), 0)
+        self.assertEqual(self.folder.note, "")
+
+    def test_notes_ok_valid(self):
         self.assertTrue(NMFolder.notes_ok([{"note": "hey", "date": "111"}]))
         self.assertTrue(NMFolder.notes_ok([{"date": "111", "note": "hey"}]))
+
+    def test_notes_ok_invalid_keys(self):
         self.assertFalse(NMFolder.notes_ok([{"n": "hey", "date": "111"}]))
         self.assertFalse(NMFolder.notes_ok([{"note": "hey", "d": "111"}]))
+
+    def test_notes_ok_invalid_values(self):
         self.assertFalse(NMFolder.notes_ok([{"note": "hey", "date": None}]))
         self.assertTrue(NMFolder.notes_ok([{"note": "hey", "date": "None"}]))
+
+    def test_notes_ok_missing_keys(self):
         self.assertFalse(NMFolder.notes_ok([{"note": "hey"}]))
         self.assertFalse(NMFolder.notes_ok([{"date": "111"}]))
+
+    def test_notes_ok_extra_keys(self):
         self.assertFalse(
             NMFolder.notes_ok([{"note": "hey", "date": "111", "more": "1"}])
         )
 
-        # Test notes equality
-        self.folder0.note_add("test note")
-        c = self.folder0.copy()
-        self.assertTrue(c == self.folder0)
+    def test_notes_affect_equality(self):
+        self.folder.note_add("test note")
+        c = self.folder.copy()
+        self.assertTrue(c == self.folder)
         c.note_add("another note")
-        self.assertFalse(c == self.folder0)
+        self.assertFalse(c == self.folder)
 
-    def xtest03_copy(self):
-        pass
 
-    def xtest04_content(self):
-        pass
+class TestNMFolderDeepCopy(NMFolderTestBase):
+    """Tests for NMFolder deep copy."""
 
-    def xtest05_data(self):
-        pass
+    def setUp(self):
+        super().setUp()
+        for i in range(3):
+            self.folder.data.new(f"data{i}")
+        self.folder.note_add("test note")
 
-    def xtest06_folder_container(self):
-        pass
+    def test_deepcopy_creates_new_instance(self):
+        c = copy.deepcopy(self.folder)
+        self.assertIsNot(c, self.folder)
+
+    def test_deepcopy_preserves_name(self):
+        c = copy.deepcopy(self.folder)
+        self.assertEqual(c.name, self.folder.name)
+
+    def test_deepcopy_creates_new_data_container(self):
+        c = copy.deepcopy(self.folder)
+        self.assertIsNot(c.data, self.folder.data)
+
+    def test_deepcopy_preserves_data_count(self):
+        c = copy.deepcopy(self.folder)
+        self.assertEqual(len(c.data), len(self.folder.data))
+
+    def test_deepcopy_preserves_notes(self):
+        c = copy.deepcopy(self.folder)
+        self.assertEqual(len(c.notes), len(self.folder.notes))
+
+
+class TestNMFolderContainer(unittest.TestCase):
+    """Tests for NMFolderContainer."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.project = NMProject(parent=self.nm)
+        self.container = NMFolderContainer(parent=self.project)
+
+    def test_content_type(self):
+        self.assertEqual(self.container.content_type(), "NMFolder")
+
+    def test_new_creates_folder(self):
+        folder = self.container.new(name="folder0")
+        self.assertIsInstance(folder, NMFolder)
+        self.assertEqual(folder.name, "folder0")
+
+    def test_new_with_select(self):
+        folder = self.container.new(name="folder0", select=True)
+        self.assertEqual(self.container.selected_name, "folder0")
+
+    def test_new_sets_correct_parent(self):
+        # Parent should be container's parent (NMProject), not container itself
+        folder = self.container.new(name="folder0")
+        self.assertEqual(folder._parent, self.project)
+
+    def test_auto_naming(self):
+        f0 = self.container.new()
+        f1 = self.container.new()
+        self.assertEqual(f0.name, "folder0")
+        self.assertEqual(f1.name, "folder1")
+
+    def test_multiple_folders(self):
+        self.container.new(name="folder0")
+        self.container.new(name="folder1")
+        self.assertEqual(len(self.container), 2)
+        self.assertIn("folder0", self.container)
+        self.assertIn("folder1", self.container)
+
+
+# =============================================================================
+# Tests for detect_prefixes method
+# =============================================================================
+
+class TestDetectPrefixes(NMFolderTestBase):
+    """Tests for NMFolder.detect_prefixes() method."""
+
+    def test_empty_folder(self):
+        result = self.folder.detect_prefixes()
+        self.assertEqual(result, [])
+
+    def test_single_prefix(self):
+        for name in ["RecordA0", "RecordA1", "RecordB0", "RecordB1"]:
+            self.folder.data.new(name)
+        result = self.folder.detect_prefixes()
+        self.assertEqual(result, ["Record"])
+
+    def test_multiple_prefixes(self):
+        for name in ["RecordA0", "RecordB0", "avgA0", "avgB0"]:
+            self.folder.data.new(name)
+        result = self.folder.detect_prefixes()
+        self.assertEqual(result, ["Record", "avg"])
+
+    def test_ignores_non_matching_names(self):
+        self.folder.data.new("RecordA0")
+        self.folder.data.new("SomeOtherData")  # no channel/epoch pattern
+        self.folder.data.new("avgB1")
+        result = self.folder.detect_prefixes()
+        self.assertEqual(result, ["Record", "avg"])
+
+
+# =============================================================================
+# Tests for make_dataseries method
+# =============================================================================
+
+class TestMakeDataSeries(NMFolderTestBase):
+    """Tests for NMFolder.make_dataseries() method."""
+
+    def setUp(self):
+        super().setUp()
+        # Create data with standard naming pattern
+        for ch in ["A", "B"]:
+            for ep in range(3):
+                name = f"Record{ch}{ep}"
+                self.folder.data.new(name)
+
+    def test_creates_dataseries(self):
+        ds = self.folder.make_dataseries("Record")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Record")
+
+    def test_creates_channels(self):
+        ds = self.folder.make_dataseries("Record")
+        self.assertEqual(len(ds.channels), 2)
+        self.assertIn("A", ds.channels)
+        self.assertIn("B", ds.channels)
+
+    def test_creates_epochs(self):
+        ds = self.folder.make_dataseries("Record")
+        self.assertEqual(len(ds.epochs), 3)
+        self.assertIn("E0", ds.epochs)
+        self.assertIn("E1", ds.epochs)
+        self.assertIn("E2", ds.epochs)
+
+    def test_links_data_to_channels(self):
+        ds = self.folder.make_dataseries("Record")
+        chan_a = ds.channels.get("A")
+        self.assertEqual(len(chan_a.data), 3)
+        data_names = [d.name for d in chan_a.data]
+        self.assertIn("RecordA0", data_names)
+        self.assertIn("RecordA1", data_names)
+        self.assertIn("RecordA2", data_names)
+
+    def test_links_data_to_epochs(self):
+        ds = self.folder.make_dataseries("Record")
+        epoch_0 = ds.epochs.get("E0")
+        self.assertEqual(len(epoch_0.data), 2)
+        data_names = [d.name for d in epoch_0.data]
+        self.assertIn("RecordA0", data_names)
+        self.assertIn("RecordB0", data_names)
+
+    def test_partial_prefix_match(self):
+        # User enters "Rec" but full prefix is "Record"
+        ds = self.folder.make_dataseries("Rec")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Record")
+
+    def test_case_insensitive_prefix(self):
+        ds = self.folder.make_dataseries("record")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Record")
+
+    def test_no_match_returns_none(self):
+        ds = self.folder.make_dataseries("NoMatch")
+        self.assertIsNone(ds)
+
+    def test_empty_prefix_returns_none(self):
+        ds = self.folder.make_dataseries("")
+        self.assertIsNone(ds)
+
+    def test_none_prefix_returns_none(self):
+        ds = self.folder.make_dataseries(None)
+        self.assertIsNone(ds)
+
+    def test_select_parameter(self):
+        self.folder.make_dataseries("Record", select=True)
+        self.assertEqual(self.folder.dataseries.selected_name, "Record")
+
+    def test_adds_to_dataseries_container(self):
+        self.folder.make_dataseries("Record")
+        self.assertIn("Record", self.folder.dataseries)
+
+    def test_does_not_duplicate_dataseries(self):
+        ds1 = self.folder.make_dataseries("Record")
+        ds2 = self.folder.make_dataseries("Record")
+        self.assertIsNotNone(ds1)
+        self.assertIsNone(ds2)  # Already exists
+
+    def test_get_data_works_after_make(self):
+        ds = self.folder.make_dataseries("Record")
+        ds.channels.selected_name = "A"
+        ds.epochs.selected_name = "E1"
+        data = ds.get_data()
+        self.assertIsNotNone(data)
+        self.assertEqual(data.name, "RecordA1")
+
+
+class TestMakeDataSeriesMultiplePrefixes(NMFolderTestBase):
+    """Tests for make_dataseries with multiple prefixes in folder."""
+
+    def setUp(self):
+        super().setUp()
+        # Create data with two different prefixes
+        for ch in ["A", "B"]:
+            for ep in range(2):
+                self.folder.data.new(f"Record{ch}{ep}")
+                self.folder.data.new(f"avg{ch}{ep}")
+
+    def test_creates_correct_dataseries(self):
+        ds_record = self.folder.make_dataseries("Record")
+        ds_avg = self.folder.make_dataseries("avg")
+
+        self.assertEqual(ds_record.name, "Record")
+        self.assertEqual(ds_avg.name, "avg")
+
+    def test_dataseries_have_correct_data(self):
+        ds_record = self.folder.make_dataseries("Record")
+        ds_avg = self.folder.make_dataseries("avg")
+
+        # Check Record dataseries
+        chan_a = ds_record.channels.get("A")
+        data_names = [d.name for d in chan_a.data]
+        self.assertIn("RecordA0", data_names)
+        self.assertNotIn("avgA0", data_names)
+
+        # Check avg dataseries
+        chan_a = ds_avg.channels.get("A")
+        data_names = [d.name for d in chan_a.data]
+        self.assertIn("avgA0", data_names)
+        self.assertNotIn("RecordA0", data_names)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
