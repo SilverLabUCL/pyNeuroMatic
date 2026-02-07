@@ -62,6 +62,7 @@ class NMFolder(NMObject):
         "_NMFolder__toolfolder_container",
         "_NMFolder__toolresults",
         "_NMFolder__notes",
+        "_NMFolder__metadata",
     })
 
     def __init__(
@@ -76,6 +77,7 @@ class NMFolder(NMObject):
         self.__toolfolder_container: NMToolFolderContainer = NMToolFolderContainer(parent=self)
         self.__toolresults: dict[str, object] = {}  # tool results saved to dict
         self.__notes: list[dict] = []  # [{'date': 'timestamp', 'note': 'text'}]
+        self.__metadata: dict[str, dict] = {}  # nested dict by source folder
 
     # override
     def __eq__(
@@ -95,6 +97,8 @@ class NMFolder(NMObject):
         if self.__toolresults != other.__toolresults:
             return False
         if self.__notes != other.__notes:
+            return False
+        if self.__metadata != other.__metadata:
             return False
         return True
 
@@ -156,6 +160,11 @@ class NMFolder(NMObject):
 
         # __notes: deep copy the list
         result._NMFolder__notes = copy.deepcopy(self._NMFolder__notes, memo)
+
+        # __metadata: deep copy the nested dict
+        result._NMFolder__metadata = copy.deepcopy(
+            self._NMFolder__metadata, memo
+        )
 
         return result
 
@@ -280,6 +289,24 @@ class NMFolder(NMObject):
             if not isinstance(n["date"], str) or not isinstance(n["note"], str):
                 return False
         return True
+
+    # Metadata - structured key-value data from imported files
+
+    @property
+    def metadata(self) -> dict[str, dict]:
+        """Return metadata dict for this folder.
+
+        Metadata is a nested dict preserving the folder structure from the
+        source file. For PXP files, keys are Igor folder names mapping to
+        dicts of variables/strings found in that folder.
+
+        Example:
+            >>> folder.metadata["root"]["AcqMode"]
+            'episodic'
+            >>> folder.metadata["Notes"]["H_Name"]
+            'Jason Rothman'
+        """
+        return self.__metadata
 
     # DataSeries creation from data names
 

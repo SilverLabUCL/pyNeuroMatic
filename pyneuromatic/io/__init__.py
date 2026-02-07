@@ -14,5 +14,6 @@ Example:
 """
 from pyneuromatic.io.axograph import read_axograph
 from pyneuromatic.io.igor_text import write_itx
+from pyneuromatic.io.pxp import read_pxp
 
-__all__ = ["read_axograph", "write_itx"]
+__all__ = ["read_axograph", "read_pxp", "write_itx"]
