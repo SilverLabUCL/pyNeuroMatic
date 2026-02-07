@@ -171,6 +171,39 @@ class TestNMFolderNotes(NMFolderTestBase):
         self.assertFalse(c == self.folder)
 
 
+class TestNMFolderMetadata(NMFolderTestBase):
+    """Tests for NMFolder metadata functionality."""
+
+    def test_metadata_initially_empty(self):
+        self.assertIsInstance(self.folder.metadata, dict)
+        self.assertEqual(len(self.folder.metadata), 0)
+
+    def test_metadata_populate(self):
+        self.folder.metadata["root"] = {"AcqMode": "episodic", "NumWaves": 19}
+        self.assertEqual(self.folder.metadata["root"]["AcqMode"], "episodic")
+        self.assertEqual(self.folder.metadata["root"]["NumWaves"], 19)
+
+    def test_metadata_nested(self):
+        self.folder.metadata["root"] = {"FileFormat": 1.72}
+        self.folder.metadata["Notes"] = {"H_Name": "cell1", "F_Temp": 34.0}
+        self.assertEqual(len(self.folder.metadata), 2)
+        self.assertIn("root", self.folder.metadata)
+        self.assertIn("Notes", self.folder.metadata)
+
+    def test_metadata_affects_equality(self):
+        self.folder.metadata["root"] = {"key": "value"}
+        c = self.folder.copy()
+        self.assertTrue(c == self.folder)
+        c.metadata["root"]["key"] = "different"
+        self.assertFalse(c == self.folder)
+
+    def test_metadata_deepcopy_independent(self):
+        self.folder.metadata["root"] = {"key": "value"}
+        c = copy.deepcopy(self.folder)
+        c.metadata["root"]["key"] = "changed"
+        self.assertEqual(self.folder.metadata["root"]["key"], "value")
+
+
 class TestNMFolderDeepCopy(NMFolderTestBase):
     """Tests for NMFolder deep copy."""
 
