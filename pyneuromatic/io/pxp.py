@@ -68,6 +68,8 @@ def read_pxp(
         import re
 
         folder_name = re.sub(r"[^a-zA-Z0-9_]", "_", filepath.stem)
+        if folder_name and not folder_name[0].isalpha():
+            folder_name = "F" + folder_name
         folder = NMFolder(name=folder_name)
 
     # Load the PXP file
