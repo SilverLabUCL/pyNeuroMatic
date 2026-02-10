@@ -181,7 +181,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__map: dict[str, NMObject] = {}  # where NMObjects are stored/mapped
 
         self.__sets = NMSets(
-            parent=self,
             name="NMObjectContainerSets",
             nmobjects_fxnref=self._get_map,
         )
@@ -435,12 +434,11 @@ class NMObjectContainer(NMObject, MutableMapping):
             copied_obj._parent = result  # update parent to new container
             result._NMObjectContainer__map[key] = copied_obj
 
-        # __sets: deep copy the sets and update references
+        # __sets: deep copy the sets and update resolve function
         result._NMObjectContainer__sets = copy.deepcopy(
             self._NMObjectContainer__sets, memo
         )
-        result._NMObjectContainer__sets._parent = result
-        result._NMObjectContainer__sets._NMSets__nmobjects_fxnref = result._get_map
+        result._NMObjectContainer__sets._resolve_fxn = result._get_map
 
         return result
 
@@ -644,6 +642,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # self.__map = new_map  # reference change
         self.__map.clear()
         self.__map.update(new_map)
+        self.__sets.rename_item(key, actual_newname)
         return True
 
     def reorder(

@@ -770,6 +770,19 @@ class TestNMObjectContainerRename(NMObjectContainerTestBase):
         self.assertEqual(list(self.map0.keys()), klist)
 
 
+class TestNMObjectContainerRenameUpdatesSets(NMObjectContainerTestBase):
+    """Tests that rename updates string keys in sets."""
+
+    def test_rename_updates_sets(self):
+        self.map0.sets.add("myset", [ONLIST0[0], ONLIST0[1]])
+        self.map0.pop(ONLIST0[3])
+        self.map0.rename(ONLIST0[0], ONLIST0[3])
+        keys = self.map0.sets.get("myset", get_keys=True)
+        self.assertIn(ONLIST0[3], keys)
+        self.assertNotIn(ONLIST0[0], keys)
+        self.assertIn(ONLIST0[1], keys)
+
+
 class TestNMObjectContainerReorder(NMObjectContainerTestBase):
     """Tests for reorder() method."""
 

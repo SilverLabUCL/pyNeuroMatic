@@ -30,7 +30,6 @@ class NMSetsTestBase(unittest.TestCase):
             self.objects[name] = obj
 
         self.sets = NMSets(
-            parent=self.nm,
             name="TestSets",
             nmobjects=self.objects,
         )
@@ -40,16 +39,15 @@ class TestNMSetsInit(NMSetsTestBase):
     """Tests for NMSets initialization."""
 
     def test_init_with_nmobjects(self):
-        sets = NMSets(parent=self.nm, name="test", nmobjects=self.objects)
+        sets = NMSets(name="test", nmobjects=self.objects)
         self.assertEqual(sets.name, "test")
-        self.assertEqual(sets._parent, self.nm)
 
     def _get_objects_method(self):
         """Method reference for testing nmobjects_fxnref."""
         return self.objects
 
     def test_init_with_nmobjects_fxnref(self):
-        sets = NMSets(parent=self.nm, name="test", nmobjects_fxnref=self._get_objects_method)
+        sets = NMSets(name="test", nmobjects_fxnref=self._get_objects_method)
         self.assertEqual(sets.name, "test")
 
     def test_init_requires_nmobjects_arg(self):
@@ -344,6 +342,35 @@ class TestNMSetsRemove(NMSetsTestBase):
         self.assertNotIn("obj0", self.sets.get("set1", get_keys=True))
 
 
+class TestNMSetsRenameItem(NMSetsTestBase):
+    """Tests for rename_item (used when container renames an object)."""
+
+    def test_rename_item_updates_set(self):
+        self.sets.add("set0", ["obj0", "obj1", "obj2"])
+        self.objects["obj_new"] = self.objects.pop("obj0")
+        self.objects["obj_new"]._name_set(newname="obj_new", quiet=True)
+        self.sets.rename_item("obj0", "obj_new")
+        keys = self.sets.get("set0", get_keys=True)
+        self.assertNotIn("obj0", keys)
+        self.assertIn("obj_new", keys)
+
+    def test_rename_item_in_multiple_sets(self):
+        self.sets.add("set0", ["obj0", "obj1"])
+        self.sets.add("set1", ["obj0", "obj2"])
+        self.objects["obj_new"] = self.objects.pop("obj0")
+        self.objects["obj_new"]._name_set(newname="obj_new", quiet=True)
+        self.sets.rename_item("obj0", "obj_new")
+        self.assertIn("obj_new", self.sets.get("set0", get_keys=True))
+        self.assertIn("obj_new", self.sets.get("set1", get_keys=True))
+
+    def test_rename_item_not_in_set(self):
+        self.sets.add("set0", ["obj1", "obj2"])
+        # Renaming obj0 shouldn't affect set0
+        self.sets.rename_item("obj0", "obj_new")
+        keys = self.sets.get("set0", get_keys=True)
+        self.assertEqual(keys, ["obj1", "obj2"])
+
+
 class TestNMSetsNew(NMSetsTestBase):
     """Tests for new and duplicate operations."""
 
@@ -440,23 +467,23 @@ class TestNMSetsEquality(NMSetsTestBase):
     """Tests for equality comparison."""
 
     def test_equal_empty_sets(self):
-        sets2 = NMSets(parent=self.nm, name="TestSets", nmobjects=self.objects)
+        sets2 = NMSets(name="TestSets", nmobjects=self.objects)
         self.assertEqual(self.sets, sets2)
 
     def test_equal_with_items(self):
-        sets2 = NMSets(parent=self.nm, name="TestSets", nmobjects=self.objects)
+        sets2 = NMSets(name="TestSets", nmobjects=self.objects)
         self.sets.add("set0", ["obj0", "obj1"])
         sets2.add("set0", ["obj0", "obj1"])
         self.assertEqual(self.sets, sets2)
 
     def test_not_equal_different_items(self):
-        sets2 = NMSets(parent=self.nm, name="TestSets", nmobjects=self.objects)
+        sets2 = NMSets(name="TestSets", nmobjects=self.objects)
         self.sets.add("set0", ["obj0"])
         sets2.add("set0", ["obj1"])
         self.assertNotEqual(self.sets, sets2)
 
     def test_equal_with_equations(self):
-        sets2 = NMSets(parent=self.nm, name="TestSets", nmobjects=self.objects)
+        sets2 = NMSets(name="TestSets", nmobjects=self.objects)
         for s in [self.sets, sets2]:
             s.add("setA", ["obj0", "obj1"])
             s.add("setB", ["obj1", "obj2"])
