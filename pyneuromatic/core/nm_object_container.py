@@ -422,7 +422,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
         result._NMObject__parent = self._NMObject__parent
         result._NMObject__name = self._NMObject__name
-        result._NMObject__rename_fxnref = result._name_set
+        result._container = None
         result._NMObject__copy_of = self
 
         # Now handle NMObjectContainer's special attributes
@@ -432,6 +432,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         for key, nmobj in self._NMObjectContainer__map.items():
             copied_obj = copy.deepcopy(nmobj, memo)
             copied_obj._parent = result  # update parent to new container
+            copied_obj._container = result  # link back to new container
             result._NMObjectContainer__map[key] = copied_obj
 
         # __sets: deep copy the sets and update resolve function
@@ -464,6 +465,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 self.selected_name = None
         self.sets.remove_from_all(actual_key)
         o = self.__map.pop(actual_key)
+        o._container = None
         return o
 
     # override MutableMapping mixin method
@@ -490,6 +492,8 @@ class NMObjectContainer(NMObject, MutableMapping):
     def clear(self) -> None:
         if len(self) == 0:
             return
+        for o in self.__map.values():
+            o._container = None
         self.selected_name = None
         self.sets.empty_all()
         self.__map.clear()
@@ -550,7 +554,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     def __update_nmobject_references(self):
         for o in self.__map.values():
-            o._rename_fxnref_set(self.rename)  # reference of 'rename' fxn
+            o._container = self
             o._parent = self._parent
 
     # override MutableMapping mixin method

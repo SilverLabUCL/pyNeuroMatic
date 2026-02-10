@@ -74,9 +74,9 @@ class TestNMObjectInit(NMObjectTestBase):
         self.assertEqual(self.o0.name, ONAME0)
         self.assertEqual(self.o1.name, ONAME1)
 
-    def test_sets_rename_fxnref(self):
-        self.assertEqual(self.o0._NMObject__rename_fxnref, self.o0._name_set)
-        self.assertEqual(self.o1._NMObject__rename_fxnref, self.o1._name_set)
+    def test_container_initially_none(self):
+        self.assertIsNone(self.o0._container)
+        self.assertIsNone(self.o1._container)
 
     def test_deepcopy_preserves_parent(self):
         self.assertEqual(self.o0_copy._parent, NM0)
@@ -86,9 +86,9 @@ class TestNMObjectInit(NMObjectTestBase):
         self.assertEqual(self.o0_copy.name, ONAME0)
         self.assertEqual(self.o1_copy.name, ONAME1)
 
-    def test_deepcopy_preserves_rename_fxnref(self):
-        self.assertEqual(self.o0_copy._NMObject__rename_fxnref, self.o0_copy._name_set)
-        self.assertEqual(self.o1_copy._NMObject__rename_fxnref, self.o1_copy._name_set)
+    def test_deepcopy_has_no_container(self):
+        self.assertIsNone(self.o0_copy._container)
+        self.assertIsNone(self.o1_copy._container)
 
 
 class TestNMObjectEquality(NMObjectTestBase):
@@ -215,15 +215,9 @@ class TestNMObjectCopy(NMObjectTestBase):
         c = self.o0.copy()
         self.assertIsNotNone(c.parameters.get("created"))
 
-    def test_copy_has_rename_fxnref(self):
+    def test_copy_has_no_container(self):
         c = self.o0.copy()
-        self.assertEqual(c._NMObject__rename_fxnref, c._name_set)
-
-    def test_copy_rename_fxnref_same_function(self):
-        c = self.o0.copy()
-        fr0 = self.o0._NMObject__rename_fxnref
-        frc = c._NMObject__rename_fxnref
-        self.assertEqual(fr0.__func__, frc.__func__)
+        self.assertIsNone(c._container)
 
 
 class TestNMObjectParameters(NMObjectTestBase):
@@ -289,41 +283,38 @@ class TestNMObjectNameSet(NMObjectTestBase):
         bad.remove(None)  # None might be handled differently
         for b in bad:
             with self.assertRaises(TypeError):
-                self.o0._name_set("notused", b)
+                self.o0._name_set(b)
 
     def test_rejects_invalid_name(self):
         for b in BAD_NAMES:
             with self.assertRaises(ValueError):
-                self.o0._name_set("notused", b)
+                self.o0._name_set(b)
 
     def test_sets_name(self):
         for n in ["test", ONAME0]:
-            self.o0._name_set("notused", n)
+            self.o0._name_set(n)
             self.assertEqual(n, self.o0.name)
 
 
-class TestNMObjectRenameFxnref(NMObjectTestBase):
-    """Tests for NMObject._rename_fxnref_set method."""
+class TestNMObjectContainerRename(NMObjectTestBase):
+    """Tests for NMObject name setter with _container dispatch."""
 
-    def rename_dummy(self, oldname, newname, quiet=False):
-        """Dummy function that rejects all renames."""
-        return False
-
-    def test_rejects_bad_types(self):
-        for b in BAD_TYPES:
-            with self.assertRaises(TypeError):
-                self.o0._rename_fxnref_set(b)
-
-    def test_default_rename_works(self):
+    def test_standalone_rename(self):
         self.o0.name = "test1"
         self.assertEqual(self.o0.name, "test1")
 
-    def test_custom_rename_fxnref(self):
+    def test_container_rename_dispatches(self):
+        """When _container is set, name setter calls container.rename()."""
+        from unittest.mock import MagicMock
+        mock_container = MagicMock()
+        self.o0._container = mock_container
+        self.o0.name = "newname"
+        mock_container.rename.assert_called_once_with("object0", "newname")
+
+    def test_no_container_uses_name_set(self):
+        self.assertIsNone(self.o0._container)
         self.o0.name = "test1"
         self.assertEqual(self.o0.name, "test1")
-        self.o0._rename_fxnref_set(self.rename_dummy)
-        self.o0.name = "test2"
-        self.assertEqual(self.o0.name, "test1")  # Name unchanged due to dummy
 
 
 class TestNMObjectManager(NMObjectTestBase):

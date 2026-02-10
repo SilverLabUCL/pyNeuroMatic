@@ -133,7 +133,7 @@ class NMChannel(NMObject):
         result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
         result._NMObject__parent = self._NMObject__parent
         result._NMObject__name = self._NMObject__name
-        result._NMObject__rename_fxnref = result._name_set
+        result._container = None
         result._NMObject__copy_of = self
 
         # __thedata: copy list of references
