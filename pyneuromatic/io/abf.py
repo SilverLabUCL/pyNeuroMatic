@@ -107,18 +107,18 @@ def read_abf(
                 continue
 
             # Set y data
-            data.y.data = abf.sweepY.copy()
+            data.nparray = abf.sweepY.copy()
 
             # Set y label/units from ADC info
             if channel < len(abf.adcNames):
-                data.y.label = abf.adcNames[channel]
+                data.yscale["label"] = abf.adcNames[channel]
             if channel < len(abf.adcUnits):
-                data.y.units = abf.adcUnits[channel]
+                data.yscale["units"] = abf.adcUnits[channel]
 
             # Set x scaling
-            data.x.start = x_start
-            data.x.delta = x_delta
-            data.x.units = x_units
+            data.xscale["start"] = x_start
+            data.xscale["delta"] = x_delta
+            data.xscale["units"] = x_units
 
     # Optionally create dataseries
     if make_dataseries:

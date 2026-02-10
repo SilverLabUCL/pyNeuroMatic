@@ -29,7 +29,6 @@ from typing import TYPE_CHECKING
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
-from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
@@ -789,27 +788,19 @@ if __name__ == "__main__":
     assert isinstance(f1, NMFolder)
 
     ydata = np.random.normal(loc=0, scale=1, size=pnts)
-    ydim = NMDimension(nm, "y", nparray=ydata)
-    f1.data.new("recordA0", ydim=ydim)
+    f1.data.new("recordA0", nparray=ydata)
 
     ydata = np.random.normal(loc=0, scale=1, size=pnts)
     dx = 1
     xdata = np.arange(0, pnts * dx, dx)
     ydata = 3.2 * xdata + 5.7
-    # print(xdata)
-    # print(ydata)
-    xdim = NMDimensionX(nm, "x", nparray=xdata, ypair=ydata)
-    ydim = NMDimension(nm, "y", nparray=ydata)
-    # f1.data.new("recordA1", xdim=xdim, ydim=ydim)
-    f1.data.new("recordA1", ydim=ydim)
+    f1.data.new("recordA1", nparray=ydata)
 
     ydata = np.random.normal(loc=0, scale=1, size=pnts)
-    ydim = NMDimension(nm, "y", nparray=ydata)
-    f1.data.new("recordA2", ydim=ydim)
+    f1.data.new("recordA2", nparray=ydata)
 
     ydata = np.random.normal(loc=0, scale=1, size=pnts)
-    ydim = NMDimension(nm, "y", nparray=ydata)
-    f1.data.new("recordA3", ydim=ydim)
+    f1.data.new("recordA3", nparray=ydata)
 
     f1.data.sets.new("set1")
     f1.data.sets.add("set1", ["recordA0", "recordA2", "recordA3"])

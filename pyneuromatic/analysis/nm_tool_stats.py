@@ -26,7 +26,6 @@ import numpy as np
 
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
-from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
@@ -276,15 +275,13 @@ class NMToolStats(NMTool):
 
             sbsln_np = np.array(sbsln)
             if f.data is not None:
-                sbsln_dim = NMDimension(f.data, "y", nparray=sbsln_np)
                 dname = prefix + "_bsln_" + str(bsln_func)
-                f.data.new(dname, ydim=sbsln_dim)
+                f.data.new(dname, nparray=sbsln_np)
 
             s_np = np.array(s)
             if f.data is not None:
-                s_dim = NMDimension(f.data, "y", nparray=s_np)
                 dname = prefix + "_" + str(func)
-                f.data.new(dname, ydim=s_dim)
+                f.data.new(dname, nparray=s_np)
 
                 print(f.data.content)
 
@@ -1741,8 +1738,8 @@ def stats(
     if not isinstance(data, NMData):
         e = nmu.type_error_str(data, "data", "NMData")
         raise TypeError(e)
-    if not isinstance(data.y.nparray, np.ndarray):
-        e = nmu.type_error_str(data.y.nparray, "nparray", "NumPy.ndarray")
+    if not isinstance(data.nparray, np.ndarray):
+        e = nmu.type_error_str(data.nparray, "nparray", "NumPy.ndarray")
         raise TypeError(e)
 
     if not isinstance(func, dict):
@@ -1758,12 +1755,12 @@ def stats(
         raise TypeError(e)
     f = f.lower()
 
-    found_xarray = isinstance(data.x.nparray, np.ndarray)
-    ysize = data.y.nparray.size
+    found_xarray = isinstance(data.xarray, np.ndarray)
+    ysize = data.nparray.size
 
-    if found_xarray and data.x.nparray.size != ysize:
+    if found_xarray and data.xarray.size != ysize:
         e = ("x-y paired NumPy arrays have different size: %s != %s"
-             % (data.x.nparray.size, ysize))
+             % (data.xarray.size, ysize))
         raise RuntimeError(e)
 
     if results is None:
@@ -1775,19 +1772,11 @@ def stats(
     # results["func"] = f
     results["data"] = data.path_str
 
-    if isinstance(data.x.units, str):
-        xunits = data.x.units
-        xunits = xunits
-    else:
-        xunits = None
-    if isinstance(data.y.units, str):
-        yunits = data.y.units
-        yunits = yunits
-    else:
-        yunits = None
+    xunits = data.xscale.get("units")
+    yunits = data.yscale.get("units")
 
-    i0 = data.x.get_index(x0, clip=xclip)
-    i1 = data.x.get_index(x1, clip=xclip)
+    i0 = data.get_xindex(x0, clip=xclip)
+    i1 = data.get_xindex(x1, clip=xclip)
 
     results["i0"] = i0
     results["i1"] = i1
@@ -1804,11 +1793,11 @@ def stats(
         return results
 
     if f == "value@x0":
-        results["s"] = data.y.nparray[i0]
+        results["s"] = data.nparray[i0]
         results["sunits"] = yunits
         return results
     if f == "value@x1":
-        results["s"] = data.y.nparray[i1]
+        results["s"] = data.nparray[i1]
         results["sunits"] = yunits
         return results
 
@@ -1825,17 +1814,17 @@ def stats(
         results["i1"] = i1
 
     if i0 == 0 and i1 == ysize - 1:
-        yarray = data.y.nparray
+        yarray = data.nparray
         if found_xarray:
-            xarray = data.x.nparray
+            xarray = data.xarray
         else:
-            xstart = data.x.start
+            xstart = data.xscale.get("start")
     else:  # slice
-        yarray = data.y.nparray[i0:i1+1]
+        yarray = data.nparray[i0:i1+1]
         if found_xarray:
-            xarray = data.x.nparray[i0:i1+1]
+            xarray = data.xarray[i0:i1+1]
         else:
-            xstart = data.x.get_xvalue(i0)
+            xstart = data.get_xvalue(i0)
 
     nans = np.count_nonzero(np.isnan(yarray))
     infs = np.count_nonzero(np.isinf(yarray))
@@ -1870,8 +1859,8 @@ def stats(
         results["sunits"] = yunits
         i = int(index) + int(i0)  # shift due to slicing
         results["i"] = i
-        results["x"] = data.x.get_xvalue(i)
-        results["xunits"] = data.x.units
+        results["x"] = data.get_xvalue(i)
+        results["xunits"] = data.xscale.get("units")
 
         imean = 0
 
@@ -1893,9 +1882,9 @@ def stats(
             i1 = min(i1, ysize - 1)
             # print("i0: %s, i1: %s" % (i0, i1))
             if i0 == 0 and i1 == ysize - 1:
-                yarray = data.y.nparray
+                yarray = data.nparray
             else:  # slice
-                yarray = data.y.nparray[i0:i1+1]
+                yarray = data.nparray[i0:i1+1]
             if ignore_nans:
                 results["s"] = np.nanmean(yarray)
             else:
@@ -1919,7 +1908,7 @@ def stats(
             )
         else:
             xstart_val = xstart if isinstance(xstart, float) else 0.0
-            xdelta_val = data.x.delta if isinstance(data.x.delta, float) else 1.0
+            xdelta_val = data.xscale.get("delta") if isinstance(data.xscale.get("delta"), float) else 1.0
             i_x = find_level_crossings(
                             yarray,
                             ylevel,
@@ -1954,7 +1943,7 @@ def stats(
             )
         else:
             xstart_val = xstart if isinstance(xstart, float) else 0.0
-            xdelta_val = data.x.delta if isinstance(data.x.delta, float) else 1.0
+            xdelta_val = data.xscale.get("delta") if isinstance(data.xscale.get("delta"), float) else 1.0
             mb = linear_regression(
                             yarray,
                             xstart=xstart_val,
@@ -2054,7 +2043,7 @@ def stats(
             dy2 = np.square(np.diff(yarray))
             h = np.sqrt(np.add(dx2, dy2))
         else:
-            dx = data.x.delta if isinstance(data.x.delta, float) else 1.0
+            dx = data.xscale.get("delta") if isinstance(data.xscale.get("delta"), float) else 1.0
             dx2 = dx**2
             dy2 = np.square(np.diff(yarray))
             h = np.sqrt(dx2 + dy2)
@@ -2078,7 +2067,7 @@ def stats(
                 sum_y = np.nansum(yarray)
             else:
                 sum_y = np.sum(yarray)
-            results["s"] = sum_y * data.x.delta
+            results["s"] = sum_y * data.xscale.get("delta")
         if isinstance(xunits, str) and isinstance(yunits, str):
             if xunits == yunits:
                 results["sunits"] = xunits + "**2"

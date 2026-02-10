@@ -63,7 +63,7 @@ class NMObject(object):
 
     Known children of NMObject:
         NMChannel, NMData, NMDataSeries, NMEpoch, NMFolder, NMObjectContainer,
-        NMProject, NMDimension, NMSets
+        NMProject, NMSets
 
     Attributes:
         __created (str): creation date of NMObject.

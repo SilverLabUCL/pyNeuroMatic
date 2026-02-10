@@ -13,7 +13,6 @@ from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_manager import NMManager
 import pyneuromatic.core.nm_preferences as nmp
-from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 import pyneuromatic.core.nm_utilities as nmu
 
 QUIET = True
@@ -31,14 +30,14 @@ XSCALE1 = {"label": "time", "units": "s", "start": -10, "delta": 0.2}
 class NMDataTest(unittest.TestCase):
 
     def setUp(self):
-        # Create dimensions with nparray
-        xdim0 = NMDimensionX(parent=None, name="xscale", scale=XSCALE0)
-        ydim0 = NMDimension(parent=None, name="yscale", nparray=NPARRAY0, scale=YSCALE0)
-        xdim1 = NMDimensionX(parent=None, name="xscale", scale=XSCALE1)
-        ydim1 = NMDimension(parent=None, name="yscale", nparray=NPARRAY1, scale=YSCALE1)
-
-        self.d0 = NMData(parent=NM, name=DNAME0, xdim=xdim0, ydim=ydim0)
-        self.d1 = NMData(parent=NM, name=DNAME1, xdim=xdim1, ydim=ydim1)
+        self.d0 = NMData(
+            parent=NM, name=DNAME0, nparray=NPARRAY0,
+            xscale=XSCALE0, yscale=YSCALE0
+        )
+        self.d1 = NMData(
+            parent=NM, name=DNAME1, nparray=NPARRAY1,
+            xscale=XSCALE1, yscale=YSCALE1
+        )
         self.d0_copy = copy.deepcopy(self.d0)
         self.d1_copy = copy.deepcopy(self.d1)
 
@@ -49,22 +48,22 @@ class NMDataTest(unittest.TestCase):
 
     def test00_init(self):
         # args: parent, name (see NMObject)
-        # args: xdim, ydim, dataseries_channel, dataseries_epoch
+        # args: nparray, xscale, yscale
 
         self.assertEqual(self.d0._parent, NM)
         self.assertEqual(self.d0.name, DNAME0)
-        self.assertEqual(self.d0.y.scale, YSCALE0)
-        self.assertEqual(self.d0.x.scale, XSCALE0)
-        self.assertTrue(isinstance(self.d0.y.nparray, numpy.ndarray))
+        self.assertEqual(self.d0.yscale, YSCALE0)
+        self.assertEqual(self.d0.xscale, XSCALE0)
+        self.assertTrue(isinstance(self.d0.nparray, numpy.ndarray))
 
         # deepcopy preserves attributes
         self.assertEqual(self.d0_copy._parent, NM)
         self.assertEqual(self.d0_copy.name, DNAME0)
-        self.assertEqual(self.d0_copy.y.scale, YSCALE0)
-        self.assertEqual(self.d0_copy.x.scale, XSCALE0)
-        self.assertTrue(isinstance(self.d0_copy.y.nparray, numpy.ndarray))
+        self.assertEqual(self.d0_copy.yscale, YSCALE0)
+        self.assertEqual(self.d0_copy.xscale, XSCALE0)
+        self.assertTrue(isinstance(self.d0_copy.nparray, numpy.ndarray))
         # deepcopy creates a new array
-        self.assertFalse(self.d0_copy.y.nparray is self.d0.y.nparray)
+        self.assertFalse(self.d0_copy.nparray is self.d0.nparray)
 
     def xtest01_eq(self):
         self.assertTrue(self.d0 == self.d0)
@@ -73,32 +72,32 @@ class NMDataTest(unittest.TestCase):
 
         x = XSCALE0.copy()
         d0 = NMData(
-            parent=None, name=DNAME0, np_array=NPARRAY0, xscale=x, yscale=YSCALE0
+            parent=None, name=DNAME0, nparray=NPARRAY0, xscale=x, yscale=YSCALE0
         )
         self.assertTrue(d0 == self.d0)
-        d0.x.delta = 0.05
+        d0.xscale["delta"] = 0.05
         self.assertFalse(d0 == self.d0)
-        d0.x.delta = XSCALE0["delta"]
+        d0.xscale["delta"] = XSCALE0["delta"]
         self.assertTrue(d0 == self.d0)
-        d0.y.units = "test"
+        d0.yscale["units"] = "test"
         self.assertFalse(d0 == self.d0)
-        d0.y.units = YSCALE0["units"]
+        d0.yscale["units"] = YSCALE0["units"]
         self.assertTrue(d0 == self.d0)
 
-        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
+        d0.nparray = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
         self.assertTrue(d0 == self.d0)
-        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
-        d0.np_array[-1] = 0
+        d0.nparray = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
+        d0.nparray[-1] = 0
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([5], 3.14, dtype=numpy.float64, order="C")
+        d0.nparray = numpy.full([5], 3.14, dtype=numpy.float64, order="C")
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([4], 3.143, dtype=numpy.float64, order="C")
+        d0.nparray = numpy.full([4], 3.143, dtype=numpy.float64, order="C")
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([4], 3.14, dtype=numpy.float16, order="C")
+        d0.nparray = numpy.full([4], 3.14, dtype=numpy.float16, order="C")
         self.assertFalse(d0 == self.d0)
-        d0.np_array = numpy.full([4], numpy.nan, dtype=numpy.float64, order="C")
+        d0.nparray = numpy.full([4], numpy.nan, dtype=numpy.float64, order="C")
         self.assertFalse(d0 == self.d0)
-        self.d0.np_array.fill(numpy.nan)
+        self.d0.nparray.fill(numpy.nan)
         if nmp.NAN_EQ_NAN:
             self.assertTrue(d0 == self.d0)
         else:
@@ -118,29 +117,23 @@ class NMDataTest(unittest.TestCase):
 
     def xtest03_parameters(self):
         plist = ["name", "created", "copy of"]
-        plist += ["xscale", "yscale", "np_array", "dataseries"]
+        plist += ["xscale", "yscale", "nparray", "dataseries"]
         klist = list(self.d0.parameters.keys())
         self.assertEqual(klist, plist)
 
     def xtest03_x(self):
         with self.assertRaises(AttributeError):
-            self.d0.x = None
-        self.assertIsInstance(self.d0.x, NMDimensionX)
+            self.d0.xscale = None
         start = 100
-        self.d0.x.scale["start"] = start  # no change
-        self.assertEqual(self.d0.x.start, XSCALE0["start"])
-        self.d0.x.start = start
-        self.assertEqual(self.d0.x.start, start)
+        self.d0.xscale["start"] = start
+        self.assertEqual(self.d0.xscale["start"], start)
 
     def xtest04_y(self):
         with self.assertRaises(AttributeError):
-            self.d0.y = None
-        self.assertIsInstance(self.d0.y, NMDimension)
+            self.d0.yscale = None
         label = "test"
-        self.d0.y.scale["label"] = label  # no change
-        self.assertEqual(self.d0.y.label, YSCALE0["label"])
-        self.d0.y.label = label
-        self.assertEqual(self.d0.y.label, label)
+        self.d0.yscale["label"] = label
+        self.assertEqual(self.d0.yscale["label"], label)
 
     def xtest05_dataseries(self):
         """
@@ -156,7 +149,7 @@ class NMDataTest(unittest.TestCase):
         bad.remove(None)
         for b in bad:
             with self.assertRaises(TypeError):
-                self.d0.np_array = b
+                self.d0.nparray = b
 
     def xtest07_datacontainer(self):
         c0 = NMDataContainer(parent=NM, name="DataContainer0")
@@ -166,7 +159,7 @@ class NMDataTest(unittest.TestCase):
         for i in range(ndata):
             n = "data" + str(i)
             d = NMData(
-                parent=NM, name=n, np_array=NPARRAY0, xscale=XSCALE0, yscale=YSCALE0
+                parent=NM, name=n, nparray=NPARRAY0, xscale=XSCALE0, yscale=YSCALE0
             )
             c0.update(d)
             dnlist0.append(n)
@@ -186,7 +179,7 @@ class NMDataTest(unittest.TestCase):
         for i in range(ndata):
             n = "record" + str(i)
             d = NMData(
-                parent=NM, name=n, np_array=NPARRAY1, xscale=XSCALE1, yscale=YSCALE1
+                parent=NM, name=n, nparray=NPARRAY1, xscale=XSCALE1, yscale=YSCALE1
             )
             c1.update(d)
             dnlist1.append(n)
@@ -224,12 +217,12 @@ class NMDataTest(unittest.TestCase):
     def _test_data(self):
 
         # __init__()
-        # args: parent, name, np_array, xscale, yscale, copy
+        # args: parent, name, nparray, xscale, yscale, copy
         # dataseries, dataseries_channel, dataseries_epoch
         n0 = 'RecordA0'
         n1 = 'RecordA1'
         ds = NMDataSeries(parent=PARENT, name='Record')
-        
+
         for b in BADTYPES:
             if b is None:
                 continue  # ok
@@ -249,15 +242,12 @@ class NMDataTest(unittest.TestCase):
                             dataseries_channel='A', dataseries_epoch=b)
         nparray0 = numpy.full([4], 3.14, dtype=numpy.float64, order='C')
         nparray1 = numpy.full([5], 6.28, dtype=numpy.float64, order='C')
-        # nparrayx = numpy.full([6], 12.56, dtype=numpy.float64, order='C')
-        d0 = NMData(parent=PARENT, name=n0, np_array=nparray0, xscale=XSCALE0,
+        d0 = NMData(parent=PARENT, name=n0, nparray=nparray0, xscale=XSCALE0,
                     yscale=YSCALE0)
-        d1 = NMData(parent=PARENT, name=n1, np_array=nparray1, xscale=XSCALE1,
+        d1 = NMData(parent=PARENT, name=n1, nparray=nparray1, xscale=XSCALE1,
                     yscale=YSCALE1)
-        # xdata = NMData(parent=PARENT, name='xdata', np_array=nparrayx,
-        #               xscale=XSCALEx, yscale=YSCALEx)
-        self.assertTrue(numpy.array_equal(d0._NMData__np_array, nparray0))
-        self.assertTrue(numpy.array_equal(d1._NMData__np_array, nparray1))
+        self.assertTrue(numpy.array_equal(d0._NMData__nparray, nparray0))
+        self.assertTrue(numpy.array_equal(d1._NMData__nparray, nparray1))
 
         # parameters()
         plist = PLIST + ['xscale', 'yscale', 'dataseries']
@@ -269,69 +259,25 @@ class NMDataTest(unittest.TestCase):
         self.assertIsInstance(c, dict)
         self.assertEqual(list(c.keys()), [content_name])
         self.assertEqual(c[content_name], d0.name)
-        # self.assertEqual(c['notes'], d0.note.names)
-
-        # isequivalent()
-        # args: NMData
-        self.assertFalse(d0._isequivalent(d1, alert=ALERT))
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray0,
-                     xscale=XSCALE0, yscale=YSCALE0)
-        self.assertTrue(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = numpy.full([4], 3.14, dtype=numpy.float64, order='F')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
-        self.assertTrue(d0._isequivalent(d00, alert=ALERT))
-        nparray0[2] = 5
-        self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        nparray0[2] = 0
-        d00 = NMData(parent=PARENT, name=n0, np_array=None,
-                     xscale=XSCALE0, yscale=YSCALE0)
-        self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = numpy.full([5, 2], 3.14, dtype=numpy.float64, order='C')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
-        self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = numpy.full([5], 3.14, dtype=numpy.int32, order='C')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
-        self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        nparray00 = numpy.full([5], 3.14, dtype=numpy.float64, order='F')
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray00,
-                     xscale=XSCALE0, yscale=YSCALE0)
-        self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray0,
-                     xscale=XSCALE1, yscale=YSCALE0)
-        self.assertFalse(d0._isequivalent(d00, alert=ALERT))
-        d00 = NMData(parent=PARENT, name=n0, np_array=nparray0,
-                     xscale=XSCALE0, yscale=YSCALE1)
-        self.assertFalse(d0._isequivalent(d00, alert=ALERT))
 
         # copy()
         c = d0.copy()
         self.assertIsInstance(c, NMData)
         self.assertTrue(d0._isequivalent(c, alert=ALERT))
 
-        # np_array_set()
-        # args: np_array
+        # nparray setter
         for b in BADTYPES:
             if b is None:
                 continue
             with self.assertRaises(TypeError):
-                d0._np_array_set(b)
-        self.assertTrue(d0._np_array_set(None))
-        self.assertIsNone(d0.np_array)
-        self.assertTrue(d0._np_array_set(nparray1))
-        self.assertIsInstance(d0.np_array, numpy.ndarray)
-        # np_array_make, args: shape, fill_value, dtype, order
-        # wrapper fxn, so basic testing here
-        self.assertTrue(d0.np_array_make((10, 2)))
-        # np_array_make_random_normal, args: shape, mean, stdv
-        # wrapper fxn, so basic testing here
-        self.assertTrue(d0.np_array_make_random_normal(10, mean=3, stdv=1))
+                d0.nparray = b
+        d0.nparray = None
+        self.assertIsNone(d0.nparray)
+        d0.nparray = nparray1
+        self.assertIsInstance(d0.nparray, numpy.ndarray)
         # TODO
         # dataseries
         # dataseries_set
-        # ds = NMDataSeries(parent=PARENT, name='Record')
         # TODO x- and y-scale
 
     def _test_data_container(self):
@@ -340,8 +286,7 @@ class NMDataTest(unittest.TestCase):
         self.assertEqual(c0.parameters['type'], 'NMData')
         self.assertEqual(c0.prefix, nmp.DATA_PREFIX)
         self.assertTrue(c0.parameters['rename'])
-        # new, args: name, np_array, xscale=, yscale, dataseries, select
-        # wrapper for Data.new() and NMObjectContainer.new()
+        # new, args: name, nparray, xscale=, yscale, dataseries, select
         nlist = ['RecordA0', 'WaveA0', 'Xdata']
         for n in nlist:
             self.assertIsInstance(c0.new(name=n, xscale=XSCALE0,
@@ -349,14 +294,13 @@ class NMDataTest(unittest.TestCase):
             self.assertIsInstance(c1.new(name=n, xscale=XSCALE0,
                                          yscale=YSCALE0), NMData)
         # append(), args: data, select
-        # wrapper for NMObjectContainer.new()
         for b in BADTYPES:
             if b is None:
                 continue  # ok
             with self.assertRaises(TypeError):
                 c0.append(b)
         nparray0 = numpy.full([4], 3.14, dtype=numpy.float64, order='C')
-        d0 = NMData(parent=PARENT, name='RecordA1', np_array=nparray0,
+        d0 = NMData(parent=PARENT, name='RecordA1', nparray=nparray0,
                     xscale=XSCALE0, yscale=YSCALE0)
         self.assertTrue(c0.append(d0))
 
@@ -366,14 +310,11 @@ class NMDataTest(unittest.TestCase):
         self.assertTrue(c._isequivalent(c0, alert=ALERT))
         # isequivalent, args: DataContainer
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
-        d1 = NMData(parent=PARENT, name='RecordA1', np_array=nparray0,
+        d1 = NMData(parent=PARENT, name='RecordA1', nparray=nparray0,
                     xscale=XSCALE0, yscale=YSCALE0)
         c1.append(d1)
         self.assertTrue(c0._isequivalent(c1, alert=ALERT))
         self.assertIsInstance(c0._select_set('WaveA0'), NMData)
         self.assertIsInstance(c1._select_set('RecordA0'), NMData)
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
-        # remove(), args: names, indexes, confirm
-        # wrapper for NMObjectContainer.remove()
-        # TODO, test if Data is removed from dataseries and sets
     """

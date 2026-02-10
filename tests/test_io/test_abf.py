@@ -58,36 +58,36 @@ class TestReadAbfFile(unittest.TestCase):
     def test_x_delta(self):
         # 5000 Hz = 0.2 ms sample interval
         self.assertAlmostEqual(
-            self.folder.data["RecordA0"].x.delta, 0.2, places=4
+            self.folder.data["RecordA0"].xscale["delta"], 0.2, places=4
         )
 
     def test_x_start(self):
         self.assertAlmostEqual(
-            self.folder.data["RecordA0"].x.start, 0.0, places=4
+            self.folder.data["RecordA0"].xscale["start"], 0.0, places=4
         )
 
     def test_x_units(self):
-        self.assertEqual(self.folder.data["RecordA0"].x.units, "ms")
+        self.assertEqual(self.folder.data["RecordA0"].xscale["units"], "ms")
 
     # y-axis
 
     def test_channel_a_y_label(self):
-        self.assertEqual(self.folder.data["RecordA0"].y.label, "Im_1stCh2")
+        self.assertEqual(self.folder.data["RecordA0"].yscale["label"], "Im_1stCh2")
 
     def test_channel_a_y_units(self):
-        self.assertEqual(self.folder.data["RecordA0"].y.units, "pA")
+        self.assertEqual(self.folder.data["RecordA0"].yscale["units"], "pA")
 
     def test_channel_b_y_label(self):
-        self.assertEqual(self.folder.data["RecordB0"].y.label, "Light")
+        self.assertEqual(self.folder.data["RecordB0"].yscale["label"], "Light")
 
     def test_channel_b_y_units(self):
-        self.assertEqual(self.folder.data["RecordB0"].y.units, "V")
+        self.assertEqual(self.folder.data["RecordB0"].yscale["units"], "V")
 
     # data shape
 
     def test_data_shape(self):
         self.assertEqual(
-            self.folder.data["RecordA0"].y.data.shape, (5000,)
+            self.folder.data["RecordA0"].nparray.shape, (5000,)
         )
 
     # metadata
