@@ -22,8 +22,6 @@ from __future__ import annotations
 
 import copy
 import datetime
-from tkinter.font import names
-import types
 from typing import overload, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -69,8 +67,9 @@ class NMObject(object):
         __created (str): creation date of NMObject.
         __parent (NMObject or any object): parent of NMObject.
         __name (str): name of NMObject.
-        __rename_fxnref: reference of function that renames NMObject,
-            e.g. NMObject._name_set or NMObjectContainer.rename.
+        _container (NMObjectContainer or None): the container this NMObject
+            resides in, if any. Used to dispatch name changes through the
+            container's rename method.
         __copy_of (NMObject): if NMObject is a copy of another NMObject, this
             attribute holds the reference of the other NMObject.
 
@@ -100,7 +99,6 @@ class NMObject(object):
         "_NMObject__created",
         "_NMObject__parent",
         "_NMObject__name",
-        "_NMObject__rename_fxnref",
         "_NMObject__copy_of",
     })
 
@@ -122,7 +120,7 @@ class NMObject(object):
         self.__created = datetime.datetime.now().isoformat(" ", "seconds")
         self.__parent: object | None = parent
         self.__name: str = "NMObject0"
-        self.__rename_fxnref = self._name_set
+        self._container = None  # set by NMObjectContainer when added
         self.__copy_of: NMObject | None = None
 
         if not isinstance(name, str):
@@ -189,8 +187,8 @@ class NMObject(object):
         result._NMObject__parent = self._NMObject__parent
         # __name: copied
         result._NMObject__name = self._NMObject__name
-        # __rename_fxnref: NOT copied, set to new instance's _name_set
-        result._NMObject__rename_fxnref = result._name_set
+        # _container: NOT copied, standalone until added to a container
+        result._container = None
         # __copy_of: set to reference the original object
         result._NMObject__copy_of = self
 
@@ -333,28 +331,18 @@ class NMObject(object):
 
     @name.setter
     def name(self, newname: str) -> None:
-        # Name setter is called via function reference self.__rename_fxnref
-        # By default, self.__rename_fxnref points to
-        # NMObject._name_set(name, newname) (see below)
-        # Otherwise, it may point to
-        # NMObjectContainer.rename(key, newkey)
-        self.__rename_fxnref(self.__name, newname)
+        if self._container is not None:
+            self._container.rename(self.__name, newname)
+        else:
+            self._name_set(newname=newname)
 
     def _name_set(
         self,
-        name_notused: str | None = None,
-        # name_notused, dummy argument to be consistent with
-        # NMObjectContainer.rename(key, newkey)
-        newname: str | None = None,
-        # coding newname as optional (None)
-        # since preceding param name_notused is optional
+        newname: str = "",
         quiet: bool = nmp.QUIET,
     ) -> None:
-        """Set the name of the this NMObject.
+        """Set the name of this NMObject directly (bypasses container).
 
-        :param name_notused: name of this NMObject, but param is NOT USED
-            since name is known.
-        :type name_notused: str, optional
         :param newname: a new name for this NMObject
         :type newname: str
         :raises TypeError: If newname is not a string
@@ -371,20 +359,6 @@ class NMObject(object):
         self.__name = newname
         h = nmh.history_change_str("name", oldname, self.__name)
         nmh.history(h, path=self.path_str, quiet=quiet)
-
-    def _rename_fxnref_set(self, rename_fxnref) -> None:
-        """Set the rename function reference for this NMObject.
-
-        The rename function must have the following format:
-            fxn(oldname, newname)
-        See NMObject._name_set(name, newname)
-        See NMObjectContainer.rename(key, newkey)
-        """
-        if not isinstance(rename_fxnref, types.MethodType):
-            e = nmu.type_error_str(rename_fxnref, "rename_fxnref", "MethodType")
-            raise TypeError(e)
-        # TODO: test if function has 2 arguments?
-        self.__rename_fxnref = rename_fxnref
 
     @property
     def _manager(self) -> NMManager | None:  # find NMManager of this NMObject

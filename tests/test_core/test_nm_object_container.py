@@ -375,15 +375,13 @@ class TestNMObjectContainerSetItem(NMObjectContainerTestBase):
         self.assertFalse(o1 is self.olist0[1])
         self.assertTrue(o1 is o2)
 
-    def test_updates_rename_fxnref(self):
+    def test_updates_container_ref(self):
         n = ONLIST0[1]
         o2 = NMObject(parent=NM0, name=n)
-        rfr_before = o2._NMObject__rename_fxnref
+        self.assertIsNone(o2._container)
         self.map0[n.upper()] = o2
         o1 = self.map0.get(n)
-        rfr_after = o1._NMObject__rename_fxnref
-        self.assertNotEqual(rfr_before, rfr_after)
-        self.assertEqual(rfr_after, self.map0.rename)
+        self.assertIs(o1._container, self.map0)
 
     def test_length_unchanged_when_replacing(self):
         n = ONLIST0[1]
@@ -642,14 +640,12 @@ class TestNMObjectContainerUpdate(NMObjectContainerTestBase):
         self.map0.update(o1)
         self.assertEqual(len(self.map0), len(ONLIST0) + 1)
 
-    def test_update_sets_rename_fxnref(self):
+    def test_update_sets_container_ref(self):
         n1 = "test_new"
         o1 = NMObject(parent=NM0, name=n1)
-        rfr_before = o1._NMObject__rename_fxnref
+        self.assertIsNone(o1._container)
         self.map0.update(o1)
-        rfr_after = o1._NMObject__rename_fxnref
-        self.assertNotEqual(rfr_before, rfr_after)
-        self.assertEqual(rfr_after, self.map0.rename)
+        self.assertIs(o1._container, self.map0)
 
     def test_update_replaces_same_name(self):
         n1 = "test"
