@@ -512,6 +512,14 @@ class NMSets(MutableMapping):
                 new_map[newkey] = v
             else:
                 new_map[k] = v
+        # Update equation tuples that reference the old set name
+        for k, v in new_map.items():
+            if NMSets.tuple_is_equation(v):
+                assert isinstance(v, tuple)
+                op, s1, s2 = v
+                s1 = newkey if s1.lower() == key.lower() else s1
+                s2 = newkey if s2.lower() == key.lower() else s2
+                new_map[k] = (op, s1, s2)
         self._map.clear()
         self._map.update(new_map)
         return newkey

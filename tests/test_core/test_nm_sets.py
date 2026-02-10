@@ -418,6 +418,26 @@ class TestNMSetsRename(NMSetsTestBase):
         self.assertFalse("set0" in self.sets)
         self.assertTrue("renamed" in self.sets)
 
+    def test_rename_updates_equations(self):
+        self.sets.add("setA", ["obj0", "obj1"])
+        self.sets.add("setB", ["obj1", "obj2"])
+        self.sets.define_and("setC", "setA", "setB")
+        self.sets.rename("setA", "setX")
+        # Equation should now reference "setX" instead of "setA"
+        eq = self.sets.get("setC", get_equation=True)
+        self.assertEqual(eq, ("and", "setX", "setB"))
+        # Equation should still evaluate correctly
+        result = set(self.sets.get("setC", get_keys=True))
+        self.assertEqual(result, {"obj1"})
+
+    def test_rename_updates_equations_second_operand(self):
+        self.sets.add("setA", ["obj0", "obj1"])
+        self.sets.add("setB", ["obj1", "obj2"])
+        self.sets.define_or("setC", "setA", "setB")
+        self.sets.rename("setB", "setY")
+        eq = self.sets.get("setC", get_equation=True)
+        self.assertEqual(eq, ("or", "setA", "setY"))
+
     def test_reorder(self):
         self.sets.add("set0", [])
         self.sets.add("set1", [])
