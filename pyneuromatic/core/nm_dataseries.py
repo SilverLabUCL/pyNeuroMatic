@@ -241,10 +241,10 @@ class NMDataSeries(NMObject):
         return None
 
     # =========================================================================
-    # Bulk dimension utility methods
+    # Bulk scale utility methods
     #
-    # These methods provide convenient ways to set dimension properties across
-    # multiple data objects. NMData remains the source of truth for dimensions.
+    # These methods provide convenient ways to set scale properties across
+    # multiple data objects. NMData remains the source of truth for scales.
     # =========================================================================
 
     def set_xstart(
@@ -267,7 +267,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.x.start = value
+                data.xscale["start"] = value
                 count += 1
         return count
 
@@ -291,7 +291,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.x.delta = value
+                data.xscale["delta"] = value
                 count += 1
         return count
 
@@ -315,7 +315,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.x.label = label
+                data.xscale["label"] = label
                 count += 1
         return count
 
@@ -339,7 +339,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.x.units = units
+                data.xscale["units"] = units
                 count += 1
         return count
 
@@ -363,7 +363,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.y.label = label
+                data.yscale["label"] = label
                 count += 1
         return count
 
@@ -387,7 +387,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.y.units = units
+                data.yscale["units"] = units
                 count += 1
         return count
 
@@ -411,11 +411,11 @@ class NMDataSeries(NMObject):
             starts: set = set()
             deltas: set = set()
             for data in channel.data:
-                if hasattr(data, 'x'):
-                    if data.x.start is not None:
-                        starts.add(data.x.start)
-                    if data.x.delta is not None:
-                        deltas.add(data.x.delta)
+                xscale = data.xscale
+                if xscale.get("start") is not None:
+                    starts.add(xscale["start"])
+                if xscale.get("delta") is not None:
+                    deltas.add(xscale["delta"])
             result[ch_name] = {
                 "start": starts,
                 "delta": deltas,
@@ -440,11 +440,11 @@ class NMDataSeries(NMObject):
             labels: set = set()
             units: set = set()
             for data in channel.data:
-                if hasattr(data, 'y'):
-                    if data.y.label:
-                        labels.add(data.y.label)
-                    if data.y.units:
-                        units.add(data.y.units)
+                yscale = data.yscale
+                if yscale.get("label"):
+                    labels.add(yscale["label"])
+                if yscale.get("units"):
+                    units.add(yscale["units"])
             result[ch_name] = {
                 "label": labels,
                 "units": units,

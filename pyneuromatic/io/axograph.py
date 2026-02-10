@@ -123,14 +123,14 @@ def read_axograph(
         if parsed.scale != 1.0:
             y_data = y_data * parsed.scale
 
-        data.y.data = y_data
-        data.y.label = parsed.label
-        data.y.units = parsed.units
+        data.nparray = y_data
+        data.yscale["label"] = parsed.label
+        data.yscale["units"] = parsed.units
 
         # Set x scale
-        data.x.start = x_start
-        data.x.delta = x_delta
-        data.x.units = x_units
+        data.xscale["start"] = x_start
+        data.xscale["delta"] = x_delta
+        data.xscale["units"] = x_units
 
     # Optionally create dataseries
     if make_dataseries:

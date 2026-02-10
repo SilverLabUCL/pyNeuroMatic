@@ -5,7 +5,6 @@ import unittest
 from typing import Union
 
 from pyneuromatic.core.nm_data import NMData
-from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_manager import NMManager
 import pyneuromatic.analysis.nm_tool_stats as nms
 import pyneuromatic.core.nm_utilities as nmu
@@ -44,22 +43,20 @@ class NMStatsTest(unittest.TestCase):
         self.w1 = nms.NMStatsWin(NM, "w1", win=self.win1)
 
         ydata = numpy.random.normal(loc=0, scale=1, size=n)
-        ydim = NMDimension(NM, "y", nparray=ydata)
-        ydim.label = "Membrane Current"
-        ydim.units = "pA"
-        self.data = NMData(NM, name="recordA0", ydim=ydim)
-        self.data.x.label = "Time"
-        self.data.x.units = "ms"
+        self.data = NMData(
+            NM, name="recordA0", nparray=ydata,
+            yscale={"label": "Membrane Current", "units": "pA"},
+            xscale={"label": "Time", "units": "ms", "start": 0, "delta": 1},
+        )
 
         ydata = numpy.random.normal(loc=0, scale=1, size=n)
         ydata[3] = math.nan
         ydata[66] = math.nan
-        ydim = NMDimension(NM, "y", nparray=ydata)
-        ydim.label = "Membrane Current"
-        ydim.units = "pA"
-        self.datanan = NMData(NM, name="recordA0", ydim=ydim)
-        self.datanan.x.label = "Time"
-        self.datanan.x.units = "ms"
+        self.datanan = NMData(
+            NM, name="recordA0", nparray=ydata,
+            yscale={"label": "Membrane Current", "units": "pA"},
+            xscale={"label": "Time", "units": "ms", "start": 0, "delta": 1},
+        )
     #    self.stats = NMToolStats()
 
     def test00_statswin_init(self):
@@ -531,11 +528,9 @@ class NMStatsTest(unittest.TestCase):
                 nms.stats(self.datanan, func, results=b)
 
         ydata = numpy.array([1, 2, 3, 4])
-        ydim = NMDimension(NM, "y", nparray=ydata)
         xdata = numpy.array([1, 2, 3, 4])
-        xdim = NMDimensionX(NM, "x", nparray=xdata)
-        data = NMData(NM, name="recordA0", ydim=ydim, xdim=xdim)
-        data.x.nparray = numpy.array([1, 2, 3])
+        data = NMData(NM, name="recordA0", nparray=ydata, xarray=xdata)
+        data.xarray = numpy.array([1, 2, 3])
         with self.assertRaises(RuntimeError):
             nms.stats(data, func)
 
@@ -546,10 +541,10 @@ class NMStatsTest(unittest.TestCase):
         self.assertEqual(list(r.keys()), keys)
         self.assertEqual(r["data"], self.datanan.path_str)
         self.assertEqual(r["i0"], 0)  # xclip = True
-        pnts = len(self.datanan.y.nparray)
+        pnts = len(self.datanan.nparray)
         self.assertEqual(r["i1"], pnts-1)  # xclip = True
-        self.assertEqual(r["sunits"], self.datanan.y.units)
-        self.assertEqual(r["xunits"], self.datanan.x.units)
+        self.assertEqual(r["sunits"], self.datanan.yscale.get("units", ""))
+        self.assertEqual(r["xunits"], self.datanan.xscale.get("units", ""))
         r = nms.stats(self.datanan, func, x0=-100, xclip=False)
         keys = ['data', 'i0', 'i1', 'error']
         self.assertEqual(list(r.keys()), keys)
@@ -562,24 +557,24 @@ class NMStatsTest(unittest.TestCase):
         func = {"name": "value@x0"}
         r = nms.stats(self.datanan, func, x0=10)
         self.assertEqual(r["i0"], 10)
-        self.assertEqual(r["s"], self.datanan.y.nparray[10])
+        self.assertEqual(r["s"], self.datanan.nparray[10])
         func = {"name": "value@x1"}
         r = nms.stats(self.datanan, func, x1=10)
         self.assertEqual(r["i1"], 10)
-        self.assertEqual(r["s"], self.datanan.y.nparray[10])
+        self.assertEqual(r["s"], self.datanan.nparray[10])
 
         func = {"name": "max"}
         r = nms.stats(self.datanan, func, x0=10, x1=10)
-        self.assertEqual(r["s"], self.datanan.y.nparray[10])
+        self.assertEqual(r["s"], self.datanan.nparray[10])
         func = {"name": "min"}
         r = nms.stats(self.datanan, func, x0=10, x1=10)
-        self.assertEqual(r["s"], self.datanan.y.nparray[10])
+        self.assertEqual(r["s"], self.datanan.nparray[10])
 
         func = {"name": "mean"}
         r = nms.stats(self.datanan, func)
         # print(r)
-        self.datanan.y.nparray[3] = math.inf
-        self.datanan.y.nparray[66] = math.inf
+        self.datanan.nparray[3] = math.inf
+        self.datanan.nparray[66] = math.inf
         r = nms.stats(self.datanan, func)
         # self.assertTrue("error" in r)
         # r = nms.stats(self.datanan, func, x0=pnts-1, x1=0)
@@ -591,7 +586,7 @@ class NMStatsTest(unittest.TestCase):
 
     def test91_find_level_crossings(self):
         # TODO test yarray and xarray
-        ydata = self.data.y.nparray
+        ydata = self.data.nparray
         for b in nmu.badtypes(ok=["string"]):
             with self.assertRaises(TypeError):
                 nms.find_level_crossings(ydata, ylevel=0, func_name=b)

@@ -34,26 +34,26 @@ def write_itx(
 
         for name in folder.data:
             nmdata = folder.data[name]
-            if nmdata.y.data is None:
+            if nmdata.nparray is None:
                 continue
 
             f.write(f"WAVES/D\t{name}\n")
             f.write("BEGIN\n")
-            for val in nmdata.y.data:
+            for val in nmdata.nparray:
                 f.write(f"\t{val}\n")
             f.write("END\n")
 
             # x scaling: SetScale/P x, offset, delta, "units", waveName
-            x_start = nmdata.x.start if nmdata.x.start else 0
-            x_delta = nmdata.x.delta if nmdata.x.delta else 1
-            x_units = nmdata.x.units or ""
+            x_start = nmdata.xscale.get("start") or 0
+            x_delta = nmdata.xscale.get("delta") or 1
+            x_units = nmdata.xscale.get("units") or ""
             f.write(
                 f'X SetScale/P x, {x_start}, {x_delta},'
                 f' "{x_units}", {name}\n'
             )
 
             # y units: SetScale d, 0, 0, "units", waveName
-            y_units = nmdata.y.units or ""
+            y_units = nmdata.yscale.get("units") or ""
             f.write(
                 f'X SetScale d, 0, 0,'
                 f' "{y_units}", {name}\n'

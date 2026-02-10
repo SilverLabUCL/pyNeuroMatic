@@ -10,7 +10,6 @@ import unittest
 import tests.test_core.test_nm_channel as test_nm_channel
 import tests.test_core.test_nm_data as test_nm_data
 import tests.test_core.test_nm_dataseries as test_nm_dataseries
-import tests.test_core.test_nm_dimension as test_nm_dimension
 import tests.test_core.test_nm_epoch as test_nm_epoch
 import tests.test_core.test_nm_folder as test_nm_folder
 import tests.test_core.test_nm_manager as test_nm_manager

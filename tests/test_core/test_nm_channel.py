@@ -11,7 +11,6 @@ import unittest
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 import pyneuromatic.core.nm_utilities as nmu
 
 NM = NMManager(quiet=True)
@@ -49,7 +48,7 @@ class NMChannelTest(unittest.TestCase):
 
     def test00_init(self):
         # args: parent, name, copy (see NMObject)
-        # args: xscale, yscale (see NMDimension, NMDimensionX)
+        # args: xscale, yscale
         bad = list(nmu.BADTYPES)
         bad.remove(None)
         bad.remove({})
@@ -63,21 +62,19 @@ class NMChannelTest(unittest.TestCase):
         self.assertEqual(self.c0.name, CNAME0)
 
         for key in XSCALE0.keys():
-            self.assertEqual(self.c0.x.scale[key], XSCALE0[key])
+            self.assertEqual(self.c0.xscale[key], XSCALE0[key])
         for key in YSCALE0.keys():
-            self.assertEqual(self.c0.y.scale[key], YSCALE0[key])
+            self.assertEqual(self.c0.yscale[key], YSCALE0[key])
 
         for i, o in enumerate(self.c0.data):
             self.assertEqual(o.name, DNLIST0[i])
 
         self.assertEqual(self.c0_copy._parent, NM)
         self.assertEqual(self.c0_copy.name, CNAME0)
-        self.assertEqual(self.c0_copy.x, self.c0.x)
-        self.assertEqual(self.c0_copy.y, self.c0.y)
-        self.assertTrue(isinstance(self.c0_copy.x, NMDimensionX))
-        self.assertTrue(isinstance(self.c0_copy.x, NMDimension))
-        self.assertTrue(isinstance(self.c0_copy.y, NMDimension))
-        self.assertFalse(isinstance(self.c0_copy.y, NMDimensionX))
+        self.assertEqual(self.c0_copy.xscale, self.c0.xscale)
+        self.assertEqual(self.c0_copy.yscale, self.c0.yscale)
+        self.assertIsInstance(self.c0_copy.xscale, dict)
+        self.assertIsInstance(self.c0_copy.yscale, dict)
 
         for i, o in enumerate(self.c0_copy.data):
             self.assertEqual(o.name, DNLIST0[i])
@@ -101,8 +98,8 @@ class NMChannelTest(unittest.TestCase):
 
         self.assertTrue(len(c0.data) != len(self.c0.data))
         self.assertFalse(c0 == self.c0)
-        self.assertTrue(c0.x == self.c0.x)
-        self.assertTrue(c0.y == self.c0.y)
+        self.assertTrue(c0.xscale == self.c0.xscale)
+        self.assertTrue(c0.yscale == self.c0.yscale)
 
         for n in DNLIST0:
             d = NMData(parent=NM, name=n)
@@ -196,5 +193,5 @@ class NMChannelTest(unittest.TestCase):
         a = channels.get("A")
         self.assertFalse(c == a)  # name is different
         self.assertFalse(c.name == a.name)
-        self.assertTrue(c.x == a.x)
-        self.assertTrue(c.y == a.y)
+        self.assertTrue(c.xscale == a.xscale)
+        self.assertTrue(c.yscale == a.yscale)

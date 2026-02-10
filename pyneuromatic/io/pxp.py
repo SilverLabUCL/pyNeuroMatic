@@ -156,18 +156,18 @@ def read_pxp(
             continue
 
         # Set y data
-        data.y.data = wave["wData"]
+        data.nparray = wave["wData"]
 
         # Set y label/units from yLabel config wave
         if channel_num < len(y_labels):
             y_parsed = parse_units_from_label(y_labels[channel_num])
-            data.y.label = y_parsed.label
-            data.y.units = y_parsed.units
+            data.yscale["label"] = y_parsed.label
+            data.yscale["units"] = y_parsed.units
 
         # Set x scaling from wave header
-        data.x.start = float(wave_header.get("hsB", 0.0))
-        data.x.delta = float(wave_header.get("hsA", 1.0))
-        data.x.units = x_units
+        data.xscale["start"] = float(wave_header.get("hsB", 0.0))
+        data.xscale["delta"] = float(wave_header.get("hsA", 1.0))
+        data.xscale["units"] = x_units
 
     # Optionally create dataseries
     if make_dataseries:

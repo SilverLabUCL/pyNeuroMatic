@@ -12,7 +12,6 @@ import unittest
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
-from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
 from pyneuromatic.core.nm_manager import NMManager
 import pyneuromatic.core.nm_utilities as nmu
@@ -173,67 +172,69 @@ class TestNMDataSeriesBulkDimensions(unittest.TestCase):
         yscale_a = {"label": "current", "units": "pA"}
         yscale_b = {"label": "voltage", "units": "mV"}
 
-        # Create data with dimensions
+        # Create data with scale dicts
         for i in range(3):
-            xdim = NMDimensionX(parent=self.nm, name="x", scale=xscale)
-            ydim_a = NMDimension(parent=self.nm, name="y", scale=yscale_a)
-            d_a = NMData(parent=self.nm, name=f"RecordA{i}", xdim=xdim, ydim=ydim_a)
+            d_a = NMData(
+                parent=self.nm, name=f"RecordA{i}",
+                xscale=dict(xscale), yscale=dict(yscale_a)
+            )
             self.chan_a.data.append(d_a)
 
-            xdim = NMDimensionX(parent=self.nm, name="x", scale=xscale)
-            ydim_b = NMDimension(parent=self.nm, name="y", scale=yscale_b)
-            d_b = NMData(parent=self.nm, name=f"RecordB{i}", xdim=xdim, ydim=ydim_b)
+            d_b = NMData(
+                parent=self.nm, name=f"RecordB{i}",
+                xscale=dict(xscale), yscale=dict(yscale_b)
+            )
             self.chan_b.data.append(d_b)
 
     def test_set_xstart_all_channels(self):
         count = self.ds.set_xstart(0.5)
         self.assertEqual(count, 6)  # 3 data per channel * 2 channels
         for d in self.chan_a.data:
-            self.assertEqual(d.x.start, 0.5)
+            self.assertEqual(d.xscale["start"], 0.5)
         for d in self.chan_b.data:
-            self.assertEqual(d.x.start, 0.5)
+            self.assertEqual(d.xscale["start"], 0.5)
 
     def test_set_xstart_single_channel(self):
         count = self.ds.set_xstart(0.5, channel="A")
         self.assertEqual(count, 3)
         for d in self.chan_a.data:
-            self.assertEqual(d.x.start, 0.5)
+            self.assertEqual(d.xscale["start"], 0.5)
         # Channel B unchanged
         for d in self.chan_b.data:
-            self.assertEqual(d.x.start, 0)
+            self.assertEqual(d.xscale["start"], 0)
 
     def test_set_xdelta_all_channels(self):
         count = self.ds.set_xdelta(0.02)
         self.assertEqual(count, 6)
         for d in self.chan_a.data:
-            self.assertEqual(d.x.delta, 0.02)
+            self.assertEqual(d.xscale["delta"], 0.02)
 
     def test_set_xlabel_all_channels(self):
         count = self.ds.set_xlabel("Time")
         self.assertEqual(count, 6)
         for d in self.chan_a.data:
-            self.assertEqual(d.x.label, "Time")
+            self.assertEqual(d.xscale["label"], "Time")
 
     def test_set_xunits_single_channel(self):
         count = self.ds.set_xunits("s", channel="B")
         self.assertEqual(count, 3)
         for d in self.chan_b.data:
-            self.assertEqual(d.x.units, "s")
+            self.assertEqual(d.xscale["units"], "s")
         # Channel A unchanged
         for d in self.chan_a.data:
-            self.assertEqual(d.x.units, "ms")
+            self.assertEqual(d.xscale["units"], "ms")
 
     def test_set_ylabel_single_channel(self):
         count = self.ds.set_ylabel("Current", channel="A")
         self.assertEqual(count, 3)
         for d in self.chan_a.data:
-            self.assertEqual(d.y.label, "Current")
+            self.assertEqual(d.yscale["label"], "Current")
 
     def test_set_yunits_all_channels(self):
         count = self.ds.set_yunits("nA")
         self.assertEqual(count, 6)
         for d in self.chan_a.data:
-            self.assertEqual(d.y.units, "nA")
+            self.assertEqual(d.yscale["units"], "nA")
 
     def test_set_xstart_invalid_channel(self):
         with self.assertRaises(KeyError):
@@ -260,16 +261,20 @@ class TestNMDataSeriesScalesSummary(unittest.TestCase):
 
         # Create data with uniform scales for channel A
         for i in range(3):
-            xdim = NMDimensionX(parent=self.nm, name="x", scale={"start": 0, "delta": 0.01})
-            ydim = NMDimension(parent=self.nm, name="y", scale={"label": "current", "units": "pA"})
-            d = NMData(parent=self.nm, name=f"RecordA{i}", xdim=xdim, ydim=ydim)
+            d = NMData(
+                parent=self.nm, name=f"RecordA{i}",
+                xscale={"start": 0, "delta": 0.01},
+                yscale={"label": "current", "units": "pA"},
+            )
             self.chan_a.data.append(d)
 
         # Create data with non-uniform scales for channel B
         for i in range(3):
-            xdim = NMDimensionX(parent=self.nm, name="x", scale={"start": i * 0.1, "delta": 0.01 + i * 0.001})
-            ydim = NMDimension(parent=self.nm, name="y", scale={"label": "voltage", "units": "mV"})
-            d = NMData(parent=self.nm, name=f"RecordB{i}", xdim=xdim, ydim=ydim)
+            d = NMData(
+                parent=self.nm, name=f"RecordB{i}",
+                xscale={"start": i * 0.1, "delta": 0.01 + i * 0.001},
+                yscale={"label": "voltage", "units": "mV"},
+            )
             self.chan_b.data.append(d)
 
     def test_get_xscales_summary_uniform(self):

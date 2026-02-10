@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-[Module description].
+NMChannel module.
 
 Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
 
 If you use this software in your research, please cite:
-Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source 
-Software Toolkit for Acquisition, Analysis and Simulation of 
-Electrophysiological Data. Front. Neuroinform. 12:14. 
+Rothman JS and Silver RA (2018) NeuroMatic: An Integrated Open-Source
+Software Toolkit for Acquisition, Analysis and Simulation of
+Electrophysiological Data. Front. Neuroinform. 12:14.
 doi: 10.3389/fninf.2018.00014
 
 Copyright (c) 2026 The Silver Lab, University College London.
@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
-from pyneuromatic.core.nm_dimension import NMDimension, NMDimensionX
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -59,13 +58,14 @@ Ch B  B0  B1  B2...
 
 class NMChannel(NMObject):
     """
-    NM Channel class
+    NM Channel class.
+
+    Stores channel-level x/y scale metadata as simple dicts
+    and a list of NMData references belonging to this channel.
     """
 
     # Extend NMObject's special attrs with NMChannel's own
     _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
-        "_NMChannel__x",
-        "_NMChannel__y",
         "_NMChannel__thedata",
     })
 
@@ -73,33 +73,27 @@ class NMChannel(NMObject):
         self,
         parent: object | None = None,
         name: str = "NMChannel0",
-        xscale: dict | NMDimensionX | None = None,
-        yscale: dict | NMDimension | None = None,
+        xscale: dict | None = None,
+        yscale: dict | None = None,
     ) -> None:
         super().__init__(parent=parent, name=name)
 
         self.__thedata: list[NMData] = []  # list of NMData refs for this channel
 
-        # Initialize __x based on xscale parameter
         if xscale is None:
-            self.__x = NMDimensionX(parent=self, name="xscale")
-        elif isinstance(xscale, NMDimensionX):
-            self.__x = xscale
+            self.__xscale: dict = {}
         elif isinstance(xscale, dict):
-            self.__x = NMDimensionX(parent=self, name="xscale", scale=xscale)
+            self.__xscale = dict(xscale)
         else:
-            e = nmu.type_error_str(xscale, "xscale", "dictionary or NMDimensionX")
+            e = nmu.type_error_str(xscale, "xscale", "dictionary")
             raise TypeError(e)
 
-        # Initialize __y based on yscale parameter
         if yscale is None:
-            self.__y = NMDimension(parent=self, name="yscale")
-        elif isinstance(yscale, NMDimension):
-            self.__y = yscale
+            self.__yscale: dict = {}
         elif isinstance(yscale, dict):
-            self.__y = NMDimension(parent=self, name="yscale", scale=yscale)
+            self.__yscale = dict(yscale)
         else:
-            e = nmu.type_error_str(yscale, "yscale", "dictionary or NMDimension")
+            e = nmu.type_error_str(yscale, "yscale", "dictionary")
             raise TypeError(e)
 
     # override
@@ -108,9 +102,9 @@ class NMChannel(NMObject):
             return NotImplemented
         if not super().__eq__(other):
             return False
-        if self.x.scale != other.x.scale:
+        if self.__xscale != other.xscale:
             return False
-        if self.y.scale != other.y.scale:
+        if self.__yscale != other.yscale:
             return False
         if len(self.__thedata) != len(other.data):
             return False
@@ -119,17 +113,7 @@ class NMChannel(NMObject):
         return True
 
     def __deepcopy__(self, memo: dict) -> NMChannel:
-        """Support Python's copy.deepcopy() protocol.
-
-        Creates a copy of this NMChannel by bypassing __init__ and directly
-        setting attributes.
-
-        Args:
-            memo: Dictionary to track already copied objects (prevents cycles)
-
-        Returns:
-            A deep copy of this NMChannel
-        """
+        """Support Python's copy.deepcopy() protocol."""
         import datetime
 
         cls = self.__class__
@@ -140,6 +124,7 @@ class NMChannel(NMObject):
         special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
 
         # Deep copy all attributes that aren't special
+        # (this handles __xscale and __yscale dicts automatically)
         for attr, value in self.__dict__.items():
             if attr not in special_attrs:
                 setattr(result, attr, copy.deepcopy(value, memo))
@@ -150,14 +135,6 @@ class NMChannel(NMObject):
         result._NMObject__name = self._NMObject__name
         result._NMObject__rename_fxnref = result._name_set
         result._NMObject__copy_of = self
-
-        # Now handle NMChannel's special attributes
-
-        # __x and __y: deep copy (they're NMDimension objects)
-        result._NMChannel__x = copy.deepcopy(self._NMChannel__x, memo)
-        result._NMChannel__x._parent = result  # update parent
-        result._NMChannel__y = copy.deepcopy(self._NMChannel__y, memo)
-        result._NMChannel__y._parent = result  # update parent
 
         # __thedata: copy list of references
         # If copying within a folder context, try to resolve to copied NMData
@@ -184,16 +161,8 @@ class NMChannel(NMObject):
     @property
     def parameters(self) -> dict[str, object]:
         k = super().parameters
-        if isinstance(self.__x, NMDimensionX):
-            k.update({"xscale": self.__x.scale})
-        else:
-            k.update({"xscale": {}})
-        if isinstance(self.__y, NMDimension):
-            k.update({"yscale": self.__y.scale})
-        else:
-            k.update({"yscale": {}})
-        # k.update({'graphXY': self.__graphXY})
-        # k.update({'transform': self.__transform})
+        k.update({"xscale": dict(self.__xscale)})
+        k.update({"yscale": dict(self.__yscale)})
         return k
 
     @property
@@ -201,12 +170,12 @@ class NMChannel(NMObject):
         return self.__thedata
 
     @property
-    def x(self) -> NMDimensionX:
-        return self.__x
+    def xscale(self) -> dict:
+        return self.__xscale
 
     @property
-    def y(self) -> NMDimension:
-        return self.__y
+    def yscale(self) -> dict:
+        return self.__yscale
 
 
 class NMChannelContainer(NMObjectContainer):
@@ -239,17 +208,17 @@ class NMChannelContainer(NMObjectContainer):
         self,
         name: str | None = None,  # not used, instead name = name_next()
         select: bool = False,
-        xscale: dict | NMDimensionX = {},
-        yscale: dict | NMDimension = {},
+        xscale: dict = {},
+        yscale: dict = {},
         # quiet: bool = nmp.QUIET
     ) -> NMChannel | None:
         actual_name = self.auto_name_next()
         # Use self._parent (NMDataSeries) to skip container in parent chain,
         # consistent with NMFolder, NMData, NMDataSeries, NMEpoch
         c = NMChannel(
-            parent=self._parent, 
-            name=actual_name, 
-            xscale=xscale, 
+            parent=self._parent,
+            name=actual_name,
+            xscale=xscale,
             yscale=yscale
         )
         if super()._new(c, select=select):
