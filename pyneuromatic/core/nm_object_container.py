@@ -508,7 +508,8 @@ class NMObjectContainer(NMObject, MutableMapping):
     # add/update NMObject to map
     def update(  # type: ignore[override]
         self,
-        nmobjects: NMObject | list[NMObject] | dict[str, NMObject] | NMObjectContainer | None = None
+        nmobjects: NMObject | list[NMObject] | dict[str, NMObject] | NMObjectContainer | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> None:
         olist: list[NMObject]
         if nmobjects is None:
@@ -543,20 +544,23 @@ class NMObjectContainer(NMObject, MutableMapping):
             )
             e = nmu.type_error_str(nmobjects, "nmobjects", e)
             raise TypeError(e)
-        update = False
+        updated: list[str] = []
         for o in olist:
             if self.content_type_ok(o):
                 key = self._getkey(o.name)
                 if key is None:
                     key = self._newkey(o.name)
                 self.__map[key] = o
-                update = True
+                updated.append(key)
             else:
                 e = "nmobjects: list item"
                 e = nmu.type_error_str(o, e, self.content_type())
                 raise TypeError(e)
-        if update:
+        if updated:
             self.__update_nmobject_references()
+            nmh.history(
+                "updated %s" % updated, path=self.path_str, quiet=quiet
+            )
 
     def __update_nmobject_references(self):
         for o in self.__map.values():

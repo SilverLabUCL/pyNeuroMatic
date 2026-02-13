@@ -1301,6 +1301,26 @@ class TestNMObjectContainerHistory(unittest.TestCase):
         self.assertIn("0", msg)
         self.assertIn("A", msg)
 
+    def test_update_logs(self):
+        o = NMObject(parent=self.nm, name="itemX")
+        self.container.update(o, quiet=False)
+        msg = self._last_message()
+        self.assertIn("updated", msg)
+        self.assertIn("itemX", msg)
+
+    def test_update_multiple_logs(self):
+        objs = [NMObject(parent=self.nm, name="a%d" % i) for i in range(3)]
+        self.container.update(objs, quiet=False)
+        msg = self._last_message()
+        self.assertIn("updated", msg)
+        self.assertIn("a0", msg)
+        self.assertIn("a1", msg)
+        self.assertIn("a2", msg)
+
+    def test_update_none_no_log(self):
+        self.container.update(None, quiet=False)
+        self.assertEqual(len(self.nm.history.buffer), 0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
