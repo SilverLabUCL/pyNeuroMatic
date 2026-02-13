@@ -1199,5 +1199,108 @@ class TestNMObjectContainerExecute(NMObjectContainerTestBase):
             self.assertTrue(self.map0.is_execute_target(n))
 
 
+class TestNMObjectContainerHistory(unittest.TestCase):
+    """Tests for history logging in NMObjectContainer mutation methods."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.container = NMObjectContainer(
+            parent=self.nm,
+            name="hist_map",
+            rename_on=True,
+            auto_name_prefix="item",
+            auto_name_seq_format="0",
+        )
+        for i in range(3):
+            self.container.new("item%d" % i)
+        self.nm.history.clear()
+
+    def _last_message(self):
+        buf = self.nm.history.buffer
+        if buf:
+            return buf[-1]["message"]
+        return None
+
+    def _messages(self):
+        return [e["message"] for e in self.nm.history.buffer]
+
+    def test_new_logs(self):
+        self.container.new("itemX")
+        self.assertIn("new 'itemX'", self._last_message())
+
+    def test_new_via_internal_logs(self):
+        o = NMObject(parent=self.nm, name="itemZ")
+        self.container._new(o, quiet=False)
+        self.assertIn("new 'itemZ'", self._last_message())
+
+    def test_pop_logs(self):
+        self.container.pop("item0", quiet=False)
+        self.assertIn("removed 'item0'", self._last_message())
+
+    def test_clear_logs(self):
+        self.container.clear(quiet=False)
+        msg = self._last_message()
+        self.assertIn("cleared all", msg)
+        self.assertIn("item0", msg)
+        self.assertIn("item1", msg)
+        self.assertIn("item2", msg)
+
+    def test_clear_empty_no_log(self):
+        self.container.clear(quiet=False)
+        self.nm.history.clear()
+        self.container.clear(quiet=False)
+        self.assertEqual(len(self.nm.history.buffer), 0)
+
+    def test_rename_logs(self):
+        self.container.rename("item0", "renamed0", quiet=False)
+        msg = self._last_message()
+        self.assertIn("item0", msg)
+        self.assertIn("renamed0", msg)
+
+    def test_selected_name_set_logs(self):
+        self.container._selected_name_set("item1", quiet=False)
+        msg = self._last_message()
+        self.assertIn("item1", msg)
+
+    def test_selected_name_set_none_logs(self):
+        self.container._selected_name_set("item1", quiet=False)
+        self.nm.history.clear()
+        self.container._selected_name_set(None, quiet=False)
+        msg = self._last_message()
+        self.assertIn("item1", msg)
+
+    def test_selected_name_set_same_no_log(self):
+        self.container._selected_name_set("item1", quiet=False)
+        self.nm.history.clear()
+        self.container._selected_name_set("item1", quiet=False)
+        self.assertEqual(len(self.nm.history.buffer), 0)
+
+    def test_duplicate_logs(self):
+        self.container.duplicate("item0", "item0_copy", quiet=False)
+        msg = self._last_message()
+        self.assertIn("item0", msg)
+        self.assertIn("item0_copy", msg)
+
+    def test_reorder_logs(self):
+        self.container.reorder(["item2", "item1", "item0"], quiet=False)
+        self.assertIn("reordered", self._last_message())
+
+    def test_reorder_same_order_no_log(self):
+        self.container.reorder(["item0", "item1", "item2"], quiet=False)
+        self.assertEqual(len(self.nm.history.buffer), 0)
+
+    def test_auto_name_prefix_set_logs(self):
+        self.container._auto_name_prefix_set("NewPrefix", quiet=False)
+        msg = self._last_message()
+        self.assertIn("item", msg)
+        self.assertIn("NewPrefix", msg)
+
+    def test_auto_name_seq_format_set_logs(self):
+        self.container._auto_name_seq_format_set("A", quiet=False)
+        msg = self._last_message()
+        self.assertIn("0", msg)
+        self.assertIn("A", msg)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
