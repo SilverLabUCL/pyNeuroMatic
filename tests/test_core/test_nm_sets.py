@@ -511,5 +511,151 @@ class TestNMSetsEquality(NMSetsTestBase):
         self.assertEqual(self.sets, sets2)
 
 
+class TestNMSetsPathStr(unittest.TestCase):
+    """Tests for NMSets.path_str property."""
+
+    def test_path_str_with_parent(self):
+        nm = NMManager(quiet=True)
+        from pyneuromatic.core.nm_object_container import NMObjectContainer
+        container = NMObjectContainer(parent=nm, name="Data")
+        self.assertEqual(container.sets.path_str, container.path_str + ".sets")
+
+    def test_path_str_without_parent(self):
+        sets = NMSets(name="MySets", nmobjects={})
+        self.assertEqual(sets.path_str, "MySets")
+
+    def test_path_str_deepcopy_has_no_parent(self):
+        nm = NMManager(quiet=True)
+        from pyneuromatic.core.nm_object_container import NMObjectContainer
+        container = NMObjectContainer(parent=nm, name="Data")
+        sets_copy = copy.deepcopy(container.sets)
+        self.assertEqual(sets_copy.path_str, "NMObjectContainerSets")
+
+
+class TestNMSetsHistory(unittest.TestCase):
+    """Tests for history logging in NMSets mutation methods."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        from pyneuromatic.core.nm_object_container import NMObjectContainer
+        self.container = NMObjectContainer(
+            parent=self.nm,
+            name="Data",
+            rename_on=True,
+            auto_name_prefix="obj",
+            auto_name_seq_format="0",
+        )
+        for i in range(5):
+            self.container.new("obj%d" % i)
+        self.nm.history.clear()
+        self.sets = self.container.sets
+
+    def _last_message(self):
+        buf = self.nm.history.buffer
+        if buf:
+            return buf[-1]["message"]
+        return None
+
+    def _messages(self):
+        return [e["message"] for e in self.nm.history.buffer]
+
+    def test_new_logs(self):
+        self.sets.new("mySet", quiet=False)
+        self.assertIn("new set 'mySet'", self._last_message())
+
+    def test_add_logs(self):
+        self.sets.add("setA", ["obj0", "obj1"], quiet=False)
+        msg = self._last_message()
+        self.assertIn("setA", msg)
+        self.assertIn("obj0", msg)
+        self.assertIn("obj1", msg)
+
+    def test_define_and_logs(self):
+        self.sets.add("s1", ["obj0", "obj1"])
+        self.sets.add("s2", ["obj1", "obj2"])
+        self.nm.history.clear()
+        self.sets.define_and("s3", "s1", "s2", quiet=False)
+        msg = self._last_message()
+        self.assertIn("s3", msg)
+        self.assertIn("s1", msg)
+        self.assertIn("AND", msg)
+        self.assertIn("s2", msg)
+
+    def test_define_or_logs(self):
+        self.sets.add("s1", ["obj0", "obj1"])
+        self.sets.add("s2", ["obj1", "obj2"])
+        self.nm.history.clear()
+        self.sets.define_or("s3", "s1", "s2", quiet=False)
+        msg = self._last_message()
+        self.assertIn("s3", msg)
+        self.assertIn("s1", msg)
+        self.assertIn("OR", msg)
+        self.assertIn("s2", msg)
+
+    def test_remove_logs(self):
+        self.sets.add("setA", ["obj0", "obj1", "obj2"])
+        self.nm.history.clear()
+        self.sets.remove("setA", "obj1", quiet=False)
+        msg = self._last_message()
+        self.assertIn("setA", msg)
+        self.assertIn("obj1", msg)
+
+    def test_pop_logs(self):
+        self.sets.add("setA", ["obj0"])
+        self.nm.history.clear()
+        self.sets.pop("setA", quiet=False)
+        self.assertIn("removed set 'setA'", self._last_message())
+
+    def test_clear_logs(self):
+        self.sets.add("s1", ["obj0"])
+        self.sets.add("s2", ["obj1"])
+        self.nm.history.clear()
+        self.sets.clear(quiet=False)
+        msg = self._last_message()
+        self.assertIn("cleared all sets", msg)
+        self.assertIn("s1", msg)
+        self.assertIn("s2", msg)
+
+    def test_clear_empty_no_log(self):
+        self.sets.clear(quiet=False)
+        self.assertEqual(len(self.nm.history.buffer), 0)
+
+    def test_rename_logs(self):
+        self.sets.add("setA", ["obj0"])
+        self.nm.history.clear()
+        self.sets.rename("setA", "setB", quiet=False)
+        msg = self._last_message()
+        self.assertIn("setA", msg)
+        self.assertIn("setB", msg)
+
+    def test_duplicate_logs(self):
+        self.sets.add("setA", ["obj0"])
+        self.nm.history.clear()
+        self.sets.duplicate("setA", "setA_copy", quiet=False)
+        msg = self._last_message()
+        self.assertIn("setA", msg)
+        self.assertIn("setA_copy", msg)
+
+    def test_reorder_logs(self):
+        self.sets.add("s1", ["obj0"])
+        self.sets.add("s2", ["obj1"])
+        self.nm.history.clear()
+        self.sets.reorder(["s2", "s1"], quiet=False)
+        self.assertIn("reordered", self._last_message())
+
+    def test_reorder_same_order_no_log(self):
+        self.sets.add("s1", ["obj0"])
+        self.sets.add("s2", ["obj1"])
+        self.nm.history.clear()
+        self.sets.reorder(["s1", "s2"], quiet=False)
+        self.assertEqual(len(self.nm.history.buffer), 0)
+
+    def test_empty_logs(self):
+        self.sets.add("setA", ["obj0", "obj1"])
+        self.nm.history.clear()
+        self.sets.empty("setA", quiet=False)
+        self.assertIn("emptied set 'setA'", self._last_message())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
