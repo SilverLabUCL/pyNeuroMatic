@@ -26,6 +26,7 @@ import h5py
 
 from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeriesContainer
+from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolderContainer
@@ -61,7 +62,6 @@ class NMFolder(NMObject):
         "_NMFolder__dataseries_container",
         "_NMFolder__toolfolder_container",
         "_NMFolder__toolresults",
-        "_NMFolder__notes",
         "_NMFolder__metadata",
     })
 
@@ -76,7 +76,7 @@ class NMFolder(NMObject):
         self.__dataseries_container: NMDataSeriesContainer = NMDataSeriesContainer(parent=self)
         self.__toolfolder_container: NMToolFolderContainer = NMToolFolderContainer(parent=self)
         self.__toolresults: dict[str, object] = {}  # tool results saved to dict
-        self.__notes: list[dict] = []  # [{'date': 'timestamp', 'note': 'text'}]
+        self.__notes = NMNotes()
         self.__metadata: dict[str, dict] = {}  # nested dict by source folder
 
     # override
@@ -158,9 +158,6 @@ class NMFolder(NMObject):
             self._NMFolder__toolresults, memo
         )
 
-        # __notes: deep copy the list
-        result._NMFolder__notes = copy.deepcopy(self._NMFolder__notes, memo)
-
         # __metadata: deep copy the nested dict
         result._NMFolder__metadata = copy.deepcopy(
             self._NMFolder__metadata, memo
@@ -220,75 +217,10 @@ class NMFolder(NMObject):
               (tool, tp, newkey, t))
         return newkey
 
-    # Notes - experiment/recording session notes
-
     @property
-    def notes(self) -> list[dict]:
-        """Return list of notes for this folder.
-
-        Each note is a dict with 'date' (ISO timestamp) and 'note' (text).
-        """
+    def notes(self) -> NMNotes:
+        """Return notes for this folder."""
         return self.__notes
-
-    @property
-    def note(self) -> str:
-        """Return the text of the most recent note, or empty string if none."""
-        if self.__notes:
-            return self.__notes[-1].get("note", "")
-        return ""
-
-    @note.setter
-    def note(self, text: str) -> None:
-        """Add a new note with the given text."""
-        self.note_add(text)
-
-    def note_add(self, text: str) -> None:
-        """Add a timestamped note to this folder.
-
-        :param text: The note text to add
-        :type text: str
-        """
-        if text is None:
-            return
-        if not isinstance(text, str):
-            text = str(text)
-        entry = {
-            "date": datetime.datetime.now().isoformat(" ", "seconds"),
-            "note": text,
-        }
-        self.__notes.append(entry)
-
-    def notes_clear(self) -> None:
-        """Clear all notes from this folder."""
-        self.__notes = []
-
-    def notes_print(self) -> None:
-        """Print all notes to stdout."""
-        for n in self.__notes:
-            date = n.get("date", "")
-            text = n.get("note", "")
-            print(f"{date}  {text}")
-
-    @staticmethod
-    def notes_ok(notes: list[dict]) -> bool:
-        """Validate notes format.
-
-        :param notes: List of note dicts to validate
-        :type notes: list[dict]
-        :return: True if format is valid
-        :rtype: bool
-        """
-        if not isinstance(notes, list):
-            return False
-        for n in notes:
-            if not isinstance(n, dict):
-                return False
-            keys = n.keys()
-            if len(keys) != 2 or "date" not in keys or "note" not in keys:
-                return False
-            if not isinstance(n["date"], str) or not isinstance(n["note"], str):
-                return False
-        return True
 
     # Metadata - structured key-value data from imported files
 

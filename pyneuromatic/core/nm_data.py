@@ -26,6 +26,7 @@ import numpy
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_epoch import NMEpoch
+from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 import pyneuromatic.core.nm_preferences as nmp
@@ -118,6 +119,8 @@ class NMData(NMObject):
             e = nmu.type_error_str(yscale, "yscale", "dictionary")
             raise TypeError(e)
 
+        self.__notes = NMNotes()
+
         self._dataseries_set(dataseries_channel, dataseries_epoch)
 
     # override
@@ -141,6 +144,8 @@ class NMData(NMObject):
         if self._dataseries_channel != other._dataseries_channel:
             return False
         if self._dataseries_epoch != other._dataseries_epoch:
+            return False
+        if self.__notes != other.__notes:
             return False
 
         return True
@@ -234,6 +239,11 @@ class NMData(NMObject):
         else:
             k.update({"dataseries epoch": None})
         return k
+
+    @property
+    def notes(self) -> NMNotes:
+        """Return notes for this data."""
+        return self.__notes
 
     # =========================================================================
     # Data array properties
