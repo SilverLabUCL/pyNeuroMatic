@@ -452,7 +452,8 @@ class NMObjectContainer(NMObject, MutableMapping):
     def pop(  # type: ignore[override]
         self,
         key: str,
-        default: object = _POPDEFAULT
+        default: object = _POPDEFAULT,
+        quiet: bool = nmp.QUIET,
     ) -> NMObject | None:
         # Check if key exists, raise KeyError if not and no default provided
         actual_key = self._getkey(key)
@@ -466,6 +467,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.sets.remove_from_all(actual_key)
         o = self.__map.pop(actual_key)
         o._container = None
+        nmh.history("removed '%s'" % actual_key, path=self.path_str, quiet=quiet)
         return o
 
     # override MutableMapping mixin method
@@ -489,14 +491,16 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
-    def clear(self) -> None:
+    def clear(self, quiet: bool = nmp.QUIET) -> None:
         if len(self) == 0:
             return
+        names = list(self.__map.keys())
         for o in self.__map.values():
             o._container = None
         self.selected_name = None
         self.sets.empty_all()
         self.__map.clear()
+        nmh.history("cleared all: %s" % names, path=self.path_str, quiet=quiet)
 
     # override MutableMapping mixin method
     # add/update NMObject to map
@@ -621,9 +625,10 @@ class NMObjectContainer(NMObject, MutableMapping):
         return newkey
 
     def rename(
-        self, 
-        name: str, 
-        newname: str | None = None
+        self,
+        name: str,
+        newname: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> bool:
         """
         Cannot change map key names.
@@ -647,11 +652,16 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__map.clear()
         self.__map.update(new_map)
         self.__sets.rename_item(key, actual_newname)
+        nmh.history(
+            "renamed '%s' as '%s'" % (key, actual_newname),
+            path=self.path_str, quiet=quiet,
+        )
         return True
 
     def reorder(
-        self, 
-        name_order: list[str]
+        self,
+        name_order: list[str],
+        quiet: bool = nmp.QUIET,
     ) -> None:
         """
         Cannot change map key names.
@@ -679,11 +689,13 @@ class NMObjectContainer(NMObject, MutableMapping):
         # self.__map = new_map  # reference change
         self.__map.clear()
         self.__map.update(new_map)
+        nmh.history("reordered items", path=self.path_str, quiet=quiet)
 
     def duplicate(
         self,
         name: str,
         newname: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> NMObject | None:
         if name is None:
             e = nmu.type_error_str(name, "name", "string")
@@ -700,6 +712,10 @@ class NMObjectContainer(NMObject, MutableMapping):
         c._name_set(newname=newkey, quiet=True)  # no history
         self.__map[c.name] = c
         self.__update_nmobject_references()
+        nmh.history(
+            "duplicated '%s' as '%s'" % (key, c.name),
+            path=self.path_str, quiet=quiet,
+        )
         return c
 
     # children should override
@@ -720,7 +736,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         nmobject: NMObject,
         select: bool = False,
-        # quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET,
     ) -> bool:
         if not self.content_type_ok(nmobject):
             e = nmu.type_error_str(nmobject, "nmobject", self.content_type())
@@ -734,6 +750,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             select = True  # select first entry
         if isinstance(select, bool) and select:
             self.__selected_name = newkey
+        nmh.history("new '%s'" % newkey, path=self.path_str, quiet=quiet)
         return True
 
     @property
@@ -764,16 +781,8 @@ class NMObjectContainer(NMObject, MutableMapping):
             return  # nothing to do
         oldprefix = self.__auto_name_prefix
         self.__auto_name_prefix = prefix
-        """
-        if self.__name_prefix is None:
-            h = 'prefix = None'
-        else:
-            h = "prefix = '%s'" % self.__auto_name_prefix
-        self.note = h
-        h = nmh.history_change_str('prefix', oldprefix, self.__auto_name_prefix)
-        nmh.history(h, quiet=quiet)
-        """
-        return
+        h = nmh.history_change_str("prefix", oldprefix, self.__auto_name_prefix)
+        nmh.history(h, path=self.path_str, quiet=quiet)
 
     @property
     def auto_name_seq_format(self) -> str:
@@ -787,7 +796,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         return self._auto_name_seq_format_set(seq_format)
 
     def _auto_name_seq_format_set(
-        self, seq_format: str = "0", 
+        self, seq_format: str = "0",
         quiet: bool = nmp.QUIET
     ) -> None:
         if isinstance(seq_format, int) and seq_format == 0:
@@ -807,8 +816,11 @@ class NMObjectContainer(NMObject, MutableMapping):
             raise ValueError("encounted mixed seq format types '0' and 'A'")
         if self.__auto_name_seq_format == slist:
             return  # no change
+        old_format = self.__auto_name_seq_format
         self.__auto_name_seq_format = slist
         self._auto_name_seq_counter_reset()
+        h = nmh.history_change_str("seq_format", old_format, slist)
+        nmh.history(h, path=self.path_str, quiet=quiet)
 
     @staticmethod
     def __auto_name_seq_char_list() -> list[str]:
@@ -913,22 +925,26 @@ class NMObjectContainer(NMObject, MutableMapping):
         self._selected_name_set(name)
 
     def _selected_name_set(
-        self, 
-        name: str | None, 
+        self,
+        name: str | None,
+        quiet: bool = nmp.QUIET,
     ) -> None:
-        if name is None:
+        old_selected = self.__selected_name
+        if name is None or (isinstance(name, str) and
+                            (name == "" or name.lower() == "none")):
             self.__selected_name = None
-            return
-        if not isinstance(name, str):
+        elif not isinstance(name, str):
             e = nmu.type_error_str(name, "key", "string")
             raise TypeError(e)
-        if name == "" or name.lower() == "none":
-            self.__selected_name = None
-            return
-        key = self._getkey(name)
-        if key is None:
-            raise KeyError("key name '%s' does not exist" % name)
-        self.__selected_name = key
+        else:
+            key = self._getkey(name)
+            if key is None:
+                raise KeyError("key name '%s' does not exist" % name)
+            self.__selected_name = key
+        if old_selected != self.__selected_name:
+            h = nmh.history_change_str("selected", old_selected,
+                                       self.__selected_name)
+            nmh.history(h, path=self.path_str, quiet=quiet)
 
     def is_selected(
         self, 

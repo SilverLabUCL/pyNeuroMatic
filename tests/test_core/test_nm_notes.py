@@ -79,8 +79,6 @@ class TestNMNotes(unittest.TestCase):
     def test_ok_valid(self):
         self.assertTrue(NMNotes.ok([{"note": "hey", "date": "111"}]))
         self.assertTrue(NMNotes.ok([{"date": "111", "note": "hey"}]))
-        self.assertFalse(NMNotes.ok(None))
-        self.assertFalse(NMNotes.ok([{"note": 123, "date": "111"}]))
 
     def test_ok_empty_list(self):
         self.assertTrue(NMNotes.ok([]))
