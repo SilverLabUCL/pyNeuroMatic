@@ -26,6 +26,8 @@ from typing import Callable, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from pyneuromatic.core.nm_object import NMObject
 
+import pyneuromatic.core.nm_history as nmh
+import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -50,10 +52,12 @@ class NMSets(MutableMapping):
     def __init__(
         self,
         name: str = "NMSets0",
+        parent: object | None = None,
         nmobjects_fxnref: Callable | None = None,
         nmobjects: dict | None = None,
     ) -> None:
         self._name = name
+        self._parent = parent
         self._map: dict[str, list[str] | tuple[str, str, str]] = {}
         self._nmobjects: dict = {}
         self._resolve_fxn: Callable = self._nmobjects_default
@@ -82,6 +86,12 @@ class NMSets(MutableMapping):
     def name(self) -> str:
         return self._name
 
+    @property
+    def path_str(self) -> str:
+        if self._parent is not None and hasattr(self._parent, "path_str"):
+            return self._parent.path_str + ".sets"
+        return self._name
+
     def copy(self) -> NMSets:
         return copy.deepcopy(self)
 
@@ -90,6 +100,7 @@ class NMSets(MutableMapping):
         result = cls.__new__(cls)
         memo[id(self)] = result
         result._name = self._name
+        result._parent = None
         result._map = copy.deepcopy(self._map, memo)
         result._nmobjects = {}
         result._resolve_fxn = result._nmobjects_default
@@ -202,9 +213,11 @@ class NMSets(MutableMapping):
                     return False
         return True
 
-    def pop(self, key: str) -> Any:  # type: ignore[override]
+    def pop(self, key: str, quiet: bool = nmp.QUIET) -> Any:  # type: ignore[override]
         key = self._getkey(key)
-        return self._map.pop(key)
+        value = self._map.pop(key)
+        nmh.history("removed set '%s'" % key, path=self.path_str, quiet=quiet)
+        return value
 
     def popitem(self) -> tuple[str, Any] | None:
         if len(self._map) == 0:
@@ -216,8 +229,14 @@ class NMSets(MutableMapping):
             return (key, value)
         return None
 
-    def clear(self) -> None:
+    def clear(self, quiet: bool = nmp.QUIET) -> None:
+        if len(self._map) == 0:
+            return
+        names = list(self._map.keys())
         self._map.clear()
+        nmh.history(
+            "cleared all sets: %s" % names, path=self.path_str, quiet=quiet
+        )
 
     def setdefault(self, key, default=None):
         k = self._getkey(key)
@@ -372,26 +391,50 @@ class NMSets(MutableMapping):
         self,
         key: str,
         olist: Any = None,
+        quiet: bool = nmp.QUIET,
     ) -> None:
         if olist is None:
             olist = []
         self._setitem(key, olist, add=True)
+        actual_key = self._getkey(key)
+        nmh.history(
+            "set '%s': added %s" % (actual_key, self._map[actual_key]),
+            path=self.path_str,
+            quiet=quiet,
+        )
 
-    def define_and(self, name: str, set1: str, set2: str) -> str:
+    def define_and(
+        self, name: str, set1: str, set2: str, quiet: bool = nmp.QUIET
+    ) -> str:
         """Define an equation set as the AND (intersection) of two sets."""
         self._setitem(name, ("and", set1, set2), add=False)
-        return self._getkey(name) or name
+        actual_key = self._getkey(name) or name
+        nmh.history(
+            "set '%s' = '%s' AND '%s'" % (actual_key, set1, set2),
+            path=self.path_str,
+            quiet=quiet,
+        )
+        return actual_key
 
-    def define_or(self, name: str, set1: str, set2: str) -> str:
+    def define_or(
+        self, name: str, set1: str, set2: str, quiet: bool = nmp.QUIET
+    ) -> str:
         """Define an equation set as the OR (union) of two sets."""
         self._setitem(name, ("or", set1, set2), add=False)
-        return self._getkey(name) or name
+        actual_key = self._getkey(name) or name
+        nmh.history(
+            "set '%s' = '%s' OR '%s'" % (actual_key, set1, set2),
+            path=self.path_str,
+            quiet=quiet,
+        )
+        return actual_key
 
     def remove(
         self,
         key: str,
         olist: Any,
         error: bool = True,
+        quiet: bool = nmp.QUIET,
     ) -> list:
         key = self._getkey(key)
         items: list[str]
@@ -429,6 +472,12 @@ class NMSets(MutableMapping):
                 return []
         for r in removed:
             value.remove(r)
+
+        nmh.history(
+            "set '%s': removed %s" % (key, removed),
+            path=self.path_str,
+            quiet=quiet,
+        )
 
         # Resolve removed keys to NMObjects for return value
         return self._resolve_keys(removed)
@@ -479,13 +528,14 @@ class NMSets(MutableMapping):
                 return False
         return True
 
-    def new(self, name: str | None = None) -> tuple[str, list]:
+    def new(self, name: str | None = None, quiet: bool = nmp.QUIET) -> tuple[str, list]:
         key = self._newkey(name)
         self._map[key] = []
+        nmh.history("new set '%s'" % key, path=self.path_str, quiet=quiet)
         return (key, [])
 
     def duplicate(
-        self, name: str, newname: str | None = None
+        self, name: str, newname: str | None = None, quiet: bool = nmp.QUIET
     ) -> tuple[str, Any]:
         """Duplicate a set with a new name."""
         if name is None:
@@ -497,13 +547,17 @@ class NMSets(MutableMapping):
         value = self._map[key]
         if NMSets.tuple_is_equation(value):
             self._map[newkey] = value
-            return (newkey, value)
         else:
             assert isinstance(value, list)
             self._map[newkey] = list(value)
-            return (newkey, list(value))
+        nmh.history(
+            "duplicated set '%s' as '%s'" % (key, newkey),
+            path=self.path_str,
+            quiet=quiet,
+        )
+        return (newkey, self._map[newkey])
 
-    def rename(self, name: str, newname: str | None = None) -> str:
+    def rename(self, name: str, newname: str | None = None, quiet: bool = nmp.QUIET) -> str:
         key = self._getkey(name)
         newkey = self._newkey(newname)
         new_map: dict[str, Any] = {}
@@ -522,9 +576,14 @@ class NMSets(MutableMapping):
                 new_map[k] = (op, s1, s2)
         self._map.clear()
         self._map.update(new_map)
+        nmh.history(
+            "renamed set '%s' as '%s'" % (key, newkey),
+            path=self.path_str,
+            quiet=quiet,
+        )
         return newkey
 
-    def reorder(self, name_order: list[str]) -> None:
+    def reorder(self, name_order: list[str], quiet: bool = nmp.QUIET) -> None:
         if not isinstance(name_order, list):
             raise TypeError(nmu.type_error_str(name_order, "newkeyorder", "list"))
         if len(name_order) != len(self._map):
@@ -532,17 +591,21 @@ class NMSets(MutableMapping):
                 "number of keys mismatch: '%s' != '%s'"
                 % (len(name_order), len(self._map))
             )
+        old_keys = list(self._map.keys())
         new_map: dict[str, Any] = {}
         for n in name_order:
             actual = self._getkey(n)
             new_map[actual] = self._map[actual]
         self._map.clear()
         self._map.update(new_map)
+        if list(self._map.keys()) != old_keys:
+            nmh.history("reordered sets", path=self.path_str, quiet=quiet)
 
-    def empty(self, key: str) -> None:
+    def empty(self, key: str, quiet: bool = nmp.QUIET) -> None:
         """Clear the contents of a set, converting equations to empty lists."""
         key = self._getkey(key)
         self._map[key] = []
+        nmh.history("emptied set '%s'" % key, path=self.path_str, quiet=quiet)
 
     def empty_all(self) -> None:
         """Clear all sets, converting equations to empty lists."""

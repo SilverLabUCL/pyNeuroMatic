@@ -182,6 +182,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
         self.__sets = NMSets(
             name="NMObjectContainerSets",
+            parent=self,
             nmobjects_fxnref=self._get_map,
         )
 
@@ -440,6 +441,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             self._NMObjectContainer__sets, memo
         )
         result._NMObjectContainer__sets._resolve_fxn = result._get_map
+        result._NMObjectContainer__sets._parent = result
 
         return result
 
