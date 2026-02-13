@@ -34,6 +34,8 @@ from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
+import pyneuromatic.core.nm_history as nmh
+import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -250,7 +252,8 @@ class NMDataSeries(NMObject):
     def set_xstart(
         self,
         value: float | int,
-        channel: str | None = None
+        channel: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> int:
         """Set x-axis start value on data in this series.
 
@@ -269,12 +272,20 @@ class NMDataSeries(NMObject):
             for data in ch.data:
                 data.xscale["start"] = value
                 count += 1
+        if count > 0:
+            ch_str = channel if channel else "all"
+            nmh.history(
+                "set xstart=%s, channel=%s, n=%d" % (value, ch_str, count),
+                path=self.path_str,
+                quiet=quiet,
+            )
         return count
 
     def set_xdelta(
         self,
         value: float | int,
-        channel: str | None = None
+        channel: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> int:
         """Set x-axis delta (sample interval) on data in this series.
 
@@ -293,12 +304,20 @@ class NMDataSeries(NMObject):
             for data in ch.data:
                 data.xscale["delta"] = value
                 count += 1
+        if count > 0:
+            ch_str = channel if channel else "all"
+            nmh.history(
+                "set xdelta=%s, channel=%s, n=%d" % (value, ch_str, count),
+                path=self.path_str,
+                quiet=quiet,
+            )
         return count
 
     def set_xlabel(
         self,
         label: str,
-        channel: str | None = None
+        channel: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> int:
         """Set x-axis label on data in this series.
 
@@ -317,12 +336,20 @@ class NMDataSeries(NMObject):
             for data in ch.data:
                 data.xscale["label"] = label
                 count += 1
+        if count > 0:
+            ch_str = channel if channel else "all"
+            nmh.history(
+                "set xlabel='%s', channel=%s, n=%d" % (label, ch_str, count),
+                path=self.path_str,
+                quiet=quiet,
+            )
         return count
 
     def set_xunits(
         self,
         units: str,
-        channel: str | None = None
+        channel: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> int:
         """Set x-axis units on data in this series.
 
@@ -341,12 +368,20 @@ class NMDataSeries(NMObject):
             for data in ch.data:
                 data.xscale["units"] = units
                 count += 1
+        if count > 0:
+            ch_str = channel if channel else "all"
+            nmh.history(
+                "set xunits='%s', channel=%s, n=%d" % (units, ch_str, count),
+                path=self.path_str,
+                quiet=quiet,
+            )
         return count
 
     def set_ylabel(
         self,
         label: str,
-        channel: str | None = None
+        channel: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> int:
         """Set y-axis label on data in this series.
 
@@ -365,12 +400,20 @@ class NMDataSeries(NMObject):
             for data in ch.data:
                 data.yscale["label"] = label
                 count += 1
+        if count > 0:
+            ch_str = channel if channel else "all"
+            nmh.history(
+                "set ylabel='%s', channel=%s, n=%d" % (label, ch_str, count),
+                path=self.path_str,
+                quiet=quiet,
+            )
         return count
 
     def set_yunits(
         self,
         units: str,
-        channel: str | None = None
+        channel: str | None = None,
+        quiet: bool = nmp.QUIET,
     ) -> int:
         """Set y-axis units on data in this series.
 
@@ -389,6 +432,13 @@ class NMDataSeries(NMObject):
             for data in ch.data:
                 data.yscale["units"] = units
                 count += 1
+        if count > 0:
+            ch_str = channel if channel else "all"
+            nmh.history(
+                "set yunits='%s', channel=%s, n=%d" % (units, ch_str, count),
+                path=self.path_str,
+                quiet=quiet,
+            )
         return count
 
     def get_xscales_summary(self) -> dict[str, dict]:
