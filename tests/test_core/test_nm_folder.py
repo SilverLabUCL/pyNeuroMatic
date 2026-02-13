@@ -12,6 +12,7 @@ import unittest
 from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeriesContainer
 from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
+from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_project import NMProject
 import pyneuromatic.core.nm_utilities as nmu
@@ -105,69 +106,25 @@ class TestNMFolderEquality(NMFolderTestBase):
 
 
 class TestNMFolderNotes(NMFolderTestBase):
-    """Tests for NMFolder notes functionality."""
+    """Tests for NMFolder notes integration with NMNotes."""
+
+    def test_notes_returns_nmnotes(self):
+        self.assertIsInstance(self.folder.notes, NMNotes)
 
     def test_notes_initially_empty(self):
-        self.assertIsInstance(self.folder.notes, list)
         self.assertEqual(len(self.folder.notes), 0)
 
-    def test_note_getter_empty(self):
-        self.assertEqual(self.folder.note, "")
-
-    def test_note_setter(self):
-        self.folder.note = "added TTX"
-        self.assertEqual(len(self.folder.notes), 1)
-        self.assertEqual(self.folder.notes[0].get("note"), "added TTX")
-
-    def test_note_add(self):
-        self.folder.note_add("first note")
-        self.folder.note_add("second note")
+    def test_notes_add(self):
+        self.folder.notes.add("first note")
+        self.folder.notes.add("second note")
         self.assertEqual(len(self.folder.notes), 2)
         self.assertEqual(self.folder.notes[0].get("note"), "first note")
-        self.assertEqual(self.folder.notes[1].get("note"), "second note")
-
-    def test_note_getter_returns_last(self):
-        self.folder.note_add("first")
-        self.folder.note_add("last")
-        self.assertEqual(self.folder.note, "last")
-
-    def test_notes_have_timestamps(self):
-        self.folder.note_add("test note")
-        self.assertIn("date", self.folder.notes[0])
-
-    def test_notes_clear(self):
-        self.folder.note_add("note1")
-        self.folder.note_add("note2")
-        self.folder.notes_clear()
-        self.assertEqual(len(self.folder.notes), 0)
-        self.assertEqual(self.folder.note, "")
-
-    def test_notes_ok_valid(self):
-        self.assertTrue(NMFolder.notes_ok([{"note": "hey", "date": "111"}]))
-        self.assertTrue(NMFolder.notes_ok([{"date": "111", "note": "hey"}]))
-
-    def test_notes_ok_invalid_keys(self):
-        self.assertFalse(NMFolder.notes_ok([{"n": "hey", "date": "111"}]))
-        self.assertFalse(NMFolder.notes_ok([{"note": "hey", "d": "111"}]))
-
-    def test_notes_ok_invalid_values(self):
-        self.assertFalse(NMFolder.notes_ok([{"note": "hey", "date": None}]))
-        self.assertTrue(NMFolder.notes_ok([{"note": "hey", "date": "None"}]))
-
-    def test_notes_ok_missing_keys(self):
-        self.assertFalse(NMFolder.notes_ok([{"note": "hey"}]))
-        self.assertFalse(NMFolder.notes_ok([{"date": "111"}]))
-
-    def test_notes_ok_extra_keys(self):
-        self.assertFalse(
-            NMFolder.notes_ok([{"note": "hey", "date": "111", "more": "1"}])
-        )
 
     def test_notes_affect_equality(self):
-        self.folder.note_add("test note")
+        self.folder.notes.add("test note")
         c = self.folder.copy()
         self.assertTrue(c == self.folder)
-        c.note_add("another note")
+        c.notes.add("another note")
         self.assertFalse(c == self.folder)
 
 
@@ -211,7 +168,7 @@ class TestNMFolderDeepCopy(NMFolderTestBase):
         super().setUp()
         for i in range(3):
             self.folder.data.new(f"data{i}")
-        self.folder.note_add("test note")
+        self.folder.notes.add("test note")
 
     def test_deepcopy_creates_new_instance(self):
         c = copy.deepcopy(self.folder)

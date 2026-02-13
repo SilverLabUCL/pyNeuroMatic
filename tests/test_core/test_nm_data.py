@@ -12,6 +12,7 @@ import unittest
 from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -212,6 +213,44 @@ class NMDataTest(unittest.TestCase):
         self.assertFalse(c0_copy == c0)
         c0.sets.add("set0", dnlist0[0])
         self.assertTrue(c0_copy == c0)
+
+class TestNMDataNotes(unittest.TestCase):
+    """Tests for NMData notes integration with NMNotes."""
+
+    def setUp(self):
+        self.d0 = NMData(
+            parent=NM, name=DNAME0, nparray=NPARRAY0,
+            xscale=XSCALE0, yscale=YSCALE0
+        )
+
+    def test_notes_returns_nmnotes(self):
+        self.assertIsInstance(self.d0.notes, NMNotes)
+
+    def test_notes_initially_empty(self):
+        self.assertEqual(len(self.d0.notes), 0)
+
+    def test_notes_add(self):
+        self.d0.notes.add("filtered with 1kHz lowpass")
+        self.d0.notes.add("baseline subtracted")
+        self.assertEqual(len(self.d0.notes), 2)
+        self.assertEqual(self.d0.notes[0].get("note"), "filtered with 1kHz lowpass")
+
+    def test_notes_affect_equality(self):
+        c = copy.deepcopy(self.d0)
+        self.assertTrue(c == self.d0)
+        c.notes.add("transformed")
+        self.assertFalse(c == self.d0)
+
+    def test_deepcopy_preserves_notes(self):
+        self.d0.notes.add("test note")
+        c = copy.deepcopy(self.d0)
+        self.assertEqual(len(c.notes), 1)
+        self.assertEqual(c.notes[0].get("note"), "test note")
+        # Verify independence
+        c.notes.add("new note")
+        self.assertEqual(len(self.d0.notes), 1)
+        self.assertEqual(len(c.notes), 2)
+
 
     """
     def _test_data(self):
