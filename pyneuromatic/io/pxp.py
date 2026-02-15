@@ -150,24 +150,24 @@ def read_pxp(
         # Build the data name using the requested prefix
         name = make_data_name(prefix, channel_num, epoch_num)
 
+        # Build scale dicts
+        xscale = {
+            "start": float(wave_header.get("hsB", 0.0)),
+            "delta": float(wave_header.get("hsA", 1.0)),
+            "units": x_units,
+        }
+        yscale = None
+        if channel_num < len(y_labels):
+            y_parsed = parse_units_from_label(y_labels[channel_num])
+            yscale = {"label": y_parsed.label, "units": y_parsed.units}
+
         # Create NMData
-        data = folder.data.new(name)
+        data = folder.data.new(name, xscale=xscale, yscale=yscale)
         if data is None:
             continue
 
         # Set y data
         data.nparray = wave["wData"]
-
-        # Set y label/units from yLabel config wave
-        if channel_num < len(y_labels):
-            y_parsed = parse_units_from_label(y_labels[channel_num])
-            data.yscale["label"] = y_parsed.label
-            data.yscale["units"] = y_parsed.units
-
-        # Set x scaling from wave header
-        data.xscale["start"] = float(wave_header.get("hsB", 0.0))
-        data.xscale["delta"] = float(wave_header.get("hsA", 1.0))
-        data.xscale["units"] = x_units
 
     # Optionally create dataseries
     if make_dataseries:

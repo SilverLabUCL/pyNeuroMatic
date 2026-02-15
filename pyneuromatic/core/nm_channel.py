@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_scale import NMScaleX, NMScaleY, _xscale_from_dict, _yscale_from_dict
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -67,6 +68,8 @@ class NMChannel(NMObject):
     # Extend NMObject's special attrs with NMChannel's own
     _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
         "_NMChannel__thedata",
+        "_NMChannel__xscale",
+        "_NMChannel__yscale",
     })
 
     def __init__(
@@ -79,22 +82,8 @@ class NMChannel(NMObject):
         super().__init__(parent=parent, name=name)
 
         self.__thedata: list[NMData] = []  # list of NMData refs for this channel
-
-        if xscale is None:
-            self.__xscale: dict = {}
-        elif isinstance(xscale, dict):
-            self.__xscale = dict(xscale)
-        else:
-            e = nmu.type_error_str(xscale, "xscale", "dictionary")
-            raise TypeError(e)
-
-        if yscale is None:
-            self.__yscale: dict = {}
-        elif isinstance(yscale, dict):
-            self.__yscale = dict(yscale)
-        else:
-            e = nmu.type_error_str(yscale, "yscale", "dictionary")
-            raise TypeError(e)
+        self.__xscale: NMScaleX = _xscale_from_dict(xscale, parent=self)
+        self.__yscale: NMScaleY = _yscale_from_dict(yscale, parent=self)
 
     # override
     def __eq__(self, other: object) -> bool:
@@ -124,7 +113,6 @@ class NMChannel(NMObject):
         special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
 
         # Deep copy all attributes that aren't special
-        # (this handles __xscale and __yscale dicts automatically)
         for attr, value in self.__dict__.items():
             if attr not in special_attrs:
                 setattr(result, attr, copy.deepcopy(value, memo))
@@ -135,6 +123,12 @@ class NMChannel(NMObject):
         result._NMObject__name = self._NMObject__name
         result._container = None
         result._NMObject__copy_of = self
+
+        # __xscale/__yscale: deep copy and reset parent
+        result._NMChannel__xscale = copy.deepcopy(self._NMChannel__xscale, memo)
+        result._NMChannel__xscale._parent = result
+        result._NMChannel__yscale = copy.deepcopy(self._NMChannel__yscale, memo)
+        result._NMChannel__yscale._parent = result
 
         # __thedata: copy list of references
         # If copying within a folder context, try to resolve to copied NMData
@@ -161,8 +155,8 @@ class NMChannel(NMObject):
     @property
     def parameters(self) -> dict[str, object]:
         k = super().parameters
-        k.update({"xscale": dict(self.__xscale)})
-        k.update({"yscale": dict(self.__yscale)})
+        k.update({"xscale": self.__xscale.to_dict()})
+        k.update({"yscale": self.__yscale.to_dict()})
         return k
 
     @property
@@ -170,11 +164,11 @@ class NMChannel(NMObject):
         return self.__thedata
 
     @property
-    def xscale(self) -> dict:
+    def xscale(self) -> NMScaleX:
         return self.__xscale
 
     @property
-    def yscale(self) -> dict:
+    def yscale(self) -> NMScaleY:
         return self.__yscale
 
 
@@ -208,8 +202,8 @@ class NMChannelContainer(NMObjectContainer):
         self,
         name: str | None = None,  # not used, instead name = name_next()
         select: bool = False,
-        xscale: dict = {},
-        yscale: dict = {},
+        xscale: dict | None = None,
+        yscale: dict | None = None,
         # quiet: bool = nmp.QUIET
     ) -> NMChannel | None:
         actual_name = self.auto_name_next()

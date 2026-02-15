@@ -29,6 +29,7 @@ from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_scale import NMScaleX, NMScaleY, _xscale_from_dict, _yscale_from_dict
 import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -67,6 +68,8 @@ class NMData(NMObject):
     _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
         "_NMData__nparray",
         "_NMData__xarray",
+        "_NMData__xscale",
+        "_NMData__yscale",
         "_NMData__dataseries_channel",
         "_NMData__dataseries_epoch",
     })
@@ -101,23 +104,9 @@ class NMData(NMObject):
                 raise TypeError(e)
         self.__xarray = xarray
 
-        # X-scale dict
-        if xscale is None:
-            self.__xscale: dict = {"label": "", "units": "", "start": 0, "delta": 1}
-        elif isinstance(xscale, dict):
-            self.__xscale = dict(xscale)
-        else:
-            e = nmu.type_error_str(xscale, "xscale", "dictionary")
-            raise TypeError(e)
-
-        # Y-scale dict
-        if yscale is None:
-            self.__yscale: dict = {"label": "", "units": ""}
-        elif isinstance(yscale, dict):
-            self.__yscale = dict(yscale)
-        else:
-            e = nmu.type_error_str(yscale, "yscale", "dictionary")
-            raise TypeError(e)
+        # X-scale and Y-scale
+        self.__xscale: NMScaleX = _xscale_from_dict(xscale, parent=self)
+        self.__yscale: NMScaleY = _yscale_from_dict(yscale, parent=self)
 
         self.__notes = NMNotes()
 
@@ -162,7 +151,6 @@ class NMData(NMObject):
         special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
 
         # Deep copy all attributes that aren't special
-        # (this handles __xscale and __yscale dicts automatically)
         for attr, value in self.__dict__.items():
             if attr not in special_attrs:
                 setattr(result, attr, copy.deepcopy(value, memo))
@@ -175,6 +163,12 @@ class NMData(NMObject):
         result._NMObject__copy_of = self
 
         # Now handle NMData's special attributes
+
+        # __xscale/__yscale: deep copy and reset parent
+        result._NMData__xscale = copy.deepcopy(self._NMData__xscale, memo)
+        result._NMData__xscale._parent = result
+        result._NMData__yscale = copy.deepcopy(self._NMData__yscale, memo)
+        result._NMData__yscale._parent = result
 
         # __nparray: deep copy numpy array (if present)
         if self._NMData__nparray is not None:
@@ -219,8 +213,8 @@ class NMData(NMObject):
     @property
     def parameters(self) -> dict[str, object]:
         k = super().parameters
-        k.update({"xscale": dict(self.xscale)})
-        k.update({"yscale": dict(self.yscale)})
+        k.update({"xscale": self.xscale.to_dict()})
+        k.update({"yscale": self.yscale.to_dict()})
         if isinstance(self.__nparray, numpy.ndarray):
             k.update({"nparray": self.__nparray.dtype})
         else:
@@ -278,13 +272,13 @@ class NMData(NMObject):
     # =========================================================================
 
     @property
-    def xscale(self) -> dict:
+    def xscale(self) -> NMScaleX:
         if isinstance(self.__dataseries_channel, NMChannel):
             return self.__dataseries_channel.xscale
         return self.__xscale
 
     @property
-    def yscale(self) -> dict:
+    def yscale(self) -> NMScaleY:
         if isinstance(self.__dataseries_channel, NMChannel):
             return self.__dataseries_channel.yscale
         return self.__yscale
@@ -327,11 +321,8 @@ class NMData(NMObject):
 
         # Use start/delta from xscale
         xscale = self.xscale
-        start = xscale.get("start")
-        delta = xscale.get("delta")
-
-        if start is None or delta is None:
-            return None
+        start = xscale.start
+        delta = xscale.delta
 
         points = self.__nparray.size if self.__nparray is not None else None
         if points is None:
@@ -407,11 +398,8 @@ class NMData(NMObject):
             return self.__xarray[i]
 
         xscale = self.xscale
-        start = xscale.get("start")
-        delta = xscale.get("delta")
-
-        if start is None or delta is None:
-            return None
+        start = xscale.start
+        delta = xscale.delta
 
         return start + i * delta
 
