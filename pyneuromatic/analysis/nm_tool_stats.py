@@ -1772,8 +1772,8 @@ def stats(
     # results["func"] = f
     results["data"] = data.path_str
 
-    xunits = data.xscale.get("units")
-    yunits = data.yscale.get("units")
+    xunits = data.xscale.units
+    yunits = data.yscale.units
 
     i0 = data.get_xindex(x0, clip=xclip)
     i1 = data.get_xindex(x1, clip=xclip)
@@ -1818,7 +1818,7 @@ def stats(
         if found_xarray:
             xarray = data.xarray
         else:
-            xstart = data.xscale.get("start")
+            xstart = data.xscale.start
     else:  # slice
         yarray = data.nparray[i0:i1+1]
         if found_xarray:
@@ -1860,7 +1860,7 @@ def stats(
         i = int(index) + int(i0)  # shift due to slicing
         results["i"] = i
         results["x"] = data.get_xvalue(i)
-        results["xunits"] = data.xscale.get("units")
+        results["xunits"] = data.xscale.units
 
         imean = 0
 
@@ -1908,7 +1908,7 @@ def stats(
             )
         else:
             xstart_val = xstart if isinstance(xstart, float) else 0.0
-            xdelta_val = data.xscale.get("delta") if isinstance(data.xscale.get("delta"), float) else 1.0
+            xdelta_val = float(data.xscale.delta)
             i_x = find_level_crossings(
                             yarray,
                             ylevel,
@@ -1943,7 +1943,7 @@ def stats(
             )
         else:
             xstart_val = xstart if isinstance(xstart, float) else 0.0
-            xdelta_val = data.xscale.get("delta") if isinstance(data.xscale.get("delta"), float) else 1.0
+            xdelta_val = float(data.xscale.delta)
             mb = linear_regression(
                             yarray,
                             xstart=xstart_val,
@@ -2043,7 +2043,7 @@ def stats(
             dy2 = np.square(np.diff(yarray))
             h = np.sqrt(np.add(dx2, dy2))
         else:
-            dx = data.xscale.get("delta") if isinstance(data.xscale.get("delta"), float) else 1.0
+            dx = float(data.xscale.delta)
             dx2 = dx**2
             dy2 = np.square(np.diff(yarray))
             h = np.sqrt(dx2 + dy2)
@@ -2067,7 +2067,7 @@ def stats(
                 sum_y = np.nansum(yarray)
             else:
                 sum_y = np.sum(yarray)
-            results["s"] = sum_y * data.xscale.get("delta")
+            results["s"] = sum_y * data.xscale.delta
         if isinstance(xunits, str) and isinstance(yunits, str):
             if xunits == yunits:
                 results["sunits"] = xunits + "**2"

@@ -56,30 +56,30 @@ class TestReadPxpFile(unittest.TestCase):
 
     def test_x_delta(self):
         self.assertAlmostEqual(
-            self.folder.data["RecordA0"].xscale["delta"], 0.02, places=4
+            self.folder.data["RecordA0"].xscale.delta, 0.02, places=4
         )
 
     def test_x_start(self):
         self.assertAlmostEqual(
-            self.folder.data["RecordA0"].xscale["start"], 0.0, places=4
+            self.folder.data["RecordA0"].xscale.start, 0.0, places=4
         )
 
     def test_x_units(self):
-        self.assertEqual(self.folder.data["RecordA0"].xscale["units"], "ms")
+        self.assertEqual(self.folder.data["RecordA0"].xscale.units, "ms")
 
     # y-axis (from yLabel wave)
 
     def test_channel_a_y_label(self):
-        self.assertEqual(self.folder.data["RecordA0"].yscale["label"], "Vmem")
+        self.assertEqual(self.folder.data["RecordA0"].yscale.label, "Vmem")
 
     def test_channel_a_y_units(self):
-        self.assertEqual(self.folder.data["RecordA0"].yscale["units"], "mV")
+        self.assertEqual(self.folder.data["RecordA0"].yscale.units, "mV")
 
     def test_channel_b_y_label(self):
-        self.assertEqual(self.folder.data["RecordB0"].yscale["label"], "Icmd")
+        self.assertEqual(self.folder.data["RecordB0"].yscale.label, "Icmd")
 
     def test_channel_b_y_units(self):
-        self.assertEqual(self.folder.data["RecordB0"].yscale["units"], "pA")
+        self.assertEqual(self.folder.data["RecordB0"].yscale.units, "pA")
 
     # data shape
 

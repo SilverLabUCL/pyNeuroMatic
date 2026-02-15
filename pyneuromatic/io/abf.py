@@ -102,23 +102,22 @@ def read_abf(
 
             name = make_data_name(prefix, channel, sweep)
 
-            data = folder.data.new(name)
+            # Build scale dicts
+            xscale = {"start": x_start, "delta": x_delta, "units": x_units}
+            yscale = {}
+            if channel < len(abf.adcNames):
+                yscale["label"] = abf.adcNames[channel]
+            if channel < len(abf.adcUnits):
+                yscale["units"] = abf.adcUnits[channel]
+
+            data = folder.data.new(
+                name, xscale=xscale, yscale=yscale if yscale else None
+            )
             if data is None:
                 continue
 
             # Set y data
             data.nparray = abf.sweepY.copy()
-
-            # Set y label/units from ADC info
-            if channel < len(abf.adcNames):
-                data.yscale["label"] = abf.adcNames[channel]
-            if channel < len(abf.adcUnits):
-                data.yscale["units"] = abf.adcUnits[channel]
-
-            # Set x scaling
-            data.xscale["start"] = x_start
-            data.xscale["delta"] = x_delta
-            data.xscale["units"] = x_units
 
     # Optionally create dataseries
     if make_dataseries:

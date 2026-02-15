@@ -76,13 +76,13 @@ class NMDataTest(unittest.TestCase):
             parent=None, name=DNAME0, nparray=NPARRAY0, xscale=x, yscale=YSCALE0
         )
         self.assertTrue(d0 == self.d0)
-        d0.xscale["delta"] = 0.05
+        d0.xscale.delta = 0.05
         self.assertFalse(d0 == self.d0)
-        d0.xscale["delta"] = XSCALE0["delta"]
+        d0.xscale.delta = XSCALE0["delta"]
         self.assertTrue(d0 == self.d0)
-        d0.yscale["units"] = "test"
+        d0.yscale.units = "test"
         self.assertFalse(d0 == self.d0)
-        d0.yscale["units"] = YSCALE0["units"]
+        d0.yscale.units = YSCALE0["units"]
         self.assertTrue(d0 == self.d0)
 
         d0.nparray = numpy.full([4], 3.14, dtype=numpy.float64, order="C")
@@ -126,15 +126,15 @@ class NMDataTest(unittest.TestCase):
         with self.assertRaises(AttributeError):
             self.d0.xscale = None
         start = 100
-        self.d0.xscale["start"] = start
-        self.assertEqual(self.d0.xscale["start"], start)
+        self.d0.xscale.start = start
+        self.assertEqual(self.d0.xscale.start, start)
 
     def xtest04_y(self):
         with self.assertRaises(AttributeError):
             self.d0.yscale = None
         label = "test"
-        self.d0.yscale["label"] = label
-        self.assertEqual(self.d0.yscale["label"], label)
+        self.d0.yscale.label = label
+        self.assertEqual(self.d0.yscale.label, label)
 
     def xtest05_dataseries(self):
         """

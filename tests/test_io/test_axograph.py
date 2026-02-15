@@ -65,11 +65,11 @@ class TestReadAxographXFile(unittest.TestCase):
     # channel A: Membrane Voltage
 
     def test_channel_a_label(self):
-        self.assertEqual(self.folder.data["RecordA0"].yscale["label"],
+        self.assertEqual(self.folder.data["RecordA0"].yscale.label,
                          "Membrane Voltage-1")
 
     def test_channel_a_units(self):
-        self.assertEqual(self.folder.data["RecordA0"].yscale["units"], "mV")
+        self.assertEqual(self.folder.data["RecordA0"].yscale.units, "mV")
 
     def test_channel_a_shape_epoch0(self):
         self.assertEqual(self.folder.data["RecordA0"].nparray.shape, (79840,))
@@ -80,28 +80,28 @@ class TestReadAxographXFile(unittest.TestCase):
     # channel B: Command Current
 
     def test_channel_b_label(self):
-        self.assertEqual(self.folder.data["RecordB0"].yscale["label"],
+        self.assertEqual(self.folder.data["RecordB0"].yscale.label,
                          "Raw Command Current-1")
 
     def test_channel_b_units(self):
-        self.assertEqual(self.folder.data["RecordB0"].yscale["units"], "pA")
+        self.assertEqual(self.folder.data["RecordB0"].yscale.units, "pA")
 
     # channel C: Analog Input
 
     def test_channel_c_label(self):
-        self.assertEqual(self.folder.data["RecordC0"].yscale["label"],
+        self.assertEqual(self.folder.data["RecordC0"].yscale.label,
                          "Analog Input #2")
 
     def test_channel_c_units(self):
-        self.assertEqual(self.folder.data["RecordC0"].yscale["units"], "mV")
+        self.assertEqual(self.folder.data["RecordC0"].yscale.units, "mV")
 
     # x-axis (time)
 
     def test_x_units(self):
-        self.assertEqual(self.folder.data["RecordA0"].xscale["units"], "ms")
+        self.assertEqual(self.folder.data["RecordA0"].xscale.units, "ms")
 
     def test_x_delta(self):
-        self.assertAlmostEqual(self.folder.data["RecordA0"].xscale["delta"],
+        self.assertAlmostEqual(self.folder.data["RecordA0"].xscale.delta,
                                0.0501, places=4)
 
     # dataseries

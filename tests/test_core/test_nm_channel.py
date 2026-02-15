@@ -11,6 +11,7 @@ import unittest
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.core.nm_scale import NMScaleX, NMScaleY
 import pyneuromatic.core.nm_utilities as nmu
 
 NM = NMManager(quiet=True)
@@ -61,10 +62,8 @@ class NMChannelTest(unittest.TestCase):
         self.assertEqual(self.c0._parent, NM)
         self.assertEqual(self.c0.name, CNAME0)
 
-        for key in XSCALE0.keys():
-            self.assertEqual(self.c0.xscale[key], XSCALE0[key])
-        for key in YSCALE0.keys():
-            self.assertEqual(self.c0.yscale[key], YSCALE0[key])
+        self.assertEqual(self.c0.xscale, XSCALE0)
+        self.assertEqual(self.c0.yscale, YSCALE0)
 
         for i, o in enumerate(self.c0.data):
             self.assertEqual(o.name, DNLIST0[i])
@@ -73,8 +72,8 @@ class NMChannelTest(unittest.TestCase):
         self.assertEqual(self.c0_copy.name, CNAME0)
         self.assertEqual(self.c0_copy.xscale, self.c0.xscale)
         self.assertEqual(self.c0_copy.yscale, self.c0.yscale)
-        self.assertIsInstance(self.c0_copy.xscale, dict)
-        self.assertIsInstance(self.c0_copy.yscale, dict)
+        self.assertIsInstance(self.c0_copy.xscale, NMScaleX)
+        self.assertIsInstance(self.c0_copy.yscale, NMScaleY)
 
         for i, o in enumerate(self.c0_copy.data):
             self.assertEqual(o.name, DNLIST0[i])

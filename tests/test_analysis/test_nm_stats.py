@@ -543,8 +543,8 @@ class NMStatsTest(unittest.TestCase):
         self.assertEqual(r["i0"], 0)  # xclip = True
         pnts = len(self.datanan.nparray)
         self.assertEqual(r["i1"], pnts-1)  # xclip = True
-        self.assertEqual(r["sunits"], self.datanan.yscale.get("units", ""))
-        self.assertEqual(r["xunits"], self.datanan.xscale.get("units", ""))
+        self.assertEqual(r["sunits"], self.datanan.yscale.units)
+        self.assertEqual(r["xunits"], self.datanan.xscale.units)
         r = nms.stats(self.datanan, func, x0=-100, xclip=False)
         keys = ['data', 'i0', 'i1', 'error']
         self.assertEqual(list(r.keys()), keys)

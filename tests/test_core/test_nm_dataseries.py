@@ -190,51 +190,51 @@ class TestNMDataSeriesBulkDimensions(unittest.TestCase):
         count = self.ds.set_xstart(0.5)
         self.assertEqual(count, 6)  # 3 data per channel * 2 channels
         for d in self.chan_a.data:
-            self.assertEqual(d.xscale["start"], 0.5)
+            self.assertEqual(d.xscale.start, 0.5)
         for d in self.chan_b.data:
-            self.assertEqual(d.xscale["start"], 0.5)
+            self.assertEqual(d.xscale.start, 0.5)
 
     def test_set_xstart_single_channel(self):
         count = self.ds.set_xstart(0.5, channel="A")
         self.assertEqual(count, 3)
         for d in self.chan_a.data:
-            self.assertEqual(d.xscale["start"], 0.5)
+            self.assertEqual(d.xscale.start, 0.5)
         # Channel B unchanged
         for d in self.chan_b.data:
-            self.assertEqual(d.xscale["start"], 0)
+            self.assertEqual(d.xscale.start, 0)
 
     def test_set_xdelta_all_channels(self):
         count = self.ds.set_xdelta(0.02)
         self.assertEqual(count, 6)
         for d in self.chan_a.data:
-            self.assertEqual(d.xscale["delta"], 0.02)
+            self.assertEqual(d.xscale.delta, 0.02)
 
     def test_set_xlabel_all_channels(self):
         count = self.ds.set_xlabel("Time")
         self.assertEqual(count, 6)
         for d in self.chan_a.data:
-            self.assertEqual(d.xscale["label"], "Time")
+            self.assertEqual(d.xscale.label, "Time")
 
     def test_set_xunits_single_channel(self):
         count = self.ds.set_xunits("s", channel="B")
         self.assertEqual(count, 3)
         for d in self.chan_b.data:
-            self.assertEqual(d.xscale["units"], "s")
+            self.assertEqual(d.xscale.units, "s")
         # Channel A unchanged
         for d in self.chan_a.data:
-            self.assertEqual(d.xscale["units"], "ms")
+            self.assertEqual(d.xscale.units, "ms")
 
     def test_set_ylabel_single_channel(self):
         count = self.ds.set_ylabel("Current", channel="A")
         self.assertEqual(count, 3)
         for d in self.chan_a.data:
-            self.assertEqual(d.yscale["label"], "Current")
+            self.assertEqual(d.yscale.label, "Current")
 
     def test_set_yunits_all_channels(self):
         count = self.ds.set_yunits("nA")
         self.assertEqual(count, 6)
         for d in self.chan_a.data:
-            self.assertEqual(d.yscale["units"], "nA")
+            self.assertEqual(d.yscale.units, "nA")
 
     def test_set_xstart_invalid_channel(self):
         with self.assertRaises(KeyError):

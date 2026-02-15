@@ -110,12 +110,7 @@ def read_axograph(
         epoch = col["epoch"]
         name = make_data_name(prefix, channel, epoch)
 
-        # Create NMData
-        data = folder.data.new(name)
-        if data is None:
-            continue
-
-        # Set y data
+        # Build y data and scale
         y_data = col["data"]
         parsed = parse_units_from_label(col["title"])
 
@@ -123,14 +118,15 @@ def read_axograph(
         if parsed.scale != 1.0:
             y_data = y_data * parsed.scale
 
-        data.nparray = y_data
-        data.yscale["label"] = parsed.label
-        data.yscale["units"] = parsed.units
+        xscale = {"start": x_start, "delta": x_delta, "units": x_units}
+        yscale = {"label": parsed.label, "units": parsed.units}
 
-        # Set x scale
-        data.xscale["start"] = x_start
-        data.xscale["delta"] = x_delta
-        data.xscale["units"] = x_units
+        # Create NMData
+        data = folder.data.new(name, xscale=xscale, yscale=yscale)
+        if data is None:
+            continue
+
+        data.nparray = y_data
 
     # Optionally create dataseries
     if make_dataseries:

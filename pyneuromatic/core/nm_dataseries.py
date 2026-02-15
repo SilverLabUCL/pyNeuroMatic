@@ -270,7 +270,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xscale["start"] = value
+                data.xscale._set_start(value, quiet=True)
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
@@ -302,7 +302,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xscale["delta"] = value
+                data.xscale._set_delta(value, quiet=True)
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
@@ -334,7 +334,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xscale["label"] = label
+                data.xscale._set_label(label, quiet=True)
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
@@ -366,7 +366,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.xscale["units"] = units
+                data.xscale._set_units(units, quiet=True)
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
@@ -398,7 +398,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.yscale["label"] = label
+                data.yscale._set_label(label, quiet=True)
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
@@ -430,7 +430,7 @@ class NMDataSeries(NMObject):
         count = 0
         for ch in self._iter_channels(channel):
             for data in ch.data:
-                data.yscale["units"] = units
+                data.yscale._set_units(units, quiet=True)
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
@@ -461,11 +461,8 @@ class NMDataSeries(NMObject):
             starts: set = set()
             deltas: set = set()
             for data in channel.data:
-                xscale = data.xscale
-                if xscale.get("start") is not None:
-                    starts.add(xscale["start"])
-                if xscale.get("delta") is not None:
-                    deltas.add(xscale["delta"])
+                starts.add(data.xscale.start)
+                deltas.add(data.xscale.delta)
             result[ch_name] = {
                 "start": starts,
                 "delta": deltas,
@@ -490,11 +487,10 @@ class NMDataSeries(NMObject):
             labels: set = set()
             units: set = set()
             for data in channel.data:
-                yscale = data.yscale
-                if yscale.get("label"):
-                    labels.add(yscale["label"])
-                if yscale.get("units"):
-                    units.add(yscale["units"])
+                if data.yscale.label:
+                    labels.add(data.yscale.label)
+                if data.yscale.units:
+                    units.add(data.yscale.units)
             result[ch_name] = {
                 "label": labels,
                 "units": units,

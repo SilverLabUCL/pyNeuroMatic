@@ -44,16 +44,16 @@ def write_itx(
             f.write("END\n")
 
             # x scaling: SetScale/P x, offset, delta, "units", waveName
-            x_start = nmdata.xscale.get("start") or 0
-            x_delta = nmdata.xscale.get("delta") or 1
-            x_units = nmdata.xscale.get("units") or ""
+            x_start = nmdata.xscale.start
+            x_delta = nmdata.xscale.delta
+            x_units = nmdata.xscale.units
             f.write(
                 f'X SetScale/P x, {x_start}, {x_delta},'
                 f' "{x_units}", {name}\n'
             )
 
             # y units: SetScale d, 0, 0, "units", waveName
-            y_units = nmdata.yscale.get("units") or ""
+            y_units = nmdata.yscale.units
             f.write(
                 f'X SetScale d, 0, 0,'
                 f' "{y_units}", {name}\n'
