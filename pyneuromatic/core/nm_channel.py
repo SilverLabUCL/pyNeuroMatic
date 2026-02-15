@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_scale import NMScaleX, NMScaleY, _xscale_from_dict, _yscale_from_dict
+import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -204,7 +205,7 @@ class NMChannelContainer(NMObjectContainer):
         select: bool = False,
         xscale: dict | None = None,
         yscale: dict | None = None,
-        # quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET,
     ) -> NMChannel | None:
         actual_name = self.auto_name_next()
         # Use self._parent (NMDataSeries) to skip container in parent chain,
@@ -215,6 +216,6 @@ class NMChannelContainer(NMObjectContainer):
             xscale=xscale,
             yscale=yscale
         )
-        if super()._new(c, select=select):
+        if super()._new(c, select=select, quiet=quiet):
             return c
         return None

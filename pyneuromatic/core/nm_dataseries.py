@@ -548,13 +548,13 @@ class NMDataSeriesContainer(NMObjectContainer):
         self,
         name: str = "",  # dataseries name/prefix
         select: bool = False,
-        # quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET,
     ) -> NMDataSeries | None:
         name = self._newkey(name)
         # Use self._parent (NMFolder) to skip container in parent chain,
         # consistent with NMFolder, NMData, NMChannel, NMEpoch
         s = NMDataSeries(parent=self._parent, name=name)
-        if super()._new(s, select=select):
+        if super()._new(s, select=select, quiet=quiet):
             return s
         return None
 
