@@ -249,6 +249,90 @@ class TestNMDataSeriesBulkDimensions(unittest.TestCase):
             self.ds.set_xlabel(123)
 
 
+class TestNMDataSeriesHistory(unittest.TestCase):
+    """Tests for history logging in NMDataSeries set_* methods."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.ds = NMDataSeries(parent=self.nm, name="Record")
+
+        self.chan_a = self.ds.channels.new()
+        self.chan_b = self.ds.channels.new()
+
+        xscale = {"start": 0, "delta": 0.01, "label": "time", "units": "ms"}
+        yscale = {"label": "current", "units": "pA"}
+
+        for i in range(3):
+            d_a = NMData(
+                parent=self.nm, name=f"RecordA{i}",
+                xscale=dict(xscale), yscale=dict(yscale)
+            )
+            self.chan_a.data.append(d_a)
+            d_b = NMData(
+                parent=self.nm, name=f"RecordB{i}",
+                xscale=dict(xscale), yscale=dict(yscale)
+            )
+            self.chan_b.data.append(d_b)
+
+        self.nm.history.buffer.clear()
+
+    def _last_message(self):
+        buf = self.nm.history.buffer
+        if not buf:
+            return ""
+        return buf[-1].get("message", "")
+
+    def test_set_xstart_logs(self):
+        self.ds.set_xstart(5.0, quiet=False)
+        msg = self._last_message()
+        self.assertIn("xstart=5.0", msg)
+        self.assertIn("channel=all", msg)
+        self.assertIn("n=6", msg)
+
+    def test_set_xdelta_logs(self):
+        self.ds.set_xdelta(0.02, quiet=False)
+        msg = self._last_message()
+        self.assertIn("xdelta=0.02", msg)
+        self.assertIn("n=6", msg)
+
+    def test_set_xlabel_logs(self):
+        self.ds.set_xlabel("Time", quiet=False)
+        msg = self._last_message()
+        self.assertIn("xlabel='Time'", msg)
+        self.assertIn("n=6", msg)
+
+    def test_set_xunits_logs(self):
+        self.ds.set_xunits("s", quiet=False)
+        msg = self._last_message()
+        self.assertIn("xunits='s'", msg)
+        self.assertIn("n=6", msg)
+
+    def test_set_ylabel_logs(self):
+        self.ds.set_ylabel("Vm", quiet=False)
+        msg = self._last_message()
+        self.assertIn("ylabel='Vm'", msg)
+        self.assertIn("n=6", msg)
+
+    def test_set_yunits_logs(self):
+        self.ds.set_yunits("mV", quiet=False)
+        msg = self._last_message()
+        self.assertIn("yunits='mV'", msg)
+        self.assertIn("n=6", msg)
+
+    def test_single_channel_logs_channel_name(self):
+        self.ds.set_xstart(1.0, channel="A", quiet=False)
+        msg = self._last_message()
+        self.assertIn("channel=A", msg)
+        self.assertIn("n=3", msg)
+
+    def test_no_data_no_log(self):
+        ds_empty = NMDataSeries(parent=self.nm, name="Empty")
+        ds_empty.channels.new()  # channel with no data
+        count = len(self.nm.history.buffer)
+        ds_empty.set_xstart(1.0, quiet=False)
+        self.assertEqual(len(self.nm.history.buffer), count)
+
+
 class TestNMDataSeriesScalesSummary(unittest.TestCase):
     """Tests for scale summary diagnostic methods."""
 
