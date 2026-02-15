@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
+import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -205,7 +206,7 @@ class NMEpochContainer(NMObjectContainer):
         self,
         name: str | None = None,  # not used, instead name = name_next()
         select: bool = False,
-        # quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET,
     ) -> NMEpoch | None:
         actual_name = self.auto_name_next()
         istr = actual_name.replace(self.auto_name_prefix, "")
@@ -216,10 +217,10 @@ class NMEpochContainer(NMObjectContainer):
         # Use self._parent (NMDataSeries) to skip container in parent chain,
         # consistent with NMFolder, NMData, NMDataSeries, NMChannel
         c = NMEpoch(
-            parent=self._parent, 
-            name=actual_name, 
+            parent=self._parent,
+            name=actual_name,
             number=iseq
         )
-        if super()._new(c, select=select):
+        if super()._new(c, select=select, quiet=quiet):
             return c
         return None

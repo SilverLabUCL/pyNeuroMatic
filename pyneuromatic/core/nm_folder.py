@@ -30,6 +30,8 @@ from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolderContainer
+import pyneuromatic.core.nm_history as nmh
+import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -266,7 +268,8 @@ class NMFolder(NMObject):
     def make_dataseries(
         self,
         prefix: str,
-        select: bool = False
+        select: bool = False,
+        quiet: bool = nmp.QUIET,
     ) -> NMDataSeries | None:
         """Create a dataseries from data matching a prefix pattern.
 
@@ -280,6 +283,7 @@ class NMFolder(NMObject):
         Args:
             prefix: Prefix to match (case-insensitive). Can be partial.
             select: Whether to select the new dataseries.
+            quiet: If True, suppress history output.
 
         Returns:
             The created NMDataSeries, or None if no matching data found.
@@ -332,8 +336,9 @@ class NMFolder(NMObject):
         if actual_prefix in self.dataseries:
             return None  # Could also raise an error or return existing
 
-        # Create the dataseries
-        ds = self.dataseries.new(name=actual_prefix, select=select)
+        # Create the dataseries, channels, and epochs with quiet=True
+        # to suppress individual history entries; log a summary below
+        ds = self.dataseries.new(name=actual_prefix, select=select, quiet=True)
         if ds is None:
             return None
 
@@ -345,14 +350,14 @@ class NMFolder(NMObject):
         # We need to create channels in order, so if data has A, B, C, we create 3
         channel_map: dict[str, object] = {}  # channel_char -> NMChannel
         for ch_char in channel_chars:
-            channel = ds.channels.new()
+            channel = ds.channels.new(quiet=True)
             if channel is not None:
                 channel_map[ch_char] = channel
 
         # Create epochs (NMEpochContainer auto-names E0, E1, E2...)
         epoch_map: dict[int, object] = {}  # epoch_num -> NMEpoch
         for ep_num in epoch_nums:
-            epoch = ds.epochs.new()
+            epoch = ds.epochs.new(quiet=True)
             if epoch is not None:
                 epoch_map[ep_num] = epoch
 
@@ -365,6 +370,19 @@ class NMFolder(NMObject):
                 channel.data.append(data)
             if epoch is not None:
                 epoch.data.append(data)
+
+        # Log summary
+        ch_str = ", ".join(channel_chars)
+        if epoch_nums:
+            ep_str = "E%d..E%d" % (epoch_nums[0], epoch_nums[-1])
+        else:
+            ep_str = ""
+        nmh.history(
+            "new dataseries '%s': channels %s; epochs %s"
+            % (actual_prefix, ch_str, ep_str),
+            path=self.path_str,
+            quiet=quiet,
+        )
 
         return ds
 
