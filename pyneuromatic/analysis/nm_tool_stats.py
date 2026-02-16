@@ -31,6 +31,11 @@ from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 import pyneuromatic.core.nm_preferences as nmp
 from pyneuromatic.analysis.nm_tool import NMTool
+from pyneuromatic.core.nm_transform import (
+    NMTransform,
+    apply_transforms,
+    _transform_from_dict,
+)
 import pyneuromatic.core.nm_utilities as nmu
 
 FUNC_NAMES = (
@@ -332,7 +337,7 @@ class NMStatsWin(NMObject):
         self.__func: dict[str, Any] = {}
         self.__x0 = -math.inf
         self.__x1 = math.inf
-        self.__transform: list[Any] | None = None
+        self.__transform: list[NMTransform] | None = None
         self.__results: list[dict[str, Any]] = []  # [ {}, {} ...] list of dictionaries
 
         # baseline
@@ -404,12 +409,16 @@ class NMStatsWin(NMObject):
 
     @property
     def win(self) -> dict:
+        if self.__transform is not None:
+            transform_dicts = [t.to_dict() for t in self.__transform]
+        else:
+            transform_dicts = None
         r = {
             "on": self.__on,
             "func": self.__func,
             "x0": self.__x0,
             "x1": self.__x1,
-            "transform": self.__transform,
+            "transform": transform_dicts,
             "bsln_on": self.__bsln_on,
             "bsln_func": self.__bsln_func,
             "bsln_x0": self.__bsln_x0,
@@ -603,7 +612,7 @@ class NMStatsWin(NMObject):
         return self._x_set("x1", x1)
 
     @property
-    def transform(self) -> list | None:
+    def transform(self) -> list[NMTransform] | None:
         return self.__transform
 
     @transform.setter
@@ -612,15 +621,27 @@ class NMStatsWin(NMObject):
 
     def _transform_set(
         self,
-        transform_list: list | None,
+        transform_list: list[NMTransform] | list[dict] | None,
         quiet: bool = nmp.QUIET
     ) -> None:
         if transform_list is None:
-            pass
-        elif not isinstance(transform_list, list):
+            self.__transform = None
+            return None
+        if not isinstance(transform_list, list):
             e = nmu.type_error_str(transform_list, "transform_list", "list")
             raise TypeError(e)
-        self.__transform = transform_list
+        result = []
+        for item in transform_list:
+            if isinstance(item, NMTransform):
+                result.append(item)
+            elif isinstance(item, dict):
+                result.append(_transform_from_dict(item))
+            else:
+                e = nmu.type_error_str(
+                    item, "transform item", "NMTransform or dict"
+                )
+                raise TypeError(e)
+        self.__transform = result
         return None
 
     @property
@@ -716,8 +737,18 @@ class NMStatsWin(NMObject):
         ignore_nans: bool = False
     ) -> list:
 
-        # TODO compute transforms
-        # self.__transform
+        # Apply transforms to a copy of the data (original never mutated)
+        if self.__transform and len(self.__transform) > 0:
+            if data is not None and data.nparray is not None:
+                transformed = apply_transforms(
+                    data.nparray, self.__transform, xscale=data.xscale
+                )
+                data = NMData(
+                    name=data.name,
+                    nparray=transformed,
+                    xscale=data.xscale.to_dict(),
+                    yscale=data.yscale.to_dict(),
+                )
 
         self.__results = []
 
