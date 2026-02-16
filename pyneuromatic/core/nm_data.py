@@ -512,7 +512,7 @@ class NMDataContainer(NMObjectContainer):
         nparray: numpy.ndarray | None = None,
         xscale: dict | None = None,
         yscale: dict | None = None,
-        # quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET
     ) -> NMData | None:
         actual_name = self._newkey(name)
         # Use self._parent (NMFolder) to skip container in parent chain,
@@ -524,7 +524,7 @@ class NMDataContainer(NMObjectContainer):
             xscale=xscale,
             yscale=yscale,
         )
-        if super()._new(d, select=select):
+        if super()._add(d, select=select, quiet=quiet):
             return d
         return None
 

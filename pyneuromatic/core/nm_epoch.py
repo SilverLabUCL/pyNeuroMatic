@@ -204,7 +204,7 @@ class NMEpochContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str | None = None,  # not used, instead name = name_next()
+        name: str | None = None,  # not used, instead name = auto_name_next()
         select: bool = False,
         quiet: bool = nmp.QUIET,
     ) -> NMEpoch | None:
@@ -221,6 +221,6 @@ class NMEpochContainer(NMObjectContainer):
             name=actual_name,
             number=iseq
         )
-        if super()._new(c, select=select, quiet=quiet):
+        if super()._add(c, select=select, quiet=quiet):
             return c
         return None

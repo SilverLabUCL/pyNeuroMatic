@@ -725,20 +725,20 @@ class NMObjectContainer(NMObject, MutableMapping):
         return c
 
     # children should override
-    # and call super()._new()
+    # and call super()._add()
     def new(
         self,
         name: str | None = None,
         select: bool = False,
-        # quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET
     ) -> NMObject | None:
         actual_name = self._newkey(name)
         o = NMObject(parent=self, name=actual_name)
-        if self._new(o, select=select):
+        if self._add(o, select=select, quiet=quiet):
             return o
         return None
     
-    def _new(
+    def _add(
         self,
         nmobject: NMObject,
         select: bool = False,
