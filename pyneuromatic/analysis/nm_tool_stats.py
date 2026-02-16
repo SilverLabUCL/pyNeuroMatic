@@ -27,8 +27,6 @@ import numpy as np
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
-from pyneuromatic.core.nm_object import NMObject
-from pyneuromatic.core.nm_object_container import NMObjectContainer
 import pyneuromatic.core.nm_preferences as nmp
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.core.nm_transform import (
@@ -104,8 +102,7 @@ class NMToolStats(NMTool):
     def __init__(self) -> None:
 
         self.__win_container = NMStatsWinContainer(parent=self)
-        self.__win_container.new(select=True)
-        self.__win_container.execute_target = "all"
+        self.__win_container.new()
 
         self.__xclip = True
         # if x0|x1 OOB, clip to data x-scale limits
@@ -179,10 +176,7 @@ class NMToolStats(NMTool):
     def execute(self) -> bool:
         if not isinstance(self.data, NMData):
             raise RuntimeError("no data selected")
-        for obj in self.windows.execute_targets:
-            if not isinstance(obj, NMStatsWin):
-                continue
-            w: NMStatsWin = obj
+        for w in self.windows:
             self.windows.selected_name = w.name
             if not w.on:
                 continue
@@ -316,14 +310,13 @@ class NMToolStats(NMTool):
     """
 
 
-class NMStatsWin(NMObject):
-    """
-    NM Stats Window class
-    """
+class NMStatsWin:
+    """NM Stats Window class.
 
-    # NMStatsWin has no special attrs beyond NMObject's - all its attrs
-    # are simple types (bool, float, dict, list) that deep copy normally
-    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS
+    Lightweight class (does not inherit NMObject) following the NMScaleY
+    pattern. Each window defines a stats measurement with x-range, function,
+    optional baseline, and optional transforms.
+    """
 
     def __init__(
         self,
@@ -331,7 +324,12 @@ class NMStatsWin(NMObject):
         name: str = "NMStatsWin0",
         win: dict[str, object] | None = None,
     ) -> None:
-        super().__init__(parent=parent, name=name)
+        self._parent = parent
+        if not isinstance(name, str):
+            raise TypeError(nmu.type_error_str(name, "name", "string"))
+        if not name or not nmu.name_ok(name):
+            raise ValueError("name: %s" % name)
+        self._name = name
 
         self.__on = True
         self.__func: dict[str, Any] = {}
@@ -354,66 +352,45 @@ class NMStatsWin(NMObject):
             e = nmu.type_error_str(win, "win", "dictionary")
             raise TypeError(e)
 
-    # override
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NMStatsWin):
             return NotImplemented
-        if not super().__eq__(other):
-            return False
-        if self.win != other.win:
-            return False
-        return True
+        return self.to_dict() == other.to_dict()
 
     def __deepcopy__(self, memo: dict) -> NMStatsWin:
-        """Support Python's copy.deepcopy() protocol.
-
-        Creates a copy of this NMStatsWin by bypassing __init__ and directly
-        setting attributes.
-
-        Args:
-            memo: Dictionary to track already copied objects (prevents cycles)
-
-        Returns:
-            A deep copy of this NMStatsWin
-        """
-        import datetime
-
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
-
-        # Use the class attribute for special attrs (includes NMObject's attrs)
-        special_attrs = cls._DEEPCOPY_SPECIAL_ATTRS
-
-        # Deep copy all attributes that aren't special
-        # NMStatsWin's attrs are all simple types (bool, float, dict, list)
         for attr, value in self.__dict__.items():
-            if attr not in special_attrs:
+            if attr == "_parent":
+                setattr(result, attr, None)
+            else:
                 setattr(result, attr, copy.deepcopy(value, memo))
-
-        # Set NMObject's attributes with custom handling
-        result._NMObject__created = datetime.datetime.now().isoformat(" ", "seconds")
-        result._NMObject__parent = self._NMObject__parent
-        result._NMObject__name = self._NMObject__name
-        result._container = None
-        result._NMObject__copy_of = self
-
         return result
 
-    # override
     @property
-    def parameters(self) -> dict[str, object]:
-        k = super().parameters
-        k.update(self.win)
-        return k
+    def name(self) -> str:
+        return self._name
 
-    @property
-    def win(self) -> dict:
+    @name.setter
+    def name(self, newname: str) -> None:
+        if not isinstance(newname, str):
+            raise TypeError(nmu.type_error_str(newname, "newname", "string"))
+        if not newname or not nmu.name_ok(newname):
+            raise ValueError("newname: %s" % newname)
+        self._name = newname
+
+    def copy(self) -> NMStatsWin:
+        return copy.deepcopy(self)
+
+    def to_dict(self) -> dict:
+        """Serialize this stats window to a dict."""
         if self.__transform is not None:
             transform_dicts = [t.to_dict() for t in self.__transform]
         else:
             transform_dicts = None
-        r = {
+        return {
+            "name": self._name,
             "on": self.__on,
             "func": self.__func,
             "x0": self.__x0,
@@ -424,11 +401,6 @@ class NMStatsWin(NMObject):
             "bsln_x0": self.__bsln_x0,
             "bsln_x1": self.__bsln_x1
         }
-        return r
-
-    @win.setter
-    def win(self, win: dict[str, object]) -> None:
-        return self._win_set(win)
 
     def _win_set(
         self,
@@ -443,7 +415,9 @@ class NMStatsWin(NMObject):
                 e = nmu.type_error_str(k, "key", "string")
                 raise TypeError(e)
             k = k.lower()
-            if k == "on":
+            if k == "name":
+                continue  # name is set via constructor, not _win_set
+            elif k == "on":
                 self._on_set(v, quiet=quiet)  # type: ignore[arg-type]
             elif k == "func":
                 self._func_set(v, quiet=quiet)  # type: ignore[arg-type]
@@ -1285,48 +1259,40 @@ class NMStatsWin(NMObject):
         return {}
 
 
-class NMStatsWinContainer(NMObjectContainer):
-    """
-    Container of NM Stats Windows (NMStatsWin)
-    """
+class NMStatsWinContainer:
+    """Simple container of NMStatsWin objects with auto-naming."""
 
     def __init__(
         self,
         parent: object | None = None,
-        name: str = "NMStatsWinContainer0",
-        rename_on: bool = False,
         name_prefix: str = "w",
-        name_seq_format: str = "0",
     ) -> None:
-        super().__init__(
-            parent=parent,
-            name=name,
-            rename_on=rename_on,
-            auto_name_prefix=name_prefix,
-            auto_name_seq_format=name_seq_format,
-        )
+        self._parent = parent
+        self._prefix = name_prefix
+        self._windows: dict[str, NMStatsWin] = {}
+        self._count = 0
+        self.selected_name: str | None = None
 
-    # override, no super
-    def content_type(self) -> str:
-        return NMStatsWin.__name__
+    def new(self) -> NMStatsWin:
+        name = "%s%d" % (self._prefix, self._count)
+        self._count += 1
+        w = NMStatsWin(parent=self._parent, name=name)
+        self._windows[name] = w
+        if self.selected_name is None:
+            self.selected_name = name
+        return w
 
-    # override
-    def new(  # type: ignore[override]
-        self,
-        name: str | None = None,  # not used, instead name = auto_name_next()
-        select: bool = False,
-        quiet: bool = nmp.QUIET
-    ) -> NMStatsWin | None:
-        name = self.auto_name_next()
-        istr = name.replace(self.auto_name_prefix, "")
-        if str.isdigit(istr):
-            iseq = int(istr)
-        else:
-            iseq = -1
-        c = NMStatsWin(parent=self._parent, name=name)
-        if super()._add(c, select=select, quiet=quiet):
-            return c
-        return None
+    def __iter__(self):
+        return iter(self._windows.values())
+
+    def __len__(self):
+        return len(self._windows)
+
+    def __getitem__(self, name: str) -> NMStatsWin:
+        return self._windows[name]
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._windows
 
 
 def badvalue(n: float | None) -> bool:

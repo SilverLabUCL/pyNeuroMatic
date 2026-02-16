@@ -60,16 +60,16 @@ class NMStatsTest(unittest.TestCase):
     #    self.stats = NMToolStats()
 
     def test00_statswin_init(self):
-        # args: parent, name, win, copy (see NMObject)
+        # args: parent, name, win
         for b in nmu.badtypes(ok=[{}, None]):
             with self.assertRaises(TypeError):
                 nms.NMStatsWin(win=b)
         with self.assertRaises(TypeError):
-            nms.NMStatsWin(copy=NM)
+            nms.NMStatsWin(copy=NM)  # unexpected kwarg
 
     def test01_statswin_eq(self):
         self.assertFalse(self.w0 == self.w1)
-        self.w1.win = self.win0
+        self.w1._win_set(self.win0)
         self.assertFalse(self.w0 == self.w1)
         self.w1.name = self.w0.name
         self.assertTrue(self.w0 == self.w1)
@@ -88,13 +88,14 @@ class NMStatsTest(unittest.TestCase):
         # print(w0.parameters)
         pass  # TODO
 
-    def test04_statswin_win(self):
-        keys = ["on", "func", "x0", "x1", "transform",
+    def test04_statswin_to_dict(self):
+        keys = ["name", "on", "func", "x0", "x1", "transform",
                 "bsln_on", "bsln_func", "bsln_x0", "bsln_x1"]
-        self.assertTrue(isinstance(self.w0.win, dict))
-        self.assertEqual(len(keys), len(self.w0.win.keys()))
+        self.assertTrue(isinstance(self.w0.to_dict(), dict))
+        self.assertEqual(len(keys), len(self.w0.to_dict().keys()))
         for k in keys:
-            self.assertTrue(k in self.w0.win)
+            self.assertTrue(k in self.w0.to_dict())
+        self.assertEqual(self.w0.to_dict()["name"], "w0")
 
         for b in nmu.badtypes(ok=[{}]):
             with self.assertRaises(TypeError):
@@ -104,9 +105,9 @@ class NMStatsTest(unittest.TestCase):
         self.w0._win_set({"on": False, "bsln_on": False})
         self.assertFalse(self.w0.on)
         self.assertFalse(self.w0.bsln_on)
-        self.w0.win = self.win1
-        self.assertEqual(self.w0.win, self.win1)
-        self.w0.win = self.win0
+        self.w0._win_set(self.win1)
+        self.assertEqual(self.w0.to_dict(), {"name": "w0", **self.win1})
+        self.w0._win_set(self.win0)
 
     def test05_statswin_func(self):
         self.assertTrue(isinstance(self.w1.func, dict))
@@ -281,8 +282,8 @@ class NMStatsTest(unittest.TestCase):
         self.assertIsInstance(self.w0.transform[0], NMTransformInvert)
         self.assertIsInstance(self.w0.transform[1], NMTransformLn)
 
-        # win property should serialize to dicts
-        win = self.w0.win
+        # to_dict should serialize transforms to dicts
+        win = self.w0.to_dict()
         self.assertIsInstance(win["transform"], list)
         self.assertEqual(win["transform"][0], {"type": "NMTransformInvert"})
         self.assertEqual(win["transform"][1], {"type": "NMTransformLn"})
@@ -299,8 +300,8 @@ class NMStatsTest(unittest.TestCase):
         self.w0.transform = None
         self.assertIsNone(self.w0.transform)
 
-        # win property with None transform
-        win = self.w0.win
+        # to_dict with None transform
+        win = self.w0.to_dict()
         self.assertIsNone(win["transform"])
 
         # Type errors
