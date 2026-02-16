@@ -254,8 +254,59 @@ class NMStatsTest(unittest.TestCase):
         self.w0._x_set("bsln_x1", 99)
         self.assertEqual(self.w0.bsln_x1, 99)
 
-    def xtest07_statswin_transform(self):
-        pass  # TODO
+    def test07_statswin_transform(self):
+        from pyneuromatic.core.nm_transform import (
+            NMTransform,
+            NMTransformInvert,
+            NMTransformLog,
+            NMTransformLn,
+        )
+
+        # Default is None
+        self.assertIsNone(self.w0.transform)
+
+        # Set with NMTransform objects
+        transforms = [NMTransformInvert(), NMTransformLog()]
+        self.w0.transform = transforms
+        self.assertEqual(len(self.w0.transform), 2)
+        self.assertIsInstance(self.w0.transform[0], NMTransformInvert)
+        self.assertIsInstance(self.w0.transform[1], NMTransformLog)
+
+        # Set with dicts (should auto-convert)
+        self.w0.transform = [
+            {"type": "NMTransformInvert"},
+            {"type": "NMTransformLn"},
+        ]
+        self.assertEqual(len(self.w0.transform), 2)
+        self.assertIsInstance(self.w0.transform[0], NMTransformInvert)
+        self.assertIsInstance(self.w0.transform[1], NMTransformLn)
+
+        # win property should serialize to dicts
+        win = self.w0.win
+        self.assertIsInstance(win["transform"], list)
+        self.assertEqual(win["transform"][0], {"type": "NMTransformInvert"})
+        self.assertEqual(win["transform"][1], {"type": "NMTransformLn"})
+
+        # Round-trip: win dict -> new NMStatsWin
+        from pyneuromatic.analysis.nm_tool_stats import NMStatsWin
+        w2 = NMStatsWin(win=win)
+        self.assertIsNotNone(w2.transform)
+        self.assertEqual(len(w2.transform), 2)
+        self.assertIsInstance(w2.transform[0], NMTransformInvert)
+        self.assertIsInstance(w2.transform[1], NMTransformLn)
+
+        # Set to None
+        self.w0.transform = None
+        self.assertIsNone(self.w0.transform)
+
+        # win property with None transform
+        win = self.w0.win
+        self.assertIsNone(win["transform"])
+
+        # Type errors
+        for b in nmu.badtypes(ok=[None, []]):
+            with self.assertRaises(TypeError):
+                self.w0.transform = b
 
     def test08_statswin_bsln_func(self):
         self.assertTrue(isinstance(self.w1.bsln_func, dict))
