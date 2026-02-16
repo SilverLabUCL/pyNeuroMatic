@@ -60,16 +60,16 @@ class NMStatsTest(unittest.TestCase):
     #    self.stats = NMToolStats()
 
     def test00_statswin_init(self):
-        # args: parent, name, win, copy (see NMObject)
+        # args: parent, name, win
         for b in nmu.badtypes(ok=[{}, None]):
             with self.assertRaises(TypeError):
                 nms.NMStatsWin(win=b)
         with self.assertRaises(TypeError):
-            nms.NMStatsWin(copy=NM)
+            nms.NMStatsWin(copy=NM)  # unexpected kwarg
 
     def test01_statswin_eq(self):
         self.assertFalse(self.w0 == self.w1)
-        self.w1.win = self.win0
+        self.w1._win_set(self.win0)
         self.assertFalse(self.w0 == self.w1)
         self.w1.name = self.w0.name
         self.assertTrue(self.w0 == self.w1)
@@ -88,13 +88,14 @@ class NMStatsTest(unittest.TestCase):
         # print(w0.parameters)
         pass  # TODO
 
-    def test04_statswin_win(self):
-        keys = ["on", "func", "x0", "x1", "transform",
+    def test04_statswin_to_dict(self):
+        keys = ["name", "on", "func", "x0", "x1", "transform",
                 "bsln_on", "bsln_func", "bsln_x0", "bsln_x1"]
-        self.assertTrue(isinstance(self.w0.win, dict))
-        self.assertEqual(len(keys), len(self.w0.win.keys()))
+        self.assertTrue(isinstance(self.w0.to_dict(), dict))
+        self.assertEqual(len(keys), len(self.w0.to_dict().keys()))
         for k in keys:
-            self.assertTrue(k in self.w0.win)
+            self.assertTrue(k in self.w0.to_dict())
+        self.assertEqual(self.w0.to_dict()["name"], "w0")
 
         for b in nmu.badtypes(ok=[{}]):
             with self.assertRaises(TypeError):
@@ -104,9 +105,9 @@ class NMStatsTest(unittest.TestCase):
         self.w0._win_set({"on": False, "bsln_on": False})
         self.assertFalse(self.w0.on)
         self.assertFalse(self.w0.bsln_on)
-        self.w0.win = self.win1
-        self.assertEqual(self.w0.win, self.win1)
-        self.w0.win = self.win0
+        self.w0._win_set(self.win1)
+        self.assertEqual(self.w0.to_dict(), {"name": "w0", **self.win1})
+        self.w0._win_set(self.win0)
 
     def test05_statswin_func(self):
         self.assertTrue(isinstance(self.w1.func, dict))
@@ -281,8 +282,8 @@ class NMStatsTest(unittest.TestCase):
         self.assertIsInstance(self.w0.transform[0], NMTransformInvert)
         self.assertIsInstance(self.w0.transform[1], NMTransformLn)
 
-        # win property should serialize to dicts
-        win = self.w0.win
+        # to_dict should serialize transforms to dicts
+        win = self.w0.to_dict()
         self.assertIsInstance(win["transform"], list)
         self.assertEqual(win["transform"][0], {"type": "NMTransformInvert"})
         self.assertEqual(win["transform"][1], {"type": "NMTransformLn"})
@@ -299,8 +300,8 @@ class NMStatsTest(unittest.TestCase):
         self.w0.transform = None
         self.assertIsNone(self.w0.transform)
 
-        # win property with None transform
-        win = self.w0.win
+        # to_dict with None transform
+        win = self.w0.to_dict()
         self.assertIsNone(win["transform"])
 
         # Type errors
@@ -713,7 +714,7 @@ class NMStatsTest(unittest.TestCase):
             nms.check_meanatmaxmin(func)
         with self.assertRaises(KeyError):
             func = {"name": f}
-            nms.check_meanatmaxmin(func, getinput=False)
+            nms.check_meanatmaxmin(func)
 
         for f in ["min", "max", "mean@max", "mean@min"]:
             func = {"name": f, "imean": 10}
@@ -731,31 +732,6 @@ class NMStatsTest(unittest.TestCase):
                 self.assertEqual(p["name"], f)
             self.assertEqual(p["imean"], 10)
 
-    def test94_input_meanatmaxmin(self):
-        # mean@max, mean@min
-        for b in nmu.badtypes(ok=["string"]):
-            with self.assertRaises(TypeError):
-                nms.input_meanatmaxmin(b)
-        with self.assertRaises(ValueError):
-            nms.input_meanatmaxmin("badfuncname")
-        for b in nmu.badtypes(ok=[None, "string"]):
-            with self.assertRaises(TypeError):
-                nms.input_meanatmaxmin("min", test_input=b)
-        for b in ["-10", "nan", "inf"]:
-            with self.assertRaises(ValueError):
-                nms.input_meanatmaxmin("min", test_input=b)
-        i = 10
-        for f in ["max", "mean@max"]:
-            p = nms.input_meanatmaxmin(f, test_input=str(i))
-            self.assertEqual(p["name"], "mean@max")
-            # "max" is changed to "mean@max"
-            self.assertEqual(p["imean"], i)
-        for f in ["min", "mean@min"]:
-            p = nms.input_meanatmaxmin(f, test_input=str(i))
-            self.assertEqual(p["name"], "mean@min")
-            # "min" is changed to "mean@min"
-            self.assertEqual(p["imean"], i)
-
     def test95_check_level(self):
         f = "level"
         for b in nmu.badtypes(ok=[{}, "string"]):
@@ -772,7 +748,7 @@ class NMStatsTest(unittest.TestCase):
             nms.check_level(func)
         with self.assertRaises(KeyError):
             func = {"name": f}
-            nms.check_level(func, getinput=False)
+            nms.check_level(func)
 
         for b in nmu.badtypes(ok=["string"]):
             with self.assertRaises(TypeError):
@@ -838,52 +814,13 @@ class NMStatsTest(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             func = {"name": f}
-            nms.check_level(func, getinput=False)
+            nms.check_level(func)
         with self.assertRaises(KeyError):
             func = {"name": f}
-            nms.check_level(func, option=1, getinput=False)
+            nms.check_level(func, option=1)
         func = {"name": f, "ylevel": 10}
-        p = nms.check_level(func, option=3, getinput=False)
+        p = nms.check_level(func, option=3)
         self.assertEqual(p["ylevel"], 10)  # option is ignored
-
-    def test96_input_level(self):
-        f = "level"
-        for b in nmu.badtypes(ok=["string"]):
-            with self.assertRaises(TypeError):
-                nms.input_level(b)
-        with self.assertRaises(ValueError):
-            nms.input_level("badfuncname")
-
-        for b in nmu.badtypes(ok=[None, "string"]):
-            with self.assertRaises(TypeError):
-                nms.input_level(f, option=1, test_input=b)
-            with self.assertRaises(TypeError):
-                nms.input_level(f, option=2, test_input=b)
-            with self.assertRaises(TypeError):
-                nms.input_level(f, option=3, test_input=b)
-            with self.assertRaises(TypeError):
-                nms.input_level(f, option=0, test_input=b)
-        with self.assertRaises(ValueError):
-            nms.input_level(f, option=0, test_input="10")
-
-        for b in ["nan", "inf"]:
-            with self.assertRaises(ValueError):
-                nms.input_level(f, option=1, test_input=b)
-            with self.assertRaises(ValueError):
-                nms.input_level(f, option=2, test_input=b)
-            with self.assertRaises(ValueError):
-                nms.input_level(f, option=3, test_input=b)
-        i = 10
-        for f in ["level", "level+", "level-"]:
-            p = nms.input_level(f, option=1, test_input=str(i))
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["ylevel"], i)
-            p = nms.input_level(f, option=2, test_input=str(i))
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["nstd"], i)
-            p = nms.input_level(f, option=3, test_input=str(i))
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["nstd"], -i)
 
     def test97_check_risefall(self):
         f = "risetime+"
@@ -901,13 +838,13 @@ class NMStatsTest(unittest.TestCase):
             nms.check_risefall(func)
         with self.assertRaises(KeyError):
             func = {"name": f}  # need p0 and p1 keys
-            nms.check_risefall(func, getinput=False)
+            nms.check_risefall(func)
         with self.assertRaises(KeyError):
-            func = {"name": f, "p0": 10}  # need p1 keys
-            nms.check_risefall(func, getinput=False)
+            func = {"name": f, "p0": 10}  # need p1 key
+            nms.check_risefall(func)
         with self.assertRaises(KeyError):
-            func = {"name": f, "p1": 90}  # need p1 keys
-            nms.check_risefall(func, getinput=False)
+            func = {"name": f, "p1": 90}  # need p0 key
+            nms.check_risefall(func)
 
         for b in nmu.badtypes(ok=["string"]):
             with self.assertRaises(TypeError):
@@ -972,41 +909,6 @@ class NMStatsTest(unittest.TestCase):
             p = nms.check_risefall(func)
             self.assertEqual(p["p0"], 36)
             self.assertEqual(p["p1"], None)
-
-    def test98_input_risefall(self):
-        f = "risetime+"
-        for b in nmu.badtypes(ok=["string"]):
-            with self.assertRaises(TypeError):
-                nms.input_risefall(b)
-        with self.assertRaises(ValueError):
-            nms.input_risefall("badfuncname")
-        for b in nmu.badtypes(ok=[None, "string"]):
-            with self.assertRaises(TypeError):
-                nms.input_risefall(f, test_input=b)
-        for b in ["-10", "nan", "inf"]:
-            with self.assertRaises(ValueError):
-                nms.input_risefall(f, test_input=b)
-
-        options = {1: [5, 95], 2: [10, 90], 3: [15, 85], 4: [20, 80]}
-        for f in ["risetime+", "risetime-", "risetimeslope+",
-                  "risetimeslope-"]:
-            for k, v in options.items():
-                p = nms.input_risefall(f, test_input=str(k))
-                self.assertEqual(p["name"], f)
-                self.assertEqual(p["p0"], v[0])
-                self.assertEqual(p["p1"], v[1])
-        options = {1: [95, 5], 2: [90, 10], 3: [85, 15], 4: [80, 20],
-                   5: [36.79, None]}
-        for f in ["falltime+", "falltime-", "falltimeslope+",
-                  "falltimeslope-"]:
-            for k, v in options.items():
-                p = nms.input_risefall(f, test_input=str(k))
-                self.assertEqual(p["name"], f)
-                self.assertEqual(p["p0"], v[0])
-                if v[1] is None:
-                    self.assertTrue(numpy.isnan(p["p1"]))
-                else:
-                    self.assertEqual(p["p1"], v[1])
 
     def test99_check_fwhm(self):
         for b in nmu.badtypes(ok=[{}, "string"]):
