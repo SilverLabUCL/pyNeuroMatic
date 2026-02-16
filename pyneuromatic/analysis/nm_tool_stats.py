@@ -466,7 +466,6 @@ class NMStatsWin:
     def _func_set(
         self,
         func: dict | str | None,
-        getinput: bool = True,
         quiet: bool = nmp.QUIET
     ) -> None:
 
@@ -507,15 +506,12 @@ class NMStatsWin:
         if not found:
             raise ValueError("func_name: %s" % func_name)
 
-        if not isinstance(getinput, bool):
-            getinput = False
-
         f = func_name.lower()
         func.update({"name": f})  # make sure key "name" exists
         if f in ["min", "max", "mean@max", "mean@min"]:
-            parameters = check_meanatmaxmin(func, getinput=getinput)
+            parameters = check_meanatmaxmin(func)
         elif f in ["level", "level+", "level-"]:
-            parameters = check_level(func, getinput=getinput)
+            parameters = check_level(func)
         elif "risetime" in f or "falltime" in f:
             parameters = check_risefall(func)
         elif f in ["fwhm+", "fwhm-"]:
@@ -553,28 +549,18 @@ class NMStatsWin:
         if math.isnan(x):
             raise ValueError(xname + ": %s" % x)
         n = xname.lower()
-        if n == "x0":
-            if math.isinf(x):
-                self.__x0 = -math.inf
-            else:
-                self.__x0 = x
-        elif n == "x1":
-            if math.isinf(x):
-                self.__x1 = math.inf
-            else:
-                self.__x1 = x
-        elif n == "bsln_x0":
-            if math.isinf(x):
-                self.__bsln_x0 = -math.inf
-            else:
-                self.__bsln_x0 = x
-        elif n == "bsln_x1":
-            if math.isinf(x):
-                self.__bsln_x1 = math.inf
-            else:
-                self.__bsln_x1 = x
-        else:
+        if n not in ("x0", "x1", "bsln_x0", "bsln_x1"):
             raise ValueError("xname: %s" % xname)
+        if math.isinf(x):
+            x = -math.inf if n.endswith("x0") else math.inf
+        if n == "x0":
+            self.__x0 = x
+        elif n == "x1":
+            self.__x1 = x
+        elif n == "bsln_x0":
+            self.__bsln_x0 = x
+        elif n == "bsln_x1":
+            self.__bsln_x1 = x
         return None
 
     @property
@@ -704,6 +690,19 @@ class NMStatsWin:
     def results(self) -> list[dict]:
         return self.__results
 
+    def _run_stat(self, data, func, id_str, x0, x1, xclip, ignore_nans,
+                  **extra):
+        """Create a result dict, append to results, and call stats()."""
+        r: dict[str, Any] = {"win": self.name, "id": id_str}
+        r.update(extra)
+        r["func"] = func
+        r["x0"] = x0
+        r["x1"] = x1
+        self.__results.append(r)
+        stats(data, func, x0=x0, x1=x1, xclip=xclip,
+              ignore_nans=ignore_nans, results=r)
+        return r
+
     def compute(
         self,
         data: NMData,
@@ -799,21 +798,9 @@ class NMStatsWin:
                     e = "level nstd requires baseline 'mean+std' computation"
                     raise RuntimeError(e)
 
-            b: dict[str, Any] = {}
-            b["win"] = self.name
-            b["id"] = "bsln"
-            b["func"] = self.__bsln_func.copy()
-            b["x0"] = self.__bsln_x0
-            b["x1"] = self.__bsln_x1
-            self.__results.append(b)
-            stats(
-                data,
-                self.__bsln_func,
-                x0=self.__bsln_x0,
-                x1=self.__bsln_x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=b
+            b = self._run_stat(
+                data, self.__bsln_func.copy(), "bsln",
+                self.__bsln_x0, self.__bsln_x1, xclip, ignore_nans
             )
 
             if level_nstd:
@@ -838,65 +825,22 @@ class NMStatsWin:
                 raise RuntimeError(e)
             b = {}  # empty baseline
 
-        r: dict[str, Any] = {}
-        r["win"] = self.name
-        self.__results.append(r)
         if fpeak:
-            r["id"] = f
-            r["func"] = fpeak
-            r["x0"] = self.__x0
-            r["x1"] = self.__x1
-            stats(
-                data,
-                fpeak,
-                x0=self.__x0,
-                x1=self.__x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r
-            )
+            main_id = f
+            main_func = fpeak
         elif fmaxmin:
-            r["id"] = "main"
-            r["func"] = fmaxmin
-            r["x0"] = self.__x0
-            r["x1"] = self.__x1
-            stats(
-                data,
-                fmaxmin,
-                x0=self.__x0,
-                x1=self.__x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r
-            )
+            main_id = "main"
+            main_func = fmaxmin
         elif flevelnstd:
-            r["id"] = "main"
-            r["func"] = flevelnstd
-            r["x0"] = self.__x0
-            r["x1"] = self.__x1
-            stats(
-                data,
-                flevelnstd,
-                x0=self.__x0,
-                x1=self.__x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r
-            )
+            main_id = "main"
+            main_func = flevelnstd
         else:
-            r["id"] = "main"
-            r["func"] = self.__func.copy()
-            r["x0"] = self.__x0
-            r["x1"] = self.__x1
-            stats(
-                data,
-                self.__func,
-                x0=self.__x0,
-                x1=self.__x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r
-            )
+            main_id = "main"
+            main_func = self.__func.copy()
+        r = self._run_stat(
+            data, main_func, main_id,
+            self.__x0, self.__x1, xclip, ignore_nans
+        )
 
         ds = math.nan
 
@@ -922,9 +866,6 @@ class NMStatsWin:
 
         flevel: dict[str, Any] = {}
         fslope: dict[str, Any] = {"name": "slope"}
-        r0: dict[str, Any] = {}
-        r1: dict[str, Any] = {}
-        r2: dict[str, Any] = {}
 
         if rise:
 
@@ -933,70 +874,34 @@ class NMStatsWin:
             elif "-" in f:
                 flevel["name"] = "level-"
             else:
-                e = "peak func '%s' requires '+' or '-' sign" % f
-                raise ValueError(e)
+                raise ValueError(
+                    "peak func '%s' requires '+' or '-' sign" % f)
 
             if "p0" in self.__func:
-                p0 = self.__func["p0"]  # %
+                p0 = self.__func["p0"]
             else:
-                e = "missing key 'p0'"
-                raise KeyError(e)
-            if p0 > 0 and p0 < 100:
-                pass
-            else:
-                e = "bad percent p0: %s" % p0
-                raise ValueError(e)
+                raise KeyError("missing key 'p0'")
+            if not (p0 > 0 and p0 < 100):
+                raise ValueError("bad percent p0: %s" % p0)
 
             if "p1" in self.__func:
-                p1 = self.__func["p1"]  # %
+                p1 = self.__func["p1"]
             else:
-                e = "missing key 'p1'"
-                raise KeyError(e)
-            if p1 > 0 and p1 < 100:
-                pass
-            else:
-                e = "bad percent p1: %s" % p1
-                raise ValueError(e)
+                raise KeyError("missing key 'p1'")
+            if not (p1 > 0 and p1 < 100):
+                raise ValueError("bad percent p1: %s" % p1)
 
             flevel["ylevel"] = 0.01 * p0 * ds
             x1 = r["x"]
-            r0["win"] = self.name
-            r0["id"] = f
-            r0["p0"] = p0
-            r0["func"] = flevel
-            r0["x0"] = self.__x0
-            r0["x1"] = x1
-            self.__results.append(r0)
-            stats(
-                data,
-                flevel,
-                x0=self.__x0,
-                x1=x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r0
+            r0 = self._run_stat(
+                data, flevel, f, self.__x0, x1, xclip, ignore_nans, p0=p0
             )
-
             r0_error = "x" not in r0 or badvalue(r0["x"])
 
             flevel["ylevel"] = 0.01 * p1 * ds
-            r1["win"] = self.name
-            r1["id"] = f
-            r1["p1"] = p1
-            r1["func"] = flevel
-            r1["x0"] = self.__x0
-            r1["x1"] = x1
-            self.__results.append(r1)
-            stats(
-                data,
-                flevel,
-                x0=self.__x0,
-                x1=x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r1
+            r1 = self._run_stat(
+                data, flevel, f, self.__x0, x1, xclip, ignore_nans, p1=p1
             )
-
             r1_error = "x" not in r1 or badvalue(r1["x"])
 
             if r1_error:
@@ -1011,22 +916,8 @@ class NMStatsWin:
                 r1["Δx"] = r1["x"] - r0["x"]
 
             if slope:
-                x0 = r0["x"]
-                x1 = r1["x"]
-                r2["win"] = self.name
-                r2["id"] = f
-                r2["func"] = fslope
-                r2["x0"] = x0
-                r2["x1"] = x1
-                self.__results.append(r2)
-                stats(
-                    data,
-                    fslope,
-                    x0=x0,
-                    x1=x1,
-                    xclip=xclip,
-                    ignore_nans=ignore_nans,
-                    results=r2
+                self._run_stat(
+                    data, fslope, f, r0["x"], r1["x"], xclip, ignore_nans
                 )
 
             return self.__results  # finished
@@ -1040,52 +931,27 @@ class NMStatsWin:
             elif "-" in f:
                 flevel["name"] = "level+"  # opposite sign
             else:
-                e = "peak func '%s' requires '+' or '-' sign" % f
-                raise ValueError(e)
+                raise ValueError(
+                    "peak func '%s' requires '+' or '-' sign" % f)
 
             if "p0" in self.__func:
-                p0 = self.__func["p0"]  # %
+                p0 = self.__func["p0"]
             else:
-                e = "missing key 'p0'"
-                raise KeyError(e)
-            if p0 > 0 and p0 < 100:
-                pass
-            else:
-                e = "bad percent p0: %s" % p0
-                raise ValueError(e)
+                raise KeyError("missing key 'p0'")
+            if not (p0 > 0 and p0 < 100):
+                raise ValueError("bad percent p0: %s" % p0)
 
             if "p1" in self.__func:
-                # p1 might not exist
-                p1 = self.__func["p1"]  # %
-                if p1 is None:
-                    pass
-                elif p1 > 0 and p1 < 100:
-                    pass
-                else:
-                    e = "bad percent p1: %s" % p1
-                    raise ValueError(e)
+                p1 = self.__func["p1"]
+                if p1 is not None and not (p1 > 0 and p1 < 100):
+                    raise ValueError("bad percent p1: %s" % p1)
 
             flevel["ylevel"] = 0.01 * p0 * ds
             x0 = r["x"]
-            r0["win"] = self.name
-            r0["id"] = f
-            r0["p0"] = p0
-            r0["func"] = flevel
-            r0["x0"] = x0
-            r0["x1"] = self.__x1
-            self.__results.append(r0)
-            stats(
-                data,
-                flevel,
-                x0=x0,
-                x1=self.__x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r0
+            r0 = self._run_stat(
+                data, flevel, f, x0, self.__x1, xclip, ignore_nans, p0=p0
             )
-
             r0_error = "x" not in r0 or badvalue(r0["x"])
-
             if r0_error:
                 r0["error"] = "unable to locate p0 level"
 
@@ -1098,23 +964,10 @@ class NMStatsWin:
             else:
 
                 flevel["ylevel"] = 0.01 * p1 * ds
-                r1["win"] = self.name
-                r1["id"] = f
-                r1["p1"] = p1
-                r1["func"] = flevel
-                r1["x0"] = x0
-                r1["x1"] = self.__x1
-                self.__results.append(r1)
-                stats(
-                    data,
-                    flevel,
-                    x0=x0,
-                    x1=self.__x1,
-                    xclip=xclip,
-                    ignore_nans=ignore_nans,
-                    results=r1
+                r1 = self._run_stat(
+                    data, flevel, f, x0, self.__x1, xclip, ignore_nans,
+                    p1=p1
                 )
-
                 r1_error = "x" not in r1 or badvalue(r1["x"])
 
                 if r1_error:
@@ -1130,26 +983,15 @@ class NMStatsWin:
 
             if slope:
                 if p1:
-                    x0 = r0["x"]
-                    x1 = r1["x"]
+                    self._run_stat(
+                        data, fslope, f, r0["x"], r1["x"],
+                        xclip, ignore_nans
+                    )
                 else:
-                    x0 = x0
-                    x1 = r0["x"]
-                r2["win"] = self.name
-                r2["id"] = f
-                r2["func"] = fslope
-                r2["x0"] = x0
-                r2["x1"] = x1
-                self.__results.append(r2)
-                stats(
-                    data,
-                    fslope,
-                    x0=x0,
-                    x1=x1,
-                    xclip=xclip,
-                    ignore_nans=ignore_nans,
-                    results=r2
-                )
+                    self._run_stat(
+                        data, fslope, f, x0, r0["x"],
+                        xclip, ignore_nans
+                    )
 
             return self.__results  # finished
 
@@ -1165,80 +1007,41 @@ class NMStatsWin:
                 flevel1["name"] = "level-"
                 flevel2["name"] = "level+"  # opposite sign
             else:
-                e = "peak func '%s' requires '+' or '-' sign" % f
-                raise ValueError(e)
+                raise ValueError(
+                    "peak func '%s' requires '+' or '-' sign" % f)
 
-            if "p0" in self.__func:
-                p0 = self.__func["p0"]  # %
-            else:
-                p0 = 50
-            if p0 > 0 and p0 < 100:
-                pass
-            else:
-                e = "bad percent p0: %s" % p0
-                raise ValueError(e)
-
-            if "p1" in self.__func:
-                p1 = self.__func["p1"]  # %
-            else:
-                p1 = 50
-            if p1 > 0 and p1 < 100:
-                pass
-            else:
-                e = "bad percent p1: %s" % p1
-                raise ValueError(e)
-            if p0 == 50 and p1 == 50:
-                w = None
-            else:
+            p0 = self.__func.get("p0", 50)
+            if not (p0 > 0 and p0 < 100):
+                raise ValueError("bad percent p0: %s" % p0)
+            p1 = self.__func.get("p1", 50)
+            if not (p1 > 0 and p1 < 100):
+                raise ValueError("bad percent p1: %s" % p1)
+            w = None
+            if p0 != 50 or p1 != 50:
                 w = "unusual fwhm %% values: %s-%s" % (p0, p1)
 
             flevel1["ylevel"] = 0.01 * p0 * ds
             x1 = r["x"]
-            r0["win"] = self.name
-            r0["id"] = f
-            r0["p0"] = p0
+            extra0 = {"p0": p0}
             if w:
-                r0["warning"] = w
-            r0["func"] = flevel1
-            r0["x0"] = self.__x0
-            r0["x1"] = x1
-            self.__results.append(r0)
-            stats(
-                data,
-                flevel1,
-                x0=self.__x0,
-                x1=x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r0
+                extra0["warning"] = w
+            r0 = self._run_stat(
+                data, flevel1, f, self.__x0, x1, xclip, ignore_nans,
+                **extra0
             )
-
             r0_error = "x" not in r0 or badvalue(r0["x"])
-
             if r0_error:
                 r0["error"] = "unable to locate p0 level"
 
             flevel2["ylevel"] = 0.01 * p1 * ds
             x0 = r["x"]
-            r1["win"] = self.name
-            r1["id"] = f
-            r1["p1"] = p1
+            extra1 = {"p1": p1}
             if w:
-                r1["warning"] = w
-            r1["func"] = flevel2
-            r1["x0"] = x0
-            r1["x1"] = self.__x1
-            self.__results.append(r1)
-            stats(
-                data,
-                flevel2,
-                x0=x0,
-                x1=self.__x1,
-                xclip=xclip,
-                ignore_nans=ignore_nans,
-                results=r1
+                extra1["warning"] = w
+            r1 = self._run_stat(
+                data, flevel2, f, x0, self.__x1, xclip, ignore_nans,
+                **extra1
             )
-
             r1_error = "x" not in r1 or badvalue(r1["x"])
 
             if r1_error:
@@ -1301,7 +1104,6 @@ def badvalue(n: float | None) -> bool:
 
 def check_meanatmaxmin(
     func: dict,  # name = "mean@max" or "mean@min"
-    getinput: bool = True
 ) -> dict:
     func_name = None
     imean = None
@@ -1337,8 +1139,6 @@ def check_meanatmaxmin(
         if imean is None:
             return {"name": f}
     elif imean is None:
-        if getinput:
-            return input_meanatmaxmin(f)
         raise KeyError("missing func key 'imean'")
     if math.isnan(imean) or math.isinf(imean) or imean < 0:
         raise ValueError("imean: '%s'" % imean)
@@ -1349,39 +1149,9 @@ def check_meanatmaxmin(
     return {}
 
 
-def input_meanatmaxmin(
-    func_name: str,  # "mean@max" or "mean@min"
-    test_input: str | None = None
-) -> dict:
-    if not isinstance(func_name, str):
-        e = nmu.type_error_str(func_name, "func_name", "string")
-        raise TypeError(e)
-    f = func_name.lower()
-    fnames = ["max", "min", "mean@max", "mean@min"]
-    if f not in fnames:
-        e = "func_name: '%s'" % func_name
-        e += "\n" + "expected one of the following: %s" % fnames
-        raise ValueError(e)
-    if f == "max" or f == "min":
-        f = "mean@" + f
-    if test_input is None:
-        istr = input("stats " + f + ": " +
-                     "enter # of data points for computing mean: ")
-        imean = int(istr)  # might raise type error
-    elif isinstance(test_input, str):
-        imean = int(test_input)  # might raise type error
-    else:
-        e = nmu.type_error_str(test_input, "test_input", "string or None")
-        raise TypeError(e)
-    if math.isnan(imean) or math.isinf(imean) or imean < 0:
-        raise ValueError("imean: '%s'" % imean)
-    return {"name": f, "imean": imean}
-
-
 def check_level(
     func: dict | str,
     option: int = 0,
-    getinput: bool = True
 ) -> dict:
     func_name = None
     ylevel = None
@@ -1433,113 +1203,31 @@ def check_level(
         e = "either 'ylevel' or 'nstd' is allowed, not both"
         raise KeyError(e)
 
-    if not isinstance(getinput, bool):
-        getinput = True
     if option not in options:
-        if getinput:
-            return input_level(f, option=0)
-        else:
-            raise KeyError("missing func key 'ylevel' or 'nstd'")
+        raise KeyError("missing func key 'ylevel' or 'nstd'")
     if option == 1:
         if ylevel is None:
-            if getinput:
-                return input_level(f, option=1)
-            else:
-                raise KeyError("missing func key 'ylevel'")
+            raise KeyError("missing func key 'ylevel'")
         if math.isnan(ylevel) or math.isinf(ylevel):
             raise ValueError("ylevel: '%s'" % ylevel)
         return {"name": f, "ylevel": ylevel}
     if option == 2:
         if nstd is None:
-            if getinput:
-                return input_level(f, option=2)
-            else:
-                raise KeyError("missing func key 'nstd'")
+            raise KeyError("missing func key 'nstd'")
         if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
             raise ValueError("nstd: '%s'" % nstd)
         return {"name": f, "nstd": abs(nstd)}
     if option == 3:
         if nstd is None:
-            if getinput:
-                return input_level(f, option=3)
-            else:
-                raise KeyError("missing func key 'nstd'")
+            raise KeyError("missing func key 'nstd'")
         if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
             raise ValueError("nstd: '%s'" % nstd)
         return {"name": f, "nstd": -1*abs(nstd)}
     raise ValueError("option: '%s'" % option)
 
 
-def input_level(
-    func_name: str,
-    option: int = 0,
-    test_input: str | None = None  # for ylevel or nstd
-) -> dict:
-    fnames = ["level", "level+", "level-"]
-    options = {1: "absolute level (ylevel)",
-               2: "# std (nstd) > baseline",
-               3: "# std (nstd) < baseline"}
-    if not isinstance(func_name, str):
-        e = nmu.type_error_str(func_name, "func_name", "string")
-        raise TypeError(e)
-    f = func_name.lower()
-    if f not in fnames:
-        e = "func name: '%s'" % func_name
-        e += "\n" + "expected one of the following: %s" % fnames
-        raise ValueError(e)
-    if test_input is None or isinstance(test_input, str):
-        pass
-    else:
-        e = nmu.type_error_str(test_input, "test_input", "string or None")
-        raise TypeError(e)
-    t = "stats " + f + ": "
-    if option not in options:
-        if test_input is None:
-            istr = t + "enter y-axis level detection option:"
-            for k, v in options.items():
-                istr += "\n" + "%s: find %s" % (k, v)
-            istr += "\n"
-            ostr = input(istr)
-            option = int(ostr)  # might raise type error
-        if option not in options:
-            raise ValueError("option: '%s'" % option)
-    if option == 1:
-        if test_input is None:
-            istr = t + "enter %s: " % options[1]
-            ystr = input(istr)
-            ylevel = float(ystr)  # might raise type error
-        else:
-            ylevel = float(test_input)  # might raise type error
-        if math.isnan(ylevel) or math.isinf(ylevel):
-            raise ValueError("ylevel: '%s'" % ylevel)
-        return {"name": f, "ylevel": ylevel}
-    elif option == 2:
-        if test_input is None:
-            istr = t + "enter %s: " % options[2]
-            nstr = input(istr)
-            nstd = float(nstr)  # might raise type error
-        else:
-            nstd = float(test_input)  # might raise type error
-        if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
-            raise ValueError("nstd: '%s'" % nstd)
-        return {"name": f, "nstd": abs(nstd)}
-    elif option == 3:
-        if test_input is None:
-            istr = t + "enter %s: " % options[3]
-            nstr = input(istr)
-            nstd = float(nstr)  # might raise type error
-        else:
-            nstd = float(test_input)  # might raise type error
-        if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
-            raise ValueError("nstd: '%s'" % nstd)
-        return {"name": f, "nstd": -1*abs(nstd)}
-    else:
-        raise ValueError("option: '%s'" % option)
-
-
 def check_risefall(
     func: dict | str,
-    getinput: bool = True,
 ) -> dict:
     # check func dictionary is ok
     # if necessary, get input for p0 and p1
@@ -1583,13 +1271,8 @@ def check_risefall(
     if not rise and not fall:
         raise ValueError("expected func name 'risetime' or 'falltime'")
 
-    if not isinstance(getinput, bool):
-        getinput = True
     if p0 is None:
-        if getinput:
-            return input_risefall(f)
-        else:
-            raise KeyError("missing func key 'p0'")
+        raise KeyError("missing func key 'p0'")
     elif math.isnan(p0) or math.isinf(p0):
         raise ValueError("p0: '%s'" % p0)
     elif p0 > 0 and p0 < 100:
@@ -1616,55 +1299,6 @@ def check_risefall(
         if p0 <= p1:
             e = "for falltime, need p0 > p1 but got %s <= %s" % (p0, p1)
             raise ValueError(e)
-    return {"name": f, "p0": p0, "p1": p1}
-
-
-def input_risefall(
-    func_name: str,
-    test_input: str | None = None
-) -> dict:
-    # get input for p0 and p1
-    fnames = ["risetime+", "risetime-", "risetimeslope+", "risetimeslope-",
-              "falltime+", "falltime-", "falltimeslope+", "falltimeslope-"]
-    if not isinstance(func_name, str):
-        e = nmu.type_error_str(func_name, "func_name", "string")
-        raise TypeError(e)
-    f = func_name.lower()
-    if f not in fnames:
-        e = "func name: '%s'" % func_name
-        e += "\n" + "expected one of the following: %s" % fnames
-        raise ValueError(e)
-    rise = "risetime" in f
-    fall = "falltime" in f
-    if rise:
-        options = {1: [5., 95.], 2: [10., 90.], 3: [15., 85.], 4: [20., 80.]}
-    elif fall:
-        options = {1: [95., 5.], 2: [90., 10.], 3: [85., 15.], 4: [80., 20.],
-                   5: [36.79, float('nan')]}  # 1/e = 36.79%
-    else:
-        raise ValueError("expected func name 'risetime' or 'falltime'")
-
-    if test_input is None:
-        istr = "stats " + f + ": enter option #:"
-        for k, v in options.items():
-            if v[1] is None:
-                istr += "\n" + "%s. %s%%" % (k, v[0])
-            else:
-                istr += "\n" + "%s. %s-%s%%" % (k, v[0], v[1])
-        istr += "\n" + ":"
-        pstr = input(istr)
-        option = int(pstr)  # might raise type error
-    elif isinstance(test_input, str):
-        option = int(test_input)
-    else:
-        e = nmu.type_error_str(test_input, "test_input", "string or None")
-        raise TypeError(e)
-    if option not in options:
-        keys = list(options.keys())
-        e = "valid options are %s but got '%s'" % (keys, option)
-        raise ValueError(e)
-    p0 = options[option][0]
-    p1 = options[option][1]
     return {"name": f, "p0": p0, "p1": p1}
 
 
