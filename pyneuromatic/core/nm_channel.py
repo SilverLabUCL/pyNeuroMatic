@@ -201,7 +201,7 @@ class NMChannelContainer(NMObjectContainer):
     # override
     def new(
         self,
-        name: str | None = None,  # not used, instead name = name_next()
+        name: str | None = None,  # not used, instead name = auto_name_next()
         select: bool = False,
         xscale: dict | None = None,
         yscale: dict | None = None,
@@ -216,6 +216,6 @@ class NMChannelContainer(NMObjectContainer):
             xscale=xscale,
             yscale=yscale
         )
-        if super()._new(c, select=select, quiet=quiet):
+        if super()._add(c, select=select, quiet=quiet):
             return c
         return None

@@ -861,7 +861,7 @@ class TestNMObjectContainerDuplicate(NMObjectContainerTestBase):
 
 
 class TestNMObjectContainerNew(NMObjectContainerTestBase):
-    """Tests for new() and _new() methods."""
+    """Tests for new() and _add() methods."""
 
     def test_new_rejects_bad_types(self):
         bad = list(BAD_TYPES)
@@ -879,7 +879,7 @@ class TestNMObjectContainerNew(NMObjectContainerTestBase):
         nnext = self.map0.auto_name_next()
         self.assertEqual(nnext, OPREFIX0 + "6")
         o = NMObject(parent=NM0, name=nnext)
-        self.assertTrue(self.map0._new(o))
+        self.assertTrue(self.map0._add(o))
         self.assertEqual(len(self.map0), len(ONLIST0) + 1)
 
 
@@ -1228,9 +1228,9 @@ class TestNMObjectContainerHistory(unittest.TestCase):
         self.container.new("itemX")
         self.assertIn("new 'itemX'", self._last_message())
 
-    def test_new_via_internal_logs(self):
+    def test_add_logs(self):
         o = NMObject(parent=self.nm, name="itemZ")
-        self.container._new(o, quiet=False)
+        self.container._add(o, quiet=False)
         self.assertIn("new 'itemZ'", self._last_message())
 
     def test_pop_logs(self):

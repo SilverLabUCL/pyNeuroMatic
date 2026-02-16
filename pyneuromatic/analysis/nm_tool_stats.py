@@ -1282,9 +1282,9 @@ class NMStatsWinContainer(NMObjectContainer):
     # override
     def new(  # type: ignore[override]
         self,
-        # name: str = 'A',  use name_next()
+        name: str | None = None,  # not used, instead name = auto_name_next()
         select: bool = False,
-        # quiet: bool = nmp.QUIET
+        quiet: bool = nmp.QUIET
     ) -> NMStatsWin | None:
         name = self.auto_name_next()
         istr = name.replace(self.auto_name_prefix, "")
@@ -1293,7 +1293,7 @@ class NMStatsWinContainer(NMObjectContainer):
         else:
             iseq = -1
         c = NMStatsWin(parent=self._parent, name=name)
-        if super()._new(c, select=select):
+        if super()._add(c, select=select, quiet=quiet):
             return c
         return None
 
