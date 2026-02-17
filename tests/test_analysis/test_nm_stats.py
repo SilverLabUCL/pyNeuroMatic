@@ -329,9 +329,9 @@ class NMStatsTest(unittest.TestCase):
 
         fnames = ('median', 'mean', 'mean+var', 'mean+std',
                   'mean+sem')
-        self.assertEqual(len(nms.BSLN_FUNC_NAMES), len(fnames))
+        self.assertEqual(len(nms.FUNC_NAMES_BSLN), len(fnames))
         for f in fnames:
-            self.assertTrue(f in nms.BSLN_FUNC_NAMES)
+            self.assertTrue(f in nms.FUNC_NAMES_BSLN)
 
     def test09_statswin_results(self):
         self.assertTrue(isinstance(self.w1.results, list))
@@ -680,287 +680,359 @@ class NMStatsTest(unittest.TestCase):
     def test92_linear_regression(self):
         pass  # TODO
 
-    def test93_check_meanatmaxmin(self):
-        # mean@max, mean@min
-        f = "mean@max"
-        for b in nmu.badtypes(ok=[{}, "string"]):
-            with self.assertRaises(TypeError):
-                nms.check_meanatmaxmin(b)
-        with self.assertRaises(KeyError):
-            func = {"badname": "max"}
-            nms.check_meanatmaxmin(func)
-        with self.assertRaises(KeyError):
-            func = {"name": "max", "badkey": 0}
-            nms.check_meanatmaxmin(func)
-
-        for b in nmu.badtypes(ok=["string"]):
-            with self.assertRaises(TypeError):
-                func = {"name": b}
-                nms.check_meanatmaxmin(func)
+    def test93_NMStatsFuncMaxMin(self):
+        # NMStatsFuncMaxMin constructor validation
         with self.assertRaises(ValueError):
-            func = {"name": "badfuncname"}
-            nms.check_meanatmaxmin(func)
+            nms.NMStatsFuncMaxMin("badfuncname")
 
         for b in [[], (), {}, set(), NM]:
             with self.assertRaises(TypeError):
-                func = {"name": f, "imean": b}
-                nms.check_meanatmaxmin(func)
+                nms.NMStatsFuncMaxMin("mean@max", imean=b)
         for b in [-10, math.nan, "badvalue"]:
             with self.assertRaises(ValueError):
-                func = {"name": f, "imean": b}
-                nms.check_meanatmaxmin(func)
+                nms.NMStatsFuncMaxMin("mean@max", imean=b)
         with self.assertRaises(OverflowError):
-            func = {"name": f, "imean": math.inf}
-            nms.check_meanatmaxmin(func)
+            nms.NMStatsFuncMaxMin("mean@max", imean=math.inf)
         with self.assertRaises(KeyError):
-            func = {"name": f}
-            nms.check_meanatmaxmin(func)
+            nms.NMStatsFuncMaxMin("mean@max")  # imean required
 
+        # max/min without imean → stays max/min
+        t = nms.NMStatsFuncMaxMin("max")
+        self.assertEqual(t.name, "max")
+        self.assertEqual(t.to_dict(), {"name": "max"})
+        t = nms.NMStatsFuncMaxMin("min")
+        self.assertEqual(t.name, "min")
+
+        # max/min + imean → upgrades to mean@max/mean@min
         for f in ["min", "max", "mean@max", "mean@min"]:
-            func = {"name": f, "imean": 10}
-            p = nms.check_meanatmaxmin(func)
+            t = nms.NMStatsFuncMaxMin(f, imean=10)
             if f == "min" or f == "max":
-                self.assertEqual(p["name"], "mean@"+f)  # changes
+                self.assertEqual(t.name, "mean@" + f)
             else:
-                self.assertEqual(p["name"], f)
-            self.assertEqual(p["imean"], 10)
-            func = {"NAME": f.upper(), "IMEAN": 10}
-            p = nms.check_meanatmaxmin(func)
+                self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["imean"], 10)
+
+        # _stats_func_from_dict
+        for f in ["min", "max", "mean@max", "mean@min"]:
+            t = nms._stats_func_from_dict({"name": f, "imean": 10})
             if f == "min" or f == "max":
-                self.assertEqual(p["name"], "mean@"+f)
+                self.assertEqual(t.name, "mean@" + f)
             else:
-                self.assertEqual(p["name"], f)
-            self.assertEqual(p["imean"], 10)
+                self.assertEqual(t.name, f)
+            self.assertEqual(t["imean"], 10)
 
-    def test95_check_level(self):
-        f = "level"
-        for b in nmu.badtypes(ok=[{}, "string"]):
-            with self.assertRaises(TypeError):
-                nms.check_level(b)
+        # unknown key via _stats_func_from_dict
         with self.assertRaises(KeyError):
-            func = {"badname": f}
-            nms.check_level(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f, "badkey": 0}
-            nms.check_level(func)
-        with self.assertRaises(KeyError):  # both keys not allowed
-            func = {"name": f, "ylevel": 10, "nstd": 2}
-            nms.check_level(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f}
-            nms.check_level(func)
+            nms._stats_func_from_dict({"name": "max", "badkey": 0})
 
-        for b in nmu.badtypes(ok=["string"]):
-            with self.assertRaises(TypeError):
-                func = {"name": b}
-                nms.check_level(func)
-        for b in ["badfuncname", "ylevel", "max"]:
-            with self.assertRaises(ValueError):
-                func = {"name": b}
-                nms.check_level(func)
+    def test95_NMStatsFuncLevel(self):
+        # NMStatsFuncLevel (ylevel) constructor validation
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncLevel("badfuncname", ylevel=10)
+        with self.assertRaises(KeyError):  # missing ylevel
+            nms.NMStatsFuncLevel("level")
 
         for b in [[], (), {}, set(), NM]:
             with self.assertRaises(TypeError):
-                func = {"name": f, "ylevel": b}
-                nms.check_level(func)
+                nms.NMStatsFuncLevel("level", ylevel=b)
         for b in [math.nan, math.inf, "badvalue"]:
             with self.assertRaises(ValueError):
-                func = {"name": f, "ylevel": b}
-                nms.check_level(func)
-        for b in [math.nan, math.inf, "badvalue", 0]:
-            with self.assertRaises(ValueError):
-                func = {"name": f, "nstd": b}
-                nms.check_level(func)
-        for b in [None, [], (), {}, set(), NM]:
-            with self.assertRaises(TypeError):
-                func = {"name": f, "option": b}
-                nms.check_level(func)
-        for b in [math.nan, "badvalue"]:
-            with self.assertRaises(ValueError):
-                func = {"name": f, "option": b}
-                nms.check_level(func)
-        with self.assertRaises(OverflowError):
-            func = {"name": f, "option": math.inf}
-            nms.check_level(func)
+                nms.NMStatsFuncLevel("level", ylevel=b)
 
         for f in ["level", "level+", "level-"]:
             y = 10
-            func = {"name": f, "ylevel": y}
-            p = nms.check_level(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["ylevel"], y)
-            func = {"NAME": f.upper(), "YLEVEL": y}
-            p = nms.check_level(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["ylevel"], y)
-            n = 2
-            func = {"name": f, "nstd": n}
-            p = nms.check_level(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["nstd"], n)
-            func = {"NAME": f.upper(), "NSTD": n}
-            p = nms.check_level(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["nstd"], n)
-            n = -2
-            func = {"name": f, "nstd": n}
-            p = nms.check_level(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["nstd"], n)
-            func = {"NAME": f.upper(), "NSTD": n}
-            p = nms.check_level(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["nstd"], n)
+            t = nms.NMStatsFuncLevel(f, ylevel=y)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["ylevel"], y)
+            self.assertFalse(t.needs_baseline)
 
-        with self.assertRaises(KeyError):
-            func = {"name": f}
-            nms.check_level(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f}
-            nms.check_level(func, option=1)
-        func = {"name": f, "ylevel": 10}
-        p = nms.check_level(func, option=3)
-        self.assertEqual(p["ylevel"], 10)  # option is ignored
+        # NMStatsFuncLevelNstd constructor validation
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncLevelNstd("badfuncname", nstd=2)
+        with self.assertRaises(KeyError):  # missing nstd
+            nms.NMStatsFuncLevelNstd("level")
 
-    def test97_check_risefall(self):
-        f = "risetime+"
-        for b in nmu.badtypes(ok=[{}, "string"]):
-            with self.assertRaises(TypeError):
-                nms.check_risefall(b)
-        with self.assertRaises(KeyError):
-            func = {"badname": f}
-            nms.check_risefall(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f, "badkey": 10}
-            nms.check_risefall(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f, "p0": 10, "badkey": 90}
-            nms.check_risefall(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f}  # need p0 and p1 keys
-            nms.check_risefall(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f, "p0": 10}  # need p1 key
-            nms.check_risefall(func)
-        with self.assertRaises(KeyError):
-            func = {"name": f, "p1": 90}  # need p0 key
-            nms.check_risefall(func)
-
-        for b in nmu.badtypes(ok=["string"]):
-            with self.assertRaises(TypeError):
-                func = {"name": b}
-                nms.check_risefall(func)
-        for b in ["badfuncname", "rise", "fall"]:
+        for b in [math.nan, math.inf, "badvalue", 0]:
             with self.assertRaises(ValueError):
-                func = {"name": b}
-                nms.check_risefall(func)
+                nms.NMStatsFuncLevelNstd("level", nstd=b)
+
+        for f in ["level", "level+", "level-"]:
+            n = 2
+            t = nms.NMStatsFuncLevelNstd(f, nstd=n)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["nstd"], n)
+            self.assertTrue(t.needs_baseline)
+
+            n = -2
+            t = nms.NMStatsFuncLevelNstd(f, nstd=n)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["nstd"], n)
+
+        # validate_baseline
+        t = nms.NMStatsFuncLevelNstd("level", nstd=2)
+        with self.assertRaises(RuntimeError):
+            t.validate_baseline(None)
+        with self.assertRaises(RuntimeError):
+            t.validate_baseline("mean")
+        t.validate_baseline("mean+std")  # ok
+
+        # _stats_func_from_dict dispatch
+        t = nms._stats_func_from_dict({"name": "level+", "ylevel": 10})
+        self.assertIsInstance(t, nms.NMStatsFuncLevel)
+        self.assertEqual(t.name, "level+")
+        self.assertEqual(t["ylevel"], 10)
+
+        t = nms._stats_func_from_dict({"name": "level-", "nstd": -2})
+        self.assertIsInstance(t, nms.NMStatsFuncLevelNstd)
+        self.assertEqual(t.name, "level-")
+        self.assertEqual(t["nstd"], -2)
+
+        with self.assertRaises(KeyError):  # both keys
+            nms._stats_func_from_dict(
+                {"name": "level", "ylevel": 10, "nstd": 2})
+        with self.assertRaises(KeyError):  # neither key
+            nms._stats_func_from_dict({"name": "level"})
+        with self.assertRaises(KeyError):  # bad key
+            nms._stats_func_from_dict({"name": "level", "badkey": 0})
+
+    def test97_NMStatsFuncRiseFall(self):
+        # NMStatsFuncRise constructor validation
+        f = "risetime+"
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncRiseTime("badfuncname", p0=10, p1=90)
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncRiseTime("falltime+", p0=90, p1=10)
+
+        with self.assertRaises(KeyError):
+            nms.NMStatsFuncRiseTime(f)  # need p0
+        with self.assertRaises(KeyError):
+            nms.NMStatsFuncRiseTime(f, p0=10)  # rise needs p1
+        with self.assertRaises(KeyError):
+            nms.NMStatsFuncRiseTime(f, p1=90)  # need p0
 
         for b in [[], (), {}, set(), NM]:
             with self.assertRaises(TypeError):
-                func = {"name": f, "p0": b}
-                nms.check_risefall(func)
+                nms.NMStatsFuncRiseTime(f, p0=b, p1=90)
             with self.assertRaises(TypeError):
-                func = {"name": f, "p0": 10, "p1": b}
-                nms.check_risefall(func)
+                nms.NMStatsFuncRiseTime(f, p0=10, p1=b)
         for b in [math.nan, math.inf, "badvalue"]:
             with self.assertRaises(ValueError):
-                func = {"name": f, "p0": b}
-                nms.check_risefall(func)
+                nms.NMStatsFuncRiseTime(f, p0=b, p1=90)
             with self.assertRaises(ValueError):
-                func = {"name": f, "p0": 10, "p1": b}
-                nms.check_risefall(func)
+                nms.NMStatsFuncRiseTime(f, p0=10, p1=b)
 
-        with self.assertRaises(KeyError):
-            func = {"name": f, "p0": 63}  # need p1
-            nms.check_risefall(func)
-        for b in [105, -1, "badvalue"]:
+        for b in [105, -1]:
             with self.assertRaises(ValueError):
-                func = {"name": f, "p0": b}
-                nms.check_risefall(func)
+                nms.NMStatsFuncRiseTime(f, p0=b, p1=90)
         with self.assertRaises(ValueError):
-            func = {"name": f, "p0": 90, "p1": 10}  # backwards
-            nms.check_risefall(func)
-        with self.assertRaises(ValueError):
-            func = {"name": "falltime+", "p0": 10, "p1": 90}  # backwards
-            nms.check_risefall(func)
-        func = {"name": "falltime+", "p0": 36}
-        p = nms.check_risefall(func)
-        self.assertEqual(p["p0"], 36)
+            nms.NMStatsFuncRiseTime(f, p0=90, p1=10)  # backwards
 
         for f in ["risetime+", "risetime-", "risetimeslope+",
                   "risetimeslope-"]:
-            func = {"name": f, "p0": 10, "p1": 90}
-            p = nms.check_risefall(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["p0"], 10)
-            self.assertEqual(p["p1"], 90)
-            func = {"name": f, "p0": 10.5, "p1": 89.5}
-            p = nms.check_risefall(func)
-            self.assertEqual(p["p0"], 10.5)
-            self.assertEqual(p["p1"], 89.5)
-        for f in ["falltime+", "falltime-", "falltimeslope+",
-                  "falltimeslope-"]:
-            func = {"name": f, "p0": 90, "p1": 10}
-            p = nms.check_risefall(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["p0"], 90)
-            self.assertEqual(p["p1"], 10)
-            func = {"name": f, "p0": 36}
-            p = nms.check_risefall(func)
-            self.assertEqual(p["p0"], 36)
-            self.assertEqual(p["p1"], None)
+            t = nms.NMStatsFuncRiseTime(f, p0=10, p1=90)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["p0"], 10)
+            self.assertEqual(t.to_dict()["p1"], 90)
+            t = nms.NMStatsFuncRiseTime(f, p0=10.5, p1=89.5)
+            self.assertEqual(t.to_dict()["p0"], 10.5)
+            self.assertEqual(t.to_dict()["p1"], 89.5)
 
-    def test99_check_fwhm(self):
-        for b in nmu.badtypes(ok=[{}, "string"]):
-            with self.assertRaises(TypeError):
-                p = nms.check_fwhm(b)
-        with self.assertRaises(KeyError):
-            func = {"badname": "fwhm+"}
-            p = nms.check_fwhm(func)
-        with self.assertRaises(KeyError):
-            func = {"name": "fwhm+", "badkey": 0}
-            p = nms.check_fwhm(func)
+        # needs_baseline and validate_baseline
+        t = nms.NMStatsFuncRiseTime("risetime+", p0=10, p1=90)
+        self.assertTrue(t.needs_baseline)
+        with self.assertRaises(RuntimeError):
+            t.validate_baseline(None)
+        t.validate_baseline("mean")  # ok
+        t.validate_baseline("median")  # ok
 
-        for b in nmu.badtypes(ok=["string"]):
-            with self.assertRaises(TypeError):
-                func = {"name": b}
-                nms.check_fwhm(func)
-        for b in ["badfuncname", "fwhmslope+", "fwhm"]:
-            with self.assertRaises(ValueError):
-                func = {"name": b}
-                nms.check_fwhm(func)
+        # _stats_func_from_dict
+        t = nms._stats_func_from_dict(
+            {"name": "risetime+", "p0": 10, "p1": 90})
+        self.assertIsInstance(t, nms.NMStatsFuncRiseTime)
+        self.assertEqual(t.name, "risetime+")
+        with self.assertRaises(KeyError):
+            nms._stats_func_from_dict(
+                {"name": "risetime+", "p0": 10, "badkey": 90})
+
+        # NMStatsFuncFall constructor validation
+        f = "falltime+"
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncFallTime("badfuncname", p0=90)
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncFallTime("risetime+", p0=10, p1=90)
+
+        with self.assertRaises(KeyError):
+            nms.NMStatsFuncFallTime(f)  # need p0
 
         for b in [[], (), {}, set(), NM]:
             with self.assertRaises(TypeError):
-                func = {"name": "fwhm+", "p0": b, "p1": 50}
-                nms.check_fwhm(func)
+                nms.NMStatsFuncFallTime(f, p0=b)
+        for b in [math.nan, math.inf, "badvalue"]:
+            with self.assertRaises(ValueError):
+                nms.NMStatsFuncFallTime(f, p0=b)
+
+        for b in [105, -1]:
+            with self.assertRaises(ValueError):
+                nms.NMStatsFuncFallTime(f, p0=b)
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncFallTime(f, p0=10, p1=90)  # backwards
+
+        # falltime p0 without p1 is ok
+        t = nms.NMStatsFuncFallTime("falltime+", p0=36)
+        self.assertEqual(t.to_dict()["p0"], 36)
+        self.assertIsNone(t.to_dict()["p1"])
+
+        for f in ["falltime+", "falltime-", "falltimeslope+",
+                  "falltimeslope-"]:
+            t = nms.NMStatsFuncFallTime(f, p0=90, p1=10)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["p0"], 90)
+            self.assertEqual(t.to_dict()["p1"], 10)
+            t = nms.NMStatsFuncFallTime(f, p0=36)
+            self.assertEqual(t.to_dict()["p0"], 36)
+            self.assertIsNone(t.to_dict()["p1"])
+
+        # needs_baseline and validate_baseline
+        t = nms.NMStatsFuncFallTime("falltime+", p0=90, p1=10)
+        self.assertTrue(t.needs_baseline)
+        with self.assertRaises(RuntimeError):
+            t.validate_baseline(None)
+        t.validate_baseline("mean")  # ok
+        t.validate_baseline("median")  # ok
+
+        # _stats_func_from_dict
+        t = nms._stats_func_from_dict(
+            {"name": "falltime+", "p0": 90, "p1": 10})
+        self.assertIsInstance(t, nms.NMStatsFuncFallTime)
+        self.assertEqual(t.name, "falltime+")
+        with self.assertRaises(KeyError):
+            nms._stats_func_from_dict(
+                {"name": "falltime+", "p0": 90, "badkey": 10})
+
+    def test99_NMStatsFuncFWHM(self):
+        # NMStatsFuncFWHM constructor validation
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncFWHM("badfuncname")
+
+        for b in [[], (), {}, set(), NM]:
             with self.assertRaises(TypeError):
-                func = {"name": "fwhm+", "p0": 50, "p1": b}
-                nms.check_fwhm(func)
+                nms.NMStatsFuncFWHM("fwhm+", p0=b, p1=50)
+            with self.assertRaises(TypeError):
+                nms.NMStatsFuncFWHM("fwhm+", p0=50, p1=b)
         for b in [-10, 110, math.nan, math.inf, "badvalue"]:
             with self.assertRaises(ValueError):
-                func = {"name": "fwhm+", "p0": b, "p1": 50}
-                nms.check_fwhm(func)
+                nms.NMStatsFuncFWHM("fwhm+", p0=b, p1=50)
             with self.assertRaises(ValueError):
-                func = {"name": "fwhm+", "p0": 50, "p1": b}
-                nms.check_fwhm(func)
+                nms.NMStatsFuncFWHM("fwhm+", p0=50, p1=b)
 
         for f in ["fwhm+", "fwhm-"]:
-            func = {"name": f}
-            p = nms.check_fwhm(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["p0"], 50)
-            self.assertEqual(p["p1"], 50)
-            func = f
-            p = nms.check_fwhm(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["p0"], 50)
-            self.assertEqual(p["p1"], 50)
-            func = {"NAME": f.upper(), "P0": 45, "P1": 55}
-            p = nms.check_fwhm(func)
-            self.assertEqual(p["name"], f)
-            self.assertEqual(p["p0"], 45)
-            self.assertEqual(p["p1"], 55)
+            # defaults to 50/50
+            t = nms.NMStatsFuncFWHM(f)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["p0"], 50)
+            self.assertEqual(t.to_dict()["p1"], 50)
+            # custom values
+            t = nms.NMStatsFuncFWHM(f, p0=45, p1=55)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict()["p0"], 45)
+            self.assertEqual(t.to_dict()["p1"], 55)
+
+        # needs_baseline and validate_baseline
+        t = nms.NMStatsFuncFWHM("fwhm+")
+        self.assertTrue(t.needs_baseline)
+        with self.assertRaises(RuntimeError):
+            t.validate_baseline(None)
+        t.validate_baseline("mean")  # ok
+        t.validate_baseline("median")  # ok
+
+        # _stats_func_from_dict with defaults
+        t = nms._stats_func_from_dict({"name": "fwhm+"})
+        self.assertEqual(t.name, "fwhm+")
+        self.assertEqual(t["p0"], 50)
+        self.assertEqual(t["p1"], 50)
+        t = nms._stats_func_from_dict({"name": "fwhm-", "p0": 45, "p1": 55})
+        self.assertEqual(t["p0"], 45)
+        self.assertEqual(t["p1"], 55)
+        with self.assertRaises(KeyError):
+            nms._stats_func_from_dict({"name": "fwhm+", "badkey": 0})
+
+    def test100_NMStatsFunc_base(self):
+        # NMStatsFunc base class
+        import copy
+        t = nms.NMStatsFunc("test")
+        self.assertEqual(t.name, "test")
+        self.assertFalse(t.needs_baseline)
+        self.assertEqual(t.to_dict(), {"name": "test"})
+        self.assertEqual(t["name"], "test")
+        with self.assertRaises(KeyError):
+            t["nonexistent"]
+        with self.assertRaises(NotImplementedError):
+            t.compute(None, 0, 1, False, False, None, {})
+
+        # deepcopy resets _parent
+        parent = object()
+        t = nms.NMStatsFuncBasic("mean", parent=parent)
+        t2 = copy.deepcopy(t)
+        self.assertIsNone(t2._parent)
+        self.assertEqual(t, t2)
+
+        # __eq__
+        t1 = nms.NMStatsFuncBasic("mean")
+        t2 = nms.NMStatsFuncBasic("mean")
+        self.assertEqual(t1, t2)
+        t3 = nms.NMStatsFuncBasic("median")
+        self.assertNotEqual(t1, t3)
+        self.assertEqual(t1, {"name": "mean"})
+        self.assertEqual(t1.__eq__(42), NotImplemented)
+
+        # __repr__
+        t = nms.NMStatsFuncBasic("mean")
+        self.assertIn("NMStatsFuncBasic", repr(t))
+        self.assertIn("mean", repr(t))
+
+    def test101_NMStatsFuncBasic(self):
+        # NMStatsFuncBasic constructor validation
+        with self.assertRaises(ValueError):
+            nms.NMStatsFuncBasic("badfuncname")
+        for f in nms.FUNC_NAMES_BASIC:
+            t = nms.NMStatsFuncBasic(f)
+            self.assertEqual(t.name, f)
+            self.assertEqual(t.to_dict(), {"name": f})
+
+    def test102_stats_func_from_dict(self):
+        # _stats_func_from_dict helper
+        self.assertIsNone(nms._stats_func_from_dict(None))
+        self.assertIsNone(nms._stats_func_from_dict({}))
+        self.assertIsNone(nms._stats_func_from_dict({"name": None}))
+
+        with self.assertRaises(KeyError):
+            nms._stats_func_from_dict({"badkey": "mean"})
+        with self.assertRaises(ValueError):
+            nms._stats_func_from_dict({"name": "badname"})
+        with self.assertRaises(TypeError):
+            nms._stats_func_from_dict(42)
+        with self.assertRaises(TypeError):
+            nms._stats_func_from_dict({"name": 42})
+
+        # string shorthand
+        t = nms._stats_func_from_dict("mean")
+        self.assertIsInstance(t, nms.NMStatsFuncBasic)
+        self.assertEqual(t.name, "mean")
+
+        # round-trip
+        for f in nms.FUNC_NAMES:
+            if f in nms.FUNC_NAMES_BASIC:
+                t = nms._stats_func_from_dict({"name": f})
+                self.assertEqual(t.name, f)
+            elif f in ("max", "min"):
+                t = nms._stats_func_from_dict({"name": f})
+                self.assertEqual(t.name, f)
+            elif f in ("mean@max", "mean@min"):
+                t = nms._stats_func_from_dict({"name": f, "imean": 5})
+                self.assertEqual(t.name, f)
+            elif f in nms.FUNC_NAMES_FWHM:
+                t = nms._stats_func_from_dict({"name": f})
+                self.assertEqual(t.name, f)
 
 
 if __name__ == "__main__":
