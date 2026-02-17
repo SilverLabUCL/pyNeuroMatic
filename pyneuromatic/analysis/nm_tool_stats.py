@@ -77,7 +77,7 @@ FUNC_NAMES = (
     "fwhm-"
 )
 
-BSLN_FUNC_NAMES = (
+FUNC_NAMES_BSLN = (
     "median",
     "mean",
     "mean+var",
@@ -92,6 +92,635 @@ BSLN_FUNC_NAMES = (
     # "area",
     # "slope",
 )
+
+
+def badvalue(n: float | None) -> bool:
+    return n is None or math.isnan(n) or math.isinf(n)
+
+
+# =========================================================================
+# Stats function classes
+# =========================================================================
+
+FUNC_NAMES_BASIC = (
+    "median", "mean", "mean+var", "mean+std", "mean+sem",
+    "var", "std", "sem", "rms", "sum", "pathlength", "area", "slope",
+    "value@x0", "value@x1", "count", "count_nans", "count_infs",
+)
+
+FUNC_NAMES_MAXMIN = ("max", "min", "mean@max", "mean@min")
+
+FUNC_NAMES_LEVEL = ("level", "level+", "level-")
+
+FUNC_NAMES_RISETIME = (
+    "risetime+", "risetime-", "risetimeslope+", "risetimeslope-",
+)
+
+FUNC_NAMES_FALLTIME = (
+    "falltime+", "falltime-", "falltimeslope+", "falltimeslope-",
+)
+
+FUNC_NAMES_FWHM = ("fwhm+", "fwhm-")
+
+
+class NMStatsFunc:
+    """Base class for stats function types.
+
+    Lightweight class (following NMTransform pattern) that represents
+    a statistics function with its parameters and compute pipeline.
+    """
+
+    _VALID_KEYS: set[str] = set()
+
+    def __init__(self, name: str, parent: object | None = None) -> None:
+        self._parent = parent
+        self._name = name
+
+    def __repr__(self) -> str:
+        d = self.to_dict()
+        params = ", ".join("%s=%r" % (k, v) for k, v in d.items())
+        return "%s(%s)" % (self.__class__.__name__, params)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, NMStatsFunc):
+            return self.to_dict() == other.to_dict()
+        if isinstance(other, dict):
+            return self.to_dict() == other
+        return NotImplemented
+
+    def __deepcopy__(self, memo: dict) -> NMStatsFunc:
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for attr, value in self.__dict__.items():
+            if attr == "_parent":
+                setattr(result, attr, None)
+            else:
+                setattr(result, attr, copy.deepcopy(value, memo))
+        return result
+
+    def __getitem__(self, key: str) -> object:
+        d = self.to_dict()
+        if key in d:
+            return d[key]
+        raise KeyError(key)
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def to_dict(self) -> dict:
+        return {"name": self._name}
+
+    @property
+    def needs_baseline(self) -> bool:
+        return False
+
+    def validate_baseline(self, bsln_func_name: str | None) -> None:
+        pass
+
+    def _add_ds(self, r: dict, bsln_result: dict) -> float:
+        """Compute Δs (stat minus baseline) and add to result dict."""
+        ds = math.nan
+        if bsln_result:
+            if "s" in bsln_result:
+                bs = bsln_result["s"]
+                if "s" in r:
+                    rs = r["s"]
+                elif isinstance(r.get("func"), dict) and "ylevel" in r["func"]:
+                    rs = r["func"]["ylevel"]
+                else:
+                    rs = math.nan
+                if not badvalue(bs) and not badvalue(rs):
+                    ds = rs - bs
+            r["Δs"] = ds
+        return ds
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        raise NotImplementedError(
+            "%s.compute() not implemented" % self.__class__.__name__
+        )
+
+
+class NMStatsFuncBasic(NMStatsFunc):
+    """Stats functions with no parameters (mean, median, var, etc.)."""
+
+    def __init__(self, name: str, parent: object | None = None) -> None:
+        if name.lower() not in FUNC_NAMES_BASIC:
+            raise ValueError("func name: '%s'" % name)
+        super().__init__(name.lower(), parent=parent)
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        r = run_stat(data, {"name": self._name}, "main",
+                     x0, x1, xclip, ignore_nans)
+        self._add_ds(r, bsln_result)
+
+
+class NMStatsFuncMaxMin(NMStatsFunc):
+    """Max, min, mean@max, mean@min functions."""
+
+    _VALID_KEYS = {"imean"}
+
+    def __init__(
+        self, name: str, imean: int | None = None,
+        parent: object | None = None
+    ) -> None:
+        if name.lower() not in FUNC_NAMES_MAXMIN:
+            raise ValueError("func name: '%s'" % name)
+        f = name.lower()
+        if f in ("mean@max", "mean@min"):
+            if imean is None:
+                raise KeyError("missing func key 'imean'")
+        if imean is not None:
+            imean = int(imean)  # raises TypeError/ValueError/OverflowError
+            if imean < 0:
+                raise ValueError("imean: '%s'" % imean)
+            # Upgrade max→mean@max, min→mean@min when imean is provided
+            if f == "max":
+                f = "mean@max"
+            elif f == "min":
+                f = "mean@min"
+        super().__init__(f, parent=parent)
+        self._imean = imean
+
+    def to_dict(self) -> dict:
+        d = {"name": self._name}
+        if self._imean is not None:
+            d["imean"] = self._imean
+        return d
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        func: dict[str, Any] = {"name": self._name}
+        if self._imean is not None:
+            func["imean"] = self._imean
+        if self._name in ("mean@max", "mean@min"):
+            imean = self._imean if self._imean is not None else 0
+            if imean <= 1:
+                func["warning"] = "not enough data points to compute a mean"
+        r = run_stat(data, func, "main", x0, x1, xclip, ignore_nans)
+        self._add_ds(r, bsln_result)
+
+
+class NMStatsFuncLevel(NMStatsFunc):
+    """Level with explicit ylevel value."""
+
+    _VALID_KEYS = {"ylevel"}
+
+    def __init__(
+        self, name: str, ylevel: float | None = None,
+        parent: object | None = None
+    ) -> None:
+        if name.lower() not in FUNC_NAMES_LEVEL:
+            raise ValueError("func name: '%s'" % name)
+        if ylevel is None:
+            raise KeyError("missing func key 'ylevel'")
+        ylevel = float(ylevel)
+        if math.isnan(ylevel) or math.isinf(ylevel):
+            raise ValueError("ylevel: '%s'" % ylevel)
+        super().__init__(name.lower(), parent=parent)
+        self._ylevel = ylevel
+
+    def to_dict(self) -> dict:
+        return {"name": self._name, "ylevel": self._ylevel}
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        func: dict[str, Any] = {"name": self._name, "ylevel": self._ylevel}
+        r = run_stat(data, func, "main", x0, x1, xclip, ignore_nans)
+        self._add_ds(r, bsln_result)
+
+
+class NMStatsFuncLevelNstd(NMStatsFunc):
+    """Level computed from baseline mean +/- nstd * std."""
+
+    _VALID_KEYS = {"nstd"}
+
+    def __init__(
+        self, name: str, nstd: float | None = None,
+        parent: object | None = None
+    ) -> None:
+        if name.lower() not in FUNC_NAMES_LEVEL:
+            raise ValueError("func name: '%s'" % name)
+        if nstd is None:
+            raise KeyError("missing func key 'nstd'")
+        nstd = float(nstd)
+        if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
+            raise ValueError("nstd: '%s'" % nstd)
+        super().__init__(name.lower(), parent=parent)
+        self._nstd = nstd
+
+    def to_dict(self) -> dict:
+        return {"name": self._name, "nstd": self._nstd}
+
+    @property
+    def needs_baseline(self) -> bool:
+        return True
+
+    def validate_baseline(self, bsln_func_name: str | None) -> None:
+        if bsln_func_name is None or bsln_func_name.lower() != "mean+std":
+            raise RuntimeError(
+                "level nstd requires baseline 'mean+std' computation"
+            )
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        nstd = self._nstd
+        ylevel = math.nan
+        if "s" in bsln_result and "std" in bsln_result:
+            s = bsln_result["s"]
+            std = bsln_result["std"]
+            if not badvalue(s) and not badvalue(std):
+                ylevel = s + nstd * std
+        func: dict[str, Any] = {"name": self._name, "ylevel": ylevel}
+        r = run_stat(data, func, "main", x0, x1, xclip, ignore_nans)
+        self._add_ds(r, bsln_result)
+
+
+class NMStatsFuncRiseTime(NMStatsFunc):
+    """Rise time functions (risetime+/-, risetimeslope+/-)."""
+
+    _VALID_KEYS = {"p0", "p1"}
+
+    def __init__(
+        self, name: str, p0: float | None = None,
+        p1: float | None = None, parent: object | None = None
+    ) -> None:
+        if name.lower() not in FUNC_NAMES_RISETIME:
+            raise ValueError("func name: '%s'" % name)
+        f = name.lower()
+        if p0 is None:
+            raise KeyError("missing func key 'p0'")
+        p0 = float(p0)
+        if math.isnan(p0) or math.isinf(p0):
+            raise ValueError("p0: '%s'" % p0)
+        if not (p0 > 0 and p0 < 100):
+            raise ValueError("bad percent p0: %s" % p0)
+        if p1 is None:
+            raise KeyError("missing func key 'p1'")
+        p1 = float(p1)
+        if math.isnan(p1) or math.isinf(p1):
+            raise ValueError("p1: '%s'" % p1)
+        if not (p1 > 0 and p1 < 100):
+            raise ValueError("bad percent p1: %s" % p1)
+        if p0 >= p1:
+            raise ValueError(
+                "for risetime, need p0 < p1 but got %s >= %s" % (p0, p1))
+        super().__init__(f, parent=parent)
+        self._p0 = p0
+        self._p1 = p1
+
+    def to_dict(self) -> dict:
+        return {"name": self._name, "p0": self._p0, "p1": self._p1}
+
+    @property
+    def needs_baseline(self) -> bool:
+        return True
+
+    def validate_baseline(self, bsln_func_name: str | None) -> None:
+        if bsln_func_name is None:
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+        bf = bsln_func_name.lower()
+        if "mean" not in bf and bf != "median":
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        f = self._name
+        slope = "slope" in f
+
+        # Peak stat
+        if "+" in f:
+            peak_func: dict[str, Any] = {"name": "max"}
+            flevel: dict[str, Any] = {"name": "level+"}
+        else:
+            peak_func = {"name": "min"}
+            flevel = {"name": "level-"}
+
+        r = run_stat(data, peak_func, f, x0, x1, xclip, ignore_nans)
+        ds = self._add_ds(r, bsln_result)
+
+        if badvalue(ds):
+            r["error"] = "unable to compute peak height Δs"
+            return
+
+        peak_x = r["x"]
+
+        flevel["ylevel"] = 0.01 * self._p0 * ds
+        r0 = run_stat(data, flevel, f, x0, peak_x, xclip, ignore_nans,
+                      p0=self._p0)
+        r0_error = "x" not in r0 or badvalue(r0["x"])
+
+        flevel["ylevel"] = 0.01 * self._p1 * ds
+        r1 = run_stat(data, flevel, f, x0, peak_x, xclip, ignore_nans,
+                      p1=self._p1)
+        r1_error = "x" not in r1 or badvalue(r1["x"])
+
+        if r1_error:
+            r1["error"] = "unable to locate p1 level"
+            r1["Δx"] = math.nan
+            return
+
+        if r0_error:
+            r1["Δx"] = math.nan
+            return
+        r1["Δx"] = r1["x"] - r0["x"]
+
+        if slope:
+            run_stat(data, {"name": "slope"}, f, r0["x"], r1["x"],
+                     xclip, ignore_nans)
+
+
+class NMStatsFuncFallTime(NMStatsFunc):
+    """Fall time functions (falltime+/-, falltimeslope+/-)."""
+
+    _VALID_KEYS = {"p0", "p1"}
+
+    def __init__(
+        self, name: str, p0: float | None = None,
+        p1: float | None = None, parent: object | None = None
+    ) -> None:
+        if name.lower() not in FUNC_NAMES_FALLTIME:
+            raise ValueError("func name: '%s'" % name)
+        f = name.lower()
+        if p0 is None:
+            raise KeyError("missing func key 'p0'")
+        p0 = float(p0)
+        if math.isnan(p0) or math.isinf(p0):
+            raise ValueError("p0: '%s'" % p0)
+        if not (p0 > 0 and p0 < 100):
+            raise ValueError("bad percent p0: %s" % p0)
+        if p1 is not None:
+            p1 = float(p1)
+            if math.isnan(p1) or math.isinf(p1):
+                raise ValueError("p1: '%s'" % p1)
+            if not (p1 > 0 and p1 < 100):
+                raise ValueError("bad percent p1: %s" % p1)
+            if p0 <= p1:
+                raise ValueError(
+                    "for falltime, need p0 > p1 but got %s <= %s" % (p0, p1))
+        super().__init__(f, parent=parent)
+        self._p0 = p0
+        self._p1 = p1
+
+    def to_dict(self) -> dict:
+        return {"name": self._name, "p0": self._p0, "p1": self._p1}
+
+    @property
+    def needs_baseline(self) -> bool:
+        return True
+
+    def validate_baseline(self, bsln_func_name: str | None) -> None:
+        if bsln_func_name is None:
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+        bf = bsln_func_name.lower()
+        if "mean" not in bf and bf != "median":
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        f = self._name
+        slope = "slope" in f
+
+        # Peak stat
+        if "+" in f:
+            peak_func: dict[str, Any] = {"name": "max"}
+            flevel: dict[str, Any] = {"name": "level-"}  # opposite sign
+        else:
+            peak_func = {"name": "min"}
+            flevel = {"name": "level+"}  # opposite sign
+
+        r = run_stat(data, peak_func, f, x0, x1, xclip, ignore_nans)
+        ds = self._add_ds(r, bsln_result)
+
+        if badvalue(ds):
+            r["error"] = "unable to compute peak height Δs"
+            return
+
+        peak_x = r["x"]
+
+        flevel["ylevel"] = 0.01 * self._p0 * ds
+        r0 = run_stat(data, flevel, f, peak_x, x1, xclip, ignore_nans,
+                      p0=self._p0)
+        r0_error = "x" not in r0 or badvalue(r0["x"])
+        if r0_error:
+            r0["error"] = "unable to locate p0 level"
+
+        if self._p1 is None:
+            if r0_error:
+                r0["Δx"] = math.nan
+                return
+            r0["Δx"] = r0["x"] - peak_x
+        else:
+            flevel["ylevel"] = 0.01 * self._p1 * ds
+            r1 = run_stat(data, flevel, f, peak_x, x1, xclip, ignore_nans,
+                          p1=self._p1)
+            r1_error = "x" not in r1 or badvalue(r1["x"])
+
+            if r1_error:
+                r1["error"] = "unable to locate p1 level"
+                r1["Δx"] = math.nan
+                return
+            if r0_error:
+                r1["Δx"] = math.nan
+                return
+            r1["Δx"] = r1["x"] - r0["x"]
+
+        if slope:
+            if self._p1 is not None:
+                run_stat(data, {"name": "slope"}, f, r0["x"], r1["x"],
+                         xclip, ignore_nans)
+            else:
+                run_stat(data, {"name": "slope"}, f, peak_x, r0["x"],
+                         xclip, ignore_nans)
+
+
+class NMStatsFuncFWHM(NMStatsFunc):
+    """Full width at half maximum functions."""
+
+    _VALID_KEYS = {"p0", "p1"}
+
+    def __init__(
+        self, name: str, p0: float | None = None,
+        p1: float | None = None, parent: object | None = None
+    ) -> None:
+        if name.lower() not in FUNC_NAMES_FWHM:
+            raise ValueError("func_name: '%s'" % name)
+        f = name.lower()
+        if p0 is None:
+            p0 = 50
+        if p1 is None:
+            p1 = 50
+        p0 = float(p0)
+        p1 = float(p1)
+        if not (p0 > 0 and p0 < 100):
+            raise ValueError("bad percent p0: %s" % p0)
+        if not (p1 > 0 and p1 < 100):
+            raise ValueError("bad percent p1: %s" % p1)
+        super().__init__(f, parent=parent)
+        self._p0 = p0
+        self._p1 = p1
+
+    def to_dict(self) -> dict:
+        return {"name": self._name, "p0": self._p0, "p1": self._p1}
+
+    @property
+    def needs_baseline(self) -> bool:
+        return True
+
+    def validate_baseline(self, bsln_func_name: str | None) -> None:
+        if bsln_func_name is None:
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+        bf = bsln_func_name.lower()
+        if "mean" not in bf and bf != "median":
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        f = self._name
+
+        # Peak stat
+        if "+" in f:
+            peak_func: dict[str, Any] = {"name": "max"}
+        else:
+            peak_func = {"name": "min"}
+
+        r = run_stat(data, peak_func, f, x0, x1, xclip, ignore_nans)
+
+        # Compute Δs from baseline
+        ds = self._add_ds(r, bsln_result)
+
+        if badvalue(ds):
+            r["error"] = "unable to compute peak height Δs"
+            return
+
+        if "+" in f:
+            flevel1: dict[str, Any] = {"name": "level+"}
+            flevel2: dict[str, Any] = {"name": "level-"}  # opposite sign
+        else:
+            flevel1 = {"name": "level-"}
+            flevel2 = {"name": "level+"}  # opposite sign
+
+        w = None
+        if self._p0 != 50 or self._p1 != 50:
+            w = "unusual fwhm %% values: %s-%s" % (self._p0, self._p1)
+
+        flevel1["ylevel"] = 0.01 * self._p0 * ds
+        peak_x = r["x"]
+        extra0: dict[str, Any] = {"p0": self._p0}
+        if w:
+            extra0["warning"] = w
+        r0 = run_stat(data, flevel1, f, x0, peak_x, xclip, ignore_nans,
+                      **extra0)
+        r0_error = "x" not in r0 or badvalue(r0["x"])
+        if r0_error:
+            r0["error"] = "unable to locate p0 level"
+
+        flevel2["ylevel"] = 0.01 * self._p1 * ds
+        extra1: dict[str, Any] = {"p1": self._p1}
+        if w:
+            extra1["warning"] = w
+        r1 = run_stat(data, flevel2, f, peak_x, x1, xclip, ignore_nans,
+                      **extra1)
+        r1_error = "x" not in r1 or badvalue(r1["x"])
+
+        if r1_error:
+            r1["error"] = "unable to locate p1 level"
+            r1["Δx"] = math.nan
+            return
+
+        if r0_error:
+            r1["Δx"] = math.nan
+        else:
+            r1["Δx"] = r1["x"] - r0["x"]
+
+
+# Registry mapping func names to their class
+_STATS_FUNC_REGISTRY: dict[str, type[NMStatsFunc]] = {}
+for _name in FUNC_NAMES_BASIC:
+    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncBasic
+for _name in FUNC_NAMES_MAXMIN:
+    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncMaxMin
+for _name in FUNC_NAMES_LEVEL:
+    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncLevel
+for _name in FUNC_NAMES_RISETIME:
+    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncRiseTime
+for _name in FUNC_NAMES_FALLTIME:
+    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncFallTime
+for _name in FUNC_NAMES_FWHM:
+    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncFWHM
+
+
+def _stats_func_from_dict(
+    d: dict | str | None,
+    parent: object | None = None,
+) -> NMStatsFunc | None:
+    """Create an NMStatsFunc from a dict or string name.
+
+    Args:
+        d: Dict with at least a "name" key, a string func name, or None.
+        parent: Optional parent reference.
+
+    Returns:
+        An NMStatsFunc instance, or None.
+    """
+    if d is None:
+        return None
+    if isinstance(d, str):
+        d = {"name": d}
+    if not isinstance(d, dict):
+        raise TypeError(nmu.type_error_str(d, "func", "dictionary or string"))
+    if len(d) == 0:
+        return None
+    if "name" not in d:
+        raise KeyError("missing func key 'name'")
+    name = d["name"]
+    if name is None:
+        return None
+    if not isinstance(name, str):
+        raise TypeError(nmu.type_error_str(name, "func_name", "string"))
+    f = name.lower()
+    if f not in _STATS_FUNC_REGISTRY:
+        raise ValueError("func_name: %s" % name)
+    cls = _STATS_FUNC_REGISTRY[f]
+    # Level dispatch: redirect to NMStatsFuncLevelNstd when "nstd" present
+    if cls is NMStatsFuncLevel:
+        lower_keys = {k.lower() for k in d if k.lower() != "name"}
+        if "nstd" in lower_keys and "ylevel" in lower_keys:
+            raise KeyError("either 'ylevel' or 'nstd' is allowed, not both")
+        if "nstd" in lower_keys:
+            cls = NMStatsFuncLevelNstd
+        elif not lower_keys:
+            raise KeyError("missing func key 'ylevel' or 'nstd'")
+    # Extract valid parameter keys for this class, reject unknown keys
+    kwargs: dict[str, Any] = {}
+    for key, v in d.items():
+        k = key.lower()
+        if k == "name":
+            continue
+        elif k in cls._VALID_KEYS:
+            kwargs[k] = v
+        else:
+            if cls._VALID_KEYS:
+                raise KeyError("unknown func key '%s'" % key)
+            else:
+                raise KeyError(
+                    "unknown key parameter '%s' for func '%s'" % (key, name))
+    return cls(f, parent=parent, **kwargs)
 
 
 class NMToolStats(NMTool):
@@ -332,7 +961,7 @@ class NMStatsWin:
         self._name = name
 
         self.__on = True
-        self.__func: dict[str, Any] = {}
+        self.__func: NMStatsFunc | None = None
         self.__x0 = -math.inf
         self.__x1 = math.inf
         self.__transform: list[NMTransform] | None = None
@@ -392,7 +1021,7 @@ class NMStatsWin:
         return {
             "name": self._name,
             "on": self.__on,
-            "func": self.__func,
+            "func": self.__func.to_dict() if self.__func else {},
             "x0": self.__x0,
             "x1": self.__x1,
             "transform": transform_dicts,
@@ -456,7 +1085,7 @@ class NMStatsWin:
 
     @property
     def func(self) -> dict:
-        return self.__func
+        return self.__func.to_dict() if self.__func else {}
 
     @func.setter
     def func(self, func: dict | str) -> None:
@@ -468,67 +1097,16 @@ class NMStatsWin:
         func: dict | str | None,
         quiet: bool = nmp.QUIET
     ) -> None:
-
-        if func is None:
-            self.__func.clear()
+        if func is None or (isinstance(func, dict) and len(func) == 0):
+            self.__func = None
             return None
-        if isinstance(func, dict):
-            if len(func) == 0:
-                self.__func.clear()
-                return None
-            if "name" in func:
-                func_name = func["name"]
-            elif "name" in self.__func:
-                func_name = self.__func["name"]
+        if isinstance(func, dict) and "name" not in func:
+            if self.__func is not None:
                 # allows updating func parameters without passing name
+                func["name"] = self.__func.name
             else:
-                e = "missing func key 'name'"
-                raise KeyError(e)
-        elif isinstance(func, str):
-            func_name = func
-            func = {"name": func_name}
-        else:
-            e = nmu.type_error_str(func, "func", "dictionary, string or None")
-            raise TypeError(e)
-
-        if func_name is None:
-            self.__func.clear()
-            return None
-        if not isinstance(func_name, str):
-            e = nmu.type_error_str(func_name, "func_name", "string")
-            raise TypeError(e)
-
-        found = False
-        for f in FUNC_NAMES:
-            if f.lower() == func_name.lower():
-                found = True
-                break
-        if not found:
-            raise ValueError("func_name: %s" % func_name)
-
-        f = func_name.lower()
-        func.update({"name": f})  # make sure key "name" exists
-        if f in ["min", "max", "mean@max", "mean@min"]:
-            parameters = check_meanatmaxmin(func)
-        elif f in ["level", "level+", "level-"]:
-            parameters = check_level(func)
-        elif "risetime" in f or "falltime" in f:
-            parameters = check_risefall(func)
-        elif f in ["fwhm+", "fwhm-"]:
-            parameters = check_fwhm(func)
-        else:  # no parameters for remaining functions
-            for k in func.keys():
-                if k.lower() != "name":
-                    e = ("unknown key parameter '%s' for func '%s'"
-                         % (k, func_name))
-                    raise KeyError(e)
-            parameters = {}
-
-        self.__func.clear()
-        self.__func.update({"name": f})
-        if parameters:
-            self.__func.update(parameters)
-
+                raise KeyError("missing func key 'name'")
+        self.__func = _stats_func_from_dict(func, parent=self._parent)
         return None
 
     @property
@@ -659,7 +1237,7 @@ class NMStatsWin:
             raise TypeError(e)
 
         found = False
-        for f in BSLN_FUNC_NAMES:
+        for f in FUNC_NAMES_BSLN:
             if f.lower() == func_name.lower():
                 found = True
                 break
@@ -725,7 +1303,7 @@ class NMStatsWin:
 
         self.__results = []
 
-        if data is None or self.__func is None or "name" not in self.__func:
+        if data is None or self.__func is None:
             return self.__results
 
         if not isinstance(xclip, bool):
@@ -734,332 +1312,25 @@ class NMStatsWin:
         if not isinstance(ignore_nans, bool):
             ignore_nans = True
 
-        f = self.__func["name"]
-
-        if not isinstance(f, str):
-            e = nmu.type_error_str(f, "func_name", "string")
-            raise TypeError(e)
-
-        f = f.lower()
-        level_nstd = "level" in f and "nstd" in self.__func
-        rise = "risetime" in f
-        fall = "falltime" in f
-        fwhm = "fwhm" in f
-        slope = "slope" in f
-
-        fpeak: dict[str, Any] = {}
-        fmaxmin: dict[str, Any] = {}
-        flevelnstd: dict[str, Any] = {}
-
-        if rise or fall or fwhm:
-            if "+" in f:
-                fpeak["name"] = "max"
-            elif "-" in f:
-                fpeak["name"] = "min"
-
-        if fpeak and "imean" in self.__func:
-            fpeak["imean"] = self.__func["imean"]
-
-        if f == "mean@max" or f == "mean@min":
-            fmaxmin["name"] = f
-
-        if fmaxmin:
-            w = None
-            if "imean" in self.__func:
-                imean = self.__func["imean"]
-            else:
-                imean = 0
-            if imean <= 1:
-                w = "not enough data points to compute a mean"
-            fmaxmin["imean"] = imean
-            if w:
-                fmaxmin["warning"] = w
+        bsln_result: dict[str, Any] = {}
 
         if self.__bsln_on:
-
-            if fpeak:
-                bf_ok = False
-                if "name" in self.__bsln_func:
-                    bf = self.__bsln_func["name"]
-                    bf = bf.lower()
-                    if "mean" in bf or bf == "median":
-                        bf_ok = True
-                if not bf_ok:
-                    e = ("peak func '%s' requires baseline 'mean' computation"
-                         % f)
-                    raise RuntimeError(e)
-            elif level_nstd:
-                bf_ok = False
-                if "name" in self.__bsln_func:
-                    bf = self.__bsln_func["name"]
-                    if bf.lower() == "mean+std":
-                        bf_ok = True
-                if not bf_ok:
-                    e = "level nstd requires baseline 'mean+std' computation"
-                    raise RuntimeError(e)
-
-            b = self._run_stat(
+            self.__func.validate_baseline(self.__bsln_func.get("name"))
+            bsln_result = self._run_stat(
                 data, self.__bsln_func.copy(), "bsln",
                 self.__bsln_x0, self.__bsln_x1, xclip, ignore_nans
             )
+        elif self.__func.needs_baseline:
+            raise RuntimeError(
+                "func '%s' requires baseline" % self.__func.name
+            )
 
-            if level_nstd:
-                nstd = self.__func["nstd"]
-                if badvalue(nstd):
-                    raise ValueError("level nstd: '%s'" % nstd)
-                ylevel = math.nan
-                if "s" in b and "std" in b:
-                    s = b["s"]
-                    std = b["std"]
-                    if not badvalue(s) and not badvalue(std):
-                        ylevel = s + nstd * std
-                flevelnstd["name"] = f
-                flevelnstd["ylevel"] = ylevel
-
-        else:
-            if fpeak:
-                e = "peak func '%s' requires baseline 'mean' computation" % f
-                raise RuntimeError(e)
-            if level_nstd:
-                e = "level nstd requires baseline 'mean+std' computation"
-                raise RuntimeError(e)
-            b = {}  # empty baseline
-
-        if fpeak:
-            main_id = f
-            main_func = fpeak
-        elif fmaxmin:
-            main_id = "main"
-            main_func = fmaxmin
-        elif flevelnstd:
-            main_id = "main"
-            main_func = flevelnstd
-        else:
-            main_id = "main"
-            main_func = self.__func.copy()
-        r = self._run_stat(
-            data, main_func, main_id,
-            self.__x0, self.__x1, xclip, ignore_nans
+        self.__func.compute(
+            data, self.__x0, self.__x1, xclip, ignore_nans,
+            self._run_stat, bsln_result
         )
 
-        ds = math.nan
-
-        if self.__bsln_on:
-            if "s" in b:
-                bs = b["s"]
-                if "s" in r:
-                    rs = r["s"]
-                elif "ylevel" in r["func"]:
-                    rs = r["func"]["ylevel"]
-                else:
-                    rs = math.nan
-                if not badvalue(bs) and not badvalue(rs):
-                    ds = rs - bs
-            r["Δs"] = ds
-
-        if not fpeak:
-            return self.__results  # finished
-
-        if badvalue(ds):
-            r["error"] = "unable to compute peak height Δs"
-            return self.__results  # finished
-
-        flevel: dict[str, Any] = {}
-        fslope: dict[str, Any] = {"name": "slope"}
-
-        if rise:
-
-            if "+" in f:
-                flevel["name"] = "level+"
-            elif "-" in f:
-                flevel["name"] = "level-"
-            else:
-                raise ValueError(
-                    "peak func '%s' requires '+' or '-' sign" % f)
-
-            if "p0" in self.__func:
-                p0 = self.__func["p0"]
-            else:
-                raise KeyError("missing key 'p0'")
-            if not (p0 > 0 and p0 < 100):
-                raise ValueError("bad percent p0: %s" % p0)
-
-            if "p1" in self.__func:
-                p1 = self.__func["p1"]
-            else:
-                raise KeyError("missing key 'p1'")
-            if not (p1 > 0 and p1 < 100):
-                raise ValueError("bad percent p1: %s" % p1)
-
-            flevel["ylevel"] = 0.01 * p0 * ds
-            x1 = r["x"]
-            r0 = self._run_stat(
-                data, flevel, f, self.__x0, x1, xclip, ignore_nans, p0=p0
-            )
-            r0_error = "x" not in r0 or badvalue(r0["x"])
-
-            flevel["ylevel"] = 0.01 * p1 * ds
-            r1 = self._run_stat(
-                data, flevel, f, self.__x0, x1, xclip, ignore_nans, p1=p1
-            )
-            r1_error = "x" not in r1 or badvalue(r1["x"])
-
-            if r1_error:
-                r1["error"] = "unable to locate p1 level"
-                r1["Δx"] = math.nan
-                return self.__results  # finished
-
-            if r0_error:
-                r1["Δx"] = math.nan
-                return self.__results  # finished
-            else:
-                r1["Δx"] = r1["x"] - r0["x"]
-
-            if slope:
-                self._run_stat(
-                    data, fslope, f, r0["x"], r1["x"], xclip, ignore_nans
-                )
-
-            return self.__results  # finished
-
-        if fall:
-
-            p1 = None
-
-            if "+" in f:
-                flevel["name"] = "level-"  # opposite sign
-            elif "-" in f:
-                flevel["name"] = "level+"  # opposite sign
-            else:
-                raise ValueError(
-                    "peak func '%s' requires '+' or '-' sign" % f)
-
-            if "p0" in self.__func:
-                p0 = self.__func["p0"]
-            else:
-                raise KeyError("missing key 'p0'")
-            if not (p0 > 0 and p0 < 100):
-                raise ValueError("bad percent p0: %s" % p0)
-
-            if "p1" in self.__func:
-                p1 = self.__func["p1"]
-                if p1 is not None and not (p1 > 0 and p1 < 100):
-                    raise ValueError("bad percent p1: %s" % p1)
-
-            flevel["ylevel"] = 0.01 * p0 * ds
-            x0 = r["x"]
-            r0 = self._run_stat(
-                data, flevel, f, x0, self.__x1, xclip, ignore_nans, p0=p0
-            )
-            r0_error = "x" not in r0 or badvalue(r0["x"])
-            if r0_error:
-                r0["error"] = "unable to locate p0 level"
-
-            if p1 is None:
-                if r0_error:
-                    r0["Δx"] = math.nan
-                    return self.__results  # finished
-                else:
-                    r0["Δx"] = r0["x"] - x0  # use time of peak
-            else:
-
-                flevel["ylevel"] = 0.01 * p1 * ds
-                r1 = self._run_stat(
-                    data, flevel, f, x0, self.__x1, xclip, ignore_nans,
-                    p1=p1
-                )
-                r1_error = "x" not in r1 or badvalue(r1["x"])
-
-                if r1_error:
-                    r1["error"] = "unable to locate p1 level"
-                    r1["Δx"] = math.nan
-                    return self.__results  # finished
-
-                if r0_error:
-                    r1["Δx"] = math.nan
-                    return self.__results  # finished
-                else:
-                    r1["Δx"] = r1["x"] - r0["x"]
-
-            if slope:
-                if p1:
-                    self._run_stat(
-                        data, fslope, f, r0["x"], r1["x"],
-                        xclip, ignore_nans
-                    )
-                else:
-                    self._run_stat(
-                        data, fslope, f, x0, r0["x"],
-                        xclip, ignore_nans
-                    )
-
-            return self.__results  # finished
-
-        if fwhm:
-
-            flevel1: dict[str, Any] = {}
-            flevel2: dict[str, Any] = {}
-
-            if "+" in f:
-                flevel1["name"] = "level+"
-                flevel2["name"] = "level-"  # opposite sign
-            elif "-" in f:
-                flevel1["name"] = "level-"
-                flevel2["name"] = "level+"  # opposite sign
-            else:
-                raise ValueError(
-                    "peak func '%s' requires '+' or '-' sign" % f)
-
-            p0 = self.__func.get("p0", 50)
-            if not (p0 > 0 and p0 < 100):
-                raise ValueError("bad percent p0: %s" % p0)
-            p1 = self.__func.get("p1", 50)
-            if not (p1 > 0 and p1 < 100):
-                raise ValueError("bad percent p1: %s" % p1)
-            w = None
-            if p0 != 50 or p1 != 50:
-                w = "unusual fwhm %% values: %s-%s" % (p0, p1)
-
-            flevel1["ylevel"] = 0.01 * p0 * ds
-            x1 = r["x"]
-            extra0 = {"p0": p0}
-            if w:
-                extra0["warning"] = w
-            r0 = self._run_stat(
-                data, flevel1, f, self.__x0, x1, xclip, ignore_nans,
-                **extra0
-            )
-            r0_error = "x" not in r0 or badvalue(r0["x"])
-            if r0_error:
-                r0["error"] = "unable to locate p0 level"
-
-            flevel2["ylevel"] = 0.01 * p1 * ds
-            x0 = r["x"]
-            extra1 = {"p1": p1}
-            if w:
-                extra1["warning"] = w
-            r1 = self._run_stat(
-                data, flevel2, f, x0, self.__x1, xclip, ignore_nans,
-                **extra1
-            )
-            r1_error = "x" not in r1 or badvalue(r1["x"])
-
-            if r1_error:
-                r1["error"] = "unable to locate p1 level"
-                r1["Δx"] = math.nan
-                return self.__results  # finished
-
-            if r0_error:
-                r1["Δx"] = math.nan
-            else:
-                r1["Δx"] = r1["x"] - r0["x"]
-
-            return self.__results  # finished
-
-        e = "unknown peak func '%s'" % f
-        raise ValueError(e)
-
-        return {}
+        return self.__results
 
 
 class NMStatsWinContainer:
@@ -1098,262 +1369,245 @@ class NMStatsWinContainer:
         return name in self._windows
 
 
-def badvalue(n: float | None) -> bool:
-    return n is None or math.isnan(n) or math.isinf(n)
+# =========================================================================
+# stats() dispatch handlers
+# =========================================================================
 
 
-def check_meanatmaxmin(
-    func: dict,  # name = "mean@max" or "mean@min"
-) -> dict:
-    func_name = None
-    imean = None
-    fnames = ["max", "min", "mean@max", "mean@min"]
-
-    if isinstance(func, dict):
-        for key, v in func.items():
-            k = key.lower()
-            if k == "name":
-                if isinstance(v, str):
-                    func_name = v
-                else:
-                    e = nmu.type_error_str(v, "func name", "string")
-                    raise TypeError(e)
-            elif k == "imean":
-                if v is not None:
-                    imean = int(v)  # might raise type error
-            else:
-                raise KeyError("unknown func key '%s'" % k)
-    elif isinstance(func, str):
-        func_name = func
-    else:
-        e = nmu.type_error_str(func, "func", "dictionary or string")
-        raise TypeError(e)
-    if func_name is None:
-        raise KeyError("missing func key 'name'")
-    f = func_name.lower()
-    if f not in fnames:
-        e = "func name: '%s'" % func_name
-        e += "\n" + "expected 'mean@max' or 'mean@min'"
-        raise ValueError(e)
-    if f == "max" or f == "min":
-        if imean is None:
-            return {"name": f}
-    elif imean is None:
-        raise KeyError("missing func key 'imean'")
-    if math.isnan(imean) or math.isinf(imean) or imean < 0:
-        raise ValueError("imean: '%s'" % imean)
+def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
+                 yunits, **_):
     if "max" in f:
-        return {"name": "mean@max", "imean": imean}
-    if "min" in f:
-        return {"name": "mean@min", "imean": imean}
-    return {}
-
-
-def check_level(
-    func: dict | str,
-    option: int = 0,
-) -> dict:
-    func_name = None
-    ylevel = None
-    nstd = None
-    options = [1, 2, 3]
-    fnames = ["level", "level+", "level-"]
-
-    if not isinstance(option, int):
-        option = int(option)
-
-    if isinstance(func, dict):
-        for key, v in func.items():
-            k = key.lower()
-            if k == "name":
-                if isinstance(v, str):
-                    func_name = v
-                else:
-                    e = nmu.type_error_str(v, "func name", "string")
-                    raise TypeError(e)
-            elif k == "option":
-                option = int(v)  # might raise type error
-            elif k == "ylevel":
-                if v is not None:
-                    ylevel = float(v)  # might raise type error
-                option = 1
-            elif k == "nstd":
-                if v is not None:
-                    nstd = float(v)  # might raise type error
-                if nstd is not None and nstd > 0:
-                    option = 2
-                else:
-                    option = 3
-            else:
-                raise KeyError("unknown func key '%s'" % k)
-    elif isinstance(func, str):
-        func_name = func
+        index = np.nanargmax(yarray) if ignore_nans else np.argmax(yarray)
     else:
-        e = nmu.type_error_str(func, "func", "dictionary or string")
-        raise TypeError(e)
-    if func_name is None:
-        raise KeyError("missing func key 'name'")
-    f = func_name.lower()
-    if f not in fnames:
-        e = "func name: '%s'" % func_name
-        e += "\n" + "expected one of the following: %s" % fnames
-        raise ValueError(e)
+        index = np.nanargmin(yarray) if ignore_nans else np.argmin(yarray)
+    results["s"] = yarray[index]
+    results["sunits"] = yunits
+    i = int(index) + int(i0)  # shift due to slicing
+    results["i"] = i
+    results["x"] = data.get_xvalue(i)
+    results["xunits"] = data.xscale.units
 
-    if ylevel is not None and nstd is not None:
-        e = "either 'ylevel' or 'nstd' is allowed, not both"
-        raise KeyError(e)
+    imean = 0
+    if "imean" in func and 0 <= i < ysize:
+        imean = int(func["imean"])
+        if imean <= 1:
+            imean = 0
 
-    if option not in options:
-        raise KeyError("missing func key 'ylevel' or 'nstd'")
-    if option == 1:
-        if ylevel is None:
-            raise KeyError("missing func key 'ylevel'")
-        if math.isnan(ylevel) or math.isinf(ylevel):
-            raise ValueError("ylevel: '%s'" % ylevel)
-        return {"name": f, "ylevel": ylevel}
-    if option == 2:
-        if nstd is None:
-            raise KeyError("missing func key 'nstd'")
-        if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
-            raise ValueError("nstd: '%s'" % nstd)
-        return {"name": f, "nstd": abs(nstd)}
-    if option == 3:
-        if nstd is None:
-            raise KeyError("missing func key 'nstd'")
-        if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
-            raise ValueError("nstd: '%s'" % nstd)
-        return {"name": f, "nstd": -1*abs(nstd)}
-    raise ValueError("option: '%s'" % option)
+    if imean > 1:
+        if imean % 2 == 0:  # even
+            i0_m = int(i - 0.5 * imean)
+            i1_m = int(i0_m + imean - 1)
+        else:  # odd
+            i0_m = int(i - 0.5 * (imean - 1))
+            i1_m = int(i + 0.5 * (imean - 1))
+        i0_m = max(i0_m, 0)
+        i0_m = min(i0_m, ysize - 1)
+        i1_m = max(i1_m, 0)
+        i1_m = min(i1_m, ysize - 1)
+        if i0_m == 0 and i1_m == ysize - 1:
+            yarr = data.nparray
+        else:
+            yarr = data.nparray[i0_m:i1_m+1]
+        results["s"] = np.nanmean(yarr) if ignore_nans else np.mean(yarr)
+
+    return results
 
 
-def check_risefall(
-    func: dict | str,
-) -> dict:
-    # check func dictionary is ok
-    # if necessary, get input for p0 and p1
-    func_name = None
-    p0 = None
-    p1 = None
-    fnames = ["risetime+", "risetime-", "risetimeslope+", "risetimeslope-",
-              "falltime+", "falltime-", "falltimeslope+", "falltimeslope-"]
-
-    if isinstance(func, dict):
-        for key, v in func.items():
-            k = key.lower()
-            if k == "name":
-                if isinstance(v, str):
-                    func_name = v
-                else:
-                    e = nmu.type_error_str(func_name, "func name", "string")
-                    raise TypeError(e)
-            elif k == "p0":
-                if v is not None:
-                    p0 = float(v)  # might raise type error
-            elif k == "p1":
-                if v is not None:
-                    p1 = float(v)  # might raise type error
-            else:
-                raise KeyError("unknown func key '%s'" % k)
-    elif isinstance(func, str):
-        func_name = func.lower()
+def _stat_level(f, func, yarray, data, i0, ignore_nans, results, yunits,
+                xunits, found_xarray, xarray=None, xstart=None, **_):
+    if "ylevel" in func:
+        ylevel = func["ylevel"]
     else:
-        e = nmu.type_error_str(func, "func", "dictionary or string")
-        raise TypeError(e)
-    if func_name is None:
-        raise KeyError("missing func key 'name'")
-    f = func_name.lower()
-    if f not in fnames:
-        e = "func name: '%s'" % func_name
-        e += "\n" + "expected one of the following: %s" % fnames
-        raise ValueError(e)
-    rise = "risetime" in f
-    fall = "falltime" in f
-    if not rise and not fall:
-        raise ValueError("expected func name 'risetime' or 'falltime'")
-
-    if p0 is None:
-        raise KeyError("missing func key 'p0'")
-    elif math.isnan(p0) or math.isinf(p0):
-        raise ValueError("p0: '%s'" % p0)
-    elif p0 > 0 and p0 < 100:
-        pass  # ok
+        raise KeyError("missing key 'ylevel'")
+    if found_xarray:
+        i_x = find_level_crossings(
+            yarray, ylevel, func_name=f,
+            xarray=xarray, ignore_nans=ignore_nans
+        )
     else:
-        e = "bad percent p0: %s" % p0
-        raise ValueError(e)
-    if p1 is None:
-        if rise:
-            raise KeyError("missing func key 'p1'")
-        return {"name": f, "p0": p0, "p1": p1}
-    elif math.isnan(p1) or math.isinf(p1):
-        raise ValueError("p1: '%s'" % p1)
-    elif p1 > 0 and p1 < 100:
-        pass  # ok
+        xstart_val = xstart if isinstance(xstart, float) else 0.0
+        xdelta_val = float(data.xscale.delta)
+        i_x = find_level_crossings(
+            yarray, ylevel, func_name=f,
+            xstart=xstart_val, xdelta=xdelta_val,
+            ignore_nans=ignore_nans
+        )
+    indexes = i_x[0]
+    xvalues = i_x[1]
+    if "func" in results:
+        fxn = results["func"]
+        if isinstance(fxn, dict):
+            fxn.update({"yunits": yunits})
+    if indexes.size > 0:  # return first level crossing
+        results["i"] = indexes[0] + i0  # shift due to slicing
+        results["x"] = xvalues[0]  # shift not needed for x-values
+        results["xunits"] = xunits
     else:
-        e = "bad percent p1: %s" % p1
-        raise ValueError(e)
-    if rise:
-        if p0 >= p1:
-            e = "for risetime, need p0 < p1 but got %s >= %s" % (p0, p1)
-            raise ValueError(e)
-    elif fall:
-        if p0 <= p1:
-            e = "for falltime, need p0 > p1 but got %s <= %s" % (p0, p1)
-            raise ValueError(e)
-    return {"name": f, "p0": p0, "p1": p1}
+        results["i"] = None
+        results["x"] = None
+    return results
 
 
-def check_fwhm(
-    func: dict | str
-) -> dict:
-    # check func dictionary is ok
-    func_name = None
-    p0 = None
-    p1 = None
-    fnames = ["fwhm+", "fwhm-"]
+def _stat_slope(yarray, data, ignore_nans, results, yunits, xunits,
+                found_xarray, xarray=None, xstart=None, **_):
+    if found_xarray:
+        mb = linear_regression(
+            yarray, xarray=xarray, ignore_nans=ignore_nans
+        )
+    else:
+        xstart_val = xstart if isinstance(xstart, float) else 0.0
+        xdelta_val = float(data.xscale.delta)
+        mb = linear_regression(
+            yarray, xstart=xstart_val, xdelta=xdelta_val,
+            ignore_nans=ignore_nans
+        )
+    if mb:
+        results["s"] = mb[0]
+        if isinstance(xunits, str) and isinstance(yunits, str):
+            results["sunits"] = yunits + "/" + xunits
+        else:
+            results["sunits"] = None
+        results["b"] = mb[1]
+        if isinstance(yunits, str):
+            results["bunits"] = yunits
+        else:
+            results["bunits"] = None
+    else:
+        results["s"] = None
+        results["b"] = None
+    return results
 
-    if isinstance(func, dict):
-        for key, v in func.items():
-            k = key.lower()
-            if k == "name":
-                if isinstance(v, str):
-                    func_name = v
-                else:
-                    e = nmu.type_error_str(v, "func name", "string")
-                    raise TypeError(e)
-            elif k == "p0":
-                if v is not None:
-                    p0 = float(v)  # might raise type error
-            elif k == "p1":
-                if v is not None:
-                    p1 = float(v)  # might raise type error
-            else:
-                raise KeyError("unknown func key '%s'" % k)
-    elif isinstance(func, str):
-        func_name = func
-    else:
-        e = nmu.type_error_str(func, "func", "dictionary or string")
-        raise TypeError(e)
-    if func_name is None:
-        raise KeyError("missing func key 'name'")
-    if p0 is None:
-        p0 = 50
-    if p1 is None:
-        p1 = 50
-    f = func_name.lower()
-    if f not in fnames:
-        e = "func_name: '%s'" % func_name
-        e += "\n" + "expected one of the following: %s" % fnames
-        raise ValueError(e)
-    if p0 > 0 and p0 < 100:
-        pass  # ok
-    else:
-        raise ValueError("bad percent p0: %s" % p0)
-    if p1 > 0 and p1 < 100:
-        pass  # ok
-    else:
-        raise ValueError("bad percent p1: %s" % p1)
 
-    return {"name": f, "p0": p0, "p1": p1}
+def _stat_median(yarray, ignore_nans, results, yunits, **_):
+    results["s"] = np.nanmedian(yarray) if ignore_nans else np.median(yarray)
+    results["sunits"] = yunits
+    return results
+
+
+def _stat_mean(f, yarray, ignore_nans, results, yunits, n, **_):
+    results["s"] = np.nanmean(yarray) if ignore_nans else np.mean(yarray)
+    results["sunits"] = yunits
+    if "+var" in f:
+        results["var"] = np.nanvar(yarray) if ignore_nans else np.var(yarray)
+    if "+std" in f:
+        results["std"] = np.nanstd(yarray) if ignore_nans else np.std(yarray)
+    if "+sem" in f:
+        std = np.nanstd(yarray) if ignore_nans else np.std(yarray)
+        results["sem"] = std / math.sqrt(n)
+    return results
+
+
+def _stat_var(yarray, ignore_nans, results, yunits, **_):
+    results["s"] = np.nanvar(yarray) if ignore_nans else np.var(yarray)
+    if isinstance(yunits, str):
+        results["sunits"] = yunits + "**2"
+    else:
+        results["sunits"] = None
+    return results
+
+
+def _stat_std(yarray, ignore_nans, results, yunits, **_):
+    results["s"] = np.nanstd(yarray) if ignore_nans else np.std(yarray)
+    results["sunits"] = yunits
+    return results
+
+
+def _stat_sem(yarray, ignore_nans, results, yunits, n, **_):
+    std = np.nanstd(yarray) if ignore_nans else np.std(yarray)
+    results["s"] = std / math.sqrt(n)
+    results["sunits"] = yunits
+    return results
+
+
+def _stat_rms(yarray, ignore_nans, results, yunits, n, **_):
+    sos = np.nansum(np.square(yarray)) if ignore_nans else np.sum(
+        np.square(yarray))
+    results["s"] = math.sqrt(sos / n)
+    results["sunits"] = yunits
+    return results
+
+
+def _stat_sum(yarray, ignore_nans, results, yunits, **_):
+    results["s"] = np.nansum(yarray) if ignore_nans else np.sum(yarray)
+    results["sunits"] = yunits
+    return results
+
+
+def _stat_pathlength(yarray, data, ignore_nans, results, yunits, xunits,
+                     found_xarray, xarray=None, **_):
+    w = None
+    if isinstance(xunits, str) and isinstance(yunits, str):
+        if xunits != yunits:
+            raise ValueError(
+                "pathlength: x- and y-scales have "
+                + "different units: %s != %s" % (xunits, yunits))
+    else:
+        w = "pathlength assumes x- and y-scales have the same units"
+    if found_xarray:
+        dx2 = np.square(np.diff(xarray))
+        dy2 = np.square(np.diff(yarray))
+        h = np.sqrt(np.add(dx2, dy2))
+    else:
+        dx = float(data.xscale.delta)
+        dx2 = dx**2
+        dy2 = np.square(np.diff(yarray))
+        h = np.sqrt(dx2 + dy2)
+    results["s"] = np.nansum(h) if ignore_nans else np.sum(h)
+    results["sunits"] = yunits
+    if w:
+        results["warning"] = w
+    return results
+
+
+def _stat_area(yarray, data, ignore_nans, results, yunits, xunits,
+               found_xarray, xarray=None, **_):
+    if found_xarray:
+        if ignore_nans:
+            results["s"] = np.nansum(np.multiply(xarray, yarray))
+        else:
+            results["s"] = np.sum(np.multiply(xarray, yarray))
+    else:
+        sum_y = np.nansum(yarray) if ignore_nans else np.sum(yarray)
+        results["s"] = sum_y * data.xscale.delta
+    if isinstance(xunits, str) and isinstance(yunits, str):
+        if xunits == yunits:
+            results["sunits"] = xunits + "**2"
+        else:
+            results["sunits"] = xunits + "*" + yunits
+    else:
+        results["sunits"] = None
+    return results
+
+
+def _stat_count(results, **_):
+    return results
+
+
+_STATS_DISPATCH = {
+    "max": _stat_maxmin,
+    "min": _stat_maxmin,
+    "mean@max": _stat_maxmin,
+    "mean@min": _stat_maxmin,
+    "level": _stat_level,
+    "level+": _stat_level,
+    "level-": _stat_level,
+    "slope": _stat_slope,
+    "median": _stat_median,
+    "mean": _stat_mean,
+    "mean+var": _stat_mean,
+    "mean+std": _stat_mean,
+    "mean+sem": _stat_mean,
+    "var": _stat_var,
+    "std": _stat_std,
+    "sem": _stat_sem,
+    "rms": _stat_rms,
+    "sum": _stat_sum,
+    "pathlength": _stat_pathlength,
+    "area": _stat_area,
+    "count": _stat_count,
+    "count_nans": _stat_count,
+    "count_infs": _stat_count,
+}
 
 
 def stats(
@@ -1467,274 +1721,22 @@ def stats(
     results["nans"] = nans
     results["infs"] = infs
 
-    maxmin = False
-
-    if f == "max":
-        if ignore_nans:
-            index = np.nanargmax(yarray)
-        else:
-            index = np.argmax(yarray)
-            # might be index of nan
-        maxmin = True
-    elif f == "min":
-        if ignore_nans:
-            index = np.nanargmin(yarray)
-        else:
-            index = np.argmin(yarray)
-            # might be index of nan
-        maxmin = True
-
-    if maxmin:
-        # should always get an index
-        results["s"] = yarray[index]
-        results["sunits"] = yunits
-        i = int(index) + int(i0)  # shift due to slicing
-        results["i"] = i
-        results["x"] = data.get_xvalue(i)
-        results["xunits"] = data.xscale.units
-
-        imean = 0
-
-        if "imean" in func and i >= 0 and i < ysize:
-            imean = int(func["imean"])  # might raise type error
-            if imean <= 1:
-                imean = 0
-
-        if imean > 1:
-            if imean % 2 == 0:  # even
-                i0 = int(i - 0.5 * imean)
-                i1 = int(i0 + imean - 1)
-            else:  # odd
-                i0 = int(i - 0.5 * (imean - 1))
-                i1 = int(i + 0.5 * (imean - 1))
-            i0 = max(i0, 0)
-            i0 = min(i0, ysize - 1)
-            i1 = max(i1, 0)
-            i1 = min(i1, ysize - 1)
-            # print("i0: %s, i1: %s" % (i0, i1))
-            if i0 == 0 and i1 == ysize - 1:
-                yarray = data.nparray
-            else:  # slice
-                yarray = data.nparray[i0:i1+1]
-            if ignore_nans:
-                results["s"] = np.nanmean(yarray)
-            else:
-                results["s"] = np.mean(yarray)
-
-        return results  # finished max/min
-
-    if "level" in f:
-        if "ylevel" in func:
-            ylevel = func["ylevel"]
-        else:
-            e = "missing key 'ylevel'"
-            raise KeyError(e)
-        if found_xarray:
-            i_x = find_level_crossings(
-                            yarray,
-                            ylevel,
-                            func_name=f,
-                            xarray=xarray,
-                            ignore_nans=ignore_nans
-            )
-        else:
-            xstart_val = xstart if isinstance(xstart, float) else 0.0
-            xdelta_val = float(data.xscale.delta)
-            i_x = find_level_crossings(
-                            yarray,
-                            ylevel,
-                            func_name=f,
-                            xstart=xstart_val,
-                            xdelta=xdelta_val,
-                            ignore_nans=ignore_nans
-            )
-        indexes = i_x[0]
-        xvalues = i_x[1]
-        if "func" in results:
-            fxn = results["func"]
-            if isinstance(fxn, dict):
-                fxn.update({"yunits": yunits})
-        # results["s"] = ylevel
-        # results["sunits"] = yunits
-        if indexes.size > 0:  # return first level crossing
-            results["i"] = indexes[0] + i0  # shift due to slicing
-            results["x"] = xvalues[0]  # shift not needed for x-values
-            results["xunits"] = xunits
-        else:
-            results["i"] = None
-            results["x"] = None
-        return results  # finished level
-
-    if f == "slope":
-        if found_xarray:
-            mb = linear_regression(
-                            yarray,
-                            xarray=xarray,
-                            ignore_nans=ignore_nans
-            )
-        else:
-            xstart_val = xstart if isinstance(xstart, float) else 0.0
-            xdelta_val = float(data.xscale.delta)
-            mb = linear_regression(
-                            yarray,
-                            xstart=xstart_val,
-                            xdelta=xdelta_val,
-                            ignore_nans=ignore_nans
-            )
-        if mb:
-            results["s"] = mb[0]
-            if isinstance(xunits, str) and isinstance(yunits, str):
-                results["sunits"] = yunits + "/" + xunits
-            else:
-                results["sunits"] = None
-            results["b"] = mb[1]
-            if isinstance(yunits, str):
-                results["bunits"] = yunits
-            else:
-                results["bunits"] = None
-        else:
-            results["s"] = None
-            results["b"] = None
-        return results
-
-    if f == "median":
-        if ignore_nans:
-            results["s"] = np.nanmedian(yarray)
-        else:
-            results["s"] = np.median(yarray)
-        results["sunits"] = yunits
-        return results
-
-    elif "mean" in f:
-        if ignore_nans:
-            results["s"] = np.nanmean(yarray)
-        else:
-            results["s"] = np.mean(yarray)
-        results["sunits"] = yunits
-        if f == "mean":
-            return results
-        # else continue to +var, +std, +sem
-
-    elif f == "var":
-        if ignore_nans:
-            results["s"] = np.nanvar(yarray)
-        else:
-            results["s"] = np.var(yarray)
-        if isinstance(yunits, str):
-            results["sunits"] = yunits + "**2"
-        else:
-            results["sunits"] = None
-        return results
-
-    elif f == "std":
-        if ignore_nans:
-            results["s"] = np.nanstd(yarray)
-        else:
-            results["s"] = np.std(yarray)
-        results["sunits"] = yunits
-        return results
-
-    elif f == "sem":
-        if ignore_nans:
-            std = np.nanstd(yarray)
-        else:
-            std = np.std(yarray)
-        results["s"] = std / math.sqrt(n)
-        results["sunits"] = yunits
-        return results
-
-    elif f == "rms":
-        if ignore_nans:
-            sos = np.nansum(np.square(yarray))
-        else:
-            sos = np.sum(np.square(yarray))
-        results["s"] = math.sqrt(sos/n)
-        results["sunits"] = yunits
-        return results
-
-    elif f == "sum":
-        if ignore_nans:
-            results["s"] = np.nansum(yarray)
-        else:
-            results["s"] = np.sum(yarray)
-        results["sunits"] = yunits
-        return results
-
-    elif f == "pathlength":
-        w = None
-        if isinstance(xunits, str) and isinstance(yunits, str):
-            if xunits != yunits:
-                e = ("pathlength: x- and y-scales have " +
-                     "different units: %s != %s" % (xunits, yunits))
-                raise ValueError(e)
-        else:
-            w = "pathlength assumes x- and y-scales have the same units"
-        if found_xarray:
-            dx2 = np.square(np.diff(xarray))
-            dy2 = np.square(np.diff(yarray))
-            h = np.sqrt(np.add(dx2, dy2))
-        else:
-            dx = float(data.xscale.delta)
-            dx2 = dx**2
-            dy2 = np.square(np.diff(yarray))
-            h = np.sqrt(dx2 + dy2)
-        if ignore_nans:
-            results["s"] = np.nansum(h)
-        else:
-            results["s"] = np.sum(h)
-        results["sunits"] = yunits
-        if w:
-            results["warning"] = w
-        return results
-
-    elif f == "area":
-        if found_xarray:
-            if ignore_nans:
-                results["s"] = np.nansum(np.multiply(xarray, yarray))
-            else:
-                results["s"] = np.sum(np.multiply(xarray, yarray))
-        else:
-            if ignore_nans:
-                sum_y = np.nansum(yarray)
-            else:
-                sum_y = np.sum(yarray)
-            results["s"] = sum_y * data.xscale.delta
-        if isinstance(xunits, str) and isinstance(yunits, str):
-            if xunits == yunits:
-                results["sunits"] = xunits + "**2"
-            else:
-                results["sunits"] = xunits + "*" + yunits
-        else:
-            results["sunits"] = None
-        return results
-
-    elif f == "count" or f == "count_nans" or f == "count_infs":
-        return results
-
+    ctx = {
+        "f": f, "func": func, "yarray": yarray, "data": data,
+        "i0": i0, "ysize": ysize, "ignore_nans": ignore_nans,
+        "results": results, "yunits": yunits, "xunits": xunits, "n": n,
+        "found_xarray": found_xarray,
+    }
+    if found_xarray:
+        ctx["xarray"] = xarray
     else:
-        e = "unknown function '%s'" % func
-        raise ValueError(e)
+        ctx["xstart"] = xstart
 
-    if "+var" in f:
-        if ignore_nans:
-            results["var"] = np.nanvar(yarray)
-        else:
-            results["var"] = np.var(yarray)
+    handler = _STATS_DISPATCH.get(f)
+    if handler is None:
+        raise ValueError("unknown function '%s'" % func)
 
-    if "+std" in f:
-        if ignore_nans:
-            results["std"] = np.nanstd(yarray)
-        else:
-            results["std"] = np.std(yarray)
-
-    if "+sem" in f:
-        if ignore_nans:
-            std = np.nanstd(yarray)
-        else:
-            std = np.std(yarray)
-        results["sem"] = std / math.sqrt(n)
-
-    return results
+    return handler(**ctx)
 
 
 def find_level_crossings(
