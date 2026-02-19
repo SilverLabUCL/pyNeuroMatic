@@ -119,11 +119,13 @@ class TestNMStatsFunc(unittest.TestCase):
         self.assertEqual(t, t2)
 
     def test_validate_baseline_is_noop(self):
-        nms.NMStatsFunc("test").validate_baseline(None)  # must not raise
+        t = nms.NMStatsFunc("test")
+        t.validate_baseline(None)  # must not raise
 
     def test_compute_raises_not_implemented(self):
+        t = nms.NMStatsFunc("test")
         with self.assertRaises(NotImplementedError):
-            nms.NMStatsFunc("test").compute(None, 0, 1, False, False, None, {})
+            t.compute(None, 0, 1, False, False, None, {})
 
 
 # =========================================================================
@@ -164,43 +166,43 @@ class TestNMStatsFuncMaxMin(unittest.TestCase):
         with self.assertRaises(ValueError):
             nms.NMStatsFuncMaxMin("badfuncname")
 
-    def test_mean_at_max_requires_imean(self):
+    def test_mean_at_max_requires_n_avg(self):
         with self.assertRaises(KeyError):
             nms.NMStatsFuncMaxMin("mean@max")
 
-    def test_imean_type_errors(self):
-        for b in [[], (), {}, set(), NM]:
+    def test_n_avg_type_errors(self):
+        for b in [[], (), {}, set(), NM, True, False]:
             with self.assertRaises(TypeError):
-                nms.NMStatsFuncMaxMin("mean@max", imean=b)
+                nms.NMStatsFuncMaxMin("mean@max", n_avg=b)
 
-    def test_imean_value_errors(self):
+    def test_n_avg_value_errors(self):
         for b in [-10, math.nan, "badvalue"]:
             with self.assertRaises(ValueError):
-                nms.NMStatsFuncMaxMin("mean@max", imean=b)
+                nms.NMStatsFuncMaxMin("mean@max", n_avg=b)
 
-    def test_imean_overflow(self):
+    def test_n_avg_overflow(self):
         with self.assertRaises(OverflowError):
-            nms.NMStatsFuncMaxMin("mean@max", imean=math.inf)
+            nms.NMStatsFuncMaxMin("mean@max", n_avg=math.inf)
 
-    def test_max_min_without_imean(self):
+    def test_max_min_without_n_avg(self):
         for f in ("max", "min"):
             t = nms.NMStatsFuncMaxMin(f)
             self.assertEqual(t.name, f)
             self.assertEqual(t.to_dict(), {"name": f})
 
-    def test_imean_upgrades_to_mean_at(self):
+    def test_n_avg_upgrades_to_mean_at(self):
         for f in ["max", "min", "mean@max", "mean@min"]:
-            t = nms.NMStatsFuncMaxMin(f, imean=10)
+            t = nms.NMStatsFuncMaxMin(f, n_avg=10)
             expected = ("mean@" + f) if f in ("max", "min") else f
             self.assertEqual(t.name, expected)
-            self.assertEqual(t.to_dict()["imean"], 10)
+            self.assertEqual(t.to_dict()["n_avg"], 10)
 
     def test_from_dict(self):
         for f in ["max", "min", "mean@max", "mean@min"]:
-            t = nms._stats_func_from_dict({"name": f, "imean": 10})
+            t = nms._stats_func_from_dict({"name": f, "n_avg": 10})
             expected = ("mean@" + f) if f in ("max", "min") else f
             self.assertEqual(t.name, expected)
-            self.assertEqual(t["imean"], 10)
+            self.assertEqual(t["n_avg"], 10)
 
     def test_from_dict_unknown_key_raises(self):
         with self.assertRaises(KeyError):
@@ -223,7 +225,7 @@ class TestNMStatsFuncLevel(unittest.TestCase):
             nms.NMStatsFuncLevel("level")
 
     def test_ylevel_type_errors(self):
-        for b in [[], (), {}, set(), NM]:
+        for b in [[], (), {}, set(), NM, True, False]:
             with self.assertRaises(TypeError):
                 nms.NMStatsFuncLevel("level", ylevel=b)
 
@@ -259,34 +261,39 @@ class TestNMStatsFuncLevel(unittest.TestCase):
 # =========================================================================
 
 class TestNMStatsFuncLevelNstd(unittest.TestCase):
-    """Tests for NMStatsFuncLevelNstd (nstd-based ylevel)."""
+    """Tests for NMStatsFuncLevelNstd (n_std-based ylevel)."""
 
     def test_invalid_name_raises(self):
         with self.assertRaises(ValueError):
-            nms.NMStatsFuncLevelNstd("badfuncname", nstd=2)
+            nms.NMStatsFuncLevelNstd("badfuncname", n_std=2)
 
-    def test_missing_nstd_raises(self):
+    def test_missing_n_std_raises(self):
         with self.assertRaises(KeyError):
             nms.NMStatsFuncLevelNstd("level")
 
-    def test_nstd_value_errors(self):
+    def test_n_std_type_errors(self):
+        for b in [[], (), {}, set(), NM, True, False]:
+            with self.assertRaises(TypeError):
+                nms.NMStatsFuncLevelNstd("level", n_std=b)
+
+    def test_n_std_value_errors(self):
         for b in [math.nan, math.inf, "badvalue", 0]:
             with self.assertRaises(ValueError):
-                nms.NMStatsFuncLevelNstd("level", nstd=b)
+                nms.NMStatsFuncLevelNstd("level", n_std=b)
 
     def test_valid_construction(self):
         for f in nms.FUNC_NAMES_LEVEL:
-            t = nms.NMStatsFuncLevelNstd(f, nstd=2)
+            t = nms.NMStatsFuncLevelNstd(f, n_std=2)
             self.assertEqual(t.name, f)
-            self.assertEqual(t.to_dict()["nstd"], 2)
+            self.assertEqual(t.to_dict()["n_std"], 2)
             self.assertTrue(t.needs_baseline)
 
-    def test_negative_nstd_valid(self):
-        t = nms.NMStatsFuncLevelNstd("level", nstd=-2)
-        self.assertEqual(t.to_dict()["nstd"], -2)
+    def test_negative_n_std_valid(self):
+        t = nms.NMStatsFuncLevelNstd("level", n_std=-2)
+        self.assertEqual(t.to_dict()["n_std"], -2)
 
     def test_validate_baseline(self):
-        t = nms.NMStatsFuncLevelNstd("level", nstd=2)
+        t = nms.NMStatsFuncLevelNstd("level", n_std=2)
         with self.assertRaises(RuntimeError):
             t.validate_baseline(None)
         with self.assertRaises(RuntimeError):
@@ -294,15 +301,15 @@ class TestNMStatsFuncLevelNstd(unittest.TestCase):
         t.validate_baseline("mean+std")  # ok
 
     def test_from_dict(self):
-        t = nms._stats_func_from_dict({"name": "level-", "nstd": -2})
+        t = nms._stats_func_from_dict({"name": "level-", "n_std": -2})
         self.assertIsInstance(t, nms.NMStatsFuncLevelNstd)
         self.assertEqual(t.name, "level-")
-        self.assertEqual(t["nstd"], -2)
+        self.assertEqual(t["n_std"], -2)
 
     def test_from_dict_both_keys_raises(self):
         with self.assertRaises(KeyError):
             nms._stats_func_from_dict(
-                {"name": "level", "ylevel": 10, "nstd": 2})
+                {"name": "level", "ylevel": 10, "n_std": 2})
 
 
 # =========================================================================
@@ -316,7 +323,7 @@ class TestNMStatsFuncRiseTime(unittest.TestCase):
         with self.assertRaises(ValueError):
             nms.NMStatsFuncRiseTime("badfuncname", p0=10, p1=90)
         with self.assertRaises(ValueError):
-            nms.NMStatsFuncRiseTime("falltime+", p0=90, p1=10)
+            nms.NMStatsFuncRiseTime("falltime+", p0=10, p1=90)
 
     def test_missing_p0_raises(self):
         with self.assertRaises(KeyError):
@@ -329,7 +336,7 @@ class TestNMStatsFuncRiseTime(unittest.TestCase):
             nms.NMStatsFuncRiseTime("risetime+", p0=10)
 
     def test_p0_p1_type_errors(self):
-        for b in [[], (), {}, set(), NM]:
+        for b in [[], (), {}, set(), NM, True, False]:
             with self.assertRaises(TypeError):
                 nms.NMStatsFuncRiseTime("risetime+", p0=b, p1=90)
             with self.assertRaises(TypeError):
@@ -402,7 +409,7 @@ class TestNMStatsFuncFallTime(unittest.TestCase):
             nms.NMStatsFuncFallTime("falltime+")
 
     def test_p0_type_errors(self):
-        for b in [[], (), {}, set(), NM]:
+        for b in [[], (), {}, set(), NM, True, False]:
             with self.assertRaises(TypeError):
                 nms.NMStatsFuncFallTime("falltime+", p0=b)
 
@@ -413,6 +420,11 @@ class TestNMStatsFuncFallTime(unittest.TestCase):
         for b in [105, -1]:
             with self.assertRaises(ValueError):
                 nms.NMStatsFuncFallTime("falltime+", p0=b)
+
+    def test_p1_type_errors(self):
+        for b in [[], (), {}, set(), NM, True, False]:
+            with self.assertRaises(TypeError):
+                nms.NMStatsFuncFallTime("falltime+", p0=90, p1=b)
 
     def test_p0_le_p1_raises(self):
         with self.assertRaises(ValueError):
@@ -559,14 +571,14 @@ class TestStatsFuncFromDict(unittest.TestCase):
             self.assertIsInstance(t, nms.NMStatsFuncBasic)
             self.assertEqual(t.name, f)
 
-    def test_maxmin_without_imean(self):
+    def test_maxmin_without_n_avg(self):
         for f in ("max", "min"):
             t = nms._stats_func_from_dict({"name": f})
             self.assertEqual(t.name, f)
 
-    def test_maxmin_with_imean(self):
+    def test_maxmin_with_n_avg(self):
         for f in ("mean@max", "mean@min"):
-            t = nms._stats_func_from_dict({"name": f, "imean": 5})
+            t = nms._stats_func_from_dict({"name": f, "n_avg": 5})
             self.assertEqual(t.name, f)
 
     def test_level_ylevel(self):
@@ -574,7 +586,7 @@ class TestStatsFuncFromDict(unittest.TestCase):
         self.assertIsInstance(t, nms.NMStatsFuncLevel)
 
     def test_level_nstd(self):
-        t = nms._stats_func_from_dict({"name": "level", "nstd": 2})
+        t = nms._stats_func_from_dict({"name": "level", "n_std": 2})
         self.assertIsInstance(t, nms.NMStatsFuncLevelNstd)
 
     def test_risetime_round_trip(self):
@@ -681,6 +693,12 @@ class TestFindLevelCrossings(unittest.TestCase):
         self.assertEqual(r[0].size, 0)
         self.assertEqual(r[1].size, 0)
 
+    def test_xarray_size_mismatch_raises(self):
+        ydata = np.zeros(10)
+        xdata = np.zeros(5)  # wrong size
+        with self.assertRaises(ValueError):
+            nms.find_level_crossings(ydata, ylevel=0, xarray=xdata)
+
 
 # =========================================================================
 # linear_regression()
@@ -694,7 +712,7 @@ class TestLinearRegression(unittest.TestCase):
             nms.linear_regression([1, 2, 3])
 
     def test_xarray_size_mismatch_raises(self):
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ValueError):
             nms.linear_regression(
                 np.array([1.0, 2.0, 3.0]), xarray=np.array([1.0, 2.0]))
 
@@ -736,6 +754,8 @@ class TestLinearRegression(unittest.TestCase):
                                      ignore_nans=True)
         self.assertFalse(math.isnan(m))
         self.assertFalse(math.isnan(b))
+        self.assertAlmostEqual(m, 2.0)
+        self.assertAlmostEqual(b, 1.0)
 
 
 # =========================================================================
@@ -750,7 +770,7 @@ class TestStats(unittest.TestCase):
         self.datanan = _make_data(n=100, with_nans=True)
 
     def test_data_type_error(self):
-        for b in nmu.badtypes(ok=[]):
+        for b in nmu.badtypes():
             with self.assertRaises(TypeError):
                 nms.stats(b, {"name": "mean"})
 
@@ -782,7 +802,7 @@ class TestStats(unittest.TestCase):
         data = NMData(NM, name="d", nparray=np.array([1, 2, 3, 4]),
                       xarray=np.array([1, 2, 3, 4]))
         data.xarray = np.array([1, 2, 3])
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ValueError):
             nms.stats(data, {"name": "max"})
 
     def test_unknown_func_raises(self):
@@ -946,6 +966,35 @@ class TestStats(unittest.TestCase):
         r = nms.stats(data, {"name": "area"})
         self.assertAlmostEqual(r["s"], 10.0)  # sum(y) * delta = 10 * 1
 
+    def test_pathlength(self):
+        # flat line: dy=0 at each step, so pathlength = (n-1) * dx
+        ydata = np.array([3.0, 3.0, 3.0, 3.0, 3.0])
+        data = NMData(NM, name="d", nparray=ydata,
+                      xscale={"start": 0, "delta": 2},
+                      yscale={"units": "mV"})
+        data.xscale.units = "mV"  # must match yunits for pathlength
+        r = nms.stats(data, {"name": "pathlength"})
+        self.assertAlmostEqual(r["s"], 4 * 2.0)  # 4 steps * dx=2
+
+    def test_pathlength_diagonal(self):
+        # y increases by 1 each step, dx=1: each segment = sqrt(1²+1²) = sqrt(2)
+        ydata = np.array([0.0, 1.0, 2.0, 3.0])
+        data = NMData(NM, name="d", nparray=ydata,
+                      xscale={"start": 0, "delta": 1},
+                      yscale={"units": "mV"})
+        data.xscale.units = "mV"
+        r = nms.stats(data, {"name": "pathlength"})
+        self.assertAlmostEqual(r["s"], 3 * math.sqrt(2))
+
+    def test_pathlength_unit_mismatch_raises(self):
+        ydata = np.array([1.0, 2.0, 3.0])
+        data = NMData(NM, name="d", nparray=ydata,
+                      xscale={"start": 0, "delta": 1},
+                      yscale={"units": "mV"})
+        data.xscale.units = "ms"  # different string units → ValueError
+        with self.assertRaises(ValueError):
+            nms.stats(data, {"name": "pathlength"})
+
     def test_mean_with_nans_ignored(self):
         r = nms.stats(self.datanan, {"name": "mean"}, ignore_nans=True)
         self.assertFalse(math.isnan(r["s"]))
@@ -1005,13 +1054,19 @@ class TestNMStatsWin(unittest.TestCase):
         c = self.w0.copy()
         self.assertTrue(self.w0 == c)
 
-    def test_eq_after_win_and_name_set(self):
-        self.w1._win_set(self.win0)
-        self.assertFalse(self.w0 == self.w1)  # names still differ
-        self.w1.name = self.w0.name
-        self.assertTrue(self.w0 == self.w1)
-        self.w1.x0 = -1
-        self.assertFalse(self.w0 == self.w1)
+    def test_eq_after_win_set(self):
+        w0 = nms.NMStatsWin(name="same")
+        w1 = nms.NMStatsWin(name="same")
+        w0._win_set(self.win0)
+        w1._win_set(self.win0)
+        self.assertTrue(w0 == w1)
+        w1.x0 = -1
+        self.assertFalse(w0 == w1)
+
+    def test_name_setter_removed(self):
+        w = nms.NMStatsWin(name="w0")
+        with self.assertRaises(AttributeError):
+            w.name = "w1"
 
     def test_to_dict_keys(self):
         keys = ["name", "on", "func", "x0", "x1", "transform",
@@ -1063,13 +1118,16 @@ class TestNMStatsWin(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.w1.func = {"name": "badname"}
 
-    def test_func_set_maxmin_imean(self):
-        self.w1._func_set({"name": "mean@max", "imean": 7})
-        self.w1._func_set({"imean": "3"})
+    def test_func_set_maxmin_n_avg(self):
+        self.w1._func_set({"name": "mean@max", "n_avg": 7})
+        self.w1._func_set({"n_avg": "3"})
         self.assertEqual(self.w1.func["name"], "mean@max")
-        self.assertEqual(self.w1.func["imean"], 3)
-        self.w1._func_set({"imean": True})
-        self.assertEqual(self.w1.func["imean"], 1)
+        self.assertEqual(self.w1.func["n_avg"], 3)
+
+    def test_func_set_maxmin_n_avg_bool_raises(self):
+        self.w1._func_set({"name": "mean@max", "n_avg": 7})
+        with self.assertRaises(TypeError):
+            self.w1._func_set({"n_avg": True})
 
     def test_func_set_level(self):
         self.w1._func_set({"name": "level+", "ylevel": -10})
@@ -1205,7 +1263,7 @@ class TestNMStatsWin(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.w1.bsln_func = {"name": "badname"}
         with self.assertRaises(ValueError):
-            self.w1._bsln_func_set({"name": "mean@max", "imean": 7})
+            self.w1._bsln_func_set({"name": "mean@max", "n_avg": 7})
 
     def test_results_list(self):
         self.assertIsInstance(self.w1.results, list)
@@ -1249,18 +1307,18 @@ class TestNMStatsWin(unittest.TestCase):
         self.assertTrue(np.isnan(r[1]["Δs"]))
 
     def test_compute_mean_at_max_warning(self):
-        self.w1.func = {"name": "mean@max", "imean": 0}
+        self.w1.func = {"name": "mean@max", "n_avg": 0}
         r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
         self.assertIn("warning", r[1]["func"])
 
-    def test_compute_mean_at_max_with_imean(self):
-        self.w1.func = {"name": "mean@max", "imean": 5}
+    def test_compute_mean_at_max_with_n_avg(self):
+        self.w1.func = {"name": "mean@max", "n_avg": 5}
         r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
         self.assertEqual(r[1]["func"]["name"], "mean@max")
-        self.assertEqual(r[1]["func"]["imean"], 5)
+        self.assertEqual(r[1]["func"]["n_avg"], 5)
 
     def test_compute_mean_at_min(self):
-        self.w1.func = {"name": "mean@min", "imean": 5}
+        self.w1.func = {"name": "mean@min", "n_avg": 5}
         r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
         self.assertEqual(r[1]["func"]["name"], "mean@min")
 
@@ -1273,31 +1331,31 @@ class TestNMStatsWin(unittest.TestCase):
         self.assertEqual(r[1]["func"]["ylevel"], ylevel)
 
     def test_compute_level_nstd_requires_mean_std_baseline(self):
-        self.w1.func = {"name": "level+", "nstd": 2}
+        self.w1.func = {"name": "level+", "n_std": 2}
         self.w1.bsln_on = True
         with self.assertRaises(RuntimeError):
             self.w1.bsln_func = "mean"  # need mean+std
             self.w1.compute(self.data, xclip=True, ignore_nans=True)
 
     def test_compute_level_nstd(self):
-        nstd = 2
-        self.w1.func = {"name": "level+", "nstd": nstd}
+        n_std = 2
+        self.w1.func = {"name": "level+", "n_std": n_std}
         self.w1.bsln_on = True
         self.w1.bsln_func = "mean+std"
         r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
         self.assertIn("ylevel", r[1]["func"])
         self.assertAlmostEqual(
             round(r[1]["Δs"] * 1000),
-            round(nstd * r[0]["std"] * 1000))
+            round(n_std * r[0]["std"] * 1000))
 
     def test_compute_level_nstd_negative(self):
-        nstd = -2
-        self.w1.func = {"name": "level-", "nstd": nstd}
+        n_std = -2
+        self.w1.func = {"name": "level-", "n_std": n_std}
         self.w1.bsln_func = "mean+std"
         r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
         self.assertAlmostEqual(
             round(r[1]["Δs"] * 1000),
-            round(nstd * r[0]["std"] * 1000))
+            round(n_std * r[0]["std"] * 1000))
 
     def test_compute_falltime_p0_only(self):
         self.w1.bsln_x0 = 0

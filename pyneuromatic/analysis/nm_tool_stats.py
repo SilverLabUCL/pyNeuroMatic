@@ -219,46 +219,48 @@ class NMStatsFuncBasic(NMStatsFunc):
 
 
 class NMStatsFuncMaxMin(NMStatsFunc):
-    """Max, min, mean@max, mean@min functions."""
+    """max, min, mean@max, mean@min functions."""
 
-    _VALID_KEYS = {"imean"}
+    _VALID_KEYS = {"n_avg"}
 
     def __init__(
-        self, name: str, imean: int | None = None,
+        self, name: str, n_avg: int | None = None,
         parent: object | None = None
     ) -> None:
         if name.lower() not in FUNC_NAMES_MAXMIN:
             raise ValueError("func name: '%s'" % name)
         f = name.lower()
         if f in ("mean@max", "mean@min"):
-            if imean is None:
-                raise KeyError("missing func key 'imean'")
-        if imean is not None:
-            imean = int(imean)  # raises TypeError/ValueError/OverflowError
-            if imean < 0:
-                raise ValueError("imean: '%s'" % imean)
-            # Upgrade max→mean@max, min→mean@min when imean is provided
+            if n_avg is None:
+                raise KeyError("missing func key 'n_avg'")
+        if n_avg is not None:
+            if isinstance(n_avg, bool):
+                raise TypeError("n_avg: '%s'" % n_avg)
+            n_avg = int(n_avg)  # raises TypeError/ValueError/OverflowError
+            if n_avg < 0:
+                raise ValueError("n_avg: '%s'" % n_avg)
+            # Upgrade max→mean@max, min→mean@min when n_avg is provided
             if f == "max":
                 f = "mean@max"
             elif f == "min":
                 f = "mean@min"
         super().__init__(f, parent=parent)
-        self._imean = imean
+        self._n_avg = n_avg
 
     def to_dict(self) -> dict:
         d = {"name": self._name}
-        if self._imean is not None:
-            d["imean"] = self._imean
+        if self._n_avg is not None:
+            d["n_avg"] = self._n_avg
         return d
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
         func: dict[str, Any] = {"name": self._name}
-        if self._imean is not None:
-            func["imean"] = self._imean
+        if self._n_avg is not None:
+            func["n_avg"] = self._n_avg
         if self._name in ("mean@max", "mean@min"):
-            imean = self._imean if self._imean is not None else 0
-            if imean <= 1:
+            n_avg = self._n_avg if self._n_avg is not None else 0
+            if n_avg <= 1:
                 func["warning"] = "not enough data points to compute a mean"
         r = run_stat(data, func, "main", x0, x1, xclip, ignore_nans)
         self._add_ds(r, bsln_result)
@@ -277,6 +279,8 @@ class NMStatsFuncLevel(NMStatsFunc):
             raise ValueError("func name: '%s'" % name)
         if ylevel is None:
             raise KeyError("missing func key 'ylevel'")
+        if isinstance(ylevel, bool):
+            raise TypeError("ylevel: '%s'" % ylevel)
         ylevel = float(ylevel)
         if math.isnan(ylevel) or math.isinf(ylevel):
             raise ValueError("ylevel: '%s'" % ylevel)
@@ -294,26 +298,28 @@ class NMStatsFuncLevel(NMStatsFunc):
 
 
 class NMStatsFuncLevelNstd(NMStatsFunc):
-    """Level computed from baseline mean +/- nstd * std."""
+    """Level computed from baseline mean +/- n_std * std."""
 
-    _VALID_KEYS = {"nstd"}
+    _VALID_KEYS = {"n_std"}
 
     def __init__(
-        self, name: str, nstd: float | None = None,
+        self, name: str, n_std: float | None = None,
         parent: object | None = None
     ) -> None:
         if name.lower() not in FUNC_NAMES_LEVEL:
             raise ValueError("func name: '%s'" % name)
-        if nstd is None:
-            raise KeyError("missing func key 'nstd'")
-        nstd = float(nstd)
-        if math.isnan(nstd) or math.isinf(nstd) or nstd == 0:
-            raise ValueError("nstd: '%s'" % nstd)
+        if n_std is None:
+            raise KeyError("missing func key 'n_std'")
+        if isinstance(n_std, bool):
+            raise TypeError("n_std: '%s'" % n_std)
+        n_std = float(n_std)
+        if math.isnan(n_std) or math.isinf(n_std) or n_std == 0:
+            raise ValueError("n_std: '%s'" % n_std)
         super().__init__(name.lower(), parent=parent)
-        self._nstd = nstd
+        self._n_std = n_std
 
     def to_dict(self) -> dict:
-        return {"name": self._name, "nstd": self._nstd}
+        return {"name": self._name, "n_std": self._n_std}
 
     @property
     def needs_baseline(self) -> bool:
@@ -322,18 +328,17 @@ class NMStatsFuncLevelNstd(NMStatsFunc):
     def validate_baseline(self, bsln_func_name: str | None) -> None:
         if bsln_func_name is None or bsln_func_name.lower() != "mean+std":
             raise RuntimeError(
-                "level nstd requires baseline 'mean+std' computation"
+                "level n_std requires baseline 'mean+std' computation"
             )
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
-        nstd = self._nstd
         ylevel = math.nan
         if "s" in bsln_result and "std" in bsln_result:
             s = bsln_result["s"]
             std = bsln_result["std"]
             if not badvalue(s) and not badvalue(std):
-                ylevel = s + nstd * std
+                ylevel = s + self._n_std * std
         func: dict[str, Any] = {"name": self._name, "ylevel": ylevel}
         r = run_stat(data, func, "main", x0, x1, xclip, ignore_nans)
         self._add_ds(r, bsln_result)
@@ -353,6 +358,8 @@ class NMStatsFuncRiseTime(NMStatsFunc):
         f = name.lower()
         if p0 is None:
             raise KeyError("missing func key 'p0'")
+        if isinstance(p0, bool):
+            raise TypeError("p0: '%s'" % p0)
         p0 = float(p0)
         if math.isnan(p0) or math.isinf(p0):
             raise ValueError("p0: '%s'" % p0)
@@ -360,6 +367,8 @@ class NMStatsFuncRiseTime(NMStatsFunc):
             raise ValueError("bad percent p0: %s" % p0)
         if p1 is None:
             raise KeyError("missing func key 'p1'")
+        if isinstance(p1, bool):
+            raise TypeError("p1: '%s'" % p1)
         p1 = float(p1)
         if math.isnan(p1) or math.isinf(p1):
             raise ValueError("p1: '%s'" % p1)
@@ -451,12 +460,16 @@ class NMStatsFuncFallTime(NMStatsFunc):
         f = name.lower()
         if p0 is None:
             raise KeyError("missing func key 'p0'")
+        if isinstance(p0, bool):
+            raise TypeError("p0: '%s'" % p0)
         p0 = float(p0)
         if math.isnan(p0) or math.isinf(p0):
             raise ValueError("p0: '%s'" % p0)
         if not (p0 > 0 and p0 < 100):
             raise ValueError("bad percent p0: %s" % p0)
         if p1 is not None:
+            if isinstance(p1, bool):
+                raise TypeError("p1: '%s'" % p1)
             p1 = float(p1)
             if math.isnan(p1) or math.isinf(p1):
                 raise ValueError("p1: '%s'" % p1)
@@ -559,14 +572,18 @@ class NMStatsFuncFWHM(NMStatsFunc):
         f = name.lower()
         if p0 is None:
             p0 = 50
+        elif isinstance(p0, bool):
+            raise TypeError("p0: '%s'" % p0)
         if p1 is None:
             p1 = 50
+        elif isinstance(p1, bool):
+            raise TypeError("p1: '%s'" % p1)
         p0 = float(p0)
         p1 = float(p1)
         if not (p0 > 0 and p0 < 100):
-            raise ValueError("bad percent p0: %s" % p0)
+            raise ValueError("p0: %s" % p0)
         if not (p1 > 0 and p1 < 100):
-            raise ValueError("bad percent p1: %s" % p1)
+            raise ValueError("p1: %s" % p1)
         super().__init__(f, parent=parent)
         self._p0 = p0
         self._p1 = p1
@@ -697,15 +714,15 @@ def _stats_func_from_dict(
     if f not in _STATS_FUNC_REGISTRY:
         raise ValueError("func_name: %s" % name)
     cls = _STATS_FUNC_REGISTRY[f]
-    # Level dispatch: redirect to NMStatsFuncLevelNstd when "nstd" present
+    # Level dispatch: redirect to NMStatsFuncLevelNstd when "n_std" present
     if cls is NMStatsFuncLevel:
         lower_keys = {k.lower() for k in d if k.lower() != "name"}
-        if "nstd" in lower_keys and "ylevel" in lower_keys:
-            raise KeyError("either 'ylevel' or 'nstd' is allowed, not both")
-        if "nstd" in lower_keys:
+        if "n_std" in lower_keys and "ylevel" in lower_keys:
+            raise KeyError("either 'ylevel' or 'n_std' is allowed, not both")
+        if "n_std" in lower_keys:
             cls = NMStatsFuncLevelNstd
         elif not lower_keys:
-            raise KeyError("missing func key 'ylevel' or 'nstd'")
+            raise KeyError("missing func key 'ylevel' or 'n_std'")
     # Extract valid parameter keys for this class, reject unknown keys
     kwargs: dict[str, Any] = {}
     for key, v in d.items():
@@ -1000,14 +1017,6 @@ class NMStatsWin:
     @property
     def name(self) -> str:
         return self._name
-
-    @name.setter
-    def name(self, newname: str) -> None:
-        if not isinstance(newname, str):
-            raise TypeError(nmu.type_error_str(newname, "newname", "string"))
-        if not newname or not nmu.name_ok(newname):
-            raise ValueError("newname: %s" % newname)
-        self._name = newname
 
     def copy(self) -> NMStatsWin:
         return copy.deepcopy(self)
@@ -1387,19 +1396,19 @@ def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
     results["x"] = data.get_xvalue(i)
     results["xunits"] = data.xscale.units
 
-    imean = 0
-    if "imean" in func and 0 <= i < ysize:
-        imean = int(func["imean"])
-        if imean <= 1:
-            imean = 0
+    n_avg = 0
+    if "n_avg" in func and 0 <= i < ysize:
+        n_avg = int(func["n_avg"])
+        if n_avg <= 1:
+            n_avg = 0
 
-    if imean > 1:
-        if imean % 2 == 0:  # even
-            i0_m = int(i - 0.5 * imean)
-            i1_m = int(i0_m + imean - 1)
+    if n_avg > 1:
+        if n_avg % 2 == 0:  # even
+            i0_m = int(i - 0.5 * n_avg)
+            i1_m = int(i0_m + n_avg - 1)
         else:  # odd
-            i0_m = int(i - 0.5 * (imean - 1))
-            i1_m = int(i + 0.5 * (imean - 1))
+            i0_m = int(i - 0.5 * (n_avg - 1))
+            i1_m = int(i + 0.5 * (n_avg - 1))
         i0_m = max(i0_m, 0)
         i0_m = min(i0_m, ysize - 1)
         i1_m = max(i1_m, 0)
@@ -1646,7 +1655,7 @@ def stats(
     if found_xarray and data.xarray.size != ysize:
         e = ("x-y paired NumPy arrays have different size: %s != %s"
              % (data.xarray.size, ysize))
-        raise RuntimeError(e)
+        raise ValueError(e)
 
     if results is None:
         results = {}
@@ -1804,7 +1813,7 @@ def find_level_crossings(
         else:
             e = ("x-y paired NumPy arrays have different size: %s != %s"
                  % (xarray.size, yarray.size))
-            raise RuntimeError(e)
+            raise ValueError(e)
     else:
         e = nmu.type_error_str(xarray, "xarray", "NumPy.ndarray")
         raise TypeError(e)
@@ -1936,7 +1945,7 @@ def linear_regression(
         else:
             e = ("x-y paired NumPy arrays have different size: %s != %s"
                  % (xarray.size, yarray.size))
-            raise RuntimeError(e)
+            raise ValueError(e)
     else:
         e = nmu.type_error_str(xarray, "xarray", "NumPy.ndarray")
         raise TypeError(e)
@@ -1966,27 +1975,10 @@ def linear_regression(
         xarray = np.linspace(x0, x1, yarray.size)
 
     if ignore_nans:
-        xavg = np.nanmean(xarray)
-        xsum = np.nansum(xarray)
-        yavg = np.nanmean(yarray)
-        ysum = np.nansum(yarray)
-        n = float(np.count_nonzero(~np.isnan(yarray)))
-        xdelta = xarray - xavg
-        ydelta = yarray - yavg
-        sumxy = np.nansum(np.multiply(xdelta, ydelta))
-        sumxsqr = np.nansum(xdelta**2)
-    else:
-        xavg = np.mean(xarray)
-        xsum = np.sum(xarray)
-        yavg = np.mean(yarray)
-        ysum = np.sum(yarray)
-        n = float(yarray.size)
-        xdelta = xarray - xavg
-        ydelta = yarray - yavg
-        sumxy = np.sum(np.multiply(xdelta, ydelta))
-        sumxsqr = np.sum(xdelta**2)
+        mask = ~np.isnan(yarray)
+        xarray = xarray[mask]
+        yarray = yarray[mask]
 
-    m = sumxy / sumxsqr
-    b = (ysum - m * xsum) / n
+    m, b = np.polyfit(xarray, yarray, deg=1)
 
     return (m, b)
