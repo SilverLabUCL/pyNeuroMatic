@@ -392,5 +392,99 @@ class TestMakeDataSeriesMultiplePrefixes(NMFolderTestBase):
         self.assertNotIn("RecordA0", data_names)
 
 
+class TestNMFolderToolResults(NMFolderTestBase):
+    """Tests for NMFolder.toolresults_save() and toolresults_clear()."""
+
+    def test_toolresults_initially_empty(self):
+        self.assertEqual(self.folder.toolresults, {})
+
+    def test_save_returns_index(self):
+        idx = self.folder.toolresults_save("stats", {"s": 1.0})
+        self.assertEqual(idx, 0)
+
+    def test_save_second_entry_returns_incremented_index(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        idx = self.folder.toolresults_save("stats", {"s": 2.0})
+        self.assertEqual(idx, 1)
+
+    def test_save_stores_results_under_tool_key(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        self.assertIn("stats", self.folder.toolresults)
+
+    def test_save_entry_contains_date_and_results(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        entry = self.folder.toolresults["stats"][0]
+        self.assertIn("date", entry)
+        self.assertIn("results", entry)
+        self.assertNotIn("tool", entry)
+
+    def test_save_entry_results_correct(self):
+        self.folder.toolresults_save("stats", {"s": 42.0})
+        entry = self.folder.toolresults["stats"][0]
+        self.assertEqual(entry["results"], {"s": 42.0})
+
+    def test_save_multiple_tools(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        self.folder.toolresults_save("main", {"v": 2.0})
+        self.assertIn("stats", self.folder.toolresults)
+        self.assertIn("main", self.folder.toolresults)
+
+    def test_save_multiple_tools_independent(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        self.folder.toolresults_save("main", {"v": 2.0})
+        self.assertEqual(len(self.folder.toolresults["stats"]), 1)
+        self.assertEqual(len(self.folder.toolresults["main"]), 1)
+
+    def test_save_rejects_non_string_tool(self):
+        with self.assertRaises(TypeError):
+            self.folder.toolresults_save(123, {"s": 1.0})
+
+    def test_clear_all(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        self.folder.toolresults_save("main", {"v": 2.0})
+        self.folder.toolresults_clear()
+        self.assertEqual(self.folder.toolresults, {})
+
+    def test_clear_by_tool(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        self.folder.toolresults_save("main", {"v": 2.0})
+        self.folder.toolresults_clear("stats")
+        self.assertNotIn("stats", self.folder.toolresults)
+        self.assertIn("main", self.folder.toolresults)
+
+    def test_clear_by_index(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        self.folder.toolresults_save("stats", {"s": 2.0})
+        self.folder.toolresults_save("stats", {"s": 3.0})
+        self.folder.toolresults_clear("stats", 1)
+        entries = self.folder.toolresults["stats"]
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["results"], {"s": 1.0})
+        self.assertEqual(entries[1]["results"], {"s": 3.0})
+
+    def test_clear_last_entry_removes_tool_key(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        self.folder.toolresults_clear("stats", 0)
+        self.assertNotIn("stats", self.folder.toolresults)
+
+    def test_clear_unknown_tool_raises(self):
+        with self.assertRaises(KeyError):
+            self.folder.toolresults_clear("stats")
+
+    def test_clear_index_out_of_range_raises(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        with self.assertRaises(IndexError):
+            self.folder.toolresults_clear("stats", 5)
+
+    def test_clear_non_string_tool_raises(self):
+        with self.assertRaises(TypeError):
+            self.folder.toolresults_clear(123)
+
+    def test_clear_non_int_index_raises(self):
+        self.folder.toolresults_save("stats", {"s": 1.0})
+        with self.assertRaises(TypeError):
+            self.folder.toolresults_clear("stats", "0")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
