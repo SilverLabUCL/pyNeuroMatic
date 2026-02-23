@@ -1370,7 +1370,7 @@ class TestNMStatsWin(unittest.TestCase):
         if not math.isnan(r[1]["Δs"]):
             self.assertEqual(len(r), 3)
             self.assertAlmostEqual(r[1]["Δs"], r[1]["s"] - r[0]["s"])
-            self.assertIn("Δx", r[2])
+            self.assertIn("dx", r[2])
 
     def test_compute_peak_funcs(self):
         flist = [
@@ -1406,10 +1406,10 @@ class TestNMStatsWin(unittest.TestCase):
             self.assertGreaterEqual(len(r), 4)
             self.assertEqual(r[2]["p0"], p0)
             self.assertEqual(r[3]["p1"], p1)
-            self.assertIn("Δx", r[3])
-            if not math.isnan(r[3]["Δx"]):
-                self.assertAlmostEqual(r[3]["Δx"], r[3]["x"] - r[2]["x"])
-            expected_len = (5 if slope and not math.isnan(r[3]["Δx"])
+            self.assertIn("dx", r[3])
+            if not math.isnan(r[3]["dx"]):
+                self.assertAlmostEqual(r[3]["dx"], r[3]["x"] - r[2]["x"])
+            expected_len = (5 if slope and not math.isnan(r[3]["dx"])
                             else 4)
             self.assertEqual(len(r), expected_len)
             for i in range(1, expected_len):
@@ -1552,6 +1552,91 @@ class TestNMToolStats(unittest.TestCase):
         w.func = "mean"
         w.compute(data)
         self.tool._save_history(quiet=True)
+
+    # --- _save_numpy ---
+
+    def _setup_folder(self):
+        """Create a real NMFolder and wire it into the tool's selection."""
+        from pyneuromatic.core.nm_folder import NMFolder
+        from pyneuromatic.analysis.nm_tool import SELECT_LEVELS
+        folder = NMFolder(name="TestFolder")
+        self.tool._select = {level: None for level in SELECT_LEVELS}
+        self.tool._select["folder"] = folder
+        return folder
+
+    def _run_compute(self, func="mean", n_waves=3):
+        """Compute stats for n_waves and accumulate into tool results."""
+        w = list(self.tool.windows)[0]
+        w.func = func
+        for k in range(n_waves):
+            data = _make_data(name="recordA%d" % k)
+            w.compute(data)
+            wname = w.name
+            results = w.results
+            if wname in self.tool._NMToolStats__results:
+                self.tool._NMToolStats__results[wname].append(results)
+            else:
+                self.tool._NMToolStats__results[wname] = [results]
+
+    def test_save_numpy_returns_toolfolder(self):
+        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        self._setup_folder()
+        self._run_compute()
+        f = self.tool._save_numpy()
+        self.assertIsInstance(f, NMToolFolder)
+
+    def test_save_numpy_folder_named_stats0(self):
+        self._setup_folder()
+        self._run_compute()
+        f = self.tool._save_numpy()
+        self.assertEqual(f.name, "stats0")
+
+    def test_save_numpy_second_run_named_stats1(self):
+        self._setup_folder()
+        self._run_compute()
+        self.tool._save_numpy()
+        self.tool._NMToolStats__results.clear()
+        self._run_compute()
+        f = self.tool._save_numpy()
+        self.assertEqual(f.name, "stats1")
+
+    def test_save_numpy_creates_data_array(self):
+        self._setup_folder()
+        self._run_compute(n_waves=3)
+        f = self.tool._save_numpy()
+        self.assertIn("ST_w0_data", f.data)
+
+    def test_save_numpy_data_array_length(self):
+        self._setup_folder()
+        self._run_compute(n_waves=3)
+        f = self.tool._save_numpy()
+        d = f.data.get("ST_w0_data")
+        self.assertEqual(len(d.nparray), 3)
+
+    def test_save_numpy_creates_s_array(self):
+        self._setup_folder()
+        self._run_compute(func="mean", n_waves=3)
+        f = self.tool._save_numpy()
+        self.assertIn("ST_w0_main_s", f.data)
+
+    def test_save_numpy_s_array_length(self):
+        self._setup_folder()
+        self._run_compute(func="mean", n_waves=3)
+        f = self.tool._save_numpy()
+        d = f.data.get("ST_w0_main_s")
+        self.assertEqual(len(d.nparray), 3)
+
+    def test_save_numpy_no_folder_returns_none(self):
+        from pyneuromatic.analysis.nm_tool import SELECT_LEVELS
+        self.tool._select = {level: None for level in SELECT_LEVELS}
+        # folder is None — should return None
+        result = self.tool._save_numpy()
+        self.assertIsNone(result)
+
+    def test_save_numpy_no_results_raises(self):
+        self._setup_folder()
+        with self.assertRaises(RuntimeError):
+            self.tool._save_numpy()
 
 
 if __name__ == "__main__":
