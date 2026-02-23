@@ -813,13 +813,13 @@ class NMToolStats(NMTool):
             raise TypeError(e)
 
     # override, no super
-    def execute_init(self) -> bool:
+    def run_init(self) -> bool:
         if isinstance(self.__results, dict):
             self.__results.clear()
         return True  # ok
 
     # override, no super
-    def execute(self) -> bool:
+    def run(self) -> bool:
         if not isinstance(self.data, NMData):
             raise RuntimeError("no data selected")
         for w in self.windows:
@@ -838,7 +838,7 @@ class NMToolStats(NMTool):
         return True  # ok
 
     # override, no super
-    def execute_finish(self) -> bool:
+    def run_finish(self) -> bool:
         NMToolStats.results_print(self.__results)
         self.results_save()
         self.results_save_as_numpy()

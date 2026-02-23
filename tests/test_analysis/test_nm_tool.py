@@ -224,40 +224,40 @@ class TestNMToolSelectKeys(unittest.TestCase):
         self.assertEqual(set(keys.keys()), set(SELECT_LEVELS))
 
 
-class TestNMToolExecuteMethods(unittest.TestCase):
-    """Tests for NMTool execute methods."""
+class TestNMToolRunMethods(unittest.TestCase):
+    """Tests for NMTool run methods."""
 
-    def test_execute_init_returns_true(self):
+    def test_run_init_returns_true(self):
         tool = NMTool()
-        self.assertTrue(tool.execute_init())
+        self.assertTrue(tool.run_init())
 
-    def test_execute_returns_true(self):
+    def test_run_returns_true(self):
         tool = NMTool()
-        self.assertTrue(tool.execute())
+        self.assertTrue(tool.run())
 
-    def test_execute_finish_returns_true(self):
+    def test_run_finish_returns_true(self):
         tool = NMTool()
-        self.assertTrue(tool.execute_finish())
+        self.assertTrue(tool.run_finish())
 
 
 class TestNMToolSubclass(unittest.TestCase):
     """Tests for NMTool subclassing."""
 
-    def test_subclass_can_override_execute(self):
+    def test_subclass_can_override_run(self):
         class CustomTool(NMTool):
             def __init__(self):
                 super().__init__()
-                self.executed = False
+                self.run_finished = False
 
-            def execute(self) -> bool:
-                self.executed = True
+            def run(self) -> bool:
+                self.run_finished = True
                 return True
 
         tool = CustomTool()
-        self.assertFalse(tool.executed)
-        result = tool.execute()
+        self.assertFalse(tool.run_finished)
+        result = tool.run()
         self.assertTrue(result)
-        self.assertTrue(tool.executed)
+        self.assertTrue(tool.run_finished)
 
     def test_subclass_can_access_selection(self):
         nm = NMManager(quiet=QUIET)
@@ -266,37 +266,37 @@ class TestNMToolSubclass(unittest.TestCase):
         assert isinstance(folder, NMFolder)
 
         class CustomTool(NMTool):
-            def execute(self) -> bool:
+            def run(self) -> bool:
                 return self.folder is not None
 
         tool = CustomTool()
         tool._select["folder"] = folder
 
-        self.assertTrue(tool.execute())
+        self.assertTrue(tool.run())
         self.assertEqual(tool.folder.name, "test_folder")
 
-    def test_subclass_execute_init_called_before_execute(self):
+    def test_subclass_run_init_called_before_run(self):
         call_order = []
 
         class CustomTool(NMTool):
-            def execute_init(self) -> bool:
+            def run_init(self) -> bool:
                 call_order.append("init")
                 return True
 
-            def execute(self) -> bool:
-                call_order.append("execute")
+            def run(self) -> bool:
+                call_order.append("run")
                 return True
 
-            def execute_finish(self) -> bool:
+            def run_finish(self) -> bool:
                 call_order.append("finish")
                 return True
 
         tool = CustomTool()
-        tool.execute_init()
-        tool.execute()
-        tool.execute_finish()
+        tool.run_init()
+        tool.run()
+        tool.run_finish()
 
-        self.assertEqual(call_order, ["init", "execute", "finish"])
+        self.assertEqual(call_order, ["init", "run", "finish"])
 
 
 class TestNMToolIntegration(unittest.TestCase):

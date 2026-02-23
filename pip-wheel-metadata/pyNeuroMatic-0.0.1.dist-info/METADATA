@@ -120,7 +120,7 @@ NM's container tree hierarchy is as follows:
 
 In the future, users will be able to instruct NM to perform a given task on the selected items, such as baselining or filtering.
 
-(3) NM container 'execute' items. Each NMObjectContainer has one 'execute' item. By default the execute item is the 'select' item, just described (2). However, users have the option to set the 'execute' item to a NM container key (e.g. nm.projects.execute_key = 'project0') or a NMSet (e.g. nm.projects.execute_key = 'set3').
+(3) NM container 'run' items. Each NMObjectContainer has one 'run' item. By default the 'run' item is the 'select' item, just described (2). However, users have the option to set the 'run' item to a NM container key (e.g. nm.projects.run_key = 'project0') or a NMSet (e.g. nm.projects.run_key = 'set3').
 
 (4) GUI built with pyQt6 and channel graphs.
 
