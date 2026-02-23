@@ -862,7 +862,7 @@ class NMToolStats(NMTool):
                     print(rdict)
         return None
 
-    def results_save(self) -> str | None:
+    def results_save(self) -> int | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:

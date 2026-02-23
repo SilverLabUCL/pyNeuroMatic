@@ -192,32 +192,64 @@ class NMFolder(NMObject):
     def toolresults(self) -> dict[str, object]:
         return self.__toolresults
 
-    def toolresults_save(self, tool: str, results: Any) -> str:
-        imax_keys = 99
+    def toolresults_save(
+        self,
+        tool: str,
+        results: Any,
+        quiet: bool = nmp.QUIET,
+    ) -> int:
         if not isinstance(tool, str):
             e = nmu.type_error_str(tool, "tool", "string")
             raise TypeError(e)
 
-        tp = self.path_str
-        foundkey = False
-        for i in range(imax_keys):
-            newkey = tool + str(i)
-            if newkey not in self.__toolresults:
-                foundkey = True
-                break
-        if not foundkey:
-            e = "failed to find unused key for %s results in %s" % (tool, tp)
-            raise KeyError(e)
+        if tool not in self.__toolresults:
+            self.__toolresults[tool] = []
+        entry = {"date": str(datetime.datetime.now()), "results": results}
+        self.__toolresults[tool].append(entry)
+        idx = len(self.__toolresults[tool]) - 1
+        nmh.history(
+            "saved %s results to %s[%d]" % (tool, self.path_str, idx),
+            quiet=quiet,
+        )
+        return idx
 
-        t = str(datetime.datetime.now())
-        r = {}
-        r["tool"] = tool
-        r["date"] = t
-        r["results"] = results
-        self.__toolresults[newkey] = r
-        print("saved %s results to %s via key '%s' (%s)" %
-              (tool, tp, newkey, t))
-        return newkey
+    def toolresults_clear(
+        self,
+        tool: str | None = None,
+        idx: int | None = None,
+        quiet: bool = nmp.QUIET,
+    ) -> None:
+        if tool is None:
+            self.__toolresults.clear()
+            nmh.history("cleared all toolresults", quiet=quiet)
+            return None
+        if not isinstance(tool, str):
+            raise TypeError(nmu.type_error_str(tool, "tool", "string"))
+        if tool not in self.__toolresults:
+            raise KeyError("tool not found in toolresults: %s" % tool)
+        if idx is None:
+            del self.__toolresults[tool]
+            nmh.history(
+                "cleared %s toolresults" % tool,
+                quiet=quiet,
+            )
+            return None
+        if not isinstance(idx, int):
+            raise TypeError(nmu.type_error_str(idx, "idx", "integer"))
+        entries = self.__toolresults[tool]
+        if idx < 0 or idx >= len(entries):
+            raise IndexError(
+                "idx %d out of range for %s toolresults (len=%d)"
+                % (idx, tool, len(entries))
+            )
+        entries.pop(idx)
+        if len(entries) == 0:
+            del self.__toolresults[tool]
+        nmh.history(
+            "cleared %s toolresults[%d]" % (tool, idx),
+            quiet=quiet,
+        )
+        return None
 
     @property
     def notes(self) -> NMNotes:
