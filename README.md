@@ -205,7 +205,7 @@ NMManager (nm)
                             NMEpoch ('E0', 'E1', 'E2'...)
 ```
 
-### Selection and Execution (✅ Implemented)
+### Selection and Run (✅ Implemented)
 
 **Select Items:**
 
@@ -218,9 +218,9 @@ nm.select_values  # or nm.select_keys
 
 Users can perform tasks on selected items, such as baselining or filtering.
 
-**Execute Items:**
+**Run Items:**
 
-Each `NMObjectContainer` has one 'execute' item. By default, this is the 'select' item, but users can set the execute item to a container key (e.g., `nm.projects.execute_key = 'project0'`) or a `NMSet` (e.g., `nm.projects.execute_key = 'set3'`).
+Each `NMObjectContainer` has one 'run' item. By default, this is the 'select' item, but users can set the run item to a container key (e.g., `nm.projects.run_key = 'project0'`) or a `NMSet` (e.g., `nm.projects.run_key = 'set3'`).
 
 ### Analysis Tools
 

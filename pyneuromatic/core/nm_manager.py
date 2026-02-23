@@ -47,9 +47,9 @@ nm = None  # holds Manager, accessed via console
 # Hierarchy levels for selection (folder down to epoch)
 SELECT_LEVELS = ("folder", "data", "dataseries", "channel", "epoch")
 
-# Execute target constants (consistent with ExecuteMode in NMObjectContainer)
-EXECUTE_SELECTED = "selected"
-EXECUTE_ALL = "all"
+# Run target constants (consistent with RunMode in NMObjectContainer)
+RUN_SELECTED = "selected"
+RUN_ALL = "all"
 
 """
 NM class tree:
@@ -87,7 +87,7 @@ class NMManager:
     Example:
         nm = NMManager(workspace="spike_analysis")
         nm.stats.windows.get("w0").func = "mean"
-        nm.execute_tool()
+        nm.run_tool()
     """
 
     def __init__(
@@ -425,27 +425,27 @@ class NMManager:
         # Use existing _select_keys_set to apply the selection
         self._select_keys_set(select)
 
-    def execute_values(
+    def run_values(
         self,
         dataseries_priority: bool = True
     ) -> list[dict[str, NMObject]]:
         elist: list[dict[str, NMObject]] = []
-        # for p in self.__project_container.execute_values:
+        # for p in self.__project_container.run_values:
         p = self.__project
         folders = p.folders
         if folders is None:
             return elist
-        flist = folders.execute_targets
+        flist = folders.run_targets
         for f in flist:
             if not isinstance(f, NMFolder):
                 continue
-            dslist = f.dataseries.execute_targets
+            dslist = f.dataseries.run_targets
             if dataseries_priority and dslist:
                 for ds in dslist:
                     if not isinstance(ds, NMDataSeries):
                         continue
-                    for c in ds.channels.execute_targets:
-                        for e in ds.epochs.execute_targets:
+                    for c in ds.channels.run_targets:
+                        for e in ds.epochs.run_targets:
                             x: dict[str, NMObject] = {}
                             x["folder"] = f
                             x["dataseries"] = ds
@@ -453,7 +453,7 @@ class NMManager:
                             x["epoch"] = e
                             elist.append(x)
             else:
-                dlist = f.data.execute_targets
+                dlist = f.data.run_targets
                 for d in dlist:
                     x2: dict[str, NMObject] = {}
                     x2["folder"] = f
@@ -461,12 +461,12 @@ class NMManager:
                     elist.append(x2)
         return elist
 
-    def execute_keys(
+    def run_keys(
         self,
         dataseries_priority: bool = True
     ) -> list[dict[str, str]]:
         elist = []
-        elist2 = self.execute_values(dataseries_priority)
+        elist2 = self.run_values(dataseries_priority)
         for e in elist2:
             e2 = {}
             for k, o in e.items():
@@ -474,32 +474,32 @@ class NMManager:
             elist.append(e2)
         return elist
 
-    def execute_count(self, dataseries_priority: bool = True) -> int:
+    def run_count(self, dataseries_priority: bool = True) -> int:
         """
-        Return count of execute targets without executing.
+        Return count of run targets without executing.
 
         Use this to preview how many items will be targeted before
-        calling execute_tool().
+        calling run_tool().
 
         Args:
             dataseries_priority: If True, count dataseries mode targets.
                                 If False, count data mode targets.
 
         Returns:
-            Number of execute targets
+            Number of run targets
         """
-        return len(self.execute_keys(dataseries_priority))
+        return len(self.run_keys(dataseries_priority))
 
-    def execute_keys_set(
+    def run_keys_set(
         self,
-        execute: dict[str, str],
+        run: dict[str, str],
         max_targets: int | None = 1000
     ) -> list[dict[str, str]]:
         """
-        Set execute targets at each hierarchy level.
+        Set run targets at each hierarchy level.
 
         Args:
-            execute: Dictionary mapping level names to target values.
+            run: Dictionary mapping level names to target values.
                     Values can be: "select"/"selected", "all", a specific name,
                     or a set name.
                     Must include "folder" and either "data" or "dataseries".
@@ -508,90 +508,90 @@ class NMManager:
                         Set to None for unlimited. Default is 1000.
 
         Returns:
-            List of execute target dictionaries (same as execute_keys())
+            List of run target dictionaries (same as run_keys())
 
         Raises:
-            TypeError: If execute is not a dict or values aren't strings
+            TypeError: If run is not a dict or values aren't strings
             KeyError: If a key is not a valid selection level
             ValueError: If target count exceeds max_targets
         """
-        if not isinstance(execute, dict):
-            raise TypeError(nmu.type_error_str(execute, "execute", "dictionary"))
+        if not isinstance(run, dict):
+            raise TypeError(nmu.type_error_str(run, "run", "dictionary"))
 
-        for key, value in execute.items():
+        for key, value in run.items():
             if not isinstance(key, str):
                 raise TypeError(nmu.type_error_str(key, "key", "string"))
 
         # Normalize keys to lowercase for case-insensitive matching
-        execute = {k.lower(): v for k, v in execute.items()}
+        run = {k.lower(): v for k, v in run.items()}
 
-        for key, value in execute.items():
+        for key, value in run.items():
             if key not in SELECT_LEVELS:
-                raise KeyError(f"unknown execute key '{key}'")
+                raise KeyError(f"unknown run key '{key}'")
             if not isinstance(value, str):
                 raise TypeError(nmu.type_error_str(value, "value", "string"))
 
         # Validate mutually exclusive keys
-        if "data" in execute and "dataseries" in execute:
+        if "data" in run and "dataseries" in run:
             raise KeyError(
                 "encountered both 'data' and 'dataseries' keys "
                 "but only one should be defined"
             )
 
-        if "data" not in execute and "dataseries" not in execute:
-            raise KeyError("missing execute 'data' or 'dataseries' key")
+        if "data" not in run and "dataseries" not in run:
+            raise KeyError("missing run 'data' or 'dataseries' key")
 
-        if "data" in execute and "channel" in execute:
+        if "data" in run and "channel" in run:
             raise KeyError(
-                "execute 'channel' key should be used with 'dataseries', not 'data'"
+                "run 'channel' key should be used with 'dataseries', not 'data'"
             )
 
-        if "data" in execute and "epoch" in execute:
+        if "data" in run and "epoch" in run:
             raise KeyError(
-                "execute 'epoch' key should be used with 'dataseries', not 'data'"
+                "run 'epoch' key should be used with 'dataseries', not 'data'"
             )
 
         # Folder is required
-        if "folder" not in execute:
-            raise KeyError("missing execute 'folder' key")
+        if "folder" not in run:
+            raise KeyError("missing run 'folder' key")
 
         folders = self.__project.folders
         if folders is None:
             raise ValueError("project has no folder container")
 
-        # Set folder execute target (allows select/all/name/set)
-        folders.execute_target = execute["folder"]
+        # Set folder run target (allows select/all/name/set)
+        folders.run_target = run["folder"]
 
         # Data mode - simpler path
-        if "data" in execute:
-            # Set data execute target for each folder in execute_targets
-            for f in folders.execute_targets:
+        if "data" in run:
+            # Set data run target for each folder in run_targets
+            for f in folders.run_targets:
                 if isinstance(f, NMFolder):
-                    f.data.execute_target = execute["data"]
+                    f.data.run_target = run["data"]
 
-            result = self.execute_keys(dataseries_priority=False)
+            result = self.run_keys(dataseries_priority=False)
             self._check_max_targets(result, max_targets)
             return result
 
         # Dataseries mode - requires dataseries, channel, epoch
-        if "dataseries" not in execute:
-            raise KeyError("missing execute 'dataseries' key")
-        if "channel" not in execute:
-            raise KeyError("missing execute 'channel' key")
-        if "epoch" not in execute:
-            raise KeyError("missing execute 'epoch' key")
+        if "dataseries" not in run:
+            raise KeyError("missing run 'dataseries' key")
+        if "channel" not in run:
+            raise KeyError("missing run 'channel' key")
+        if "epoch" not in run:
+            raise KeyError("missing run 'epoch' key")
 
-        # Set execute targets for each folder and dataseries
-        for f in folders.execute_targets:
+        # Set run targets for each folder and dataseries
+        for f in folders.run_targets:
             if not isinstance(f, NMFolder):
                 continue
-            f.dataseries.execute_target = execute["dataseries"]
-            for ds in f.dataseries.execute_targets:
+            f.dataseries.run_target = run["dataseries"]
+            for ds in f.dataseries.run_targets:
                 if isinstance(ds, NMDataSeries):
-                    ds.channels.execute_target = execute["channel"]
-                    ds.epochs.execute_target = execute["epoch"]
+                    ds.channels.run_target = run["channel"]
+                    ds.epochs.run_target = run["epoch"]
 
-        result = self.execute_keys(dataseries_priority=True)
+        result = self.run_keys(dataseries_priority=True)
         self._check_max_targets(result, max_targets)
         return result
 
@@ -603,31 +603,31 @@ class NMManager:
         """Check if result exceeds max_targets limit."""
         if max_targets is not None and len(result) > max_targets:
             raise ValueError(
-                f"Execute would target {len(result)} items, exceeding limit "
+                f"Run would target {len(result)} items, exceeding limit "
                 f"of {max_targets}. Use max_targets=None to override, or use "
-                f"execute_count() to preview target count."
+                f"run_count() to preview target count."
             )
 
-    def execute_reset_all(self) -> None:
-        """Reset all execute targets to use the selected item at each level."""
+    def run_reset_all(self) -> None:
+        """Reset all run targets to use the selected item at each level."""
         p = self.__project
         folders = p.folders
         if folders is None:
             return None
-        folders.execute_target = EXECUTE_SELECTED
+        folders.run_target = RUN_SELECTED
         for f in folders.values():
             if not isinstance(f, NMFolder):
                 continue
-            f.data.execute_target = EXECUTE_SELECTED
-            f.dataseries.execute_target = EXECUTE_SELECTED
+            f.data.run_target = RUN_SELECTED
+            f.dataseries.run_target = RUN_SELECTED
             for ds in f.dataseries.values():
                 if not isinstance(ds, NMDataSeries):
                     continue
-                ds.channels.execute_target = EXECUTE_SELECTED
-                ds.epochs.execute_target = EXECUTE_SELECTED
+                ds.channels.run_target = RUN_SELECTED
+                ds.epochs.run_target = RUN_SELECTED
         return None
 
-    def execute_tool(
+    def run_tool(
         self,
         toolname: str = "selected"
     ) -> bool:
@@ -651,17 +651,17 @@ class NMManager:
             e = "tool '%s' is not an instance of NMTool" % toolname
             raise TypeError(e)
 
-        execute_list = self.execute_keys()
-        if not execute_list:
-            print("nothing to execute")
-        if not tool.execute_init():
+        run_list = self.run_keys()
+        if not run_list:
+            print("nothing to run")
+        if not tool.run_init():
             return False
-        for ex in execute_list:
+        for ex in run_list:
             self.select_keys = ex
             tool.select_values = self.select_values
-            if not tool.execute():
+            if not tool.run():
                 break
-        return tool.execute_finish()
+        return tool.run_finish()
 
     # Workspace methods
 
@@ -810,7 +810,7 @@ if __name__ == "__main__":
          "data": "set1"
          }
 
-    nm.execute_keys_set(e)
+    nm.run_keys_set(e)
 
     stats = nm.stats
 
@@ -830,18 +830,15 @@ if __name__ == "__main__":
         w2.func = "mean+sem"
         w3 = nm.stats.windows.new()
         w3.func = "median"
-        nm.stats.windows.sets.new("set1")
-        nm.stats.windows.sets.add("set1", ["w1"])
-        nm.stats.windows.execute_key = "set1"
 
     for i in range(1):
-        nm.execute_tool()
+        nm.run_tool()
 
     # f1.toolresults.clear()
     # print(len(f1.toolresults))
 
-    # print(nm.projects.execute_key)
-    # print(nm.execute_keys())
+    # print(nm.projects.run_key)
+    # print(nm.run_keys())
 
     # p = nm.projects.new("project0")
     # p.folders.new("folder0")

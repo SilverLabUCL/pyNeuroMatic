@@ -30,12 +30,12 @@ from pyneuromatic.core.nm_sets import NMSets
 import pyneuromatic.core.nm_utilities as nmu
 
 
-class ExecuteMode(Enum):
+class RunMode(Enum):
     """Specifies which NMObjects to operate on in a container."""
     SELECTED = auto()  # the currently selected NMObject
     ALL = auto()       # all NMObjects in the container
-    NAME = auto()      # a specific NMObject by name (use execute_target_name)
-    SET = auto()       # all NMObjects in a named set (use execute_target_name)
+    NAME = auto()      # a specific NMObject by name (use run_target_name)
+    SET = auto()       # all NMObjects in a named set (use run_target_name)
 
 
 class NMObjectContainer(NMObject, MutableMapping):
@@ -75,7 +75,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     NMObjects within a NMObjectContainer can be added to one or more NM sets.
     The NM sets can then be used for execution of NM functions via the
-    NMManager. See NMManager.execute_values().
+    NMManager. See NMManager.run_values().
 
     See Attributes and Properties of NMObject.
 
@@ -160,11 +160,11 @@ class NMObjectContainer(NMObject, MutableMapping):
         # only one NMObject can be selected at a time; None if nothing selected
         self.__selected_name: str | None = None
 
-        # execute_mode: specifies which NMObjects to operate/execute on (see ExecuteMode enum)
-        # execute_target_name: used with NAME or SET modes to specify which object/set
-        # see execute_targets property for resolved NMObject list
-        self.__execute_mode: ExecuteMode = ExecuteMode.SELECTED
-        self.__execute_target_name: str | None = None
+        # run_mode: specifies which NMObjects to operate/run on (see RunMode enum)
+        # run_target_name: used with NAME or SET modes to specify which object/set
+        # see run_targets property for resolved NMObject list
+        self.__run_mode: RunMode = RunMode.SELECTED
+        self.__run_target_name: str | None = None
 
         if not isinstance(rename_on, bool):
             e = nmu.type_error_str(rename_on, "rename_on", "boolean")
@@ -200,8 +200,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         k.update({"auto_name_prefix": self.__auto_name_prefix})
         k.update({"auto_name_seq_format": self.__auto_name_seq_format})
         k.update({"selected_name": self.__selected_name})
-        k.update({"execute_mode": self.__execute_mode.name})
-        k.update({"execute_target_name": self.__execute_target_name})
+        k.update({"run_mode": self.__run_mode.name})
+        k.update({"run_target_name": self.__run_target_name})
         if self.__sets:
             k.update({"sets": list(self.__sets.keys())})
         return k
@@ -373,15 +373,15 @@ class NMObjectContainer(NMObject, MutableMapping):
                 return False
             if self.selected_value != other.selected_value:
                 return False
-        if "execute_mode" not in ignore_parameters:
-            if self.execute_mode != other.execute_mode:
+        if "run_mode" not in ignore_parameters:
+            if self.run_mode != other.run_mode:
                 return False
-            if self.execute_target_name != other.execute_target_name:
+            if self.run_target_name != other.run_target_name:
                 return False
-            if len(self.execute_targets) != len(other.execute_targets):
+            if len(self.run_targets) != len(other.run_targets):
                 return False
-            for i in range(len(self.execute_targets)):
-                if self.execute_targets[i] != other.execute_targets[i]:
+            for i in range(len(self.run_targets)):
+                if self.run_targets[i] != other.run_targets[i]:
                     return False
         if "sets" not in ignore_parameters:
             if self.sets != other.sets:
@@ -967,26 +967,26 @@ class NMObjectContainer(NMObject, MutableMapping):
         return name.lower() == self.__selected_name.lower()
 
     @property
-    def execute_targets(self) -> list[NMObject]:
-        """Returns the list of NMObjects to operate on based on execute_mode."""
-        if self.__execute_mode == ExecuteMode.SELECTED:
+    def run_targets(self) -> list[NMObject]:
+        """Returns the list of NMObjects to operate on based on run_mode."""
+        if self.__run_mode == RunMode.SELECTED:
             value = self.selected_value
             if value is None:
                 return []
             return [value]
-        if self.__execute_mode == ExecuteMode.ALL:
+        if self.__run_mode == RunMode.ALL:
             return list(self.values())
-        if self.__execute_mode == ExecuteMode.NAME:
-            if self.__execute_target_name is None:
+        if self.__run_mode == RunMode.NAME:
+            if self.__run_target_name is None:
                 return []
-            key = self._getkey(self.__execute_target_name)
+            key = self._getkey(self.__run_target_name)
             if key is None:
                 return []
             return [self.__map[key]]
-        if self.__execute_mode == ExecuteMode.SET:
-            if self.__execute_target_name is None:
+        if self.__run_mode == RunMode.SET:
+            if self.__run_target_name is None:
                 return []
-            key = self.sets._getkey(self.__execute_target_name)
+            key = self.sets._getkey(self.__run_target_name)
             if key is None:
                 return []
             s = self.sets.get(key)
@@ -996,35 +996,35 @@ class NMObjectContainer(NMObject, MutableMapping):
         return []
 
     @property
-    def execute_mode(self) -> ExecuteMode:
-        return self.__execute_mode
+    def run_mode(self) -> RunMode:
+        return self.__run_mode
 
-    @execute_mode.setter
-    def execute_mode(self, mode: ExecuteMode) -> None:
-        self._execute_mode_set(mode)
-
-    @property
-    def execute_target_name(self) -> str | None:
-        return self.__execute_target_name
-
-    @execute_target_name.setter
-    def execute_target_name(self, name: str | None) -> None:
-        self._execute_mode_set(self.__execute_mode, name)
+    @run_mode.setter
+    def run_mode(self, mode: RunMode) -> None:
+        self._run_mode_set(mode)
 
     @property
-    def execute_target(self) -> str:
-        """Returns string representation of current execute target."""
-        if self.__execute_mode == ExecuteMode.SELECTED:
+    def run_target_name(self) -> str | None:
+        return self.__run_target_name
+
+    @run_target_name.setter
+    def run_target_name(self, name: str | None) -> None:
+        self._run_mode_set(self.__run_mode, name)
+
+    @property
+    def run_target(self) -> str:
+        """Returns string representation of current run target."""
+        if self.__run_mode == RunMode.SELECTED:
             return "selected"
-        if self.__execute_mode == ExecuteMode.ALL:
+        if self.__run_mode == RunMode.ALL:
             return "all"
-        if self.__execute_target_name is not None:
-            return self.__execute_target_name
+        if self.__run_target_name is not None:
+            return self.__run_target_name
         return "selected"
 
-    @execute_target.setter
-    def execute_target(self, target: str | None) -> None:
-        """Set execute mode from a string value.
+    @run_target.setter
+    def run_target(self, target: str | None) -> None:
+        """Set run mode from a string value.
 
         Args:
             target: One of:
@@ -1034,87 +1034,87 @@ class NMObjectContainer(NMObject, MutableMapping):
                 - a set name: use all items in that set
         """
         if target is None:
-            self._execute_mode_set(ExecuteMode.SELECTED)
+            self._run_mode_set(RunMode.SELECTED)
             return
         if not isinstance(target, str):
             e = nmu.type_error_str(target, "target", "string")
             raise TypeError(e)
         target_lower = target.lower()
         if target_lower in ("select", "selected"):
-            self._execute_mode_set(ExecuteMode.SELECTED)
+            self._run_mode_set(RunMode.SELECTED)
         elif target_lower == "all":
-            self._execute_mode_set(ExecuteMode.ALL)
+            self._run_mode_set(RunMode.ALL)
         elif self._getkey(target) is not None:
             # It's a valid name in the container
-            self._execute_mode_set(ExecuteMode.NAME, target)
+            self._run_mode_set(RunMode.NAME, target)
         elif self.sets._getkey(target) is not None:
             # It's a valid set name
-            self._execute_mode_set(ExecuteMode.SET, target)
+            self._run_mode_set(RunMode.SET, target)
         else:
-            raise ValueError("unknown execute target: %s" % target)
+            raise ValueError("unknown run target: %s" % target)
 
-    def _execute_mode_set(
+    def _run_mode_set(
         self,
-        mode: ExecuteMode = ExecuteMode.SELECTED,
+        mode: RunMode = RunMode.SELECTED,
         target_name: str | None = None,
     ) -> None:
-        if not isinstance(mode, ExecuteMode):
-            e = nmu.type_error_str(mode, "mode", "ExecuteMode")
+        if not isinstance(mode, RunMode):
+            e = nmu.type_error_str(mode, "mode", "RunMode")
             raise TypeError(e)
-        if mode in (ExecuteMode.SELECTED, ExecuteMode.ALL):
-            self.__execute_mode = mode
-            self.__execute_target_name = None
+        if mode in (RunMode.SELECTED, RunMode.ALL):
+            self.__run_mode = mode
+            self.__run_target_name = None
             return
         if target_name is None:
             # raise ValueError("target_name required for NAME or SET mode")
-            self.__execute_mode = mode
-            self.__execute_target_name = None
+            self.__run_mode = mode
+            self.__run_target_name = None
             return
         if not isinstance(target_name, str):
             e = nmu.type_error_str(target_name, "target_name", "string")
             raise TypeError(e)
-        if mode == ExecuteMode.NAME:
+        if mode == RunMode.NAME:
             key = self._getkey(target_name)
             if key is None:
                 raise KeyError("name '%s' does not exist" % target_name)
-            self.__execute_mode = mode
-            self.__execute_target_name = key
-        elif mode == ExecuteMode.SET:
+            self.__run_mode = mode
+            self.__run_target_name = key
+        elif mode == RunMode.SET:
             key = self.sets._getkey(target_name)
             if key is None:
                 raise KeyError("set '%s' does not exist" % target_name)
-            self.__execute_mode = mode
-            self.__execute_target_name = key
+            self.__run_mode = mode
+            self.__run_target_name = key
 
-    def is_execute_target(
+    def is_run_target(
         self,
         target: str
     ) -> bool:
-        """Check if the given target matches the current execute configuration."""
+        """Check if the given target matches the current run configuration."""
         if target is None:
             return False
         if not isinstance(target, str):
             return False
-        if self.__execute_mode == ExecuteMode.SELECTED:
+        if self.__run_mode == RunMode.SELECTED:
             key = self.__selected_name
             if key is None:
                 return False
             return target.lower() == key.lower()
-        if self.__execute_mode == ExecuteMode.ALL:
+        if self.__run_mode == RunMode.ALL:
             if target.lower() == "all":
                 return True
             return target in self
-        if self.__execute_mode == ExecuteMode.NAME:
-            if self.__execute_target_name is None:
+        if self.__run_mode == RunMode.NAME:
+            if self.__run_target_name is None:
                 return False
-            return target.lower() == self.__execute_target_name.lower()
-        if self.__execute_mode == ExecuteMode.SET:
-            if self.__execute_target_name is None:
+            return target.lower() == self.__run_target_name.lower()
+        if self.__run_mode == RunMode.SET:
+            if self.__run_target_name is None:
                 return False
-            if target.lower() == self.__execute_target_name.lower():
+            if target.lower() == self.__run_target_name.lower():
                 return True
             # Check if target is in the set
-            s = self.sets.get(self.__execute_target_name)
+            s = self.sets.get(self.__run_target_name)
             if s is not None:
                 return target in s
         return False

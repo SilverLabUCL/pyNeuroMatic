@@ -12,7 +12,7 @@ import unittest
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
-from pyneuromatic.core.nm_object_container import NMObjectContainer, ExecuteMode
+from pyneuromatic.core.nm_object_container import NMObjectContainer, RunMode
 from tests.test_core.test_nm_object import NMObject2
 
 QUIET = True
@@ -111,14 +111,14 @@ class TestNMObjectContainerInit(NMObjectContainerTestBase):
         self.assertIsNone(self.map0.selected_name)
         self.assertIsNone(self.map0.selected_value)
 
-    def test_default_execute_mode_is_selected(self):
-        self.assertEqual(self.map0.execute_mode, ExecuteMode.SELECTED)
+    def test_default_run_mode_is_selected(self):
+        self.assertEqual(self.map0.run_mode, RunMode.SELECTED)
 
-    def test_default_execute_target_name_is_none(self):
-        self.assertEqual(self.map0.execute_target_name, None)
+    def test_default_run_target_name_is_none(self):
+        self.assertEqual(self.map0.run_target_name, None)
 
-    def test_execute_targets_empty_when_no_selection(self):
-        self.assertEqual(self.map0.execute_targets, [])
+    def test_run_targets_empty_when_no_selection(self):
+        self.assertEqual(self.map0.run_targets, [])
 
     def test_stores_sets(self):
         self.assertEqual(list(self.map0.sets.keys()), [SETS_NLIST0[0]])
@@ -147,8 +147,8 @@ class TestNMObjectContainerInit(NMObjectContainerTestBase):
     def test_map1_selected_value(self):
         self.assertEqual(self.map1.selected_value, self.olist1[2])
 
-    def test_map1_execute_targets(self):
-        self.assertEqual(self.map1.execute_targets, [self.olist1[2]])
+    def test_map1_run_targets(self):
+        self.assertEqual(self.map1.run_targets, [self.olist1[2]])
 
     def test_map1_stores_multiple_sets(self):
         self.assertEqual(list(self.map1.sets.keys()), [SETS_NLIST1[0], SETS_NLIST1[1]])
@@ -175,8 +175,8 @@ class TestNMObjectContainerCopy(NMObjectContainerTestBase):
     def test_copy_preserves_selected_name(self):
         self.assertEqual(self.map1_copy.selected_name, ONLIST1[2])
 
-    def test_copy_preserves_execute_mode(self):
-        self.assertEqual(self.map1_copy.execute_mode, ExecuteMode.SELECTED)
+    def test_copy_preserves_run_mode(self):
+        self.assertEqual(self.map1_copy.run_mode, RunMode.SELECTED)
 
     def test_copy_preserves_sets(self):
         self.assertEqual(list(self.map1_copy.sets.keys()), [SETS_NLIST1[0], SETS_NLIST1[1]])
@@ -210,7 +210,7 @@ class TestNMObjectContainerParameters(NMObjectContainerTestBase):
         expected_keys = [
             "name", "created", "copy of", "content_type", "rename_on",
             "auto_name_prefix", "auto_name_seq_format", "selected_name",
-            "execute_mode", "execute_target_name", "sets"
+            "run_mode", "run_target_name", "sets"
         ]
         plist = self.map0.parameters
         self.assertEqual(list(plist.keys()), expected_keys)
@@ -243,13 +243,13 @@ class TestNMObjectContainerParameters(NMObjectContainerTestBase):
         plist = self.map0.parameters
         self.assertIsNone(plist["selected_name"])
 
-    def test_map0_execute_mode(self):
+    def test_map0_run_mode(self):
         plist = self.map0.parameters
-        self.assertEqual(plist["execute_mode"], ExecuteMode.SELECTED.name)
+        self.assertEqual(plist["run_mode"], RunMode.SELECTED.name)
 
-    def test_map0_execute_target_name(self):
+    def test_map0_run_target_name(self):
         plist = self.map0.parameters
-        self.assertEqual(plist["execute_target_name"], None)
+        self.assertEqual(plist["run_target_name"], None)
 
     def test_map0_sets(self):
         plist = self.map0.parameters
@@ -1134,69 +1134,69 @@ class TestNMObjectContainerSelection(NMObjectContainerTestBase):
         self.assertIsNone(self.map0.selected_name)
 
 
-class TestNMObjectContainerExecute(NMObjectContainerTestBase):
-    """Tests for execute_mode, execute_target_name, execute_targets, and is_execute_target."""
+class TestNMObjectContainerRun(NMObjectContainerTestBase):
+    """Tests for run_mode, run_target_name, run_targets, and is_run_target."""
 
-    def test_execute_mode_rejects_bad_types(self):
+    def test_run_mode_rejects_bad_types(self):
         for b in BAD_TYPES:
             with self.assertRaises(TypeError):
-                self.map0.execute_mode = b
+                self.map0.run_mode = b
 
-    def test_is_execute_target_false_for_bad_types(self):
+    def test_is_run_target_false_for_bad_types(self):
         for b in BAD_TYPES:
-            self.assertFalse(self.map0.is_execute_target(b))
+            self.assertFalse(self.map0.is_run_target(b))
 
-    def test_execute_mode_name_with_no_target(self):
-        self.map0.execute_mode = ExecuteMode.NAME
-        self.assertIsNone(self.map0.execute_target_name)
+    def test_run_mode_name_with_no_target(self):
+        self.map0.run_mode = RunMode.NAME
+        self.assertIsNone(self.map0.run_target_name)
 
-    def test_execute_target_name_rejects_invalid(self):
-        self.map0.execute_mode = ExecuteMode.NAME
+    def test_run_target_name_rejects_invalid(self):
+        self.map0.run_mode = RunMode.NAME
         with self.assertRaises(KeyError):
-            self.map0.execute_target_name = "test"
+            self.map0.run_target_name = "test"
 
-    def test_is_execute_target_false_for_invalid(self):
-        self.map0.execute_mode = ExecuteMode.NAME
-        self.assertFalse(self.map0.is_execute_target("test"))
+    def test_is_run_target_false_for_invalid(self):
+        self.map0.run_mode = RunMode.NAME
+        self.assertFalse(self.map0.is_run_target("test"))
 
-    def test_execute_mode_name_sets_target(self):
-        self.map0.execute_mode = ExecuteMode.NAME
-        self.map0.execute_target_name = ONLIST0[3]
-        self.assertTrue(self.map0.is_execute_target(ONLIST0[3]))
+    def test_run_mode_name_sets_target(self):
+        self.map0.run_mode = RunMode.NAME
+        self.map0.run_target_name = ONLIST0[3]
+        self.assertTrue(self.map0.is_run_target(ONLIST0[3]))
 
-    def test_execute_mode_selected_clears_target_name(self):
-        self.map0.execute_mode = ExecuteMode.NAME
-        self.map0.execute_target_name = ONLIST0[3]
-        self.map0.execute_mode = ExecuteMode.SELECTED
-        self.assertIsNone(self.map0.execute_target_name)
+    def test_run_mode_selected_clears_target_name(self):
+        self.map0.run_mode = RunMode.NAME
+        self.map0.run_target_name = ONLIST0[3]
+        self.map0.run_mode = RunMode.SELECTED
+        self.assertIsNone(self.map0.run_target_name)
 
-    def test_execute_targets_selected_mode(self):
+    def test_run_targets_selected_mode(self):
         self.map0.selected_name = ONLIST0[3]
         self.assertEqual(self.map0.selected_value, self.olist0[3])
-        self.assertTrue(self.map0.is_execute_target(ONLIST0[3]))
-        self.assertEqual(self.map0.execute_targets, [self.olist0[3]])
+        self.assertTrue(self.map0.is_run_target(ONLIST0[3]))
+        self.assertEqual(self.map0.run_targets, [self.olist0[3]])
 
-    def test_execute_targets_name_mode(self):
-        self.map0.execute_mode = ExecuteMode.NAME
-        self.map0.execute_target_name = ONLIST0[4]
-        self.assertEqual(self.map0.execute_targets, [self.olist0[4]])
-        self.assertFalse(self.map0.is_execute_target(ONLIST0[3]))
-        self.assertTrue(self.map0.is_execute_target(ONLIST0[4]))
+    def test_run_targets_name_mode(self):
+        self.map0.run_mode = RunMode.NAME
+        self.map0.run_target_name = ONLIST0[4]
+        self.assertEqual(self.map0.run_targets, [self.olist0[4]])
+        self.assertFalse(self.map0.is_run_target(ONLIST0[3]))
+        self.assertTrue(self.map0.is_run_target(ONLIST0[4]))
 
-    def test_execute_targets_set_mode(self):
-        self.map0.execute_mode = ExecuteMode.SET
-        self.map0.execute_target_name = SETS_NLIST0[0]
-        self.assertEqual(self.map0.execute_targets, [self.olist0[0], self.olist0[2], self.olist0[3]])
+    def test_run_targets_set_mode(self):
+        self.map0.run_mode = RunMode.SET
+        self.map0.run_target_name = SETS_NLIST0[0]
+        self.assertEqual(self.map0.run_targets, [self.olist0[0], self.olist0[2], self.olist0[3]])
 
-    def test_execute_targets_all_mode(self):
-        self.map0.execute_mode = ExecuteMode.ALL
-        self.assertIsNone(self.map0.execute_target_name)
-        self.assertEqual(self.map0.execute_targets, self.olist0)
+    def test_run_targets_all_mode(self):
+        self.map0.run_mode = RunMode.ALL
+        self.assertIsNone(self.map0.run_target_name)
+        self.assertEqual(self.map0.run_targets, self.olist0)
 
-    def test_is_execute_target_all_mode(self):
-        self.map0.execute_mode = ExecuteMode.ALL
+    def test_is_run_target_all_mode(self):
+        self.map0.run_mode = RunMode.ALL
         for n in ONLIST0:
-            self.assertTrue(self.map0.is_execute_target(n))
+            self.assertTrue(self.map0.is_run_target(n))
 
 
 class TestNMObjectContainerHistory(unittest.TestCase):

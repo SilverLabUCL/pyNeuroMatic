@@ -34,15 +34,15 @@ class NMTool:
     NM Tool - Base class for analysis tools.
 
     Tools receive selection state from NMManager via select_values and
-    perform analysis during execute(). Subclasses override execute()
-    to implement specific analysis.
+    perform analysis during run(). Subclasses override run() to implement
+    specific analysis.
 
     Selection is set by NMManager - tools have read-only access to
     individual levels (folder, data, dataseries, channel, epoch).
 
     Example:
         class MyTool(NMTool):
-            def execute(self) -> bool:
+            def run(self) -> bool:
                 data = self.dataseries.get_data(self.channel, self.epoch)
                 # analyze data...
                 return True
@@ -94,7 +94,7 @@ class NMTool:
         """
         Set selection from a dictionary of NMObjects.
 
-        Called by NMManager.execute_tool() to set the context for execution.
+        Called by NMManager.run_tool() to set the context for run execution.
 
         Args:
             values: Dictionary mapping level names to NMObjects.
@@ -112,15 +112,15 @@ class NMTool:
             for level, obj in self._select.items()
         }
 
-    def execute_init(self) -> bool:
-        """Called once before execute loop. Override in subclass."""
+    def run_init(self) -> bool:
+        """Called once before run loop. Override in subclass."""
         return True
 
-    def execute(self) -> bool:
-        """Called for each execution target. Override in subclass."""
+    def run(self) -> bool:
+        """Called for each run target. Override in subclass."""
         print(self.select_keys)
         return True
 
-    def execute_finish(self) -> bool:
-        """Called once after execute loop. Override in subclass."""
+    def run_finish(self) -> bool:
+        """Called once after run loop. Override in subclass."""
         return True
