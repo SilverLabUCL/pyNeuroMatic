@@ -126,11 +126,11 @@ def setUpModule():
 
 
 # ---------------------------------------------------------------------------
-# Helper: extract the result dict that carries "Δx" (time interval)
+# Helper: extract the result dict that carries "dx" (time interval)
 # ---------------------------------------------------------------------------
 def _dx_result(results):
     for r in reversed(results):
-        if "Δx" in r:
+        if "dx" in r:
             return r
     return {}
 
@@ -403,14 +403,14 @@ class TestSineWaveRiseTime(unittest.TestCase):
         # TAU/π * (arcsin(0.9) - arcsin(0.1)) ≈ 6.491 ms
         results = self._compute({"name": "risetime+", "p0": _S_P0_RISE, "p1": _S_P1_RISE})
         r = _dx_result(results)
-        self.assertAlmostEqual(r["Δx"], _S_RISETIME_IGOR, places=3)
+        self.assertAlmostEqual(r["dx"], _S_RISETIME_IGOR, places=3)
 
     def test_risetime_p0_location(self):
         # t at 10% of amplitude on rising edge ≈ 10.638 ms
         results = self._compute({"name": "risetime+", "p0": _S_P0_RISE, "p1": _S_P1_RISE})
         r = _dx_result(results)
         t_p0 = _S_T0 + _S_TAU / math.pi * math.asin(_S_P0_RISE / 100.0)
-        self.assertAlmostEqual(r["x"] - r["Δx"], t_p0, places=1)
+        self.assertAlmostEqual(r["x"] - r["dx"], t_p0, places=1)
 
     def test_risetime_p1_location(self):
         # t at 90% of amplitude on rising edge ≈ 17.127 ms
@@ -420,10 +420,10 @@ class TestSineWaveRiseTime(unittest.TestCase):
         self.assertAlmostEqual(r["x"], t_p1, places=1)
 
     def test_risetimeslope_delta_x(self):
-        # Slope variant still reports the same Δx
+        # Slope variant still reports the same dx
         results = self._compute({"name": "risetimeslope+", "p0": _S_P0_RISE, "p1": _S_P1_RISE})
         r = _dx_result(results)
-        self.assertAlmostEqual(r["Δx"], _S_RISETIME_IGOR, places=3)
+        self.assertAlmostEqual(r["dx"], _S_RISETIME_IGOR, places=3)
 
     def test_risetimeslope_value(self):
         # Linear regression slope of rising half-sine from 10% to 90%.
@@ -462,15 +462,15 @@ class TestSineWaveFallTime(unittest.TestCase):
         # Same magnitude as rise time (symmetric half-sine) ≈ 6.491 ms
         results = self._compute({"name": "falltime+", "p0": _S_P0_FALL, "p1": _S_P1_FALL})
         r = _dx_result(results)
-        self.assertAlmostEqual(r["Δx"], _S_RISETIME_IGOR, places=3)
+        self.assertAlmostEqual(r["dx"], _S_RISETIME_IGOR, places=3)
 
     def test_falltime_p0_location(self):
         # t at 90% of amplitude on falling edge ≈ 22.873 ms
         results = self._compute({"name": "falltime+", "p0": _S_P0_FALL, "p1": _S_P1_FALL})
         r = _dx_result(results)
-        # r["x"] is the p1 (10%) crossing; p0 (90%) crossing = r["x"] - Δx
+        # r["x"] is the p1 (10%) crossing; p0 (90%) crossing = r["x"] - dx
         t_p0_fall = _S_T0 + _S_TAU - _S_TAU / math.pi * math.asin(_S_P0_FALL / 100.0)
-        self.assertAlmostEqual(r["x"] - r["Δx"], t_p0_fall, places=1)
+        self.assertAlmostEqual(r["x"] - r["dx"], t_p0_fall, places=1)
 
     def test_falltime_p1_location(self):
         # t at 10% of amplitude on falling edge ≈ 29.362 ms
@@ -482,7 +482,7 @@ class TestSineWaveFallTime(unittest.TestCase):
     def test_falltimeslope_delta_x(self):
         results = self._compute({"name": "falltimeslope+", "p0": _S_P0_FALL, "p1": _S_P1_FALL})
         r = _dx_result(results)
-        self.assertAlmostEqual(r["Δx"], _S_RISETIME_IGOR, places=3)
+        self.assertAlmostEqual(r["dx"], _S_RISETIME_IGOR, places=3)
 
     def test_falltimeslope_value(self):
         # Linear regression slope of falling half-sine from 90% to 10%.
@@ -522,13 +522,13 @@ class TestSineWaveFWHM(unittest.TestCase):
         # 2 * TAU / 3 = 40/3 ≈ 13.333 ms
         results = self._compute({"name": "fwhm+", "p0": 50, "p1": 50})
         r = _dx_result(results)
-        self.assertAlmostEqual(r["Δx"], _S_FWHM_IGOR, places=3)
+        self.assertAlmostEqual(r["dx"], _S_FWHM_IGOR, places=3)
 
     def test_fwhm_left_location(self):
         # Left (rising) half-max crossing ≈ 13.333 ms
         results = self._compute({"name": "fwhm+", "p0": 50, "p1": 50})
         r = _dx_result(results)
-        self.assertAlmostEqual(r["x"] - r["Δx"], _S_LEVEL_PLUS_X_IGOR, places=3)
+        self.assertAlmostEqual(r["x"] - r["dx"], _S_LEVEL_PLUS_X_IGOR, places=3)
 
     def test_fwhm_right_location(self):
         # Right (falling) half-max crossing ≈ 26.667 ms
@@ -541,7 +541,7 @@ class TestSineWaveFWHM(unittest.TestCase):
         results = self._compute({"name": "fwhm+", "p0": 50, "p1": 50})
         r = _dx_result(results)
         peak_x = _S_T0 + _S_TAU / 2.0  # = 20.0 ms
-        left_x = r["x"] - r["Δx"]
+        left_x = r["x"] - r["dx"]
         right_x = r["x"]
         self.assertAlmostEqual(peak_x - left_x, right_x - peak_x, places=1)
 

@@ -434,13 +434,13 @@ class NMStatsFuncRiseTime(NMStatsFunc):
 
         if r1_error:
             r1["error"] = "unable to locate p1 level"
-            r1["Δx"] = math.nan
+            r1["dx"] = math.nan
             return
 
         if r0_error:
-            r1["Δx"] = math.nan
+            r1["dx"] = math.nan
             return
-        r1["Δx"] = r1["x"] - r0["x"]
+        r1["dx"] = r1["x"] - r0["x"]
 
         if slope:
             run_stat(data, {"name": "slope"}, f, r0["x"], r1["x"],
@@ -532,9 +532,9 @@ class NMStatsFuncFallTime(NMStatsFunc):
 
         if self._p1 is None:
             if r0_error:
-                r0["Δx"] = math.nan
+                r0["dx"] = math.nan
                 return
-            r0["Δx"] = r0["x"] - peak_x
+            r0["dx"] = r0["x"] - peak_x
         else:
             flevel["ylevel"] = 0.01 * self._p1 * ds
             r1 = run_stat(data, flevel, f, peak_x, x1, xclip, ignore_nans,
@@ -543,12 +543,12 @@ class NMStatsFuncFallTime(NMStatsFunc):
 
             if r1_error:
                 r1["error"] = "unable to locate p1 level"
-                r1["Δx"] = math.nan
+                r1["dx"] = math.nan
                 return
             if r0_error:
-                r1["Δx"] = math.nan
+                r1["dx"] = math.nan
                 return
-            r1["Δx"] = r1["x"] - r0["x"]
+            r1["dx"] = r1["x"] - r0["x"]
 
         if slope:
             if self._p1 is not None:
@@ -658,13 +658,13 @@ class NMStatsFuncFWHM(NMStatsFunc):
 
         if r1_error:
             r1["error"] = "unable to locate p1 level"
-            r1["Δx"] = math.nan
+            r1["dx"] = math.nan
             return
 
         if r0_error:
-            r1["Δx"] = math.nan
+            r1["dx"] = math.nan
         else:
-            r1["Δx"] = r1["x"] - r0["x"]
+            r1["dx"] = r1["x"] - r0["x"]
 
 
 # Registry mapping func names to their class
@@ -932,73 +932,95 @@ class NMToolStats(NMTool):
             raise RuntimeError("there are no results to save")
         return self.folder.toolresults_save("stats", self.__results)
 
+    # Numeric keys extracted from result dicts into NMData arrays.
+    # Maps result dict key → NMData name suffix and units source key.
+    _NUMERIC_KEYS: dict[str, tuple[str, str | None]] = {
+        "s":    ("s",    "sunits"),
+        "x":    ("x",    "xunits"),
+        "i":    ("i",    None),
+        "i0":   ("i0",   None),
+        "i1":   ("i1",   None),
+        "n":    ("n",    None),
+        "nans": ("nans", None),
+        "infs": ("infs", None),
+        "var":  ("var",  "sunits"),
+        "std":  ("std",  "sunits"),
+        "sem":  ("sem",  "sunits"),
+        "b":    ("b",    "bunits"),
+        "dx":   ("dx",   "xunits"),
+    }
+
     def _save_numpy(self) -> NMToolFolder | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
             raise RuntimeError("there are no results to save")
-        for kwin, vlist in self.__results.items():  # windows
-            if not isinstance(vlist, list) or len(vlist) == 0:
-                return None  # error
-            data_list = []
-            bsln_func = None
-            sbsln = []
-            func = None
-            s = []
+
+        # Find next unused folder name stats0, stats1, ...
+        tf = self.folder.toolfolder
+        i = 0
+        f = None
+        while f is None:
+            try:
+                f = tf.new(name="stats%d" % i)
+            except KeyError:
+                i += 1
+
+        for wname, vlist in self.__results.items():
+            # vlist: list of lists, one inner list per data wave
+            # Each inner list contains result dicts for that wave
+
+            # Collect data path strings (one per wave, from first rdict)
+            data_paths: list[str] = []
+            # Collect result dicts grouped by id: {id_str: [rdict, ...]}
+            id_rdicts: dict[str, list[dict]] = {}
+
             for ilist in vlist:
-                if not isinstance(ilist, list):
-                    return None  # error
-                first = True
+                wave_path: str | None = None
                 for rdict in ilist:
-                    if "data" not in rdict:
-                        return None  # error
-                    if first:
-                        data_list.append(rdict["data"])
-                        first = False
-                    if "id" in rdict and rdict["id"] == "bsln":
-                        if not bsln_func:
-                            f = rdict["func"]
-                            bsln_func = f["name"]
-                        sbsln.append(rdict["s"])
-                    else:
-                        if not func:
-                            f = rdict["func"]
-                            func = f["name"]
-                        s.append(rdict["s"])
-            if len(data_list) != len(sbsln):
-                return None  # error
-            if len(data_list) != len(s):
-                return None  # error
+                    id_str = rdict.get("id", "main")
+                    if wave_path is None:
+                        wave_path = rdict.get("data", "")
+                    if id_str not in id_rdicts:
+                        id_rdicts[id_str] = []
+                    id_rdicts[id_str].append(rdict)
+                if wave_path is not None:
+                    data_paths.append(wave_path)
 
-            fname = "stats_test"
-            tf = self.folder.toolfolder
-            if tf is None:
-                return None
-            f = tf.new(fname)
-            if f is None:
-                return None
-            print(f.name)
+            # Save data path strings
+            if data_paths and f.data is not None:
+                f.data.new(
+                    "ST_%s_data" % wname,
+                    nparray=np.array(data_paths, dtype=object),
+                )
 
-            prefix = "ST_" + kwin
+            # Save numeric arrays per id
+            for id_str, rdicts in id_rdicts.items():
+                for rkey, (suffix, units_key) in self._NUMERIC_KEYS.items():
+                    values = [rdict.get(rkey) for rdict in rdicts]
+                    if all(v is None for v in values):
+                        continue  # key not present for this func
+                    arr = np.array(
+                        [v if v is not None else math.nan for v in values],
+                        dtype=float,
+                    )
+                    units = rdicts[0].get(units_key) if units_key else None
+                    yscale = {"units": units} if units else None
+                    dname = "ST_%s_%s_%s" % (wname, id_str, suffix)
+                    if f.data is not None:
+                        f.data.new(dname, nparray=arr, yscale=yscale)
 
-            data_np = np.array(data_list)
-            dname = prefix + "_data"
-
-            sbsln_np = np.array(sbsln)
-            if f.data is not None:
-                dname = prefix + "_bsln_" + str(bsln_func)
-                f.data.new(dname, nparray=sbsln_np)
-
-            s_np = np.array(s)
-            if f.data is not None:
-                dname = prefix + "_" + str(func)
-                f.data.new(dname, nparray=s_np)
-
-                print(f.data.content)
-
-            # print(data_list)
-            # print(s_bsln)
-            # print(s)
+                # Save warnings if any occurred
+                warnings = [rdict.get("warning") for rdict in rdicts]
+                if any(w is not None for w in warnings):
+                    dname = "ST_%s_%s_warning" % (wname, id_str)
+                    if f.data is not None:
+                        f.data.new(
+                            dname,
+                            nparray=np.array(
+                                [w or "" for w in warnings], dtype=object
+                            ),
+                        )
 
         return f
 
