@@ -1473,5 +1473,86 @@ class TestNMStatsWinContainer(unittest.TestCase):
         self.assertEqual(w.name, "win0")
 
 
+class TestNMToolStats(unittest.TestCase):
+    """Tests for NMToolStats save flags and _save_history()."""
+
+    def setUp(self):
+        self.tool = nms.NMToolStats()
+
+    # --- defaults ---
+
+    def test_save_history_default(self):
+        self.assertFalse(self.tool.save_history)
+
+    def test_save_cache_default(self):
+        self.assertTrue(self.tool.save_cache)
+
+    def test_save_numpy_default(self):
+        self.assertFalse(self.tool.save_numpy)
+
+    # --- save_history ---
+
+    def test_save_history_set_true(self):
+        self.tool.save_history = True
+        self.assertTrue(self.tool.save_history)
+
+    def test_save_history_set_false(self):
+        self.tool.save_history = True
+        self.tool.save_history = False
+        self.assertFalse(self.tool.save_history)
+
+    def test_save_history_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.save_history = 1
+
+    def test_save_history_rejects_none(self):
+        with self.assertRaises(TypeError):
+            self.tool.save_history = None
+
+    # --- save_cache ---
+
+    def test_save_cache_set_false(self):
+        self.tool.save_cache = False
+        self.assertFalse(self.tool.save_cache)
+
+    def test_save_cache_set_true(self):
+        self.tool.save_cache = False
+        self.tool.save_cache = True
+        self.assertTrue(self.tool.save_cache)
+
+    def test_save_cache_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.save_cache = "yes"
+
+    # --- save_numpy ---
+
+    def test_save_numpy_set_true(self):
+        self.tool.save_numpy = True
+        self.assertTrue(self.tool.save_numpy)
+
+    def test_save_numpy_set_false(self):
+        self.tool.save_numpy = True
+        self.tool.save_numpy = False
+        self.assertFalse(self.tool.save_numpy)
+
+    def test_save_numpy_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.save_numpy = 0
+
+    # --- _save_history ---
+
+    def test__save_history_empty_results(self):
+        # Should not raise with no results
+        self.tool._save_history(quiet=True)
+
+    def test__save_history_with_results(self):
+        # Populate results via compute then call print
+        data = _make_data()
+        w = list(self.tool.windows)[0]
+        w.func = "mean"
+        w.compute(data)
+        self.tool._save_history(quiet=True)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

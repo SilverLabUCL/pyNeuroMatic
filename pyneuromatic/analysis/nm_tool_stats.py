@@ -771,6 +771,10 @@ class NMToolStats(NMTool):
         # results for each measure {} made for the stats window
         # e.g. baseline, main, p0, p1, slope, etc.
 
+        self.__save_history = False
+        self.__save_cache = True
+        self.__save_numpy = False
+
     @property
     def windows(self) -> NMStatsWinContainer:
         return self.__win_container
@@ -815,6 +819,60 @@ class NMToolStats(NMTool):
             raise TypeError(e)
         nmh.history("set ignore_nans=%s" % ignore_nans, quiet=quiet)
 
+    @property
+    def save_history(self) -> bool:
+        return self.__save_history
+
+    @save_history.setter
+    def save_history(self, value: bool) -> None:
+        self._save_history_set(value)
+
+    def _save_history_set(
+        self,
+        value: bool,
+        quiet: bool = nmp.QUIET,
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "save_history", "boolean"))
+        self.__save_history = value
+        nmh.history("set save_history=%s" % value, quiet=quiet)
+
+    @property
+    def save_cache(self) -> bool:
+        return self.__save_cache
+
+    @save_cache.setter
+    def save_cache(self, value: bool) -> None:
+        self._save_cache_set(value)
+
+    def _save_cache_set(
+        self,
+        value: bool,
+        quiet: bool = nmp.QUIET,
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "save_cache", "boolean"))
+        self.__save_cache = value
+        nmh.history("set save_cache=%s" % value, quiet=quiet)
+
+    @property
+    def save_numpy(self) -> bool:
+        return self.__save_numpy
+
+    @save_numpy.setter
+    def save_numpy(self, value: bool) -> None:
+        self._save_numpy_set(value)
+
+    def _save_numpy_set(
+        self,
+        value: bool,
+        quiet: bool = nmp.QUIET,
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "save_numpy", "boolean"))
+        self.__save_numpy = value
+        nmh.history("set save_numpy=%s" % value, quiet=quiet)
+
     # override, no super
     def run_init(self) -> bool:
         if isinstance(self.__results, dict):
@@ -842,34 +900,39 @@ class NMToolStats(NMTool):
 
     # override, no super
     def run_finish(self) -> bool:
-        NMToolStats.results_print(self.__results)
-        self.results_save()
-        self.results_save_as_numpy()
+        if self.__save_history:
+            self._save_history()
+        if self.__save_cache:
+            self._save_cache()
+        if self.__save_numpy:
+            self._save_numpy()
         return True  # ok
 
-    @staticmethod
-    def results_print(results: dict[str, list[Any]]) -> None:
-        if not isinstance(results, dict):
+    def _save_history(self, quiet: bool = False) -> None:
+        if not isinstance(self.__results, dict):
             return None
-        for kwin, vlist in results.items():  # windows
-            print("\n" + "stats results for win '%s':" % kwin)
+        for kwin, vlist in self.__results.items():  # windows
+            nmh.history(
+                "stats results for win '%s':" % kwin,
+                quiet=quiet,
+            )
             if not isinstance(vlist, list):
                 return None
             for ilist in vlist:  # NMData
                 if not isinstance(ilist, list):
                     return None
                 for rdict in ilist:  # stats results
-                    print(rdict)
+                    nmh.history(str(rdict), quiet=quiet)
         return None
 
-    def results_save(self) -> int | None:
+    def _save_cache(self) -> int | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
             raise RuntimeError("there are no results to save")
         return self.folder.toolresults_save("stats", self.__results)
 
-    def results_save_as_numpy(self) -> NMToolFolder | None:
+    def _save_numpy(self) -> NMToolFolder | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
