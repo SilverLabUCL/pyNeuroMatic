@@ -27,6 +27,7 @@ import numpy as np
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_preferences as nmp
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.core.nm_transform import (
@@ -792,6 +793,7 @@ class NMToolStats(NMTool):
         else:
             e = nmu.type_error_str(xclip, "xclip", "boolean")
             raise TypeError(e)
+        nmh.history("set xclip=%s" % xclip, quiet=quiet)
 
     @property
     def ignore_nans(self) -> bool:
@@ -811,6 +813,7 @@ class NMToolStats(NMTool):
         else:
             e = nmu.type_error_str(ignore_nans, "ignore_nans", "boolean")
             raise TypeError(e)
+        nmh.history("set ignore_nans=%s" % ignore_nans, quiet=quiet)
 
     # override, no super
     def run_init(self) -> bool:
@@ -1056,25 +1059,26 @@ class NMStatsWin:
             if k == "name":
                 continue  # name is set via constructor, not _win_set
             elif k == "on":
-                self._on_set(v, quiet=quiet)  # type: ignore[arg-type]
+                self._on_set(v, quiet=True)  # type: ignore[arg-type]
             elif k == "func":
-                self._func_set(v, quiet=quiet)  # type: ignore[arg-type]
+                self._func_set(v, quiet=True)  # type: ignore[arg-type]
             elif k == "x0":
-                self._x_set("x0", v, quiet=quiet)  # type: ignore[arg-type]
+                self._x_set("x0", v, quiet=True)  # type: ignore[arg-type]
             elif k == "x1":
-                self._x_set("x1", v, quiet=quiet)  # type: ignore[arg-type]
+                self._x_set("x1", v, quiet=True)  # type: ignore[arg-type]
             elif k == "transform":
-                self._transform_set(v, quiet=quiet)  # type: ignore[arg-type]
+                self._transform_set(v, quiet=True)  # type: ignore[arg-type]
             elif k == "bsln_on":
-                self._bsln_on_set(v, quiet=quiet)  # type: ignore[arg-type]
+                self._bsln_on_set(v, quiet=True)  # type: ignore[arg-type]
             elif k == "bsln_func":
-                self._bsln_func_set(v, quiet=quiet)  # type: ignore[arg-type]
+                self._bsln_func_set(v, quiet=True)  # type: ignore[arg-type]
             elif k == "bsln_x0":
-                self._x_set("bsln_x0", v, quiet=quiet)  # type: ignore[arg-type]
+                self._x_set("bsln_x0", v, quiet=True)  # type: ignore[arg-type]
             elif k == "bsln_x1":
-                self._x_set("bsln_x1", v, quiet=quiet)  # type: ignore[arg-type]
+                self._x_set("bsln_x1", v, quiet=True)  # type: ignore[arg-type]
             else:
                 raise KeyError("unknown key '%s'" % k)
+        nmh.history("set win=%s" % win, path=self._name, quiet=quiet)
         return None
 
     @property
@@ -1090,6 +1094,7 @@ class NMStatsWin:
             e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
         self.__on = on
+        nmh.history("set on=%s" % on, path=self._name, quiet=quiet)
         return None
 
     @property
@@ -1116,6 +1121,12 @@ class NMStatsWin:
             else:
                 raise KeyError("missing func key 'name'")
         self.__func = _stats_func_from_dict(func, parent=self._parent)
+        if self.__func is not None:
+            nmh.history(
+                "set func=%s" % self.__func.to_dict(),
+                path=self._name,
+                quiet=quiet,
+            )
         return None
 
     @property
@@ -1148,6 +1159,7 @@ class NMStatsWin:
             self.__bsln_x0 = x
         elif n == "bsln_x1":
             self.__bsln_x1 = x
+        nmh.history("set %s=%s" % (n, x), path=self._name, quiet=quiet)
         return None
 
     @property
@@ -1173,6 +1185,7 @@ class NMStatsWin:
     ) -> None:
         if transform_list is None:
             self.__transform = None
+            nmh.history("set transform=None", path=self._name, quiet=quiet)
             return None
         if not isinstance(transform_list, list):
             e = nmu.type_error_str(transform_list, "transform_list", "list")
@@ -1189,6 +1202,11 @@ class NMStatsWin:
                 )
                 raise TypeError(e)
         self.__transform = result
+        nmh.history(
+            "set transform=[%s]" % ", ".join(t.type_str for t in result),
+            path=self._name,
+            quiet=quiet,
+        )
         return None
 
     @property
@@ -1204,6 +1222,7 @@ class NMStatsWin:
             e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
         self.__bsln_on = on
+        nmh.history("set bsln_on=%s" % on, path=self._name, quiet=quiet)
         return None
 
     @property
@@ -1255,6 +1274,11 @@ class NMStatsWin:
 
         self.__bsln_func.clear()
         self.__bsln_func.update({"name": func_name.lower()})
+        nmh.history(
+            "set bsln_func=%s" % self.__bsln_func,
+            path=self._name,
+            quiet=quiet,
+        )
         return None
 
     @property
@@ -1294,7 +1318,8 @@ class NMStatsWin:
         self,
         data: NMData,
         xclip: bool = False,  # if x0|x1 OOB, clip to data x-scale limits
-        ignore_nans: bool = False
+        ignore_nans: bool = False,
+        quiet: bool = nmp.QUIET
     ) -> list:
 
         # Apply transforms to a copy of the data (original never mutated)
@@ -1339,6 +1364,13 @@ class NMStatsWin:
             self._run_stat, bsln_result
         )
 
+        nmh.history(
+            "compute func=%s, x0=%s, x1=%s, n=%d"
+            % (self.__func.name, self.__x0, self.__x1, len(self.__results)),
+            path=self._name,
+            quiet=quiet,
+        )
+
         return self.__results
 
 
@@ -1356,13 +1388,14 @@ class NMStatsWinContainer:
         self._count = 0
         self.selected_name: str | None = None
 
-    def new(self) -> NMStatsWin:
+    def new(self, quiet: bool = nmp.QUIET) -> NMStatsWin:
         name = "%s%d" % (self._prefix, self._count)
         self._count += 1
         w = NMStatsWin(parent=self._parent, name=name)
         self._windows[name] = w
         if self.selected_name is None:
             self.selected_name = name
+        nmh.history("new NMStatsWin=%s" % name, quiet=quiet)
         return w
 
     def __iter__(self):
