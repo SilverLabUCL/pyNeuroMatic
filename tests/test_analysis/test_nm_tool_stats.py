@@ -34,86 +34,86 @@ def _make_data(n=100, name="recordA0", with_nans=False, units=True):
 
 
 class TestNMToolStats(unittest.TestCase):
-    """Tests for NMToolStats save flags and _save_history()."""
+    """Tests for NMToolStats results_to_* flags and _results_to_history()."""
 
     def setUp(self):
         self.tool = nms.NMToolStats()
 
     # --- defaults ---
 
-    def test_save_history_default(self):
-        self.assertFalse(self.tool.save_history)
+    def test_results_to_history_default(self):
+        self.assertFalse(self.tool.results_to_history)
 
-    def test_save_cache_default(self):
-        self.assertTrue(self.tool.save_cache)
+    def test_results_to_cache_default(self):
+        self.assertTrue(self.tool.results_to_cache)
 
-    def test_save_numpy_default(self):
-        self.assertFalse(self.tool.save_numpy)
+    def test_results_to_numpy_default(self):
+        self.assertFalse(self.tool.results_to_numpy)
 
-    # --- save_history ---
+    # --- results_to_history ---
 
-    def test_save_history_set_true(self):
-        self.tool.save_history = True
-        self.assertTrue(self.tool.save_history)
+    def test_results_to_history_set_true(self):
+        self.tool.results_to_history = True
+        self.assertTrue(self.tool.results_to_history)
 
-    def test_save_history_set_false(self):
-        self.tool.save_history = True
-        self.tool.save_history = False
-        self.assertFalse(self.tool.save_history)
+    def test_results_to_history_set_false(self):
+        self.tool.results_to_history = True
+        self.tool.results_to_history = False
+        self.assertFalse(self.tool.results_to_history)
 
-    def test_save_history_rejects_non_bool(self):
+    def test_results_to_history_rejects_non_bool(self):
         with self.assertRaises(TypeError):
-            self.tool.save_history = 1
+            self.tool.results_to_history = 1
 
-    def test_save_history_rejects_none(self):
+    def test_results_to_history_rejects_none(self):
         with self.assertRaises(TypeError):
-            self.tool.save_history = None
+            self.tool.results_to_history = None
 
-    # --- save_cache ---
+    # --- results_to_cache ---
 
-    def test_save_cache_set_false(self):
-        self.tool.save_cache = False
-        self.assertFalse(self.tool.save_cache)
+    def test_results_to_cache_set_false(self):
+        self.tool.results_to_cache = False
+        self.assertFalse(self.tool.results_to_cache)
 
-    def test_save_cache_set_true(self):
-        self.tool.save_cache = False
-        self.tool.save_cache = True
-        self.assertTrue(self.tool.save_cache)
+    def test_results_to_cache_set_true(self):
+        self.tool.results_to_cache = False
+        self.tool.results_to_cache = True
+        self.assertTrue(self.tool.results_to_cache)
 
-    def test_save_cache_rejects_non_bool(self):
+    def test_results_to_cache_rejects_non_bool(self):
         with self.assertRaises(TypeError):
-            self.tool.save_cache = "yes"
+            self.tool.results_to_cache = "yes"
 
-    # --- save_numpy ---
+    # --- results_to_numpy ---
 
-    def test_save_numpy_set_true(self):
-        self.tool.save_numpy = True
-        self.assertTrue(self.tool.save_numpy)
+    def test_results_to_numpy_set_true(self):
+        self.tool.results_to_numpy = True
+        self.assertTrue(self.tool.results_to_numpy)
 
-    def test_save_numpy_set_false(self):
-        self.tool.save_numpy = True
-        self.tool.save_numpy = False
-        self.assertFalse(self.tool.save_numpy)
+    def test_results_to_numpy_set_false(self):
+        self.tool.results_to_numpy = True
+        self.tool.results_to_numpy = False
+        self.assertFalse(self.tool.results_to_numpy)
 
-    def test_save_numpy_rejects_non_bool(self):
+    def test_results_to_numpy_rejects_non_bool(self):
         with self.assertRaises(TypeError):
-            self.tool.save_numpy = 0
+            self.tool.results_to_numpy = 0
 
-    # --- _save_history ---
+    # --- _results_to_history ---
 
-    def test__save_history_empty_results(self):
+    def test_results_to_history_empty_results(self):
         # Should not raise with no results
-        self.tool._save_history(quiet=True)
+        self.tool._results_to_history(quiet=True)
 
-    def test__save_history_with_results(self):
+    def test_results_to_history_with_results(self):
         # Populate results via compute then call print
         data = _make_data()
         w = list(self.tool.windows)[0]
         w.func = "mean"
         w.compute(data)
-        self.tool._save_history(quiet=True)
+        self.tool._results_to_history(quiet=True)
 
-    # --- _save_numpy ---
+    # --- _results_to_numpy ---
 
     def _setup_folder(self):
         """Create a real NMFolder and wire it into the tool's selection."""
@@ -138,65 +138,65 @@ class TestNMToolStats(unittest.TestCase):
             else:
                 self.tool._NMToolStats__results[wname] = [results]
 
-    def test_save_numpy_returns_toolfolder(self):
+    def test_results_to_numpy_returns_toolfolder(self):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
         self._setup_folder()
         self._run_compute()
-        f = self.tool._save_numpy()
+        f = self.tool._results_to_numpy()
         self.assertIsInstance(f, NMToolFolder)
 
-    def test_save_numpy_folder_named_stats0(self):
+    def test_results_to_numpy_folder_named_stats0(self):
         self._setup_folder()
         self._run_compute()
-        f = self.tool._save_numpy()
+        f = self.tool._results_to_numpy()
         self.assertEqual(f.name, "stats0")
 
-    def test_save_numpy_second_run_named_stats1(self):
+    def test_results_to_numpy_second_run_named_stats1(self):
         self._setup_folder()
         self._run_compute()
-        self.tool._save_numpy()
+        self.tool._results_to_numpy()
         self.tool._NMToolStats__results.clear()
         self._run_compute()
-        f = self.tool._save_numpy()
+        f = self.tool._results_to_numpy()
         self.assertEqual(f.name, "stats1")
 
-    def test_save_numpy_creates_data_array(self):
+    def test_results_to_numpy_creates_data_array(self):
         self._setup_folder()
         self._run_compute(n_waves=3)
-        f = self.tool._save_numpy()
+        f = self.tool._results_to_numpy()
         self.assertIn("ST_w0_data", f.data)
 
-    def test_save_numpy_data_array_length(self):
+    def test_results_to_numpy_data_array_length(self):
         self._setup_folder()
         self._run_compute(n_waves=3)
-        f = self.tool._save_numpy()
+        f = self.tool._results_to_numpy()
         d = f.data.get("ST_w0_data")
         self.assertEqual(len(d.nparray), 3)
 
-    def test_save_numpy_creates_s_array(self):
+    def test_results_to_numpy_creates_s_array(self):
         self._setup_folder()
         self._run_compute(func="mean", n_waves=3)
-        f = self.tool._save_numpy()
+        f = self.tool._results_to_numpy()
         self.assertIn("ST_w0_main_s", f.data)
 
-    def test_save_numpy_s_array_length(self):
+    def test_results_to_numpy_s_array_length(self):
         self._setup_folder()
         self._run_compute(func="mean", n_waves=3)
-        f = self.tool._save_numpy()
+        f = self.tool._results_to_numpy()
         d = f.data.get("ST_w0_main_s")
         self.assertEqual(len(d.nparray), 3)
 
-    def test_save_numpy_no_folder_returns_none(self):
+    def test_results_to_numpy_no_folder_returns_none(self):
         from pyneuromatic.analysis.nm_tool import SELECT_LEVELS
         self.tool._select = {level: None for level in SELECT_LEVELS}
         # folder is None — should return None
-        result = self.tool._save_numpy()
+        result = self.tool._results_to_numpy()
         self.assertIsNone(result)
 
-    def test_save_numpy_no_results_raises(self):
+    def test_results_to_numpy_no_results_raises(self):
         self._setup_folder()
         with self.assertRaises(RuntimeError):
-            self.tool._save_numpy()
+            self.tool._results_to_numpy()
 
 
 class TestNMToolStats2(unittest.TestCase):
@@ -216,40 +216,40 @@ class TestNMToolStats2(unittest.TestCase):
 
     # --- defaults ---
 
-    def test_save_history_default(self):
-        self.assertFalse(self.tool2.save_history)
+    def test_results_to_history_default(self):
+        self.assertFalse(self.tool2.results_to_history)
 
-    def test_save_cache_default(self):
-        self.assertTrue(self.tool2.save_cache)
+    def test_results_to_cache_default(self):
+        self.assertTrue(self.tool2.results_to_cache)
 
-    def test_save_numpy_default(self):
-        self.assertFalse(self.tool2.save_numpy)
+    def test_results_to_numpy_default(self):
+        self.assertFalse(self.tool2.results_to_numpy)
 
     # --- save flag setters ---
 
-    def test_save_history_set(self):
-        self.tool2.save_history = True
-        self.assertTrue(self.tool2.save_history)
+    def test_results_to_history_set(self):
+        self.tool2.results_to_history = True
+        self.assertTrue(self.tool2.results_to_history)
 
-    def test_save_cache_set(self):
-        self.tool2.save_cache = False
-        self.assertFalse(self.tool2.save_cache)
+    def test_results_to_cache_set(self):
+        self.tool2.results_to_cache = False
+        self.assertFalse(self.tool2.results_to_cache)
 
-    def test_save_numpy_set(self):
-        self.tool2.save_numpy = True
-        self.assertTrue(self.tool2.save_numpy)
+    def test_results_to_numpy_set(self):
+        self.tool2.results_to_numpy = True
+        self.assertTrue(self.tool2.results_to_numpy)
 
-    def test_save_history_rejects_non_bool(self):
+    def test_results_to_history_rejects_non_bool(self):
         with self.assertRaises(TypeError):
-            self.tool2.save_history = 1
+            self.tool2.results_to_history = 1
 
-    def test_save_cache_rejects_non_bool(self):
+    def test_results_to_cache_rejects_non_bool(self):
         with self.assertRaises(TypeError):
-            self.tool2.save_cache = "yes"
+            self.tool2.results_to_cache = "yes"
 
-    def test_save_numpy_rejects_non_bool(self):
+    def test_results_to_numpy_rejects_non_bool(self):
         with self.assertRaises(TypeError):
-            self.tool2.save_numpy = 0
+            self.tool2.results_to_numpy = 0
 
     # --- ignore_nans ---
 
@@ -320,30 +320,30 @@ class TestNMToolStats2(unittest.TestCase):
         r = self.tool2.compute(self.tf, select="ST_w0_main_s")
         self.assertEqual(r["ST_w0_main_s"]["N"], 5)
 
-    # --- _save_numpy_results ---
+    # --- _results_to_numpy_results ---
 
-    def test_save_numpy_creates_st2_data(self):
-        self.tool2.save_cache = False
-        self.tool2.save_numpy = True
+    def test_results_to_numpy_creates_st2_data(self):
+        self.tool2.results_to_cache = False
+        self.tool2.results_to_numpy = True
         self.tool2.compute(self.tf, select="all")
         self.assertIn("ST2_data", self.tf.data)
 
-    def test_save_numpy_creates_st2_mean(self):
-        self.tool2.save_cache = False
-        self.tool2.save_numpy = True
+    def test_results_to_numpy_creates_st2_mean(self):
+        self.tool2.results_to_cache = False
+        self.tool2.results_to_numpy = True
         self.tool2.compute(self.tf, select="all")
         self.assertIn("ST2_mean", self.tf.data)
 
-    def test_save_numpy_st2_data_length(self):
-        self.tool2.save_cache = False
-        self.tool2.save_numpy = True
+    def test_results_to_numpy_st2_data_length(self):
+        self.tool2.results_to_cache = False
+        self.tool2.results_to_numpy = True
         self.tool2.compute(self.tf, select="all")
         d = self.tf.data.get("ST2_data")
         self.assertEqual(len(d.nparray), 2)  # 2 ST_ numeric arrays
 
-    def test_save_numpy_st2_mean_value(self):
-        self.tool2.save_cache = False
-        self.tool2.save_numpy = True
+    def test_results_to_numpy_st2_mean_value(self):
+        self.tool2.results_to_cache = False
+        self.tool2.results_to_numpy = True
         self.tool2.compute(self.tf, select="ST_w0_main_s")
         d = self.tf.data.get("ST2_mean")
         self.assertAlmostEqual(d.nparray[0], 3.0)
