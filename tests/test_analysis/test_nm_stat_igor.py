@@ -19,7 +19,8 @@ import numpy as np
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.io.pxp import read_pxp
-import pyneuromatic.analysis.nm_tool_stats as nms
+import pyneuromatic.analysis.nm_stat_utilities as nsmm
+import pyneuromatic.analysis.nm_stat_win as nmsw
 
 
 _PXP = Path(__file__).parent.parent / "test_io" / "fixtures" / "nm02Jul04c0_002.pxp"
@@ -143,7 +144,7 @@ class TestIgorWaveStats(unittest.TestCase):
     """Compare stat() against Igor Pro WaveStats for RecordA0, t=500–1000 ms."""
 
     def _stat(self, name, **kwargs):
-        return nms.stat(_DATA, {"name": name}, x0=_X0, x1=_X1,
+        return nsmm.stat(_DATA, {"name": name}, x0=_X0, x1=_X1,
                          xclip=True, **kwargs)
 
     def test_wave_loaded(self):
@@ -215,22 +216,22 @@ class TestIgorWaveStats(unittest.TestCase):
 
     def test_mean_at_max(self):
         # n_avg=500 determined by matching Igor minAvg/maxAvg to 3 decimal places
-        r = nms.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
+        r = nsmm.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["s"], _IGOR_R0["maxAvg"], places=3)
 
     def test_mean_at_max_location(self):
-        r = nms.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
+        r = nsmm.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["x"], _IGOR_R0["maxAvgLoc"], places=1)
 
     def test_mean_at_min(self):
-        r = nms.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
+        r = nsmm.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["s"], _IGOR_R0["minAvg"], places=3)
 
     def test_mean_at_min_location(self):
-        r = nms.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
+        r = nsmm.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["x"], _IGOR_R0["minAvgLoc"], places=1)
 
@@ -261,7 +262,7 @@ class TestIgorLevelCrossings(unittest.TestCase):
         i0 = round((_X0 - _DATA.xscale.start) / _DATA.xscale.delta)
         i1 = round((_X1 - _DATA.xscale.start) / _DATA.xscale.delta)
         yslice = _DATA.nparray[i0:i1 + 1]
-        return nms.find_level_crossings(
+        return nsmm.find_level_crossings(
             yslice, ylevel=_IGOR_R0["ylevel"],
             func_name=func_name,
             xstart=_X0,
@@ -333,7 +334,7 @@ class TestSineWaveLevelCrossings(unittest.TestCase):
     """
 
     def _crossings(self, func_name):
-        return nms.find_level_crossings(
+        return nsmm.find_level_crossings(
             _SINE_DATA.nparray,
             ylevel=_S_YLEVEL,
             func_name=func_name,
@@ -389,7 +390,7 @@ class TestSineWaveRiseTime(unittest.TestCase):
     def _compute(self, func_dict):
         win = dict(_S_WIN_BASE)
         win["func"] = func_dict
-        w = nms.NMStatWin(name="w")
+        w = nmsw.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
         w.bsln_x0 = win["bsln_x0"]
@@ -448,7 +449,7 @@ class TestSineWaveFallTime(unittest.TestCase):
     def _compute(self, func_dict):
         win = dict(_S_WIN_BASE)
         win["func"] = func_dict
-        w = nms.NMStatWin(name="w")
+        w = nmsw.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
         w.bsln_x0 = win["bsln_x0"]
@@ -508,7 +509,7 @@ class TestSineWaveFWHM(unittest.TestCase):
     def _compute(self, func_dict):
         win = dict(_S_WIN_BASE)
         win["func"] = func_dict
-        w = nms.NMStatWin(name="w")
+        w = nmsw.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
         w.bsln_x0 = win["bsln_x0"]
