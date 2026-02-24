@@ -36,6 +36,11 @@ import pyneuromatic.core.nm_utilities as nmu
 
 def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
                  yunits, **_):
+    """Compute max or min value and its location.
+
+    For mean@max and mean@min, also compute the mean of n_avg points centred
+    on the peak index (func["n_avg"] key, optional).
+    """
     if "max" in f:
         index = np.nanargmax(yarray) if ignore_nans else np.argmax(yarray)
     else:
@@ -75,6 +80,12 @@ def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
 
 def _stat_level(f, func, yarray, data, i0, ignore_nans, results, yunits,
                 xunits, found_xarray, xarray=None, xstart=None, **_):
+    """Find the first y-level crossing within the data window.
+
+    Requires func["ylevel"]. Direction is controlled by func_name:
+    "level" = any crossing, "level+" = rising, "level-" = falling.
+    Sets results["i"] and results["x"]; both are None if no crossing found.
+    """
     if "ylevel" in func:
         ylevel = func["ylevel"]
     else:
@@ -110,6 +121,10 @@ def _stat_level(f, func, yarray, data, i0, ignore_nans, results, yunits,
 
 def _stat_slope(yarray, data, ignore_nans, results, yunits, xunits,
                 found_xarray, xarray=None, xstart=None, **_):
+    """Compute linear regression slope (m) and intercept (b) over the window.
+
+    Sets results["s"] = slope, results["b"] = intercept, and their units.
+    """
     if found_xarray:
         mb = linear_regression(
             yarray, xarray=xarray, ignore_nans=ignore_nans
@@ -139,12 +154,17 @@ def _stat_slope(yarray, data, ignore_nans, results, yunits, xunits,
 
 
 def _stat_median(yarray, ignore_nans, results, yunits, **_):
+    """Compute median."""
     results["s"] = np.nanmedian(yarray) if ignore_nans else np.median(yarray)
     results["sunits"] = yunits
     return results
 
 
 def _stat_mean(f, yarray, ignore_nans, results, yunits, n, **_):
+    """Compute mean, and optionally variance (+var), std (+std), or sem (+sem).
+
+    The func name suffix controls which extra statistics are added to results.
+    """
     results["s"] = np.nanmean(yarray) if ignore_nans else np.mean(yarray)
     results["sunits"] = yunits
     if "+var" in f:
@@ -158,6 +178,7 @@ def _stat_mean(f, yarray, ignore_nans, results, yunits, n, **_):
 
 
 def _stat_var(yarray, ignore_nans, results, yunits, **_):
+    """Compute variance. Units are squared (e.g. mV**2)."""
     results["s"] = np.nanvar(yarray) if ignore_nans else np.var(yarray)
     if isinstance(yunits, str):
         results["sunits"] = yunits + "**2"
@@ -167,12 +188,14 @@ def _stat_var(yarray, ignore_nans, results, yunits, **_):
 
 
 def _stat_std(yarray, ignore_nans, results, yunits, **_):
+    """Compute standard deviation."""
     results["s"] = np.nanstd(yarray) if ignore_nans else np.std(yarray)
     results["sunits"] = yunits
     return results
 
 
 def _stat_sem(yarray, ignore_nans, results, yunits, n, **_):
+    """Compute standard error of the mean (std / sqrt(n))."""
     std = np.nanstd(yarray) if ignore_nans else np.std(yarray)
     results["s"] = std / math.sqrt(n)
     results["sunits"] = yunits
@@ -180,6 +203,7 @@ def _stat_sem(yarray, ignore_nans, results, yunits, n, **_):
 
 
 def _stat_rms(yarray, ignore_nans, results, yunits, n, **_):
+    """Compute root mean square: sqrt(sum(y**2) / n)."""
     sos = np.nansum(np.square(yarray)) if ignore_nans else np.sum(
         np.square(yarray))
     results["s"] = math.sqrt(sos / n)
@@ -188,6 +212,7 @@ def _stat_rms(yarray, ignore_nans, results, yunits, n, **_):
 
 
 def _stat_sum(yarray, ignore_nans, results, yunits, **_):
+    """Compute sum of all values in the window."""
     results["s"] = np.nansum(yarray) if ignore_nans else np.sum(yarray)
     results["sunits"] = yunits
     return results
@@ -195,6 +220,11 @@ def _stat_sum(yarray, ignore_nans, results, yunits, **_):
 
 def _stat_pathlength(yarray, data, ignore_nans, results, yunits, xunits,
                      found_xarray, xarray=None, **_):
+    """Compute arc length (path length) of the data curve: sum(sqrt(dx**2 + dy**2)).
+
+    Requires x- and y-scales to have the same units; adds a warning to results
+    if units cannot be verified.
+    """
     w = None
     if isinstance(xunits, str) and isinstance(yunits, str):
         if xunits != yunits:
@@ -221,6 +251,7 @@ def _stat_pathlength(yarray, data, ignore_nans, results, yunits, xunits,
 
 def _stat_area(yarray, data, ignore_nans, results, yunits, xunits,
                found_xarray, xarray=None, **_):
+    """Compute area under the curve using the rectangle rule: sum(x * y) or sum(y) * dx."""
     if found_xarray:
         if ignore_nans:
             results["s"] = np.nansum(np.multiply(xarray, yarray))
@@ -240,9 +271,12 @@ def _stat_area(yarray, data, ignore_nans, results, yunits, xunits,
 
 
 def _stat_count(results, **_):
+    """Return results unchanged. count/count_nans/count_infs are set by stat()."""
     return results
 
 
+# Maps func name strings to their dispatch handler.
+# Called by stat() to route computation based on func["name"].
 _STAT_DISPATCH = {
     "max": _stat_maxmin,
     "min": _stat_maxmin,
@@ -279,12 +313,62 @@ def stat(
     data: NMData,
     func: dict,
     x0: float = -math.inf,
-    x1: float = math.inf,  # math.inf denotes xclip = True
+    x1: float = math.inf,
     xclip: bool = False,  # if x0|x1 OOB, clip to data x-scale limits
     ignore_nans: bool = False,
     results: dict | None = None
-) -> dict:  # returns results
+) -> dict:
+    """Compute a single statistic on an NMData object over an x-axis window.
 
+    Args:
+        data: NMData containing the y-values (data.nparray) and x-scale.
+        func: Dict specifying the statistic to compute. Must contain "name".
+            Additional keys depend on the function type:
+            - Basic stats (median, mean, var, std, sem, rms, sum, etc.):
+              no extra keys required.
+            - mean+var / mean+std / mean+sem:
+              no extra keys required; extra stat appended to results.
+            - max / min:
+              optional "n_avg" (int) to average that many points around peak.
+            - mean@max / mean@min:
+              "n_avg" (int) required; mean of n_avg points around peak.
+            - level / level+ / level-:
+              "ylevel" (float) required; the y-axis threshold to search for.
+            - slope:
+              no extra keys; fits linear regression over the window.
+            - value@x0 / value@x1:
+              no extra keys; returns the sample at x0 or x1 index.
+            - count / count_nans / count_infs:
+              no extra keys; values come from n, nans, infs in results.
+        x0: Left x-axis bound of the analysis window (default: -inf = start).
+        x1: Right x-axis bound of the analysis window (default: +inf = end).
+        xclip: If True, out-of-bounds x0/x1 are clipped to the data x-scale
+            limits. If False, out-of-bounds values cause an error in results.
+        ignore_nans: If True, NaN values are excluded from calculations.
+        results: Optional dict to populate. Created as empty dict if None.
+
+    Returns:
+        Results dict. Keys present in all results:
+            "data"  — data path string (str)
+            "i0"    — start sample index (int)
+            "i1"    — end sample index (int)
+            "n"     — number of samples used (int)
+            "nans"  — number of NaN values in window (int)
+            "infs"  — number of Inf values in window (int)
+        Additional keys set by specific functions:
+            "s"      — scalar result (float)
+            "sunits" — units of "s" (str or None)
+            "i"      — index of peak or level crossing (int or None)
+            "x"      — x-value at peak or level crossing (float or None)
+            "xunits" — units of "x" (str)
+            "b"      — regression intercept (float), set by slope
+            "bunits" — units of "b" (str or None), set by slope
+            "var"    — variance (float), set by mean+var
+            "std"    — std deviation (float), set by mean+std / mean+sem
+            "sem"    — SEM (float), set by mean+sem
+            "warning"  — warning message (str), set if a non-fatal issue occurs
+            "error"    — error message (str), set if computation fails
+    """
     if not isinstance(data, NMData):
         e = nmu.type_error_str(data, "data", "NMData")
         raise TypeError(e)
@@ -465,15 +549,49 @@ def find_level_crossings(
     xdelta: float = 1,  # x-scale delta increment, used if xarray=None
     i_nearest: bool = True,
     # return array indexes (i-values) that are nearest to ylevel crossings
-    # method uses linear interpoloation
+    # method uses linear interpolation
     # otherwise returns array indexes immediately after level crossing (i1)
     x_interp: bool = True,
     # return estimated x-value at location of ylevel crossing
-    # method uses linear interpoloation
+    # method uses linear interpolation
     # otherwise returns x-values at corresponding i-values (e.g. x1 at i1)
     ignore_nans: bool = True
 ) -> tuple:
+    """Find crossings of a y-axis level in a data array.
 
+    A crossing is detected wherever the signal transitions across ylevel
+    (i.e. np.diff(yarray > ylevel) is True). For each crossing, the
+    nearest sample index and interpolated x-value are returned.
+
+    Args:
+        yarray: 1-D numpy array of y-values to search.
+        ylevel: The y-axis threshold to search for.
+        func_name: Controls which crossing directions are returned:
+            "level"  — all crossings (both rising and falling).
+            "level+" — rising crossings only (y goes from below to above).
+            "level-" — falling crossings only (y goes from above to below).
+        xarray: Optional 1-D numpy array of x-values. Must be same size as
+            yarray. Used instead of xstart/xdelta when provided.
+        xstart: X-scale start value; used to compute x-values when xarray
+            is None.
+        xdelta: X-scale sample interval; used to compute x-values when
+            xarray is None.
+        i_nearest: If True (default), returns the sample index nearest to
+            the crossing via linear interpolation. If False, returns the
+            index immediately after the crossing (i1).
+        x_interp: If True (default), returns the interpolated x-value at
+            the exact crossing location. If False, returns the x-value at
+            the nearest sample index.
+        ignore_nans: If True (default), NaN values are included in the
+            transition detection (np.diff behaviour is unchanged; NaN
+            propagation may affect edge cases).
+
+    Returns:
+        Tuple (indexes, xvalues) of numpy arrays:
+            indexes  — sample indices (int) nearest to each crossing.
+            xvalues  — x-values (float) at each crossing location.
+        Both arrays are empty if no crossings are found.
+    """
     if not isinstance(func_name, str):
         e = nmu.type_error_str(func_name, "func_name", "string")
         raise TypeError(e)
@@ -591,6 +709,19 @@ def find_level_crossings(
 
 
 def xinterp(ylevel, x0, y0, x1, y1):
+    """Interpolate the x-coordinate where a line segment crosses ylevel.
+
+    Fits a line through (x0, y0) and (x1, y1) and returns the x-value
+    where that line equals ylevel.
+
+    Args:
+        ylevel: The y-axis threshold to intersect.
+        x0, y0: Coordinates of the first point.
+        x1, y1: Coordinates of the second point.
+
+    Returns:
+        Interpolated x-value (float) at y = ylevel.
+    """
     dx = x1 - x0
     dy = y1 - y0
     m = dy / dx
@@ -605,8 +736,23 @@ def linear_regression(
     xstart: float = 0,
     xdelta: float = 1,
     ignore_nans: bool = True
-) -> tuple:  # (m, b)
+) -> tuple:
+    """Fit a linear regression line to y-data using numpy.polyfit.
 
+    Args:
+        yarray: 1-D numpy array of y-values.
+        xarray: Optional 1-D numpy array of x-values. Must be the same size
+            as yarray. Used instead of xstart/xdelta when provided.
+        xstart: X-scale start value; used to build a uniform x-array when
+            xarray is None.
+        xdelta: X-scale sample interval; used to build a uniform x-array
+            when xarray is None.
+        ignore_nans: If True (default), NaN samples are removed from both
+            arrays before fitting.
+
+    Returns:
+        Tuple (m, b) where m is the slope and b is the y-intercept.
+    """
     if not isinstance(yarray, np.ndarray):
         e = nmu.type_error_str(yarray, "yarray", "NumPy.ndarray")
         raise TypeError(e)
