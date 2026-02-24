@@ -36,48 +36,6 @@ import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
 
 
-FUNC_NAMES = (
-    "max",  # np.argmax
-    "min",  # np.argmin
-    "mean@max",
-    "mean@min",
-    "median",  # np.median
-    "mean",  # "avg" # np.mean
-    "mean+var",
-    "mean+std",
-    "mean+sem",
-    "var",  # np.var
-    "std",  # "sdev" # np.std
-    "sem",
-    "rms",
-    "sum",  # np.sum
-    "pathlength",
-    "area",
-    "slope",
-    # TODO "onset",  # Igor version requires sigmoid curvefit
-    "level",
-    "level+",
-    "level-",
-    "value@x0",
-    "value@x1",
-    "count",  # "numpnts"
-    "count_nans",
-    "count_infs",
-    # positive peaks
-    "risetime+",
-    "falltime+",
-    "risetimeslope+",
-    "falltimeslope+",
-    "fwhm+",
-    # negative peaks
-    "risetime-",
-    "falltime-",
-    "risetimeslope-",
-    "falltimeslope-",
-    "fwhm-"
-)
-
-
 class NMToolStats(NMTool):
     """
     NM Stats Tool class

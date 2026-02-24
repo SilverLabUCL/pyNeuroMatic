@@ -27,12 +27,33 @@ import pyneuromatic.core.nm_utilities as nmu
 
 
 FUNC_NAMES_BASIC = (
-    "median", "mean", "mean+var", "mean+std", "mean+sem",
-    "var", "std", "sem", "rms", "sum", "pathlength", "area", "slope",
-    "value@x0", "value@x1", "count", "count_nans", "count_infs",
+    "median",       # np.median
+    "mean",         # np.mean (Igor: "avg")
+    "mean+var",
+    "mean+std",
+    "mean+sem",
+    "var",          # np.var
+    "std",          # np.std (Igor: "sdev")
+    "sem",
+    "rms",
+    "sum",          # np.sum
+    "pathlength",
+    "area",
+    "slope",
+    "value@x0",
+    "value@x1",
+    "count",        # np.size (Igor: "numpnts")
+    "count_nans",
+    "count_infs",
+    # TODO: add "onset" — Igor version requires sigmoid curve fit
 )
 
-FUNC_NAMES_MAXMIN = ("max", "min", "mean@max", "mean@min")
+FUNC_NAMES_MAXMIN = (
+    "max",          # np.argmax
+    "min",          # np.argmin
+    "mean@max",
+    "mean@min",
+)
 
 FUNC_NAMES_LEVEL = ("level", "level+", "level-")
 

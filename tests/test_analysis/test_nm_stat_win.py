@@ -14,7 +14,7 @@ import numpy as np
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
 import pyneuromatic.analysis.nm_stat_win as nmsw
-from pyneuromatic.analysis.nm_tool_stats import FUNC_NAMES
+import pyneuromatic.analysis.nm_stat_func as nmsf
 from pyneuromatic.analysis.nm_stat_func import FUNC_NAMES_BSLN
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -197,19 +197,31 @@ class TestNMStatWin(unittest.TestCase):
             self.assertEqual(self.w1.func["p1"], 40)
 
     def test_func_names_complete(self):
-        fnames = [
-            "max", "min", "mean@max", "mean@min",
-            "median", "mean", "mean+var", "mean+std", "mean+sem",
-            "var", "std", "sem", "rms", "sum", "pathlength", "area", "slope",
-            "level", "level+", "level-", "value@x0", "value@x1",
-            "count", "count_nans", "count_infs",
-            "risetime+", "falltime+", "risetimeslope+", "falltimeslope+",
-            "fwhm+", "risetime-", "falltime-", "risetimeslope-",
-            "falltimeslope-", "fwhm-",
-        ]
-        self.assertEqual(len(FUNC_NAMES), len(fnames))
-        for f in fnames:
-            self.assertIn(f, FUNC_NAMES)
+        expected = {
+            "basic":     ("median", "mean", "mean+var", "mean+std", "mean+sem",
+                          "var", "std", "sem", "rms", "sum", "pathlength",
+                          "area", "slope", "value@x0", "value@x1",
+                          "count", "count_nans", "count_infs"),
+            "maxmin":    ("max", "min", "mean@max", "mean@min"),
+            "level":     ("level", "level+", "level-"),
+            "risetime":  ("risetime+", "risetime-",
+                          "risetimeslope+", "risetimeslope-"),
+            "falltime":  ("falltime+", "falltime-",
+                          "falltimeslope+", "falltimeslope-"),
+            "decaytime": ("decaytime+", "decaytime-"),
+            "fwhm":      ("fwhm+", "fwhm-"),
+        }
+        actual = {
+            "basic":     nmsf.FUNC_NAMES_BASIC,
+            "maxmin":    nmsf.FUNC_NAMES_MAXMIN,
+            "level":     nmsf.FUNC_NAMES_LEVEL,
+            "risetime":  nmsf.FUNC_NAMES_RISETIME,
+            "falltime":  nmsf.FUNC_NAMES_FALLTIME,
+            "decaytime": nmsf.FUNC_NAMES_DECAYTIME,
+            "fwhm":      nmsf.FUNC_NAMES_FWHM,
+        }
+        for key in expected:
+            self.assertEqual(set(actual[key]), set(expected[key]), msg=key)
 
     def test_bsln_func_names_complete(self):
         fnames = ("median", "mean", "mean+var", "mean+std", "mean+sem")
