@@ -100,7 +100,7 @@ def badvalue(n: float | None) -> bool:
 
 
 # =========================================================================
-# Stats function classes
+# Stat function classes
 # =========================================================================
 
 FUNC_NAMES_BASIC = (
@@ -124,8 +124,8 @@ FUNC_NAMES_FALLTIME = (
 FUNC_NAMES_FWHM = ("fwhm+", "fwhm-")
 
 
-class NMStatsFunc:
-    """Base class for stats function types.
+class NMStatFunc:
+    """Base class for stat function types.
 
     Lightweight class (following NMTransform pattern) that represents
     a statistics function with its parameters and compute pipeline.
@@ -143,13 +143,13 @@ class NMStatsFunc:
         return "%s(%s)" % (self.__class__.__name__, params)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, NMStatsFunc):
+        if isinstance(other, NMStatFunc):
             return self.to_dict() == other.to_dict()
         if isinstance(other, dict):
             return self.to_dict() == other
         return NotImplemented
 
-    def __deepcopy__(self, memo: dict) -> NMStatsFunc:
+    def __deepcopy__(self, memo: dict) -> NMStatFunc:
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -204,8 +204,8 @@ class NMStatsFunc:
         )
 
 
-class NMStatsFuncBasic(NMStatsFunc):
-    """Stats functions with no parameters (mean, median, var, etc.)."""
+class NMStatFuncBasic(NMStatFunc):
+    """Stat functions with no parameters (mean, median, var, etc.)."""
 
     def __init__(self, name: str, parent: object | None = None) -> None:
         if name.lower() not in FUNC_NAMES_BASIC:
@@ -219,7 +219,7 @@ class NMStatsFuncBasic(NMStatsFunc):
         self._add_ds(r, bsln_result)
 
 
-class NMStatsFuncMaxMin(NMStatsFunc):
+class NMStatFuncMaxMin(NMStatFunc):
     """max, min, mean@max, mean@min functions."""
 
     _VALID_KEYS = {"n_avg"}
@@ -267,7 +267,7 @@ class NMStatsFuncMaxMin(NMStatsFunc):
         self._add_ds(r, bsln_result)
 
 
-class NMStatsFuncLevel(NMStatsFunc):
+class NMStatFuncLevel(NMStatFunc):
     """Level with explicit ylevel value."""
 
     _VALID_KEYS = {"ylevel"}
@@ -298,7 +298,7 @@ class NMStatsFuncLevel(NMStatsFunc):
         self._add_ds(r, bsln_result)
 
 
-class NMStatsFuncLevelNstd(NMStatsFunc):
+class NMStatFuncLevelNstd(NMStatFunc):
     """Level computed from baseline mean +/- n_std * std."""
 
     _VALID_KEYS = {"n_std"}
@@ -345,7 +345,7 @@ class NMStatsFuncLevelNstd(NMStatsFunc):
         self._add_ds(r, bsln_result)
 
 
-class NMStatsFuncRiseTime(NMStatsFunc):
+class NMStatFuncRiseTime(NMStatFunc):
     """Rise time functions (risetime+/-, risetimeslope+/-)."""
 
     _VALID_KEYS = {"p0", "p1"}
@@ -447,7 +447,7 @@ class NMStatsFuncRiseTime(NMStatsFunc):
                      xclip, ignore_nans)
 
 
-class NMStatsFuncFallTime(NMStatsFunc):
+class NMStatFuncFallTime(NMStatFunc):
     """Fall time functions (falltime+/-, falltimeslope+/-)."""
 
     _VALID_KEYS = {"p0", "p1"}
@@ -559,7 +559,7 @@ class NMStatsFuncFallTime(NMStatsFunc):
                          xclip, ignore_nans)
 
 
-class NMStatsFuncFWHM(NMStatsFunc):
+class NMStatFuncFWHM(NMStatFunc):
     """Full width at half maximum functions."""
 
     _VALID_KEYS = {"p0", "p1"}
@@ -668,33 +668,33 @@ class NMStatsFuncFWHM(NMStatsFunc):
 
 
 # Registry mapping func names to their class
-_STATS_FUNC_REGISTRY: dict[str, type[NMStatsFunc]] = {}
+_STAT_FUNC_REGISTRY: dict[str, type[NMStatFunc]] = {}
 for _name in FUNC_NAMES_BASIC:
-    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncBasic
+    _STAT_FUNC_REGISTRY[_name] = NMStatFuncBasic
 for _name in FUNC_NAMES_MAXMIN:
-    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncMaxMin
+    _STAT_FUNC_REGISTRY[_name] = NMStatFuncMaxMin
 for _name in FUNC_NAMES_LEVEL:
-    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncLevel
+    _STAT_FUNC_REGISTRY[_name] = NMStatFuncLevel
 for _name in FUNC_NAMES_RISETIME:
-    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncRiseTime
+    _STAT_FUNC_REGISTRY[_name] = NMStatFuncRiseTime
 for _name in FUNC_NAMES_FALLTIME:
-    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncFallTime
+    _STAT_FUNC_REGISTRY[_name] = NMStatFuncFallTime
 for _name in FUNC_NAMES_FWHM:
-    _STATS_FUNC_REGISTRY[_name] = NMStatsFuncFWHM
+    _STAT_FUNC_REGISTRY[_name] = NMStatFuncFWHM
 
 
-def _stats_func_from_dict(
+def _stat_func_from_dict(
     d: dict | str | None,
     parent: object | None = None,
-) -> NMStatsFunc | None:
-    """Create an NMStatsFunc from a dict or string name.
+) -> NMStatFunc | None:
+    """Create an NMStatFunc from a dict or string name.
 
     Args:
         d: Dict with at least a "name" key, a string func name, or None.
         parent: Optional parent reference.
 
     Returns:
-        An NMStatsFunc instance, or None.
+        An NMStatFunc instance, or None.
     """
     if d is None:
         return None
@@ -712,16 +712,16 @@ def _stats_func_from_dict(
     if not isinstance(name, str):
         raise TypeError(nmu.type_error_str(name, "func_name", "string"))
     f = name.lower()
-    if f not in _STATS_FUNC_REGISTRY:
+    if f not in _STAT_FUNC_REGISTRY:
         raise ValueError("func_name: %s" % name)
-    cls = _STATS_FUNC_REGISTRY[f]
-    # Level dispatch: redirect to NMStatsFuncLevelNstd when "n_std" present
-    if cls is NMStatsFuncLevel:
+    cls = _STAT_FUNC_REGISTRY[f]
+    # Level dispatch: redirect to NMStatFuncLevelNstd when "n_std" present
+    if cls is NMStatFuncLevel:
         lower_keys = {k.lower() for k in d if k.lower() != "name"}
         if "n_std" in lower_keys and "ylevel" in lower_keys:
             raise KeyError("either 'ylevel' or 'n_std' is allowed, not both")
         if "n_std" in lower_keys:
-            cls = NMStatsFuncLevelNstd
+            cls = NMStatFuncLevelNstd
         elif not lower_keys:
             raise KeyError("missing func key 'ylevel' or 'n_std'")
     # Extract valid parameter keys for this class, reject unknown keys
@@ -748,7 +748,7 @@ class NMToolStats(NMTool):
 
     def __init__(self) -> None:
 
-        self.__win_container = NMStatsWinContainer(parent=self)
+        self.__win_container = NMStatWinContainer(parent=self)
         self.__win_container.new()
 
         self.__xclip = True
@@ -762,13 +762,13 @@ class NMToolStats(NMTool):
         # then np.nanmean(array) else np.mean(array)
 
         self.__results: dict[str, list[Any]] = {}
-        # {"w0": [ [{}, {}], [{}, {}]... ],  stats win0
-        #  "w1": [ [{}, {}], [{}, {}]... ],  stats win1
+        # {"w0": [ [{}, {}], [{}, {}]... ],  stat win0
+        #  "w1": [ [{}, {}], [{}, {}]... ],  stat win1
         #  ...}
-        # for each stats window (e.g. "w0") there is a list
+        # for each stat window (e.g. "w0") there is a list
         # containing results [{}, {}] for each data array.
         # for each data array there is a list [{}, {}] containing
-        # results for each measure {} made for the stats window
+        # results for each measure {} made for the stat window
         # e.g. baseline, main, p0, p1, slope, etc.
 
         self.__save_history = False
@@ -776,7 +776,7 @@ class NMToolStats(NMTool):
         self.__save_numpy = False
 
     @property
-    def windows(self) -> NMStatsWinContainer:
+    def windows(self) -> NMStatWinContainer:
         return self.__win_container
 
     @property
@@ -913,7 +913,7 @@ class NMToolStats(NMTool):
             return None
         for kwin, vlist in self.__results.items():  # windows
             nmh.history(
-                "stats results for win '%s':" % kwin,
+                "stat results for win '%s':" % kwin,
                 quiet=quiet,
             )
             if not isinstance(vlist, list):
@@ -921,7 +921,7 @@ class NMToolStats(NMTool):
             for ilist in vlist:  # NMData
                 if not isinstance(ilist, list):
                     return None
-                for rdict in ilist:  # stats results
+                for rdict in ilist:  # stat results
                     nmh.history(str(rdict), quiet=quiet)
         return None
 
@@ -1044,18 +1044,18 @@ class NMToolStats(NMTool):
     """
 
 
-class NMStatsWin:
-    """NM Stats Window class.
+class NMStatWin:
+    """NM Stat Window class.
 
     Lightweight class (does not inherit NMObject) following the NMScaleY
-    pattern. Each window defines a stats measurement with x-range, function,
+    pattern. Each window defines a stat measurement with x-range, function,
     optional baseline, and optional transforms.
     """
 
     def __init__(
         self,
         parent: object | None = None,
-        name: str = "NMStatsWin0",
+        name: str = "NMStatWin0",
         win: dict[str, object] | None = None,
     ) -> None:
         self._parent = parent
@@ -1066,7 +1066,7 @@ class NMStatsWin:
         self._name = name
 
         self.__on = True
-        self.__func: NMStatsFunc | None = None
+        self.__func: NMStatFunc | None = None
         self.__x0 = -math.inf
         self.__x1 = math.inf
         self.__transform: list[NMTransform] | None = None
@@ -1087,11 +1087,11 @@ class NMStatsWin:
             raise TypeError(e)
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, NMStatsWin):
+        if not isinstance(other, NMStatWin):
             return NotImplemented
         return self.to_dict() == other.to_dict()
 
-    def __deepcopy__(self, memo: dict) -> NMStatsWin:
+    def __deepcopy__(self, memo: dict) -> NMStatWin:
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -1106,11 +1106,11 @@ class NMStatsWin:
     def name(self) -> str:
         return self._name
 
-    def copy(self) -> NMStatsWin:
+    def copy(self) -> NMStatWin:
         return copy.deepcopy(self)
 
     def to_dict(self) -> dict:
-        """Serialize this stats window to a dict."""
+        """Serialize this stat window to a dict."""
         if self.__transform is not None:
             transform_dicts = [t.to_dict() for t in self.__transform]
         else:
@@ -1205,7 +1205,7 @@ class NMStatsWin:
                 func["name"] = self.__func.name
             else:
                 raise KeyError("missing func key 'name'")
-        self.__func = _stats_func_from_dict(func, parent=self._parent)
+        self.__func = _stat_func_from_dict(func, parent=self._parent)
         if self.__func is not None:
             nmh.history(
                 "set func=%s" % self.__func.to_dict(),
@@ -1388,14 +1388,14 @@ class NMStatsWin:
 
     def _run_stat(self, data, func, id_str, x0, x1, xclip, ignore_nans,
                   **extra):
-        """Create a result dict, append to results, and call stats()."""
+        """Create a result dict, append to results, and call stat()."""
         r: dict[str, Any] = {"win": self.name, "id": id_str}
         r.update(extra)
         r["func"] = func
         r["x0"] = x0
         r["x1"] = x1
         self.__results.append(r)
-        stats(data, func, x0=x0, x1=x1, xclip=xclip,
+        stat(data, func, x0=x0, x1=x1, xclip=xclip,
               ignore_nans=ignore_nans, results=r)
         return r
 
@@ -1459,8 +1459,8 @@ class NMStatsWin:
         return self.__results
 
 
-class NMStatsWinContainer:
-    """Simple container of NMStatsWin objects with auto-naming."""
+class NMStatWinContainer:
+    """Simple container of NMStatWin objects with auto-naming."""
 
     def __init__(
         self,
@@ -1469,18 +1469,18 @@ class NMStatsWinContainer:
     ) -> None:
         self._parent = parent
         self._prefix = name_prefix
-        self._windows: dict[str, NMStatsWin] = {}
+        self._windows: dict[str, NMStatWin] = {}
         self._count = 0
         self.selected_name: str | None = None
 
-    def new(self, quiet: bool = nmp.QUIET) -> NMStatsWin:
+    def new(self, quiet: bool = nmp.QUIET) -> NMStatWin:
         name = "%s%d" % (self._prefix, self._count)
         self._count += 1
-        w = NMStatsWin(parent=self._parent, name=name)
+        w = NMStatWin(parent=self._parent, name=name)
         self._windows[name] = w
         if self.selected_name is None:
             self.selected_name = name
-        nmh.history("new NMStatsWin=%s" % name, quiet=quiet)
+        nmh.history("new NMStatWin=%s" % name, quiet=quiet)
         return w
 
     def __iter__(self):
@@ -1489,7 +1489,7 @@ class NMStatsWinContainer:
     def __len__(self):
         return len(self._windows)
 
-    def __getitem__(self, name: str) -> NMStatsWin:
+    def __getitem__(self, name: str) -> NMStatWin:
         return self._windows[name]
 
     def __contains__(self, name: str) -> bool:
@@ -1497,7 +1497,7 @@ class NMStatsWinContainer:
 
 
 # =========================================================================
-# stats() dispatch handlers
+# stat() dispatch handlers
 # =========================================================================
 
 
@@ -1710,7 +1710,7 @@ def _stat_count(results, **_):
     return results
 
 
-_STATS_DISPATCH = {
+_STAT_DISPATCH = {
     "max": _stat_maxmin,
     "min": _stat_maxmin,
     "mean@max": _stat_maxmin,
@@ -1737,7 +1737,7 @@ _STATS_DISPATCH = {
 }
 
 
-def stats(
+def stat(
     data: NMData,
     func: dict,
     x0: float = -math.inf,
@@ -1859,7 +1859,7 @@ def stats(
     else:
         ctx["xstart"] = xstart
 
-    handler = _STATS_DISPATCH.get(f)
+    handler = _STAT_DISPATCH.get(f)
     if handler is None:
         raise ValueError("unknown function '%s'" % func)
 

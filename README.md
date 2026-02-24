@@ -224,7 +224,7 @@ Each `NMObjectContainer` has one 'run' item. By default, this is the 'select' it
 
 ### Analysis Tools
 
-**Stats module** - Compute statistical data measures such as Max, Min, Average, Slope, Rise Time, etc., within predefined time windows.
+**Stat module** - Compute statistical data measures such as Max, Min, Average, Slope, Rise Time, etc., within predefined time windows.
 
 Planned Features
 ----------------
