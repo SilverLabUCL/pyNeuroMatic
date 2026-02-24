@@ -1866,6 +1866,251 @@ def stat(
     return handler(**ctx)
 
 
+def stats(
+    yarray: np.ndarray,
+    ignore_nans: bool = False,
+    results: dict | None = None,
+) -> dict:
+    """Compute all summary statistics of a numpy array in a single pass.
+
+    Analogous to Igor Pro's WaveStats. Computes N, NaNs, INFs, mean, std,
+    sem, rms, min, max.
+
+    Args:
+        yarray: Input numpy array.
+        ignore_nans: If True, exclude NaN values from calculations.
+        results: Optional dict to populate. Created if None.
+
+    Returns:
+        Results dict with keys: N, NaNs, INFs, mean, std, sem, rms, min, max.
+    """
+    if not isinstance(yarray, np.ndarray):
+        raise TypeError(nmu.type_error_str(yarray, "yarray", "NumPy ndarray"))
+    if results is None:
+        results = {}
+    elif not isinstance(results, dict):
+        raise TypeError(nmu.type_error_str(results, "results", "dictionary"))
+
+    nans = int(np.count_nonzero(np.isnan(yarray)))
+    infs = int(np.count_nonzero(np.isinf(yarray)))
+    results["NaNs"] = nans
+    results["INFs"] = infs
+
+    if ignore_nans:
+        arr = yarray[~np.isnan(yarray)]
+    else:
+        arr = yarray
+
+    n = arr.size
+    results["N"] = n
+
+    if n == 0:
+        results["mean"] = math.nan
+        results["std"] = math.nan
+        results["sem"] = math.nan
+        results["rms"] = math.nan
+        results["min"] = math.nan
+        results["max"] = math.nan
+        return results
+
+    results["mean"] = float(np.mean(arr))
+    results["std"] = float(np.std(arr, ddof=1) if n > 1 else math.nan)
+    results["sem"] = (results["std"] / math.sqrt(n)
+                      if n > 1 else math.nan)
+    results["rms"] = float(math.sqrt(np.mean(np.square(arr))))
+    results["min"] = float(np.min(arr))
+    results["max"] = float(np.max(arr))
+
+    return results
+
+
+class NMToolStats2:
+    """Compute summary statistics of Stats results (ST_ arrays).
+
+    Operates on a NMToolFolder produced by NMToolStats._save_numpy(),
+    computing stats() on each selected ST_ array and saving results as
+    ST2_ arrays in the same folder.
+    """
+
+    # Keys written to ST2_ arrays (in order)
+    _ST2_KEYS = ("mean", "std", "sem", "N", "NaNs", "INFs", "rms", "min", "max")
+
+    def __init__(self) -> None:
+        self.__results: dict[str, Any] = {}
+        self.__ignore_nans: bool = True
+        self.__save_history: bool = False
+        self.__save_cache: bool = True
+        self.__save_numpy: bool = False
+
+    # --- ignore_nans (same pattern as NMToolStats) ---
+
+    @property
+    def ignore_nans(self) -> bool:
+        return self.__ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        self._ignore_nans_set(value)
+
+    def _ignore_nans_set(
+        self, value: bool, quiet: bool = nmp.QUIET
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self.__ignore_nans = value
+        nmh.history("set ignore_nans=%s" % value, quiet=quiet)
+
+    # --- save flags (same pattern as NMToolStats) ---
+
+    @property
+    def save_history(self) -> bool:
+        return self.__save_history
+
+    @save_history.setter
+    def save_history(self, value: bool) -> None:
+        self._save_history_flag_set(value)
+
+    def _save_history_flag_set(
+        self, value: bool, quiet: bool = nmp.QUIET
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "save_history", "boolean"))
+        self.__save_history = value
+        nmh.history("set save_history=%s" % value, quiet=quiet)
+
+    @property
+    def save_cache(self) -> bool:
+        return self.__save_cache
+
+    @save_cache.setter
+    def save_cache(self, value: bool) -> None:
+        self._save_cache_flag_set(value)
+
+    def _save_cache_flag_set(
+        self, value: bool, quiet: bool = nmp.QUIET
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "save_cache", "boolean"))
+        self.__save_cache = value
+        nmh.history("set save_cache=%s" % value, quiet=quiet)
+
+    @property
+    def save_numpy(self) -> bool:
+        return self.__save_numpy
+
+    @save_numpy.setter
+    def save_numpy(self, value: bool) -> None:
+        self._save_numpy_flag_set(value)
+
+    def _save_numpy_flag_set(
+        self, value: bool, quiet: bool = nmp.QUIET
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "save_numpy", "boolean"))
+        self.__save_numpy = value
+        nmh.history("set save_numpy=%s" % value, quiet=quiet)
+
+    @property
+    def results(self) -> dict:
+        return self.__results
+
+    def compute(
+        self,
+        toolfolder: NMToolFolder,
+        select: str = "all",
+        ignore_nans: bool | None = None,
+    ) -> dict[str, Any]:
+        """Compute summary statistics on ST_ arrays in a NMToolFolder.
+
+        Args:
+            toolfolder: NMToolFolder containing ST_ arrays from NMToolStats.
+            select: Name of a specific ST_ array, or "all" to process all
+                numeric ST_ arrays.
+            ignore_nans: If True, exclude NaN values from calculations.
+                Defaults to None, which uses self.ignore_nans.
+
+        Returns:
+            Results dict keyed by source array name.
+        """
+        if not isinstance(toolfolder, NMToolFolder):
+            raise TypeError(
+                nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
+            )
+        if not isinstance(select, str):
+            raise TypeError(nmu.type_error_str(select, "select", "string"))
+        if ignore_nans is None:
+            ignore_nans = self.__ignore_nans
+        elif not isinstance(ignore_nans, bool):
+            ignore_nans = self.__ignore_nans
+
+        self.__results = {}
+
+        # Collect target ST_ arrays
+        targets: list[NMData] = []
+        if select.lower() == "all":
+            for name in toolfolder.data:
+                if name.startswith("ST_") and not name.endswith("_data"):
+                    d = toolfolder.data.get(name)
+                    if (d is not None
+                            and isinstance(d.nparray, np.ndarray)
+                            and d.nparray.dtype.kind in ("f", "i", "u")):
+                        targets.append(d)
+        else:
+            d = toolfolder.data.get(select)
+            if d is None:
+                raise KeyError("array not found in toolfolder: %s" % select)
+            if not isinstance(d.nparray, np.ndarray):
+                raise ValueError("array has no nparray: %s" % select)
+            targets.append(d)
+
+        if not targets:
+            return self.__results
+
+        for d in targets:
+            r: dict[str, Any] = {}
+            stats(d.nparray, ignore_nans=ignore_nans, results=r)
+            self.__results[d.name] = r
+
+        if self.__save_history:
+            self._save_history_results()
+        if self.__save_cache:
+            self._save_cache_results(toolfolder)
+        if self.__save_numpy:
+            self._save_numpy_results(toolfolder)
+
+        return self.__results
+
+    def _save_history_results(self, quiet: bool = False) -> None:
+        for src_name, r in self.__results.items():
+            nmh.history("stats2 %s: %s" % (src_name, r), quiet=quiet)
+
+    def _save_cache_results(self, toolfolder: NMToolFolder) -> None:
+        # Store in the folder's parent NMFolder toolresults if available
+        parent = toolfolder._parent
+        while parent is not None:
+            if hasattr(parent, "toolresults_save"):
+                parent.toolresults_save("stats2", self.__results)
+                return
+            parent = getattr(parent, "_parent", None)
+
+    def _save_numpy_results(self, toolfolder: NMToolFolder) -> None:
+        if not self.__results:
+            return
+        src_names = list(self.__results.keys())
+        # ST2_data: text array of source array names
+        toolfolder.data.new(
+            "ST2_data",
+            nparray=np.array(src_names, dtype=object),
+        )
+        # One ST2_ array per metric
+        for key in self._ST2_KEYS:
+            values = [self.__results[n].get(key, math.nan) for n in src_names]
+            toolfolder.data.new(
+                "ST2_%s" % key,
+                nparray=np.array(values, dtype=float),
+            )
+
+
 def find_level_crossings(
     yarray,
     ylevel: float,  # the y-axis level (yl) to search for
