@@ -94,7 +94,7 @@ In the future, users will be able to instruct NM to perform a given task on the 
 
 (6) Main module/tab. NM's main module/tab that performs basic Display, Edit and X-scale data functions, basic data operations such as Scale and Normalize, and data analysis functions such as Avarage and Sum.
 
-(7) Stats module/tab. Compute statistical data measures such as Max, Min, Average, Slope, Rise Time, etc, within any number of predefined time windows.
+(7) Stat module/tab. Compute statistical data measures such as Max, Min, Average, Slope, Rise Time, etc, within any number of predefined time windows.
 
 (8) Spike module/tab. Spike analysis module/tab for computing raster plots, peristimulus time (PST) histograms and inter-spike-interval (ISI) histograms. Spike occurrences are determined by a y-threshold level detector on positive or negative slope deflections.
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Igor Pro comparison tests for stats().
+Igor Pro comparison tests for stat().
 
-Validates pyNeuroMatic stats() results against Igor Pro WaveStats output
+Validates pyNeuroMatic stat() results against Igor Pro WaveStats output
 for RecordA0 from nm02Jul04c0_002.pxp, computed over t=500 to 1000 ms.
 
 Reference values sourced from:
@@ -98,7 +98,7 @@ _S_DECAYTIME_IGOR = 7.6015363   # Igor NM decay-time result for p1=36.79% (1/e)
 # FWHM = 2*TAU/3 (exact for half-sine, p0=p1=50%) ≈ 13.333 ms
 _S_FWHM_IGOR = 13.333325        # Igor NM result (ms)
 
-# NMStatsWin win-dict base shared by all rise/fall/FWHM tests
+# NMStatWin win-dict base shared by all rise/fall/FWHM tests
 _S_WIN_BASE = {
     "bsln_on":  True,
     "bsln_func": {"name": "mean"},
@@ -140,10 +140,10 @@ def _dx_result(results):
 # ===========================================================================
 
 class TestIgorWaveStats(unittest.TestCase):
-    """Compare stats() against Igor Pro WaveStats for RecordA0, t=500–1000 ms."""
+    """Compare stat() against Igor Pro WaveStats for RecordA0, t=500–1000 ms."""
 
     def _stat(self, name, **kwargs):
-        return nms.stats(_DATA, {"name": name}, x0=_X0, x1=_X1,
+        return nms.stat(_DATA, {"name": name}, x0=_X0, x1=_X1,
                          xclip=True, **kwargs)
 
     def test_wave_loaded(self):
@@ -215,22 +215,22 @@ class TestIgorWaveStats(unittest.TestCase):
 
     def test_mean_at_max(self):
         # n_avg=500 determined by matching Igor minAvg/maxAvg to 3 decimal places
-        r = nms.stats(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
+        r = nms.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["s"], _IGOR_R0["maxAvg"], places=3)
 
     def test_mean_at_max_location(self):
-        r = nms.stats(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
+        r = nms.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["x"], _IGOR_R0["maxAvgLoc"], places=1)
 
     def test_mean_at_min(self):
-        r = nms.stats(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
+        r = nms.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["s"], _IGOR_R0["minAvg"], places=3)
 
     def test_mean_at_min_location(self):
-        r = nms.stats(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
+        r = nms.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["x"], _IGOR_R0["minAvgLoc"], places=1)
 
@@ -290,7 +290,7 @@ class TestIgorLevelCrossings(unittest.TestCase):
 
 
 class TestIgorRiseTime(unittest.TestCase):
-    """Compare rise-time stats against Igor NeuroMatic results for RecordA0."""
+    """Compare rise-time stat against Igor NeuroMatic results for RecordA0."""
 
     # TODO: add Igor rise-time results here
 
@@ -299,7 +299,7 @@ class TestIgorRiseTime(unittest.TestCase):
 
 
 class TestIgorFallTime(unittest.TestCase):
-    """Compare fall-time stats against Igor NeuroMatic results for RecordA0."""
+    """Compare fall-time stat against Igor NeuroMatic results for RecordA0."""
 
     # TODO: add Igor fall-time results here
 
@@ -308,7 +308,7 @@ class TestIgorFallTime(unittest.TestCase):
 
 
 class TestIgorFWHM(unittest.TestCase):
-    """Compare FWHM stats against Igor NeuroMatic results for RecordA0."""
+    """Compare FWHM stat against Igor NeuroMatic results for RecordA0."""
 
     # TODO: add Igor FWHM results here
 
@@ -389,7 +389,7 @@ class TestSineWaveRiseTime(unittest.TestCase):
     def _compute(self, func_dict):
         win = dict(_S_WIN_BASE)
         win["func"] = func_dict
-        w = nms.NMStatsWin(name="w")
+        w = nms.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
         w.bsln_x0 = win["bsln_x0"]
@@ -448,7 +448,7 @@ class TestSineWaveFallTime(unittest.TestCase):
     def _compute(self, func_dict):
         win = dict(_S_WIN_BASE)
         win["func"] = func_dict
-        w = nms.NMStatsWin(name="w")
+        w = nms.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
         w.bsln_x0 = win["bsln_x0"]
@@ -508,7 +508,7 @@ class TestSineWaveFWHM(unittest.TestCase):
     def _compute(self, func_dict):
         win = dict(_S_WIN_BASE)
         win["func"] = func_dict
-        w = nms.NMStatsWin(name="w")
+        w = nms.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
         w.bsln_x0 = win["bsln_x0"]

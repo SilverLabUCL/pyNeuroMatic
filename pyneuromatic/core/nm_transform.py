@@ -4,7 +4,7 @@ NMTransform module — data transform classes for pyNeuroMatic.
 
 Provides NMTransform base class and simple transform subclasses
 (Invert, Differentiate, DoubleDifferentiate, Integrate, Log, Ln)
-for use in NMChannel and NMStatsWin transform pipelines.
+for use in NMChannel and NMStatWin transform pipelines.
 
 Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
