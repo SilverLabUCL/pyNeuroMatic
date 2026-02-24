@@ -81,6 +81,7 @@ FUNC_NAMES_BSLN = (
 
 
 def badvalue(n: float | None) -> bool:
+    """Return True if n is None, NaN, or infinite."""
     return n is None or math.isnan(n) or math.isinf(n)
 
 
@@ -94,6 +95,14 @@ class NMStatFunc:
 
     Lightweight class (following NMTransform pattern) that represents
     a statistics function with its parameters and compute pipeline.
+
+    Each subclass corresponds to one category of stat function and stores
+    validated parameters, exposes them via `to_dict()`, and implements the
+    full measurement pipeline in `compute()`.
+
+    Args:
+        name: Stat function name string (e.g., ``"mean"``, ``"risetime+"``).
+        parent: Optional parent object reference (reset to None on deep-copy).
     """
 
     _VALID_KEYS: set[str] = set()
@@ -103,11 +112,13 @@ class NMStatFunc:
         self._name = name
 
     def __repr__(self) -> str:
+        """Return string representation showing class name and parameters."""
         d = self.to_dict()
         params = ", ".join("%s=%r" % (k, v) for k, v in d.items())
         return "%s(%s)" % (self.__class__.__name__, params)
 
     def __eq__(self, other: object) -> bool:
+        """Return True if other has the same to_dict() as this instance."""
         if isinstance(other, NMStatFunc):
             return self.to_dict() == other.to_dict()
         if isinstance(other, dict):
@@ -115,6 +126,7 @@ class NMStatFunc:
         return NotImplemented
 
     def __deepcopy__(self, memo: dict) -> NMStatFunc:
+        """Deep-copy all attributes, resetting _parent to None."""
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -126,6 +138,7 @@ class NMStatFunc:
         return result
 
     def __getitem__(self, key: str) -> object:
+        """Return parameter value by key, equivalent to ``to_dict()[key]``."""
         d = self.to_dict()
         if key in d:
             return d[key]
@@ -133,16 +146,24 @@ class NMStatFunc:
 
     @property
     def name(self) -> str:
+        """Stat function name string."""
         return self._name
 
     def to_dict(self) -> dict:
+        """Return function parameters as a dict with at least a ``"name"`` key."""
         return {"name": self._name}
 
     @property
     def needs_baseline(self) -> bool:
+        """True if this func requires a baseline result before ``compute()``."""
         return False
 
     def validate_baseline(self, bsln_func_name: str | None) -> None:
+        """Raise RuntimeError if the baseline func is incompatible with this func.
+
+        Args:
+            bsln_func_name: The baseline func name, or None if no baseline set.
+        """
         pass
 
     def _add_ds(self, r: dict, bsln_result: dict) -> float:
@@ -164,13 +185,35 @@ class NMStatFunc:
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Execute the stat computation, appending results via run_stat.
+
+        Args:
+            data: Input data object with x/y arrays.
+            x0: Left x-boundary of the main stat window.
+            x1: Right x-boundary of the main stat window.
+            xclip: If True, clip data to [x0, x1] before computing.
+            ignore_nans: If True, exclude NaN values from computation.
+            run_stat: Callable (``NMStatWin._run_stat``) that executes a
+                single stat dict and appends the result to the results list.
+            bsln_result: Dict of baseline result keys (e.g., ``"s"``,
+                ``"std"``), or ``{}`` if no baseline is used.
+        """
         raise NotImplementedError(
             "%s.compute() not implemented" % self.__class__.__name__
         )
 
 
 class NMStatFuncBasic(NMStatFunc):
-    """Stat functions with no parameters (mean, median, var, etc.)."""
+    """Stat functions that take no extra parameters.
+
+    Accepted names: median, mean, mean+var, mean+std, mean+sem, var, std,
+    sem, rms, sum, pathlength, area, slope, value@x0, value@x1, count,
+    count_nans, count_infs.
+
+    Args:
+        name: One of the names in ``FUNC_NAMES_BASIC``.
+        parent: Optional parent object reference.
+    """
 
     def __init__(self, name: str, parent: object | None = None) -> None:
         if name.lower() not in FUNC_NAMES_BASIC:
@@ -179,13 +222,27 @@ class NMStatFuncBasic(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Run a single stat call and optionally record the baseline delta."""
         r = run_stat(data, {"name": self._name}, "main",
                      x0, x1, xclip, ignore_nans)
         self._add_ds(r, bsln_result)
 
 
 class NMStatFuncMaxMin(NMStatFunc):
-    """max, min, mean@max, mean@min functions."""
+    """Max/min stat functions with optional averaging around the peak.
+
+    Accepted names: max, min, mean@max, mean@min.
+
+    When ``n_avg`` is provided for a ``"max"`` or ``"min"`` name, the name is
+    upgraded to ``"mean@max"`` or ``"mean@min"`` automatically.
+
+    Args:
+        name: One of the names in ``FUNC_NAMES_MAXMIN``.
+        n_avg: Number of points to average around the peak location. Required
+            for ``mean@max`` / ``mean@min``; upgrades ``max`` / ``min`` when
+            provided.
+        parent: Optional parent object reference.
+    """
 
     _VALID_KEYS = {"n_avg"}
 
@@ -221,6 +278,7 @@ class NMStatFuncMaxMin(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Run the max/min stat; warn if n_avg <= 1 for mean@ variants."""
         func: dict[str, Any] = {"name": self._name}
         if self._n_avg is not None:
             func["n_avg"] = self._n_avg
@@ -233,7 +291,17 @@ class NMStatFuncMaxMin(NMStatFunc):
 
 
 class NMStatFuncLevel(NMStatFunc):
-    """Level with explicit ylevel value."""
+    """Level crossing with an explicit absolute y-value threshold.
+
+    Accepted names: level, level+, level-.
+
+    Use ``NMStatFuncLevelNstd`` for a baseline-relative threshold.
+
+    Args:
+        name: One of the names in ``FUNC_NAMES_LEVEL``.
+        ylevel: The absolute y threshold. Must be finite and not None.
+        parent: Optional parent object reference.
+    """
 
     _VALID_KEYS = {"ylevel"}
 
@@ -258,13 +326,26 @@ class NMStatFuncLevel(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Find the level crossing at ylevel and optionally add baseline delta."""
         func: dict[str, Any] = {"name": self._name, "ylevel": self._ylevel}
         r = run_stat(data, func, "main", x0, x1, xclip, ignore_nans)
         self._add_ds(r, bsln_result)
 
 
 class NMStatFuncLevelNstd(NMStatFunc):
-    """Level computed from baseline mean +/- n_std * std."""
+    """Level crossing at baseline mean +/- n_std standard deviations.
+
+    Accepted names: level, level+, level-.
+
+    Requires a ``"mean+std"`` baseline computation so that the threshold
+    ``ylevel = bsln_mean + n_std * bsln_std`` can be derived at runtime.
+
+    Args:
+        name: One of the names in ``FUNC_NAMES_LEVEL``.
+        n_std: Number of standard deviations from the baseline mean. Must
+            be non-zero and finite.
+        parent: Optional parent object reference.
+    """
 
     _VALID_KEYS = {"n_std"}
 
@@ -292,6 +373,7 @@ class NMStatFuncLevelNstd(NMStatFunc):
         return True
 
     def validate_baseline(self, bsln_func_name: str | None) -> None:
+        """Raise RuntimeError if the baseline func is not ``"mean+std"``."""
         if bsln_func_name is None or bsln_func_name.lower() != "mean+std":
             raise RuntimeError(
                 "level n_std requires baseline 'mean+std' computation"
@@ -299,6 +381,7 @@ class NMStatFuncLevelNstd(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Derive ylevel from the baseline, then find the level crossing."""
         ylevel = math.nan
         if "s" in bsln_result and "std" in bsln_result:
             s = bsln_result["s"]
@@ -311,7 +394,21 @@ class NMStatFuncLevelNstd(NMStatFunc):
 
 
 class NMStatFuncRiseTime(NMStatFunc):
-    """Rise time functions (risetime+/-, risetimeslope+/-)."""
+    """Rise time functions (risetime+/-, risetimeslope+/-).
+
+    Measures the time for a signal to rise from ``p0``% to ``p1``% of its
+    peak amplitude above baseline. Both percentages are required, and
+    ``p0`` must be less than ``p1`` (e.g., p0=10, p1=90 for 10–90% rise
+    time).
+
+    Requires a mean or median baseline to establish the amplitude reference.
+
+    Args:
+        name: One of the names in ``FUNC_NAMES_RISETIME``.
+        p0: Lower amplitude threshold as a percentage (0 < p0 < 100).
+        p1: Upper amplitude threshold as a percentage (p0 < p1 < 100).
+        parent: Optional parent object reference.
+    """
 
     _VALID_KEYS = {"p0", "p1"}
 
@@ -355,6 +452,7 @@ class NMStatFuncRiseTime(NMStatFunc):
         return True
 
     def validate_baseline(self, bsln_func_name: str | None) -> None:
+        """Raise RuntimeError if baseline is not a mean or median func."""
         if bsln_func_name is None:
             raise RuntimeError(
                 "peak func '%s' requires baseline 'mean' computation"
@@ -367,6 +465,10 @@ class NMStatFuncRiseTime(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Compute rise time: peak → level at p0% → level at p1%.
+
+        Records ``dx = x(p1) - x(p0)`` and optionally the slope between them.
+        """
         f = self._name
         slope = "slope" in f
 
@@ -413,7 +515,21 @@ class NMStatFuncRiseTime(NMStatFunc):
 
 
 class NMStatFuncFallTime(NMStatFunc):
-    """Fall time functions (falltime+/-, falltimeslope+/-)."""
+    """Fall time functions (falltime+/-, falltimeslope+/-).
+
+    Measures the time for a signal to fall from ``p0``% to ``p1``% of its
+    peak amplitude above baseline, starting from the peak. Both percentages
+    are required, and ``p0`` must be greater than ``p1`` (e.g., p0=90,
+    p1=10 for 90–10% fall time).
+
+    Requires a mean or median baseline to establish the amplitude reference.
+
+    Args:
+        name: One of the names in ``FUNC_NAMES_FALLTIME``.
+        p0: Upper amplitude threshold as a percentage (0 < p1 < p0 < 100).
+        p1: Lower amplitude threshold as a percentage (0 < p1 < p0 < 100).
+        parent: Optional parent object reference.
+    """
 
     _VALID_KEYS = {"p0", "p1"}
 
@@ -457,6 +573,7 @@ class NMStatFuncFallTime(NMStatFunc):
         return True
 
     def validate_baseline(self, bsln_func_name: str | None) -> None:
+        """Raise RuntimeError if baseline is not a mean or median func."""
         if bsln_func_name is None:
             raise RuntimeError(
                 "peak func '%s' requires baseline 'mean' computation"
@@ -469,6 +586,10 @@ class NMStatFuncFallTime(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Compute fall time: peak → level at p0% → level at p1% after peak.
+
+        Records ``dx = x(p1) - x(p0)`` and optionally the slope between them.
+        """
         f = self._name
         slope = "slope" in f
 
@@ -552,6 +673,7 @@ class NMStatFuncDecayTime(NMStatFunc):
         return True
 
     def validate_baseline(self, bsln_func_name: str | None) -> None:
+        """Raise RuntimeError if baseline is not a mean or median func."""
         if bsln_func_name is None:
             raise RuntimeError(
                 "peak func '%s' requires baseline 'mean' computation"
@@ -564,6 +686,10 @@ class NMStatFuncDecayTime(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Compute decay time: peak → level at p0% after peak.
+
+        Records ``dx = x(p0) - peak_x``.
+        """
         f = self._name
 
         # Peak stat
@@ -595,7 +721,20 @@ class NMStatFuncDecayTime(NMStatFunc):
 
 
 class NMStatFuncFWHM(NMStatFunc):
-    """Full width at half maximum functions."""
+    """Full-width at half-maximum functions (fwhm+, fwhm-).
+
+    Measures the width of a peak at ``p0``% of the amplitude before the peak
+    and ``p1``% after, both defaulting to 50 (half maximum).
+    ``dx = x(p1, after peak) - x(p0, before peak)``.
+
+    Requires a mean or median baseline to establish the amplitude reference.
+
+    Args:
+        name: One of the names in ``FUNC_NAMES_FWHM``.
+        p0: Threshold before the peak as a percentage (default 50).
+        p1: Threshold after the peak as a percentage (default 50).
+        parent: Optional parent object reference.
+    """
 
     _VALID_KEYS = {"p0", "p1"}
 
@@ -632,6 +771,7 @@ class NMStatFuncFWHM(NMStatFunc):
         return True
 
     def validate_baseline(self, bsln_func_name: str | None) -> None:
+        """Raise RuntimeError if baseline is not a mean or median func."""
         if bsln_func_name is None:
             raise RuntimeError(
                 "peak func '%s' requires baseline 'mean' computation"
@@ -644,6 +784,10 @@ class NMStatFuncFWHM(NMStatFunc):
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
+        """Compute FWHM: peak → level at p0% before peak, level at p1% after.
+
+        Records ``dx = x(p1) - x(p0)``.
+        """
         f = self._name
 
         # Peak stat
@@ -731,11 +875,21 @@ def _stat_func_from_dict(
     """Create an NMStatFunc from a dict or string name.
 
     Args:
-        d: Dict with at least a "name" key, a string func name, or None.
-        parent: Optional parent reference.
+        d: Dict with at least a ``"name"`` key, a bare string func name,
+            or None. Additional keys (``"p0"``, ``"n_avg"``, etc.) are
+            forwarded to the subclass constructor.
+        parent: Optional parent object reference.
 
     Returns:
-        An NMStatFunc instance, or None.
+        An NMStatFunc subclass instance, or None if ``d`` is None or ``{}``.
+
+    Raises:
+        TypeError: If ``d`` is not a dict or string.
+        KeyError: If ``"name"`` is missing, a required parameter is absent,
+            an unknown key is present, or both ``"ylevel"`` and ``"n_std"``
+            are supplied together for a level func.
+        ValueError: If the func name is not in ``_STAT_FUNC_REGISTRY``, or a
+            parameter value is invalid (e.g., out-of-range percentage).
     """
     if d is None:
         return None
