@@ -23,8 +23,6 @@ import copy
 import math
 from typing import Any
 
-import numpy as np
-
 from pyneuromatic.analysis.nm_stat_func import (
     NMStatFunc,
     FUNC_NAMES_BSLN,
@@ -43,11 +41,27 @@ import pyneuromatic.core.nm_utilities as nmu
 
 
 class NMStatWin:
-    """NM Stat Window class.
+    """Stat measurement window: x-range, function, baseline, and transforms.
 
     Lightweight class (does not inherit NMObject) following the NMScaleY
-    pattern. Each window defines a stat measurement with x-range, function,
-    optional baseline, and optional transforms.
+    pattern. Each window defines one stat measurement pipeline:
+
+    - ``func`` — the stat function (e.g., ``{"name": "mean"}`` or
+      ``{"name": "risetime+", "p0": 10, "p1": 90}``)
+    - ``x0`` / ``x1`` — x-boundaries of the main stat region
+    - ``bsln_on`` / ``bsln_func`` / ``bsln_x0`` / ``bsln_x1`` — optional
+      baseline stat subtracted from (or required by) the main stat
+    - ``transform`` — optional list of NMTransform operations applied to a
+      copy of the data before computing
+
+    Call ``compute(data)`` to run the pipeline and retrieve result dicts.
+
+    Args:
+        parent: Optional parent object reference.
+        name: Window name (alphanumeric + underscores, default ``"NMStatWin0"``).
+        win: Optional dict to initialise window parameters via ``_win_set()``.
+            Accepted keys: ``on``, ``func``, ``x0``, ``x1``, ``transform``,
+            ``bsln_on``, ``bsln_func``, ``bsln_x0``, ``bsln_x1``.
     """
 
     def __init__(
@@ -85,11 +99,13 @@ class NMStatWin:
             raise TypeError(e)
 
     def __eq__(self, other: object) -> bool:
+        """Return True if other is an NMStatWin with the same to_dict()."""
         if not isinstance(other, NMStatWin):
             return NotImplemented
         return self.to_dict() == other.to_dict()
 
     def __deepcopy__(self, memo: dict) -> NMStatWin:
+        """Deep-copy all attributes, resetting _parent to None."""
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -102,9 +118,11 @@ class NMStatWin:
 
     @property
     def name(self) -> str:
+        """Window name string."""
         return self._name
 
     def copy(self) -> NMStatWin:
+        """Return a deep copy of this window."""
         return copy.deepcopy(self)
 
     def to_dict(self) -> dict:
@@ -131,6 +149,12 @@ class NMStatWin:
         win: dict[str, object],
         quiet: bool = nmp.QUIET
     ) -> None:
+        """Set multiple window parameters from a dict.
+
+        Accepted keys: ``on``, ``func``, ``x0``, ``x1``, ``transform``,
+        ``bsln_on``, ``bsln_func``, ``bsln_x0``, ``bsln_x1``.
+        The key ``"name"`` is silently ignored (name is set via constructor).
+        """
         if not isinstance(win, dict):
             e = nmu.type_error_str(win, "win", "dictionary")
             raise TypeError(e)
@@ -166,6 +190,7 @@ class NMStatWin:
 
     @property
     def on(self) -> bool:
+        """True if this window is active and will be included in compute()."""
         return self.__on
 
     @on.setter
@@ -173,6 +198,7 @@ class NMStatWin:
         return self._on_set(on)
 
     def _on_set(self, on: bool, quiet: bool = nmp.QUIET) -> None:
+        """Set the on flag; raises TypeError if not bool."""
         if not isinstance(on, bool):
             e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
@@ -182,6 +208,7 @@ class NMStatWin:
 
     @property
     def func(self) -> dict:
+        """The stat function as a dict (e.g. ``{"name": "mean"}``), or ``{}``."""
         return self.__func.to_dict() if self.__func else {}
 
     @func.setter
@@ -194,6 +221,12 @@ class NMStatWin:
         func: dict | str | None,
         quiet: bool = nmp.QUIET
     ) -> None:
+        """Set the stat function from a dict, string name, or None.
+
+        If ``func`` is a dict without a ``"name"`` key and a func is already
+        set, the current func name is reused so parameters can be updated
+        in-place (e.g. ``w.func = {"p0": 10, "p1": 90}``).
+        """
         if func is None or (isinstance(func, dict) and len(func) == 0):
             self.__func = None
             return None
@@ -214,6 +247,7 @@ class NMStatWin:
 
     @property
     def x0(self) -> float:
+        """Left x-boundary of the main stat window (default ``-inf``)."""
         return self.__x0
 
     @x0.setter
@@ -226,6 +260,13 @@ class NMStatWin:
         x: float,
         quiet: bool = nmp.QUIET
     ) -> None:
+        """Set an x-boundary by name.
+
+        Args:
+            xname: One of ``"x0"``, ``"x1"``, ``"bsln_x0"``, ``"bsln_x1"``.
+            x: The x value. Infinite values are coerced to ``-inf`` for x0
+                variants and ``+inf`` for x1 variants. NaN is rejected.
+        """
         x = float(x)  # might raise type error
         if math.isnan(x):
             raise ValueError(xname + ": %s" % x)
@@ -247,6 +288,7 @@ class NMStatWin:
 
     @property
     def x1(self) -> float:
+        """Right x-boundary of the main stat window (default ``+inf``)."""
         return self.__x1
 
     @x1.setter
@@ -255,6 +297,7 @@ class NMStatWin:
 
     @property
     def transform(self) -> list[NMTransform] | None:
+        """List of NMTransform objects applied before computing, or None."""
         return self.__transform
 
     @transform.setter
@@ -266,6 +309,7 @@ class NMStatWin:
         transform_list: list[NMTransform] | list[dict] | None,
         quiet: bool = nmp.QUIET
     ) -> None:
+        """Set the transform list from NMTransform objects, dicts, or None."""
         if transform_list is None:
             self.__transform = None
             nmh.history("set transform=None", path=self._name, quiet=quiet)
@@ -294,6 +338,7 @@ class NMStatWin:
 
     @property
     def bsln_on(self) -> bool:
+        """True if the baseline stat is enabled."""
         return self.__bsln_on
 
     @bsln_on.setter
@@ -301,6 +346,7 @@ class NMStatWin:
         return self._bsln_on_set(on)
 
     def _bsln_on_set(self, on: bool, quiet: bool = nmp.QUIET) -> None:
+        """Set the bsln_on flag; raises TypeError if not bool."""
         if not isinstance(on, bool):
             e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
@@ -310,6 +356,7 @@ class NMStatWin:
 
     @property
     def bsln_func(self) -> dict:
+        """The baseline function as a dict (e.g. ``{"name": "mean"}``), or ``{}``."""
         return self.__bsln_func
 
     @bsln_func.setter
@@ -322,7 +369,11 @@ class NMStatWin:
         func: dict | str | None,
         quiet: bool = nmp.QUIET
     ) -> None:
+        """Set the baseline function from a dict, string name, or None.
 
+        Only names in ``FUNC_NAMES_BSLN`` are accepted: median, mean,
+        mean+var, mean+std, mean+sem.
+        """
         if func is None:
             self.__bsln_func.clear()
             return None
@@ -366,6 +417,7 @@ class NMStatWin:
 
     @property
     def bsln_x0(self) -> float:
+        """Left x-boundary of the baseline window (default ``-inf``)."""
         return self.__bsln_x0
 
     @bsln_x0.setter
@@ -374,6 +426,7 @@ class NMStatWin:
 
     @property
     def bsln_x1(self) -> float:
+        """Right x-boundary of the baseline window (default ``+inf``)."""
         return self.__bsln_x1
 
     @bsln_x1.setter
@@ -382,11 +435,28 @@ class NMStatWin:
 
     @property
     def results(self) -> list[dict]:
+        """List of result dicts from the most recent ``compute()`` call."""
         return self.__results
 
     def _run_stat(self, data, func, id_str, x0, x1, xclip, ignore_nans,
                   **extra):
-        """Create a result dict, append to results, and call stat()."""
+        """Create a result dict, append it to results, and call stat().
+
+        Args:
+            data: NMData object to analyse.
+            func: Stat function dict (e.g. ``{"name": "max"}``).
+            id_str: Label stored in the result as ``"id"`` (e.g. ``"bsln"``,
+                ``"main"``, or a func name for intermediate pipeline steps).
+            x0: Left x-boundary for this stat call.
+            x1: Right x-boundary for this stat call.
+            xclip: If True, clip data to [x0, x1].
+            ignore_nans: If True, exclude NaN values.
+            **extra: Additional key-value pairs stored in the result dict
+                (e.g. ``p0``, ``p1``, ``warning``).
+
+        Returns:
+            The result dict after stat() has populated it in-place.
+        """
         r: dict[str, Any] = {"win": self.name, "id": id_str}
         r.update(extra)
         r["func"] = func
@@ -404,7 +474,22 @@ class NMStatWin:
         ignore_nans: bool = False,
         quiet: bool = nmp.QUIET
     ) -> list:
+        """Run the stat computation on data.
 
+        Applies any transforms to a copy of the data (original is never
+        mutated), runs the baseline stat if ``bsln_on`` is True, then
+        delegates to ``self.__func.compute()``.
+
+        Args:
+            data: NMData object to analyse.
+            xclip: If True, clip data to [x0, x1] before computing stats.
+            ignore_nans: If True, exclude NaN values from computations.
+            quiet: If True, suppress history logging.
+
+        Returns:
+            List of result dicts from each stat call in the pipeline.
+            Returns an empty list if ``data`` is None or no func is set.
+        """
         # Apply transforms to a copy of the data (original never mutated)
         if self.__transform and len(self.__transform) > 0:
             if data is not None and data.nparray is not None:
@@ -458,7 +543,16 @@ class NMStatWin:
 
 
 class NMStatWinContainer:
-    """Simple container of NMStatWin objects with auto-naming."""
+    """Ordered container of NMStatWin objects with auto-naming.
+
+    Windows are created via ``new()`` and named ``{prefix}0``, ``{prefix}1``,
+    etc. The ``selected_name`` attribute tracks which window is currently
+    active.
+
+    Args:
+        parent: Optional parent object reference.
+        name_prefix: Prefix for auto-generated window names (default ``"w"``).
+    """
 
     def __init__(
         self,
@@ -472,6 +566,7 @@ class NMStatWinContainer:
         self.selected_name: str | None = None
 
     def new(self, quiet: bool = nmp.QUIET) -> NMStatWin:
+        """Create, register, and return a new NMStatWin with an auto-name."""
         name = "%s%d" % (self._prefix, self._count)
         self._count += 1
         w = NMStatWin(parent=self._parent, name=name)
@@ -482,13 +577,17 @@ class NMStatWinContainer:
         return w
 
     def __iter__(self):
+        """Iterate over all NMStatWin objects in insertion order."""
         return iter(self._windows.values())
 
     def __len__(self):
+        """Return the number of windows in the container."""
         return len(self._windows)
 
     def __getitem__(self, name: str) -> NMStatWin:
+        """Return the NMStatWin with the given name."""
         return self._windows[name]
 
     def __contains__(self, name: str) -> bool:
+        """Return True if a window with the given name exists."""
         return name in self._windows
