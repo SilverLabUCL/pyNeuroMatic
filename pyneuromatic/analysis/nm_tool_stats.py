@@ -108,9 +108,9 @@ class NMToolStats(NMTool):
         # results for each measure {} made for the stat window
         # e.g. baseline, main, p0, p1, slope, etc.
 
-        self.__save_history = False
-        self.__save_cache = True
-        self.__save_numpy = False
+        self.__results_to_history = False
+        self.__results_to_cache = True
+        self.__results_to_numpy = False
 
     @property
     def windows(self) -> NMStatWinContainer:
@@ -157,58 +157,58 @@ class NMToolStats(NMTool):
         nmh.history("set ignore_nans=%s" % ignore_nans, quiet=quiet)
 
     @property
-    def save_history(self) -> bool:
-        return self.__save_history
+    def results_to_history(self) -> bool:
+        return self.__results_to_history
 
-    @save_history.setter
-    def save_history(self, value: bool) -> None:
-        self._save_history_set(value)
+    @results_to_history.setter
+    def results_to_history(self, value: bool) -> None:
+        self._results_to_history_set(value)
 
-    def _save_history_set(
+    def _results_to_history_set(
         self,
         value: bool,
         quiet: bool = nmp.QUIET,
     ) -> None:
         if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "save_history", "boolean"))
-        self.__save_history = value
-        nmh.history("set save_history=%s" % value, quiet=quiet)
+            raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
+        self.__results_to_history = value
+        nmh.history("set results_to_history=%s" % value, quiet=quiet)
 
     @property
-    def save_cache(self) -> bool:
-        return self.__save_cache
+    def results_to_cache(self) -> bool:
+        return self.__results_to_cache
 
-    @save_cache.setter
-    def save_cache(self, value: bool) -> None:
-        self._save_cache_set(value)
+    @results_to_cache.setter
+    def results_to_cache(self, value: bool) -> None:
+        self._results_to_cache_set(value)
 
-    def _save_cache_set(
+    def _results_to_cache_set(
         self,
         value: bool,
         quiet: bool = nmp.QUIET,
     ) -> None:
         if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "save_cache", "boolean"))
-        self.__save_cache = value
-        nmh.history("set save_cache=%s" % value, quiet=quiet)
+            raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
+        self.__results_to_cache = value
+        nmh.history("set results_to_cache=%s" % value, quiet=quiet)
 
     @property
-    def save_numpy(self) -> bool:
-        return self.__save_numpy
+    def results_to_numpy(self) -> bool:
+        return self.__results_to_numpy
 
-    @save_numpy.setter
-    def save_numpy(self, value: bool) -> None:
-        self._save_numpy_set(value)
+    @results_to_numpy.setter
+    def results_to_numpy(self, value: bool) -> None:
+        self._results_to_numpy_set(value)
 
-    def _save_numpy_set(
+    def _results_to_numpy_set(
         self,
         value: bool,
         quiet: bool = nmp.QUIET,
     ) -> None:
         if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "save_numpy", "boolean"))
-        self.__save_numpy = value
-        nmh.history("set save_numpy=%s" % value, quiet=quiet)
+            raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
+        self.__results_to_numpy = value
+        nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
 
     # override, no super
     def run_init(self) -> bool:
@@ -237,15 +237,15 @@ class NMToolStats(NMTool):
 
     # override, no super
     def run_finish(self) -> bool:
-        if self.__save_history:
-            self._save_history()
-        if self.__save_cache:
-            self._save_cache()
-        if self.__save_numpy:
-            self._save_numpy()
+        if self.__results_to_history:
+            self._results_to_history()
+        if self.__results_to_cache:
+            self._results_to_cache()
+        if self.__results_to_numpy:
+            self._results_to_numpy()
         return True  # ok
 
-    def _save_history(self, quiet: bool = False) -> None:
+    def _results_to_history(self, quiet: bool = False) -> None:
         if not isinstance(self.__results, dict):
             return None
         for kwin, vlist in self.__results.items():  # windows
@@ -262,7 +262,7 @@ class NMToolStats(NMTool):
                     nmh.history(str(rdict), quiet=quiet)
         return None
 
-    def _save_cache(self) -> int | None:
+    def _results_to_cache(self) -> int | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
@@ -287,7 +287,7 @@ class NMToolStats(NMTool):
         "dx":   ("dx",   "xunits"),
     }
 
-    def _save_numpy(self) -> NMToolFolder | None:
+    def _results_to_numpy(self) -> NMToolFolder | None:
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
@@ -365,7 +365,7 @@ class NMToolStats(NMTool):
 class NMToolStats2:
     """Compute summary statistics of Stats results (ST_ arrays).
 
-    Operates on a NMToolFolder produced by NMToolStats._save_numpy(),
+    Operates on a NMToolFolder produced by NMToolStats._results_to_numpy(),
     computing stats() on each selected ST_ array and saving results as
     ST2_ arrays in the same folder.
     """
@@ -376,9 +376,9 @@ class NMToolStats2:
     def __init__(self) -> None:
         self.__results: dict[str, Any] = {}
         self.__ignore_nans: bool = True
-        self.__save_history: bool = False
-        self.__save_cache: bool = True
-        self.__save_numpy: bool = False
+        self.__results_to_history: bool = False
+        self.__results_to_cache: bool = True
+        self.__results_to_numpy: bool = False
 
     # --- ignore_nans (same pattern as NMToolStats) ---
 
@@ -401,52 +401,52 @@ class NMToolStats2:
     # --- save flags (same pattern as NMToolStats) ---
 
     @property
-    def save_history(self) -> bool:
-        return self.__save_history
+    def results_to_history(self) -> bool:
+        return self.__results_to_history
 
-    @save_history.setter
-    def save_history(self, value: bool) -> None:
-        self._save_history_flag_set(value)
+    @results_to_history.setter
+    def results_to_history(self, value: bool) -> None:
+        self._results_to_history_set(value)
 
-    def _save_history_flag_set(
+    def _results_to_history_set(
         self, value: bool, quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "save_history", "boolean"))
-        self.__save_history = value
-        nmh.history("set save_history=%s" % value, quiet=quiet)
+            raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
+        self.__results_to_history = value
+        nmh.history("set results_to_history=%s" % value, quiet=quiet)
 
     @property
-    def save_cache(self) -> bool:
-        return self.__save_cache
+    def results_to_cache(self) -> bool:
+        return self.__results_to_cache
 
-    @save_cache.setter
-    def save_cache(self, value: bool) -> None:
-        self._save_cache_flag_set(value)
+    @results_to_cache.setter
+    def results_to_cache(self, value: bool) -> None:
+        self._results_to_cache_set(value)
 
-    def _save_cache_flag_set(
+    def _results_to_cache_set(
         self, value: bool, quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "save_cache", "boolean"))
-        self.__save_cache = value
-        nmh.history("set save_cache=%s" % value, quiet=quiet)
+            raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
+        self.__results_to_cache = value
+        nmh.history("set results_to_cache=%s" % value, quiet=quiet)
 
     @property
-    def save_numpy(self) -> bool:
-        return self.__save_numpy
+    def results_to_numpy(self) -> bool:
+        return self.__results_to_numpy
 
-    @save_numpy.setter
-    def save_numpy(self, value: bool) -> None:
-        self._save_numpy_flag_set(value)
+    @results_to_numpy.setter
+    def results_to_numpy(self, value: bool) -> None:
+        self._results_to_numpy_set(value)
 
-    def _save_numpy_flag_set(
+    def _results_to_numpy_set(
         self, value: bool, quiet: bool = nmp.QUIET
     ) -> None:
         if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "save_numpy", "boolean"))
-        self.__save_numpy = value
-        nmh.history("set save_numpy=%s" % value, quiet=quiet)
+            raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
+        self.__results_to_numpy = value
+        nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
 
     @property
     def results(self) -> dict:
@@ -509,20 +509,20 @@ class NMToolStats2:
             stats(d.nparray, ignore_nans=ignore_nans, results=r)
             self.__results[d.name] = r
 
-        if self.__save_history:
-            self._save_history_results()
-        if self.__save_cache:
-            self._save_cache_results(toolfolder)
-        if self.__save_numpy:
-            self._save_numpy_results(toolfolder)
+        if self.__results_to_history:
+            self._results_to_history()
+        if self.__results_to_cache:
+            self._results_to_cache(toolfolder)
+        if self.__results_to_numpy:
+            self._results_to_numpy(toolfolder)
 
         return self.__results
 
-    def _save_history_results(self, quiet: bool = False) -> None:
+    def _results_to_history(self, quiet: bool = False) -> None:
         for src_name, r in self.__results.items():
             nmh.history("stats2 %s: %s" % (src_name, r), quiet=quiet)
 
-    def _save_cache_results(self, toolfolder: NMToolFolder) -> None:
+    def _results_to_cache(self, toolfolder: NMToolFolder) -> None:
         # Store in the folder's parent NMFolder toolresults if available
         parent = toolfolder._parent
         while parent is not None:
@@ -531,7 +531,7 @@ class NMToolStats2:
                 return
             parent = getattr(parent, "_parent", None)
 
-    def _save_numpy_results(self, toolfolder: NMToolFolder) -> None:
+    def _results_to_numpy(self, toolfolder: NMToolFolder) -> None:
         if not self.__results:
             return
         src_names = list(self.__results.keys())
