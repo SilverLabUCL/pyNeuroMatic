@@ -183,9 +183,6 @@ class TestNMStatWin(unittest.TestCase):
         self.assertEqual(self.w1.func["name"], "falltime+")
         self.assertEqual(self.w1.func["p0"], 90)
         self.assertEqual(self.w1.func["p1"], 10)
-        self.w1._func_set({"p0": 36})
-        self.assertEqual(self.w1.func["p0"], 36)
-        self.assertIsNone(self.w1.func["p1"])
         with self.assertRaises(ValueError):
             self.w1._func_set({"p0": 25, "p1": 75})
 
@@ -388,15 +385,15 @@ class TestNMStatWin(unittest.TestCase):
             round(r[1]["Δs"] * 1000),
             round(n_std * r[0]["std"] * 1000))
 
-    def test_compute_falltime_p0_only(self):
+    def test_compute_decaytime(self):
         self.w1.bsln_x0 = 0
         self.w1.bsln_x1 = 10
         self.w1.x0 = -math.inf
         self.w1.x1 = math.inf
-        self.w1.func = {"name": "falltime+", "p0": 36}
+        self.w1.func = {"name": "decaytime+", "p0": 36}
         r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
         self.assertEqual(r[0]["id"], "bsln")
-        self.assertEqual(r[1]["id"], "falltime+")
+        self.assertEqual(r[1]["id"], "decaytime+")
         self.assertIn("Δs", r[1])
         if not math.isnan(r[1]["Δs"]):
             self.assertEqual(len(r), 3)

@@ -85,7 +85,7 @@ _S_P0_RISE = 10.0   # %
 _S_P1_RISE = 90.0   # %
 _S_P0_FALL = 90.0   # % (NOTE: p0 > p1 for falltime)
 _S_P1_FALL = 10.0   # %
-_S_P1_DECAY = 36.79   # %
+_S_P0_DECAY = 36.79   # % (Igor's rounded 1/e default; exact = nmsf.DECAY_TIME_DEFAULT_PCT)
 
 # Rise/fall time and slope.  Igor NM reference values.
 # Analytical rise time: TAU/π * (arcsin(0.9) - arcsin(0.1)) ≈ 6.491 ms
@@ -492,6 +492,47 @@ class TestSineWaveFallTime(unittest.TestCase):
         slope_r = results[-1]
         self.assertLess(slope_r["s"], 0.0)
         self.assertAlmostEqual(slope_r["s"], -_S_RISESLOPE_IGOR, delta=0.0001)
+
+
+class TestSineWaveDecayTime(unittest.TestCase):
+    """Decay-time tests on a half-sine pulse with analytical reference values.
+
+    Decay time = time from peak to when signal has fallen to X% of its
+    amplitude (default 36.79% ≈ 1/e, one exponential time constant).
+
+    Igor replication:
+        Same wave as TestSineWaveRiseTime. Run NM Stats with:
+            baseline: mean over [0, 9.98 ms]
+            func: decaytime+ (p0=36.79)
+            signal: [10, 30 ms]
+    """
+
+    def _compute(self, func_dict):
+        win = dict(_S_WIN_BASE)
+        win["func"] = func_dict
+        w = nmsw.NMStatWin(name="w")
+        w.bsln_on = win["bsln_on"]
+        w.bsln_func = win["bsln_func"]
+        w.bsln_x0 = win["bsln_x0"]
+        w.bsln_x1 = win["bsln_x1"]
+        w.func = win["func"]
+        w.x0 = win["x0"]
+        w.x1 = win["x1"]
+        return w.compute(_SINE_DATA, xclip=True)
+
+    def test_decaytime_delta_x(self):
+        # Time from peak to 36.79% (≈1/e) level ≈ 7.6015 ms (Igor NM value)
+        results = self._compute({"name": "decaytime+", "p0": _S_P0_DECAY})
+        r = _dx_result(results)
+        self.assertAlmostEqual(r["dx"], _S_DECAYTIME_IGOR, places=3)
+
+    def test_decaytime_x_location(self):
+        # t at 36.79% of amplitude on falling edge
+        # = t0 + τ - τ/π * arcsin(p0/100)
+        results = self._compute({"name": "decaytime+", "p0": _S_P0_DECAY})
+        r = _dx_result(results)
+        t_decay = _S_T0 + _S_TAU - _S_TAU / math.pi * math.asin(_S_P0_DECAY / 100.0)
+        self.assertAlmostEqual(r["x"], t_decay, places=1)
 
 
 class TestSineWaveFWHM(unittest.TestCase):
