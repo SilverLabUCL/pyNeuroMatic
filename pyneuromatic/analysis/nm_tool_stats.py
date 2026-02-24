@@ -37,8 +37,22 @@ import pyneuromatic.core.nm_utilities as nmu
 
 
 class NMToolStats(NMTool):
-    """
-    NM Stats Tool class
+    """High-level stats tool that runs NMStatWin windows over a data folder.
+
+    Iterates over all active NMStatWin windows in sequence, calling
+    ``window.compute(data)`` for each selected NMData object, and collects
+    results into an internal dict.  After the run loop completes,
+    ``run_finish()`` optionally writes those results to the history log,
+    the folder cache, or new NMData numpy arrays (ST_ prefix).
+
+    Attributes:
+        windows: Container of NMStatWin objects (auto-named w0, w1, …).
+        xclip: If True, clip x0/x1 boundaries to the data x-scale limits.
+        ignore_nans: If True, use NaN-ignoring numpy functions (e.g.
+            ``np.nanmean``).
+        results_to_history: If True, print results to history log after run.
+        results_to_cache: If True, save results to NMFolder tool-results cache.
+        results_to_numpy: If True, write results as ST_ NMData arrays.
     """
 
     def __init__(self) -> None:
@@ -72,10 +86,12 @@ class NMToolStats(NMTool):
 
     @property
     def windows(self) -> NMStatWinContainer:
+        """Return the container of NMStatWin objects for this tool."""
         return self.__win_container
 
     @property
     def xclip(self) -> bool:
+        """Return True if x0/x1 boundaries are clipped to data x-scale limits."""
         return self.__xclip
 
     @xclip.setter
@@ -87,6 +103,13 @@ class NMToolStats(NMTool):
         xclip: bool,
         quiet: bool = nmp.QUIET
     ) -> None:
+        """Set xclip flag.
+
+        Args:
+            xclip: If True, clip x0/x1 to the data x-scale limits when
+                computing stats windows.
+            quiet: If True, suppress history log output.
+        """
         if isinstance(xclip, bool):
             self.__xclip = xclip
         else:
@@ -96,6 +119,7 @@ class NMToolStats(NMTool):
 
     @property
     def ignore_nans(self) -> bool:
+        """Return True if NaN values are excluded from calculations."""
         return self.__ignore_nans
 
     @ignore_nans.setter
@@ -107,6 +131,13 @@ class NMToolStats(NMTool):
         ignore_nans: bool,
         quiet: bool = nmp.QUIET
     ) -> None:
+        """Set ignore_nans flag.
+
+        Args:
+            ignore_nans: If True, use NaN-ignoring numpy functions such as
+                ``np.nanmean`` instead of ``np.mean``.
+            quiet: If True, suppress history log output.
+        """
         if isinstance(ignore_nans, bool):
             self.__ignore_nans = ignore_nans
         else:
@@ -116,6 +147,7 @@ class NMToolStats(NMTool):
 
     @property
     def results_to_history(self) -> bool:
+        """Return True if results are printed to the history log after run."""
         return self.__results_to_history
 
     @results_to_history.setter
@@ -127,6 +159,12 @@ class NMToolStats(NMTool):
         value: bool,
         quiet: bool = nmp.QUIET,
     ) -> None:
+        """Set results_to_history flag.
+
+        Args:
+            value: If True, print results to history log in run_finish().
+            quiet: If True, suppress history log output.
+        """
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
         self.__results_to_history = value
@@ -134,6 +172,7 @@ class NMToolStats(NMTool):
 
     @property
     def results_to_cache(self) -> bool:
+        """Return True if results are saved to the NMFolder tool-results cache after run."""
         return self.__results_to_cache
 
     @results_to_cache.setter
@@ -145,6 +184,13 @@ class NMToolStats(NMTool):
         value: bool,
         quiet: bool = nmp.QUIET,
     ) -> None:
+        """Set results_to_cache flag.
+
+        Args:
+            value: If True, save results to NMFolder tool-results cache in
+                run_finish().
+            quiet: If True, suppress history log output.
+        """
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
         self.__results_to_cache = value
@@ -152,6 +198,7 @@ class NMToolStats(NMTool):
 
     @property
     def results_to_numpy(self) -> bool:
+        """Return True if results are written as ST_ NMData arrays after run."""
         return self.__results_to_numpy
 
     @results_to_numpy.setter
@@ -163,6 +210,13 @@ class NMToolStats(NMTool):
         value: bool,
         quiet: bool = nmp.QUIET,
     ) -> None:
+        """Set results_to_numpy flag.
+
+        Args:
+            value: If True, write results as ST_ NMData arrays in
+                run_finish().
+            quiet: If True, suppress history log output.
+        """
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
         self.__results_to_numpy = value
@@ -170,12 +224,26 @@ class NMToolStats(NMTool):
 
     # override, no super
     def run_init(self) -> bool:
+        """Clear results dict before the run loop starts.
+
+        Returns:
+            True on success.
+        """
         if isinstance(self.__results, dict):
             self.__results.clear()
         return True  # ok
 
     # override, no super
     def run(self) -> bool:
+        """Compute stats for the current NMData object across all active windows.
+
+        Called once per NMData object by the NMTool run loop.  Skips windows
+        where ``on`` is False, then appends each window's results to the
+        internal results dict keyed by window name.
+
+        Returns:
+            True on success.
+        """
         if not isinstance(self.data, NMData):
             raise RuntimeError("no data selected")
         for w in self.windows:
@@ -195,6 +263,14 @@ class NMToolStats(NMTool):
 
     # override, no super
     def run_finish(self) -> bool:
+        """Save results after the run loop completes.
+
+        Dispatches to the enabled output sinks: history log, NMFolder cache,
+        and/or ST_ numpy arrays, based on the ``results_to_*`` flags.
+
+        Returns:
+            True on success.
+        """
         if self.__results_to_history:
             self._results_to_history()
         if self.__results_to_cache:
@@ -204,6 +280,11 @@ class NMToolStats(NMTool):
         return True  # ok
 
     def _results_to_history(self, quiet: bool = False) -> None:
+        """Print all results to the history log.
+
+        Args:
+            quiet: If True, suppress output.
+        """
         if not isinstance(self.__results, dict):
             return None
         for kwin, vlist in self.__results.items():  # windows
@@ -221,6 +302,11 @@ class NMToolStats(NMTool):
         return None
 
     def _results_to_cache(self) -> int | None:
+        """Save results to the NMFolder tool-results cache.
+
+        Returns:
+            Cache slot index on success, or None if no folder is set.
+        """
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
@@ -228,7 +314,7 @@ class NMToolStats(NMTool):
         return self.folder.toolresults_save("stats", self.__results)
 
     # Numeric keys extracted from result dicts into NMData arrays.
-    # Maps result dict key → NMData name suffix and units source key.
+    # Maps result dict key → (NMData name suffix, units source key or None).
     _NUMERIC_KEYS: dict[str, tuple[str, str | None]] = {
         "s":    ("s",    "sunits"),
         "x":    ("x",    "xunits"),
@@ -246,6 +332,17 @@ class NMToolStats(NMTool):
     }
 
     def _results_to_numpy(self) -> NMToolFolder | None:
+        """Write results as ST_ NMData arrays in a new NMToolFolder.
+
+        Creates a new folder named ``stats0``, ``stats1``, … (first unused
+        name) under the current folder's toolfolder, then writes one NMData
+        array per numeric result key per window/id combination, named
+        ``ST_{wname}_{id}_{suffix}``.  String data paths are saved as
+        ``ST_{wname}_data``.
+
+        Returns:
+            The newly created NMToolFolder, or None if no folder is set.
+        """
         if not isinstance(self.folder, NMFolder):
             return None
         if not self.__results:
@@ -324,8 +421,18 @@ class NMToolStats2:
     """Compute summary statistics of Stats results (ST_ arrays).
 
     Operates on a NMToolFolder produced by NMToolStats._results_to_numpy(),
-    computing stats() on each selected ST_ array and saving results as
+    computing ``stats()`` on each selected ST_ array and saving results as
     ST2_ arrays in the same folder.
+
+    Attributes:
+        ignore_nans: If True, use NaN-ignoring numpy functions.
+        results_to_history: If True, print results to history log after
+            compute().
+        results_to_cache: If True, save results to NMFolder tool-results
+            cache after compute().
+        results_to_numpy: If True, write results as ST2_ NMData arrays after
+            compute().
+        results: Most recent results dict, keyed by source array name.
     """
 
     # Keys written to ST2_ arrays (in order)
@@ -342,6 +449,7 @@ class NMToolStats2:
 
     @property
     def ignore_nans(self) -> bool:
+        """Return True if NaN values are excluded from calculations."""
         return self.__ignore_nans
 
     @ignore_nans.setter
@@ -351,6 +459,12 @@ class NMToolStats2:
     def _ignore_nans_set(
         self, value: bool, quiet: bool = nmp.QUIET
     ) -> None:
+        """Set ignore_nans flag.
+
+        Args:
+            value: If True, use NaN-ignoring numpy functions.
+            quiet: If True, suppress history log output.
+        """
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
         self.__ignore_nans = value
@@ -360,6 +474,7 @@ class NMToolStats2:
 
     @property
     def results_to_history(self) -> bool:
+        """Return True if results are printed to the history log after compute()."""
         return self.__results_to_history
 
     @results_to_history.setter
@@ -369,6 +484,12 @@ class NMToolStats2:
     def _results_to_history_set(
         self, value: bool, quiet: bool = nmp.QUIET
     ) -> None:
+        """Set results_to_history flag.
+
+        Args:
+            value: If True, print results to history log after compute().
+            quiet: If True, suppress history log output.
+        """
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
         self.__results_to_history = value
@@ -376,6 +497,7 @@ class NMToolStats2:
 
     @property
     def results_to_cache(self) -> bool:
+        """Return True if results are saved to the NMFolder tool-results cache after compute()."""
         return self.__results_to_cache
 
     @results_to_cache.setter
@@ -385,6 +507,13 @@ class NMToolStats2:
     def _results_to_cache_set(
         self, value: bool, quiet: bool = nmp.QUIET
     ) -> None:
+        """Set results_to_cache flag.
+
+        Args:
+            value: If True, save results to NMFolder tool-results cache after
+                compute().
+            quiet: If True, suppress history log output.
+        """
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
         self.__results_to_cache = value
@@ -392,6 +521,7 @@ class NMToolStats2:
 
     @property
     def results_to_numpy(self) -> bool:
+        """Return True if results are written as ST2_ NMData arrays after compute()."""
         return self.__results_to_numpy
 
     @results_to_numpy.setter
@@ -401,6 +531,13 @@ class NMToolStats2:
     def _results_to_numpy_set(
         self, value: bool, quiet: bool = nmp.QUIET
     ) -> None:
+        """Set results_to_numpy flag.
+
+        Args:
+            value: If True, write results as ST2_ NMData arrays after
+                compute().
+            quiet: If True, suppress history log output.
+        """
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
         self.__results_to_numpy = value
@@ -408,6 +545,7 @@ class NMToolStats2:
 
     @property
     def results(self) -> dict:
+        """Return the most recent results dict, keyed by source array name."""
         return self.__results
 
     def compute(
@@ -477,10 +615,21 @@ class NMToolStats2:
         return self.__results
 
     def _results_to_history(self, quiet: bool = False) -> None:
+        """Print all results to the history log.
+
+        Args:
+            quiet: If True, suppress output.
+        """
         for src_name, r in self.__results.items():
             nmh.history("stats2 %s: %s" % (src_name, r), quiet=quiet)
 
     def _results_to_cache(self, toolfolder: NMToolFolder) -> None:
+        """Save results to the nearest NMFolder tool-results cache.
+
+        Args:
+            toolfolder: The NMToolFolder whose parent hierarchy is searched for
+                a ``toolresults_save`` method.
+        """
         # Store in the folder's parent NMFolder toolresults if available
         parent = toolfolder._parent
         while parent is not None:
@@ -490,6 +639,14 @@ class NMToolStats2:
             parent = getattr(parent, "_parent", None)
 
     def _results_to_numpy(self, toolfolder: NMToolFolder) -> None:
+        """Write results as ST2_ NMData arrays in the given NMToolFolder.
+
+        Saves a ``ST2_data`` text array of source array names, then one
+        ``ST2_{key}`` float array per metric in ``_ST2_KEYS``.
+
+        Args:
+            toolfolder: Destination NMToolFolder for the ST2_ arrays.
+        """
         if not self.__results:
             return
         src_names = list(self.__results.keys())
