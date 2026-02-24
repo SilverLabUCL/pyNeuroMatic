@@ -44,7 +44,11 @@ FUNC_NAMES_FALLTIME = (
     "falltime+", "falltime-", "falltimeslope+", "falltimeslope-",
 )
 
+FUNC_NAMES_DECAYTIME = ("decaytime+", "decaytime-")
+
 FUNC_NAMES_FWHM = ("fwhm+", "fwhm-")
+
+DECAY_TIME_DEFAULT_PCT: float = 100.0 / math.e  # ≈ 36.7879% — exact 1/e as a percentage
 
 FUNC_NAMES_BSLN = (
     "median",
@@ -408,17 +412,18 @@ class NMStatFuncFallTime(NMStatFunc):
             raise ValueError("p0: '%s'" % p0)
         if not (p0 > 0 and p0 < 100):
             raise ValueError("bad percent p0: %s" % p0)
-        if p1 is not None:
-            if isinstance(p1, bool):
-                raise TypeError("p1: '%s'" % p1)
-            p1 = float(p1)
-            if math.isnan(p1) or math.isinf(p1):
-                raise ValueError("p1: '%s'" % p1)
-            if not (p1 > 0 and p1 < 100):
-                raise ValueError("bad percent p1: %s" % p1)
-            if p0 <= p1:
-                raise ValueError(
-                    "for falltime, need p0 > p1 but got %s <= %s" % (p0, p1))
+        if p1 is None:
+            raise KeyError("missing func key 'p1'")
+        if isinstance(p1, bool):
+            raise TypeError("p1: '%s'" % p1)
+        p1 = float(p1)
+        if math.isnan(p1) or math.isinf(p1):
+            raise ValueError("p1: '%s'" % p1)
+        if not (p1 > 0 and p1 < 100):
+            raise ValueError("bad percent p1: %s" % p1)
+        if p0 <= p1:
+            raise ValueError(
+                "for falltime, need p0 > p1 but got %s <= %s" % (p0, p1))
         super().__init__(f, parent=parent)
         self._p0 = p0
         self._p1 = p1
@@ -470,33 +475,102 @@ class NMStatFuncFallTime(NMStatFunc):
         if r0_error:
             r0["error"] = "unable to locate p0 level"
 
-        if self._p1 is None:
-            if r0_error:
-                r0["dx"] = math.nan
-                return
-            r0["dx"] = r0["x"] - peak_x
-        else:
-            flevel["ylevel"] = 0.01 * self._p1 * ds
-            r1 = run_stat(data, flevel, f, peak_x, x1, xclip, ignore_nans,
-                          p1=self._p1)
-            r1_error = "x" not in r1 or badvalue(r1["x"])
+        flevel["ylevel"] = 0.01 * self._p1 * ds
+        r1 = run_stat(data, flevel, f, peak_x, x1, xclip, ignore_nans,
+                      p1=self._p1)
+        r1_error = "x" not in r1 or badvalue(r1["x"])
 
-            if r1_error:
-                r1["error"] = "unable to locate p1 level"
-                r1["dx"] = math.nan
-                return
-            if r0_error:
-                r1["dx"] = math.nan
-                return
-            r1["dx"] = r1["x"] - r0["x"]
+        if r1_error:
+            r1["error"] = "unable to locate p1 level"
+            r1["dx"] = math.nan
+            return
+        if r0_error:
+            r1["dx"] = math.nan
+            return
+        r1["dx"] = r1["x"] - r0["x"]
 
         if slope:
-            if self._p1 is not None:
-                run_stat(data, {"name": "slope"}, f, r0["x"], r1["x"],
-                         xclip, ignore_nans)
-            else:
-                run_stat(data, {"name": "slope"}, f, peak_x, r0["x"],
-                         xclip, ignore_nans)
+            run_stat(data, {"name": "slope"}, f, r0["x"], r1["x"],
+                     xclip, ignore_nans)
+
+
+class NMStatFuncDecayTime(NMStatFunc):
+    """Decay time functions (decaytime+/-).
+
+    Measures the time from the signal peak to when it has decayed to p0%
+    of its amplitude above baseline. Default p0 = 1/e ≈ 36.79%,
+    giving one exponential time constant (tau).
+    """
+
+    _VALID_KEYS = {"p0"}
+
+    def __init__(
+        self, name: str, p0: float | None = None,
+        parent: object | None = None
+    ) -> None:
+        if name.lower() not in FUNC_NAMES_DECAYTIME:
+            raise ValueError("func name: '%s'" % name)
+        f = name.lower()
+        if p0 is None:
+            p0 = DECAY_TIME_DEFAULT_PCT
+        if isinstance(p0, bool):
+            raise TypeError("p0: '%s'" % p0)
+        p0 = float(p0)
+        if math.isnan(p0) or math.isinf(p0):
+            raise ValueError("p0: '%s'" % p0)
+        if not (p0 > 0 and p0 < 100):
+            raise ValueError("bad percent p0: %s" % p0)
+        super().__init__(f, parent=parent)
+        self._p0 = p0
+
+    def to_dict(self) -> dict:
+        return {"name": self._name, "p0": self._p0}
+
+    @property
+    def needs_baseline(self) -> bool:
+        return True
+
+    def validate_baseline(self, bsln_func_name: str | None) -> None:
+        if bsln_func_name is None:
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+        bf = bsln_func_name.lower()
+        if "mean" not in bf and bf != "median":
+            raise RuntimeError(
+                "peak func '%s' requires baseline 'mean' computation"
+                % self._name)
+
+    def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
+                bsln_result):
+        f = self._name
+
+        # Peak stat
+        if "+" in f:
+            peak_func: dict[str, Any] = {"name": "max"}
+            flevel: dict[str, Any] = {"name": "level-"}  # opposite sign
+        else:
+            peak_func = {"name": "min"}
+            flevel = {"name": "level+"}  # opposite sign
+
+        r = run_stat(data, peak_func, f, x0, x1, xclip, ignore_nans)
+        ds = self._add_ds(r, bsln_result)
+
+        if badvalue(ds):
+            r["error"] = "unable to compute peak height Δs"
+            return
+
+        peak_x = r["x"]
+
+        flevel["ylevel"] = 0.01 * self._p0 * ds
+        r0 = run_stat(data, flevel, f, peak_x, x1, xclip, ignore_nans,
+                      p0=self._p0)
+        r0_error = "x" not in r0 or badvalue(r0["x"])
+        if r0_error:
+            r0["error"] = "unable to locate p0 level"
+            r0["dx"] = math.nan
+            return
+        r0["dx"] = r0["x"] - peak_x
 
 
 class NMStatFuncFWHM(NMStatFunc):
@@ -623,6 +697,8 @@ for _name in FUNC_NAMES_RISETIME:
     _STAT_FUNC_REGISTRY[_name] = NMStatFuncRiseTime
 for _name in FUNC_NAMES_FALLTIME:
     _STAT_FUNC_REGISTRY[_name] = NMStatFuncFallTime
+for _name in FUNC_NAMES_DECAYTIME:
+    _STAT_FUNC_REGISTRY[_name] = NMStatFuncDecayTime
 for _name in FUNC_NAMES_FWHM:
     _STAT_FUNC_REGISTRY[_name] = NMStatFuncFWHM
 

@@ -403,10 +403,9 @@ class TestNMStatFuncFallTime(unittest.TestCase):
         with self.assertRaises(ValueError):
             nmsf.NMStatFuncFallTime("falltime+", p0=10, p1=90)
 
-    def test_p0_without_p1(self):
-        t = nmsf.NMStatFuncFallTime("falltime+", p0=36)
-        self.assertEqual(t.to_dict()["p0"], 36)
-        self.assertIsNone(t.to_dict()["p1"])
+    def test_missing_p1_raises(self):
+        with self.assertRaises(KeyError):
+            nmsf.NMStatFuncFallTime("falltime+", p0=90)
 
     def test_valid_construction(self):
         for f in nmsf.FUNC_NAMES_FALLTIME:
@@ -436,6 +435,67 @@ class TestNMStatFuncFallTime(unittest.TestCase):
         with self.assertRaises(KeyError):
             nmsf._stat_func_from_dict(
                 {"name": "falltime+", "p0": 90, "badkey": 10})
+
+
+# =========================================================================
+# NMStatFuncDecayTime
+# =========================================================================
+
+class TestNMStatFuncDecayTime(unittest.TestCase):
+    """Tests for NMStatFuncDecayTime."""
+
+    def test_invalid_name_raises(self):
+        with self.assertRaises(ValueError):
+            nmsf.NMStatFuncDecayTime("badfuncname")
+        with self.assertRaises(ValueError):
+            nmsf.NMStatFuncDecayTime("falltime+")
+
+    def test_default_p0(self):
+        t = nmsf.NMStatFuncDecayTime("decaytime+")
+        self.assertAlmostEqual(t.to_dict()["p0"], nmsf.DECAY_TIME_DEFAULT_PCT,
+                               places=10)
+
+    def test_p0_type_errors(self):
+        for b in [[], (), {}, set(), NM, True, False]:
+            with self.assertRaises(TypeError):
+                nmsf.NMStatFuncDecayTime("decaytime+", p0=b)
+
+    def test_p0_value_errors(self):
+        for b in [math.nan, math.inf, "badvalue"]:
+            with self.assertRaises(ValueError):
+                nmsf.NMStatFuncDecayTime("decaytime+", p0=b)
+        for b in [105, -1, 0, 100]:
+            with self.assertRaises(ValueError):
+                nmsf.NMStatFuncDecayTime("decaytime+", p0=b)
+
+    def test_valid_construction(self):
+        for f in nmsf.FUNC_NAMES_DECAYTIME:
+            t = nmsf.NMStatFuncDecayTime(f, p0=36.79)
+            self.assertEqual(t.name, f)
+            self.assertAlmostEqual(t.to_dict()["p0"], 36.79)
+
+    def test_needs_baseline(self):
+        t = nmsf.NMStatFuncDecayTime("decaytime+")
+        self.assertTrue(t.needs_baseline)
+
+    def test_validate_baseline(self):
+        t = nmsf.NMStatFuncDecayTime("decaytime+")
+        with self.assertRaises(RuntimeError):
+            t.validate_baseline(None)
+        with self.assertRaises(RuntimeError):
+            t.validate_baseline("var")
+        t.validate_baseline("mean")
+        t.validate_baseline("median")
+
+    def test_from_dict_with_p0(self):
+        t = nmsf._stat_func_from_dict({"name": "decaytime+", "p0": 36.79})
+        self.assertIsInstance(t, nmsf.NMStatFuncDecayTime)
+        self.assertEqual(t.name, "decaytime+")
+
+    def test_from_dict_default_p0(self):
+        t = nmsf._stat_func_from_dict({"name": "decaytime+"})
+        self.assertIsInstance(t, nmsf.NMStatFuncDecayTime)
+        self.assertAlmostEqual(t.to_dict()["p0"], nmsf.DECAY_TIME_DEFAULT_PCT)
 
 
 # =========================================================================
@@ -572,6 +632,12 @@ class TestStatFuncFromDict(unittest.TestCase):
         for f in nmsf.FUNC_NAMES_FALLTIME:
             t = nmsf._stat_func_from_dict({"name": f, "p0": 90, "p1": 10})
             self.assertIsInstance(t, nmsf.NMStatFuncFallTime)
+            self.assertEqual(t.name, f)
+
+    def test_decaytime_round_trip(self):
+        for f in nmsf.FUNC_NAMES_DECAYTIME:
+            t = nmsf._stat_func_from_dict({"name": f, "p0": 36.79})
+            self.assertIsInstance(t, nmsf.NMStatFuncDecayTime)
             self.assertEqual(t.name, f)
 
     def test_fwhm_round_trip(self):
