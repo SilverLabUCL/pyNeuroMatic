@@ -124,3 +124,30 @@ class NMTool:
     def run_finish(self) -> bool:
         """Called once after run loop. Override in subclass."""
         return True
+
+    def run_all(self, targets: list[dict[str, NMObject]]) -> bool:
+        """Run the tool over a list of selection targets.
+
+        Calls ``run_init()`` once, then ``run()`` for each target (setting
+        ``select_values`` before each call), then ``run_finish()`` once.
+        Stops early if ``run()`` returns False.
+
+        This is the standard entry point for executing a tool.
+        ``NMManager.run_tool()`` calls this method after resolving run
+        targets from the project hierarchy.  Tools can also be driven
+        directly (e.g. in tests or scripts) by passing targets explicitly.
+
+        Args:
+            targets: List of selection dicts mapping level names to
+                NMObjects, as returned by ``NMManager.run_values()``.
+
+        Returns:
+            Return value of ``run_finish()``.
+        """
+        if not self.run_init():
+            return False
+        for target in targets:
+            self.select_values = target
+            if not self.run():
+                break
+        return self.run_finish()
