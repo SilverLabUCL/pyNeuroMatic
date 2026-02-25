@@ -330,15 +330,120 @@ class NMToolStats(NMTool):
         "dx":   ("dx",   "xunits"),
     }
 
+    # Maps stat function names containing special chars or long names to
+    # NMData-safe abbreviations (alphanumeric + underscores only).
+    _FUNC_NAME_MAP: dict[str, str] = {
+        "mean+std":       "mean_std",
+        "mean+var":       "mean_var",
+        "mean+sem":       "mean_sem",
+        "mean@max":       "mean_max",
+        "mean@min":       "mean_min",
+        "value@x0":       "val_x0",
+        "value@x1":       "val_x1",
+        "level+":         "level_p",
+        "level-":         "level_m",
+        "risetime+":      "rt_p",
+        "risetime-":      "rt_m",
+        "risetimeslope+": "rtslope_p",
+        "risetimeslope-": "rtslope_m",
+        "falltime+":      "ft_p",
+        "falltime-":      "ft_m",
+        "falltimeslope+": "ftslope_p",
+        "falltimeslope-": "ftslope_m",
+        "decaytime+":     "decay_p",
+        "decaytime-":     "decay_m",
+        "fwhm+":          "fwhm_p",
+        "fwhm-":          "fwhm_m",
+        "pathlength":     "pathlen",
+    }
+
+    # Compound functions that compute two outputs from one call.
+    # Maps func_name → (base name used for "s" key, secondary result key).
+    # e.g. "mean+std" splits into ST_w0_mean_y and ST_w0_std_y.
+    _COMPOUND_FUNCS: dict[str, tuple[str, str]] = {
+        "mean+std": ("mean", "std"),
+        "mean+var": ("mean", "var"),
+        "mean+sem": ("mean", "sem"),
+    }
+
+    @staticmethod
+    def _sanitize_func_name(name: str) -> str:
+        """Return an NMData-safe version of a stat function name.
+
+        Looks up ``_FUNC_NAME_MAP`` first; falls back to replacing ``+``,
+        ``-``, and ``@`` with underscored abbreviations.
+
+        Args:
+            name: Raw function name (e.g. ``"risetime+"``).
+
+        Returns:
+            NMData-safe string (e.g. ``"rt_p"``).
+        """
+        if name in NMToolStats._FUNC_NAME_MAP:
+            return NMToolStats._FUNC_NAME_MAP[name]
+        return name.replace("+", "_p").replace("-", "_m").replace("@", "_")
+
+    @staticmethod
+    def _st_array_name(wname: str, func_name: str, id_str: str, rkey: str) -> str:
+        """Build the ST_ NMData array name for a single result key.
+
+        Naming rules:
+
+        * ``"s"`` result key → ``"y"`` suffix (y-axis stat value).
+        * ``"main"`` id → omitted; sanitized func name embedded instead.
+        * ``"bsln"`` id → ``"bsln"`` component; func name omitted.
+        * Compound funcs (``mean+std/var/sem``) → split into separate arrays:
+          ``ST_{w}_mean_y`` and ``ST_{w}_std_y`` (etc.).
+        * Complex func ids (``risetime+``, etc.) → sanitized and used directly.
+
+        Args:
+            wname: Window name (e.g. ``"w0"``).
+            func_name: Stat function name from the result dict.
+            id_str: Computation stage (``"main"``, ``"bsln"``, or func name
+                for complex pipelines).
+            rkey: Result dict key (e.g. ``"s"``, ``"x"``, ``"dx"``).
+
+        Returns:
+            Array name string (e.g. ``"ST_w0_mean_y"``).
+        """
+        suffix = "y" if rkey == "s" else rkey
+
+        if id_str == "bsln":
+            return "ST_%s_bsln_%s" % (wname, suffix)
+
+        if id_str == "main" and func_name in NMToolStats._COMPOUND_FUNCS:
+            base, sec_key = NMToolStats._COMPOUND_FUNCS[func_name]
+            if rkey == "s":
+                return "ST_%s_%s_y" % (wname, base)
+            if rkey == sec_key:
+                return "ST_%s_%s_y" % (wname, sec_key)
+            # other keys (n, nans, etc.): use sanitized compound func name
+            safe = NMToolStats._sanitize_func_name(func_name)
+            return "ST_%s_%s_%s" % (wname, safe, suffix)
+
+        safe = NMToolStats._sanitize_func_name(
+            func_name if id_str == "main" else id_str
+        )
+        return "ST_%s_%s_%s" % (wname, safe, suffix)
+
     def _results_to_numpy(self) -> NMToolFolder | None:
         """Write results as ST_ NMData arrays in a new NMToolFolder.
 
         Creates a new folder named ``stats_{dataseries}_0``,
         ``stats_{dataseries}_1``, … (first unused name) under the current
-        folder's toolfolder, then writes one NMData
-        array per numeric result key per window/id combination, named
-        ``ST_{wname}_{id}_{suffix}``.  String data paths are saved as
-        ``ST_{wname}_data``.
+        folder's toolfolder, then writes one NMData array per numeric result
+        key per window/func combination.  Array naming rules:
+
+        * Primary stat value (``"s"`` key): ``ST_{w}_{func}_y``
+          e.g. ``ST_w0_mean_y``, ``ST_w0_max_y``.
+        * Compound funcs split into two: ``mean+std`` →
+          ``ST_{w}_mean_y`` and ``ST_{w}_std_y``.
+        * Baseline results: ``ST_{w}_bsln_y``, ``ST_{w}_bsln_std``, etc.
+        * Other keys keep their descriptive suffix: ``ST_{w}_{func}_x``,
+          ``ST_{w}_{func}_dx``, ``ST_{w}_{func}_n``, etc.
+        * Long/special-char func names are abbreviated via
+          ``_FUNC_NAME_MAP`` (e.g. ``risetime+`` → ``rt_p``).
+        * String data paths are saved as ``ST_{w}_data``.
 
         Returns:
             The newly created NMToolFolder, or None if no folder is set.
@@ -393,7 +498,8 @@ class NMToolStats(NMTool):
 
             # Save numeric arrays per id
             for id_str, rdicts in id_rdicts.items():
-                for rkey, (suffix, units_key) in self._NUMERIC_KEYS.items():
+                func_name = rdicts[0].get("func", {}).get("name", "") if rdicts else ""
+                for rkey, (_suffix, units_key) in self._NUMERIC_KEYS.items():
                     values = [rdict.get(rkey) for rdict in rdicts]
                     if all(v is None for v in values):
                         continue  # key not present for this func
@@ -403,14 +509,14 @@ class NMToolStats(NMTool):
                     )
                     units = rdicts[0].get(units_key) if units_key else None
                     yscale = {"units": units} if units else None
-                    dname = "ST_%s_%s_%s" % (wname, id_str, suffix)
+                    dname = self._st_array_name(wname, func_name, id_str, rkey)
                     if f.data is not None:
                         f.data.new(dname, nparray=arr, yscale=yscale)
 
                 # Save warnings if any occurred
                 warnings = [rdict.get("warning") for rdict in rdicts]
                 if any(w is not None for w in warnings):
-                    dname = "ST_%s_%s_warning" % (wname, id_str)
+                    dname = self._st_array_name(wname, func_name, id_str, "warning")
                     if f.data is not None:
                         f.data.new(
                             dname,

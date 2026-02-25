@@ -138,6 +138,22 @@ class TestNMToolStats(unittest.TestCase):
             else:
                 self.tool._NMToolStats__results[wname] = [results]
 
+    def _run_compute_with_bsln(self, func="mean", bsln_func="mean", n_waves=3):
+        """Compute stat with baseline enabled for n_waves."""
+        w = list(self.tool.windows)[0]
+        w.func = func
+        w._bsln_on_set(True, quiet=True)
+        w._bsln_func_set({"name": bsln_func}, quiet=True)
+        for k in range(n_waves):
+            data = _make_data(name="recordA%d" % k)
+            w.compute(data)
+            wname = w.name
+            results = w.results
+            if wname in self.tool._NMToolStats__results:
+                self.tool._NMToolStats__results[wname].append(results)
+            else:
+                self.tool._NMToolStats__results[wname] = [results]
+
     def test_results_to_numpy_returns_toolfolder(self):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
         self._setup_folder()
@@ -185,18 +201,79 @@ class TestNMToolStats(unittest.TestCase):
         d = f.data.get("ST_w0_data")
         self.assertEqual(len(d.nparray), 3)
 
-    def test_results_to_numpy_creates_s_array(self):
+    def test_results_to_numpy_creates_mean_y_array(self):
         self._setup_folder()
         self._run_compute(func="mean", n_waves=3)
         f = self.tool._results_to_numpy()
-        self.assertIn("ST_w0_main_s", f.data)
+        self.assertIn("ST_w0_mean_y", f.data)
 
-    def test_results_to_numpy_s_array_length(self):
+    def test_results_to_numpy_mean_y_array_length(self):
         self._setup_folder()
         self._run_compute(func="mean", n_waves=3)
         f = self.tool._results_to_numpy()
-        d = f.data.get("ST_w0_main_s")
+        d = f.data.get("ST_w0_mean_y")
         self.assertEqual(len(d.nparray), 3)
+
+    def test_results_to_numpy_compound_mean_std_splits(self):
+        # mean+std → ST_w0_mean_y AND ST_w0_std_y
+        self._setup_folder()
+        self._run_compute(func="mean+std", n_waves=3)
+        f = self.tool._results_to_numpy()
+        self.assertIn("ST_w0_mean_y", f.data)
+        self.assertIn("ST_w0_std_y", f.data)
+        self.assertNotIn("ST_w0_mean_std_y", f.data)
+
+    def test_results_to_numpy_bsln_uses_bsln_prefix(self):
+        # baseline result → ST_w0_bsln_y
+        self._setup_folder()
+        self._run_compute_with_bsln()
+        f = self.tool._results_to_numpy()
+        self.assertIn("ST_w0_bsln_y", f.data)
+
+    # --- _sanitize_func_name / _st_array_name ---
+
+    def test_sanitize_plain_name_unchanged(self):
+        self.assertEqual(nms.NMToolStats._sanitize_func_name("mean"), "mean")
+
+    def test_sanitize_risetime_plus(self):
+        self.assertEqual(nms.NMToolStats._sanitize_func_name("risetime+"), "rt_p")
+
+    def test_sanitize_falltime_minus(self):
+        self.assertEqual(nms.NMToolStats._sanitize_func_name("falltime-"), "ft_m")
+
+    def test_sanitize_fwhm_plus(self):
+        self.assertEqual(nms.NMToolStats._sanitize_func_name("fwhm+"), "fwhm_p")
+
+    def test_sanitize_pathlength(self):
+        self.assertEqual(nms.NMToolStats._sanitize_func_name("pathlength"), "pathlen")
+
+    def test_st_array_name_main_mean(self):
+        n = nms.NMToolStats._st_array_name("w0", "mean", "main", "s")
+        self.assertEqual(n, "ST_w0_mean_y")
+
+    def test_st_array_name_main_mean_x(self):
+        n = nms.NMToolStats._st_array_name("w0", "mean", "main", "x")
+        self.assertEqual(n, "ST_w0_mean_x")
+
+    def test_st_array_name_bsln(self):
+        n = nms.NMToolStats._st_array_name("w0", "mean", "bsln", "s")
+        self.assertEqual(n, "ST_w0_bsln_y")
+
+    def test_st_array_name_bsln_std(self):
+        n = nms.NMToolStats._st_array_name("w0", "mean+std", "bsln", "std")
+        self.assertEqual(n, "ST_w0_bsln_std")
+
+    def test_st_array_name_compound_primary(self):
+        n = nms.NMToolStats._st_array_name("w0", "mean+std", "main", "s")
+        self.assertEqual(n, "ST_w0_mean_y")
+
+    def test_st_array_name_compound_secondary(self):
+        n = nms.NMToolStats._st_array_name("w0", "mean+std", "main", "std")
+        self.assertEqual(n, "ST_w0_std_y")
+
+    def test_st_array_name_complex_func(self):
+        n = nms.NMToolStats._st_array_name("w0", "risetime+", "risetime+", "dx")
+        self.assertEqual(n, "ST_w0_rt_p_dx")
 
     def test_results_to_numpy_no_folder_returns_none(self):
         from pyneuromatic.analysis.nm_tool import SELECT_LEVELS
@@ -219,8 +296,8 @@ class TestNMToolStats2(unittest.TestCase):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
         self.tf = NMToolFolder(name="stats0")
         arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        self.tf.data.new("ST_w0_main_s", nparray=arr.copy())
-        self.tf.data.new("ST_w0_bsln_s", nparray=arr.copy() * 0.1)
+        self.tf.data.new("ST_w0_mean_y", nparray=arr.copy())
+        self.tf.data.new("ST_w0_bsln_y", nparray=arr.copy() * 0.1)
         self.tf.data.new("ST_w0_data",
                          nparray=np.array(["p0", "p1", "p2", "p3", "p4"],
                                           dtype=object))
@@ -261,25 +338,25 @@ class TestNMToolStats2(unittest.TestCase):
 
     def test_stats_all_keys_are_st_arrays(self):
         r = nms.NMToolStats2.stats(self.tf, select="all")
-        self.assertIn("ST_w0_main_s", r)
-        self.assertIn("ST_w0_bsln_s", r)
+        self.assertIn("ST_w0_mean_y", r)
+        self.assertIn("ST_w0_bsln_y", r)
 
     def test_stats_all_excludes_data_array(self):
         r = nms.NMToolStats2.stats(self.tf, select="all")
         self.assertNotIn("ST_w0_data", r)
 
     def test_stats_single_array(self):
-        r = nms.NMToolStats2.stats(self.tf, select="ST_w0_main_s")
-        self.assertIn("ST_w0_main_s", r)
+        r = nms.NMToolStats2.stats(self.tf, select="ST_w0_mean_y")
+        self.assertIn("ST_w0_mean_y", r)
         self.assertEqual(len(r), 1)
 
     def test_stats_mean_correct(self):
-        r = nms.NMToolStats2.stats(self.tf, select="ST_w0_main_s")
-        self.assertAlmostEqual(r["ST_w0_main_s"]["mean"], 3.0)
+        r = nms.NMToolStats2.stats(self.tf, select="ST_w0_mean_y")
+        self.assertAlmostEqual(r["ST_w0_mean_y"]["mean"], 3.0)
 
     def test_stats_N_correct(self):
-        r = nms.NMToolStats2.stats(self.tf, select="ST_w0_main_s")
-        self.assertEqual(r["ST_w0_main_s"]["N"], 5)
+        r = nms.NMToolStats2.stats(self.tf, select="ST_w0_mean_y")
+        self.assertEqual(r["ST_w0_mean_y"]["N"], 5)
 
     # --- results_to_numpy parameter ---
 
@@ -297,7 +374,7 @@ class TestNMToolStats2(unittest.TestCase):
         self.assertEqual(len(d.nparray), 2)  # 2 ST_ numeric arrays
 
     def test_results_to_numpy_st2_mean_value(self):
-        nms.NMToolStats2.stats(self.tf, select="ST_w0_main_s", results_to_numpy=True)
+        nms.NMToolStats2.stats(self.tf, select="ST_w0_mean_y", results_to_numpy=True)
         d = self.tf.data.get("ST2_mean")
         self.assertAlmostEqual(d.nparray[0], 3.0)
 
@@ -309,57 +386,57 @@ class TestNMToolStats2Histogram(unittest.TestCase):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
         self.tf = NMToolFolder(name="stats0")
         arr = np.array([1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0])
-        self.tf.data.new("ST_w0_main_s", nparray=arr)
+        self.tf.data.new("ST_w0_mean_y", nparray=arr)
 
     # --- return value ---
 
     def test_histogram_returns_dict(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s")
+        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y")
         self.assertIsInstance(r, dict)
         self.assertIn("counts", r)
         self.assertIn("edges", r)
 
     def test_histogram_counts_length(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4)
+        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
         self.assertEqual(len(r["counts"]), 4)
 
     def test_histogram_edges_length(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4)
+        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
         self.assertEqual(len(r["edges"]), 5)  # bins + 1
 
     def test_histogram_counts_sum(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4)
+        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
         self.assertEqual(sum(r["counts"]), 9)  # all 9 values counted
 
     # --- saved arrays (save_to_numpy=True, default) ---
 
     def test_histogram_saves_counts_array(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4)
-        self.assertIn("HIST_ST_w0_main_s_counts", self.tf.data)
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
+        self.assertIn("HIST_ST_w0_mean_y_counts", self.tf.data)
 
     def test_histogram_saves_edges_array(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4)
-        self.assertIn("HIST_ST_w0_main_s_edges", self.tf.data)
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
+        self.assertIn("HIST_ST_w0_mean_y_edges", self.tf.data)
 
     def test_histogram_xscale_start(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4)
-        d = self.tf.data.get("HIST_ST_w0_main_s_counts")
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
+        d = self.tf.data.get("HIST_ST_w0_mean_y_counts")
         self.assertAlmostEqual(d.xscale.start, 1.0)
 
     def test_histogram_xscale_delta(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4)
-        d = self.tf.data.get("HIST_ST_w0_main_s_counts")
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
+        d = self.tf.data.get("HIST_ST_w0_mean_y_counts")
         self.assertAlmostEqual(d.xscale.delta, 1.0)  # (5 - 1) / 4 = 1.0
 
     # --- save_to_numpy=False ---
 
     def test_histogram_no_save_skips_arrays(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4, save_to_numpy=False)
-        self.assertNotIn("HIST_ST_w0_main_s_counts", self.tf.data)
-        self.assertNotIn("HIST_ST_w0_main_s_edges", self.tf.data)
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, save_to_numpy=False)
+        self.assertNotIn("HIST_ST_w0_mean_y_counts", self.tf.data)
+        self.assertNotIn("HIST_ST_w0_mean_y_edges", self.tf.data)
 
     def test_histogram_no_save_still_returns_dict(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_main_s", bins=4,
+        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4,
                                  save_to_numpy=False)
         self.assertIn("counts", r)
         self.assertIn("edges", r)
@@ -382,7 +459,7 @@ class TestNMToolStats2Histogram(unittest.TestCase):
 
     def test_histogram_rejects_non_toolfolder(self):
         with self.assertRaises(TypeError):
-            nms.NMToolStats2.histogram("bad", "ST_w0_main_s")
+            nms.NMToolStats2.histogram("bad", "ST_w0_mean_y")
 
     def test_histogram_rejects_non_string_name(self):
         with self.assertRaises(TypeError):
