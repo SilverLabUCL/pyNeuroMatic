@@ -268,56 +268,56 @@ class TestNMToolStats2(unittest.TestCase):
         arr_nan = np.array([1.0, np.nan, 3.0])
         self.tf.data.new("ST_w0_nan_s", nparray=arr_nan)
         self.tool2.ignore_nans = True
-        r = self.tool2.compute(self.tf, select="ST_w0_nan_s")
+        r = self.tool2.stats(self.tf, select="ST_w0_nan_s")
         self.assertEqual(r["ST_w0_nan_s"]["N"], 2)
 
     def test_ignore_nans_param_overrides_instance(self):
         arr_nan = np.array([1.0, np.nan, 3.0])
         self.tf.data.new("ST_w0_nan_s", nparray=arr_nan)
         self.tool2.ignore_nans = True
-        r = self.tool2.compute(self.tf, select="ST_w0_nan_s", ignore_nans=False)
+        r = self.tool2.stats(self.tf, select="ST_w0_nan_s", ignore_nans=False)
         self.assertEqual(r["ST_w0_nan_s"]["N"], 3)  # NaN counted
 
     # --- compute() type validation ---
 
     def test_compute_rejects_non_toolfolder(self):
         with self.assertRaises(TypeError):
-            self.tool2.compute("bad")
+            self.tool2.stats("bad")
 
     def test_compute_rejects_non_string_select(self):
         with self.assertRaises(TypeError):
-            self.tool2.compute(self.tf, select=123)
+            self.tool2.stats(self.tf, select=123)
 
     def test_compute_unknown_select_raises(self):
         with self.assertRaises(KeyError):
-            self.tool2.compute(self.tf, select="ST_w0_missing")
+            self.tool2.stats(self.tf, select="ST_w0_missing")
 
     # --- compute() results ---
 
     def test_compute_all_returns_dict(self):
-        r = self.tool2.compute(self.tf, select="all")
+        r = self.tool2.stats(self.tf, select="all")
         self.assertIsInstance(r, dict)
 
     def test_compute_all_keys_are_st_arrays(self):
-        r = self.tool2.compute(self.tf, select="all")
+        r = self.tool2.stats(self.tf, select="all")
         self.assertIn("ST_w0_main_s", r)
         self.assertIn("ST_w0_bsln_s", r)
 
     def test_compute_all_excludes_data_array(self):
-        r = self.tool2.compute(self.tf, select="all")
+        r = self.tool2.stats(self.tf, select="all")
         self.assertNotIn("ST_w0_data", r)
 
     def test_compute_single_array(self):
-        r = self.tool2.compute(self.tf, select="ST_w0_main_s")
+        r = self.tool2.stats(self.tf, select="ST_w0_main_s")
         self.assertIn("ST_w0_main_s", r)
         self.assertEqual(len(r), 1)
 
     def test_compute_mean_correct(self):
-        r = self.tool2.compute(self.tf, select="ST_w0_main_s")
+        r = self.tool2.stats(self.tf, select="ST_w0_main_s")
         self.assertAlmostEqual(r["ST_w0_main_s"]["mean"], 3.0)
 
     def test_compute_N_correct(self):
-        r = self.tool2.compute(self.tf, select="ST_w0_main_s")
+        r = self.tool2.stats(self.tf, select="ST_w0_main_s")
         self.assertEqual(r["ST_w0_main_s"]["N"], 5)
 
     # --- _results_to_numpy_results ---
@@ -325,26 +325,26 @@ class TestNMToolStats2(unittest.TestCase):
     def test_results_to_numpy_creates_st2_data(self):
         self.tool2.results_to_cache = False
         self.tool2.results_to_numpy = True
-        self.tool2.compute(self.tf, select="all")
+        self.tool2.stats(self.tf, select="all")
         self.assertIn("ST2_data", self.tf.data)
 
     def test_results_to_numpy_creates_st2_mean(self):
         self.tool2.results_to_cache = False
         self.tool2.results_to_numpy = True
-        self.tool2.compute(self.tf, select="all")
+        self.tool2.stats(self.tf, select="all")
         self.assertIn("ST2_mean", self.tf.data)
 
     def test_results_to_numpy_st2_data_length(self):
         self.tool2.results_to_cache = False
         self.tool2.results_to_numpy = True
-        self.tool2.compute(self.tf, select="all")
+        self.tool2.stats(self.tf, select="all")
         d = self.tf.data.get("ST2_data")
         self.assertEqual(len(d.nparray), 2)  # 2 ST_ numeric arrays
 
     def test_results_to_numpy_st2_mean_value(self):
         self.tool2.results_to_cache = False
         self.tool2.results_to_numpy = True
-        self.tool2.compute(self.tf, select="ST_w0_main_s")
+        self.tool2.stats(self.tf, select="ST_w0_main_s")
         d = self.tf.data.get("ST2_mean")
         self.assertAlmostEqual(d.nparray[0], 3.0)
 
