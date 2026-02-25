@@ -432,6 +432,9 @@ class NMToolStats2:
         results_to_numpy: If True, write results as ST2_ NMData arrays after
             compute().
         results: Most recent results dict, keyed by source array name.
+
+    Methods:
+        stats: Compute summary statistics on ST_ arrays.
     """
 
     # Keys written to ST2_ arrays (in order)
@@ -547,7 +550,7 @@ class NMToolStats2:
         """Return the most recent results dict, keyed by source array name."""
         return self.__results
 
-    def compute(
+    def stats(
         self,
         toolfolder: NMToolFolder,
         select: str = "all",
