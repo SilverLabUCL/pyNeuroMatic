@@ -19,7 +19,6 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
-import copy
 import math
 from typing import Any
 
@@ -57,7 +56,6 @@ class NMStatWin:
     Call ``compute(data)`` to run the pipeline and retrieve result dicts.
 
     Args:
-        parent: Optional parent object reference.
         name: Window name (alphanumeric + underscores, default ``"NMStatWin0"``).
         win: Optional dict to initialise window parameters via ``_win_set()``.
             Accepted keys: ``on``, ``func``, ``x0``, ``x1``, ``transform``,
@@ -66,11 +64,9 @@ class NMStatWin:
 
     def __init__(
         self,
-        parent: object | None = None,
         name: str = "NMStatWin0",
         win: dict[str, object] | None = None,
     ) -> None:
-        self._parent = parent
         if not isinstance(name, str):
             raise TypeError(nmu.type_error_str(name, "name", "string"))
         if not name or not nmu.name_ok(name):
@@ -104,26 +100,10 @@ class NMStatWin:
             return NotImplemented
         return self.to_dict() == other.to_dict()
 
-    def __deepcopy__(self, memo: dict) -> NMStatWin:
-        """Deep-copy all attributes, resetting _parent to None."""
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for attr, value in self.__dict__.items():
-            if attr == "_parent":
-                setattr(result, attr, None)
-            else:
-                setattr(result, attr, copy.deepcopy(value, memo))
-        return result
-
     @property
     def name(self) -> str:
         """Window name string."""
         return self._name
-
-    def copy(self) -> NMStatWin:
-        """Return a deep copy of this window."""
-        return copy.deepcopy(self)
 
     def to_dict(self) -> dict:
         """Serialize this stat window to a dict."""
@@ -236,7 +216,7 @@ class NMStatWin:
                 func["name"] = self.__func.name
             else:
                 raise KeyError("missing func key 'name'")
-        self.__func = _stat_func_from_dict(func, parent=self._parent)
+        self.__func = _stat_func_from_dict(func)
         if self.__func is not None:
             nmh.history(
                 "set func=%s" % self.__func.to_dict(),
@@ -550,16 +530,13 @@ class NMStatWinContainer:
     active.
 
     Args:
-        parent: Optional parent object reference.
         name_prefix: Prefix for auto-generated window names (default ``"w"``).
     """
 
     def __init__(
         self,
-        parent: object | None = None,
         name_prefix: str = "w",
     ) -> None:
-        self._parent = parent
         self._prefix = name_prefix
         self._windows: dict[str, NMStatWin] = {}
         self._count = 0
@@ -569,7 +546,7 @@ class NMStatWinContainer:
         """Create, register, and return a new NMStatWin with an auto-name."""
         name = "%s%d" % (self._prefix, self._count)
         self._count += 1
-        w = NMStatWin(parent=self._parent, name=name)
+        w = NMStatWin(name=name)
         self._windows[name] = w
         if self.selected_name is None:
             self.selected_name = name
