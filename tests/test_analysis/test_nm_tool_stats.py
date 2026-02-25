@@ -188,6 +188,26 @@ class TestNMToolStats(unittest.TestCase):
         f = self.tool._results_to_numpy()
         self.assertEqual(f.name, "stats_Record_0")
 
+    def test_results_to_numpy_folder_named_with_dataseries_and_channel(self):
+        # Dataseries + channel → stats_{ds}_{ch}_N
+        from pyneuromatic.core.nm_dataseries import NMDataSeries
+        from pyneuromatic.core.nm_channel import NMChannel
+        self._setup_folder()
+        self.tool._select["dataseries"] = NMDataSeries(name="Record")
+        self.tool._select["channel"] = NMChannel(name="A")
+        self._run_compute()
+        f = self.tool._results_to_numpy()
+        self.assertEqual(f.name, "stats_Record_A_0")
+
+    def test_results_to_numpy_folder_named_channel_only(self):
+        # Channel but no dataseries → stats_{ch}_N
+        from pyneuromatic.core.nm_channel import NMChannel
+        self._setup_folder()
+        self.tool._select["channel"] = NMChannel(name="B")
+        self._run_compute()
+        f = self.tool._results_to_numpy()
+        self.assertEqual(f.name, "stats_B_0")
+
     def test_results_to_numpy_creates_data_array(self):
         self._setup_folder()
         self._run_compute(n_waves=3)

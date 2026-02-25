@@ -453,13 +453,16 @@ class NMToolStats(NMTool):
         if not self.__results:
             raise RuntimeError("there are no results to save")
 
-        # Find next unused folder name stats_{dataseries}_N, ...
+        # Find next unused folder name stats_{dataseries}_{channel}_N, ...
         tf = self.folder.toolfolder
         ds = self.dataseries
+        ch = self.channel
+        parts = ["stats"]
         if ds is not None:
-            base = "stats_%s" % ds.name
-        else:
-            base = "stats"
+            parts.append(ds.name)
+        if ch is not None:
+            parts.append(ch.name)
+        base = "_".join(parts)
         i = 0
         f = None
         while f is None:
