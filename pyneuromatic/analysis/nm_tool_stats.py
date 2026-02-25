@@ -435,6 +435,7 @@ class NMToolStats2:
 
     Methods:
         stats: Compute summary statistics on ST_ arrays.
+        histogram: Compute a histogram of a single ST_ array.
     """
 
     # Keys written to ST2_ arrays (in order)
@@ -664,3 +665,73 @@ class NMToolStats2:
                 "ST2_%s" % key,
                 nparray=np.array(values, dtype=float),
             )
+
+    def histogram(
+        self,
+        toolfolder: NMToolFolder,
+        name: str,
+        bins: int | list = 10,
+        xrange: tuple | None = None,
+        density: bool = False,
+        save_to_numpy: bool = True,
+    ) -> dict[str, Any]:
+        """Compute a histogram of a single ST_ array.
+
+        NaN and Inf values are excluded before computing the histogram.
+
+        Args:
+            toolfolder: NMToolFolder containing the ST_ array.
+            name: Name of the ST_ array to histogram.
+            bins: Number of equal-width bins (int) or explicit bin edges
+                (list). Defaults to 10.
+            xrange: ``(min, max)`` tuple to restrict the data range.
+                Defaults to None (full data range).
+            density: If True, return probability density instead of counts.
+                Defaults to False.
+            save_to_numpy: If True, save ``HIST_{name}_counts`` and
+                ``HIST_{name}_edges`` as NMData arrays in toolfolder.
+                Defaults to True.
+
+        Returns:
+            Dict with keys ``"counts"`` (bin counts or density values) and
+            ``"edges"`` (bin edge values, length = bins + 1).
+
+        Raises:
+            TypeError: If toolfolder is not an NMToolFolder or name is not
+                a string.
+            KeyError: If name is not found in toolfolder.
+            ValueError: If the named array has no nparray data.
+        """
+        if not isinstance(toolfolder, NMToolFolder):
+            raise TypeError(
+                nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
+            )
+        if not isinstance(name, str):
+            raise TypeError(nmu.type_error_str(name, "name", "string"))
+        d = toolfolder.data.get(name)
+        if d is None:
+            raise KeyError("array not found in toolfolder: %s" % name)
+        if not isinstance(d.nparray, np.ndarray):
+            raise ValueError("array has no nparray: %s" % name)
+
+        arr = d.nparray
+        arr = arr[np.isfinite(arr)]  # exclude NaN and Inf
+
+        counts, edges = np.histogram(arr, bins=bins, range=xrange,
+                                     density=density)
+
+        if save_to_numpy:
+            # x-scaling: left edge of first bin, uniform bin width
+            xscale = {"start": float(edges[0]),
+                      "delta": float(edges[1] - edges[0])}
+            toolfolder.data.new(
+                "HIST_%s_counts" % name,
+                nparray=counts.astype(float),
+                xscale=xscale,
+            )
+            toolfolder.data.new(
+                "HIST_%s_edges" % name,
+                nparray=edges,
+            )
+
+        return {"counts": counts, "edges": edges}
