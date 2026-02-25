@@ -431,8 +431,8 @@ class NMToolStats2:
     # Keys written to ST2_ arrays (in order)
     _ST2_KEYS = ("mean", "std", "sem", "N", "NaNs", "INFs", "rms", "min", "max")
 
+    @staticmethod
     def stats(
-        self,
         toolfolder: NMToolFolder,
         select: str = "all",
         ignore_nans: bool = True,
@@ -496,18 +496,19 @@ class NMToolStats2:
             results[d.name] = r
 
         if results_to_history:
-            self._results_to_history(results)
+            NMToolStats2._stats_results_to_history(results)
         if results_to_cache:
-            self._results_to_cache(toolfolder, results)
+            NMToolStats2._stats_results_to_cache(toolfolder, results)
         if results_to_numpy:
-            self._results_to_numpy(toolfolder, results)
+            NMToolStats2._stats_results_to_numpy(toolfolder, results)
 
         return results
 
-    def _results_to_history(
-        self, results: dict[str, Any], quiet: bool = False
+    @staticmethod
+    def _stats_results_to_history(
+        results: dict[str, Any], quiet: bool = False
     ) -> None:
-        """Print all results to the history log.
+        """Print all stats results to the history log.
 
         Args:
             results: Results dict keyed by source array name.
@@ -516,10 +517,11 @@ class NMToolStats2:
         for src_name, r in results.items():
             nmh.history("stats2 %s: %s" % (src_name, r), quiet=quiet)
 
-    def _results_to_cache(
-        self, toolfolder: NMToolFolder, results: dict[str, Any]
+    @staticmethod
+    def _stats_results_to_cache(
+        toolfolder: NMToolFolder, results: dict[str, Any]
     ) -> None:
-        """Save results to the nearest NMFolder tool-results cache.
+        """Save stats results to the nearest NMFolder tool-results cache.
 
         Args:
             toolfolder: The NMToolFolder whose parent hierarchy is searched for
@@ -533,10 +535,11 @@ class NMToolStats2:
                 return
             parent = getattr(parent, "_parent", None)
 
-    def _results_to_numpy(
-        self, toolfolder: NMToolFolder, results: dict[str, Any]
+    @staticmethod
+    def _stats_results_to_numpy(
+        toolfolder: NMToolFolder, results: dict[str, Any]
     ) -> None:
-        """Write results as ST2_ NMData arrays in the given NMToolFolder.
+        """Write stats results as ST2_ NMData arrays in the given NMToolFolder.
 
         Saves a ``ST2_data`` text array of source array names, then one
         ``ST2_{key}`` float array per metric in ``_ST2_KEYS``.
@@ -554,15 +557,15 @@ class NMToolStats2:
             nparray=np.array(src_names, dtype=object),
         )
         # One ST2_ array per metric
-        for key in self._ST2_KEYS:
+        for key in NMToolStats2._ST2_KEYS:
             values = [results[n].get(key, math.nan) for n in src_names]
             toolfolder.data.new(
                 "ST2_%s" % key,
                 nparray=np.array(values, dtype=float),
             )
 
+    @staticmethod
     def histogram(
-        self,
         toolfolder: NMToolFolder,
         name: str,
         bins: int | list = 10,
