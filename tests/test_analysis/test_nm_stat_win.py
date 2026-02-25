@@ -66,8 +66,8 @@ class TestNMStatWin(unittest.TestCase):
             "bsln_x0": 0,
             "bsln_x1": 10,
         }
-        self.w0 = nmsw.NMStatWin(NM, "w0", win=self.win0)
-        self.w1 = nmsw.NMStatWin(NM, "w1", win=self.win1)
+        self.w0 = nmsw.NMStatWin("w0", win=self.win0)
+        self.w1 = nmsw.NMStatWin("w1", win=self.win1)
         self.data = _make_data(n=n)
         self.datanan = _make_data(n=n, with_nans=True)
 
@@ -82,7 +82,7 @@ class TestNMStatWin(unittest.TestCase):
         self.assertFalse(self.w0 == self.w1)
 
     def test_eq_same_after_copy(self):
-        c = self.w0.copy()
+        c = nmsw.NMStatWin(name=self.w0.name, win=self.w0.to_dict())
         self.assertTrue(self.w0 == c)
 
     def test_eq_after_win_set(self):

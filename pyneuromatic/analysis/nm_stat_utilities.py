@@ -21,7 +21,6 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 import math
-from typing import Any
 
 import numpy as np
 

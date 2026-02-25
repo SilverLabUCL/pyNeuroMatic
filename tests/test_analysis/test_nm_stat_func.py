@@ -85,10 +85,9 @@ class TestNMStatFunc(unittest.TestCase):
         self.assertIn("NMStatFuncBasic", repr(t))
         self.assertIn("mean", repr(t))
 
-    def test_deepcopy_resets_parent(self):
-        t = nmsf.NMStatFuncBasic("mean", parent=object())
+    def test_deepcopy(self):
+        t = nmsf.NMStatFuncBasic("mean")
         t2 = copy.deepcopy(t)
-        self.assertIsNone(t2._parent)
         self.assertEqual(t, t2)
 
     def test_validate_baseline_is_noop(self):

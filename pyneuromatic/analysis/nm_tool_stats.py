@@ -24,9 +24,8 @@ from typing import Any
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_stat_func import FUNC_NAMES_BSLN  # noqa: F401
 from pyneuromatic.analysis.nm_stat_utilities import stats
-from pyneuromatic.analysis.nm_stat_win import NMStatWin, NMStatWinContainer  # noqa: F401
+from pyneuromatic.analysis.nm_stat_win import NMStatWinContainer  # noqa: F401
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
@@ -57,7 +56,7 @@ class NMToolStats(NMTool):
 
     def __init__(self) -> None:
 
-        self.__win_container = NMStatWinContainer(parent=self)
+        self.__win_container = NMStatWinContainer()
         self.__win_container.new()
 
         self.__xclip = True

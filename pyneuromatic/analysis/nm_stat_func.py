@@ -19,7 +19,6 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
-import copy
 import math
 from typing import Any
 
@@ -102,13 +101,11 @@ class NMStatFunc:
 
     Args:
         name: Stat function name string (e.g., ``"mean"``, ``"risetime+"``).
-        parent: Optional parent object reference (reset to None on deep-copy).
     """
 
     _VALID_KEYS: set[str] = set()
 
-    def __init__(self, name: str, parent: object | None = None) -> None:
-        self._parent = parent
+    def __init__(self, name: str) -> None:
         self._name = name
 
     def __repr__(self) -> str:
@@ -124,18 +121,6 @@ class NMStatFunc:
         if isinstance(other, dict):
             return self.to_dict() == other
         return NotImplemented
-
-    def __deepcopy__(self, memo: dict) -> NMStatFunc:
-        """Deep-copy all attributes, resetting _parent to None."""
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for attr, value in self.__dict__.items():
-            if attr == "_parent":
-                setattr(result, attr, None)
-            else:
-                setattr(result, attr, copy.deepcopy(value, memo))
-        return result
 
     def __getitem__(self, key: str) -> object:
         """Return parameter value by key, equivalent to ``to_dict()[key]``."""
@@ -212,13 +197,12 @@ class NMStatFuncBasic(NMStatFunc):
 
     Args:
         name: One of the names in ``FUNC_NAMES_BASIC``.
-        parent: Optional parent object reference.
     """
 
-    def __init__(self, name: str, parent: object | None = None) -> None:
+    def __init__(self, name: str) -> None:
         if name.lower() not in FUNC_NAMES_BASIC:
             raise ValueError("func name: '%s'" % name)
-        super().__init__(name.lower(), parent=parent)
+        super().__init__(name.lower())
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
@@ -241,14 +225,12 @@ class NMStatFuncMaxMin(NMStatFunc):
         n_avg: Number of points to average around the peak location. Required
             for ``mean@max`` / ``mean@min``; upgrades ``max`` / ``min`` when
             provided.
-        parent: Optional parent object reference.
     """
 
     _VALID_KEYS = {"n_avg"}
 
     def __init__(
         self, name: str, n_avg: int | None = None,
-        parent: object | None = None
     ) -> None:
         if name.lower() not in FUNC_NAMES_MAXMIN:
             raise ValueError("func name: '%s'" % name)
@@ -267,7 +249,7 @@ class NMStatFuncMaxMin(NMStatFunc):
                 f = "mean@max"
             elif f == "min":
                 f = "mean@min"
-        super().__init__(f, parent=parent)
+        super().__init__(f)
         self._n_avg = n_avg
 
     def to_dict(self) -> dict:
@@ -300,14 +282,12 @@ class NMStatFuncLevel(NMStatFunc):
     Args:
         name: One of the names in ``FUNC_NAMES_LEVEL``.
         ylevel: The absolute y threshold. Must be finite and not None.
-        parent: Optional parent object reference.
     """
 
     _VALID_KEYS = {"ylevel"}
 
     def __init__(
         self, name: str, ylevel: float | None = None,
-        parent: object | None = None
     ) -> None:
         if name.lower() not in FUNC_NAMES_LEVEL:
             raise ValueError("func name: '%s'" % name)
@@ -318,7 +298,7 @@ class NMStatFuncLevel(NMStatFunc):
         ylevel = float(ylevel)
         if math.isnan(ylevel) or math.isinf(ylevel):
             raise ValueError("ylevel: '%s'" % ylevel)
-        super().__init__(name.lower(), parent=parent)
+        super().__init__(name.lower())
         self._ylevel = ylevel
 
     def to_dict(self) -> dict:
@@ -344,14 +324,12 @@ class NMStatFuncLevelNstd(NMStatFunc):
         name: One of the names in ``FUNC_NAMES_LEVEL``.
         n_std: Number of standard deviations from the baseline mean. Must
             be non-zero and finite.
-        parent: Optional parent object reference.
     """
 
     _VALID_KEYS = {"n_std"}
 
     def __init__(
         self, name: str, n_std: float | None = None,
-        parent: object | None = None
     ) -> None:
         if name.lower() not in FUNC_NAMES_LEVEL:
             raise ValueError("func name: '%s'" % name)
@@ -362,7 +340,7 @@ class NMStatFuncLevelNstd(NMStatFunc):
         n_std = float(n_std)
         if math.isnan(n_std) or math.isinf(n_std) or n_std == 0:
             raise ValueError("n_std: '%s'" % n_std)
-        super().__init__(name.lower(), parent=parent)
+        super().__init__(name.lower())
         self._n_std = n_std
 
     def to_dict(self) -> dict:
@@ -407,14 +385,13 @@ class NMStatFuncRiseTime(NMStatFunc):
         name: One of the names in ``FUNC_NAMES_RISETIME``.
         p0: Lower amplitude threshold as a percentage (0 < p0 < 100).
         p1: Upper amplitude threshold as a percentage (p0 < p1 < 100).
-        parent: Optional parent object reference.
     """
 
     _VALID_KEYS = {"p0", "p1"}
 
     def __init__(
         self, name: str, p0: float | None = None,
-        p1: float | None = None, parent: object | None = None
+        p1: float | None = None,
     ) -> None:
         if name.lower() not in FUNC_NAMES_RISETIME:
             raise ValueError("func name: '%s'" % name)
@@ -440,7 +417,7 @@ class NMStatFuncRiseTime(NMStatFunc):
         if p0 >= p1:
             raise ValueError(
                 "for risetime, need p0 < p1 but got %s >= %s" % (p0, p1))
-        super().__init__(f, parent=parent)
+        super().__init__(f)
         self._p0 = p0
         self._p1 = p1
 
@@ -535,7 +512,7 @@ class NMStatFuncFallTime(NMStatFunc):
 
     def __init__(
         self, name: str, p0: float | None = None,
-        p1: float | None = None, parent: object | None = None
+        p1: float | None = None,
     ) -> None:
         if name.lower() not in FUNC_NAMES_FALLTIME:
             raise ValueError("func name: '%s'" % name)
@@ -561,7 +538,7 @@ class NMStatFuncFallTime(NMStatFunc):
         if p0 <= p1:
             raise ValueError(
                 "for falltime, need p0 > p1 but got %s <= %s" % (p0, p1))
-        super().__init__(f, parent=parent)
+        super().__init__(f)
         self._p0 = p0
         self._p1 = p1
 
@@ -648,7 +625,6 @@ class NMStatFuncDecayTime(NMStatFunc):
 
     def __init__(
         self, name: str, p0: float | None = None,
-        parent: object | None = None
     ) -> None:
         if name.lower() not in FUNC_NAMES_DECAYTIME:
             raise ValueError("func name: '%s'" % name)
@@ -662,7 +638,7 @@ class NMStatFuncDecayTime(NMStatFunc):
             raise ValueError("p0: '%s'" % p0)
         if not (p0 > 0 and p0 < 100):
             raise ValueError("bad percent p0: %s" % p0)
-        super().__init__(f, parent=parent)
+        super().__init__(f)
         self._p0 = p0
 
     def to_dict(self) -> dict:
@@ -740,7 +716,7 @@ class NMStatFuncFWHM(NMStatFunc):
 
     def __init__(
         self, name: str, p0: float | None = None,
-        p1: float | None = None, parent: object | None = None
+        p1: float | None = None,
     ) -> None:
         if name.lower() not in FUNC_NAMES_FWHM:
             raise ValueError("func_name: '%s'" % name)
@@ -759,7 +735,7 @@ class NMStatFuncFWHM(NMStatFunc):
             raise ValueError("p0: %s" % p0)
         if not (p1 > 0 and p1 < 100):
             raise ValueError("p1: %s" % p1)
-        super().__init__(f, parent=parent)
+        super().__init__(f)
         self._p0 = p0
         self._p1 = p1
 
@@ -870,7 +846,6 @@ for _name in FUNC_NAMES_FWHM:
 
 def _stat_func_from_dict(
     d: dict | str | None,
-    parent: object | None = None,
 ) -> NMStatFunc | None:
     """Create an NMStatFunc from a dict or string name.
 
@@ -878,7 +853,6 @@ def _stat_func_from_dict(
         d: Dict with at least a ``"name"`` key, a bare string func name,
             or None. Additional keys (``"p0"``, ``"n_avg"``, etc.) are
             forwarded to the subclass constructor.
-        parent: Optional parent object reference.
 
     Returns:
         An NMStatFunc subclass instance, or None if ``d`` is None or ``{}``.
@@ -933,4 +907,4 @@ def _stat_func_from_dict(
             else:
                 raise KeyError(
                     "unknown key parameter '%s' for func '%s'" % (key, name))
-    return cls(f, parent=parent, **kwargs)
+    return cls(f, **kwargs)
