@@ -333,8 +333,9 @@ class NMToolStats(NMTool):
     def _results_to_numpy(self) -> NMToolFolder | None:
         """Write results as ST_ NMData arrays in a new NMToolFolder.
 
-        Creates a new folder named ``stats0``, ``stats1``, … (first unused
-        name) under the current folder's toolfolder, then writes one NMData
+        Creates a new folder named ``stats_{dataseries}_0``,
+        ``stats_{dataseries}_1``, … (first unused name) under the current
+        folder's toolfolder, then writes one NMData
         array per numeric result key per window/id combination, named
         ``ST_{wname}_{id}_{suffix}``.  String data paths are saved as
         ``ST_{wname}_data``.
@@ -347,13 +348,18 @@ class NMToolStats(NMTool):
         if not self.__results:
             raise RuntimeError("there are no results to save")
 
-        # Find next unused folder name stats0, stats1, ...
+        # Find next unused folder name stats_{dataseries}_N, ...
         tf = self.folder.toolfolder
+        ds = self.dataseries
+        if ds is not None:
+            base = "stats_%s" % ds.name
+        else:
+            base = "stats"
         i = 0
         f = None
         while f is None:
             try:
-                f = tf.new(name="stats%d" % i)
+                f = tf.new(name="%s_%d" % (base, i))
             except KeyError:
                 i += 1
 

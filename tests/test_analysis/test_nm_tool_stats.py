@@ -145,20 +145,32 @@ class TestNMToolStats(unittest.TestCase):
         f = self.tool._results_to_numpy()
         self.assertIsInstance(f, NMToolFolder)
 
-    def test_results_to_numpy_folder_named_stats0(self):
+    def test_results_to_numpy_folder_named_stats_0_no_dataseries(self):
+        # No dataseries selected → fallback name "stats_0"
         self._setup_folder()
         self._run_compute()
         f = self.tool._results_to_numpy()
-        self.assertEqual(f.name, "stats0")
+        self.assertEqual(f.name, "stats_0")
 
-    def test_results_to_numpy_second_run_named_stats1(self):
+    def test_results_to_numpy_second_run_named_stats_1_no_dataseries(self):
+        # Second run with no dataseries → "stats_1"
         self._setup_folder()
         self._run_compute()
         self.tool._results_to_numpy()
         self.tool._NMToolStats__results.clear()
         self._run_compute()
         f = self.tool._results_to_numpy()
-        self.assertEqual(f.name, "stats1")
+        self.assertEqual(f.name, "stats_1")
+
+    def test_results_to_numpy_folder_named_with_dataseries(self):
+        # Dataseries selected → name uses dataseries name
+        from pyneuromatic.core.nm_dataseries import NMDataSeries
+        self._setup_folder()
+        ds = NMDataSeries(name="Record")
+        self.tool._select["dataseries"] = ds
+        self._run_compute()
+        f = self.tool._results_to_numpy()
+        self.assertEqual(f.name, "stats_Record_0")
 
     def test_results_to_numpy_creates_data_array(self):
         self._setup_folder()
