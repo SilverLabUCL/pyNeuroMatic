@@ -240,6 +240,180 @@ class TestNMToolRunMethods(unittest.TestCase):
         self.assertTrue(tool.run_finish())
 
 
+class TestNMToolRunAll(unittest.TestCase):
+    """Tests for NMTool.run_all()."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        assert self.nm.project.folders is not None
+        self.folder = self.nm.project.folders.new("test_folder")
+        assert isinstance(self.folder, NMFolder)
+        self.dataseries = self.folder.dataseries.new("test_ds")
+        assert isinstance(self.dataseries, NMDataSeries)
+        self.channel = self.dataseries.channels.new("A")
+        self.epoch = self.dataseries.epochs.new("E0")
+
+    def _make_target(self):
+        return {
+            "folder": self.folder,
+            "dataseries": self.dataseries,
+            "channel": self.channel,
+            "epoch": self.epoch,
+        }
+
+    def test_run_all_empty_targets_returns_true(self):
+        tool = NMTool()
+        result = tool.run_all([])
+        self.assertTrue(result)
+
+    def test_run_all_empty_targets_calls_init_and_finish(self):
+        calls = []
+
+        class TrackTool(NMTool):
+            def run_init(self):
+                calls.append("init")
+                return True
+
+            def run(self):
+                calls.append("run")
+                return True
+
+            def run_finish(self):
+                calls.append("finish")
+                return True
+
+        tool = TrackTool()
+        tool.run_all([])
+        self.assertEqual(calls, ["init", "finish"])
+
+    def test_run_all_calls_run_for_each_target(self):
+        run_count = []
+
+        class CountTool(NMTool):
+            def run(self):
+                run_count.append(1)
+                return True
+
+        tool = CountTool()
+        targets = [self._make_target(), self._make_target(), self._make_target()]
+        tool.run_all(targets)
+        self.assertEqual(len(run_count), 3)
+
+    def test_run_all_sets_selection_before_each_run(self):
+        seen_folders = []
+
+        class CaptureTool(NMTool):
+            def run(self):
+                seen_folders.append(self.folder)
+                return True
+
+        tool = CaptureTool()
+        tool.run_all([self._make_target()])
+        self.assertEqual(len(seen_folders), 1)
+        self.assertIs(seen_folders[0], self.folder)
+
+    def test_run_all_stops_early_if_run_returns_false(self):
+        run_count = []
+
+        class StopAfterOneTool(NMTool):
+            def run(self):
+                run_count.append(1)
+                return False  # stop after first
+
+        tool = StopAfterOneTool()
+        targets = [self._make_target(), self._make_target(), self._make_target()]
+        tool.run_all(targets)
+        self.assertEqual(len(run_count), 1)
+
+    def test_run_all_still_calls_run_finish_after_early_stop(self):
+        calls = []
+
+        class StopTool(NMTool):
+            def run(self):
+                return False
+
+            def run_finish(self):
+                calls.append("finish")
+                return True
+
+        tool = StopTool()
+        tool.run_all([self._make_target()])
+        self.assertIn("finish", calls)
+
+    def test_run_all_returns_false_if_run_init_returns_false(self):
+        class BadInitTool(NMTool):
+            def run_init(self):
+                return False
+
+        tool = BadInitTool()
+        result = tool.run_all([self._make_target()])
+        self.assertFalse(result)
+
+    def test_run_all_skips_run_if_run_init_returns_false(self):
+        run_count = []
+
+        class BadInitTool(NMTool):
+            def run_init(self):
+                return False
+
+            def run(self):
+                run_count.append(1)
+                return True
+
+        tool = BadInitTool()
+        tool.run_all([self._make_target()])
+        self.assertEqual(len(run_count), 0)
+
+    def test_run_all_returns_run_finish_result(self):
+        class FinishFalseTool(NMTool):
+            def run_finish(self):
+                return False
+
+        tool = FinishFalseTool()
+        result = tool.run_all([])
+        self.assertFalse(result)
+
+    def test_run_all_order_init_run_finish(self):
+        calls = []
+
+        class OrderTool(NMTool):
+            def run_init(self):
+                calls.append("init")
+                return True
+
+            def run(self):
+                calls.append("run")
+                return True
+
+            def run_finish(self):
+                calls.append("finish")
+                return True
+
+        tool = OrderTool()
+        tool.run_all([self._make_target()])
+        self.assertEqual(calls, ["init", "run", "finish"])
+
+    def test_run_all_multiple_targets_order(self):
+        calls = []
+
+        class OrderTool(NMTool):
+            def run_init(self):
+                calls.append("init")
+                return True
+
+            def run(self):
+                calls.append("run")
+                return True
+
+            def run_finish(self):
+                calls.append("finish")
+                return True
+
+        tool = OrderTool()
+        tool.run_all([self._make_target(), self._make_target()])
+        self.assertEqual(calls, ["init", "run", "run", "finish"])
+
+
 class TestNMToolSubclass(unittest.TestCase):
     """Tests for NMTool subclassing."""
 

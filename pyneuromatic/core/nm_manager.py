@@ -631,16 +631,32 @@ class NMManager:
         self,
         toolname: str = "selected"
     ) -> bool:
+        """Run the selected (or named) tool over all current run targets.
+
+        Resolves the tool by name, fetches run targets from the project
+        hierarchy via ``run_values()``, and delegates the execution loop
+        to ``tool.run_all(targets)``.
+
+        Args:
+            toolname: Name of the tool to run, or ``"selected"`` (default)
+                to use the currently selected tool.
+
+        Returns:
+            Return value of ``tool.run_finish()``.
+
+        Raises:
+            TypeError: If toolname is not a string.
+            ValueError: If no tool is selected.
+            KeyError: If the named tool is not in the toolkit.
+        """
+        from pyneuromatic.analysis.nm_tool import NMTool
 
         tname: str | None = toolname
-        if tname is None:
-            tname = self.__toolselect
         if isinstance(tname, str):
             if tname.lower() in ("select", "selected"):
                 tname = self.__toolselect
         else:
-            e = nmu.type_error_str(tname, "toolname", "string")
-            raise TypeError(e)
+            raise TypeError(nmu.type_error_str(tname, "toolname", "string"))
         if tname is None:
             raise ValueError("no tool selected")
         tname = tname.lower()
@@ -648,20 +664,12 @@ class NMManager:
             raise KeyError("NM tool key '%s' does not exist" % toolname)
         tool = self.__toolkit[tname]
         if not isinstance(tool, NMTool):
-            e = "tool '%s' is not an instance of NMTool" % toolname
-            raise TypeError(e)
+            raise TypeError("tool '%s' is not an instance of NMTool" % toolname)
 
-        run_list = self.run_keys()
-        if not run_list:
+        targets = self.run_values()
+        if not targets:
             print("nothing to run")
-        if not tool.run_init():
-            return False
-        for ex in run_list:
-            self.select_keys = ex
-            tool.select_values = self.select_values
-            if not tool.run():
-                break
-        return tool.run_finish()
+        return tool.run_all(targets)
 
     # Workspace methods
 
