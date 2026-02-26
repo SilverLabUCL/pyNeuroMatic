@@ -111,6 +111,7 @@ class NMManager:
 
         self.__toolkit: dict[str, "NMTool"] = {}
         self.__toolselect: str | None = None
+        self.__run_config: dict | None = None
 
         # Load workspace (or default)
         self._load_workspace_internal(workspace, quiet=quiet)
@@ -571,6 +572,7 @@ class NMManager:
 
             result = self.run_keys(dataseries_priority=False)
             self._check_max_targets(result, max_targets)
+            self.__run_config = dict(run)
             return result
 
         # Dataseries mode - requires dataseries, channel, epoch
@@ -593,6 +595,7 @@ class NMManager:
 
         result = self.run_keys(dataseries_priority=True)
         self._check_max_targets(result, max_targets)
+        self.__run_config = dict(run)
         return result
 
     def _check_max_targets(
@@ -625,6 +628,7 @@ class NMManager:
                     continue
                 ds.channels.run_target = RUN_SELECTED
                 ds.epochs.run_target = RUN_SELECTED
+        self.__run_config = None
         return None
 
     def run_tool(
@@ -669,7 +673,7 @@ class NMManager:
         targets = self.run_values()
         if not targets:
             print("nothing to run")
-        return tool.run_all(targets)
+        return tool.run_all(targets, run_keys=self.__run_config)
 
     # Workspace methods
 

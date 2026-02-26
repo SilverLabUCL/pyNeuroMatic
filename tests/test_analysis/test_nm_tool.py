@@ -522,5 +522,244 @@ class TestNMToolIntegration(unittest.TestCase):
         self.assertIs(retrieved["epoch"], self.epoch)
 
 
+class TestNMToolRunMeta(unittest.TestCase):
+    """Tests for NMTool.run_meta populated by run_all()."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        assert self.nm.project.folders is not None
+        self.folder = self.nm.project.folders.new("test_folder")
+        assert isinstance(self.folder, NMFolder)
+        self.dataseries = self.folder.dataseries.new("test_ds")
+        assert isinstance(self.dataseries, NMDataSeries)
+        self.channel = self.dataseries.channels.new("A")
+        self.epoch0 = self.dataseries.epochs.new("E0")
+        self.epoch1 = self.dataseries.epochs.new("E1")
+
+    def _make_target(self, epoch=None):
+        return {
+            "folder": self.folder,
+            "dataseries": self.dataseries,
+            "channel": self.channel,
+            "epoch": epoch if epoch is not None else self.epoch0,
+        }
+
+    def test_run_meta_empty_before_run_all(self):
+        tool = NMTool()
+        self.assertEqual(tool.run_meta, {})
+
+    def test_run_meta_returns_copy(self):
+        tool = NMTool()
+        tool.run_all([])
+        meta1 = tool.run_meta
+        meta1["injected"] = True
+        self.assertNotIn("injected", tool.run_meta)
+
+    def test_run_meta_has_date_after_run_all(self):
+        tool = NMTool()
+        tool.run_all([])
+        self.assertIn("date", tool.run_meta)
+        self.assertIsInstance(tool.run_meta["date"], str)
+        self.assertGreater(len(tool.run_meta["date"]), 0)
+
+    def test_run_meta_run_keys_empty_without_run_keys(self):
+        tool = NMTool()
+        tool.run_all([self._make_target()])
+        self.assertEqual(tool.run_meta["run_keys"], {})
+
+    def test_run_meta_run_keys_stored_from_run_keys(self):
+        tool = NMTool()
+        run_keys = {"folder": "test_folder", "dataseries": "test_ds",
+                    "channel": "A", "epoch": "Set1"}
+        tool.run_all([self._make_target()], run_keys=run_keys)
+        self.assertEqual(tool.run_meta["run_keys"]["epoch"], "Set1")
+        self.assertEqual(tool.run_meta["run_keys"]["channel"], "A")
+
+    def test_run_meta_run_keys_epoch_all(self):
+        tool = NMTool()
+        run_keys = {"folder": "test_folder", "dataseries": "test_ds",
+                    "channel": "A", "epoch": "all"}
+        tool.run_all([self._make_target()], run_keys=run_keys)
+        self.assertEqual(tool.run_meta["run_keys"]["epoch"], "all")
+
+    def test_run_meta_run_keys_channel_set(self):
+        tool = NMTool()
+        run_keys = {"folder": "test_folder", "dataseries": "test_ds",
+                    "channel": "ChanSet1", "epoch": "all"}
+        tool.run_all([self._make_target()], run_keys=run_keys)
+        self.assertEqual(tool.run_meta["run_keys"]["channel"], "ChanSet1")
+
+    def test_run_meta_run_keys_is_copy(self):
+        tool = NMTool()
+        run_keys = {"folder": "f", "dataseries": "ds", "channel": "A", "epoch": "all"}
+        tool.run_all([self._make_target()], run_keys=run_keys)
+        tool.run_meta["run_keys"]["injected"] = True  # mutate the returned copy
+        self.assertNotIn("injected", tool.run_meta["run_keys"])
+
+    def test_run_meta_epochs_empty_for_no_targets(self):
+        tool = NMTool()
+        tool.run_all([])
+        self.assertEqual(tool.run_meta["epochs"], [])
+
+    def test_run_meta_epochs_accumulates_from_targets(self):
+        tool = NMTool()
+        targets = [self._make_target(self.epoch0), self._make_target(self.epoch1)]
+        tool.run_all(targets)
+        self.assertEqual(tool.run_meta["epochs"], ["E0", "E1"])
+
+    def test_run_meta_epochs_no_duplicates(self):
+        tool = NMTool()
+        # Same epoch repeated twice (e.g. multiple channels)
+        targets = [self._make_target(self.epoch0), self._make_target(self.epoch0)]
+        tool.run_all(targets)
+        self.assertEqual(tool.run_meta["epochs"], ["E0"])
+
+    def test_run_meta_epochs_preserves_order(self):
+        tool = NMTool()
+        targets = [self._make_target(self.epoch1), self._make_target(self.epoch0)]
+        tool.run_all(targets)
+        self.assertEqual(tool.run_meta["epochs"], ["E1", "E0"])
+
+    def test_run_meta_channels_accumulates_from_targets(self):
+        tool = NMTool()
+        channel_b = self.dataseries.channels.new("B")
+        t0 = {**self._make_target(self.epoch0), "channel": self.channel}
+        t1 = {**self._make_target(self.epoch0), "channel": channel_b}
+        tool.run_all([t0, t1])
+        self.assertEqual(tool.run_meta["channels"], ["A", "B"])
+
+    def test_run_meta_folders_accumulates_from_targets(self):
+        tool = NMTool()
+        targets = [self._make_target(self.epoch0)]
+        tool.run_all(targets)
+        self.assertIn("test_folder", tool.run_meta["folders"])
+
+    def test_run_meta_dataseries_accumulates_from_targets(self):
+        tool = NMTool()
+        targets = [self._make_target(self.epoch0)]
+        tool.run_all(targets)
+        self.assertIn("test_ds", tool.run_meta["dataseries"])
+
+    def test_run_meta_accessible_from_run_finish(self):
+        captured = {}
+
+        class CaptureTool(NMTool):
+            def run_finish(self):
+                captured.update(self.run_meta)
+                return True
+
+        tool = CaptureTool()
+        run_keys = {"folder": "f", "dataseries": "ds", "channel": "A", "epoch": "Set1"}
+        targets = [self._make_target(self.epoch0), self._make_target(self.epoch1)]
+        tool.run_all(targets, run_keys=run_keys)
+
+        self.assertEqual(captured["run_keys"]["epoch"], "Set1")
+        self.assertEqual(captured["epochs"], ["E0", "E1"])
+        self.assertIn("date", captured)
+
+    def test_run_meta_accessible_from_run_init(self):
+        captured = {}
+
+        class CaptureTool(NMTool):
+            def run_init(self):
+                captured.update(self.run_meta)
+                return True
+
+        tool = CaptureTool()
+        run_keys = {"folder": "f", "dataseries": "ds", "channel": "A", "epoch": "Set1"}
+        tool.run_all([self._make_target()], run_keys=run_keys)
+
+        self.assertEqual(captured["run_keys"]["epoch"], "Set1")
+        self.assertIn("date", captured)
+
+    def test_run_meta_reset_on_each_run_all(self):
+        tool = NMTool()
+        run_keys1 = {"folder": "f", "dataseries": "ds", "channel": "A", "epoch": "Set1"}
+        run_keys2 = {"folder": "f", "dataseries": "ds", "channel": "A", "epoch": "Set2"}
+        tool.run_all([self._make_target(self.epoch0)], run_keys=run_keys1)
+        tool.run_all([self._make_target(self.epoch1)], run_keys=run_keys2)
+        self.assertEqual(tool.run_meta["run_keys"]["epoch"], "Set2")
+        self.assertEqual(tool.run_meta["epochs"], ["E1"])
+
+    def test_run_meta_epochs_not_accumulated_across_runs(self):
+        tool = NMTool()
+        tool.run_all([self._make_target(self.epoch0)])
+        tool.run_all([self._make_target(self.epoch1)])
+        # Second run should only have epoch1, not epoch0
+        self.assertEqual(tool.run_meta["epochs"], ["E1"])
+
+
+class TestNMManagerRunConfig(unittest.TestCase):
+    """Tests for NMManager.__run_config passed to run_all via run_tool."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        assert self.nm.project.folders is not None
+        self.folder = self.nm.project.folders.new("folder0")
+        assert isinstance(self.folder, NMFolder)
+        self.dataseries = self.folder.dataseries.new("Record")
+        assert isinstance(self.dataseries, NMDataSeries)
+        self.channel = self.dataseries.channels.new("A")
+        self.epoch0 = self.dataseries.epochs.new("E0")
+        self.epoch1 = self.dataseries.epochs.new("E1")
+
+    def test_run_tool_passes_epoch_set_in_run_meta(self):
+        captured = {}
+
+        class CaptureTool(NMTool):
+            def run_finish(self):
+                captured.update(self.run_meta)
+                return True
+
+        self.nm.tool_add("mytool", CaptureTool(), select=True)
+        self.nm.run_keys_set({
+            "folder": "selected",
+            "dataseries": "selected",
+            "channel": "selected",
+            "epoch": "all",
+        })
+        self.nm.run_tool()
+        self.assertEqual(captured["run_keys"]["epoch"], "all")
+
+    def test_run_tool_run_meta_epochs_match_targets(self):
+        captured = {}
+
+        class CaptureTool(NMTool):
+            def run_finish(self):
+                captured["epochs"] = list(self.run_meta["epochs"])
+                return True
+
+        self.nm.tool_add("mytool", CaptureTool(), select=True)
+        self.nm.run_keys_set({
+            "folder": "selected",
+            "dataseries": "selected",
+            "channel": "selected",
+            "epoch": "all",
+        })
+        self.nm.run_tool()
+        self.assertIn("E0", captured["epochs"])
+        self.assertIn("E1", captured["epochs"])
+
+    def test_run_reset_all_clears_run_meta_epoch_set(self):
+        captured = {}
+
+        class CaptureTool(NMTool):
+            def run_finish(self):
+                captured.update(self.run_meta)
+                return True
+
+        self.nm.tool_add("mytool", CaptureTool(), select=True)
+        self.nm.run_keys_set({
+            "folder": "selected",
+            "dataseries": "selected",
+            "channel": "selected",
+            "epoch": "all",
+        })
+        self.nm.run_reset_all()
+        # After reset, run_config is None so epoch_set should be None
+        self.nm.run_tool()
+        self.assertEqual(captured.get("run_keys"), {})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -20,6 +20,8 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
+import datetime
+
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_data import NMData
@@ -52,6 +54,7 @@ class NMTool:
         self._select: dict[str, NMObject | None] = {
             level: None for level in SELECT_LEVELS
         }
+        self._run_meta: dict = {}
 
     # Read-only convenience properties for accessing selection
     @property
@@ -112,6 +115,28 @@ class NMTool:
             for level, obj in self._select.items()
         }
 
+    @property
+    def run_meta(self) -> dict:
+        """Get run context metadata populated during the most recent run_all().
+
+        Contains:
+            date: ISO timestamp of when run_all() started.
+            run_keys: Copy of the run configuration dict passed from
+                ``NMManager.run_keys_set()`` (e.g.
+                ``{"folder": "selected", "channel": "ChanSet1",
+                "epoch": "all"}``). Empty dict if run_all() was called
+                directly without run_keys.
+            folders: Unique folder names processed, in order of first
+                encounter.
+            dataseries: Unique dataseries names processed.
+            channels: Unique channel names processed.
+            epochs: Unique epoch names processed.
+        """
+        meta = self._run_meta.copy()
+        if "run_keys" in meta:
+            meta["run_keys"] = dict(meta["run_keys"])
+        return meta
+
     def run_init(self) -> bool:
         """Called once before run loop. Override in subclass."""
         return True
@@ -125,7 +150,11 @@ class NMTool:
         """Called once after run loop. Override in subclass."""
         return True
 
-    def run_all(self, targets: list[dict[str, NMObject]]) -> bool:
+    def run_all(
+        self,
+        targets: list[dict[str, NMObject]],
+        run_keys: dict[str, str] | None = None,
+    ) -> bool:
         """Run the tool over a list of selection targets.
 
         Calls ``run_init()`` once, then ``run()`` for each target (setting
@@ -137,17 +166,42 @@ class NMTool:
         targets from the project hierarchy.  Tools can also be driven
         directly (e.g. in tests or scripts) by passing targets explicitly.
 
+        Populates ``run_meta`` before ``run_init()`` is called, so subclasses
+        can access it from ``run_init()``, ``run()``, and ``run_finish()``.
+
         Args:
             targets: List of selection dicts mapping level names to
                 NMObjects, as returned by ``NMManager.run_values()``.
+            run_keys: Optional run configuration dict as passed to
+                ``NMManager.run_keys_set()`` (e.g.
+                ``{"epoch": "Set1", "channel": "A"}``). Used to record
+                the epoch set name in ``run_meta``. ``None`` when the tool
+                is driven directly (e.g. in tests or scripts).
 
         Returns:
             Return value of ``run_finish()``.
         """
+        self._run_meta = {
+            "date": datetime.datetime.now().isoformat(" ", "seconds"),
+            "run_keys": dict(run_keys) if run_keys else {},
+            "folders": [],
+            "dataseries": [],
+            "channels": [],
+            "epochs": [],
+        }
         if not self.run_init():
             return False
         for target in targets:
             self.select_values = target
+            for level, meta_key in (
+                ("folder", "folders"),
+                ("dataseries", "dataseries"),
+                ("channel", "channels"),
+                ("epoch", "epochs"),
+            ):
+                obj = target.get(level)
+                if isinstance(obj, NMObject) and obj.name not in self._run_meta[meta_key]:
+                    self._run_meta[meta_key].append(obj.name)
             if not self.run():
                 break
         return self.run_finish()
