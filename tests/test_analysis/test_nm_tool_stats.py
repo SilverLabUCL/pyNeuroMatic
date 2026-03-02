@@ -495,7 +495,6 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def setUp(self):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
-        from pyneuromatic.core.nm_folder import NMFolder
         from pyneuromatic.core.nm_dataseries import NMDataSeries
 
         self.tf = NMToolFolder(name="stats0")
@@ -522,53 +521,65 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_condition_str_greater_than(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "y > 3")
 
     def test_condition_str_greater_than_or_equal(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y",
-            greater_than_or_equal=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", ">=", 3, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "y >= 3")
 
     def test_condition_str_less_than(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", less_than=4, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "<", 4, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "y < 4")
 
     def test_condition_str_less_than_or_equal(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", less_than_or_equal=4, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "<=", 4, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "y <= 4")
 
-    def test_condition_str_range(self):
+    def test_condition_str_range_exclusive(self):
+        # "<<" → a < y < b
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y",
-            greater_than=2, less_than=5, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "<<", 2, 5, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "2 < y < 5")
 
     def test_condition_str_range_inclusive(self):
+        # "<=<=" → a <= y <= b
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y",
-            greater_than_or_equal=2, less_than_or_equal=4,
-            save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "<=<=", 2, 4, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "2 <= y <= 4")
 
+    def test_condition_str_range_half_open_left(self):
+        # "<=<" → a <= y < b
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<=<", 2, 5, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "2 <= y < 5")
+
+    def test_condition_str_range_half_open_right(self):
+        # "<<=" → a < y <= b
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<<=", 2, 5, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "2 < y <= 5")
+
     def test_condition_str_equal(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", equal=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "==", 3, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "y == 3")
 
     def test_condition_str_not_equal(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", not_equal=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "!=", 3, save_to_numpy=False
         )
         self.assertEqual(r["condition"], "y != 3")
 
@@ -576,7 +587,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_greater_than_mask(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
         )
         expected = np.array([False, False, False, True, True])
         np.testing.assert_array_equal(r["mask"], expected)
@@ -585,7 +596,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_less_than_mask(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", less_than=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "<", 3, save_to_numpy=False
         )
         expected = np.array([True, True, False, False, False])
         np.testing.assert_array_equal(r["mask"], expected)
@@ -593,10 +604,9 @@ class TestNMToolStats2Inequality(unittest.TestCase):
         self.assertEqual(r["failures"], 3)
 
     def test_range_mask(self):
-        # 2 < y < 5 → [2, 3, 4] pass
+        # "<<" → 2 < y < 5 → [3, 4] pass (not 2, not 5)
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y",
-            greater_than=2, less_than=5, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "<<", 2, 5, save_to_numpy=False
         )
         expected = np.array([False, False, True, True, False])
         np.testing.assert_array_equal(r["mask"], expected)
@@ -604,7 +614,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_equal_mask(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", equal=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "==", 3, save_to_numpy=False
         )
         expected = np.array([False, False, True, False, False])
         np.testing.assert_array_equal(r["mask"], expected)
@@ -612,7 +622,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_not_equal_mask(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", not_equal=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", "!=", 3, save_to_numpy=False
         )
         self.assertEqual(r["successes"], 4)
 
@@ -622,7 +632,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
             nparray=np.array([1.0, np.nan, 3.0, 4.0, 5.0])
         )
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_nan_y", greater_than=0, save_to_numpy=False
+            self.tf, "ST_w0_nan_y", ">", 0, save_to_numpy=False
         )
         # NaN > 0 is False
         self.assertEqual(r["successes"], 4)
@@ -632,7 +642,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_binary_output_true(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
         )
         np.testing.assert_array_equal(
             r["result"], np.array([0.0, 0.0, 0.0, 1.0, 1.0])
@@ -640,7 +650,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_binary_output_false(self):
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3,
+            self.tf, "ST_w0_mean_y", ">", 3,
             binary_output=False, save_to_numpy=False
         )
         expected = np.array([np.nan, np.nan, np.nan, 4.0, 5.0])
@@ -657,13 +667,13 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_save_to_numpy_creates_iq_array(self):
         nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3, save_to_numpy=True
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=True
         )
         self.assertIn("IQ_ST_w0_mean_y", self.tf.data)
 
     def test_save_to_numpy_false_does_not_create_array(self):
         nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3, save_to_numpy=False
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
         )
         self.assertNotIn("IQ_ST_w0_mean_y", self.tf.data)
 
@@ -671,7 +681,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
     def test_set_name_success_creates_epoch_set(self):
         nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3,
+            self.tf, "ST_w0_mean_y", ">", 3,
             dataseries=self.ds,
             set_name_success="Successes",
             save_to_numpy=False,
@@ -680,9 +690,9 @@ class TestNMToolStats2Inequality(unittest.TestCase):
         self.assertIsNotNone(set_epochs)
 
     def test_set_name_success_contains_correct_epochs(self):
-        # greater_than=3 → E3, E4 pass
+        # ">" 3 → E3, E4 pass
         nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3,
+            self.tf, "ST_w0_mean_y", ">", 3,
             dataseries=self.ds,
             set_name_success="Pass",
             save_to_numpy=False,
@@ -694,9 +704,9 @@ class TestNMToolStats2Inequality(unittest.TestCase):
         self.assertNotIn("E0", epoch_names)
 
     def test_set_name_failure_contains_failing_epochs(self):
-        # greater_than=3 → E0, E1, E2 fail
+        # ">" 3 → E0, E1, E2 fail
         nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_mean_y", greater_than=3,
+            self.tf, "ST_w0_mean_y", ">", 3,
             dataseries=self.ds,
             set_name_failure="Fail",
             save_to_numpy=False,
@@ -708,26 +718,32 @@ class TestNMToolStats2Inequality(unittest.TestCase):
         self.assertIn("E2", epoch_names)
         self.assertNotIn("E3", epoch_names)
 
-    # --- type validation ---
+    # --- type and value validation ---
 
     def test_bad_toolfolder_raises_typeerror(self):
         with self.assertRaises(TypeError):
             nms.NMToolStats2.inequality("not_a_folder", "ST_w0_mean_y",
-                                        greater_than=1)
+                                        ">", 1)
 
     def test_bad_name_raises_typeerror(self):
         with self.assertRaises(TypeError):
-            nms.NMToolStats2.inequality(self.tf, 123, greater_than=1)
+            nms.NMToolStats2.inequality(self.tf, 123, ">", 1)
 
     def test_unknown_name_raises_keyerror(self):
         with self.assertRaises(KeyError):
-            nms.NMToolStats2.inequality(self.tf, "ST_w0_missing",
-                                        greater_than=1)
+            nms.NMToolStats2.inequality(self.tf, "ST_w0_missing", ">", 1)
 
-    def test_no_condition_raises_valueerror(self):
+    def test_unknown_op_raises_valueerror(self):
         with self.assertRaises(ValueError):
-            nms.NMToolStats2.inequality(self.tf, "ST_w0_mean_y",
-                                        save_to_numpy=False)
+            nms.NMToolStats2.inequality(
+                self.tf, "ST_w0_mean_y", "??", 1, save_to_numpy=False
+            )
+
+    def test_range_op_without_b_raises_valueerror(self):
+        with self.assertRaises(ValueError):
+            nms.NMToolStats2.inequality(
+                self.tf, "ST_w0_mean_y", "<<", 1, save_to_numpy=False
+            )
 
 
 if __name__ == "__main__":

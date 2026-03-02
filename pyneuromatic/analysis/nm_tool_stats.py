@@ -755,12 +755,9 @@ class NMToolStats2:
     def inequality(
         toolfolder: NMToolFolder,
         name: str,
-        greater_than: float | None = None,
-        greater_than_or_equal: float | None = None,
-        less_than: float | None = None,
-        less_than_or_equal: float | None = None,
-        equal: float | None = None,
-        not_equal: float | None = None,
+        op: str,
+        a: float,
+        b: float | None = None,
         binary_output: bool = True,
         dataseries: NMDataSeries | None = None,
         set_name_success: str | None = None,
@@ -769,22 +766,21 @@ class NMToolStats2:
     ) -> dict:
         """Filter an ST_ array by an inequality condition.
 
-        Applies one or more threshold conditions (AND logic) to each value in
-        the named ST_ array and returns a result array plus success/failure
-        counts.  Optionally creates epoch sets from the passing and failing
-        epochs.
+        Applies a threshold condition to each value in the named ST_ array
+        and returns a result array plus success/failure counts.  Optionally
+        creates epoch sets from the passing and failing epochs.
 
         This mirrors the Igor NeuroMatic ``NMStatsInequality()`` function.
 
         Args:
             toolfolder: NMToolFolder containing the ST_ array.
             name: Name of the ST_ array to filter (e.g. ``"ST_w0_max_y"``).
-            greater_than: Keep values where ``y > greater_than``.
-            greater_than_or_equal: Keep values where ``y >= greater_than_or_equal``.
-            less_than: Keep values where ``y < less_than``.
-            less_than_or_equal: Keep values where ``y <= less_than_or_equal``.
-            equal: Keep values where ``y == equal``.
-            not_equal: Keep values where ``y != not_equal``.
+            op: Comparison operator.  Single-threshold: ``">"``, ``">="``,
+                ``"<"``, ``"<="``, ``"=="``, ``"!="``.  Range (requires
+                ``b``): ``"<<"`` (a < y < b), ``"<=<="`` (a <= y <= b),
+                ``"<=<"`` (a <= y < b), ``"<<="`` (a < y <= b).
+            a: Threshold value (or lower bound for range operators).
+            b: Upper bound; required for range operators.
             binary_output: If True (default), result array contains 1.0
                 (pass) or 0.0 (fail).  If False, result contains the
                 original value where the condition is met and NaN elsewhere.
@@ -809,22 +805,27 @@ class NMToolStats2:
         Raises:
             TypeError: If toolfolder is not NMToolFolder or name is not str.
             KeyError: If name is not found in toolfolder.
-            ValueError: If the named array has no data, or no condition is
-                specified.
+            ValueError: If the named array has no data, op is unrecognised,
+                or a range op is given without b.
         """
+        _SINGLE_OPS = frozenset({">", ">=", "<", "<=", "==", "!="})
+        _RANGE_OPS = frozenset({"<<", "<=<=", "<=<", "<<="})
+
         if not isinstance(toolfolder, NMToolFolder):
             raise TypeError(
                 nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
             )
         if not isinstance(name, str):
             raise TypeError(nmu.type_error_str(name, "name", "string"))
-
-        conditions_specified = [
-            greater_than, greater_than_or_equal, less_than,
-            less_than_or_equal, equal, not_equal,
-        ]
-        if all(v is None for v in conditions_specified):
-            raise ValueError("at least one inequality condition must be specified")
+        if op not in _SINGLE_OPS | _RANGE_OPS:
+            raise ValueError(
+                "unknown operator %r. Single: %s; range: %s"
+                % (op, sorted(_SINGLE_OPS), sorted(_RANGE_OPS))
+            )
+        if op in _RANGE_OPS and b is None:
+            raise ValueError(
+                "range operator %r requires b to be specified" % op
+            )
 
         d = toolfolder.data.get(name)
         if d is None:
@@ -834,20 +835,27 @@ class NMToolStats2:
 
         arr = d.nparray.astype(float)
 
-        # Build boolean mask — AND logic, NaN propagates as False
-        mask = np.ones(len(arr), dtype=bool)
-        if greater_than is not None:
-            mask &= arr > greater_than
-        if greater_than_or_equal is not None:
-            mask &= arr >= greater_than_or_equal
-        if less_than is not None:
-            mask &= arr < less_than
-        if less_than_or_equal is not None:
-            mask &= arr <= less_than_or_equal
-        if equal is not None:
-            mask &= arr == equal
-        if not_equal is not None:
-            mask &= arr != not_equal
+        # Build boolean mask — NaN propagates as False in comparisons
+        if op == ">":
+            mask = arr > a
+        elif op == ">=":
+            mask = arr >= a
+        elif op == "<":
+            mask = arr < a
+        elif op == "<=":
+            mask = arr <= a
+        elif op == "==":
+            mask = arr == a
+        elif op == "!=":
+            mask = arr != a
+        elif op == "<<":     # a < y < b
+            mask = (arr > a) & (arr < b)
+        elif op == "<=<=":   # a <= y <= b
+            mask = (arr >= a) & (arr <= b)
+        elif op == "<=<":    # a <= y < b
+            mask = (arr >= a) & (arr < b)
+        else:                # op == "<<="  a < y <= b
+            mask = (arr > a) & (arr <= b)
 
         if binary_output:
             result = mask.astype(float)
@@ -857,12 +865,7 @@ class NMToolStats2:
         successes = int(np.sum(mask))
         failures = len(mask) - successes
 
-        # Build human-readable condition string
-        condition = NMToolStats2._inequality_condition_str(
-            greater_than, greater_than_or_equal,
-            less_than, less_than_or_equal,
-            equal, not_equal,
-        )
+        condition = NMToolStats2._inequality_condition_str(op, a, b)
 
         if save_to_numpy and toolfolder.data is not None:
             toolfolder.data.new("IQ_%s" % name, nparray=result)
@@ -922,42 +925,19 @@ class NMToolStats2:
         }
 
     @staticmethod
-    def _inequality_condition_str(
-        greater_than: float | None,
-        greater_than_or_equal: float | None,
-        less_than: float | None,
-        less_than_or_equal: float | None,
-        equal: float | None,
-        not_equal: float | None,
-    ) -> str:
+    def _inequality_condition_str(op: str, a: float, b: float | None) -> str:
         """Build a human-readable condition string for inequality().
 
-        Examples: ``"y > 50"``, ``"20 < y < 100"``, ``"y == 0"``.
+        Examples: ``"y > 50"``, ``"2 < y < 5"``, ``"y == 0"``.
         """
-        if equal is not None:
-            return "y == %g" % equal
-        if not_equal is not None:
-            return "y != %g" % not_equal
-
-        lo_str = ""
-        hi_str = ""
-
-        if greater_than is not None:
-            lo_str = "%g <" % greater_than
-        elif greater_than_or_equal is not None:
-            lo_str = "%g <=" % greater_than_or_equal
-
-        if less_than is not None:
-            hi_str = "< %g" % less_than
-        elif less_than_or_equal is not None:
-            hi_str = "<= %g" % less_than_or_equal
-
-        if lo_str and hi_str:
-            return "%s y %s" % (lo_str, hi_str)   # "20 < y < 100"
-        if lo_str:
-            if greater_than is not None:
-                return "y > %g" % greater_than
-            return "y >= %g" % greater_than_or_equal
-        if hi_str:
-            return "y %s" % hi_str   # "y < 100" or "y <= 100"
+        if op == ">":   return "y > %g" % a
+        if op == ">=":  return "y >= %g" % a
+        if op == "<":   return "y < %g" % a
+        if op == "<=":  return "y <= %g" % a
+        if op == "==":  return "y == %g" % a
+        if op == "!=":  return "y != %g" % a
+        if op == "<<":   return "%g < y < %g" % (a, b)
+        if op == "<=<=": return "%g <= y <= %g" % (a, b)
+        if op == "<=<":  return "%g <= y < %g" % (a, b)
+        if op == "<<=":  return "%g < y <= %g" % (a, b)
         return ""
