@@ -490,5 +490,261 @@ class TestNMToolStats2Histogram(unittest.TestCase):
             nms.NMToolStats2.histogram(self.tf, "ST_w0_missing")
 
 
+class TestNMToolStats2Inequality(unittest.TestCase):
+    """Tests for NMToolStats2.inequality()."""
+
+    def setUp(self):
+        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.core.nm_dataseries import NMDataSeries
+
+        self.tf = NMToolFolder(name="stats0")
+        # ST_w0_mean_y: values 1..5
+        self.arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        self.tf.data.new("ST_w0_mean_y", nparray=self.arr.copy())
+        # ST_w0_data: wave names for epoch set creation
+        self.wave_names = ["RecordA0", "RecordA1", "RecordA2",
+                           "RecordA3", "RecordA4"]
+        self.tf.data.new(
+            "ST_w0_data",
+            nparray=np.array(self.wave_names, dtype=object),
+        )
+
+        # Build a real NMDataSeries with 5 epochs for set-creation tests
+        self.nm = NMManager(quiet=True)
+        assert self.nm.project.folders is not None
+        self.folder = self.nm.project.folders.new("f0")
+        self.ds = self.folder.dataseries.new("Record")
+        for i in range(5):
+            self.ds.epochs.new("E%d" % i)
+
+    # --- condition string ---
+
+    def test_condition_str_greater_than(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "y > 3")
+
+    def test_condition_str_greater_than_or_equal(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">=", 3, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "y >= 3")
+
+    def test_condition_str_less_than(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<", 4, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "y < 4")
+
+    def test_condition_str_less_than_or_equal(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<=", 4, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "y <= 4")
+
+    def test_condition_str_range_exclusive(self):
+        # "<<" → a < y < b
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<<", 2, 5, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "2 < y < 5")
+
+    def test_condition_str_range_inclusive(self):
+        # "<=<=" → a <= y <= b
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<=<=", 2, 4, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "2 <= y <= 4")
+
+    def test_condition_str_range_half_open_left(self):
+        # "<=<" → a <= y < b
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<=<", 2, 5, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "2 <= y < 5")
+
+    def test_condition_str_range_half_open_right(self):
+        # "<<=" → a < y <= b
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<<=", 2, 5, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "2 < y <= 5")
+
+    def test_condition_str_equal(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "==", 3, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "y == 3")
+
+    def test_condition_str_not_equal(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "!=", 3, save_to_numpy=False
+        )
+        self.assertEqual(r["condition"], "y != 3")
+
+    # --- mask and counts ---
+
+    def test_greater_than_mask(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
+        )
+        expected = np.array([False, False, False, True, True])
+        np.testing.assert_array_equal(r["mask"], expected)
+        self.assertEqual(r["successes"], 2)
+        self.assertEqual(r["failures"], 3)
+
+    def test_less_than_mask(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<", 3, save_to_numpy=False
+        )
+        expected = np.array([True, True, False, False, False])
+        np.testing.assert_array_equal(r["mask"], expected)
+        self.assertEqual(r["successes"], 2)
+        self.assertEqual(r["failures"], 3)
+
+    def test_range_mask(self):
+        # "<<" → 2 < y < 5 → [3, 4] pass (not 2, not 5)
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "<<", 2, 5, save_to_numpy=False
+        )
+        expected = np.array([False, False, True, True, False])
+        np.testing.assert_array_equal(r["mask"], expected)
+        self.assertEqual(r["successes"], 2)
+
+    def test_equal_mask(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "==", 3, save_to_numpy=False
+        )
+        expected = np.array([False, False, True, False, False])
+        np.testing.assert_array_equal(r["mask"], expected)
+        self.assertEqual(r["successes"], 1)
+
+    def test_not_equal_mask(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", "!=", 3, save_to_numpy=False
+        )
+        self.assertEqual(r["successes"], 4)
+
+    def test_nan_in_array_counts_as_failure(self):
+        self.tf.data.new(
+            "ST_w0_nan_y",
+            nparray=np.array([1.0, np.nan, 3.0, 4.0, 5.0])
+        )
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_nan_y", ">", 0, save_to_numpy=False
+        )
+        # NaN > 0 is False
+        self.assertEqual(r["successes"], 4)
+        self.assertEqual(r["failures"], 1)
+
+    # --- result array ---
+
+    def test_binary_output_true(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
+        )
+        np.testing.assert_array_equal(
+            r["result"], np.array([0.0, 0.0, 0.0, 1.0, 1.0])
+        )
+
+    def test_binary_output_false(self):
+        r = nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3,
+            binary_output=False, save_to_numpy=False
+        )
+        expected = np.array([np.nan, np.nan, np.nan, 4.0, 5.0])
+        np.testing.assert_array_equal(
+            np.isnan(r["result"]),
+            np.isnan(expected),
+        )
+        np.testing.assert_array_equal(
+            r["result"][~np.isnan(r["result"])],
+            expected[~np.isnan(expected)],
+        )
+
+    # --- save_to_numpy ---
+
+    def test_save_to_numpy_creates_iq_array(self):
+        nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=True
+        )
+        self.assertIn("IQ_ST_w0_mean_y", self.tf.data)
+
+    def test_save_to_numpy_false_does_not_create_array(self):
+        nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3, save_to_numpy=False
+        )
+        self.assertNotIn("IQ_ST_w0_mean_y", self.tf.data)
+
+    # --- epoch sets ---
+
+    def test_set_name_success_creates_epoch_set(self):
+        nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3,
+            dataseries=self.ds,
+            set_name_success="Successes",
+            save_to_numpy=False,
+        )
+        set_epochs = self.ds.epochs.sets.get("Successes")
+        self.assertIsNotNone(set_epochs)
+
+    def test_set_name_success_contains_correct_epochs(self):
+        # ">" 3 → E3, E4 pass
+        nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3,
+            dataseries=self.ds,
+            set_name_success="Pass",
+            save_to_numpy=False,
+        )
+        set_epochs = self.ds.epochs.sets.get("Pass")
+        epoch_names = [ep.name for ep in set_epochs]
+        self.assertIn("E3", epoch_names)
+        self.assertIn("E4", epoch_names)
+        self.assertNotIn("E0", epoch_names)
+
+    def test_set_name_failure_contains_failing_epochs(self):
+        # ">" 3 → E0, E1, E2 fail
+        nms.NMToolStats2.inequality(
+            self.tf, "ST_w0_mean_y", ">", 3,
+            dataseries=self.ds,
+            set_name_failure="Fail",
+            save_to_numpy=False,
+        )
+        set_epochs = self.ds.epochs.sets.get("Fail")
+        epoch_names = [ep.name for ep in set_epochs]
+        self.assertIn("E0", epoch_names)
+        self.assertIn("E1", epoch_names)
+        self.assertIn("E2", epoch_names)
+        self.assertNotIn("E3", epoch_names)
+
+    # --- type and value validation ---
+
+    def test_bad_toolfolder_raises_typeerror(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats2.inequality("not_a_folder", "ST_w0_mean_y",
+                                        ">", 1)
+
+    def test_bad_name_raises_typeerror(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats2.inequality(self.tf, 123, ">", 1)
+
+    def test_unknown_name_raises_keyerror(self):
+        with self.assertRaises(KeyError):
+            nms.NMToolStats2.inequality(self.tf, "ST_w0_missing", ">", 1)
+
+    def test_unknown_op_raises_valueerror(self):
+        with self.assertRaises(ValueError):
+            nms.NMToolStats2.inequality(
+                self.tf, "ST_w0_mean_y", "??", 1, save_to_numpy=False
+            )
+
+    def test_range_op_without_b_raises_valueerror(self):
+        with self.assertRaises(ValueError):
+            nms.NMToolStats2.inequality(
+                self.tf, "ST_w0_mean_y", "<<", 1, save_to_numpy=False
+            )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

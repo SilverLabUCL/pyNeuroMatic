@@ -29,6 +29,8 @@ from pyneuromatic.analysis.nm_stat_win import NMStatWinContainer  # noqa: F401
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
+from pyneuromatic.core.nm_dataseries import NMDataSeries
+from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_preferences as nmp
@@ -748,3 +750,194 @@ class NMToolStats2:
             )
 
         return {"counts": counts, "edges": edges}
+
+    @staticmethod
+    def inequality(
+        toolfolder: NMToolFolder,
+        name: str,
+        op: str,
+        a: float,
+        b: float | None = None,
+        binary_output: bool = True,
+        dataseries: NMDataSeries | None = None,
+        set_name_success: str | None = None,
+        set_name_failure: str | None = None,
+        save_to_numpy: bool = True,
+    ) -> dict:
+        """Filter an ST_ array by an inequality condition.
+
+        Applies a threshold condition to each value in the named ST_ array
+        and returns a result array plus success/failure counts.  Optionally
+        creates epoch sets from the passing and failing epochs.
+
+        This mirrors the Igor NeuroMatic ``NMStatsInequality()`` function.
+
+        Args:
+            toolfolder: NMToolFolder containing the ST_ array.
+            name: Name of the ST_ array to filter (e.g. ``"ST_w0_max_y"``).
+            op: Comparison operator.  Single-threshold: ``">"``, ``">="``,
+                ``"<"``, ``"<="``, ``"=="``, ``"!="``.  Range (requires
+                ``b``): ``"<<"`` (a < y < b), ``"<=<="`` (a <= y <= b),
+                ``"<=<"`` (a <= y < b), ``"<<="`` (a < y <= b).
+            a: Threshold value (or lower bound for range operators).
+            b: Upper bound; required for range operators.
+            binary_output: If True (default), result array contains 1.0
+                (pass) or 0.0 (fail).  If False, result contains the
+                original value where the condition is met and NaN elsewhere.
+            dataseries: NMDataSeries to use when creating epoch sets.
+                Required if set_name_success or set_name_failure is given.
+            set_name_success: Name of the epoch set to populate with passing
+                epochs.  Requires dataseries.
+            set_name_failure: Name of the epoch set to populate with failing
+                epochs.  Requires dataseries.
+            save_to_numpy: If True (default), save the result array as
+                ``IQ_{name}`` in toolfolder.
+
+        Returns:
+            Dict with keys:
+
+            - ``"result"``: numpy array (binary 0/1 or value/NaN).
+            - ``"mask"``: boolean numpy array, True where condition is met.
+            - ``"successes"``: number of values that passed.
+            - ``"failures"``: number of values that failed.
+            - ``"condition"``: human-readable condition string.
+
+        Raises:
+            TypeError: If toolfolder is not NMToolFolder or name is not str.
+            KeyError: If name is not found in toolfolder.
+            ValueError: If the named array has no data, op is unrecognised,
+                or a range op is given without b.
+        """
+        _SINGLE_OPS = frozenset({">", ">=", "<", "<=", "==", "!="})
+        _RANGE_OPS = frozenset({"<<", "<=<=", "<=<", "<<="})
+
+        if not isinstance(toolfolder, NMToolFolder):
+            raise TypeError(
+                nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
+            )
+        if not isinstance(name, str):
+            raise TypeError(nmu.type_error_str(name, "name", "string"))
+        if op not in _SINGLE_OPS | _RANGE_OPS:
+            raise ValueError(
+                "unknown operator %r. Single: %s; range: %s"
+                % (op, sorted(_SINGLE_OPS), sorted(_RANGE_OPS))
+            )
+        if op in _RANGE_OPS and b is None:
+            raise ValueError(
+                "range operator %r requires b to be specified" % op
+            )
+
+        d = toolfolder.data.get(name)
+        if d is None:
+            raise KeyError("array not found in toolfolder: %s" % name)
+        if not isinstance(d.nparray, np.ndarray):
+            raise ValueError("array has no nparray: %s" % name)
+
+        arr = d.nparray.astype(float)
+
+        # Build boolean mask — NaN propagates as False in comparisons
+        if op == ">":
+            mask = arr > a
+        elif op == ">=":
+            mask = arr >= a
+        elif op == "<":
+            mask = arr < a
+        elif op == "<=":
+            mask = arr <= a
+        elif op == "==":
+            mask = arr == a
+        elif op == "!=":
+            mask = arr != a
+        elif op == "<<":     # a < y < b
+            mask = (arr > a) & (arr < b)
+        elif op == "<=<=":   # a <= y <= b
+            mask = (arr >= a) & (arr <= b)
+        elif op == "<=<":    # a <= y < b
+            mask = (arr >= a) & (arr < b)
+        else:                # op == "<<="  a < y <= b
+            mask = (arr > a) & (arr <= b)
+
+        if binary_output:
+            result = mask.astype(float)
+        else:
+            result = np.where(mask, arr, np.nan)
+
+        successes = int(np.sum(mask))
+        failures = len(mask) - successes
+
+        condition = NMToolStats2._inequality_condition_str(op, a, b)
+
+        if save_to_numpy and toolfolder.data is not None:
+            toolfolder.data.new("IQ_%s" % name, nparray=result)
+
+        # Create epoch sets if dataseries and set names are given
+        if isinstance(dataseries, NMDataSeries) and (
+            set_name_success or set_name_failure
+        ):
+            # Find the ST_{wname}_data array (maps index → wave name)
+            parts = name.split("_")
+            data_arr = None
+            if len(parts) >= 2:
+                wname = parts[1]
+                data_arr = toolfolder.data.get("ST_%s_data" % wname)
+
+            if data_arr is not None and isinstance(data_arr.nparray, np.ndarray):
+                wave_names = data_arr.nparray
+                success_epochs: list[str] = []
+                failure_epochs: list[str] = []
+
+                # Build epoch_num → epoch_name lookup
+                epoch_map: dict[int, str] = {
+                    ep.number: ep.name
+                    for ep in dataseries.epochs.values()
+                    if isinstance(ep, NMEpoch)
+                }
+
+                for i, wave_name in enumerate(wave_names):
+                    parsed = nmu.parse_data_name(str(wave_name))
+                    if parsed is None:
+                        continue
+                    epoch_num = parsed[2]
+                    ep_name = epoch_map.get(epoch_num)
+                    if ep_name is None:
+                        continue
+                    if i < len(mask):
+                        if mask[i]:
+                            success_epochs.append(ep_name)
+                        else:
+                            failure_epochs.append(ep_name)
+
+                if set_name_success and success_epochs:
+                    dataseries.epochs.sets.add(
+                        set_name_success, success_epochs
+                    )
+                if set_name_failure and failure_epochs:
+                    dataseries.epochs.sets.add(
+                        set_name_failure, failure_epochs
+                    )
+
+        return {
+            "result": result,
+            "mask": mask,
+            "successes": successes,
+            "failures": failures,
+            "condition": condition,
+        }
+
+    @staticmethod
+    def _inequality_condition_str(op: str, a: float, b: float | None) -> str:
+        """Build a human-readable condition string for inequality().
+
+        Examples: ``"y > 50"``, ``"2 < y < 5"``, ``"y == 0"``.
+        """
+        if op == ">":   return "y > %g" % a
+        if op == ">=":  return "y >= %g" % a
+        if op == "<":   return "y < %g" % a
+        if op == "<=":  return "y <= %g" % a
+        if op == "==":  return "y == %g" % a
+        if op == "!=":  return "y != %g" % a
+        if op == "<<":   return "%g < y < %g" % (a, b)
+        if op == "<=<=": return "%g <= y <= %g" % (a, b)
+        if op == "<=<":  return "%g <= y < %g" % (a, b)
+        if op == "<<=":  return "%g < y <= %g" % (a, b)
+        return ""
