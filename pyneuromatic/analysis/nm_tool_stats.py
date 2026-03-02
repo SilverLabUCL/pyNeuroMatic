@@ -29,6 +29,8 @@ from pyneuromatic.analysis.nm_stat_win import NMStatWinContainer  # noqa: F401
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
+from pyneuromatic.core.nm_dataseries import NMDataSeries
+from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_preferences as nmp
@@ -748,3 +750,214 @@ class NMToolStats2:
             )
 
         return {"counts": counts, "edges": edges}
+
+    @staticmethod
+    def inequality(
+        toolfolder: NMToolFolder,
+        name: str,
+        greater_than: float | None = None,
+        greater_than_or_equal: float | None = None,
+        less_than: float | None = None,
+        less_than_or_equal: float | None = None,
+        equal: float | None = None,
+        not_equal: float | None = None,
+        binary_output: bool = True,
+        dataseries: NMDataSeries | None = None,
+        set_name_success: str | None = None,
+        set_name_failure: str | None = None,
+        save_to_numpy: bool = True,
+    ) -> dict:
+        """Filter an ST_ array by an inequality condition.
+
+        Applies one or more threshold conditions (AND logic) to each value in
+        the named ST_ array and returns a result array plus success/failure
+        counts.  Optionally creates epoch sets from the passing and failing
+        epochs.
+
+        This mirrors the Igor NeuroMatic ``NMStatsInequality()`` function.
+
+        Args:
+            toolfolder: NMToolFolder containing the ST_ array.
+            name: Name of the ST_ array to filter (e.g. ``"ST_w0_max_y"``).
+            greater_than: Keep values where ``y > greater_than``.
+            greater_than_or_equal: Keep values where ``y >= greater_than_or_equal``.
+            less_than: Keep values where ``y < less_than``.
+            less_than_or_equal: Keep values where ``y <= less_than_or_equal``.
+            equal: Keep values where ``y == equal``.
+            not_equal: Keep values where ``y != not_equal``.
+            binary_output: If True (default), result array contains 1.0
+                (pass) or 0.0 (fail).  If False, result contains the
+                original value where the condition is met and NaN elsewhere.
+            dataseries: NMDataSeries to use when creating epoch sets.
+                Required if set_name_success or set_name_failure is given.
+            set_name_success: Name of the epoch set to populate with passing
+                epochs.  Requires dataseries.
+            set_name_failure: Name of the epoch set to populate with failing
+                epochs.  Requires dataseries.
+            save_to_numpy: If True (default), save the result array as
+                ``IQ_{name}`` in toolfolder.
+
+        Returns:
+            Dict with keys:
+
+            - ``"result"``: numpy array (binary 0/1 or value/NaN).
+            - ``"mask"``: boolean numpy array, True where condition is met.
+            - ``"successes"``: number of values that passed.
+            - ``"failures"``: number of values that failed.
+            - ``"condition"``: human-readable condition string.
+
+        Raises:
+            TypeError: If toolfolder is not NMToolFolder or name is not str.
+            KeyError: If name is not found in toolfolder.
+            ValueError: If the named array has no data, or no condition is
+                specified.
+        """
+        if not isinstance(toolfolder, NMToolFolder):
+            raise TypeError(
+                nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
+            )
+        if not isinstance(name, str):
+            raise TypeError(nmu.type_error_str(name, "name", "string"))
+
+        conditions_specified = [
+            greater_than, greater_than_or_equal, less_than,
+            less_than_or_equal, equal, not_equal,
+        ]
+        if all(v is None for v in conditions_specified):
+            raise ValueError("at least one inequality condition must be specified")
+
+        d = toolfolder.data.get(name)
+        if d is None:
+            raise KeyError("array not found in toolfolder: %s" % name)
+        if not isinstance(d.nparray, np.ndarray):
+            raise ValueError("array has no nparray: %s" % name)
+
+        arr = d.nparray.astype(float)
+
+        # Build boolean mask — AND logic, NaN propagates as False
+        mask = np.ones(len(arr), dtype=bool)
+        if greater_than is not None:
+            mask &= arr > greater_than
+        if greater_than_or_equal is not None:
+            mask &= arr >= greater_than_or_equal
+        if less_than is not None:
+            mask &= arr < less_than
+        if less_than_or_equal is not None:
+            mask &= arr <= less_than_or_equal
+        if equal is not None:
+            mask &= arr == equal
+        if not_equal is not None:
+            mask &= arr != not_equal
+
+        if binary_output:
+            result = mask.astype(float)
+        else:
+            result = np.where(mask, arr, np.nan)
+
+        successes = int(np.sum(mask))
+        failures = len(mask) - successes
+
+        # Build human-readable condition string
+        condition = NMToolStats2._inequality_condition_str(
+            greater_than, greater_than_or_equal,
+            less_than, less_than_or_equal,
+            equal, not_equal,
+        )
+
+        if save_to_numpy and toolfolder.data is not None:
+            toolfolder.data.new("IQ_%s" % name, nparray=result)
+
+        # Create epoch sets if dataseries and set names are given
+        if isinstance(dataseries, NMDataSeries) and (
+            set_name_success or set_name_failure
+        ):
+            # Find the ST_{wname}_data array (maps index → wave name)
+            parts = name.split("_")
+            data_arr = None
+            if len(parts) >= 2:
+                wname = parts[1]
+                data_arr = toolfolder.data.get("ST_%s_data" % wname)
+
+            if data_arr is not None and isinstance(data_arr.nparray, np.ndarray):
+                wave_names = data_arr.nparray
+                success_epochs: list[str] = []
+                failure_epochs: list[str] = []
+
+                # Build epoch_num → epoch_name lookup
+                epoch_map: dict[int, str] = {
+                    ep.number: ep.name
+                    for ep in dataseries.epochs.values()
+                    if isinstance(ep, NMEpoch)
+                }
+
+                for i, wave_name in enumerate(wave_names):
+                    parsed = nmu.parse_data_name(str(wave_name))
+                    if parsed is None:
+                        continue
+                    epoch_num = parsed[2]
+                    ep_name = epoch_map.get(epoch_num)
+                    if ep_name is None:
+                        continue
+                    if i < len(mask):
+                        if mask[i]:
+                            success_epochs.append(ep_name)
+                        else:
+                            failure_epochs.append(ep_name)
+
+                if set_name_success and success_epochs:
+                    dataseries.epochs.sets.add(
+                        set_name_success, success_epochs
+                    )
+                if set_name_failure and failure_epochs:
+                    dataseries.epochs.sets.add(
+                        set_name_failure, failure_epochs
+                    )
+
+        return {
+            "result": result,
+            "mask": mask,
+            "successes": successes,
+            "failures": failures,
+            "condition": condition,
+        }
+
+    @staticmethod
+    def _inequality_condition_str(
+        greater_than: float | None,
+        greater_than_or_equal: float | None,
+        less_than: float | None,
+        less_than_or_equal: float | None,
+        equal: float | None,
+        not_equal: float | None,
+    ) -> str:
+        """Build a human-readable condition string for inequality().
+
+        Examples: ``"y > 50"``, ``"20 < y < 100"``, ``"y == 0"``.
+        """
+        if equal is not None:
+            return "y == %g" % equal
+        if not_equal is not None:
+            return "y != %g" % not_equal
+
+        lo_str = ""
+        hi_str = ""
+
+        if greater_than is not None:
+            lo_str = "%g <" % greater_than
+        elif greater_than_or_equal is not None:
+            lo_str = "%g <=" % greater_than_or_equal
+
+        if less_than is not None:
+            hi_str = "< %g" % less_than
+        elif less_than_or_equal is not None:
+            hi_str = "<= %g" % less_than_or_equal
+
+        if lo_str and hi_str:
+            return "%s y %s" % (lo_str, hi_str)   # "20 < y < 100"
+        if lo_str:
+            if greater_than is not None:
+                return "y > %g" % greater_than
+            return "y >= %g" % greater_than_or_equal
+        if hi_str:
+            return "y %s" % hi_str   # "y < 100" or "y <= 100"
+        return ""
