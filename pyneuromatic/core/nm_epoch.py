@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -206,7 +206,7 @@ class NMEpochContainer(NMObjectContainer):
         self,
         name: str | None = None,  # not used, instead name = auto_name_next()
         select: bool = False,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> NMEpoch | None:
         actual_name = self.auto_name_next()
         istr = actual_name.replace(self.auto_name_prefix, "")

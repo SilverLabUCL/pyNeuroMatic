@@ -34,7 +34,7 @@ from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -131,7 +131,7 @@ class NMToolStats(NMTool):
     def _xclip_set(
         self,
         xclip: bool,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         """Set xclip flag.
 
@@ -159,7 +159,7 @@ class NMToolStats(NMTool):
     def _ignore_nans_set(
         self,
         ignore_nans: bool,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         """Set ignore_nans flag.
 
@@ -187,7 +187,7 @@ class NMToolStats(NMTool):
     def _results_to_history_set(
         self,
         value: bool,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         """Set results_to_history flag.
 
@@ -212,7 +212,7 @@ class NMToolStats(NMTool):
     def _results_to_cache_set(
         self,
         value: bool,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         """Set results_to_cache flag.
 
@@ -238,7 +238,7 @@ class NMToolStats(NMTool):
     def _results_to_numpy_set(
         self,
         value: bool,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         """Set results_to_numpy flag.
 

@@ -27,7 +27,7 @@ import copy
 import math
 
 import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -100,7 +100,7 @@ class NMScaleY:
         self,
         value: str,
         log: bool = True,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         if not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "label", "string"))
@@ -129,7 +129,7 @@ class NMScaleY:
         self,
         value: str,
         log: bool = True,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         if not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "units", "string"))
@@ -203,7 +203,7 @@ class NMScaleX(NMScaleY):
         self,
         value: float | int,
         log: bool = True,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         if not isinstance(value, (float, int)) or isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "start", "number"))
@@ -233,7 +233,7 @@ class NMScaleX(NMScaleY):
         self,
         value: float | int,
         log: bool = True,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         if not isinstance(value, (float, int)) or isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "delta", "number"))

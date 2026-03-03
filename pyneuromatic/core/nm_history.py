@@ -31,7 +31,7 @@ from collections import deque
 
 from colorama import Fore
 
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 
 
 class NMHistoryBufferHandler(logging.Handler):
@@ -291,7 +291,7 @@ def history(
 ) -> str:
     """Print message to NM history.
 
-    This function checks nmp.QUIET internally, so callers don't need to.
+    This function checks nmc.QUIET internally, so callers don't need to.
 
     :param message: message to print.
     :type message: str
@@ -309,7 +309,7 @@ def history(
     :rtype: str
     """
     # Check global QUIET flag
-    if nmp.QUIET:
+    if nmc.QUIET:
         quiet = True
 
     if not isinstance(message, str):

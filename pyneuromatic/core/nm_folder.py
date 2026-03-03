@@ -31,7 +31,7 @@ from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolderContainer
 import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -196,7 +196,7 @@ class NMFolder(NMObject):
         self,
         tool: str,
         results: Any,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> int:
         if not isinstance(tool, str):
             e = nmu.type_error_str(tool, "tool", "string")
@@ -217,7 +217,7 @@ class NMFolder(NMObject):
         self,
         tool: str | None = None,
         idx: int | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         if tool is None:
             self.__toolresults.clear()
@@ -301,7 +301,7 @@ class NMFolder(NMObject):
         self,
         prefix: str,
         select: bool = False,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> NMDataSeries | None:
         """Create a dataseries from data matching a prefix pattern.
 
@@ -449,7 +449,7 @@ class NMFolderContainer(NMObjectContainer):
         self,
         name: str | None = None,
         select: bool = False,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> NMFolder | None:
         actual_name = self._newkey(name)
         # Use self._parent (NMProject) to skip container in parent chain,
