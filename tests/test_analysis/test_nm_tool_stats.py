@@ -1075,10 +1075,10 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
                 self.tf, "ST_w0_flat_y", min_window=100
             )
 
-    def test_min_window_less_than_2_raises(self):
+    def test_min_window_less_than_3_raises(self):
         with self.assertRaises(ValueError):
             nms.NMToolStats2.stability_test(
-                self.tf, "ST_w0_flat_y", min_window=1
+                self.tf, "ST_w0_flat_y", min_window=2
             )
 
     # --- type and key validation ---
