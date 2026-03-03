@@ -30,7 +30,7 @@ from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_scale import NMScaleX, NMScaleY, _xscale_from_dict, _yscale_from_dict
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -473,7 +473,7 @@ def _eq_arrays(a1, a2) -> bool:
     if numpy.array_equal(a1, a2):
         return True
     # array_equal returns false if both arrays filled with NANs
-    if nmp.NAN_EQ_NAN:
+    if nmc.NAN_EQ_NAN:
         if numpy.allclose(a1, a2, rtol=0, atol=0, equal_nan=True):
             return True
     return False
@@ -512,7 +512,7 @@ class NMDataContainer(NMObjectContainer):
         nparray: numpy.ndarray | None = None,
         xscale: dict | None = None,
         yscale: dict | None = None,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> NMData | None:
         actual_name = self._newkey(name)
         # Use self._parent (NMFolder) to skip container in parent chain,

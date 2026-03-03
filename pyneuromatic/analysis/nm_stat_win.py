@@ -46,7 +46,7 @@ from pyneuromatic.analysis.nm_stat_func import (
 from pyneuromatic.analysis.nm_stat_utilities import stat
 from pyneuromatic.core.nm_data import NMData
 import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 from pyneuromatic.core.nm_transform import (
     NMTransform,
     apply_transforms,
@@ -143,7 +143,7 @@ class NMStatWin:
     def _win_set(
         self,
         win: dict[str, object],
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         """Set multiple window parameters from a dict.
 
@@ -193,7 +193,7 @@ class NMStatWin:
     def on(self, on: bool) -> None:
         return self._on_set(on)
 
-    def _on_set(self, on: bool, quiet: bool = nmp.QUIET) -> None:
+    def _on_set(self, on: bool, quiet: bool = nmc.QUIET) -> None:
         """Set the on flag; raises TypeError if not bool."""
         if not isinstance(on, bool):
             e = nmu.type_error_str(on, "on", "boolean")
@@ -215,7 +215,7 @@ class NMStatWin:
     def _func_set(
         self,
         func: dict | str | None,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         """Set the stat function from a dict, string name, or None.
 
@@ -254,7 +254,7 @@ class NMStatWin:
         self,
         xname: str,  # e.g. "x0" or "bsln_x0"
         x: float,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         """Set an x-boundary by name.
 
@@ -303,7 +303,7 @@ class NMStatWin:
     def _transform_set(
         self,
         transform_list: list[NMTransform] | list[dict] | None,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         """Set the transform list from NMTransform objects, dicts, or None."""
         if transform_list is None:
@@ -341,7 +341,7 @@ class NMStatWin:
     def bsln_on(self, on: bool) -> None:
         return self._bsln_on_set(on)
 
-    def _bsln_on_set(self, on: bool, quiet: bool = nmp.QUIET) -> None:
+    def _bsln_on_set(self, on: bool, quiet: bool = nmc.QUIET) -> None:
         """Set the bsln_on flag; raises TypeError if not bool."""
         if not isinstance(on, bool):
             e = nmu.type_error_str(on, "on", "boolean")
@@ -363,7 +363,7 @@ class NMStatWin:
     def _bsln_func_set(
         self,
         func: dict | str | None,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         """Set the baseline function from a dict, string name, or None.
 
@@ -468,7 +468,7 @@ class NMStatWin:
         data: NMData,
         xclip: bool = False,  # if x0|x1 OOB, clip to data x-scale limits
         ignore_nans: bool = False,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> list:
         """Run the stat computation on data.
 
@@ -558,7 +558,7 @@ class NMStatWinContainer:
         self._count = 0
         self.selected_name: str | None = None
 
-    def new(self, quiet: bool = nmp.QUIET) -> NMStatWin:
+    def new(self, quiet: bool = nmc.QUIET) -> NMStatWin:
         """Create, register, and return a new NMStatWin with an auto-name."""
         name = "%s%d" % (self._prefix, self._count)
         self._count += 1

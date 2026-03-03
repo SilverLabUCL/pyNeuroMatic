@@ -20,8 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 
 # Global behaviour flags used as default parameter values throughout the
-# codebase.  Import this module as ``nmp`` to preserve existing call sites:
-#   import pyneuromatic.core.nm_configurations as nmp
+# codebase.
 
 DATASERIES_SET_LIST = ["all", "set1", "set2", "setX"]
 QUIET = False       # suppress history/log output

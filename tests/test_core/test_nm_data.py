@@ -13,7 +13,7 @@ from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_notes import NMNotes
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 QUIET = True
@@ -99,7 +99,7 @@ class NMDataTest(unittest.TestCase):
         d0.nparray = numpy.full([4], numpy.nan, dtype=numpy.float64, order="C")
         self.assertFalse(d0 == self.d0)
         self.d0.nparray.fill(numpy.nan)
-        if nmp.NAN_EQ_NAN:
+        if nmc.NAN_EQ_NAN:
             self.assertTrue(d0 == self.d0)
         else:
             self.assertFalse(d0 == self.d0)
@@ -323,7 +323,7 @@ class TestNMDataNotes(unittest.TestCase):
         c0 = NMDataContainer(parent=PARENT, name='Data')
         c1 = NMDataContainer(parent=PARENT, name='Data')
         self.assertEqual(c0.parameters['type'], 'NMData')
-        self.assertEqual(c0.prefix, nmp.DATA_PREFIX)
+        self.assertEqual(c0.prefix, nmc.DATA_PREFIX)
         self.assertTrue(c0.parameters['rename'])
         # new, args: name, nparray, xscale=, yscale, dataseries, select
         nlist = ['RecordA0', 'WaveA0', 'Xdata']

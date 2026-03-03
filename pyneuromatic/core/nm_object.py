@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_project import NMProject
 
 import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -339,7 +339,7 @@ class NMObject(object):
     def _name_set(
         self,
         newname: str = "",
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         """Set the name of this NMObject directly (bypasses container).
 
@@ -382,6 +382,6 @@ class NMObject(object):
             return self.__parent._find_parent(classname)
         return None
 
-    def save(self, path: str = "", quiet: bool = nmp.QUIET):
+    def save(self, path: str = "", quiet: bool = nmc.QUIET):
         # TODO
         raise RuntimeError("save under construction")

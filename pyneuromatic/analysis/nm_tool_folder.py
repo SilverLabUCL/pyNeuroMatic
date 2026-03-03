@@ -24,7 +24,7 @@ import copy
 from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -164,7 +164,7 @@ class NMToolFolderContainer(NMObjectContainer):
         self,
         name: str | None = None,
         select: bool = False,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> NMToolFolder | None:
         name = self._newkey(name)
         f = NMToolFolder(parent=self, name=name)

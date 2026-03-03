@@ -25,7 +25,7 @@ from enum import Enum, auto
 
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 from pyneuromatic.core.nm_sets import NMSets
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -455,7 +455,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         key: str,
         default: object = _POPDEFAULT,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> NMObject | None:
         # Check if key exists, raise KeyError if not and no default provided
         actual_key = self._getkey(key)
@@ -493,7 +493,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
-    def clear(self, quiet: bool = nmp.QUIET) -> None:
+    def clear(self, quiet: bool = nmc.QUIET) -> None:
         if len(self) == 0:
             return
         names = list(self.__map.keys())
@@ -509,7 +509,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     def update(  # type: ignore[override]
         self,
         nmobjects: NMObject | list[NMObject] | dict[str, NMObject] | NMObjectContainer | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         olist: list[NMObject]
         if nmobjects is None:
@@ -634,7 +634,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         name: str,
         newname: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> bool:
         """
         Cannot change map key names.
@@ -667,7 +667,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     def reorder(
         self,
         name_order: list[str],
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         """
         Cannot change map key names.
@@ -701,7 +701,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         name: str,
         newname: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> NMObject | None:
         if name is None:
             e = nmu.type_error_str(name, "name", "string")
@@ -730,7 +730,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         name: str | None = None,
         select: bool = False,
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> NMObject | None:
         actual_name = self._newkey(name)
         o = NMObject(parent=self, name=actual_name)
@@ -742,7 +742,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self,
         nmobject: NMObject,
         select: bool = False,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> bool:
         if not self.content_type_ok(nmobject):
             e = nmu.type_error_str(nmobject, "nmobject", self.content_type())
@@ -773,7 +773,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     def _auto_name_prefix_set(
         self, 
         prefix: str | None = "NMObject", 
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         if prefix is None:
             prefix = ""
@@ -803,7 +803,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     def _auto_name_seq_format_set(
         self, seq_format: str = "0",
-        quiet: bool = nmp.QUIET
+        quiet: bool = nmc.QUIET
     ) -> None:
         if isinstance(seq_format, int) and seq_format == 0:
             seq_format = "0"
@@ -933,7 +933,7 @@ class NMObjectContainer(NMObject, MutableMapping):
     def _selected_name_set(
         self,
         name: str | None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> None:
         old_selected = self.__selected_name
         if name is None or (isinstance(name, str) and

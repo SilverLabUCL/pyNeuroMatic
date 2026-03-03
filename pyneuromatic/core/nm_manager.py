@@ -33,7 +33,7 @@ from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_object import NMObject
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 from pyneuromatic.core.nm_project import NMProject
 from pyneuromatic.core.nm_tool_registry import get_global_registry, NMToolRegistry
 from pyneuromatic.core.nm_workspace import NMWorkspace, NMWorkspaceManager

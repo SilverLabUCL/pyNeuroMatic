@@ -35,7 +35,7 @@ from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
 import pyneuromatic.core.nm_history as nmh
-import pyneuromatic.core.nm_preferences as nmp
+import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -253,7 +253,7 @@ class NMDataSeries(NMObject):
         self,
         value: float | int,
         channel: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> int:
         """Set x-axis start value on data in this series.
 
@@ -285,7 +285,7 @@ class NMDataSeries(NMObject):
         self,
         value: float | int,
         channel: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> int:
         """Set x-axis delta (sample interval) on data in this series.
 
@@ -317,7 +317,7 @@ class NMDataSeries(NMObject):
         self,
         label: str,
         channel: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> int:
         """Set x-axis label on data in this series.
 
@@ -349,7 +349,7 @@ class NMDataSeries(NMObject):
         self,
         units: str,
         channel: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> int:
         """Set x-axis units on data in this series.
 
@@ -381,7 +381,7 @@ class NMDataSeries(NMObject):
         self,
         label: str,
         channel: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> int:
         """Set y-axis label on data in this series.
 
@@ -413,7 +413,7 @@ class NMDataSeries(NMObject):
         self,
         units: str,
         channel: str | None = None,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> int:
         """Set y-axis units on data in this series.
 
@@ -548,7 +548,7 @@ class NMDataSeriesContainer(NMObjectContainer):
         self,
         name: str = "",  # dataseries name/prefix
         select: bool = False,
-        quiet: bool = nmp.QUIET,
+        quiet: bool = nmc.QUIET,
     ) -> NMDataSeries | None:
         name = self._newkey(name)
         # Use self._parent (NMFolder) to skip container in parent chain,
