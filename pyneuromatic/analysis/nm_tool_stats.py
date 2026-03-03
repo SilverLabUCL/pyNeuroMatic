@@ -874,47 +874,11 @@ class NMToolStats2:
         if isinstance(dataseries, NMDataSeries) and (
             set_name_success or set_name_failure
         ):
-            # Find the ST_{wname}_data array (maps index → wave name)
-            parts = name.split("_")
-            data_arr = None
-            if len(parts) >= 2:
-                wname = parts[1]
-                data_arr = toolfolder.data.get("ST_%s_data" % wname)
-
-            if data_arr is not None and isinstance(data_arr.nparray, np.ndarray):
-                wave_names = data_arr.nparray
-                success_epochs: list[str] = []
-                failure_epochs: list[str] = []
-
-                # Build epoch_num → epoch_name lookup
-                epoch_map: dict[int, str] = {
-                    ep.number: ep.name
-                    for ep in dataseries.epochs.values()
-                    if isinstance(ep, NMEpoch)
-                }
-
-                for i, wave_name in enumerate(wave_names):
-                    parsed = nmu.parse_data_name(str(wave_name))
-                    if parsed is None:
-                        continue
-                    epoch_num = parsed[2]
-                    ep_name = epoch_map.get(epoch_num)
-                    if ep_name is None:
-                        continue
-                    if i < len(mask):
-                        if mask[i]:
-                            success_epochs.append(ep_name)
-                        else:
-                            failure_epochs.append(ep_name)
-
-                if set_name_success and success_epochs:
-                    dataseries.epochs.sets.add(
-                        set_name_success, success_epochs
-                    )
-                if set_name_failure and failure_epochs:
-                    dataseries.epochs.sets.add(
-                        set_name_failure, failure_epochs
-                    )
+            NMToolStats2._add_epoch_sets_from_mask(
+                toolfolder, name, dataseries, mask,
+                set_name_true=set_name_success,
+                set_name_false=set_name_failure,
+            )
 
         return {
             "result": result,
@@ -941,6 +905,68 @@ class NMToolStats2:
         if op == "<=<":  return "%g <= y < %g" % (a, b)
         if op == "<<=":  return "%g < y <= %g" % (a, b)
         return ""
+
+    @staticmethod
+    def _add_epoch_sets_from_mask(
+        toolfolder: NMToolFolder,
+        name: str,
+        dataseries: NMDataSeries,
+        mask: np.ndarray,
+        set_name_true: str | None = None,
+        set_name_false: str | None = None,
+    ) -> None:
+        """Populate epoch sets from a boolean mask aligned to an ST_ array.
+
+        Looks up the ``ST_{wname}_data`` wave-name array in *toolfolder*,
+        maps each index to an epoch via *dataseries*, and adds matching
+        epoch names to *set_name_true* (where mask is True) and/or
+        *set_name_false* (where mask is False).
+
+        Args:
+            toolfolder: NMToolFolder containing the ST_ arrays.
+            name: Name of the ST_ result array (e.g. ``"ST_w0_mean_y"``).
+                Used to derive *wname* and locate ``ST_{wname}_data``.
+            dataseries: NMDataSeries whose epoch sets will be updated.
+            mask: Boolean array aligned to the ST_ array (True = passes).
+            set_name_true: Epoch set name for mask-True indices.  Skipped
+                if None or if no matching epochs are found.
+            set_name_false: Epoch set name for mask-False indices.  Skipped
+                if None or if no matching epochs are found.
+        """
+        parts = name.split("_")
+        if len(parts) < 2:
+            return
+        wname = parts[1]
+        data_arr = toolfolder.data.get("ST_%s_data" % wname)
+        if data_arr is None or not isinstance(data_arr.nparray, np.ndarray):
+            return
+
+        epoch_map: dict[int, str] = {
+            ep.number: ep.name
+            for ep in dataseries.epochs.values()
+            if isinstance(ep, NMEpoch)
+        }
+
+        true_epochs: list[str] = []
+        false_epochs: list[str] = []
+        for i, wave_name in enumerate(data_arr.nparray):
+            if i >= len(mask):
+                break
+            parsed = nmu.parse_data_name(str(wave_name))
+            if parsed is None:
+                continue
+            ep_name = epoch_map.get(parsed[2])
+            if ep_name is None:
+                continue
+            if mask[i]:
+                true_epochs.append(ep_name)
+            else:
+                false_epochs.append(ep_name)
+
+        if set_name_true and true_epochs:
+            dataseries.epochs.sets.add(set_name_true, true_epochs)
+        if set_name_false and false_epochs:
+            dataseries.epochs.sets.add(set_name_false, false_epochs)
 
     @staticmethod
     def ks_test(
@@ -1047,4 +1073,159 @@ class NMToolStats2:
             "message":     message,
             "n1":          int(len(arr1)),
             "n2":          int(len(arr2)),
+        }
+
+    @staticmethod
+    def stability_test(
+        toolfolder: NMToolFolder,
+        name: str,
+        alpha: float = 0.05,
+        min_window: int = 10,
+        dataseries: NMDataSeries | None = None,
+        set_name_stable: str | None = None,
+        save_to_numpy: bool = False,
+    ) -> dict:
+        """Find the largest stable (trend-free) window in an ST_ array.
+
+        Tests whether consecutive subsets of values have no significant
+        monotonic trend over time using the Spearman rank-order correlation
+        between values and their array indices.  Searches from the largest
+        possible window down to ``min_window``, stopping as soon as the
+        largest stable window is identified.
+
+        This mirrors the Igor NeuroMatic ``NMStabilityRankOrderTest()``
+        function (``NM_StatsTabStability.ipf``, pass 1 only), originally
+        written by Dr. Angus Silver and Simon Mitchell (UCL), based on
+        *Numerical Recipes in C*.
+
+        Args:
+            toolfolder: NMToolFolder containing the ST_ array.
+            name: Name of the ST_ array (e.g. ``"ST_w0_mean_y"``).
+            alpha: Significance level.  A window is "stable" when its
+                Spearman p-value exceeds this threshold.  Defaults to 0.05.
+            min_window: Minimum window size in data points.  Must be >= 2.
+                Defaults to 10.
+            dataseries: NMDataSeries to use when creating an epoch set.
+                Required if set_name_stable is given.
+            set_name_stable: Name of the epoch set to populate with epochs
+                inside the stable region.  Requires dataseries.
+            save_to_numpy: If True, save ``STAB_{name}_mask`` (float 0/1
+                array) to toolfolder.  Defaults to False.
+
+        Returns:
+            Dict with keys:
+
+            - ``"stable"``: True if a stable region was found.
+            - ``"start"``: Index into original array of first stable point,
+              or None.
+            - ``"end"``: Index into original array of last stable point
+              (inclusive), or None.
+            - ``"n"``: Window size (``end - start + 1``), or None.
+            - ``"rs"``: Spearman rs at best window, or None.
+            - ``"pvalue"``: p-value at best window, or None.
+            - ``"alpha"``: Significance level (echoed from param).
+            - ``"mask"``: Boolean numpy array (length = original array
+              length), True where the stable region falls.
+
+        Raises:
+            TypeError: If toolfolder is not NMToolFolder or name is not str.
+            KeyError: If name is not found in toolfolder.
+            ValueError: If the array has no data, or min_window is out of
+                range.
+        """
+        import warnings  # noqa: PLC0415
+
+        from scipy.stats import spearmanr  # noqa: PLC0415
+
+        if not isinstance(toolfolder, NMToolFolder):
+            raise TypeError(
+                nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
+            )
+        if not isinstance(name, str):
+            raise TypeError(nmu.type_error_str(name, "name", "string"))
+
+        d = toolfolder.data.get(name)
+        if d is None:
+            raise KeyError("array not found in toolfolder: %s" % name)
+        if not isinstance(d.nparray, np.ndarray):
+            raise ValueError("array has no nparray: %s" % name)
+
+        arr = d.nparray.astype(float)
+        finite_mask = np.isfinite(arr)
+        finite_idx = np.where(finite_mask)[0]  # original positions of valid points
+        arr_clean = arr[finite_mask]
+        n = len(arr_clean)
+
+        if min_window < 2:
+            raise ValueError("min_window must be >= 2, got %d" % min_window)
+        if min_window > n:
+            raise ValueError(
+                "min_window (%d) > available data points (%d)" % (min_window, n)
+            )
+
+        # Sliding-window Spearman search: largest window first
+        best_start: int | None = None
+        best_size: int = 0
+        best_rs: float | None = None
+        best_pvalue: float = 0.0
+
+        for w in range(n, min_window - 1, -1):
+            for i in range(n - w + 1):
+                x = np.arange(i, i + w, dtype=float)
+                y = arr_clean[i: i + w]
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    rs, pvalue = spearmanr(x, y)
+                # Constant input → rs and pvalue are NaN → no trend → stable
+                if math.isnan(rs):
+                    rs, pvalue = 0.0, 1.0
+                elif math.isnan(pvalue):
+                    # Non-constant but too few points to compute p-value
+                    continue
+                if pvalue > alpha and pvalue > best_pvalue:
+                    best_start = i
+                    best_size = w
+                    best_rs = float(rs)
+                    best_pvalue = float(pvalue)
+            if best_start is not None:
+                break  # largest stable window found; stop shrinking
+
+        mask = np.zeros(len(arr), dtype=bool)
+
+        if best_start is None:
+            return {
+                "stable":  False,
+                "start":   None,
+                "end":     None,
+                "n":       None,
+                "rs":      None,
+                "pvalue":  None,
+                "alpha":   float(alpha),
+                "mask":    mask,
+            }
+
+        best_end = best_start + best_size - 1
+        orig_start = int(finite_idx[best_start])
+        orig_end = int(finite_idx[best_end])
+        mask[finite_idx[best_start: best_end + 1]] = True
+
+        if save_to_numpy and toolfolder.data is not None:
+            toolfolder.data.new("STAB_%s_mask" % name, nparray=mask.astype(float))
+
+        # Create epoch set if dataseries and set name are given
+        if isinstance(dataseries, NMDataSeries) and set_name_stable:
+            NMToolStats2._add_epoch_sets_from_mask(
+                toolfolder, name, dataseries, mask,
+                set_name_true=set_name_stable,
+            )
+
+        return {
+            "stable":  True,
+            "start":   orig_start,
+            "end":     orig_end,
+            "n":       best_size,
+            "rs":      best_rs,
+            "pvalue":  best_pvalue,
+            "alpha":   float(alpha),
+            "mask":    mask,
         }
