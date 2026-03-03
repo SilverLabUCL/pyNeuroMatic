@@ -746,5 +746,171 @@ class TestNMToolStats2Inequality(unittest.TestCase):
             )
 
 
+class TestNMToolStats2KSTest(unittest.TestCase):
+    """Tests for NMToolStats2.ks_test()."""
+
+    def setUp(self):
+        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+
+        rng = np.random.default_rng(42)
+        self.tf = NMToolFolder(name="stats0")
+
+        # Two clearly different distributions (mean 0 vs mean 10, n=50)
+        self.pop1 = rng.normal(loc=0, scale=1, size=50)
+        self.pop2 = rng.normal(loc=10, scale=1, size=50)
+        self.tf.data.new("ST_w0_pop1_y", nparray=self.pop1.copy())
+        self.tf.data.new("ST_w0_pop2_y", nparray=self.pop2.copy())
+
+        # Two samples from the same distribution
+        self.same1 = rng.normal(loc=0, scale=1, size=50)
+        self.same2 = rng.normal(loc=0, scale=1, size=50)
+        self.tf.data.new("ST_w0_same1_y", nparray=self.same1.copy())
+        self.tf.data.new("ST_w0_same2_y", nparray=self.same2.copy())
+
+    # --- return value structure ---
+
+    def test_ks_test_returns_dict(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        for key in ("d", "pvalue", "alpha", "significant", "message", "n1", "n2"):
+            self.assertIn(key, r)
+
+    def test_ks_test_d_range(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        self.assertGreaterEqual(r["d"], 0.0)
+        self.assertLessEqual(r["d"], 1.0)
+
+    def test_ks_test_pvalue_range(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        self.assertGreaterEqual(r["pvalue"], 0.0)
+        self.assertLessEqual(r["pvalue"], 1.0)
+
+    # --- significance ---
+
+    def test_ks_test_significant_true(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        self.assertTrue(r["significant"])
+
+    def test_ks_test_significant_false(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_same1_y", "ST_w0_same2_y", save_to_numpy=False
+        )
+        self.assertFalse(r["significant"])
+
+    # --- message ---
+
+    def test_ks_test_message_different(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        self.assertEqual(r["message"], "different populations")
+
+    def test_ks_test_message_same(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_same1_y", "ST_w0_same2_y", save_to_numpy=False
+        )
+        self.assertEqual(r["message"], "same population")
+
+    # --- n1/n2 ---
+
+    def test_ks_test_n1_n2(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        self.assertEqual(r["n1"], 50)
+        self.assertEqual(r["n2"], 50)
+
+    def test_ks_test_strips_nans(self):
+        arr_nan = np.concatenate([self.pop1, [np.nan, np.nan]])
+        self.tf.data.new("ST_w0_nan_y", nparray=arr_nan)
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_nan_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        self.assertEqual(r["n1"], 50)  # 2 NaNs removed
+
+    # --- alpha ---
+
+    def test_ks_test_alpha_in_result(self):
+        r = nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y",
+            alpha=0.01, save_to_numpy=False
+        )
+        self.assertAlmostEqual(r["alpha"], 0.01)
+
+    # --- save_to_numpy ---
+
+    def test_ks_test_saves_sort_arrays(self):
+        nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
+        )
+        self.assertIn("KS_ST_w0_pop1_y_sort", self.tf.data)
+        self.assertIn("KS_ST_w0_pop2_y_sort", self.tf.data)
+
+    def test_ks_test_saves_ecdf_arrays(self):
+        nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
+        )
+        self.assertIn("KS_ST_w0_pop1_y_ecdf", self.tf.data)
+        self.assertIn("KS_ST_w0_pop2_y_ecdf", self.tf.data)
+
+    def test_ks_test_ecdf_values_in_range(self):
+        nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
+        )
+        ecdf = self.tf.data.get("KS_ST_w0_pop1_y_ecdf").nparray
+        self.assertTrue(np.all(ecdf >= 0.0))
+        self.assertTrue(np.all(ecdf <= 1.0))
+
+    def test_ks_test_ecdf_last_value_is_one(self):
+        nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
+        )
+        ecdf = self.tf.data.get("KS_ST_w0_pop1_y_ecdf").nparray
+        self.assertAlmostEqual(ecdf[-1], 1.0)
+
+    def test_ks_test_sort_array_is_sorted(self):
+        nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
+        )
+        sort_arr = self.tf.data.get("KS_ST_w0_pop1_y_sort").nparray
+        self.assertTrue(np.all(sort_arr[:-1] <= sort_arr[1:]))
+
+    def test_ks_test_no_save(self):
+        nms.NMToolStats2.ks_test(
+            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
+        )
+        self.assertNotIn("KS_ST_w0_pop1_y_sort", self.tf.data)
+        self.assertNotIn("KS_ST_w0_pop1_y_ecdf", self.tf.data)
+
+    # --- type validation ---
+
+    def test_ks_test_rejects_bad_toolfolder(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats2.ks_test("bad", "ST_w0_pop1_y", "ST_w0_pop2_y")
+
+    def test_ks_test_rejects_bad_name1(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats2.ks_test(self.tf, 123, "ST_w0_pop2_y")
+
+    def test_ks_test_rejects_bad_name2(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats2.ks_test(self.tf, "ST_w0_pop1_y", 123)
+
+    def test_ks_test_unknown_name1_raises(self):
+        with self.assertRaises(KeyError):
+            nms.NMToolStats2.ks_test(self.tf, "ST_w0_missing", "ST_w0_pop2_y")
+
+    def test_ks_test_unknown_name2_raises(self):
+        with self.assertRaises(KeyError):
+            nms.NMToolStats2.ks_test(self.tf, "ST_w0_pop1_y", "ST_w0_missing")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
