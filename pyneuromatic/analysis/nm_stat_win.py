@@ -20,7 +20,23 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 import math
+import sys
+from pathlib import Path
 from typing import Any
+
+# TOML compatibility layer (same pattern as nm_workspace.py)
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    try:
+        import tomli as tomllib
+    except ImportError:
+        tomllib = None  # type: ignore
+
+try:
+    import tomli_w
+except ImportError:
+    tomli_w = None  # type: ignore
 
 from pyneuromatic.analysis.nm_stat_func import (
     NMStatFunc,
@@ -568,3 +584,100 @@ class NMStatWinContainer:
     def __contains__(self, name: str) -> bool:
         """Return True if a window with the given name exists."""
         return name in self._windows
+
+    _TOML_TYPE = "stat_windows"
+    _TOML_VERSION = "1"
+
+    def to_dict(self) -> dict:
+        """Serialize the container and all windows to a plain dict.
+
+        The returned dict includes a ``[pyneuromatic]`` metadata header so
+        that saved TOML files are self-describing.  None values are omitted
+        from window dicts (TOML does not support null); ``selected_name`` is
+        omitted when None for the same reason.
+        """
+        def _strip_none(d: dict) -> dict:
+            return {k: v for k, v in d.items() if v is not None}
+
+        result: dict = {
+            "pyneuromatic": {
+                "type": self._TOML_TYPE,
+                "version": self._TOML_VERSION,
+            },
+            "prefix": self._prefix,
+            "windows": [_strip_none(w.to_dict()) for w in self._windows.values()],
+        }
+        if self.selected_name is not None:
+            result["selected_name"] = self.selected_name
+        return result
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "NMStatWinContainer":
+        """Reconstruct a container from a dict produced by ``to_dict()``.
+
+        Args:
+            d: Dict with keys ``"prefix"``, ``"selected_name"``, and
+                ``"windows"`` (list of window dicts).
+
+        Returns:
+            New NMStatWinContainer populated with NMStatWin objects.
+        """
+        prefix = d.get("prefix", "w")
+        container = cls(name_prefix=prefix)
+        for wd in d.get("windows", []):
+            name = wd.get("name", "%s%d" % (prefix, container._count))
+            w = NMStatWin(name=name, win=wd)
+            container._windows[name] = w
+            container._count += 1
+        container.selected_name = d.get("selected_name")
+        return container
+
+    def save(self, filepath: str | Path) -> Path:
+        """Save the container to a TOML file.
+
+        Args:
+            filepath: Destination path (e.g. ``"my_windows.toml"``).
+
+        Returns:
+            Resolved Path of the saved file.
+
+        Raises:
+            RuntimeError: If ``tomli_w`` is not installed.
+        """
+        if tomli_w is None:
+            raise RuntimeError(
+                "TOML writing not available. Install 'tomli-w' package."
+            )
+        filepath = Path(filepath)
+        with open(filepath, "wb") as f:
+            tomli_w.dump(self.to_dict(), f)
+        return filepath
+
+    @classmethod
+    def load(cls, filepath: str | Path) -> "NMStatWinContainer":
+        """Load a container from a TOML file saved by ``save()``.
+
+        Args:
+            filepath: Path to the ``.toml`` file.
+
+        Returns:
+            New NMStatWinContainer populated from the file.
+
+        Raises:
+            RuntimeError: If ``tomllib``/``tomli`` is not available.
+            FileNotFoundError: If the file does not exist.
+        """
+        if tomllib is None:
+            raise RuntimeError(
+                "TOML support not available. "
+                "Install 'tomli' package for Python < 3.11"
+            )
+        filepath = Path(filepath)
+        with open(filepath, "rb") as f:
+            d = tomllib.load(f)
+        meta = d.get("pyneuromatic", {})
+        if meta.get("type") != cls._TOML_TYPE:
+            raise ValueError(
+                "%s is not a pyNeuroMatic stat windows file" % filepath.name
+            )
+        return cls.from_dict(d)

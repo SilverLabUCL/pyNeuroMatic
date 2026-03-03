@@ -7,7 +7,9 @@ Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
 """
 import math
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -511,6 +513,147 @@ class TestNMStatWinContainer(unittest.TestCase):
         c = nmsw.NMStatWinContainer(name_prefix="win")
         w = c.new()
         self.assertEqual(w.name, "win0")
+
+    # --- to_dict / from_dict ---
+
+    def test_to_dict_keys(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()
+        d = c.to_dict()
+        self.assertIn("pyneuromatic", d)
+        self.assertIn("prefix", d)
+        self.assertIn("selected_name", d)
+        self.assertIn("windows", d)
+
+    def test_to_dict_windows_list(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()
+        c.new()
+        self.assertEqual(len(c.to_dict()["windows"]), 2)
+
+    def test_to_dict_empty_container(self):
+        c = nmsw.NMStatWinContainer()
+        d = c.to_dict()
+        self.assertEqual(d["windows"], [])
+        # selected_name is omitted when None (TOML cannot serialize null)
+        self.assertNotIn("selected_name", d)
+
+    def test_from_dict_round_trips_window_count(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()
+        c.new()
+        c2 = nmsw.NMStatWinContainer.from_dict(c.to_dict())
+        self.assertEqual(len(c2), 2)
+
+    def test_from_dict_round_trips_selected_name(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()
+        c.new()
+        c.selected_name = "w1"
+        c2 = nmsw.NMStatWinContainer.from_dict(c.to_dict())
+        self.assertEqual(c2.selected_name, "w1")
+
+    def test_from_dict_round_trips_prefix(self):
+        c = nmsw.NMStatWinContainer(name_prefix="win")
+        c.new()
+        c2 = nmsw.NMStatWinContainer.from_dict(c.to_dict())
+        self.assertEqual(c2._prefix, "win")
+
+    def test_from_dict_round_trips_window_params(self):
+        c = nmsw.NMStatWinContainer()
+        w = c.new()
+        w.func = {"name": "mean"}
+        w.x0 = 0.01
+        w.x1 = 0.05
+        c2 = nmsw.NMStatWinContainer.from_dict(c.to_dict())
+        self.assertEqual(c2["w0"], c["w0"])
+
+    def test_from_dict_empty(self):
+        c = nmsw.NMStatWinContainer.from_dict({"windows": []})
+        self.assertEqual(len(c), 0)
+
+    # --- save / load ---
+
+    def test_save_creates_file(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "wins.toml"
+            c.save(path)
+            self.assertTrue(path.exists())
+
+    def test_save_returns_path(self):
+        c = nmsw.NMStatWinContainer()
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "wins.toml"
+            result = c.save(path)
+            self.assertEqual(result, path)
+
+    def test_load_round_trips_window_count(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()
+        c.new()
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "wins.toml"
+            c.save(path)
+            c2 = nmsw.NMStatWinContainer.load(path)
+        self.assertEqual(len(c2), 2)
+
+    def test_load_round_trips_selected_name(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()
+        c.new()
+        c.selected_name = "w1"
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "wins.toml"
+            c.save(path)
+            c2 = nmsw.NMStatWinContainer.load(path)
+        self.assertEqual(c2.selected_name, "w1")
+
+    def test_load_round_trips_window_params(self):
+        c = nmsw.NMStatWinContainer()
+        w = c.new()
+        w.func = {"name": "mean"}
+        w.x0 = 0.01
+        w.x1 = 0.05
+        w.bsln_on = True
+        w.bsln_x0 = -0.01
+        w.bsln_x1 = 0.0
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "wins.toml"
+            c.save(path)
+            c2 = nmsw.NMStatWinContainer.load(path)
+        self.assertEqual(c2["w0"], c["w0"])
+
+    def test_load_round_trips_inf_x_bounds(self):
+        c = nmsw.NMStatWinContainer()
+        c.new()  # default x0=-inf, x1=inf
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "wins.toml"
+            c.save(path)
+            c2 = nmsw.NMStatWinContainer.load(path)
+        self.assertEqual(c2["w0"].x0, -math.inf)
+        self.assertEqual(c2["w0"].x1, math.inf)
+
+    def test_to_dict_contains_pyneuromatic_header(self):
+        c = nmsw.NMStatWinContainer()
+        d = c.to_dict()
+        self.assertIn("pyneuromatic", d)
+        self.assertEqual(d["pyneuromatic"]["type"], "stat_windows")
+        self.assertIn("version", d["pyneuromatic"])
+
+    def test_load_wrong_type_raises(self):
+        import tomli_w
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "bad.toml"
+            with open(path, "wb") as f:
+                tomli_w.dump({"pyneuromatic": {"type": "workspace"}}, f)
+            with self.assertRaises(ValueError):
+                nmsw.NMStatWinContainer.load(path)
+
+    def test_load_missing_file_raises(self):
+        with self.assertRaises(FileNotFoundError):
+            nmsw.NMStatWinContainer.load("/nonexistent/path/wins.toml")
 
 
 if __name__ == "__main__":
