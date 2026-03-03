@@ -912,5 +912,297 @@ class TestNMToolStats2KSTest(unittest.TestCase):
             nms.NMToolStats2.ks_test(self.tf, "ST_w0_pop1_y", "ST_w0_missing")
 
 
+class TestNMToolStats2StabilityTest(unittest.TestCase):
+    """Tests for NMToolStats2.stability_test()."""
+
+    def setUp(self):
+        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+
+        self.tf = NMToolFolder(name="stats0")
+
+        # Flat array (constant) — no monotonic trend → always stable
+        self.flat = np.full(20, 3.0)
+        self.tf.data.new("ST_w0_flat_y", nparray=self.flat.copy())
+
+        # Strictly increasing — perfect monotonic trend → not stable
+        self.trend = np.arange(20, dtype=float)
+        self.tf.data.new("ST_w0_trend_y", nparray=self.trend.copy())
+
+        # Flat array with 2 NaN values
+        nan_arr = np.full(20, 3.0)
+        nan_arr[5] = np.nan
+        nan_arr[15] = np.nan
+        self.tf.data.new("ST_w0_nan_y", nparray=nan_arr)
+
+        # Wave-name array and dataseries for epoch-set tests
+        wave_names = ["RecordA%d" % i for i in range(20)]
+        self.tf.data.new(
+            "ST_w0_data",
+            nparray=np.array(wave_names, dtype=object),
+        )
+        self.nm = NMManager(quiet=True)
+        assert self.nm.project.folders is not None
+        self.folder = self.nm.project.folders.new("f0")
+        self.ds = self.folder.dataseries.new("Record")
+        for i in range(20):
+            self.ds.epochs.new("E%d" % i)
+
+    # --- stable=True (flat array) ---
+
+    def test_stable_region_found(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        self.assertTrue(r["stable"])
+
+    def test_returns_dict_keys(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        for key in ("stable", "start", "end", "n", "rs", "pvalue", "alpha", "mask"):
+            self.assertIn(key, r)
+
+    def test_start_end_not_none_when_stable(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        self.assertIsNotNone(r["start"])
+        self.assertIsNotNone(r["end"])
+
+    def test_n_matches_window(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        self.assertEqual(r["n"], r["end"] - r["start"] + 1)
+
+    def test_rs_range(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        self.assertGreaterEqual(r["rs"], -1.0)
+        self.assertLessEqual(r["rs"], 1.0)
+
+    def test_pvalue_range(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        self.assertGreaterEqual(r["pvalue"], 0.0)
+        self.assertLessEqual(r["pvalue"], 1.0)
+
+    def test_alpha_echoed(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", alpha=0.01, min_window=5
+        )
+        self.assertAlmostEqual(r["alpha"], 0.01)
+
+    # --- stable=False (trending array) ---
+
+    def test_unstable_region(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
+        )
+        self.assertFalse(r["stable"])
+
+    def test_start_end_none_when_not_stable(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
+        )
+        self.assertIsNone(r["start"])
+        self.assertIsNone(r["end"])
+
+    def test_rs_none_when_not_stable(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
+        )
+        self.assertIsNone(r["rs"])
+
+    # --- mask ---
+
+    def test_mask_length_equals_original_array(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        self.assertEqual(len(r["mask"]), len(self.flat))
+
+    def test_mask_true_at_stable_region(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5
+        )
+        # Every index in [start, end] should be True in mask
+        self.assertTrue(np.all(r["mask"][r["start"]: r["end"] + 1]))
+
+    def test_mask_all_false_when_not_stable(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
+        )
+        self.assertFalse(np.any(r["mask"]))
+
+    # --- NaN handling ---
+
+    def test_strips_nans_mask_length_unchanged(self):
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_nan_y", min_window=5
+        )
+        # mask length = length of original array (including NaN positions)
+        self.assertEqual(len(r["mask"]), 20)
+
+    def test_strips_nans_stable_found(self):
+        # Flat array with 2 NaNs removed → remaining 18 values are flat → stable
+        r = nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_nan_y", min_window=5
+        )
+        self.assertTrue(r["stable"])
+
+    # --- save_to_numpy ---
+
+    def test_save_creates_mask_array(self):
+        nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5, save_to_numpy=True
+        )
+        self.assertIn("STAB_ST_w0_flat_y_mask", self.tf.data)
+
+    def test_no_save_no_array(self):
+        nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5, save_to_numpy=False
+        )
+        self.assertNotIn("STAB_ST_w0_flat_y_mask", self.tf.data)
+
+    # --- min_window validation ---
+
+    def test_min_window_too_large_raises(self):
+        with self.assertRaises(ValueError):
+            nms.NMToolStats2.stability_test(
+                self.tf, "ST_w0_flat_y", min_window=100
+            )
+
+    def test_min_window_less_than_2_raises(self):
+        with self.assertRaises(ValueError):
+            nms.NMToolStats2.stability_test(
+                self.tf, "ST_w0_flat_y", min_window=1
+            )
+
+    # --- type and key validation ---
+
+    def test_rejects_bad_toolfolder(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats2.stability_test("bad", "ST_w0_flat_y")
+
+    def test_rejects_bad_name(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats2.stability_test(self.tf, 123)
+
+    def test_unknown_name_raises(self):
+        with self.assertRaises(KeyError):
+            nms.NMToolStats2.stability_test(self.tf, "ST_w0_missing")
+
+    # --- epoch sets ---
+
+    def test_set_name_stable_creates_epoch_set(self):
+        nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5,
+            dataseries=self.ds, set_name_stable="Stable",
+        )
+        self.assertIsNotNone(self.ds.epochs.sets.get("Stable"))
+
+    def test_set_name_stable_contains_correct_epochs(self):
+        # Flat array → all 20 epochs should be in the stable set
+        nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5,
+            dataseries=self.ds, set_name_stable="Stable",
+        )
+        epoch_names = [ep.name for ep in self.ds.epochs.sets.get("Stable")]
+        self.assertIn("E0", epoch_names)
+        self.assertIn("E19", epoch_names)
+
+
+class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
+    """Direct tests for NMToolStats2._add_epoch_sets_from_mask()."""
+
+    def setUp(self):
+        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+
+        self.tf = NMToolFolder(name="stats0")
+        # mask: [T, T, F, F, T] → true indices 0,1,4; false indices 2,3
+        self.mask = np.array([True, True, False, False, True])
+        wave_names = ["RecordA0", "RecordA1", "RecordA2", "RecordA3", "RecordA4"]
+        self.tf.data.new("ST_w0_mean_y", nparray=np.zeros(5))
+        self.tf.data.new(
+            "ST_w0_data",
+            nparray=np.array(wave_names, dtype=object),
+        )
+        self.nm = NMManager(quiet=True)
+        assert self.nm.project.folders is not None
+        self.folder = self.nm.project.folders.new("f0")
+        self.ds = self.folder.dataseries.new("Record")
+        for i in range(5):
+            self.ds.epochs.new("E%d" % i)
+
+    def test_true_set_created(self):
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_true="Pass"
+        )
+        self.assertIsNotNone(self.ds.epochs.sets.get("Pass"))
+
+    def test_true_set_contains_correct_epochs(self):
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_true="Pass"
+        )
+        epoch_names = [ep.name for ep in self.ds.epochs.sets.get("Pass")]
+        self.assertIn("E0", epoch_names)
+        self.assertIn("E1", epoch_names)
+        self.assertIn("E4", epoch_names)
+        self.assertNotIn("E2", epoch_names)
+        self.assertNotIn("E3", epoch_names)
+
+    def test_false_set_created(self):
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_false="Fail"
+        )
+        self.assertIsNotNone(self.ds.epochs.sets.get("Fail"))
+
+    def test_false_set_contains_correct_epochs(self):
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_false="Fail"
+        )
+        epoch_names = [ep.name for ep in self.ds.epochs.sets.get("Fail")]
+        self.assertIn("E2", epoch_names)
+        self.assertIn("E3", epoch_names)
+        self.assertNotIn("E0", epoch_names)
+
+    def test_both_sets_created_in_one_call(self):
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "ST_w0_mean_y", self.ds, self.mask,
+            set_name_true="Pass", set_name_false="Fail",
+        )
+        self.assertIsNotNone(self.ds.epochs.sets.get("Pass"))
+        self.assertIsNotNone(self.ds.epochs.sets.get("Fail"))
+
+    def test_no_true_set_when_name_is_none(self):
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_true=None
+        )
+        self.assertIsNone(self.ds.epochs.sets.get("Pass"))
+
+    def test_all_false_mask_skips_true_set(self):
+        all_false = np.zeros(5, dtype=bool)
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "ST_w0_mean_y", self.ds, all_false, set_name_true="Pass"
+        )
+        self.assertIsNone(self.ds.epochs.sets.get("Pass"))
+
+    def test_missing_data_array_does_not_raise(self):
+        # No ST_w0_data → should return silently
+        tf2 = self.tf.__class__(name="stats1")
+        tf2.data.new("ST_w0_mean_y", nparray=np.zeros(5))
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            tf2, "ST_w0_mean_y", self.ds, self.mask, set_name_true="Pass"
+        )  # no exception
+
+    def test_name_with_too_few_parts_does_not_raise(self):
+        nms.NMToolStats2._add_epoch_sets_from_mask(
+            self.tf, "short", self.ds, self.mask, set_name_true="Pass"
+        )  # no exception
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
