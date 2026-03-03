@@ -29,6 +29,7 @@ from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_manager import SELECT_LEVELS
+from pyneuromatic.analysis.nm_tool_config import NMToolConfig
 
 
 class NMTool:
@@ -55,6 +56,12 @@ class NMTool:
             level: None for level in SELECT_LEVELS
         }
         self._run_meta: dict = {}
+        self._config: NMToolConfig | None = None
+
+    @property
+    def config(self) -> NMToolConfig | None:
+        """Tool configuration object, or None if the tool has no config."""
+        return self._config
 
     # Read-only convenience properties for accessing selection
     @property

@@ -7,7 +7,9 @@ Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
 """
 import math
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -15,6 +17,7 @@ from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
 import pyneuromatic.analysis.nm_tool_stats as nms
 import pyneuromatic.analysis.nm_stat_win as nmsw
+from pyneuromatic.analysis.nm_tool_stats import NMToolStatsConfig
 
 NM = NMManager(quiet=True)
 
@@ -1202,6 +1205,62 @@ class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
         nms.NMToolStats2._add_epoch_sets_from_mask(
             self.tf, "short", self.ds, self.mask, set_name_true="Pass"
         )  # no exception
+
+
+class TestNMToolStatsConfig(unittest.TestCase):
+    """NMToolStatsConfig schema and defaults."""
+
+    def setUp(self):
+        self.cfg = NMToolStatsConfig()
+
+    def test_ignore_nans_default(self):
+        self.assertTrue(self.cfg.ignore_nans)
+
+    def test_xclip_default(self):
+        self.assertTrue(self.cfg.xclip)
+
+    def test_results_to_history_default(self):
+        self.assertFalse(self.cfg.results_to_history)
+
+    def test_results_to_cache_default(self):
+        self.assertTrue(self.cfg.results_to_cache)
+
+    def test_results_to_numpy_default(self):
+        self.assertFalse(self.cfg.results_to_numpy)
+
+    def test_set_ignore_nans(self):
+        self.cfg.ignore_nans = False
+        self.assertFalse(self.cfg.ignore_nans)
+
+    def test_wrong_type_raises(self):
+        with self.assertRaises(TypeError):
+            self.cfg.ignore_nans = 1  # int, not bool
+
+    def test_toml_type(self):
+        self.assertEqual(NMToolStatsConfig._TOML_TYPE, "stats_config")
+
+    def test_save_load_round_trip(self):
+        self.cfg.ignore_nans = False
+        self.cfg.results_to_numpy = True
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "stats.toml"
+            self.cfg.save(path)
+            cfg2 = NMToolStatsConfig.load(path)
+        self.assertFalse(cfg2.ignore_nans)
+        self.assertTrue(cfg2.results_to_numpy)
+
+    def test_stats_tool_has_config(self):
+        t = nms.NMToolStats()
+        self.assertIsNotNone(t.config)
+
+    def test_stats_tool_config_is_stats_config(self):
+        t = nms.NMToolStats()
+        self.assertIsInstance(t.config, NMToolStatsConfig)
+
+    def test_stats_tool_config_defaults(self):
+        t = nms.NMToolStats()
+        self.assertTrue(t.config.ignore_nans)
+        self.assertTrue(t.config.xclip)
 
 
 if __name__ == "__main__":
