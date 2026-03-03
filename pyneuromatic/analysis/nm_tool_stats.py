@@ -941,3 +941,110 @@ class NMToolStats2:
         if op == "<=<":  return "%g <= y < %g" % (a, b)
         if op == "<<=":  return "%g < y <= %g" % (a, b)
         return ""
+
+    @staticmethod
+    def ks_test(
+        toolfolder: NMToolFolder,
+        name1: str,
+        name2: str,
+        alpha: float = 0.05,
+        method: str = "auto",
+        save_to_numpy: bool = False,
+    ) -> dict:
+        """Two-sample Kolmogorov-Smirnov test on two ST_ arrays.
+
+        Determines whether two distributions of ST_ results are significantly
+        different.  NaN and Inf values are excluded before testing, matching
+        the Igor ``NMKSTest()`` behaviour of removing NaNs before sorting.
+
+        This mirrors the Igor NeuroMatic ``NMKSTest()`` function
+        (``NM_StatsTabKolmogorov.ipf``), originally written by Dr. Angus
+        Silver (UCL) based on *Numerical Recipes*.
+
+        Args:
+            toolfolder: NMToolFolder containing the ST_ arrays.
+            name1: Name of the first ST_ array (e.g. ``"ST_w0_peak_y"``).
+            name2: Name of the second ST_ array.
+            alpha: Significance level; ``significant`` is True when
+                ``pvalue <= alpha``.  Defaults to 0.05.
+            method: P-value calculation method forwarded to
+                ``scipy.stats.ks_2samp``.  One of ``"auto"`` (default),
+                ``"exact"``, or ``"asymp"``.
+            save_to_numpy: If True (default), save empirical CDF arrays to
+                toolfolder:
+
+                - ``KS_{name1}_sort``, ``KS_{name1}_ecdf``
+                - ``KS_{name2}_sort``, ``KS_{name2}_ecdf``
+
+        Returns:
+            Dict with keys:
+
+            - ``"d"``: KS statistic — max |CDF1 - CDF2|.
+            - ``"pvalue"``: p-value.
+            - ``"alpha"``: significance level (echoed from param).
+            - ``"significant"``: True if ``pvalue <= alpha``.
+            - ``"message"``: ``"different populations"`` or
+              ``"same population"``.
+            - ``"n1"``: sample size of arr1 after NaN/Inf removal.
+            - ``"n2"``: sample size of arr2 after NaN/Inf removal.
+
+        Raises:
+            TypeError: If toolfolder is not NMToolFolder or name1/name2 are
+                not strings.
+            KeyError: If name1 or name2 is not found in toolfolder.
+            ValueError: If the named array has no nparray data.
+            ImportError: If scipy is not installed.
+        """
+        from scipy.stats import ks_2samp  # noqa: PLC0415
+
+        if not isinstance(toolfolder, NMToolFolder):
+            raise TypeError(
+                nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
+            )
+        if not isinstance(name1, str):
+            raise TypeError(nmu.type_error_str(name1, "name1", "string"))
+        if not isinstance(name2, str):
+            raise TypeError(nmu.type_error_str(name2, "name2", "string"))
+
+        d1 = toolfolder.data.get(name1)
+        if d1 is None:
+            raise KeyError("array not found in toolfolder: %s" % name1)
+        if not isinstance(d1.nparray, np.ndarray):
+            raise ValueError("array has no nparray: %s" % name1)
+
+        d2 = toolfolder.data.get(name2)
+        if d2 is None:
+            raise KeyError("array not found in toolfolder: %s" % name2)
+        if not isinstance(d2.nparray, np.ndarray):
+            raise ValueError("array has no nparray: %s" % name2)
+
+        # Strip NaN/Inf — matches Igor's Redimension after Sort + WaveStats
+        arr1 = d1.nparray.astype(float)
+        arr2 = d2.nparray.astype(float)
+        arr1 = arr1[np.isfinite(arr1)]
+        arr2 = arr2[np.isfinite(arr2)]
+
+        stat, pvalue = ks_2samp(arr1, arr2, method=method)
+
+        significant = bool(pvalue <= alpha)
+        message = "different populations" if significant else "same population"
+
+        if save_to_numpy and toolfolder.data is not None:
+            sort1 = np.sort(arr1)
+            prob1 = np.arange(1, len(sort1) + 1) / len(sort1)
+            sort2 = np.sort(arr2)
+            prob2 = np.arange(1, len(sort2) + 1) / len(sort2)
+            toolfolder.data.new("KS_%s_sort" % name1, nparray=sort1)
+            toolfolder.data.new("KS_%s_ecdf" % name1, nparray=prob1)
+            toolfolder.data.new("KS_%s_sort" % name2, nparray=sort2)
+            toolfolder.data.new("KS_%s_ecdf" % name2, nparray=prob2)
+
+        return {
+            "d":           float(stat),
+            "pvalue":      float(pvalue),
+            "alpha":       float(alpha),
+            "significant": significant,
+            "message":     message,
+            "n1":          int(len(arr1)),
+            "n2":          int(len(arr2)),
+        }
