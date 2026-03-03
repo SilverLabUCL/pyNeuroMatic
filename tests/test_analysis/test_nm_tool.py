@@ -15,6 +15,7 @@ from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.analysis.nm_tool import NMTool
+from pyneuromatic.analysis.nm_tool_config import NMToolConfig
 
 QUIET = True
 
@@ -759,6 +760,17 @@ class TestNMManagerRunConfig(unittest.TestCase):
         # After reset, run_config is None so epoch_set should be None
         self.nm.run_tool()
         self.assertEqual(captured.get("run_keys"), {})
+
+
+class TestNMToolConfigProperty(unittest.TestCase):
+    """NMTool.config property returns None for base class."""
+
+    def test_base_tool_config_is_none(self):
+        class _BareTool(NMTool):
+            def __init__(self):
+                super().__init__()
+        t = _BareTool()
+        self.assertIsNone(t.config)
 
 
 if __name__ == "__main__":

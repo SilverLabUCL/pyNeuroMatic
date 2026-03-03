@@ -27,6 +27,7 @@ import numpy as np
 from pyneuromatic.analysis.nm_stat_utilities import stats
 from pyneuromatic.analysis.nm_stat_win import NMStatWinContainer  # noqa: F401
 from pyneuromatic.analysis.nm_tool import NMTool
+from pyneuromatic.analysis.nm_tool_config import NMToolConfig
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
@@ -35,6 +36,32 @@ from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_preferences as nmp
 import pyneuromatic.core.nm_utilities as nmu
+
+
+class NMToolStatsConfig(NMToolConfig):
+    """Configuration for NMToolStats.
+
+    Parameters:
+        ignore_nans: If True, use NaN-ignoring numpy functions (e.g.
+            ``np.nanmean``).  Defaults to True.
+        xclip: If True, clip x0/x1 boundaries to the data x-scale limits.
+            Defaults to True.
+        results_to_history: If True, print results to history log after run.
+            Defaults to False.
+        results_to_cache: If True, save results to NMFolder tool-results cache.
+            Defaults to True.
+        results_to_numpy: If True, write results as ST_ NMData arrays.
+            Defaults to False.
+    """
+
+    _TOML_TYPE = "stats_config"
+    _schema = {
+        "ignore_nans":        {"type": bool, "default": True},
+        "xclip":              {"type": bool, "default": True},
+        "results_to_history": {"type": bool, "default": False},
+        "results_to_cache":   {"type": bool, "default": True},
+        "results_to_numpy":   {"type": bool, "default": False},
+    }
 
 
 class NMToolStats(NMTool):
@@ -57,6 +84,8 @@ class NMToolStats(NMTool):
     """
 
     def __init__(self) -> None:
+        super().__init__()
+        self._config = NMToolStatsConfig()
 
         self.__win_container = NMStatWinContainer()
         self.__win_container.new()
