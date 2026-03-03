@@ -1103,8 +1103,9 @@ class NMToolStats2:
             name: Name of the ST_ array (e.g. ``"ST_w0_mean_y"``).
             alpha: Significance level.  A window is "stable" when its
                 Spearman p-value exceeds this threshold.  Defaults to 0.05.
-            min_window: Minimum window size in data points.  Must be >= 2.
-                Defaults to 10.
+            min_window: Minimum window size in data points.  Must be >= 3
+                (scipy requires at least 3 points to compute a p-value for
+                non-constant data).  Defaults to 10.
             dataseries: NMDataSeries to use when creating an epoch set.
                 Required if set_name_stable is given.
             set_name_stable: Name of the epoch set to populate with epochs
@@ -1156,8 +1157,8 @@ class NMToolStats2:
         arr_clean = arr[finite_mask]
         n = len(arr_clean)
 
-        if min_window < 2:
-            raise ValueError("min_window must be >= 2, got %d" % min_window)
+        if min_window < 3:
+            raise ValueError("min_window must be >= 3, got %d" % min_window)
         if min_window > n:
             raise ValueError(
                 "min_window (%d) > available data points (%d)" % (min_window, n)
@@ -1176,11 +1177,13 @@ class NMToolStats2:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     rs, pvalue = spearmanr(x, y)
-                # Constant input → rs and pvalue are NaN → no trend → stable
+                # Constant y → spearmanr returns NaN for both rs and pvalue
+                # (ConstantInputWarning); no trend by definition → treat as
+                # perfectly stable.  NaN pvalue with valid rs (e.g. w=2 with
+                # non-constant data) → cannot assess stability → skip.
                 if math.isnan(rs):
                     rs, pvalue = 0.0, 1.0
                 elif math.isnan(pvalue):
-                    # Non-constant but too few points to compute p-value
                     continue
                 if pvalue > alpha and pvalue > best_pvalue:
                     best_start = i
