@@ -209,6 +209,41 @@ class NMDataSeries(NMObject):
                     dlist.append(d)
         return dlist
 
+    def get_data_for_epochs(
+        self,
+        epoch_names: list[str],
+        channel: str | None = None,
+        get_keys: bool = False,
+    ) -> list["NMData"] | list[str]:
+        """Get NMData for a list of epoch names and a channel.
+
+        Args:
+            epoch_names: List of epoch names (e.g. ["E0", "E2", "E5"]).
+            channel: Channel name (e.g. "A"). If None, uses selected channel.
+            get_keys: If True, return data names instead of NMData objects.
+
+        Returns:
+            List of NMData objects (or their names if get_keys=True), in the
+            same order as epoch_names. Epochs with no data at the channel are
+            silently skipped.
+
+        Raises:
+            TypeError: If epoch_names is not a list.
+            KeyError: If channel is specified but does not exist.
+        """
+        if not isinstance(epoch_names, list):
+            raise TypeError(nmu.type_error_str(epoch_names, "epoch_names", "list"))
+        if channel is not None:
+            c = self.channels.get(channel)
+            if c is None:
+                raise KeyError("channel '%s' does not exist" % channel)
+        result: list = []
+        for epoch_name in epoch_names:
+            d = self.get_data(channel=channel, epoch=epoch_name)
+            if d is not None:
+                result.append(d.name if get_keys else d)
+        return result
+
     def get_data(
         self,
         channel: str | None = None,
