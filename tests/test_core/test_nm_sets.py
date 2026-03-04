@@ -70,35 +70,35 @@ class TestNMSetsBasicOperations(NMSetsTestBase):
 
     def test_add_single_item(self):
         self.sets.add("set0", "obj0")
-        self.assertIn("obj0", self.sets.get("set0", get_keys=True))
+        self.assertIn("obj0", self.sets.get_items("set0", get_keys=True))
 
     def test_add_multiple_items(self):
         self.sets.add("set0", ["obj0", "obj1", "obj2"])
-        keys = self.sets.get("set0", get_keys=True)
+        keys = self.sets.get_items("set0", get_keys=True)
         self.assertIn("obj0", keys)
         self.assertIn("obj1", keys)
         self.assertIn("obj2", keys)
 
     def test_add_nmobject_directly(self):
         self.sets.add("set0", self.objects["obj0"])
-        self.assertIn(self.objects["obj0"], self.sets.get("set0"))
+        self.assertIn(self.objects["obj0"], self.sets.get_items("set0"))
 
     def test_get_returns_nmobjects(self):
         self.sets.add("set0", ["obj0", "obj1"])
-        result = self.sets.get("set0")
+        result = self.sets.get_items("set0")
         self.assertIsInstance(result, list)
         self.assertTrue(all(isinstance(o, NMObject) for o in result))
 
     def test_get_keys_returns_strings(self):
         self.sets.add("set0", ["obj0", "obj1"])
-        result = self.sets.get("set0", get_keys=True)
+        result = self.sets.get_items("set0", get_keys=True)
         self.assertIsInstance(result, list)
         self.assertTrue(all(isinstance(k, str) for k in result))
 
     def test_get_nonexistent_returns_default(self):
-        result = self.sets.get("nonexistent")
+        result = self.sets.get_items("nonexistent")
         self.assertIsNone(result)
-        result = self.sets.get("nonexistent", default="default")
+        result = self.sets.get_items("nonexistent", default="default")
         self.assertEqual(result, "default")
 
     def test_contains(self):
@@ -135,23 +135,6 @@ class TestNMSetsBasicOperations(NMSetsTestBase):
         self.assertIsInstance(result, tuple)
         self.assertEqual(result[0], "and")
 
-    def test_popitem(self):
-        self.sets.add("set0", ["obj0"])
-        self.sets.add("set1", ["obj1"])
-        key, value = self.sets.popitem()
-        self.assertEqual(key, "set1")  # Last item
-        self.assertFalse("set1" in self.sets)
-
-    def test_popitem_equation(self):
-        self.sets.add("setA", ["obj0", "obj1"])
-        self.sets.add("setB", ["obj1", "obj2"])
-        self.sets.define_and("setC", "setA", "setB")
-        key, value = self.sets.popitem()
-        self.assertEqual(key, "setC")  # Last item
-        # Should return the equation tuple
-        self.assertIsInstance(value, tuple)
-        self.assertEqual(value[0], "and")
-
     def test_clear(self):
         self.sets.add("set0", [])
         self.sets.add("set1", [])
@@ -162,7 +145,7 @@ class TestNMSetsBasicOperations(NMSetsTestBase):
         self.sets.add("Set0", ["obj0"])
         self.assertTrue("set0" in self.sets)
         self.assertTrue("SET0" in self.sets)
-        result = self.sets.get("SET0", get_keys=True)
+        result = self.sets.get_items("SET0", get_keys=True)
         self.assertIn("obj0", result)
 
 
@@ -177,36 +160,36 @@ class TestNMSetsEquations(NMSetsTestBase):
 
     def test_define_and(self):
         self.sets.define_and("setC", "setA", "setB")
-        result = self.sets.get("setC", get_keys=True)
+        result = self.sets.get_items("setC", get_keys=True)
         # AND should give intersection: obj2, obj3
         self.assertEqual(set(result), {"obj2", "obj3"})
 
     def test_define_or(self):
         self.sets.define_or("setC", "setA", "setB")
-        result = self.sets.get("setC", get_keys=True)
+        result = self.sets.get_items("setC", get_keys=True)
         # OR should give union: obj0, obj1, obj2, obj3, obj4, obj5
         self.assertEqual(set(result), {"obj0", "obj1", "obj2", "obj3", "obj4", "obj5"})
 
     def test_equation_via_setitem(self):
         self.sets["setC"] = ("and", "setA", "setB")
-        result = self.sets.get("setC", get_keys=True)
+        result = self.sets.get_items("setC", get_keys=True)
         self.assertEqual(set(result), {"obj2", "obj3"})
 
     def test_equation_get_equation(self):
         self.sets.define_and("setC", "setA", "setB")
-        eq = self.sets.get("setC", get_equation=True)
+        eq = self.sets.get_items("setC", get_equation=True)
         self.assertIsInstance(eq, tuple)
         self.assertEqual(eq[0], "and")
 
     def test_equation_dynamic_evaluation(self):
         # Define equation first
         self.sets.define_and("setC", "setA", "setB")
-        result1 = set(self.sets.get("setC", get_keys=True))
+        result1 = set(self.sets.get_items("setC", get_keys=True))
         self.assertEqual(result1, {"obj2", "obj3"})
 
         # Modify source set
         self.sets.add("setA", "obj4")
-        result2 = set(self.sets.get("setC", get_keys=True))
+        result2 = set(self.sets.get_items("setC", get_keys=True))
         # Now intersection should include obj4
         self.assertEqual(result2, {"obj2", "obj3", "obj4"})
 
@@ -306,7 +289,7 @@ class TestNMSetsCopy(NMSetsTestBase):
 
         # Check equation is preserved
         self.assertTrue(sets_copy.is_equation("setC"))
-        eq = sets_copy.get("setC", get_equation=True)
+        eq = sets_copy.get_items("setC", get_equation=True)
         self.assertEqual(eq, ("and", "setA", "setB"))
 
 
@@ -317,7 +300,7 @@ class TestNMSetsRemove(NMSetsTestBase):
         self.sets.add("set0", ["obj0", "obj1", "obj2"])
         removed = self.sets.remove("set0", "obj1")
         self.assertEqual(len(removed), 1)
-        self.assertNotIn("obj1", self.sets.get("set0", get_keys=True))
+        self.assertNotIn("obj1", self.sets.get_items("set0", get_keys=True))
 
     def test_remove_by_object(self):
         self.sets.add("set0", ["obj0", "obj1", "obj2"])
@@ -338,8 +321,8 @@ class TestNMSetsRemove(NMSetsTestBase):
         self.sets.add("set0", ["obj0", "obj1"])
         self.sets.add("set1", ["obj0", "obj2"])
         self.sets.remove_from_all("obj0")
-        self.assertNotIn("obj0", self.sets.get("set0", get_keys=True))
-        self.assertNotIn("obj0", self.sets.get("set1", get_keys=True))
+        self.assertNotIn("obj0", self.sets.get_items("set0", get_keys=True))
+        self.assertNotIn("obj0", self.sets.get_items("set1", get_keys=True))
 
 
 class TestNMSetsRenameItem(NMSetsTestBase):
@@ -350,7 +333,7 @@ class TestNMSetsRenameItem(NMSetsTestBase):
         self.objects["obj_new"] = self.objects.pop("obj0")
         self.objects["obj_new"]._name_set(newname="obj_new", quiet=True)
         self.sets.rename_item("obj0", "obj_new")
-        keys = self.sets.get("set0", get_keys=True)
+        keys = self.sets.get_items("set0", get_keys=True)
         self.assertNotIn("obj0", keys)
         self.assertIn("obj_new", keys)
 
@@ -360,14 +343,14 @@ class TestNMSetsRenameItem(NMSetsTestBase):
         self.objects["obj_new"] = self.objects.pop("obj0")
         self.objects["obj_new"]._name_set(newname="obj_new", quiet=True)
         self.sets.rename_item("obj0", "obj_new")
-        self.assertIn("obj_new", self.sets.get("set0", get_keys=True))
-        self.assertIn("obj_new", self.sets.get("set1", get_keys=True))
+        self.assertIn("obj_new", self.sets.get_items("set0", get_keys=True))
+        self.assertIn("obj_new", self.sets.get_items("set1", get_keys=True))
 
     def test_rename_item_not_in_set(self):
         self.sets.add("set0", ["obj1", "obj2"])
         # Renaming obj0 shouldn't affect set0
         self.sets.rename_item("obj0", "obj_new")
-        keys = self.sets.get("set0", get_keys=True)
+        keys = self.sets.get_items("set0", get_keys=True)
         self.assertEqual(keys, ["obj1", "obj2"])
 
 
@@ -391,8 +374,8 @@ class TestNMSetsNew(NMSetsTestBase):
         key, olist = self.sets.duplicate("set0", "set0_copy")
         self.assertEqual(key, "set0_copy")
         self.assertEqual(
-            self.sets.get("set0", get_keys=True),
-            self.sets.get("set0_copy", get_keys=True)
+            self.sets.get_items("set0", get_keys=True),
+            self.sets.get_items("set0_copy", get_keys=True)
         )
 
     def test_duplicate_equation(self):
@@ -404,8 +387,8 @@ class TestNMSetsNew(NMSetsTestBase):
         # Should duplicate the equation, not the evaluated result
         self.assertTrue(self.sets.is_equation("setC_copy"))
         self.assertEqual(
-            self.sets.get("setC", get_equation=True),
-            self.sets.get("setC_copy", get_equation=True)
+            self.sets.get_items("setC", get_equation=True),
+            self.sets.get_items("setC_copy", get_equation=True)
         )
 
 
@@ -424,10 +407,10 @@ class TestNMSetsRename(NMSetsTestBase):
         self.sets.define_and("setC", "setA", "setB")
         self.sets.rename("setA", "setX")
         # Equation should now reference "setX" instead of "setA"
-        eq = self.sets.get("setC", get_equation=True)
+        eq = self.sets.get_items("setC", get_equation=True)
         self.assertEqual(eq, ("and", "setX", "setB"))
         # Equation should still evaluate correctly
-        result = set(self.sets.get("setC", get_keys=True))
+        result = set(self.sets.get_items("setC", get_keys=True))
         self.assertEqual(result, {"obj1"})
 
     def test_rename_updates_equations_second_operand(self):
@@ -435,7 +418,7 @@ class TestNMSetsRename(NMSetsTestBase):
         self.sets.add("setB", ["obj1", "obj2"])
         self.sets.define_or("setC", "setA", "setB")
         self.sets.rename("setB", "setY")
-        eq = self.sets.get("setC", get_equation=True)
+        eq = self.sets.get_items("setC", get_equation=True)
         self.assertEqual(eq, ("or", "setA", "setY"))
 
     def test_reorder(self):
@@ -453,7 +436,7 @@ class TestNMSetsEmpty(NMSetsTestBase):
     def test_empty(self):
         self.sets.add("set0", ["obj0", "obj1"])
         self.sets.empty("set0")
-        self.assertEqual(self.sets.get("set0"), [])
+        self.assertEqual(self.sets.get_items("set0"), [])
 
     def test_empty_equation(self):
         self.sets.add("setA", ["obj0", "obj1"])
@@ -463,23 +446,23 @@ class TestNMSetsEmpty(NMSetsTestBase):
         self.sets.empty("setC")
         # After emptying, it should no longer be an equation
         self.assertFalse(self.sets.is_equation("setC"))
-        self.assertEqual(self.sets.get("setC"), [])
+        self.assertEqual(self.sets.get_items("setC"), [])
 
     def test_empty_all(self):
         self.sets.add("set0", ["obj0"])
         self.sets.add("set1", ["obj1"])
         self.sets.empty_all()
-        self.assertEqual(self.sets.get("set0"), [])
-        self.assertEqual(self.sets.get("set1"), [])
+        self.assertEqual(self.sets.get_items("set0"), [])
+        self.assertEqual(self.sets.get_items("set1"), [])
 
     def test_empty_all_with_equation(self):
         self.sets.add("setA", ["obj0", "obj1"])
         self.sets.add("setB", ["obj1", "obj2"])
         self.sets.define_and("setC", "setA", "setB")
         self.sets.empty_all()
-        self.assertEqual(self.sets.get("setA"), [])
-        self.assertEqual(self.sets.get("setB"), [])
-        self.assertEqual(self.sets.get("setC"), [])
+        self.assertEqual(self.sets.get_items("setA"), [])
+        self.assertEqual(self.sets.get_items("setB"), [])
+        self.assertEqual(self.sets.get_items("setC"), [])
         self.assertFalse(self.sets.is_equation("setC"))
 
 

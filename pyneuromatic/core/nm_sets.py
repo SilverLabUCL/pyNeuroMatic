@@ -20,7 +20,6 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 import copy
-from collections.abc import MutableMapping
 from typing import Callable, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -35,7 +34,7 @@ import pyneuromatic.core.nm_utilities as nmu
 EQUATION_OPERATORS = ("and", "or")
 
 
-class NMSets(MutableMapping):
+class NMSets:
     """Named groups of items within a container, with AND/OR set algebra.
 
     Internally stores string keys (NMObject names), resolving to NMObject
@@ -106,10 +105,8 @@ class NMSets(MutableMapping):
         result._resolve_fxn = result._nmobjects_default
         return result
 
-    # MutableMapping abstract methods
-
     def __getitem__(self, key: str) -> Any:
-        return self.get(key)
+        return self.get_items(key)
 
     def __setitem__(
         self,
@@ -127,14 +124,26 @@ class NMSets(MutableMapping):
     def __len__(self):
         return len(self._map)
 
-    # MutableMapping mixin overrides
+    def keys(self):
+        return list(self._map.keys())
+
+    def values(self):
+        return list(self._map.values())
+
+    def items(self):
+        return list(self._map.items())
+
+    def update(self, mapping: dict) -> None:
+        """Add/replace sets from a dict of {set_name: item_list}."""
+        for key, value in mapping.items():
+            self.__setitem__(key, value)
 
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, str):
             return False
         return self._getkey(key) is not None
 
-    def get(
+    def get_items(
         self,
         key: str,
         default=None,
@@ -153,8 +162,8 @@ class NMSets(MutableMapping):
 
             assert isinstance(value, tuple)
             operator, set1_key, set2_key = value
-            set1_items = self.get(set1_key, get_keys=True)
-            set2_items = self.get(set2_key, get_keys=True)
+            set1_items = self.get_items(set1_key, get_keys=True)
+            set2_items = self.get_items(set2_key, get_keys=True)
             if not isinstance(set1_items, list) or not isinstance(set2_items, list):
                 return []
 
@@ -194,7 +203,7 @@ class NMSets(MutableMapping):
         for s_key in s_keys:
             s_value = self._map[s_key]
             if NMSets.tuple_is_equation(s_value):
-                o_eq = other.get(s_key, get_equation=True)
+                o_eq = other.get_items(s_key, get_equation=True)
                 if not NMSets.tuple_is_equation(o_eq):
                     return False
                 assert isinstance(s_value, tuple) and isinstance(o_eq, tuple)
@@ -205,7 +214,7 @@ class NMSets(MutableMapping):
                 if s_value[2].lower() != o_eq[2].lower():
                     return False
             else:
-                o_keys = other.get(s_key, get_keys=True)
+                o_keys = other.get_items(s_key, get_keys=True)
                 if not isinstance(o_keys, list):
                     return False
                 assert isinstance(s_value, list)
@@ -219,16 +228,6 @@ class NMSets(MutableMapping):
         nmh.history("removed set '%s'" % key, path=self.path_str, quiet=quiet)
         return value
 
-    def popitem(self) -> tuple[str, Any] | None:
-        if len(self._map) == 0:
-            return None
-        klist = list(self._map.keys())
-        key = klist[-1]
-        value = self.pop(key=key)
-        if value is not None:
-            return (key, value)
-        return None
-
     def clear(self, quiet: bool = nmc.QUIET) -> None:
         if len(self._map) == 0:
             return
@@ -237,15 +236,6 @@ class NMSets(MutableMapping):
         nmh.history(
             "cleared all sets: %s" % names, path=self.path_str, quiet=quiet
         )
-
-    def setdefault(self, key, default=None):
-        k = self._getkey(key)
-        if k is None:
-            if default is None:
-                return None
-            self.__setitem__(key, default)
-            return default
-        return self.get(key)
 
     # Key lookup helpers
 
@@ -520,7 +510,7 @@ class NMSets(MutableMapping):
             items = [self._to_key(o) for o in olist]
         else:
             return False
-        klist = self.get(key, get_keys=True)
+        klist = self.get_items(key, get_keys=True)
         if not isinstance(klist, list):
             return False
         for item_key in items:

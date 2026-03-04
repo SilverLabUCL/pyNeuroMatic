@@ -65,7 +65,7 @@ class TestNMFolderInit(NMFolderTestBase):
         self.folder.data.sets.add("odd", ["data1", "data3"])
         self.folder.data.sets.define_or("all", "even", "odd")
 
-        result = self.folder.data.sets.get("all", get_keys=True)
+        result = self.folder.data.sets.get_items("all", get_keys=True)
         self.assertEqual(sorted(result), ["data0", "data1", "data2", "data3"])
 
 

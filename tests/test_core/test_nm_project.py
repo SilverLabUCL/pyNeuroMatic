@@ -70,8 +70,8 @@ class NMProjectTest(unittest.TestCase):
         self.assertEqual(folders.selected_name, FNLIST0[-1])
 
         self.assertEqual(len(folders.sets), len(FSETS_NLIST0))
-        self.assertEqual(folders.sets.get(FSETS_NLIST0[2]), self.folist0)
-        self.assertEqual(folders.sets.get(FSETS_NLIST0[2], get_keys=True), FNLIST0)
+        self.assertEqual(folders.sets.get_items(FSETS_NLIST0[2]), self.folist0)
+        self.assertEqual(folders.sets.get_items(FSETS_NLIST0[2], get_keys=True), FNLIST0)
 
         folders = self.project1.folders
         self.assertTrue(isinstance(folders, NMFolderContainer))
@@ -80,8 +80,8 @@ class NMProjectTest(unittest.TestCase):
         self.assertEqual(folders.selected_name, FNLIST1[-1])
 
         self.assertEqual(len(folders.sets), len(FSETS_NLIST1))
-        self.assertEqual(folders.sets.get(FSETS_NLIST1[2]), self.folist1)
-        self.assertEqual(folders.sets.get(FSETS_NLIST1[2], get_keys=True), FNLIST1)
+        self.assertEqual(folders.sets.get_items(FSETS_NLIST1[2]), self.folist1)
+        self.assertEqual(folders.sets.get_items(FSETS_NLIST1[2], get_keys=True), FNLIST1)
 
     def test01_eq(self):
         # args: other
@@ -120,7 +120,7 @@ class NMProjectTest(unittest.TestCase):
         # self.assertFalse(self.project0 == project0)
 
         for s in self.project0.folders.sets.keys():
-            olist = self.project0.folders.sets.get(s, get_equation=True, get_keys=True)
+            olist = self.project0.folders.sets.get_items(s, get_equation=True, get_keys=True)
             project0.folders.sets.add(s, olist)
 
         self.assertTrue(self.project0 == project0)

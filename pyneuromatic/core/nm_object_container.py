@@ -989,7 +989,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             key = self.sets._getkey(self.__run_target_name)
             if key is None:
                 return []
-            s = self.sets.get(key)
+            s = self.sets.get_items(key)
             if s is None:
                 return []
             return list(s)  # s is already a list[NMObject] from NMSets.get()
@@ -1114,7 +1114,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             if target.lower() == self.__run_target_name.lower():
                 return True
             # Check if target is in the set
-            s = self.sets.get(self.__run_target_name)
+            s = self.sets.get_items(self.__run_target_name)
             if s is not None:
                 return target in s
         return False

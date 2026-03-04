@@ -773,7 +773,7 @@ class TestNMObjectContainerRenameUpdatesSets(NMObjectContainerTestBase):
         self.map0.sets.add("myset", [ONLIST0[0], ONLIST0[1]])
         self.map0.pop(ONLIST0[3])
         self.map0.rename(ONLIST0[0], ONLIST0[3])
-        keys = self.map0.sets.get("myset", get_keys=True)
+        keys = self.map0.sets.get_items("myset", get_keys=True)
         self.assertIn(ONLIST0[3], keys)
         self.assertNotIn(ONLIST0[0], keys)
         self.assertIn(ONLIST0[1], keys)

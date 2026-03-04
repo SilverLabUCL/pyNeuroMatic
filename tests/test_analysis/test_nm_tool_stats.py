@@ -689,7 +689,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
             set_name_success="Successes",
             save_to_numpy=False,
         )
-        set_epochs = self.ds.epochs.sets.get("Successes")
+        set_epochs = self.ds.epochs.sets.get_items("Successes")
         self.assertIsNotNone(set_epochs)
 
     def test_set_name_success_contains_correct_epochs(self):
@@ -700,7 +700,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
             set_name_success="Pass",
             save_to_numpy=False,
         )
-        set_epochs = self.ds.epochs.sets.get("Pass")
+        set_epochs = self.ds.epochs.sets.get_items("Pass")
         epoch_names = [ep.name for ep in set_epochs]
         self.assertIn("E3", epoch_names)
         self.assertIn("E4", epoch_names)
@@ -714,7 +714,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
             set_name_failure="Fail",
             save_to_numpy=False,
         )
-        set_epochs = self.ds.epochs.sets.get("Fail")
+        set_epochs = self.ds.epochs.sets.get_items("Fail")
         epoch_names = [ep.name for ep in set_epochs]
         self.assertIn("E0", epoch_names)
         self.assertIn("E1", epoch_names)
@@ -1105,7 +1105,7 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
             self.tf, "ST_w0_flat_y", min_window=5,
             dataseries=self.ds, set_name_stable="Stable",
         )
-        self.assertIsNotNone(self.ds.epochs.sets.get("Stable"))
+        self.assertIsNotNone(self.ds.epochs.sets.get_items("Stable"))
 
     def test_set_name_stable_contains_correct_epochs(self):
         # Flat array → all 20 epochs should be in the stable set
@@ -1113,7 +1113,7 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
             self.tf, "ST_w0_flat_y", min_window=5,
             dataseries=self.ds, set_name_stable="Stable",
         )
-        epoch_names = [ep.name for ep in self.ds.epochs.sets.get("Stable")]
+        epoch_names = [ep.name for ep in self.ds.epochs.sets.get_items("Stable")]
         self.assertIn("E0", epoch_names)
         self.assertIn("E19", epoch_names)
 
@@ -1144,13 +1144,13 @@ class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
         nms.NMToolStats2._add_epoch_sets_from_mask(
             self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_true="Pass"
         )
-        self.assertIsNotNone(self.ds.epochs.sets.get("Pass"))
+        self.assertIsNotNone(self.ds.epochs.sets.get_items("Pass"))
 
     def test_true_set_contains_correct_epochs(self):
         nms.NMToolStats2._add_epoch_sets_from_mask(
             self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_true="Pass"
         )
-        epoch_names = [ep.name for ep in self.ds.epochs.sets.get("Pass")]
+        epoch_names = [ep.name for ep in self.ds.epochs.sets.get_items("Pass")]
         self.assertIn("E0", epoch_names)
         self.assertIn("E1", epoch_names)
         self.assertIn("E4", epoch_names)
@@ -1161,13 +1161,13 @@ class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
         nms.NMToolStats2._add_epoch_sets_from_mask(
             self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_false="Fail"
         )
-        self.assertIsNotNone(self.ds.epochs.sets.get("Fail"))
+        self.assertIsNotNone(self.ds.epochs.sets.get_items("Fail"))
 
     def test_false_set_contains_correct_epochs(self):
         nms.NMToolStats2._add_epoch_sets_from_mask(
             self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_false="Fail"
         )
-        epoch_names = [ep.name for ep in self.ds.epochs.sets.get("Fail")]
+        epoch_names = [ep.name for ep in self.ds.epochs.sets.get_items("Fail")]
         self.assertIn("E2", epoch_names)
         self.assertIn("E3", epoch_names)
         self.assertNotIn("E0", epoch_names)
@@ -1177,21 +1177,21 @@ class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
             self.tf, "ST_w0_mean_y", self.ds, self.mask,
             set_name_true="Pass", set_name_false="Fail",
         )
-        self.assertIsNotNone(self.ds.epochs.sets.get("Pass"))
-        self.assertIsNotNone(self.ds.epochs.sets.get("Fail"))
+        self.assertIsNotNone(self.ds.epochs.sets.get_items("Pass"))
+        self.assertIsNotNone(self.ds.epochs.sets.get_items("Fail"))
 
     def test_no_true_set_when_name_is_none(self):
         nms.NMToolStats2._add_epoch_sets_from_mask(
             self.tf, "ST_w0_mean_y", self.ds, self.mask, set_name_true=None
         )
-        self.assertIsNone(self.ds.epochs.sets.get("Pass"))
+        self.assertIsNone(self.ds.epochs.sets.get_items("Pass"))
 
     def test_all_false_mask_skips_true_set(self):
         all_false = np.zeros(5, dtype=bool)
         nms.NMToolStats2._add_epoch_sets_from_mask(
             self.tf, "ST_w0_mean_y", self.ds, all_false, set_name_true="Pass"
         )
-        self.assertIsNone(self.ds.epochs.sets.get("Pass"))
+        self.assertIsNone(self.ds.epochs.sets.get_items("Pass"))
 
     def test_missing_data_array_does_not_raise(self):
         # No ST_w0_data → should return silently
