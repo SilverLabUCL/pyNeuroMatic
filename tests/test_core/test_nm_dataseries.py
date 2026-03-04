@@ -157,6 +157,79 @@ class TestNMDataSeriesWithData(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestNMDataSeriesGetDataForEpochs(unittest.TestCase):
+    """Tests for NMDataSeries.get_data_for_epochs()."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.ds = NMDataSeries(parent=self.nm, name="Record")
+
+        self.chan_a = self.ds.channels.new()
+        self.chan_b = self.ds.channels.new()
+
+        self.epoch_0 = self.ds.epochs.new()
+        self.epoch_1 = self.ds.epochs.new()
+        self.epoch_2 = self.ds.epochs.new()
+
+        self.data = {}
+        for ch_name, channel in [("A", self.chan_a), ("B", self.chan_b)]:
+            for i, epoch in enumerate([self.epoch_0, self.epoch_1, self.epoch_2]):
+                name = f"Record{ch_name}{i}"
+                d = NMData(parent=self.nm, name=name)
+                self.data[name] = d
+                channel.data.append(d)
+                epoch.data.append(d)
+
+        self.ds.channels.selected_name = "A"
+
+    def test_returns_data_objects(self):
+        result = self.ds.get_data_for_epochs(["E0", "E2"], channel="A")
+        self.assertEqual(len(result), 2)
+        self.assertIsInstance(result[0], NMData)
+        self.assertEqual(result[0].name, "RecordA0")
+        self.assertEqual(result[1].name, "RecordA2")
+
+    def test_returns_keys_when_get_keys_true(self):
+        result = self.ds.get_data_for_epochs(["E0", "E1", "E2"], channel="B", get_keys=True)
+        self.assertEqual(result, ["RecordB0", "RecordB1", "RecordB2"])
+
+    def test_uses_selected_channel_when_none(self):
+        result = self.ds.get_data_for_epochs(["E1"], channel=None, get_keys=True)
+        self.assertEqual(result, ["RecordA1"])
+
+    def test_preserves_epoch_order(self):
+        result = self.ds.get_data_for_epochs(["E2", "E0", "E1"], channel="A", get_keys=True)
+        self.assertEqual(result, ["RecordA2", "RecordA0", "RecordA1"])
+
+    def test_skips_missing_epoch_silently(self):
+        result = self.ds.get_data_for_epochs(["E0", "E99", "E2"], channel="A", get_keys=True)
+        self.assertEqual(result, ["RecordA0", "RecordA2"])
+
+    def test_empty_list_returns_empty(self):
+        result = self.ds.get_data_for_epochs([], channel="A")
+        self.assertEqual(result, [])
+
+    def test_invalid_channel_raises_key_error(self):
+        with self.assertRaises(KeyError):
+            self.ds.get_data_for_epochs(["E0"], channel="Z")
+
+    def test_rejects_non_list_epoch_names(self):
+        with self.assertRaises(TypeError):
+            self.ds.get_data_for_epochs("E0", channel="A")
+
+    def test_set_and_group_intersection(self):
+        """Combined set + group selection → get_data_for_epochs."""
+        from pyneuromatic.core.nm_epoch import NMEpochContainer
+        self.ds.epochs.sets.add("evens", ["E0", "E2"])
+        self.ds.epochs.groups.assign_cyclic(["E0", "E1", "E2"], n_groups=2)
+        # group 0 → E0, E2; evens → E0, E2; intersection → {E0, E2}
+        set_items = set(self.ds.epochs.sets.get("evens", get_keys=True))
+        group_items = set(self.ds.epochs.groups.get_items(0))
+        epoch_names = sorted(set_items & group_items)
+        result = self.ds.get_data_for_epochs(epoch_names, channel="A", get_keys=True)
+        self.assertEqual(set(result), {"RecordA0", "RecordA2"})
+
+
 class TestNMDataSeriesBulkDimensions(unittest.TestCase):
     """Tests for bulk dimension setting methods."""
 
