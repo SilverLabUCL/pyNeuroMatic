@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_group import NMGroups
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -181,6 +182,11 @@ class NMEpochContainer(NMObjectContainer):
     Container of NMEpochs
     """
 
+    _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = (
+        NMObjectContainer._DEEPCOPY_SPECIAL_ATTRS
+        | frozenset({"_NMEpochContainer__groups"})
+    )
+
     def __init__(
         self,
         parent: object | None = None,
@@ -196,6 +202,7 @@ class NMEpochContainer(NMObjectContainer):
             auto_name_prefix=name_prefix,
             auto_name_seq_format=name_seq_format,
         )
+        self.__groups = NMGroups(name=name + "Groups", parent=self)
 
     # override, no super
     def content_type(self) -> str:
@@ -224,3 +231,39 @@ class NMEpochContainer(NMObjectContainer):
         if super()._add(c, select=select, quiet=quiet):
             return c
         return None
+
+    def __deepcopy__(self, memo: dict) -> "NMEpochContainer":
+        result = NMObjectContainer.__deepcopy__(self, memo)
+        result._NMEpochContainer__groups = copy.deepcopy(
+            self._NMEpochContainer__groups, memo
+        )
+        result._NMEpochContainer__groups._parent = result
+        return result
+
+    @property
+    def groups(self) -> NMGroups:
+        """Group assignments for epochs in this container."""
+        return self.__groups
+
+    # override: also remove from groups when an epoch is popped
+    def pop(
+        self,
+        key: str,
+        default: object = NMObjectContainer._POPDEFAULT,
+        quiet: bool = nmc.QUIET,
+    ) -> NMEpoch | None:
+        actual_key = self._getkey(key)
+        result = super().pop(key=key, default=default, quiet=quiet)
+        if actual_key is not None:
+            self.__groups.unassign(actual_key, error=False, quiet=True)
+        return result
+
+    # override: also clear groups when the container is cleared
+    def clear(self, quiet: bool = nmc.QUIET) -> None:
+        self.__groups.clear(quiet=True)
+        super().clear(quiet=quiet)
+
+    # Note: rename() is not overridden because NMEpochContainer is constructed
+    # with rename_on=False, so NMObjectContainer.rename() raises RuntimeError
+    # before any renaming occurs. If rename_on is ever enabled, override rename()
+    # here to also call self.__groups.rename_item(old_key, new_key).
