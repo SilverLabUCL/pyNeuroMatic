@@ -203,6 +203,7 @@ class NMEpochContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
         )
         self.__groups = NMGroups(name=name + "Groups", parent=self)
+        self.__run_group: int | None = None  # set when run_target = "group{N}"
 
     # override, no super
     def content_type(self) -> str:
@@ -244,6 +245,41 @@ class NMEpochContainer(NMObjectContainer):
     def groups(self) -> NMGroups:
         """Group assignments for epochs in this container."""
         return self.__groups
+
+    @property
+    def run_target(self) -> str:
+        """Override to return 'group{N}' when an epoch group is active."""
+        if self.__run_group is not None:
+            return "group" + str(self.__run_group)
+        return super().run_target
+
+    @run_target.setter
+    def run_target(self, target: str | None) -> None:
+        """Override to intercept 'group{N}' before passing to parent."""
+        if isinstance(target, str):
+            t = target.lower()
+            if t.startswith("group") and t[5:].isdigit():
+                self.__run_group = int(t[5:])
+                return
+        self.__run_group = None
+        NMObjectContainer.run_target.fset(self, target)  # type: ignore[arg-type]
+
+    @property
+    def run_targets(self) -> list:
+        """Override to resolve epoch group run targets."""
+        if self.__run_group is not None:
+            n = self.__run_group
+            if n not in self.__groups.group_numbers:
+                return []
+            result = []
+            for name in self.__groups.get_items(n):
+                key = self._getkey(name)
+                if key is not None:
+                    obj = self[key]
+                    if obj is not None:
+                        result.append(obj)
+            return result
+        return super().run_targets
 
     # override: also remove from groups when an epoch is popped
     def pop(
