@@ -82,6 +82,8 @@ class NMManagerTestBase(unittest.TestCase):
                         e = ds.epochs.new(select=False)
                 ds.channels.sets.add("set0", ["A", "B"])
                 ds.epochs.sets.add("set0", ["E0", "E1"])
+                epoch_names = list(ds.epochs.keys())
+                ds.epochs.groups.assign_cyclic(epoch_names, n_groups=3, quiet=QUIET)
             self.data_set0 = ["data0", "avg0", "stim0"]
             f.data.sets.add("set0", self.data_set0)
             f.dataseries.sets.add("set0", ["data", "avg"])
@@ -408,6 +410,71 @@ class TestNMManagerRunKeysSet(NMManagerTestBase):
         self.assertEqual(len(elist), 1)
         self.assertEqual(elist[0]["folder"], "folder1")
         self.assertEqual(elist[0]["data"], "data0")
+
+
+class TestNMManagerRunGroupTarget(NMManagerTestBase):
+    """Tests for epoch group run targets in run_keys_set."""
+
+    def test_group0_expands_to_correct_count(self):
+        # folder1 uses DATASERIES[2]="stim", NUMEPOCHS[2]=7, n_groups=3
+        # group0 gets epochs 0,3,6 → 3 epochs
+        e0 = {
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "group0",
+        }
+        elist = self.nm.run_keys_set(e0)
+        expected = (NUMEPOCHS[2] + 2) // 3  # ceil(7/3) = 3
+        self.assertEqual(len(elist), expected)
+
+    def test_group1_expands_to_correct_count(self):
+        e0 = {
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "group1",
+        }
+        elist = self.nm.run_keys_set(e0)
+        expected = (NUMEPOCHS[2] + 1) // 3  # floor((7+1)/3) = 2 or 3
+        self.assertGreater(len(elist), 0)
+
+    def test_group_target_string_is_preserved_in_run_target(self):
+        p = self.nm.project
+        f = p.folders.get("folder1")
+        ds = f.dataseries.get("stim")
+        ds.epochs.run_target = "group0"
+        self.assertEqual(ds.epochs.run_target, "group0")
+
+    def test_group_uppercase_accepted(self):
+        e0 = {
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "GROUP0",
+        }
+        elist = self.nm.run_keys_set(e0)
+        self.assertGreater(len(elist), 0)
+
+    def test_group_all_folders_expands(self):
+        e0 = {
+            "folder": "all",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "group0",
+        }
+        elist = self.nm.run_keys_set(e0)
+        self.assertGreater(len(elist), 0)
+
+    def test_unknown_group_raises(self):
+        e0 = {
+            "folder": "folder1",
+            "dataseries": "stim",
+            "channel": "A",
+            "epoch": "group99",
+        }
+        elist = self.nm.run_keys_set(e0)
+        self.assertEqual(len(elist), 0)  # group 99 doesn't exist → no targets
 
 
 class TestNMManagerRunMaxTargets(NMManagerTestBase):
