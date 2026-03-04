@@ -223,7 +223,7 @@ class TestNMDataSeriesGetDataForEpochs(unittest.TestCase):
         self.ds.epochs.sets.add("evens", ["E0", "E2"])
         self.ds.epochs.groups.assign_cyclic(["E0", "E1", "E2"], n_groups=2)
         # group 0 → E0, E2; evens → E0, E2; intersection → {E0, E2}
-        set_items = set(self.ds.epochs.sets.get("evens", get_keys=True))
+        set_items = set(self.ds.epochs.sets.get_items("evens", get_keys=True))
         group_items = set(self.ds.epochs.groups.get_items(0))
         epoch_names = sorted(set_items & group_items)
         result = self.ds.get_data_for_epochs(epoch_names, channel="A", get_keys=True)
@@ -567,7 +567,7 @@ class TestNMDataSeriesSets(unittest.TestCase):
         self.ds.channels.sets.add("set1", ["C", "D"])
         self.ds.channels.sets.define_or("set2", "set0", "set1")
 
-        result = self.ds.channels.sets.get("set2", get_keys=True)
+        result = self.ds.channels.sets.get_items("set2", get_keys=True)
         self.assertEqual(set(result), {"A", "B", "C", "D"})
 
     def test_epoch_sets(self):
@@ -578,10 +578,10 @@ class TestNMDataSeriesSets(unittest.TestCase):
         for i in range(1, 10, 2):
             self.ds.epochs.sets.add("odd", f"E{i}")
 
-        even_result = self.ds.epochs.sets.get("even", get_keys=True)
+        even_result = self.ds.epochs.sets.get_items("even", get_keys=True)
         self.assertEqual(len(even_result), 5)
 
-        odd_result = self.ds.epochs.sets.get("odd", get_keys=True)
+        odd_result = self.ds.epochs.sets.get_items("odd", get_keys=True)
         self.assertEqual(len(odd_result), 5)
 
 

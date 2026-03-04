@@ -44,7 +44,7 @@ class NMGroups:
 
     Combined set+group selection (AND) is a plain Python set intersection::
 
-        set_items   = dataseries.epochs.sets.get("set1", get_keys=True)
+        set_items   = dataseries.epochs.sets.get_items("set1", get_keys=True)
         group_items = dataseries.epochs.groups.get_items(0)
         selected    = set(set_items) & set(group_items)
     """
