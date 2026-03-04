@@ -82,6 +82,18 @@ class NMGroups:
             return False
         return item_name in self._map
 
+    def __getitem__(self, item_name: str) -> int:
+        result = self.get_group(item_name)
+        if result is None:
+            raise KeyError(item_name)
+        return result
+
+    def __setitem__(self, item_name: str, group: int) -> None:
+        self.assign(item_name, group)
+
+    def __delitem__(self, item_name: str) -> None:
+        self.unassign(item_name)
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NMGroups):
             return NotImplemented
