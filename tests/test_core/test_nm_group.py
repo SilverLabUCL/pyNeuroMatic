@@ -372,6 +372,40 @@ class TestNMGroupsCollectionProtocol(unittest.TestCase):
 
 
 # =========================================================================
+# NMGroups — dict-like dunder access
+# =========================================================================
+
+class TestNMGroupsDunderAccess(unittest.TestCase):
+
+    def setUp(self):
+        self.g, self.names = _make_groups(n=3)  # E0→0, E1→1, E2→2
+
+    def test_getitem_returns_group(self):
+        self.assertEqual(self.g["E0"], 0)
+        self.assertEqual(self.g["E1"], 1)
+
+    def test_getitem_missing_raises_key_error(self):
+        with self.assertRaises(KeyError):
+            _ = self.g["E99"]
+
+    def test_setitem_assigns(self):
+        self.g["E0"] = 2
+        self.assertEqual(self.g.get_group("E0"), 2)
+
+    def test_setitem_bad_group_raises(self):
+        with self.assertRaises((TypeError, ValueError)):
+            self.g["E0"] = -1
+
+    def test_delitem_unassigns(self):
+        del self.g["E0"]
+        self.assertNotIn("E0", self.g)
+
+    def test_delitem_missing_raises_key_error(self):
+        with self.assertRaises(KeyError):
+            del self.g["E99"]
+
+
+# =========================================================================
 # NMGroups — equality
 # =========================================================================
 
