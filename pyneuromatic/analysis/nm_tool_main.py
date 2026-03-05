@@ -116,48 +116,35 @@ class NMToolMain(NMTool):
             "epochs": [],
         }
 
-        # 2. Collect (data, channel_name, prefix) triples; track meta
-        data_items: list[tuple[NMData, str | None, str | None]] = []
+        # 2. Collect (data, channel_name) pairs; track meta
+        data_items: list[tuple[NMData, str | None]] = []
         folder: NMFolder | None = None
+        prefix: str | None = None
 
         for target in targets:
             self.select_values = target
 
             self._update_run_meta(target)
 
-            d = self._get_current_data()
+            if (self.dataseries is not None
+                    and self.channel is not None
+                    and self.epoch is not None):
+                d = self.dataseries.get_data(self.channel.name, self.epoch.name)
+            else:
+                d = self.data
             if d is not None:
                 channel_name = (
                     self.channel.name if self.channel is not None else None
                 )
-                prefix = (
-                    self.dataseries.name if self.dataseries is not None else None
-                )
-                data_items.append((d, channel_name, prefix))
+                data_items.append((d, channel_name))
 
             if folder is None and self.folder is not None:
                 folder = self.folder
 
+            if prefix is None and self.dataseries is not None:
+                prefix = self.dataseries.name
+
         # 3. Delegate to op
-        self._op.run_all(data_items, folder)
+        self._op.run_all(data_items, folder, prefix=prefix)
         return True
 
-    # ------------------------------------------------------------------
-    # Helper
-
-    def _get_current_data(self) -> NMData | None:
-        """Return NMData for the current selection.
-
-        Dataseries mode (folder + dataseries + channel + epoch in select):
-        calls ``dataseries.get_data(channel, epoch)``.
-        Direct data mode (folder + data in select): returns ``self.data``.
-        """
-        if (
-            self.dataseries is not None
-            and self.channel is not None
-            and self.epoch is not None
-        ):
-            return self.dataseries.get_data(
-                self.channel.name, self.epoch.name
-            )
-        return self.data

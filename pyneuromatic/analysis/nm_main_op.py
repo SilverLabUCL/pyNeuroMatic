@@ -55,8 +55,9 @@ class NMMainOp:
 
     def run_all(
         self,
-        data_items: list[tuple[NMData, str | None, str | None]],
+        data_items: list[tuple[NMData, str | None]],
         folder: NMFolder | None,
+        prefix: str | None = None,
     ) -> None:
         """Process all data items.
 
@@ -65,15 +66,17 @@ class NMMainOp:
         this method instead of ``run()``.
 
         Args:
-            data_items: List of ``(NMData, channel_name, prefix)`` triples.
-                channel_name and prefix may be ``None`` when running in
-                direct-data mode (no dataseries context); ops then fall back
-                to parsing these from the data name.
+            data_items: List of ``(NMData, channel_name)`` pairs.  The
+                channel_name may be ``None`` when running in direct-data mode
+                (no dataseries context).
             folder: The NMFolder that owns the source data.  Passed to
                 ``run_finish()`` so ops can write output there.
+            prefix: Dataseries name to use as the output wave prefix.  If
+                ``None``, ops fall back to parsing the prefix from the data
+                name.
         """
         self.run_init()
-        for data, channel_name, prefix in data_items:
+        for data, channel_name in data_items:
             self.run(data, channel_name)
         self.run_finish(folder)
 
@@ -148,14 +151,17 @@ class NMMainOpAverage(NMMainOp):
 
     def run_all(
         self,
-        data_items: list[tuple[NMData, str | None, str | None]],
+        data_items: list[tuple[NMData, str | None]],
         folder: NMFolder | None,
+        prefix: str | None = None,
     ) -> None:
         """Average all data items per channel and write results to folder.
 
         Args:
-            data_items: List of ``(NMData, channel_name, prefix)`` triples.
+            data_items: List of ``(NMData, channel_name)`` pairs.
             folder: Destination NMFolder for the averaged waves.
+            prefix: Dataseries name used as the output wave prefix.  If
+                ``None``, the prefix is parsed from the first wave name.
         """
         self._results.clear()
 
@@ -163,9 +169,9 @@ class NMMainOpAverage(NMMainOp):
         accum: dict[str, list[np.ndarray]] = {}
         xscales: dict[str, dict] = {}
         yscales: dict[str, dict] = {}
-        prefix: str | None = None
+        resolved_prefix: str | None = prefix  # None → parse from first wave
 
-        for data, channel_name, item_prefix in data_items:
+        for data, channel_name in data_items:
             if not isinstance(data.nparray, np.ndarray):
                 continue
 
@@ -174,14 +180,10 @@ class NMMainOpAverage(NMMainOp):
                 parsed = nmu.parse_data_name(data.name)
                 channel_name = parsed[1] if parsed is not None else "A"
 
-            # Capture prefix: use dataseries name if provided, else parse from
-            # first wave name (direct-data mode fallback)
-            if prefix is None:
-                if item_prefix is not None:
-                    prefix = item_prefix
-                else:
-                    parsed = nmu.parse_data_name(data.name)
-                    prefix = parsed[0] if parsed is not None else ""
+            # Resolve prefix from first wave name if not supplied
+            if resolved_prefix is None:
+                parsed = nmu.parse_data_name(data.name)
+                resolved_prefix = parsed[0] if parsed is not None else ""
 
             # First encounter for this channel: record scale metadata
             if channel_name not in accum:
@@ -195,7 +197,7 @@ class NMMainOpAverage(NMMainOp):
             return
 
         # Phase 2: compute mean and save per channel
-        pfx = prefix if prefix is not None else ""
+        pfx = resolved_prefix if resolved_prefix is not None else ""
         for cname, arrays in accum.items():
             min_len = min(len(a) for a in arrays)
             stack = np.stack([a[:min_len] for a in arrays])
