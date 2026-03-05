@@ -62,7 +62,7 @@ def _run_op_directly(op, arrays_by_name):
     data_items = []
     for name, arr in arrays_by_name.items():
         d = folder.data.new(name, nparray=np.array(arr, dtype=float))
-        data_items.append((d, None, None))   # channel_name, prefix=None → parsed from name
+        data_items.append((d, None))   # channel_name=None → parsed from name
     op.run_all(data_items, folder)
     return folder
 
@@ -191,14 +191,14 @@ class TestNMMainOpAverage(unittest.TestCase):
 
     def test_no_folder_is_graceful(self):
         # run_all with folder=None → no crash, no results
-        data_items = [(_make_data("RecordA0", [1.0, 2.0]), None, None)]
+        data_items = [(_make_data("RecordA0", [1.0, 2.0]), None)]
         self.op.run_all(data_items, None)
         self.assertEqual(self.op.results, {})
 
     def test_data_without_nparray_is_skipped(self):
         folder = NMFolder(name="folder0")
         d = folder.data.new("RecordA0")   # no nparray
-        self.op.run_all([(d, None, None)], folder)
+        self.op.run_all([(d, None)], folder)
         self.assertEqual(self.op.results, {})
 
 
