@@ -28,7 +28,7 @@ from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import NMEpoch
-from pyneuromatic.core.nm_manager import SELECT_LEVELS
+from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS
 from pyneuromatic.analysis.nm_tool_config import NMToolConfig
 
 
@@ -41,7 +41,7 @@ class NMTool:
     specific analysis.
 
     Selection is set by NMManager - tools have read-only access to
-    individual levels (folder, data, dataseries, channel, epoch).
+    individual hierarchy tier select keys (folder, data, dataseries, channel, epoch).
 
     Example:
         class MyTool(NMTool):
@@ -53,7 +53,7 @@ class NMTool:
 
     def __init__(self) -> None:
         self._select: dict[str, NMObject | None] = {
-            level: None for level in SELECT_LEVELS
+            tier: None for tier in HIERARCHY_SELECT_KEYS
         }
         self._run_meta: dict = {}
         self._config: NMToolConfig | None = None
@@ -107,19 +107,19 @@ class NMTool:
         Called by NMManager.run_tool() to set the context for run execution.
 
         Args:
-            values: Dictionary mapping level names to NMObjects.
-                    Keys should be from SELECT_LEVELS.
+            values: Dictionary mapping hierarchy tier select keys to NMObjects.
+                    Keys should be from HIERARCHY_SELECT_KEYS.
         """
-        for level in SELECT_LEVELS:
-            if level in values:
-                self._select[level] = values[level]
+        for tier in HIERARCHY_SELECT_KEYS:
+            if tier in values:
+                self._select[tier] = values[tier]
 
     @property
     def select_keys(self) -> dict[str, str | None]:
         """Get the current selection as a dictionary of names."""
         return {
-            level: (obj.name if isinstance(obj, NMObject) else None)
-            for level, obj in self._select.items()
+            key: (obj.name if isinstance(obj, NMObject) else None)
+            for key, obj in self._select.items()
         }
 
     @property
@@ -143,6 +143,25 @@ class NMTool:
         if "run_keys" in meta:
             meta["run_keys"] = dict(meta["run_keys"])
         return meta
+
+    def _update_run_meta(self, target: dict) -> None:
+        """Update run_meta lists with unique names from a single target dict.
+
+        Called once per target during run_all(). Tracks folder, dataseries,
+        channel, and epoch names (not data).
+
+        Args:
+            target: Selection dict mapping tier names to NMObjects.
+        """
+        for tier, meta_key in (
+            ("folder",     "folders"),
+            ("dataseries", "dataseries"),
+            ("channel",    "channels"),
+            ("epoch",      "epochs"),
+        ):
+            obj = target.get(tier)
+            if isinstance(obj, NMObject) and obj.name not in self._run_meta[meta_key]:
+                self._run_meta[meta_key].append(obj.name)
 
     def run_init(self) -> bool:
         """Called once before run loop. Override in subclass."""
@@ -177,7 +196,7 @@ class NMTool:
         can access it from ``run_init()``, ``run()``, and ``run_finish()``.
 
         Args:
-            targets: List of selection dicts mapping level names to
+            targets: List of selection dicts mapping hierarchy tier keys to
                 NMObjects, as returned by ``NMManager.run_values()``.
             run_keys: Optional run configuration dict as passed to
                 ``NMManager.run_keys_set()`` (e.g.
@@ -200,15 +219,7 @@ class NMTool:
             return False
         for target in targets:
             self.select_values = target
-            for level, meta_key in (
-                ("folder", "folders"),
-                ("dataseries", "dataseries"),
-                ("channel", "channels"),
-                ("epoch", "epochs"),
-            ):
-                obj = target.get(level)
-                if isinstance(obj, NMObject) and obj.name not in self._run_meta[meta_key]:
-                    self._run_meta[meta_key].append(obj.name)
+            self._update_run_meta(target)
             if not self.run():
                 break
         return self.run_finish()

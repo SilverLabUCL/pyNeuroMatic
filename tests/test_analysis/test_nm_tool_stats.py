@@ -121,9 +121,9 @@ class TestNMToolStats(unittest.TestCase):
     def _setup_folder(self):
         """Create a real NMFolder and wire it into the tool's selection."""
         from pyneuromatic.core.nm_folder import NMFolder
-        from pyneuromatic.analysis.nm_tool import SELECT_LEVELS
+        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
         folder = NMFolder(name="TestFolder")
-        self.tool._select = {level: None for level in SELECT_LEVELS}
+        self.tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
         self.tool._select["folder"] = folder
         return folder
 
@@ -299,8 +299,8 @@ class TestNMToolStats(unittest.TestCase):
         self.assertEqual(n, "ST_w0_rt_p_dx")
 
     def test_results_to_numpy_no_folder_returns_none(self):
-        from pyneuromatic.analysis.nm_tool import SELECT_LEVELS
-        self.tool._select = {level: None for level in SELECT_LEVELS}
+        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        self.tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
         # folder is None — should return None
         result = self.tool._results_to_numpy()
         self.assertIsNone(result)

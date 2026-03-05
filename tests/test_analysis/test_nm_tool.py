@@ -7,7 +7,7 @@ acquiring and simulating electrophysiology data.
 """
 import unittest
 
-from pyneuromatic.core.nm_manager import NMManager, SELECT_LEVELS
+from pyneuromatic.core.nm_manager import NMManager, HIERARCHY_SELECT_KEYS
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_data import NMData
@@ -26,12 +26,12 @@ class TestNMToolInit(unittest.TestCase):
     def test_init_creates_select_dict(self):
         tool = NMTool()
         self.assertIsInstance(tool._select, dict)
-        self.assertEqual(set(tool._select.keys()), set(SELECT_LEVELS))
+        self.assertEqual(set(tool._select.keys()), set(HIERARCHY_SELECT_KEYS))
 
     def test_init_all_values_none(self):
         tool = NMTool()
-        for level in SELECT_LEVELS:
-            self.assertIsNone(tool._select[level])
+        for tier in HIERARCHY_SELECT_KEYS:
+            self.assertIsNone(tool._select[tier])
 
 
 class TestNMToolProperties(unittest.TestCase):
@@ -135,9 +135,9 @@ class TestNMToolSelectValues(unittest.TestCase):
         values = self.tool.select_values
         self.assertIsNot(values, self.tool._select)
 
-    def test_select_values_getter_has_all_levels(self):
+    def test_select_values_getter_has_all_tiers(self):
         values = self.tool.select_values
-        self.assertEqual(set(values.keys()), set(SELECT_LEVELS))
+        self.assertEqual(set(values.keys()), set(HIERARCHY_SELECT_KEYS))
 
     def test_select_values_getter_returns_current_values(self):
         self.tool._select["folder"] = self.folder
@@ -206,8 +206,8 @@ class TestNMToolSelectKeys(unittest.TestCase):
 
     def test_select_keys_returns_none_for_empty(self):
         keys = self.tool.select_keys
-        for level in SELECT_LEVELS:
-            self.assertIsNone(keys[level])
+        for tier in HIERARCHY_SELECT_KEYS:
+            self.assertIsNone(keys[tier])
 
     def test_select_keys_returns_names(self):
         self.tool._select["folder"] = self.folder
@@ -220,9 +220,9 @@ class TestNMToolSelectKeys(unittest.TestCase):
         self.assertIsNone(keys["channel"])
         self.assertIsNone(keys["epoch"])
 
-    def test_select_keys_has_all_levels(self):
+    def test_select_keys_has_all_tiers(self):
         keys = self.tool.select_keys
-        self.assertEqual(set(keys.keys()), set(SELECT_LEVELS))
+        self.assertEqual(set(keys.keys()), set(HIERARCHY_SELECT_KEYS))
 
 
 class TestNMToolRunMethods(unittest.TestCase):
