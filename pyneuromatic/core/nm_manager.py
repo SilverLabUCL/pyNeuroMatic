@@ -44,8 +44,8 @@ if TYPE_CHECKING:
 
 nm = None  # holds Manager, accessed via console
 
-# Hierarchy levels for selection (folder down to epoch)
-SELECT_LEVELS = ("folder", "data", "dataseries", "channel", "epoch")
+# Hierarchy tier selection keys (folder down to epoch)
+HIERARCHY_SELECT_KEYS = ("folder", "data", "dataseries", "channel", "epoch")
 
 # Run target constants (consistent with RunMode in NMObjectContainer)
 RUN_SELECTED = "selected"
@@ -242,15 +242,15 @@ class NMManager:
 
     def _iter_select_hierarchy(self):
         """
-        Generator yielding (level_name, container, selected_value) tuples.
+        Generator yielding (tier_name, container, selected_value) tuples.
 
         Traverses the selection hierarchy from folder down to epoch.
         Stops when a required parent container has no selection.
 
         Yields:
-            Tuples of (level_name, container, selected_value) where:
-            - level_name: one of SELECT_LEVELS
-            - container: the NMObjectContainer at this level
+            Tuples of (tier_name, container, selected_value) where:
+            - tier_name: one of HIERARCHY_SELECT_KEYS
+            - container: the NMObjectContainer at this tier
             - selected_value: the currently selected object (or None)
         """
         folders = self.__project.folders
@@ -263,7 +263,7 @@ class NMManager:
         if not isinstance(f, NMFolder):
             return
 
-        # Data and DataSeries are siblings at folder level
+        # Data and DataSeries are siblings at folder tier
         yield ("data", f.data, f.data.selected_value)
 
         ds = f.dataseries.selected_value
@@ -272,25 +272,25 @@ class NMManager:
         if not isinstance(ds, NMDataSeries):
             return
 
-        # Channel and Epoch are siblings at dataseries level
+        # Channel and Epoch are siblings at dataseries tier
         yield ("channel", ds.channels, ds.channels.selected_value)
         yield ("epoch", ds.epochs, ds.epochs.selected_value)
 
     @property
     def select_values(self) -> dict[str, NMObject | None]:
-        """Get the currently selected object at each hierarchy level."""
-        result: dict[str, NMObject | None] = {level: None for level in SELECT_LEVELS}
-        for level, container, value in self._iter_select_hierarchy():
-            result[level] = value
+        """Get the currently selected object at each hierarchy tier."""
+        result: dict[str, NMObject | None] = {tier: None for tier in HIERARCHY_SELECT_KEYS}
+        for tier, container, value in self._iter_select_hierarchy():
+            result[tier] = value
         return result
 
     @property
     def select_keys(self) -> dict[str, str | None]:
-        """Get the names of currently selected objects at each hierarchy level."""
-        result: dict[str, str | None] = {level: None for level in SELECT_LEVELS}
-        for level, container, value in self._iter_select_hierarchy():
+        """Get the names of currently selected objects at each hierarchy tier."""
+        result: dict[str, str | None] = {tier: None for tier in HIERARCHY_SELECT_KEYS}
+        for tier, container, value in self._iter_select_hierarchy():
             if isinstance(value, NMObject):
-                result[level] = value.name
+                result[tier] = value.name
         return result
 
     @select_keys.setter
@@ -299,35 +299,35 @@ class NMManager:
 
     def _select_keys_set(self, select: dict[str, str]) -> None:
         """
-        Set selection at each hierarchy level by name.
+        Set selection at each hierarchy tier by name.
 
         Args:
-            select: Dictionary mapping level names to object names.
-                    Keys must be from SELECT_LEVELS (folder, data, dataseries,
-                    channel, epoch).
+            select: Dictionary mapping tier names to object names.
+                    Keys must be from HIERARCHY_SELECT_KEYS (folder, data,
+                    dataseries, channel, epoch).
 
         Raises:
             TypeError: If select is not a dict or values aren't strings
-            KeyError: If a key is not a valid selection level
+            KeyError: If a key is not a valid selection tier
         """
         if not isinstance(select, dict):
             raise TypeError(nmu.type_error_str(select, "select", "dictionary"))
 
-        for key, value in select.items():
-            if not isinstance(key, str):
-                raise TypeError(nmu.type_error_str(key, "key", "string"))
+        for tier, value in select.items():
+            if not isinstance(tier, str):
+                raise TypeError(nmu.type_error_str(tier, "key", "string"))
 
         # Normalize keys to lowercase for case-insensitive matching
         select = {k.lower(): v for k, v in select.items()}
 
-        for key, value in select.items():
+        for tier, value in select.items():
             if value is not None and not isinstance(value, str):
                 raise TypeError(nmu.type_error_str(value, "value", "string"))
-            if key not in SELECT_LEVELS:
-                raise KeyError(f"'{key}' is not a valid selection level. "
-                               f"Valid levels: {SELECT_LEVELS}")
+            if tier not in HIERARCHY_SELECT_KEYS:
+                raise KeyError(f"'{tier}' is not a valid selection tier. "
+                               f"Valid tiers: {HIERARCHY_SELECT_KEYS}")
 
-        # Traverse hierarchy, setting values as we go so subsequent levels
+        # Traverse hierarchy, setting values as we go so subsequent tiers
         # use the newly selected parent
         folders = self.__project.folders
         if folders is None:
@@ -358,7 +358,7 @@ class NMManager:
         Set selection by object reference, auto-populating parent hierarchy.
 
         Traverses up the parent chain from the given object to set selection
-        at each hierarchy level. Items below the specified level retain their
+        at each hierarchy tier. Items below the specified tier retain their
         current selection within the newly selected parent.
 
         Args:
@@ -497,10 +497,10 @@ class NMManager:
         max_targets: int | None = 1000
     ) -> list[dict[str, str]]:
         """
-        Set run targets at each hierarchy level.
+        Set run targets at each hierarchy tier.
 
         Args:
-            run: Dictionary mapping level names to target values.
+            run: Dictionary mapping tier names to target values.
                     Values can be: "select"/"selected", "all", a specific name,
                     or a set name.
                     Must include "folder" and either "data" or "dataseries".
@@ -513,22 +513,22 @@ class NMManager:
 
         Raises:
             TypeError: If run is not a dict or values aren't strings
-            KeyError: If a key is not a valid selection level
+            KeyError: If a key is not a valid selection tier
             ValueError: If target count exceeds max_targets
         """
         if not isinstance(run, dict):
             raise TypeError(nmu.type_error_str(run, "run", "dictionary"))
 
-        for key, value in run.items():
-            if not isinstance(key, str):
-                raise TypeError(nmu.type_error_str(key, "key", "string"))
+        for tier, value in run.items():
+            if not isinstance(tier, str):
+                raise TypeError(nmu.type_error_str(tier, "key", "string"))
 
         # Normalize keys to lowercase for case-insensitive matching
         run = {k.lower(): v for k, v in run.items()}
 
-        for key, value in run.items():
-            if key not in SELECT_LEVELS:
-                raise KeyError(f"unknown run key '{key}'")
+        for tier, value in run.items():
+            if tier not in HIERARCHY_SELECT_KEYS:
+                raise KeyError(f"unknown selection tier '{tier}'")
             if not isinstance(value, str):
                 raise TypeError(nmu.type_error_str(value, "value", "string"))
 
@@ -571,7 +571,7 @@ class NMManager:
                     f.data.run_target = run["data"]
 
             result = self.run_keys(dataseries_priority=False)
-            self._check_max_targets(result, max_targets)
+            self._run_check_max_targets(result, max_targets)
             self.__run_config = dict(run)
             return result
 
@@ -594,11 +594,11 @@ class NMManager:
                     ds.epochs.run_target = run["epoch"]
 
         result = self.run_keys(dataseries_priority=True)
-        self._check_max_targets(result, max_targets)
+        self._run_check_max_targets(result, max_targets)
         self.__run_config = dict(run)
         return result
 
-    def _check_max_targets(
+    def _run_check_max_targets(
         self,
         result: list,
         max_targets: int | None
@@ -612,7 +612,7 @@ class NMManager:
             )
 
     def run_reset_all(self) -> None:
-        """Reset all run targets to use the selected item at each level."""
+        """Reset all run targets to use the selected item at each tier."""
         p = self.__project
         folders = p.folders
         if folders is None:

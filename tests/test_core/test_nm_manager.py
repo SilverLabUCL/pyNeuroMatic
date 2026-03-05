@@ -578,7 +578,7 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         self.assertEqual(self.nm.select_keys["folder"], "folder1")
         self.assertEqual(self.nm.select_keys["data"], "data5")
 
-    def test_preserves_lower_level_selection(self):
+    def test_preserves_lower_tier_selection(self):
         # First set a specific selection
         self.nm.select_keys = {
             "folder": "folder0",
