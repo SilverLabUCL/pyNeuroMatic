@@ -23,6 +23,7 @@ from __future__ import annotations
 from pyneuromatic.analysis.nm_main_op import NMMainOp, NMMainOpAverage, op_from_name
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.core.nm_folder import NMFolder
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -110,4 +111,16 @@ class NMToolMain(NMTool):
     def run_finish(self) -> bool:
         """Finalise the current op with the folder and prefix captured during run()."""
         self._op.run_finish(self._run_folder, self._run_prefix)
+        meta = self.run_meta
+        nmh.history(
+            "%s: folders=%s, dataseries=%s, channels=%s, epochs=%s"
+            % (
+                self._op.__class__.__name__,
+                meta.get("folders", []),
+                meta.get("dataseries", []),
+                meta.get("channels", []),
+                meta.get("epochs", []),
+            ),
+            path="NMToolMain.run_finish",
+        )
         return True
