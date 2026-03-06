@@ -17,6 +17,9 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.analysis.nm_main_op import (
     NMMainOp,
     NMMainOpAverage,
+    NMMainOpDeletePoints,
+    NMMainOpInsertPoints,
+    NMMainOpRedimension,
     NMMainOpScale,
     op_from_name,
 )
@@ -279,6 +282,216 @@ class TestNMMainOpScale(unittest.TestCase):
 
 
 # ===========================================================================
+# TestNMMainOpRedimension
+# ===========================================================================
+
+class TestNMMainOpRedimension(unittest.TestCase):
+    """Test NMMainOpRedimension directly."""
+
+    def setUp(self):
+        self.op = NMMainOpRedimension()
+        self.data = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def _run(self):
+        self.op.run(self.data)
+
+    # --- truncate ---
+
+    def test_truncate(self):
+        self.op.n_points = 3
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0])
+
+    # --- extend ---
+
+    def test_extend_with_zeros(self):
+        self.op.n_points = 7
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0, 5.0, 0.0, 0.0])
+
+    def test_extend_with_fill(self):
+        self.op.n_points = 7
+        self.op.fill = 9.0
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0, 5.0, 9.0, 9.0])
+
+    # --- edge cases ---
+
+    def test_noop_when_n_points_zero(self):
+        self.op.n_points = 0
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def test_same_length_no_change(self):
+        self.op.n_points = 5
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        self.op.n_points = 3
+        self.op.run(d)   # should not raise
+
+    # --- validation ---
+
+    def test_n_points_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.n_points = True
+
+    def test_n_points_rejects_float(self):
+        with self.assertRaises(TypeError):
+            self.op.n_points = 3.0
+
+    def test_n_points_rejects_negative(self):
+        with self.assertRaises(ValueError):
+            self.op.n_points = -1
+
+    def test_fill_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.fill = True
+
+    def test_fill_accepts_int(self):
+        self.op.fill = 2
+        self.assertEqual(self.op.fill, 2.0)
+        self.assertIsInstance(self.op.fill, float)
+
+
+# ===========================================================================
+# TestNMMainOpInsertPoints
+# ===========================================================================
+
+class TestNMMainOpInsertPoints(unittest.TestCase):
+    """Test NMMainOpInsertPoints directly."""
+
+    def setUp(self):
+        self.op = NMMainOpInsertPoints()
+        self.data = _make_data("RecordA0", [1.0, 2.0, 3.0])
+
+    def _run(self):
+        self.op.run(self.data)
+
+    # --- insertion ---
+
+    def test_insert_at_start(self):
+        self.op.index = 0
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [0.0, 1.0, 2.0, 3.0])
+
+    def test_insert_at_end(self):
+        self.op.index = 3
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 0.0])
+
+    def test_insert_in_middle(self):
+        self.op.index = 1
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 0.0, 2.0, 3.0])
+
+    def test_insert_multiple(self):
+        self.op.index = 1
+        self.op.n_points = 2
+        self.op.fill = 9.0
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 9.0, 9.0, 2.0, 3.0])
+
+    def test_insert_with_fill(self):
+        self.op.fill = 7.0
+        self._run()
+        self.assertEqual(self.data.nparray[0], 7.0)
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        self.op.run(d)   # should not raise
+
+    # --- validation ---
+
+    def test_index_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.index = True
+
+    def test_index_rejects_negative(self):
+        with self.assertRaises(ValueError):
+            self.op.index = -1
+
+    def test_n_points_rejects_zero(self):
+        with self.assertRaises(ValueError):
+            self.op.n_points = 0
+
+    def test_fill_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.fill = False
+
+
+# ===========================================================================
+# TestNMMainOpDeletePoints
+# ===========================================================================
+
+class TestNMMainOpDeletePoints(unittest.TestCase):
+    """Test NMMainOpDeletePoints directly."""
+
+    def setUp(self):
+        self.op = NMMainOpDeletePoints()
+        self.data = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def _run(self):
+        self.op.run(self.data)
+
+    # --- deletion ---
+
+    def test_delete_at_start(self):
+        self.op.index = 0
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [2.0, 3.0, 4.0, 5.0])
+
+    def test_delete_at_end(self):
+        self.op.index = 4
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0])
+
+    def test_delete_in_middle(self):
+        self.op.index = 2
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 4.0, 5.0])
+
+    def test_delete_multiple(self):
+        self.op.index = 1
+        self.op.n_points = 3
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 5.0])
+
+    def test_index_out_of_range_no_change(self):
+        self.op.index = 10
+        self._run()
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        self.op.run(d)   # should not raise
+
+    # --- validation ---
+
+    def test_index_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.index = True
+
+    def test_index_rejects_negative(self):
+        with self.assertRaises(ValueError):
+            self.op.index = -1
+
+    def test_n_points_rejects_zero(self):
+        with self.assertRaises(ValueError):
+            self.op.n_points = 0
+
+    def test_n_points_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.n_points = True
+
+
+# ===========================================================================
 # TestOpFromName (registry)
 # ===========================================================================
 
@@ -291,6 +504,18 @@ class TestOpFromName(unittest.TestCase):
     def test_scale_by_name(self):
         op = op_from_name("scale")
         self.assertIsInstance(op, NMMainOpScale)
+
+    def test_redimension_by_name(self):
+        op = op_from_name("redimension")
+        self.assertIsInstance(op, NMMainOpRedimension)
+
+    def test_insert_points_by_name(self):
+        op = op_from_name("insert_points")
+        self.assertIsInstance(op, NMMainOpInsertPoints)
+
+    def test_delete_points_by_name(self):
+        op = op_from_name("delete_points")
+        self.assertIsInstance(op, NMMainOpDeletePoints)
 
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")
