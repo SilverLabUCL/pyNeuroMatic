@@ -480,12 +480,201 @@ class NMMainOpDeletePoints(NMMainOp):
 
 
 # =========================================================================
+# Baseline helper
+# =========================================================================
+
+
+def _time_to_slice(arr: np.ndarray, xscale_dict: dict, t_begin: float, t_end: float) -> slice:
+    """Convert a time window to an array slice using xscale start/delta.
+
+    Clips to valid range; returns an empty slice if the window is fully outside.
+    """
+    start = xscale_dict.get("start", 0.0)
+    delta = xscale_dict.get("delta", 1.0)
+    if delta == 0:
+        return slice(0, 0)
+    i0 = int(round((t_begin - start) / delta))
+    i1 = int(round((t_end - start) / delta)) + 1  # inclusive end
+    i0 = max(0, i0)
+    i1 = min(len(arr), i1)
+    return slice(i0, i1)
+
+
+# =========================================================================
+# Baseline
+# =========================================================================
+
+
+class NMMainOpBaseline(NMMainOp):
+    """Subtract a baseline from each selected wave.
+
+    Two modes are supported:
+
+    - **per_wave**: Each wave's own baseline (mean of the window) is subtracted
+      from that wave independently.
+    - **average**: A single shared baseline per channel is computed as the mean
+      of all per-wave baselines for that channel, then subtracted from every
+      wave in that channel.
+
+    Parameters:
+        t_begin: Baseline window start in time units (default 0.0).
+        t_end: Baseline window end in time units (default 0.0).  Must be >=
+            ``t_begin``.
+        mode: ``"per_wave"`` (default) or ``"average"``.
+        ignore_nans: If True (default) use ``np.nanmean``; otherwise ``np.mean``
+            (NaN propagates to the result).
+    """
+
+    name = "baseline"
+
+    _VALID_MODES = {"per_wave", "average"}
+
+    def __init__(
+        self,
+        t_begin: float = 0.0,
+        t_end: float = 0.0,
+        mode: str = "per_wave",
+        ignore_nans: bool = True,
+    ) -> None:
+        self.t_begin = t_begin
+        self.t_end = t_end
+        self.mode = mode
+        self.ignore_nans = ignore_nans
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def t_begin(self) -> float:
+        """Baseline window start (time units)."""
+        return self._t_begin
+
+    @t_begin.setter
+    def t_begin(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "t_begin", "float"))
+        self._t_begin = float(value)
+
+    @property
+    def t_end(self) -> float:
+        """Baseline window end (time units)."""
+        return self._t_end
+
+    @t_end.setter
+    def t_end(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "t_end", "float"))
+        self._t_end = float(value)
+
+    @property
+    def mode(self) -> str:
+        """Subtraction mode: ``'per_wave'`` or ``'average'``."""
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "mode", "string"))
+        if value not in self._VALID_MODES:
+            raise ValueError(
+                "mode must be one of %s, got %r" % (sorted(self._VALID_MODES), value)
+            )
+        self._mode = value
+
+    @property
+    def ignore_nans(self) -> bool:
+        """If True, NaN values are excluded from baseline mean (np.nanmean)."""
+        return self._ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self._ignore_nans = value
+
+    # ------------------------------------------------------------------
+    # Validation helper
+
+    def _validate_window(self) -> None:
+        if self._t_end < self._t_begin:
+            raise ValueError(
+                "t_end (%g) must be >= t_begin (%g)" % (self._t_end, self._t_begin)
+            )
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+
+    def run_init(self) -> None:
+        """Reset per-run accumulators."""
+        self._validate_window()
+        self._baseline_accum: dict[str, list[float]] = {}
+        self._data_refs: dict[str, list[NMData]] = {}
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Compute and (optionally) apply baseline for one wave.
+
+        Args:
+            data: The NMData object to process.
+            channel_name: Channel name from the selection context, or None
+                (parsed from data.name as a fallback).
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+
+        if channel_name is None:
+            parsed = nmu.parse_data_name(data.name)
+            channel_name = parsed[1] if parsed is not None else "A"
+
+        sl = _time_to_slice(
+            data.nparray, data.xscale.to_dict(), self._t_begin, self._t_end
+        )
+        segment = data.nparray[sl].astype(float)
+        if len(segment) == 0:
+            baseline = 0.0
+        elif self._ignore_nans:
+            baseline = float(np.nanmean(segment))
+        else:
+            baseline = float(np.mean(segment))
+
+        if self._mode == "per_wave":
+            data.nparray = data.nparray.astype(float) - baseline
+        else:  # "average"
+            self._baseline_accum.setdefault(channel_name, []).append(baseline)
+            self._data_refs.setdefault(channel_name, []).append(data)
+
+    def run_finish(
+        self,
+        folder: NMFolder | None = None,
+        prefix: str | None = None,
+    ) -> None:
+        """Apply averaged baseline (average mode only).
+
+        In ``per_wave`` mode this is a no-op (subtraction was done in ``run()``).
+        In ``average`` mode the mean of all per-wave baselines for each channel
+        is computed and subtracted from every wave in that channel.
+        """
+        if self._mode == "per_wave":
+            return
+        for channel_name, baselines in self._baseline_accum.items():
+            avg_baseline = float(
+                np.nanmean(baselines) if self._ignore_nans else np.mean(baselines)
+            )
+            for d in self._data_refs[channel_name]:
+                d.nparray = d.nparray.astype(float) - avg_baseline
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
 
 _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "average": NMMainOpAverage,
+    "baseline": NMMainOpBaseline,
     "delete_points": NMMainOpDeletePoints,
     "insert_points": NMMainOpInsertPoints,
     "redimension": NMMainOpRedimension,

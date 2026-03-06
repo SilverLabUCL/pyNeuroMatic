@@ -17,6 +17,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.analysis.nm_main_op import (
     NMMainOp,
     NMMainOpAverage,
+    NMMainOpBaseline,
     NMMainOpDeletePoints,
     NMMainOpInsertPoints,
     NMMainOpRedimension,
@@ -517,6 +518,10 @@ class TestOpFromName(unittest.TestCase):
         op = op_from_name("delete_points")
         self.assertIsInstance(op, NMMainOpDeletePoints)
 
+    def test_baseline_by_name(self):
+        op = op_from_name("baseline")
+        self.assertIsInstance(op, NMMainOpBaseline)
+
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")
         self.assertIsInstance(op, NMMainOpAverage)
@@ -528,6 +533,152 @@ class TestOpFromName(unittest.TestCase):
     def test_non_string_raises(self):
         with self.assertRaises(TypeError):
             op_from_name(42)
+
+
+# ===========================================================================
+# TestNMMainOpBaseline
+# ===========================================================================
+
+
+class TestNMMainOpBaseline(unittest.TestCase):
+    """Tests for NMMainOpBaseline (per_wave and average modes)."""
+
+    # ------------------------------------------------------------------
+    # per_wave mode
+
+    def test_per_wave_subtracts_correct_baseline(self):
+        # window [0,1] covers first 2 points [2,2] → baseline=2
+        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="per_wave")
+        d = _make_data("RecordA0", [2.0, 2.0, 4.0, 4.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [0.0, 0.0, 2.0, 2.0])
+
+    def test_per_wave_different_baselines(self):
+        # Two waves with different values in baseline window → independent shifts
+        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="per_wave")
+        d1 = _make_data("RecordA0", [1.0, 5.0], xstart=0.0, xdelta=1.0)
+        d2 = _make_data("RecordA1", [3.0, 7.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d1)
+        op.run(d2)
+        np.testing.assert_array_almost_equal(d1.nparray, [0.0, 4.0])
+        np.testing.assert_array_almost_equal(d2.nparray, [0.0, 4.0])
+
+    def test_per_wave_nan_ignored(self):
+        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="per_wave", ignore_nans=True)
+        d = _make_data("RecordA0", [np.nan, 2.0, 5.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        # nanmean([nan, 2.0]) = 2.0 → subtracted
+        self.assertTrue(math.isfinite(float(d.nparray[2])))
+        self.assertAlmostEqual(float(d.nparray[2]), 3.0)
+
+    def test_per_wave_nan_propagates(self):
+        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="per_wave", ignore_nans=False)
+        d = _make_data("RecordA0", [np.nan, 2.0, 5.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        # mean([nan, 2.0]) = nan → all points become nan
+        self.assertTrue(np.all(np.isnan(d.nparray)))
+
+    def test_window_out_of_range_no_subtraction(self):
+        # Window is past end of array → empty slice → baseline=0 → no change
+        op = NMMainOpBaseline(t_begin=100.0, t_end=200.0, mode="per_wave")
+        d = _make_data("RecordA0", [5.0, 6.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [5.0, 6.0])
+
+    def test_window_partial_clip(self):
+        # Window extends beyond array end — only existing samples used
+        op = NMMainOpBaseline(t_begin=1.0, t_end=10.0, mode="per_wave")
+        # xdelta=1, array=[0,1,2,3]; window 1..10 clips to indices 1..4
+        d = _make_data("RecordA0", [0.0, 2.0, 4.0, 6.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        # baseline = mean([2,4,6]) = 4.0
+        np.testing.assert_array_almost_equal(d.nparray, [-4.0, -2.0, 0.0, 2.0])
+
+    # ------------------------------------------------------------------
+    # average mode
+
+    def test_average_mode_shared_baseline(self):
+        # 3 waves [2,2], [4,4], [6,6]; window covers full wave → baselines 2,4,6
+        # avg baseline = 4; all shifted by -4
+        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="average")
+        d1 = _make_data("RecordA0", [2.0, 2.0], xstart=0.0, xdelta=1.0)
+        d2 = _make_data("RecordA1", [4.0, 4.0], xstart=0.0, xdelta=1.0)
+        d3 = _make_data("RecordA2", [6.0, 6.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d1, "A")
+        op.run(d2, "A")
+        op.run(d3, "A")
+        op.run_finish()
+        np.testing.assert_array_almost_equal(d1.nparray, [-2.0, -2.0])
+        np.testing.assert_array_almost_equal(d2.nparray, [0.0, 0.0])
+        np.testing.assert_array_almost_equal(d3.nparray, [2.0, 2.0])
+
+    def test_average_mode_per_channel(self):
+        # Channel A: baselines 2,4 → avg=3; Channel B: baseline 10 → avg=10
+        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="average")
+        a0 = _make_data("RecordA0", [2.0, 8.0], xstart=0.0, xdelta=1.0)
+        a1 = _make_data("RecordA1", [4.0, 8.0], xstart=0.0, xdelta=1.0)
+        b0 = _make_data("RecordB0", [10.0, 5.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(a0, "A")
+        op.run(a1, "A")
+        op.run(b0, "B")
+        op.run_finish()
+        # A: avg baseline = (2+4)/2 = 3
+        np.testing.assert_array_almost_equal(a0.nparray, [-1.0, 5.0])
+        np.testing.assert_array_almost_equal(a1.nparray, [1.0, 5.0])
+        # B: avg baseline = 10
+        np.testing.assert_array_almost_equal(b0.nparray, [0.0, -5.0])
+
+    def test_average_mode_nan_ignored(self):
+        # NaN in baseline window → nanmean used, result finite
+        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="average", ignore_nans=True)
+        d = _make_data("RecordA0", [np.nan, 4.0, 10.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d, "A")
+        op.run_finish()
+        # nanmean([nan, 4]) = 4 → subtract 4
+        self.assertAlmostEqual(float(d.nparray[2]), 6.0)
+
+    # ------------------------------------------------------------------
+    # validation
+
+    def test_mode_rejects_unknown(self):
+        with self.assertRaises(ValueError):
+            NMMainOpBaseline(mode="median")
+
+    def test_mode_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpBaseline(mode=1)
+
+    def test_t_end_before_t_begin_raises(self):
+        op = NMMainOpBaseline(t_begin=5.0, t_end=2.0)
+        with self.assertRaises(ValueError):
+            op.run_init()  # calls _validate_window → raises
+
+    def test_t_begin_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpBaseline(t_begin=True)
+
+    def test_t_end_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpBaseline(t_end=True)
+
+    def test_ignore_nans_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpBaseline(ignore_nans=1)
+
+    def test_skips_non_ndarray(self):
+        op = NMMainOpBaseline()
+        d = NMData(NM, name="RecordA0")  # no nparray
+        op.run_init()
+        op.run(d)  # should not raise
 
 
 # ===========================================================================
