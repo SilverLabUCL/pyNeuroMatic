@@ -20,13 +20,9 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
-import datetime
-
 from pyneuromatic.analysis.nm_main_op import NMMainOp, NMMainOpAverage, op_from_name
 from pyneuromatic.analysis.nm_tool import NMTool
-from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
-from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -43,11 +39,8 @@ class NMToolMain(NMTool):
         tool.op = NMMainOpScale(factor=2.0)
         nm.run_tool(tool)
 
-    Overrides :meth:`run_all` (rather than the per-item ``run()``) to
-    collect the full data list first, then delegate to
-    ``self.op.run_all(data_items, folder)``.  This lets aggregating ops
-    (Average) receive all data at once while pointwise ops (Scale) use the
-    default per-item loop in :class:`NMMainOp`.
+    Delegates to the current ``op`` via the standard ``run_init / run /
+    run_finish`` lifecycle inherited from :class:`NMTool`.
     """
 
     def __init__(self) -> None:
@@ -84,67 +77,37 @@ class NMToolMain(NMTool):
             )
 
     # ------------------------------------------------------------------
-    # run_all override
+    # Lifecycle hooks
 
-    def run_all(
-        self,
-        targets: list[dict[str, NMObject]],
-        run_keys: dict[str, str] | None = None,
-    ) -> bool:
-        """Run the current op over a list of selection targets.
-
-        Collects ``(NMData, channel_name)`` pairs from all targets, then
-        calls ``self.op.run_all(data_items, folder)``.  Populates
-        ``run_meta`` in the same format as :meth:`NMTool.run_all`.
-
-        Args:
-            targets: List of selection dicts as returned by
-                ``NMManager.run_values()``.
-            run_keys: Optional run configuration dict (recorded in
-                ``run_meta``).
-
-        Returns:
-            True on success.
-        """
-        # 1. Populate run_meta
-        self._run_meta = {
-            "date": datetime.datetime.now().isoformat(" ", "seconds"),
-            "run_keys": dict(run_keys) if run_keys else {},
-            "folders": [],
-            "dataseries": [],
-            "channels": [],
-            "epochs": [],
-        }
-
-        # 2. Collect (data, channel_name) pairs; track meta
-        data_items: list[tuple[NMData, str | None]] = []
-        folder: NMFolder | None = None
-        prefix: str | None = None
-
-        for target in targets:
-            self.select_values = target
-
-            self._update_run_meta(target)
-
-            if (self.dataseries is not None
-                    and self.channel is not None
-                    and self.epoch is not None):
-                d = self.dataseries.get_data(self.channel.name, self.epoch.name)
-            else:
-                d = self.data
-            if d is not None:
-                channel_name = (
-                    self.channel.name if self.channel is not None else None
-                )
-                data_items.append((d, channel_name))
-
-            if folder is None and self.folder is not None:
-                folder = self.folder
-
-            if prefix is None and self.dataseries is not None:
-                prefix = self.dataseries.name
-
-        # 3. Delegate to op
-        self._op.run_all(data_items, folder, prefix=prefix)
+    def run_init(self) -> bool:
+        """Reset per-run context and initialise the current op."""
+        self._run_folder: NMFolder | None = None
+        self._run_prefix: str | None = None
+        self._op.run_init()
         return True
 
+    def run(self) -> bool:
+        """Process the currently selected data item via the current op."""
+        if (self.dataseries is not None
+                and self.channel is not None
+                and self.epoch is not None):
+            d = self.dataseries.get_data(self.channel.name, self.epoch.name)
+        else:
+            d = self.data
+        if d is None:
+            return True  # skip silently, don't stop the loop
+
+        channel_name = self.channel.name if self.channel is not None else None
+
+        if self._run_folder is None and self.folder is not None:
+            self._run_folder = self.folder
+        if self._run_prefix is None and self.dataseries is not None:
+            self._run_prefix = self.dataseries.name
+
+        self._op.run(d, channel_name)
+        return True
+
+    def run_finish(self) -> bool:
+        """Finalise the current op with the folder and prefix captured during run()."""
+        self._op.run_finish(self._run_folder, self._run_prefix)
+        return True
