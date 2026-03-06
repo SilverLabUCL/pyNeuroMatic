@@ -109,6 +109,12 @@ class NMMainOp:
     ) -> None:
         """Called once after the per-item loop.  Override to write results."""
 
+    def _add_note(self, data: NMData, text: str) -> None:
+        """Append a timestamped note to data.notes if available."""
+        notes = getattr(data, "notes", None)
+        if notes is not None:
+            notes.add(text)
+
 
 # =========================================================================
 # Average
@@ -157,6 +163,7 @@ class NMMainOpAverage(NMMainOp):
         """Reset accumulation state for a new run."""
         self._results.clear()
         self._accum: dict[str, list[np.ndarray]] = {}
+        self._data_names: dict[str, list[str]] = {}
         self._xscales: dict[str, dict] = {}
         self._yscales: dict[str, dict] = {}
         self._parsed_prefix: str | None = None  # fallback if prefix not passed
@@ -190,6 +197,7 @@ class NMMainOpAverage(NMMainOp):
             self._yscales[channel_name] = data.yscale.to_dict()
 
         self._accum[channel_name].append(data.nparray.astype(float).copy())
+        self._data_names.setdefault(channel_name, []).append(data.name)
 
     def run_finish(
         self,
@@ -218,6 +226,28 @@ class NMMainOpAverage(NMMainOp):
                 xscale=self._xscales[cname],
                 yscale=self._yscales[cname],
             )
+            out_data = folder.data.get(out_name)
+            if out_data is not None:
+                n = len(arrays)
+                ds_name = prefix if prefix is not None else (self._parsed_prefix or "")
+                epoch_nums = []
+                for dname in self._data_names.get(cname, []):
+                    parsed = nmu.parse_data_name(dname)
+                    epoch_nums.append(str(parsed[2]) if parsed is not None else dname)
+                try:
+                    ints = [int(e) for e in epoch_nums]
+                    lo, hi = min(ints), max(ints)
+                    if len(ints) > 1 and ints == list(range(lo, hi + 1)):
+                        epoch_str = "%d-%d" % (lo, hi)
+                    else:
+                        epoch_str = "[" + ",".join(epoch_nums) + "]"
+                except ValueError:
+                    epoch_str = "[" + ",".join(epoch_nums) + "]"
+                self._add_note(
+                    out_data,
+                    "NMAverage(folder=%s,dataseries=%s,channel=%s,epochs=%s,n_epochs=%d)"
+                    % (folder.name, ds_name, cname, epoch_str, n),
+                )
             self._results[cname] = out_name
 
 
@@ -264,6 +294,7 @@ class NMMainOpScale(NMMainOp):
         if not isinstance(data.nparray, np.ndarray):
             return
         data.nparray = data.nparray * self._factor
+        self._add_note(data, "NMScale(factor=%.6g)" % self._factor)
 
 
 # =========================================================================
@@ -327,10 +358,13 @@ class NMMainOpRedimension(NMMainOp):
             return
         arr = data.nparray
         n = self._n_points
-        if n <= len(arr):
+        old_len = len(arr)
+        if n <= old_len:
             data.nparray = arr[:n]
+            self._add_note(data, "NMRedimension(n_points=%d)" % n)
         else:
-            data.nparray = np.concatenate([arr, np.full(n - len(arr), self._fill)])
+            data.nparray = np.concatenate([arr, np.full(n - old_len, self._fill)])
+            self._add_note(data, "NMRedimension(n_points=%d,fill=%.6g)" % (n, self._fill))
 
 
 # =========================================================================
@@ -410,6 +444,11 @@ class NMMainOpInsertPoints(NMMainOp):
         data.nparray = np.insert(
             data.nparray, self._index, np.full(self._n_points, self._fill)
         )
+        self._add_note(
+            data,
+            "NMInsertPoints(index=%d,n_points=%d,fill=%.6g)"
+            % (self._index, self._n_points, self._fill),
+        )
 
 
 # =========================================================================
@@ -476,6 +515,10 @@ class NMMainOpDeletePoints(NMMainOp):
             return  # nothing to delete
         data.nparray = np.delete(
             data.nparray, np.arange(self._index, self._index + self._n_points)
+        )
+        self._add_note(
+            data,
+            "NMDeletePoints(index=%d,n_points=%d)" % (self._index, self._n_points),
         )
 
 
@@ -642,6 +685,11 @@ class NMMainOpBaseline(NMMainOp):
 
         if self._mode == "per_wave":
             data.nparray = data.nparray.astype(float) - baseline
+            self._add_note(
+                data,
+                "NMBaseline(t_begin=%.6g,t_end=%.6g,mode=per_wave,baseline=%.6g)"
+                % (self._t_begin, self._t_end, baseline),
+            )
         else:  # "average"
             self._baseline_accum.setdefault(channel_name, []).append(baseline)
             self._data_refs.setdefault(channel_name, []).append(data)
@@ -665,6 +713,11 @@ class NMMainOpBaseline(NMMainOp):
             )
             for d in self._data_refs[channel_name]:
                 d.nparray = d.nparray.astype(float) - avg_baseline
+                self._add_note(
+                    d,
+                    "NMBaseline(t_begin=%.6g,t_end=%.6g,mode=average,channel=%s,baseline=%.6g)"
+                    % (self._t_begin, self._t_end, channel_name, avg_baseline),
+                )
 
 
 # =========================================================================

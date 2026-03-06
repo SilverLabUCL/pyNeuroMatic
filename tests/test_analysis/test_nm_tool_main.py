@@ -25,6 +25,7 @@ from pyneuromatic.analysis.nm_main_op import (
     op_from_name,
 )
 from pyneuromatic.analysis.nm_tool_main import NMToolMain
+import pyneuromatic.core.nm_history as nmh
 
 NM = NMManager(quiet=True)
 
@@ -205,6 +206,27 @@ class TestNMMainOpAverage(unittest.TestCase):
         self.op.run_all([(d, None)], folder)
         self.assertEqual(self.op.results, {})
 
+    # --- notes ---
+
+    def test_note_on_output_wave(self):
+        # consecutive epochs → range notation
+        folder = self._run({"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0], "RecordA2": [5.0, 6.0]})
+        out = folder.data.get("Avg_RecordA")
+        self.assertIsNotNone(out)
+        self.assertEqual(len(out.notes), 1)
+        note = out.notes[0]["note"]
+        self.assertIn("folder=folder0", note)
+        self.assertIn("channel=A", note)
+        self.assertIn("epochs=0-2", note)
+        self.assertIn("n_epochs=3", note)
+
+    def test_note_non_consecutive_epochs(self):
+        # non-consecutive epochs → list notation
+        folder = self._run({"RecordA0": [1.0], "RecordA2": [2.0], "RecordA5": [3.0]})
+        out = folder.data.get("Avg_RecordA")
+        note = out.notes[0]["note"]
+        self.assertIn("epochs=[0,2,5]", note)
+
 
 # ===========================================================================
 # TestNMMainOpScale
@@ -281,6 +303,14 @@ class TestNMMainOpScale(unittest.TestCase):
         self.op.factor = 2.0
         self.op.run(d)   # should not raise
 
+    # --- notes ---
+
+    def test_note_written(self):
+        self.op.factor = 2.0
+        self.op.run(self.data)
+        self.assertEqual(len(self.data.notes), 1)
+        self.assertIn("NMScale(factor=2)", self.data.notes[0]["note"])
+
 
 # ===========================================================================
 # TestNMMainOpRedimension
@@ -356,6 +386,23 @@ class TestNMMainOpRedimension(unittest.TestCase):
         self.assertEqual(self.op.fill, 2.0)
         self.assertIsInstance(self.op.fill, float)
 
+    # --- notes ---
+
+    def test_note_truncate(self):
+        self.op.n_points = 3
+        self.op.run(self.data)
+        self.assertEqual(len(self.data.notes), 1)
+        note = self.data.notes[0]["note"]
+        self.assertIn("NMRedimension(n_points=3)", note)
+
+    def test_note_pad(self):
+        self.op.n_points = 7
+        self.op.fill = 9.0
+        self.op.run(self.data)
+        self.assertEqual(len(self.data.notes), 1)
+        note = self.data.notes[0]["note"]
+        self.assertIn("NMRedimension(n_points=7,fill=9)", note)
+
 
 # ===========================================================================
 # TestNMMainOpInsertPoints
@@ -424,6 +471,17 @@ class TestNMMainOpInsertPoints(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.op.fill = False
 
+    # --- notes ---
+
+    def test_note_written(self):
+        self.op.index = 1
+        self.op.n_points = 2
+        self.op.fill = 0.0
+        self.op.run(self.data)
+        self.assertEqual(len(self.data.notes), 1)
+        note = self.data.notes[0]["note"]
+        self.assertIn("NMInsertPoints(index=1,n_points=2,fill=0)", note)
+
 
 # ===========================================================================
 # TestNMMainOpDeletePoints
@@ -490,6 +548,16 @@ class TestNMMainOpDeletePoints(unittest.TestCase):
     def test_n_points_rejects_bool(self):
         with self.assertRaises(TypeError):
             self.op.n_points = True
+
+    # --- notes ---
+
+    def test_note_written(self):
+        self.op.index = 2
+        self.op.n_points = 3
+        self.op.run(self.data)
+        self.assertEqual(len(self.data.notes), 1)
+        note = self.data.notes[0]["note"]
+        self.assertIn("NMDeletePoints(index=2,n_points=3)", note)
 
 
 # ===========================================================================
@@ -680,6 +748,31 @@ class TestNMMainOpBaseline(unittest.TestCase):
         op.run_init()
         op.run(d)  # should not raise
 
+    # --- notes ---
+
+    def test_per_wave_note_written(self):
+        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="per_wave")
+        d = _make_data("RecordA0", [3.0, 5.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertEqual(len(d.notes), 1)
+        note = d.notes[0]["note"]
+        self.assertIn("NMBaseline(t_begin=0,t_end=0,mode=per_wave,baseline=3)", note)
+
+    def test_average_note_written(self):
+        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="average")
+        d1 = _make_data("RecordA0", [2.0, 8.0], xstart=0.0, xdelta=1.0)
+        d2 = _make_data("RecordA1", [4.0, 6.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d1, "A")
+        op.run(d2, "A")
+        op.run_finish()
+        # avg baseline = (2+4)/2 = 3
+        for d in (d1, d2):
+            self.assertEqual(len(d.notes), 1)
+            note = d.notes[0]["note"]
+            self.assertIn("NMBaseline(t_begin=0,t_end=0,mode=average,channel=A,baseline=3)", note)
+
 
 # ===========================================================================
 # TestNMToolMain
@@ -750,6 +843,23 @@ class TestNMToolMain(unittest.TestCase):
         meta = self.tool.run_meta
         self.assertIn("date", meta)
         self.assertIn("folders", meta)
+
+    # --- NMHistory ---
+
+    def test_history_logged_after_run(self):
+        # Create a fresh NMHistory and register it so we own the buffer handler
+        # on the shared logger (other test modules may have replaced it).
+        fresh_history = nmh.NMHistory(quiet=True)
+        nmh.set_history(fresh_history)
+        before = len(fresh_history.buffer)
+        _, targets = _make_folder_with_data({"RecordA0": [1.0, 2.0]})
+        self.tool.op = NMMainOpScale(factor=2.0)
+        self.tool.run_all(targets)
+        after = len(fresh_history.buffer)
+        self.assertGreater(after, before)
+        # Most recent entry should contain the op class name
+        last_msg = fresh_history.buffer[-1]["message"]
+        self.assertIn("NMMainOpScale", last_msg)
 
 
 if __name__ == "__main__":
