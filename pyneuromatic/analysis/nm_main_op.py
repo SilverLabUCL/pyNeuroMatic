@@ -267,12 +267,228 @@ class NMMainOpScale(NMMainOp):
 
 
 # =========================================================================
+# Redimension
+# =========================================================================
+
+
+class NMMainOpRedimension(NMMainOp):
+    """Change the number of points in each selected wave (in-place).
+
+    Truncates when ``n_points`` < current length; pads with ``fill`` when
+    ``n_points`` > current length.  Equivalent to Igor's ``Redimension/N=``.
+
+    Parameters:
+        n_points: New number of points (>= 1).  Default 0 means no change.
+        fill: Value used to pad when extending (default 0.0).
+    """
+
+    name = "redimension"
+
+    def __init__(self, n_points: int = 0, fill: float = 0.0) -> None:
+        self.n_points = n_points  # setters for validation
+        self.fill = fill
+
+    @property
+    def n_points(self) -> int:
+        """New number of points (0 = no change)."""
+        return self._n_points
+
+    @n_points.setter
+    def n_points(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "n_points", "int"))
+        if value < 0:
+            raise ValueError("n_points must be >= 0, got %d" % value)
+        self._n_points = value
+
+    @property
+    def fill(self) -> float:
+        """Pad value used when extending a wave."""
+        return self._fill
+
+    @fill.setter
+    def fill(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "fill", "float"))
+        self._fill = float(value)
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Resize data.nparray to n_points in-place.
+
+        Args:
+            data: The NMData object to resize.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray) or self._n_points == 0:
+            return
+        arr = data.nparray
+        n = self._n_points
+        if n <= len(arr):
+            data.nparray = arr[:n]
+        else:
+            data.nparray = np.concatenate([arr, np.full(n - len(arr), self._fill)])
+
+
+# =========================================================================
+# Insert points
+# =========================================================================
+
+
+class NMMainOpInsertPoints(NMMainOp):
+    """Insert points into each selected wave at a given index (in-place).
+
+    Points at and after ``index`` are shifted right.  Equivalent to Igor's
+    ``InsertPoints pos, n, wave``.
+
+    Parameters:
+        index: Position at which to insert (0-based, default 0).
+        n_points: Number of points to insert (default 1).
+        fill: Value for the inserted points (default 0.0).
+    """
+
+    name = "insert_points"
+
+    def __init__(self, index: int = 0, n_points: int = 1, fill: float = 0.0) -> None:
+        self.index = index  # setters for validation
+        self.n_points = n_points
+        self.fill = fill
+
+    @property
+    def index(self) -> int:
+        """Insertion position (0-based)."""
+        return self._index
+
+    @index.setter
+    def index(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "index", "int"))
+        if value < 0:
+            raise ValueError("index must be >= 0, got %d" % value)
+        self._index = value
+
+    @property
+    def n_points(self) -> int:
+        """Number of points to insert."""
+        return self._n_points
+
+    @n_points.setter
+    def n_points(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "n_points", "int"))
+        if value < 1:
+            raise ValueError("n_points must be >= 1, got %d" % value)
+        self._n_points = value
+
+    @property
+    def fill(self) -> float:
+        """Value assigned to the inserted points."""
+        return self._fill
+
+    @fill.setter
+    def fill(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "fill", "float"))
+        self._fill = float(value)
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Insert n_points at index in data.nparray in-place.
+
+        Args:
+            data: The NMData object to modify.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        data.nparray = np.insert(
+            data.nparray, self._index, np.full(self._n_points, self._fill)
+        )
+
+
+# =========================================================================
+# Delete points
+# =========================================================================
+
+
+class NMMainOpDeletePoints(NMMainOp):
+    """Delete points from each selected wave at a given index (in-place).
+
+    Equivalent to Igor's ``DeletePoints pos, n, wave``.
+
+    Parameters:
+        index: Position of the first point to delete (0-based, default 0).
+        n_points: Number of points to delete (default 1).
+    """
+
+    name = "delete_points"
+
+    def __init__(self, index: int = 0, n_points: int = 1) -> None:
+        self.index = index  # setters for validation
+        self.n_points = n_points
+
+    @property
+    def index(self) -> int:
+        """Position of the first point to delete (0-based)."""
+        return self._index
+
+    @index.setter
+    def index(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "index", "int"))
+        if value < 0:
+            raise ValueError("index must be >= 0, got %d" % value)
+        self._index = value
+
+    @property
+    def n_points(self) -> int:
+        """Number of points to delete."""
+        return self._n_points
+
+    @n_points.setter
+    def n_points(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "n_points", "int"))
+        if value < 1:
+            raise ValueError("n_points must be >= 1, got %d" % value)
+        self._n_points = value
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Delete n_points starting at index from data.nparray in-place.
+
+        Args:
+            data: The NMData object to modify.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        if self._index >= len(data.nparray):
+            return  # nothing to delete
+        data.nparray = np.delete(
+            data.nparray, np.arange(self._index, self._index + self._n_points)
+        )
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
 
 _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "average": NMMainOpAverage,
+    "delete_points": NMMainOpDeletePoints,
+    "insert_points": NMMainOpInsertPoints,
+    "redimension": NMMainOpRedimension,
     "scale": NMMainOpScale,
 }
 
