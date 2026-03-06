@@ -43,9 +43,9 @@ class NMMainOp:
     module-level registry, and a ``run_all()`` primary interface.
 
     The default ``run_all()`` provides a ``run_init → run × N → run_finish``
-    lifecycle suitable for pointwise operations (e.g. Scale).
-    Aggregating operations (e.g. Average) override ``run_all()`` directly
-    to receive the complete data list at once.
+    lifecycle.  Subclasses override the individual lifecycle methods:
+    pointwise ops (e.g. Scale) override only ``run()``; aggregating ops
+    (e.g. Average) also override ``run_init()`` and ``run_finish()``.
 
     Subclasses should set the class attribute ``name`` to a short lowercase
     string matching the registry key (e.g. ``"scale"``).
@@ -61,9 +61,10 @@ class NMMainOp:
     ) -> None:
         """Process all data items.
 
-        Default implementation calls ``run_init()``, then ``run()`` for each
-        item, then ``run_finish()``.  Aggregating ops (e.g. Average) override
-        this method instead of ``run()``.
+        Calls ``run_init()``, then ``run()`` for each item, then
+        ``run_finish()``.  Available for standalone use (e.g. in tests);
+        ``NMToolMain`` drives the lifecycle via its own ``run_init /
+        run / run_finish`` hooks instead.
 
         Args:
             data_items: List of ``(NMData, channel_name)`` pairs.  The
@@ -78,7 +79,7 @@ class NMMainOp:
         self.run_init()
         for data, channel_name in data_items:
             self.run(data, channel_name)
-        self.run_finish(folder)
+        self.run_finish(folder, prefix)
 
     def run_init(self) -> None:
         """Called once before the per-item loop.  Override to reset state."""
@@ -95,14 +96,17 @@ class NMMainOp:
             channel_name: Channel name from the selection context, or None.
 
         Raises:
-            NotImplementedError: If the subclass does not override this method
-                and does not override ``run_all()``.
+            NotImplementedError: If the subclass does not override this method.
         """
         raise NotImplementedError(
             "%s.run() not implemented" % self.__class__.__name__
         )
 
-    def run_finish(self, folder: NMFolder | None) -> None:
+    def run_finish(
+        self,
+        folder: NMFolder | None = None,
+        prefix: str | None = None,
+    ) -> None:
         """Called once after the per-item loop.  Override to write results."""
 
 
@@ -114,8 +118,8 @@ class NMMainOp:
 class NMMainOpAverage(NMMainOp):
     """Average selected data waves per channel.
 
-    Accumulates arrays by channel across the data_items list, truncates all
-    arrays to the shortest length, and writes the mean as a new NMData wave
+    Accumulates arrays by channel, truncates all arrays to the shortest
+    length, and writes the mean as a new NMData wave
     ``Avg_{prefix}{channel}`` (e.g. ``Avg_RecordA``) into the source folder.
 
     Parameters:
@@ -149,69 +153,70 @@ class NMMainOpAverage(NMMainOp):
         """Read-only dict mapping channel name → output NMData name."""
         return dict(self._results)
 
-    def run_all(
+    def run_init(self) -> None:
+        """Reset accumulation state for a new run."""
+        self._results.clear()
+        self._accum: dict[str, list[np.ndarray]] = {}
+        self._xscales: dict[str, dict] = {}
+        self._yscales: dict[str, dict] = {}
+        self._parsed_prefix: str | None = None  # fallback if prefix not passed
+
+    def run(
         self,
-        data_items: list[tuple[NMData, str | None]],
-        folder: NMFolder | None,
-        prefix: str | None = None,
+        data: NMData,
+        channel_name: str | None = None,
     ) -> None:
-        """Average all data items per channel and write results to folder.
+        """Accumulate one wave into the per-channel buffer.
 
         Args:
-            data_items: List of ``(NMData, channel_name)`` pairs.
-            folder: Destination NMFolder for the averaged waves.
-            prefix: Dataseries name used as the output wave prefix.  If
-                ``None``, the prefix is parsed from the first wave name.
+            data: The NMData object to accumulate.
+            channel_name: Channel name from the selection context, or None
+                (parsed from data.name as a fallback).
         """
-        self._results.clear()
-
-        # Phase 1: accumulate per channel
-        accum: dict[str, list[np.ndarray]] = {}
-        xscales: dict[str, dict] = {}
-        yscales: dict[str, dict] = {}
-        resolved_prefix: str | None = prefix  # None → parse from first wave
-
-        for data, channel_name in data_items:
-            if not isinstance(data.nparray, np.ndarray):
-                continue
-
-            # Determine channel
-            if channel_name is None:
-                parsed = nmu.parse_data_name(data.name)
-                channel_name = parsed[1] if parsed is not None else "A"
-
-            # Resolve prefix from first wave name if not supplied
-            if resolved_prefix is None:
-                parsed = nmu.parse_data_name(data.name)
-                resolved_prefix = parsed[0] if parsed is not None else ""
-
-            # First encounter for this channel: record scale metadata
-            if channel_name not in accum:
-                accum[channel_name] = []
-                xscales[channel_name] = data.xscale.to_dict()
-                yscales[channel_name] = data.yscale.to_dict()
-
-            accum[channel_name].append(data.nparray.astype(float).copy())
-
-        if not accum or folder is None:
+        if not isinstance(data.nparray, np.ndarray):
             return
 
-        # Phase 2: compute mean and save per channel
-        pfx = resolved_prefix if resolved_prefix is not None else ""
-        for cname, arrays in accum.items():
+        if channel_name is None:
+            parsed = nmu.parse_data_name(data.name)
+            channel_name = parsed[1] if parsed is not None else "A"
+
+        if self._parsed_prefix is None:
+            parsed = nmu.parse_data_name(data.name)
+            self._parsed_prefix = parsed[0] if parsed is not None else ""
+
+        if channel_name not in self._accum:
+            self._accum[channel_name] = []
+            self._xscales[channel_name] = data.xscale.to_dict()
+            self._yscales[channel_name] = data.yscale.to_dict()
+
+        self._accum[channel_name].append(data.nparray.astype(float).copy())
+
+    def run_finish(
+        self,
+        folder: NMFolder | None = None,
+        prefix: str | None = None,
+    ) -> None:
+        """Compute the mean and write one output wave per channel to folder.
+
+        Args:
+            folder: Destination NMFolder for the averaged waves.
+            prefix: Dataseries name used as the output wave prefix.  Falls
+                back to the prefix parsed from the first wave name if None.
+        """
+        if not self._accum or folder is None:
+            return
+
+        pfx = prefix if prefix is not None else (self._parsed_prefix or "")
+        for cname, arrays in self._accum.items():
             min_len = min(len(a) for a in arrays)
             stack = np.stack([a[:min_len] for a in arrays])
-            if self._ignore_nans:
-                avg = np.nanmean(stack, axis=0)
-            else:
-                avg = np.mean(stack, axis=0)
-
+            avg = np.nanmean(stack, axis=0) if self._ignore_nans else np.mean(stack, axis=0)
             out_name = "Avg_" + pfx + cname
             folder.data.new(
                 out_name,
                 nparray=avg,
-                xscale=xscales[cname],
-                yscale=yscales[cname],
+                xscale=self._xscales[cname],
+                yscale=self._yscales[cname],
             )
             self._results[cname] = out_name
 
