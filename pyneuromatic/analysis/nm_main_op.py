@@ -721,6 +721,86 @@ class NMMainOpBaseline(NMMainOp):
 
 
 # =========================================================================
+# Reverse
+# =========================================================================
+
+
+class NMMainOpReverse(NMMainOp):
+    """Reverse each selected wave in-place.
+
+    Equivalent to ``np.flip(arr)``.  No parameters.
+    """
+
+    name = "reverse"
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Reverse data.nparray in-place.
+
+        Args:
+            data: The NMData object to reverse.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        data.nparray = np.flip(data.nparray)
+        self._add_note(data, "NMReverse()")
+
+
+# =========================================================================
+# Rotate
+# =========================================================================
+
+
+class NMMainOpRotate(NMMainOp):
+    """Rotate each selected wave by ``n_points`` positions (in-place).
+
+    Uses ``np.roll(arr, n_points)``.  Positive values shift elements to
+    the right (last element wraps to the front); negative values shift
+    left.
+
+    Parameters:
+        n_points: Number of positions to rotate (default 1).  May be
+            negative.  Must be int (not bool).
+    """
+
+    name = "rotate"
+
+    def __init__(self, n_points: int = 1) -> None:
+        self.n_points = n_points  # setter for validation
+
+    @property
+    def n_points(self) -> int:
+        """Number of positions to rotate (negative = rotate left)."""
+        return self._n_points
+
+    @n_points.setter
+    def n_points(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "n_points", "int"))
+        self._n_points = value
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Rotate data.nparray by n_points positions in-place.
+
+        Args:
+            data: The NMData object to rotate.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        data.nparray = np.roll(data.nparray, self._n_points)
+        self._add_note(data, "NMRotate(n_points=%d)" % self._n_points)
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
@@ -731,6 +811,8 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "delete_points": NMMainOpDeletePoints,
     "insert_points": NMMainOpInsertPoints,
     "redimension": NMMainOpRedimension,
+    "reverse": NMMainOpReverse,
+    "rotate": NMMainOpRotate,
     "scale": NMMainOpScale,
 }
 
