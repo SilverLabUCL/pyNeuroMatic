@@ -21,6 +21,8 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpDeletePoints,
     NMMainOpInsertPoints,
     NMMainOpRedimension,
+    NMMainOpReverse,
+    NMMainOpRotate,
     NMMainOpScale,
     op_from_name,
 )
@@ -590,6 +592,14 @@ class TestOpFromName(unittest.TestCase):
         op = op_from_name("baseline")
         self.assertIsInstance(op, NMMainOpBaseline)
 
+    def test_reverse_by_name(self):
+        op = op_from_name("reverse")
+        self.assertIsInstance(op, NMMainOpReverse)
+
+    def test_rotate_by_name(self):
+        op = op_from_name("rotate")
+        self.assertIsInstance(op, NMMainOpRotate)
+
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")
         self.assertIsInstance(op, NMMainOpAverage)
@@ -772,6 +782,112 @@ class TestNMMainOpBaseline(unittest.TestCase):
             self.assertEqual(len(d.notes), 1)
             note = d.notes[0]["note"]
             self.assertIn("NMBaseline(t_begin=0,t_end=0,mode=average,channel=A,baseline=3)", note)
+
+
+# ===========================================================================
+# TestNMMainOpReverse
+# ===========================================================================
+
+
+class TestNMMainOpReverse(unittest.TestCase):
+    """Test NMMainOpReverse directly."""
+
+    def setUp(self):
+        self.op = NMMainOpReverse()
+        self.data = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0])
+
+    # --- correct values ---
+
+    def test_reverse(self):
+        self.op.run(self.data)
+        np.testing.assert_array_equal(self.data.nparray, [4.0, 3.0, 2.0, 1.0])
+
+    def test_reverse_twice_is_identity(self):
+        self.op.run(self.data)
+        self.op.run(self.data)
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0])
+
+    def test_single_element(self):
+        d = _make_data("RecordA0", [5.0])
+        self.op.run(d)
+        np.testing.assert_array_equal(d.nparray, [5.0])
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        self.op.run(d)  # should not raise
+
+    # --- notes ---
+
+    def test_note_written(self):
+        self.op.run(self.data)
+        self.assertEqual(len(self.data.notes), 1)
+        self.assertEqual(self.data.notes[0]["note"], "NMReverse()")
+
+
+# ===========================================================================
+# TestNMMainOpRotate
+# ===========================================================================
+
+
+class TestNMMainOpRotate(unittest.TestCase):
+    """Test NMMainOpRotate directly."""
+
+    def setUp(self):
+        self.op = NMMainOpRotate()
+        self.data = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0])
+
+    # --- correct values ---
+
+    def test_rotate_right(self):
+        self.op.n_points = 1
+        self.op.run(self.data)
+        np.testing.assert_array_equal(self.data.nparray, [4.0, 1.0, 2.0, 3.0])
+
+    def test_rotate_left(self):
+        self.op.n_points = -1
+        self.op.run(self.data)
+        np.testing.assert_array_equal(self.data.nparray, [2.0, 3.0, 4.0, 1.0])
+
+    def test_rotate_by_length_is_identity(self):
+        self.op.n_points = 4
+        self.op.run(self.data)
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0])
+
+    def test_rotate_zero(self):
+        self.op.n_points = 0
+        self.op.run(self.data)
+        np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0])
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        self.op.run(d)  # should not raise
+
+    # --- validation ---
+
+    def test_n_points_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.n_points = True
+
+    def test_n_points_rejects_float(self):
+        with self.assertRaises(TypeError):
+            self.op.n_points = 1.0
+
+    # --- notes ---
+
+    def test_note_written(self):
+        self.op.n_points = 3
+        self.op.run(self.data)
+        self.assertEqual(len(self.data.notes), 1)
+        self.assertEqual(self.data.notes[0]["note"], "NMRotate(n_points=3)")
+
+    def test_note_negative(self):
+        self.op.n_points = -2
+        self.op.run(self.data)
+        self.assertIn("n_points=-2", self.data.notes[0]["note"])
 
 
 # ===========================================================================
