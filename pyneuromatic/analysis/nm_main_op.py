@@ -903,6 +903,159 @@ class NMMainOpDifferentiate(NMMainOp):
 
 
 # =========================================================================
+# Replace values
+# =========================================================================
+
+
+class NMMainOpReplaceValues(NMMainOp):
+    """Replace all points equal to ``old_value`` with ``new_value`` (in-place).
+
+    NaN-aware: if ``old_value`` is NaN, ``np.isnan()`` is used to build the
+    mask (since ``nan != nan``).  The note reports how many points were
+    replaced; it is written even when no replacements occurred (n=0).
+
+    Parameters:
+        old_value: Value to search for (default 0.0).  ``float("nan")`` and
+            ``float("inf")`` are accepted.
+        new_value: Replacement value (default 0.0).
+    """
+
+    name = "replace_values"
+
+    def __init__(self, old_value: float = 0.0, new_value: float = 0.0) -> None:
+        self.old_value = old_value  # setters for validation
+        self.new_value = new_value
+
+    @property
+    def old_value(self) -> float:
+        """Value to search for."""
+        return self._old_value
+
+    @old_value.setter
+    def old_value(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "old_value", "float"))
+        self._old_value = float(value)
+
+    @property
+    def new_value(self) -> float:
+        """Replacement value."""
+        return self._new_value
+
+    @new_value.setter
+    def new_value(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "new_value", "float"))
+        self._new_value = float(value)
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Replace matching values in data.nparray in-place.
+
+        Args:
+            data: The NMData object to modify.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        import math
+        arr = data.nparray.astype(float)
+        if math.isnan(self._old_value):
+            mask = np.isnan(arr)
+        else:
+            mask = arr == self._old_value
+        n = int(np.count_nonzero(mask))
+        arr[mask] = self._new_value
+        data.nparray = arr
+        self._add_note(
+            data,
+            "NMReplaceValues(old=%.6g,new=%.6g,n=%d)"
+            % (self._old_value, self._new_value, n),
+        )
+
+
+# =========================================================================
+# Delete NaNs
+# =========================================================================
+
+
+class NMMainOpDeleteNaNs(NMMainOp):
+    """Remove NaN and/or ±Inf points from each selected wave (in-place).
+
+    Shortens the array.  The note reports how many points were removed;
+    it is written even when n=0.
+
+    Parameters:
+        delete_nans: If True (default), remove NaN points.
+        delete_infs: If True, remove ±Inf points (default False).
+
+    At least one of ``delete_nans`` or ``delete_infs`` must be True.
+    """
+
+    name = "delete_nans"
+
+    def __init__(self, delete_nans: bool = True, delete_infs: bool = False) -> None:
+        self.delete_nans = delete_nans  # setters for validation
+        self.delete_infs = delete_infs
+        if not self._delete_nans and not self._delete_infs:
+            raise ValueError(
+                "at least one of delete_nans or delete_infs must be True"
+            )
+
+    @property
+    def delete_nans(self) -> bool:
+        """If True, NaN points are removed."""
+        return self._delete_nans
+
+    @delete_nans.setter
+    def delete_nans(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "delete_nans", "boolean"))
+        self._delete_nans = value
+
+    @property
+    def delete_infs(self) -> bool:
+        """If True, ±Inf points are removed (default False)."""
+        return self._delete_infs
+
+    @delete_infs.setter
+    def delete_infs(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "delete_infs", "boolean"))
+        self._delete_infs = value
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Remove NaN/Inf points from data.nparray in-place.
+
+        Args:
+            data: The NMData object to modify.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        arr = data.nparray.astype(float)
+        mask = np.zeros(len(arr), dtype=bool)
+        if self._delete_nans:
+            mask |= np.isnan(arr)
+        if self._delete_infs:
+            mask |= np.isinf(arr)
+        n = int(np.count_nonzero(mask))
+        data.nparray = arr[~mask]
+        self._add_note(
+            data,
+            "NMDeleteNaNs(delete_nans=%s,delete_infs=%s,n=%d)"
+            % (self._delete_nans, self._delete_infs, n),
+        )
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
@@ -910,11 +1063,13 @@ class NMMainOpDifferentiate(NMMainOp):
 _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "average": NMMainOpAverage,
     "baseline": NMMainOpBaseline,
+    "delete_nans": NMMainOpDeleteNaNs,
     "delete_points": NMMainOpDeletePoints,
     "differentiate": NMMainOpDifferentiate,
     "insert_points": NMMainOpInsertPoints,
     "integrate": NMMainOpIntegrate,
     "redimension": NMMainOpRedimension,
+    "replace_values": NMMainOpReplaceValues,
     "reverse": NMMainOpReverse,
     "rotate": NMMainOpRotate,
     "scale": NMMainOpScale,

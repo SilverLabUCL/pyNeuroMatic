@@ -18,11 +18,13 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOp,
     NMMainOpAverage,
     NMMainOpBaseline,
+    NMMainOpDeleteNaNs,
     NMMainOpDeletePoints,
     NMMainOpDifferentiate,
     NMMainOpInsertPoints,
     NMMainOpIntegrate,
     NMMainOpRedimension,
+    NMMainOpReplaceValues,
     NMMainOpReverse,
     NMMainOpRotate,
     NMMainOpScale,
@@ -610,6 +612,14 @@ class TestOpFromName(unittest.TestCase):
         op = op_from_name("differentiate")
         self.assertIsInstance(op, NMMainOpDifferentiate)
 
+    def test_replace_values_by_name(self):
+        op = op_from_name("replace_values")
+        self.assertIsInstance(op, NMMainOpReplaceValues)
+
+    def test_delete_nans_by_name(self):
+        op = op_from_name("delete_nans")
+        self.assertIsInstance(op, NMMainOpDeleteNaNs)
+
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")
         self.assertIsInstance(op, NMMainOpAverage)
@@ -995,9 +1005,10 @@ class TestNMMainOpDifferentiate(unittest.TestCase):
 
     def test_correct_values(self):
         # [0,1,4,9] with delta=1 → np.gradient([0,1,4,9], 1) = [1,2,4,5]
-        d = _make_data("RecordA0", [0.0, 1.0, 4.0, 9.0], xdelta=1.0)
+        arr = [0.0, 1.0, 4.0, 9.0]
+        d = _make_data("RecordA0", arr, xdelta=1.0)
         NMMainOpDifferentiate().run(d)
-        expected = np.gradient([0.0, 1.0, 4.0, 9.0], 1.0)
+        expected = np.gradient(arr, 1.0)
         np.testing.assert_array_almost_equal(d.nparray, expected)
 
     def test_uses_delta(self):
@@ -1032,6 +1043,156 @@ class TestNMMainOpDifferentiate(unittest.TestCase):
         NMMainOpDifferentiate().run(d)
         self.assertEqual(len(d.notes), 1)
         self.assertEqual(d.notes[0]["note"], "NMDifferentiate()")
+
+
+# ===========================================================================
+# TestNMMainOpReplaceValues
+# ===========================================================================
+
+
+class TestNMMainOpReplaceValues(unittest.TestCase):
+    """Test NMMainOpReplaceValues directly."""
+
+    # --- correct values ---
+
+    def test_replaces_exact_value(self):
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0, 2.0, 1.0])
+        NMMainOpReplaceValues(old_value=2.0, new_value=99.0).run(d)
+        np.testing.assert_array_equal(d.nparray, [1.0, 99.0, 3.0, 99.0, 1.0])
+
+    def test_replaces_nan(self):
+        d = _make_data("RecordA0", [1.0, float("nan"), 3.0])
+        NMMainOpReplaceValues(old_value=float("nan"), new_value=0.0).run(d)
+        np.testing.assert_array_equal(d.nparray, [1.0, 0.0, 3.0])
+
+    def test_no_match_unchanged(self):
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0])
+        NMMainOpReplaceValues(old_value=9.0, new_value=0.0).run(d)
+        np.testing.assert_array_equal(d.nparray, [1.0, 2.0, 3.0])
+
+    # --- defaults ---
+
+    def test_old_value_default_is_zero(self):
+        self.assertEqual(NMMainOpReplaceValues().old_value, 0.0)
+
+    def test_new_value_default_is_zero(self):
+        self.assertEqual(NMMainOpReplaceValues().new_value, 0.0)
+
+    # --- validation ---
+
+    def test_old_value_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpReplaceValues(old_value=True)
+
+    def test_new_value_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpReplaceValues(new_value=True)
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        NMMainOpReplaceValues().run(d)  # should not raise
+
+    # --- notes ---
+
+    def test_note_written(self):
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0, 2.0, 1.0])
+        NMMainOpReplaceValues(old_value=2.0, new_value=99.0).run(d)
+        self.assertEqual(len(d.notes), 1)
+        self.assertIn("NMReplaceValues(old=2,new=99,n=2)", d.notes[0]["note"])
+
+    def test_note_nan_old(self):
+        d = _make_data("RecordA0", [1.0, float("nan"), 3.0])
+        NMMainOpReplaceValues(old_value=float("nan"), new_value=0.0).run(d)
+        self.assertIn("NMReplaceValues(old=nan,new=0,n=1)", d.notes[0]["note"])
+
+    def test_note_written_when_no_match(self):
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0])
+        NMMainOpReplaceValues(old_value=9.0, new_value=0.0).run(d)
+        self.assertEqual(len(d.notes), 1)
+        self.assertIn("n=0", d.notes[0]["note"])
+
+
+# ===========================================================================
+# TestNMMainOpDeleteNaNs
+# ===========================================================================
+
+
+class TestNMMainOpDeleteNaNs(unittest.TestCase):
+    """Test NMMainOpDeleteNaNs directly."""
+
+    # --- correct values ---
+
+    def test_deletes_nan_only(self):
+        # default: delete_nans=True, delete_infs=False → Inf is kept
+        d = _make_data("RecordA0", [1.0, float("nan"), float("inf"), 3.0])
+        NMMainOpDeleteNaNs().run(d)
+        self.assertEqual(len(d.nparray), 3)
+        self.assertTrue(math.isinf(d.nparray[1]))
+
+    def test_deletes_inf_only(self):
+        d = _make_data("RecordA0", [1.0, float("nan"), float("inf"), 3.0])
+        NMMainOpDeleteNaNs(delete_nans=False, delete_infs=True).run(d)
+        self.assertEqual(len(d.nparray), 3)
+        self.assertTrue(math.isnan(d.nparray[1]))
+
+    def test_deletes_both(self):
+        d = _make_data("RecordA0", [float("nan"), 1.0, float("inf"), 2.0, float("-inf")])
+        NMMainOpDeleteNaNs(delete_nans=True, delete_infs=True).run(d)
+        np.testing.assert_array_equal(d.nparray, [1.0, 2.0])
+
+    def test_no_nans_unchanged(self):
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0])
+        NMMainOpDeleteNaNs().run(d)
+        np.testing.assert_array_equal(d.nparray, [1.0, 2.0, 3.0])
+
+    def test_all_nans_empty_array(self):
+        d = _make_data("RecordA0", [float("nan"), float("nan")])
+        NMMainOpDeleteNaNs().run(d)
+        self.assertEqual(len(d.nparray), 0)
+
+    # --- defaults ---
+
+    def test_default_delete_nans_true(self):
+        self.assertTrue(NMMainOpDeleteNaNs().delete_nans)
+
+    def test_default_delete_infs_false(self):
+        self.assertFalse(NMMainOpDeleteNaNs().delete_infs)
+
+    # --- validation ---
+
+    def test_both_false_raises(self):
+        with self.assertRaises(ValueError):
+            NMMainOpDeleteNaNs(delete_nans=False, delete_infs=False)
+
+    def test_delete_nans_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpDeleteNaNs(delete_nans=1)
+
+    def test_delete_infs_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpDeleteNaNs(delete_infs=1)
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        NMMainOpDeleteNaNs().run(d)  # should not raise
+
+    # --- notes ---
+
+    def test_note_written(self):
+        d = _make_data("RecordA0", [1.0, float("nan"), 3.0])
+        NMMainOpDeleteNaNs().run(d)
+        self.assertEqual(len(d.notes), 1)
+        self.assertIn("NMDeleteNaNs(delete_nans=True,delete_infs=False,n=1)", d.notes[0]["note"])
+
+    def test_note_no_deletions(self):
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0])
+        NMMainOpDeleteNaNs().run(d)
+        self.assertEqual(len(d.notes), 1)
+        self.assertIn("n=0", d.notes[0]["note"])
 
 
 # ===========================================================================
