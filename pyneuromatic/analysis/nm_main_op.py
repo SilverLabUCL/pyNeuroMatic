@@ -801,6 +801,108 @@ class NMMainOpRotate(NMMainOp):
 
 
 # =========================================================================
+# Integrate
+# =========================================================================
+
+
+class NMMainOpIntegrate(NMMainOp):
+    """Cumulative integration of each selected wave (in-place).
+
+    Two methods are supported:
+
+    - **rectangular**: ``np.cumsum(arr) * delta`` — equivalent to summing
+      rectangular strips of width ``delta``.
+    - **trapezoid**: cumulative trapezoidal rule — each step area is
+      ``0.5 * (y[i] + y[i+1]) * delta``; the first output point is 0.0
+      so the output length equals the input length.
+
+    Parameters:
+        method: ``"rectangular"`` (default) or ``"trapezoid"``.
+    """
+
+    name = "integrate"
+
+    _VALID_METHODS = {"rectangular", "trapezoid"}
+
+    def __init__(self, method: str = "rectangular") -> None:
+        self.method = method  # setter for validation
+
+    @property
+    def method(self) -> str:
+        """Integration method: ``'rectangular'`` or ``'trapezoid'``."""
+        return self._method
+
+    @method.setter
+    def method(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "method", "string"))
+        if value not in self._VALID_METHODS:
+            raise ValueError(
+                "method must be one of %s, got %r" % (sorted(self._VALID_METHODS), value)
+            )
+        self._method = value
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Integrate data.nparray in-place.
+
+        Args:
+            data: The NMData object to integrate.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        delta = data.xscale.delta
+        arr = data.nparray.astype(float)
+        if self._method == "rectangular":
+            data.nparray = np.cumsum(arr) * delta
+        else:  # "trapezoid"
+            steps = 0.5 * (arr[:-1] + arr[1:]) * delta
+            data.nparray = np.concatenate([[0.0], np.cumsum(steps)])
+        self._add_note(data, "NMIntegrate(method=%s)" % self._method)
+
+
+# =========================================================================
+# Differentiate
+# =========================================================================
+
+
+class NMMainOpDifferentiate(NMMainOp):
+    """First derivative of each selected wave using ``np.gradient`` (in-place).
+
+    Uses central differences for interior points and one-sided differences at
+    the boundaries.  Preserves array length.  Scales by ``xscale.delta`` so
+    the result has correct dy/dx units.  No parameters.
+    """
+
+    name = "differentiate"
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Differentiate data.nparray in-place.
+
+        Args:
+            data: The NMData object to differentiate.
+            channel_name: Unused; present for API consistency.
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        delta = data.xscale.delta
+        arr = data.nparray.astype(float)
+        if delta != 0:
+            data.nparray = np.gradient(arr, delta)
+        else:
+            data.nparray = np.gradient(arr)
+        self._add_note(data, "NMDifferentiate()")
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
@@ -809,7 +911,9 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "average": NMMainOpAverage,
     "baseline": NMMainOpBaseline,
     "delete_points": NMMainOpDeletePoints,
+    "differentiate": NMMainOpDifferentiate,
     "insert_points": NMMainOpInsertPoints,
+    "integrate": NMMainOpIntegrate,
     "redimension": NMMainOpRedimension,
     "reverse": NMMainOpReverse,
     "rotate": NMMainOpRotate,
