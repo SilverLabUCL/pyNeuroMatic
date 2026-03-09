@@ -19,7 +19,9 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpAverage,
     NMMainOpBaseline,
     NMMainOpDeletePoints,
+    NMMainOpDifferentiate,
     NMMainOpInsertPoints,
+    NMMainOpIntegrate,
     NMMainOpRedimension,
     NMMainOpReverse,
     NMMainOpRotate,
@@ -600,6 +602,14 @@ class TestOpFromName(unittest.TestCase):
         op = op_from_name("rotate")
         self.assertIsInstance(op, NMMainOpRotate)
 
+    def test_integrate_by_name(self):
+        op = op_from_name("integrate")
+        self.assertIsInstance(op, NMMainOpIntegrate)
+
+    def test_differentiate_by_name(self):
+        op = op_from_name("differentiate")
+        self.assertIsInstance(op, NMMainOpDifferentiate)
+
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")
         self.assertIsInstance(op, NMMainOpAverage)
@@ -888,6 +898,140 @@ class TestNMMainOpRotate(unittest.TestCase):
         self.op.n_points = -2
         self.op.run(self.data)
         self.assertIn("n_points=-2", self.data.notes[0]["note"])
+
+
+# ===========================================================================
+# TestNMMainOpIntegrate
+# ===========================================================================
+
+
+class TestNMMainOpIntegrate(unittest.TestCase):
+    """Test NMMainOpIntegrate directly."""
+
+    # --- rectangular ---
+
+    def test_rectangular_correct_values(self):
+        # [1,1,1,1] with delta=1 → cumsum=[1,2,3,4] * 1 = [1,2,3,4]
+        d = _make_data("RecordA0", [1.0, 1.0, 1.0, 1.0], xdelta=1.0)
+        NMMainOpIntegrate(method="rectangular").run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [1.0, 2.0, 3.0, 4.0])
+
+    def test_rectangular_uses_delta(self):
+        # [1,1,1,1] with delta=0.5 → cumsum=[1,2,3,4] * 0.5 = [0.5,1.0,1.5,2.0]
+        d = _make_data("RecordA0", [1.0, 1.0, 1.0, 1.0], xdelta=0.5)
+        NMMainOpIntegrate(method="rectangular").run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [0.5, 1.0, 1.5, 2.0])
+
+    # --- trapezoid ---
+
+    def test_trapezoid_correct_values(self):
+        # [0,2,4] with delta=1:
+        #   step0 = 0.5*(0+2)*1 = 1
+        #   step1 = 0.5*(2+4)*1 = 3
+        # result = [0, 1, 4]
+        d = _make_data("RecordA0", [0.0, 2.0, 4.0], xdelta=1.0)
+        NMMainOpIntegrate(method="trapezoid").run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [0.0, 1.0, 4.0])
+
+    def test_trapezoid_uses_delta(self):
+        # [0,2,4] with delta=2:
+        #   step0 = 0.5*(0+2)*2 = 2
+        #   step1 = 0.5*(2+4)*2 = 6
+        # result = [0, 2, 8]
+        d = _make_data("RecordA0", [0.0, 2.0, 4.0], xdelta=2.0)
+        NMMainOpIntegrate(method="trapezoid").run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [0.0, 2.0, 8.0])
+
+    def test_trapezoid_preserves_length(self):
+        arr = [1.0, 2.0, 3.0, 4.0, 5.0]
+        d = _make_data("RecordA0", arr, xdelta=1.0)
+        NMMainOpIntegrate(method="trapezoid").run(d)
+        self.assertEqual(len(d.nparray), len(arr))
+
+    # --- defaults and validation ---
+
+    def test_method_default_is_rectangular(self):
+        op = NMMainOpIntegrate()
+        self.assertEqual(op.method, "rectangular")
+
+    def test_method_rejects_unknown(self):
+        with self.assertRaises(ValueError):
+            NMMainOpIntegrate(method="simpson")
+
+    def test_method_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpIntegrate(method=1)
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        NMMainOpIntegrate().run(d)  # should not raise
+
+    # --- notes ---
+
+    def test_note_rectangular(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        NMMainOpIntegrate(method="rectangular").run(d)
+        self.assertEqual(len(d.notes), 1)
+        self.assertIn("NMIntegrate(method=rectangular)", d.notes[0]["note"])
+
+    def test_note_trapezoid(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        NMMainOpIntegrate(method="trapezoid").run(d)
+        self.assertEqual(len(d.notes), 1)
+        self.assertIn("NMIntegrate(method=trapezoid)", d.notes[0]["note"])
+
+
+# ===========================================================================
+# TestNMMainOpDifferentiate
+# ===========================================================================
+
+
+class TestNMMainOpDifferentiate(unittest.TestCase):
+    """Test NMMainOpDifferentiate directly."""
+
+    # --- correct values ---
+
+    def test_correct_values(self):
+        # [0,1,4,9] with delta=1 → np.gradient([0,1,4,9], 1) = [1,2,4,5]
+        d = _make_data("RecordA0", [0.0, 1.0, 4.0, 9.0], xdelta=1.0)
+        NMMainOpDifferentiate().run(d)
+        expected = np.gradient([0.0, 1.0, 4.0, 9.0], 1.0)
+        np.testing.assert_array_almost_equal(d.nparray, expected)
+
+    def test_uses_delta(self):
+        # same wave with delta=0.5 → result scaled by 1/0.5
+        arr = [0.0, 1.0, 4.0, 9.0]
+        d = _make_data("RecordA0", arr, xdelta=0.5)
+        NMMainOpDifferentiate().run(d)
+        expected = np.gradient(np.array(arr), 0.5)
+        np.testing.assert_array_almost_equal(d.nparray, expected)
+
+    def test_constant_wave_is_zero(self):
+        d = _make_data("RecordA0", [5.0, 5.0, 5.0, 5.0], xdelta=1.0)
+        NMMainOpDifferentiate().run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [0.0, 0.0, 0.0, 0.0])
+
+    def test_preserves_length(self):
+        arr = [1.0, 3.0, 6.0, 10.0, 15.0]
+        d = _make_data("RecordA0", arr, xdelta=1.0)
+        NMMainOpDifferentiate().run(d)
+        self.assertEqual(len(d.nparray), len(arr))
+
+    # --- edge cases ---
+
+    def test_skips_non_ndarray(self):
+        d = NMData(NM, name="RecordA0")
+        NMMainOpDifferentiate().run(d)  # should not raise
+
+    # --- notes ---
+
+    def test_note_written(self):
+        d = _make_data("RecordA0", [0.0, 1.0, 4.0])
+        NMMainOpDifferentiate().run(d)
+        self.assertEqual(len(d.notes), 1)
+        self.assertEqual(d.notes[0]["note"], "NMDifferentiate()")
 
 
 # ===========================================================================
