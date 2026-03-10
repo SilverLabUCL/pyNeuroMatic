@@ -543,6 +543,38 @@ def _time_to_slice(arr: np.ndarray, xscale_dict: dict, t_begin: float, t_end: fl
     return slice(i0, i1)
 
 
+def _compute_ref(arr: np.ndarray, fxn: str, n_mean: int) -> float:
+    """Compute a scalar reference value from arr using the given function.
+
+    Args:
+        arr: Array slice to compute the reference from.
+        fxn: One of ``"mean"``, ``"min"``, ``"max"``, ``"mean@min"``,
+            ``"mean@max"``.
+        n_mean: Number of points to compute mean around the extremum (used
+            only for ``"mean@min"`` and ``"mean@max"``).
+
+    Returns:
+        Scalar reference value, or ``float("nan")`` if arr is empty.
+    """
+    if len(arr) == 0:
+        return float("nan")
+    if fxn == "mean":
+        return float(np.nanmean(arr))
+    elif fxn == "min":
+        return float(np.nanmin(arr))
+    elif fxn == "max":
+        return float(np.nanmax(arr))
+    elif fxn == "mean@min":
+        i = int(np.nanargmin(arr))
+        half = n_mean // 2
+        return float(np.nanmean(arr[max(0, i - half):i + half + 1]))
+    elif fxn == "mean@max":
+        i = int(np.nanargmax(arr))
+        half = n_mean // 2
+        return float(np.nanmean(arr[max(0, i - half):i + half + 1]))
+    return float("nan")
+
+
 # =========================================================================
 # Baseline
 # =========================================================================
@@ -702,7 +734,7 @@ class NMMainOpBaseline(NMMainOp):
         """Apply averaged baseline (average mode only).
 
         In ``per_wave`` mode this is a no-op (subtraction was done in ``run()``).
-        In ``average`` mode the mean of all per-wave baselines for each channel
+        In ``average`` mode the average of all per-wave baselines for each channel
         is computed and subtracted from every wave in that channel.
         """
         if self._mode == "per_wave":
@@ -1056,6 +1088,319 @@ class NMMainOpDeleteNaNs(NMMainOp):
 
 
 # =========================================================================
+# Normalize
+# =========================================================================
+
+
+class NMMainOpNormalize(NMMainOp):
+    """Rescale each wave so a low reference maps to norm_min and a high reference maps to norm_max.
+
+    Two independent time windows are used:
+
+    - Window 1 (``t_begin1``/``t_end1``) computes the "low" reference via
+      ``fxn1`` (``"mean"``, ``"min"``, or ``"mean@min"``).
+    - Window 2 (``t_begin2``/``t_end2``) computes the "high" reference via
+      ``fxn2`` (``"mean"``, ``"max"``, or ``"mean@max"``).
+
+    Two modes (matching NMMainOpBaseline):
+
+    - **per_wave**: Each wave is normalized to its own references.
+    - **average**: Per-channel mean references are computed across all waves,
+      then applied to every wave in that channel.
+
+    Parameters:
+        t_begin1: Window 1 start in time units (default 0.0).
+        t_end1: Window 1 end in time units (default 0.0).
+        fxn1: Function for the low reference: ``"mean"``, ``"min"``, or
+            ``"mean@min"`` (default ``"mean"``).
+        n_mean1: Points around min for ``mean@min`` (default 1).
+        t_begin2: Window 2 start in time units (default 0.0).
+        t_end2: Window 2 end in time units (default 0.0).
+        fxn2: Function for the high reference: ``"mean"``, ``"max"``, or
+            ``"mean@max"`` (default ``"mean"``).
+        n_mean2: Points around max for ``mean@max`` (default 1).
+        norm_min: Target normalized minimum (default 0.0).
+        norm_max: Target normalized maximum (default 1.0).
+        mode: ``"per_wave"`` (default) or ``"average"``.
+    """
+
+    name = "normalize"
+
+    _VALID_FXN1 = {"mean", "min", "mean@min"}
+    _VALID_FXN2 = {"mean", "max", "mean@max"}
+    _VALID_MODES = {"per_wave", "average"}
+
+    def __init__(
+        self,
+        t_begin1: float = 0.0,
+        t_end1: float = 0.0,
+        fxn1: str = "mean",
+        n_mean1: int = 1,
+        t_begin2: float = 0.0,
+        t_end2: float = 0.0,
+        fxn2: str = "mean",
+        n_mean2: int = 1,
+        norm_min: float = 0.0,
+        norm_max: float = 1.0,
+        mode: str = "per_wave",
+    ) -> None:
+        self.t_begin1 = t_begin1
+        self.t_end1 = t_end1
+        self.fxn1 = fxn1
+        self.n_mean1 = n_mean1
+        self.t_begin2 = t_begin2
+        self.t_end2 = t_end2
+        self.fxn2 = fxn2
+        self.n_mean2 = n_mean2
+        self.norm_min = norm_min
+        self.norm_max = norm_max
+        self.mode = mode
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def t_begin1(self) -> float:
+        """Window 1 start (time units)."""
+        return self._t_begin1
+
+    @t_begin1.setter
+    def t_begin1(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "t_begin1", "float"))
+        self._t_begin1 = float(value)
+
+    @property
+    def t_end1(self) -> float:
+        """Window 1 end (time units)."""
+        return self._t_end1
+
+    @t_end1.setter
+    def t_end1(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "t_end1", "float"))
+        self._t_end1 = float(value)
+
+    @property
+    def fxn1(self) -> str:
+        """Low-reference function: ``'mean'``, ``'min'``, or ``'mean@min'``."""
+        return self._fxn1
+
+    @fxn1.setter
+    def fxn1(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "fxn1", "string"))
+        if value not in self._VALID_FXN1:
+            raise ValueError(
+                "fxn1 must be one of %s, got %r" % (sorted(self._VALID_FXN1), value)
+            )
+        self._fxn1 = value
+
+    @property
+    def n_mean1(self) -> int:
+        """Points around min for ``mean@min`` (default 1)."""
+        return self._n_mean1
+
+    @n_mean1.setter
+    def n_mean1(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "n_mean1", "int"))
+        if value < 1:
+            raise ValueError("n_mean1 must be >= 1, got %d" % value)
+        self._n_mean1 = value
+
+    @property
+    def t_begin2(self) -> float:
+        """Window 2 start (time units)."""
+        return self._t_begin2
+
+    @t_begin2.setter
+    def t_begin2(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "t_begin2", "float"))
+        self._t_begin2 = float(value)
+
+    @property
+    def t_end2(self) -> float:
+        """Window 2 end (time units)."""
+        return self._t_end2
+
+    @t_end2.setter
+    def t_end2(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "t_end2", "float"))
+        self._t_end2 = float(value)
+
+    @property
+    def fxn2(self) -> str:
+        """High-reference function: ``'mean'``, ``'max'``, or ``'mean@max'``."""
+        return self._fxn2
+
+    @fxn2.setter
+    def fxn2(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "fxn2", "string"))
+        if value not in self._VALID_FXN2:
+            raise ValueError(
+                "fxn2 must be one of %s, got %r" % (sorted(self._VALID_FXN2), value)
+            )
+        self._fxn2 = value
+
+    @property
+    def n_mean2(self) -> int:
+        """Points around max for ``mean@max`` (default 1)."""
+        return self._n_mean2
+
+    @n_mean2.setter
+    def n_mean2(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "n_mean2", "int"))
+        if value < 1:
+            raise ValueError("n_mean2 must be >= 1, got %d" % value)
+        self._n_mean2 = value
+
+    @property
+    def norm_min(self) -> float:
+        """Target normalized minimum."""
+        return self._norm_min
+
+    @norm_min.setter
+    def norm_min(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "norm_min", "float"))
+        self._norm_min = float(value)
+
+    @property
+    def norm_max(self) -> float:
+        """Target normalized maximum."""
+        return self._norm_max
+
+    @norm_max.setter
+    def norm_max(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "norm_max", "float"))
+        self._norm_max = float(value)
+
+    @property
+    def mode(self) -> str:
+        """Normalization mode: ``'per_wave'`` or ``'average'``."""
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "mode", "string"))
+        if value not in self._VALID_MODES:
+            raise ValueError(
+                "mode must be one of %s, got %r" % (sorted(self._VALID_MODES), value)
+            )
+        self._mode = value
+
+    # ------------------------------------------------------------------
+    # Validation helper
+
+    def _validate_windows(self) -> None:
+        if self._t_end1 < self._t_begin1:
+            raise ValueError(
+                "t_end1 (%g) must be >= t_begin1 (%g)" % (self._t_end1, self._t_begin1)
+            )
+        if self._t_end2 < self._t_begin2:
+            raise ValueError(
+                "t_end2 (%g) must be >= t_begin2 (%g)" % (self._t_end2, self._t_begin2)
+            )
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+
+    def _apply(self, arr: np.ndarray, ref_min: float, ref_max: float) -> np.ndarray:
+        """Apply normalization formula to arr."""
+        range = ref_max - ref_min
+        if range == 0:
+            return np.full_like(arr, self._norm_min)
+        return (arr - ref_min) / range * (self._norm_max - self._norm_min) + self._norm_min
+
+    def _note_str(self, ref_min: float, ref_max: float, channel_name: str | None = None) -> str:
+        note = (
+            "NMNormalize(t_begin1=%.6g,t_end1=%.6g,fxn1=%s,"
+            "t_begin2=%.6g,t_end2=%.6g,fxn2=%s,"
+            "norm_min=%.6g,norm_max=%.6g,mode=%s"
+        ) % (
+            self._t_begin1, self._t_end1, self._fxn1,
+            self._t_begin2, self._t_end2, self._fxn2,
+            self._norm_min, self._norm_max, self._mode,
+        )
+        if channel_name is not None:
+            note += ",channel=%s" % channel_name
+        note += ",ref_min=%.6g,ref_max=%.6g)" % (ref_min, ref_max)
+        return note
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+
+    def run_init(self) -> None:
+        """Reset per-run accumulators."""
+        self._validate_windows()
+        self._ref_min_accum: dict[str, list[float]] = {}
+        self._ref_max_accum: dict[str, list[float]] = {}
+        self._data_refs: dict[str, list[NMData]] = {}
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Compute references and (optionally) normalize one wave.
+
+        Args:
+            data: The NMData object to process.
+            channel_name: Channel name from the selection context, or None
+                (parsed from data.name as a fallback).
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+
+        if channel_name is None:
+            parsed = nmu.parse_data_name(data.name)
+            channel_name = parsed[1] if parsed is not None else "A"
+
+        arr = data.nparray.astype(float)
+        xd = data.xscale.to_dict()
+        sl1 = _time_to_slice(arr, xd, self._t_begin1, self._t_end1)
+        sl2 = _time_to_slice(arr, xd, self._t_begin2, self._t_end2)
+        ref_min = _compute_ref(arr[sl1], self._fxn1, self._n_mean1)
+        ref_max = _compute_ref(arr[sl2], self._fxn2, self._n_mean2)
+
+        if self._mode == "per_wave":
+            data.nparray = self._apply(arr, ref_min, ref_max)
+            self._add_note(data, self._note_str(ref_min, ref_max))
+        else:  # "average"
+            self._ref_min_accum.setdefault(channel_name, []).append(ref_min)
+            self._ref_max_accum.setdefault(channel_name, []).append(ref_max)
+            self._data_refs.setdefault(channel_name, []).append(data)
+
+    def run_finish(
+        self,
+        folder: NMFolder | None = None,
+        prefix: str | None = None,
+    ) -> None:
+        """Apply averaged references (average mode only).
+
+        In ``per_wave`` mode this is a no-op (normalization was done in
+        ``run()``).  In ``average`` mode the mean of all per-wave references
+        for each channel is computed and applied to every wave in that channel.
+        """
+        if self._mode == "per_wave":
+            return
+        for channel_name, ref_mins in self._ref_min_accum.items():
+            avg_ref_min = float(np.nanmean(ref_mins))
+            avg_ref_max = float(np.nanmean(self._ref_max_accum[channel_name]))
+            for d in self._data_refs[channel_name]:
+                arr = d.nparray.astype(float)
+                d.nparray = self._apply(arr, avg_ref_min, avg_ref_max)
+                self._add_note(d, self._note_str(avg_ref_min, avg_ref_max, channel_name))
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
@@ -1068,6 +1413,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "differentiate": NMMainOpDifferentiate,
     "insert_points": NMMainOpInsertPoints,
     "integrate": NMMainOpIntegrate,
+    "normalize": NMMainOpNormalize,
     "redimension": NMMainOpRedimension,
     "replace_values": NMMainOpReplaceValues,
     "reverse": NMMainOpReverse,

@@ -138,43 +138,43 @@ class TestNMStatFuncMaxMin(unittest.TestCase):
         with self.assertRaises(ValueError):
             nmsf.NMStatFuncMaxMin("badfuncname")
 
-    def test_mean_at_max_requires_n_avg(self):
+    def test_mean_at_max_requires_n_mean(self):
         with self.assertRaises(KeyError):
             nmsf.NMStatFuncMaxMin("mean@max")
 
-    def test_n_avg_type_errors(self):
+    def test_n_mean_type_errors(self):
         for b in [[], (), {}, set(), NM, True, False]:
             with self.assertRaises(TypeError):
-                nmsf.NMStatFuncMaxMin("mean@max", n_avg=b)
+                nmsf.NMStatFuncMaxMin("mean@max", n_mean=b)
 
-    def test_n_avg_value_errors(self):
+    def test_n_mean_value_errors(self):
         for b in [-10, math.nan, "badvalue"]:
             with self.assertRaises(ValueError):
-                nmsf.NMStatFuncMaxMin("mean@max", n_avg=b)
+                nmsf.NMStatFuncMaxMin("mean@max", n_mean=b)
 
-    def test_n_avg_overflow(self):
+    def test_n_mean_overflow(self):
         with self.assertRaises(OverflowError):
-            nmsf.NMStatFuncMaxMin("mean@max", n_avg=math.inf)
+            nmsf.NMStatFuncMaxMin("mean@max", n_mean=math.inf)
 
-    def test_max_min_without_n_avg(self):
+    def test_max_min_without_n_mean(self):
         for f in ("max", "min"):
             t = nmsf.NMStatFuncMaxMin(f)
             self.assertEqual(t.name, f)
             self.assertEqual(t.to_dict(), {"name": f})
 
-    def test_n_avg_upgrades_to_mean_at(self):
+    def test_n_mean_upgrades_to_mean_at(self):
         for f in ["max", "min", "mean@max", "mean@min"]:
-            t = nmsf.NMStatFuncMaxMin(f, n_avg=10)
+            t = nmsf.NMStatFuncMaxMin(f, n_mean=10)
             expected = ("mean@" + f) if f in ("max", "min") else f
             self.assertEqual(t.name, expected)
-            self.assertEqual(t.to_dict()["n_avg"], 10)
+            self.assertEqual(t.to_dict()["n_mean"], 10)
 
     def test_from_dict(self):
         for f in ["max", "min", "mean@max", "mean@min"]:
-            t = nmsf._stat_func_from_dict({"name": f, "n_avg": 10})
+            t = nmsf._stat_func_from_dict({"name": f, "n_mean": 10})
             expected = ("mean@" + f) if f in ("max", "min") else f
             self.assertEqual(t.name, expected)
-            self.assertEqual(t["n_avg"], 10)
+            self.assertEqual(t["n_mean"], 10)
 
     def test_from_dict_unknown_key_raises(self):
         with self.assertRaises(KeyError):
@@ -603,14 +603,14 @@ class TestStatFuncFromDict(unittest.TestCase):
             self.assertIsInstance(t, nmsf.NMStatFuncBasic)
             self.assertEqual(t.name, f)
 
-    def test_maxmin_without_n_avg(self):
+    def test_maxmin_without_n_mean(self):
         for f in ("max", "min"):
             t = nmsf._stat_func_from_dict({"name": f})
             self.assertEqual(t.name, f)
 
-    def test_maxmin_with_n_avg(self):
+    def test_maxmin_with_n_mean(self):
         for f in ("mean@max", "mean@min"):
-            t = nmsf._stat_func_from_dict({"name": f, "n_avg": 5})
+            t = nmsf._stat_func_from_dict({"name": f, "n_mean": 5})
             self.assertEqual(t.name, f)
 
     def test_level_ylevel(self):

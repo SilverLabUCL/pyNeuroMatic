@@ -37,8 +37,8 @@ def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
                  yunits, **_):
     """Compute max or min value and its location.
 
-    For mean@max and mean@min, also compute the mean of n_avg points centred
-    on the peak index (func["n_avg"] key, optional).
+    For mean@max and mean@min, also compute the mean of n_mean points centred
+    on the peak index (func["n_mean"] key, optional).
     """
     if "max" in f:
         index = np.nanargmax(yarray) if ignore_nans else np.argmax(yarray)
@@ -51,19 +51,19 @@ def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
     results["x"] = data.get_xvalue(i)
     results["xunits"] = data.xscale.units
 
-    n_avg = 0
-    if "n_avg" in func and 0 <= i < ysize:
-        n_avg = int(func["n_avg"])
-        if n_avg <= 1:
-            n_avg = 0
+    n_mean = 0
+    if "n_mean" in func and 0 <= i < ysize:
+        n_mean = int(func["n_mean"])
+        if n_mean <= 1:
+            n_mean = 0
 
-    if n_avg > 1:
-        if n_avg % 2 == 0:  # even
-            i0_m = int(i - 0.5 * n_avg)
-            i1_m = int(i0_m + n_avg - 1)
+    if n_mean > 1:
+        if n_mean % 2 == 0:  # even
+            i0_m = int(i - 0.5 * n_mean)
+            i1_m = int(i0_m + n_mean - 1)
         else:  # odd
-            i0_m = int(i - 0.5 * (n_avg - 1))
-            i1_m = int(i + 0.5 * (n_avg - 1))
+            i0_m = int(i - 0.5 * (n_mean - 1))
+            i1_m = int(i + 0.5 * (n_mean - 1))
         i0_m = max(i0_m, 0)
         i0_m = min(i0_m, ysize - 1)
         i1_m = max(i1_m, 0)
@@ -328,9 +328,9 @@ def stat(
             - mean+var / mean+std / mean+sem:
               no extra keys required; extra stat appended to results.
             - max / min:
-              optional "n_avg" (int) to average that many points around peak.
+              optional "n_mean" (int) # points to compute mean around peak.
             - mean@max / mean@min:
-              "n_avg" (int) required; mean of n_avg points around peak.
+              "n_mean" (int) required; mean of n_mean points around peak.
             - level / level+ / level-:
               "ylevel" (float) required; the y-axis threshold to search for.
             - slope:
