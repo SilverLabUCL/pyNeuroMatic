@@ -23,6 +23,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpDifferentiate,
     NMMainOpInsertPoints,
     NMMainOpIntegrate,
+    NMMainOpNormalize,
     NMMainOpRedimension,
     NMMainOpReplaceValues,
     NMMainOpReverse,
@@ -620,6 +621,10 @@ class TestOpFromName(unittest.TestCase):
         op = op_from_name("delete_nans")
         self.assertIsInstance(op, NMMainOpDeleteNaNs)
 
+    def test_normalize_by_name(self):
+        op = op_from_name("normalize")
+        self.assertIsInstance(op, NMMainOpNormalize)
+
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")
         self.assertIsInstance(op, NMMainOpAverage)
@@ -1196,8 +1201,217 @@ class TestNMMainOpDeleteNaNs(unittest.TestCase):
 
 
 # ===========================================================================
+# TestNMMainOpNormalize
+# ===========================================================================
+
+
+class TestNMMainOpNormalize(unittest.TestCase):
+    """Tests for NMMainOpNormalize (per_wave and average modes)."""
+
+    # ------------------------------------------------------------------
+    # per_wave mode — correct values
+
+    def test_per_wave_min_max(self):
+        # [0,5,10], fxn1=min→0, fxn2=max→10, range=10 → [0.0, 0.5, 1.0]
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=2.0, fxn1="min",
+            t_begin2=0.0, t_end2=2.0, fxn2="max",
+        )
+        data = _make_data("RecordA0", [0.0, 5.0, 10.0])
+        op.run_init()
+        op.run(data, "A")
+        np.testing.assert_array_almost_equal(data.nparray, [0.0, 0.5, 1.0])
+
+    def test_per_wave_mean_zero_range(self):
+        # fxn1=mean and fxn2=mean over same window → ref_min==ref_max → norm_min everywhere
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=4.0, fxn1="mean",
+            t_begin2=0.0, t_end2=4.0, fxn2="mean",
+            norm_min=-99.0,
+        )
+        data = _make_data("RecordA0", [0.0, 2.0, 4.0, 6.0, 8.0])
+        op.run_init()
+        op.run(data, "A")
+        np.testing.assert_array_equal(data.nparray, [-99.0] * 5)
+
+    def test_per_wave_uses_windows(self):
+        # [0,1,2,3,4] xdelta=1; window1=[0,0]→first point(0), window2=[4,4]→last point(4)
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=0.0, fxn1="mean",
+            t_begin2=4.0, t_end2=4.0, fxn2="mean",
+        )
+        data = _make_data("RecordA0", [0.0, 1.0, 2.0, 3.0, 4.0])
+        op.run_init()
+        op.run(data, "A")
+        np.testing.assert_array_almost_equal(data.nparray, [0.0, 0.25, 0.5, 0.75, 1.0])
+
+    def test_per_wave_custom_norm_range(self):
+        # norm_min=-1, norm_max=1; [0,5,10]→ref_min=0,ref_max=10 → [-1,0,1]
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=2.0, fxn1="min",
+            t_begin2=0.0, t_end2=2.0, fxn2="max",
+            norm_min=-1.0, norm_max=1.0,
+        )
+        data = _make_data("RecordA0", [0.0, 5.0, 10.0])
+        op.run_init()
+        op.run(data, "A")
+        np.testing.assert_array_almost_equal(data.nparray, [-1.0, 0.0, 1.0])
+
+    def test_per_wave_mean_at_min(self):
+        # [3,1,2], fxn1=mean@min, n_mean1=3; min at i=1, mean of [3,1,2]=2.0 → ref_min=2.0
+        # fxn2=max → ref_max=3.0; range=1; normalized: arr-2.0 → [1,-1,0]
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=2.0, fxn1="mean@min", n_mean1=3,
+            t_begin2=0.0, t_end2=2.0, fxn2="max",
+        )
+        data = _make_data("RecordA0", [3.0, 1.0, 2.0])
+        op.run_init()
+        op.run(data, "A")
+        np.testing.assert_array_almost_equal(data.nparray, [1.0, -1.0, 0.0])
+
+    def test_per_wave_mean_at_max(self):
+        # [1,5,3], fxn2=mean@max, n_mean2=3; max at i=1, mean of [1,5,3]=3.0 → ref_max=3.0
+        # fxn1=min → ref_min=1.0; range=2; normalized: (arr-1)/2 → [0,2,1]
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=2.0, fxn1="min",
+            t_begin2=0.0, t_end2=2.0, fxn2="mean@max", n_mean2=3,
+        )
+        data = _make_data("RecordA0", [1.0, 5.0, 3.0])
+        op.run_init()
+        op.run(data, "A")
+        np.testing.assert_array_almost_equal(data.nparray, [0.0, 2.0, 1.0])
+
+    def test_per_wave_preserves_length(self):
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=99.0, fxn1="min",
+            t_begin2=0.0, t_end2=99.0, fxn2="max",
+        )
+        data = _make_data("RecordA0", list(range(100)))
+        op.run_init()
+        op.run(data, "A")
+        self.assertEqual(len(data.nparray), 100)
+
+    # ------------------------------------------------------------------
+    # average mode
+
+    def test_average_mode_shared_refs(self):
+        # 2 waves same channel; ref_mins=[0,2]→avg=1, ref_maxes=[4,6]→avg=5, range=4
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=1.0, fxn1="min",
+            t_begin2=0.0, t_end2=1.0, fxn2="max",
+            mode="average",
+        )
+        d0 = _make_data("RecordA0", [0.0, 4.0])
+        d1 = _make_data("RecordA1", [2.0, 6.0])
+        op.run_all([(d0, "A"), (d1, "A")], folder=None)
+        np.testing.assert_array_almost_equal(d0.nparray, [-0.25, 0.75])
+        np.testing.assert_array_almost_equal(d1.nparray, [0.25, 1.25])
+
+    def test_average_mode_per_channel(self):
+        # Channel A ref_max=10, channel B ref_max=5 — independent
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=1.0, fxn1="min",
+            t_begin2=0.0, t_end2=1.0, fxn2="max",
+            mode="average",
+        )
+        dA = _make_data("RecordA0", [0.0, 10.0])
+        dB = _make_data("RecordB0", [0.0, 5.0])
+        op.run_all([(dA, "A"), (dB, "B")], folder=None)
+        np.testing.assert_array_almost_equal(dA.nparray, [0.0, 1.0])
+        np.testing.assert_array_almost_equal(dB.nparray, [0.0, 1.0])
+        # Verify each channel's note has its own ref_max
+        note_A = dA.notes[0]["note"]
+        note_B = dB.notes[0]["note"]
+        self.assertIn("ref_max=10", note_A)
+        self.assertIn("ref_max=5", note_B)
+
+    # ------------------------------------------------------------------
+    # validation
+
+    def test_fxn1_rejects_unknown(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(fxn1="bad")
+
+    def test_fxn1_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpNormalize(fxn1=42)
+
+    def test_fxn2_rejects_unknown(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(fxn2="bad")
+
+    def test_n_mean1_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpNormalize(n_mean1=True)
+
+    def test_n_mean1_rejects_zero(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(n_mean1=0)
+
+    def test_norm_min_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpNormalize(norm_min=True)
+
+    def test_norm_max_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpNormalize(norm_max=False)
+
+    def test_mode_rejects_unknown(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(mode="bad")
+
+    def test_t_end1_before_t_begin1_raises(self):
+        op = NMMainOpNormalize(t_begin1=5.0, t_end1=0.0)
+        with self.assertRaises(ValueError):
+            op.run_init()
+
+    # ------------------------------------------------------------------
+    # edge cases / notes
+
+    def test_skips_non_ndarray(self):
+        op = NMMainOpNormalize()
+        d = NMData(NM, name="RecordA0")  # no nparray
+        op.run_init()
+        op.run(d, "A")  # should not raise
+        self.assertEqual(len(d.notes), 0)
+
+    def test_note_per_wave(self):
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=2.0, fxn1="min",
+            t_begin2=0.0, t_end2=2.0, fxn2="max",
+            mode="per_wave",
+        )
+        data = _make_data("RecordA0", [0.0, 5.0, 10.0])
+        op.run_init()
+        op.run(data, "A")
+        self.assertEqual(len(data.notes), 1)
+        note = data.notes[0]["note"]
+        self.assertIn("NMNormalize", note)
+        self.assertIn("mode=per_wave", note)
+        self.assertIn("ref_min=", note)
+        self.assertIn("ref_max=", note)
+
+    def test_note_average(self):
+        op = NMMainOpNormalize(
+            t_begin1=0.0, t_end1=1.0, fxn1="min",
+            t_begin2=0.0, t_end2=1.0, fxn2="max",
+            mode="average",
+        )
+        data = _make_data("RecordA0", [0.0, 10.0])
+        op.run_all([(data, "A")], folder=None)
+        self.assertEqual(len(data.notes), 1)
+        note = data.notes[0]["note"]
+        self.assertIn("NMNormalize", note)
+        self.assertIn("mode=average", note)
+        self.assertIn("channel=A", note)
+        self.assertIn("ref_min=", note)
+        self.assertIn("ref_max=", note)
+
+
+# ===========================================================================
 # TestNMToolMain
 # ===========================================================================
+
 
 class TestNMToolMain(unittest.TestCase):
     """Test NMToolMain.op property and end-to-end run_all()."""
@@ -1226,7 +1440,7 @@ class TestNMToolMain(unittest.TestCase):
 
     def test_op_setter_rejects_unknown_string(self):
         with self.assertRaises(ValueError):
-            self.tool.op = "normalize"
+            self.tool.op = "badopname"
 
     def test_op_setter_rejects_bad_type(self):
         with self.assertRaises(TypeError):

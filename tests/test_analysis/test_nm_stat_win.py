@@ -151,16 +151,16 @@ class TestNMStatWin(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.w1.func = {"name": "badname"}
 
-    def test_func_set_maxmin_n_avg(self):
-        self.w1._func_set({"name": "mean@max", "n_avg": 7})
-        self.w1._func_set({"n_avg": "3"})
+    def test_func_set_maxmin_n_mean(self):
+        self.w1._func_set({"name": "mean@max", "n_mean": 7})
+        self.w1._func_set({"n_mean": "3"})
         self.assertEqual(self.w1.func["name"], "mean@max")
-        self.assertEqual(self.w1.func["n_avg"], 3)
+        self.assertEqual(self.w1.func["n_mean"], 3)
 
-    def test_func_set_maxmin_n_avg_bool_raises(self):
-        self.w1._func_set({"name": "mean@max", "n_avg": 7})
+    def test_func_set_maxmin_n_mean_bool_raises(self):
+        self.w1._func_set({"name": "mean@max", "n_mean": 7})
         with self.assertRaises(TypeError):
-            self.w1._func_set({"n_avg": True})
+            self.w1._func_set({"n_mean": True})
 
     def test_func_set_level(self):
         self.w1._func_set({"name": "level+", "ylevel": -10})
@@ -305,7 +305,7 @@ class TestNMStatWin(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.w1.bsln_func = {"name": "badname"}
         with self.assertRaises(ValueError):
-            self.w1._bsln_func_set({"name": "mean@max", "n_avg": 7})
+            self.w1._bsln_func_set({"name": "mean@max", "n_mean": 7})
 
     def test_results_list(self):
         self.assertIsInstance(self.w1.results, list)
@@ -349,18 +349,18 @@ class TestNMStatWin(unittest.TestCase):
         self.assertTrue(np.isnan(r[1]["Δs"]))
 
     def test_compute_mean_at_max_warning(self):
-        self.w1.func = {"name": "mean@max", "n_avg": 0}
+        self.w1.func = {"name": "mean@max", "n_mean": 0}
         r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
         self.assertIn("warning", r[1]["func"])
 
-    def test_compute_mean_at_max_with_n_avg(self):
-        self.w1.func = {"name": "mean@max", "n_avg": 5}
+    def test_compute_mean_at_max_with_n_mean(self):
+        self.w1.func = {"name": "mean@max", "n_mean": 5}
         r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
         self.assertEqual(r[1]["func"]["name"], "mean@max")
-        self.assertEqual(r[1]["func"]["n_avg"], 5)
+        self.assertEqual(r[1]["func"]["n_mean"], 5)
 
     def test_compute_mean_at_min(self):
-        self.w1.func = {"name": "mean@min", "n_avg": 5}
+        self.w1.func = {"name": "mean@min", "n_mean": 5}
         r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
         self.assertEqual(r[1]["func"]["name"], "mean@min")
 

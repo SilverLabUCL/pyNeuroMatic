@@ -217,56 +217,56 @@ class NMStatFuncMaxMin(NMStatFunc):
 
     Accepted names: max, min, mean@max, mean@min.
 
-    When ``n_avg`` is provided for a ``"max"`` or ``"min"`` name, the name is
+    When ``n_mean`` is provided for a ``"max"`` or ``"min"`` name, the name is
     upgraded to ``"mean@max"`` or ``"mean@min"`` automatically.
 
     Args:
         name: One of the names in ``FUNC_NAMES_MAXMIN``.
-        n_avg: Number of points to average around the peak location. Required
+        n_mean: Number of points to compute mean around peak location. Required
             for ``mean@max`` / ``mean@min``; upgrades ``max`` / ``min`` when
             provided.
     """
 
-    _VALID_KEYS = {"n_avg"}
+    _VALID_KEYS = {"n_mean"}
 
     def __init__(
-        self, name: str, n_avg: int | None = None,
+        self, name: str, n_mean: int | None = None,
     ) -> None:
         if name.lower() not in FUNC_NAMES_MAXMIN:
             raise ValueError("func name: '%s'" % name)
         f = name.lower()
         if f in ("mean@max", "mean@min"):
-            if n_avg is None:
-                raise KeyError("missing func key 'n_avg'")
-        if n_avg is not None:
-            if isinstance(n_avg, bool):
-                raise TypeError("n_avg: '%s'" % n_avg)
-            n_avg = int(n_avg)  # raises TypeError/ValueError/OverflowError
-            if n_avg < 0:
-                raise ValueError("n_avg: '%s'" % n_avg)
-            # Upgrade max→mean@max, min→mean@min when n_avg is provided
+            if n_mean is None:
+                raise KeyError("missing func key 'n_mean'")
+        if n_mean is not None:
+            if isinstance(n_mean, bool):
+                raise TypeError("n_mean: '%s'" % n_mean)
+            n_mean = int(n_mean)  # raises TypeError/ValueError/OverflowError
+            if n_mean < 0:
+                raise ValueError("n_mean: '%s'" % n_mean)
+            # Upgrade max→mean@max, min→mean@min when n_mean is provided
             if f == "max":
                 f = "mean@max"
             elif f == "min":
                 f = "mean@min"
         super().__init__(f)
-        self._n_avg = n_avg
+        self._n_mean = n_mean
 
     def to_dict(self) -> dict:
         d = {"name": self._name}
-        if self._n_avg is not None:
-            d["n_avg"] = self._n_avg
+        if self._n_mean is not None:
+            d["n_mean"] = self._n_mean
         return d
 
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
-        """Run the max/min stat; warn if n_avg <= 1 for mean@ variants."""
+        """Run the max/min stat; warn if n_mean <= 1 for mean@ variants."""
         func: dict[str, Any] = {"name": self._name}
-        if self._n_avg is not None:
-            func["n_avg"] = self._n_avg
+        if self._n_mean is not None:
+            func["n_mean"] = self._n_mean
         if self._name in ("mean@max", "mean@min"):
-            n_avg = self._n_avg if self._n_avg is not None else 0
-            if n_avg <= 1:
+            n_mean = self._n_mean if self._n_mean is not None else 0
+            if n_mean <= 1:
                 func["warning"] = "not enough data points to compute a mean"
         r = run_stat(data, func, "main", x0, x1, xclip, ignore_nans)
         self._add_ds(r, bsln_result)
@@ -851,7 +851,7 @@ def _stat_func_from_dict(
 
     Args:
         d: Dict with at least a ``"name"`` key, a bare string func name,
-            or None. Additional keys (``"p0"``, ``"n_avg"``, etc.) are
+            or None. Additional keys (``"p0"``, ``"n_mean"``, etc.) are
             forwarded to the subclass constructor.
 
     Returns:

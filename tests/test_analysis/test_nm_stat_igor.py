@@ -51,7 +51,7 @@ _IGOR_R0 = {
 }
 
 _X0, _X1 = 500.0, 1000.0  # ms
-_N_AVG = 500  # n_avg for mean@max and mean@min (10 ms window at 0.02 ms sampling)
+_N_MEAN = 500  # n_mean for mean@max and mean@min (10 ms window at 0.02 ms sampling)
 
 # ---------------------------------------------------------------------------
 # Sine wave test parameters
@@ -215,23 +215,23 @@ class TestIgorWaveStats(unittest.TestCase):
         self.assertAlmostEqual(r["s"], _IGOR_R0["value@xend"], places=4)
 
     def test_mean_at_max(self):
-        # n_avg=500 determined by matching Igor minAvg/maxAvg to 3 decimal places
-        r = nsmm.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
+        # n_mean=500 determined by matching Igor minAvg/maxAvg to 3 decimal places
+        r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["s"], _IGOR_R0["maxAvg"], places=3)
 
     def test_mean_at_max_location(self):
-        r = nsmm.stat(_DATA, {"name": "mean@max", "n_avg": _N_AVG},
+        r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["x"], _IGOR_R0["maxAvgLoc"], places=1)
 
     def test_mean_at_min(self):
-        r = nsmm.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
+        r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["s"], _IGOR_R0["minAvg"], places=3)
 
     def test_mean_at_min_location(self):
-        r = nsmm.stat(_DATA, {"name": "mean@min", "n_avg": _N_AVG},
+        r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
                       x0=_X0, x1=_X1, xclip=True)
         self.assertAlmostEqual(r["x"], _IGOR_R0["minAvgLoc"], places=1)
 
