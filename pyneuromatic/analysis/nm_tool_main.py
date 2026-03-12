@@ -37,7 +37,7 @@ class NMToolMain(NMTool):
     full parameter control::
 
         tool = NMToolMain()
-        tool.op = NMMainOpScale(factor=2.0)
+        tool.op = NMMainOpArithmetic(factor=2.0)
         nm.run_tool(tool)
 
     Delegates to the current ``op`` via the standard ``run_init / run /

@@ -33,7 +33,6 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpReplaceValues,
     NMMainOpReverse,
     NMMainOpRotate,
-    NMMainOpScale,
     NMMainOpSum,
     NMMainOpSumSqr,
     op_from_name,
@@ -525,90 +524,6 @@ class TestNMMainOpMax(unittest.TestCase):
 
 
 # ===========================================================================
-# TestNMMainOpScale
-# ===========================================================================
-
-class TestNMMainOpScale(unittest.TestCase):
-    """Test NMMainOpScale directly."""
-
-    def setUp(self):
-        self.op = NMMainOpScale()
-        self.data = _make_data("RecordA0", [1.0, 2.0, 3.0])
-
-    def _run_single(self, data=None):
-        if data is None:
-            data = self.data
-        self.op.run(data)
-
-    # --- factor property ---
-
-    def test_factor_default(self):
-        self.assertEqual(self.op.factor, 1.0)
-
-    def test_factor_setter(self):
-        self.op.factor = 2.5
-        self.assertEqual(self.op.factor, 2.5)
-
-    def test_factor_accepts_int(self):
-        self.op.factor = 3
-        self.assertEqual(self.op.factor, 3.0)
-        self.assertIsInstance(self.op.factor, float)
-
-    def test_factor_rejects_bool(self):
-        with self.assertRaises(TypeError):
-            self.op.factor = True
-
-    def test_factor_rejects_str(self):
-        with self.assertRaises(TypeError):
-            self.op.factor = "2.0"
-
-    # --- scaling values ---
-
-    def test_scale_by_2(self):
-        self.op.factor = 2.0
-        self._run_single()
-        np.testing.assert_array_almost_equal(self.data.nparray, [2.0, 4.0, 6.0])
-
-    def test_scale_by_1_no_change(self):
-        self.op.factor = 1.0
-        self._run_single()
-        np.testing.assert_array_almost_equal(self.data.nparray, [1.0, 2.0, 3.0])
-
-    def test_scale_by_0(self):
-        self.op.factor = 0.0
-        self._run_single()
-        np.testing.assert_array_almost_equal(self.data.nparray, [0.0, 0.0, 0.0])
-
-    def test_scale_by_negative(self):
-        self.op.factor = -1.0
-        self._run_single()
-        np.testing.assert_array_almost_equal(self.data.nparray, [-1.0, -2.0, -3.0])
-
-    def test_scale_modifies_nparray_in_place(self):
-        original_obj = self.data
-        self.op.factor = 2.0
-        self._run_single()
-        # Same NMData object, modified array
-        self.assertIs(self.data, original_obj)
-        self.assertEqual(self.data.nparray[0], 2.0)
-
-    # --- skip if no nparray ---
-
-    def test_data_without_nparray_is_skipped(self):
-        d = NMData(NM, name="RecordA0")   # nparray=None
-        self.op.factor = 2.0
-        self.op.run(d)   # should not raise
-
-    # --- notes ---
-
-    def test_note_written(self):
-        self.op.factor = 2.0
-        self.op.run(self.data)
-        self.assertEqual(len(self.data.notes), 1)
-        self.assertIn("NMScale(factor=2)", self.data.notes[0]["note"])
-
-
-# ===========================================================================
 # TestNMMainOpRedimension
 # ===========================================================================
 
@@ -866,9 +781,9 @@ class TestOpFromName(unittest.TestCase):
         op = op_from_name("average")
         self.assertIsInstance(op, NMMainOpAverage)
 
-    def test_scale_by_name(self):
-        op = op_from_name("scale")
-        self.assertIsInstance(op, NMMainOpScale)
+    def test_scale_name_raises(self):
+        with self.assertRaises(ValueError):
+            op_from_name("scale")
 
     def test_redimension_by_name(self):
         op = op_from_name("redimension")
@@ -1740,16 +1655,16 @@ class TestNMToolMain(unittest.TestCase):
     # --- op setter ---
 
     def test_op_setter_accepts_instance(self):
-        self.tool.op = NMMainOpScale()
-        self.assertIsInstance(self.tool.op, NMMainOpScale)
+        self.tool.op = NMMainOpArithmetic()
+        self.assertIsInstance(self.tool.op, NMMainOpArithmetic)
 
     def test_op_setter_accepts_string_average(self):
         self.tool.op = "average"
         self.assertIsInstance(self.tool.op, NMMainOpAverage)
 
-    def test_op_setter_accepts_string_scale(self):
-        self.tool.op = "scale"
-        self.assertIsInstance(self.tool.op, NMMainOpScale)
+    def test_op_setter_accepts_string_arithmetic(self):
+        self.tool.op = "arithmetic"
+        self.assertIsInstance(self.tool.op, NMMainOpArithmetic)
 
     def test_op_setter_rejects_unknown_string(self):
         with self.assertRaises(ValueError):
@@ -1772,13 +1687,13 @@ class TestNMToolMain(unittest.TestCase):
         self.assertIsNotNone(out)
         np.testing.assert_array_almost_equal(out.nparray, [3.0, 6.0])
 
-    # --- end-to-end: scale ---
+    # --- end-to-end: arithmetic ---
 
-    def test_run_all_scale_end_to_end(self):
+    def test_run_all_arithmetic_end_to_end(self):
         folder, targets = _make_folder_with_data({
             "RecordA0": [1.0, 2.0, 3.0],
         })
-        self.tool.op = NMMainOpScale(factor=3.0)
+        self.tool.op = NMMainOpArithmetic(factor=3.0)
         self.tool.run_all(targets)
         d = folder.data.get("RecordA0")
         np.testing.assert_array_almost_equal(d.nparray, [3.0, 6.0, 9.0])
@@ -1801,13 +1716,13 @@ class TestNMToolMain(unittest.TestCase):
         nmh.set_history(fresh_history)
         before = len(fresh_history.buffer)
         _, targets = _make_folder_with_data({"RecordA0": [1.0, 2.0]})
-        self.tool.op = NMMainOpScale(factor=2.0)
+        self.tool.op = NMMainOpArithmetic(factor=2.0)
         self.tool.run_all(targets)
         after = len(fresh_history.buffer)
         self.assertGreater(after, before)
         # Most recent entry should contain the op class name
         last_msg = fresh_history.buffer[-1]["message"]
-        self.assertIn("NMMainOpScale", last_msg)
+        self.assertIn("NMMainOpArithmetic", last_msg)
 
 
 # ===========================================================================

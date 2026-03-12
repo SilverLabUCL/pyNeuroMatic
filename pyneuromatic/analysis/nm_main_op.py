@@ -2,8 +2,8 @@
 """
 NMMainOp — operation classes for NMToolMain.
 
-Provides a base class NMMainOp and concrete subclasses (NMMainOpAverage,
-NMMainOpScale) following the same pattern as nm_transform.py:
+Provides a base class NMMainOp and concrete subclasses following the same
+pattern as nm_transform.py:
 one class per operation, a module-level registry, and a lookup helper.
 
 Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
@@ -513,52 +513,6 @@ class NMMainOpMax(NMMainOpAccumulate):
 
     def _reduce(self, stack: np.ndarray) -> np.ndarray:
         return np.nanmax(stack, axis=0) if self._ignore_nans else np.max(stack, axis=0)
-
-
-# =========================================================================
-# Scale
-# =========================================================================
-
-
-class NMMainOpScale(NMMainOp):
-    """Multiply each selected wave by a scalar factor (in-place).
-
-    Parameters:
-        factor: Multiplication factor (default 1.0).  Must be int or float
-            (not bool).
-    """
-
-    name = "scale"
-
-    def __init__(self, factor: float = 1.0) -> None:
-        self.factor = factor  # use setter for validation
-
-    @property
-    def factor(self) -> float:
-        """Multiplication factor applied to each wave."""
-        return self._factor
-
-    @factor.setter
-    def factor(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "factor", "float"))
-        self._factor = float(value)
-
-    def run(
-        self,
-        data: NMData,
-        channel_name: str | None = None,
-    ) -> None:
-        """Multiply data.nparray by self.factor in-place.
-
-        Args:
-            data: The NMData object to scale.
-            channel_name: Unused; present for API consistency.
-        """
-        if not isinstance(data.nparray, np.ndarray):
-            return
-        data.nparray = data.nparray * self._factor
-        self._add_note(data, "NMScale(factor=%.6g)" % self._factor)
 
 
 # =========================================================================
@@ -1939,7 +1893,6 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "replace_values": NMMainOpReplaceValues,
     "reverse": NMMainOpReverse,
     "rotate": NMMainOpRotate,
-    "scale": NMMainOpScale,
     "sum": NMMainOpSum,
     "sum_sqr": NMMainOpSumSqr,
 }
