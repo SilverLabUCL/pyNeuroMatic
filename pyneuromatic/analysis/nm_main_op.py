@@ -596,9 +596,9 @@ class NMMainOpArithmetic(NMMainOp):
     def op(self, value: str) -> None:
         if not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "op", "str"))
-        if value not in _VALID_ARITH_OPS:
+        if value not in nm_math.VALID_ARITH_OPS:
             raise ValueError(
-                "op must be one of %s, got %r" % (sorted(_VALID_ARITH_OPS), value)
+                "op must be one of %s, got %r" % (sorted(nm_math.VALID_ARITH_OPS), value)
             )
         self._op = value
 
@@ -631,7 +631,7 @@ class NMMainOpArithmetic(NMMainOp):
         factor = self._get_factor(data.name)
         if factor is None:
             return  # dict mode: name not in dict of factors — skip
-        data.nparray = _apply_op(data.nparray.astype(float), factor, self._op)
+        data.nparray = nm_math.apply_arithmetic(data.nparray.astype(float), factor, self._op)
         self._add_note(
             data, "NMArithmetic(factor=%.6g,op=%s)" % (factor, self._op)
         )
@@ -686,9 +686,9 @@ class NMMainOpArithmeticByArray(NMMainOp):
     def op(self, value: str) -> None:
         if not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "op", "str"))
-        if value not in _VALID_ARITH_OPS:
+        if value not in nm_math.VALID_ARITH_OPS:
             raise ValueError(
-                "op must be one of %s, got %r" % (sorted(_VALID_ARITH_OPS), value)
+                "op must be one of %s, got %r" % (sorted(nm_math.VALID_ARITH_OPS), value)
             )
         self._op = value
 
@@ -730,7 +730,7 @@ class NMMainOpArithmeticByArray(NMMainOp):
         if not isinstance(data.nparray, np.ndarray):
             return
         arr = data.nparray.astype(float)
-        data.nparray = _apply_op(arr, self._resolved_ref, self._op)
+        data.nparray = nm_math.apply_arithmetic(arr, self._resolved_ref, self._op)
         ref_label = self._ref if isinstance(self._ref, str) else "array"
         self._add_note(
             data, "NMArithmeticByArray(ref=%s,op=%s)" % (ref_label, self._op)
@@ -962,89 +962,6 @@ class NMMainOpDeletePoints(NMMainOp):
         )
 
 
-# =========================================================================
-# Baseline helper
-# =========================================================================
-
-
-def _time_to_slice(arr: np.ndarray, xscale_dict: dict, t_begin: float, t_end: float) -> slice:
-    """Convert a time window to an array slice using xscale start/delta.
-
-    Clips to valid range; returns an empty slice if the window is fully outside.
-    """
-    start = xscale_dict.get("start", 0.0)
-    delta = xscale_dict.get("delta", 1.0)
-    if delta == 0:
-        return slice(0, 0)
-    i0 = int(round((t_begin - start) / delta))
-    i1 = int(round((t_end - start) / delta)) + 1  # inclusive end
-    i0 = max(0, i0)
-    i1 = min(len(arr), i1)
-    return slice(i0, i1)
-
-
-def _compute_ref(arr: np.ndarray, fxn: str, n_mean: int) -> float:
-    """Compute a scalar reference value from arr using the given function.
-
-    Args:
-        arr: Array slice to compute the reference from.
-        fxn: One of ``"mean"``, ``"min"``, ``"max"``, ``"mean@min"``,
-            ``"mean@max"``.
-        n_mean: Number of points to compute mean around the extremum (used
-            only for ``"mean@min"`` and ``"mean@max"``).
-
-    Returns:
-        Scalar reference value, or ``float("nan")`` if arr is empty.
-    """
-    if len(arr) == 0:
-        return float("nan")
-    if fxn == "mean":
-        return float(np.nanmean(arr))
-    elif fxn == "min":
-        return float(np.nanmin(arr))
-    elif fxn == "max":
-        return float(np.nanmax(arr))
-    elif fxn == "mean@min":
-        i = int(np.nanargmin(arr))
-        half = n_mean // 2
-        return float(np.nanmean(arr[max(0, i - half):i + half + 1]))
-    elif fxn == "mean@max":
-        i = int(np.nanargmax(arr))
-        half = n_mean // 2
-        return float(np.nanmean(arr[max(0, i - half):i + half + 1]))
-    return float("nan")
-
-
-_VALID_ARITH_OPS: frozenset[str] = frozenset({"x", "/", "+", "-", "=", "**"})
-
-
-def _apply_op(arr: np.ndarray, value, op: str) -> np.ndarray:
-    """Apply a binary operation between arr and value.
-
-    Args:
-        arr: Input array.
-        value: Scalar float or ndarray of the same length as arr.
-        op: One of ``"x"`` (multiply), ``"/"`` (divide), ``"+"`` (add),
-            ``"-"`` (subtract), ``"="`` (assign constant/array),
-            ``"**"`` (exponentiate).
-
-    Returns:
-        Result array (same dtype promotion as numpy default, except ``"="``
-        which returns float64).
-    """
-    if op == "x":
-        return arr * value
-    if op == "/":
-        return arr / value
-    if op == "+":
-        return arr + value
-    if op == "-":
-        return arr - value
-    if op == "=":
-        return np.full_like(arr, value, dtype=float)
-    if op == "**":
-        return arr ** value
-    raise ValueError("unknown op: %r" % op)
 
 
 # =========================================================================
@@ -1176,7 +1093,7 @@ class NMMainOpBaseline(NMMainOp):
             parsed = nmu.parse_data_name(data.name)
             channel_name = parsed[1] if parsed is not None else "A"
 
-        sl = _time_to_slice(
+        sl = nm_math.time_window_to_slice(
             data.nparray, data.xscale.to_dict(), self._t_begin, self._t_end
         )
         segment = data.nparray[sl].astype(float)
@@ -1837,10 +1754,10 @@ class NMMainOpNormalize(NMMainOp):
 
         arr = data.nparray.astype(float)
         xd = data.xscale.to_dict()
-        sl1 = _time_to_slice(arr, xd, self._t_begin1, self._t_end1)
-        sl2 = _time_to_slice(arr, xd, self._t_begin2, self._t_end2)
-        ref_min = _compute_ref(arr[sl1], self._fxn1, self._n_mean1)
-        ref_max = _compute_ref(arr[sl2], self._fxn2, self._n_mean2)
+        sl1 = nm_math.time_window_to_slice(arr, xd, self._t_begin1, self._t_end1)
+        sl2 = nm_math.time_window_to_slice(arr, xd, self._t_begin2, self._t_end2)
+        ref_min = nm_math.compute_ref_value(arr[sl1], self._fxn1, self._n_mean1)
+        ref_max = nm_math.compute_ref_value(arr[sl2], self._fxn2, self._n_mean2)
 
         if self._mode == "per_wave":
             data.nparray = self._apply(arr, ref_min, ref_max)
