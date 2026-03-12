@@ -75,7 +75,18 @@ class NMMainOp:
             prefix: Dataseries name to use as the output wave prefix.  If
                 ``None``, ops fall back to parsing the prefix from the data
                 name.
+
+        Note:
+            Before calling ``run_init()``, stores ``folder``, ``prefix``,
+            item count, and the full item list as ``self._folder``,
+            ``self._prefix``, ``self._n_items``, and ``self._data_items`` so
+            that subclasses can access them in ``run_init()`` without
+            overriding ``run_all()``.
         """
+        self._folder = folder
+        self._prefix = prefix
+        self._n_items = len(data_items)
+        self._data_items = data_items
         self.run_init()
         for data, channel_name in data_items:
             self.run(data, channel_name)
@@ -551,6 +562,227 @@ class NMMainOpScale(NMMainOp):
 
 
 # =========================================================================
+# Arithmetic (array-wise arithmetic operation)
+# =========================================================================
+
+
+class NMMainOpArithmetic(NMMainOp):
+    """Apply an arithmetic operation to each selected data array.
+
+    The ``factor`` parameter controls the operand:
+
+    - **scalar** (``float``): the same factor is applied to every data item.
+    - **list** (``list[float]``): factors consumed in order, one per data
+      item.  List length must exactly match the number of data items.
+    - **dict** (``dict[str, float]``): factor looked up by data name;
+      missing keys are silently skipped.
+
+    Parameters:
+        factor: Operand — ``float``, ``list[float]``, or
+            ``dict[str, float]``.  Default is ``1.0``.
+        op: Operation string — one of ``"x"`` (multiply), ``"/"`` (divide),
+            ``"+"`` (add), ``"-"`` (subtract), ``"="`` (assign),
+            ``"**"`` (exponentiate).  Default is ``"x"``.
+    """
+
+    name = "arithmetic"
+
+    def __init__(
+        self,
+        factor: float | list[float] | dict[str, float] = 1.0,
+        op: str = "x",
+    ) -> None:
+        self.factor = factor
+        self.op = op
+        self._index: int = 0
+
+    @property
+    def factor(self) -> float | list[float] | dict[str, float]:
+        """Operand — scalar, list, or dict."""
+        return self._factor
+
+    @factor.setter
+    def factor(self, value: float | list[float] | dict[str, float]) -> None:
+        if isinstance(value, bool):
+            raise TypeError(
+                nmu.type_error_str(value, "factor", "float, list, or dict")
+            )
+        if isinstance(value, (int, float)):
+            self._factor = float(value)
+        elif isinstance(value, list):
+            for i, v in enumerate(value):
+                if isinstance(v, bool) or not isinstance(v, (int, float)):
+                    raise TypeError(
+                        "factor[%d]: expected float, got %s" % (i, type(v).__name__)
+                    )
+            self._factor = value
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                if not isinstance(k, str):
+                    raise TypeError(
+                        "factor key %r: expected str, got %s" % (k, type(k).__name__)
+                    )
+                if isinstance(v, bool) or not isinstance(v, (int, float)):
+                    raise TypeError(
+                        "factor[%r]: expected float, got %s" % (k, type(v).__name__)
+                    )
+            self._factor = value
+        else:
+            raise TypeError(
+                "factor must be float, list, or dict, got %s" % type(value).__name__
+            )
+
+    @property
+    def op(self) -> str:
+        """Operation string."""
+        return self._op
+
+    @op.setter
+    def op(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "op", "str"))
+        if value not in _VALID_ARITH_OPS:
+            raise ValueError(
+                "op must be one of %s, got %r" % (sorted(_VALID_ARITH_OPS), value)
+            )
+        self._op = value
+
+    def run_init(self) -> None:
+        """Reset index and pre-validate list length before any run() calls."""
+        self._index = 0
+        if isinstance(self._factor, list) and len(self._factor) != self._n_items:
+            raise IndexError(
+                "NMMainOpArithmetic: factor list length must match number of "
+                "data items (need %d, got %d)" % (self._n_items, len(self._factor))
+            )
+
+    def _get_factor(self, name: str) -> float | None:
+        if isinstance(self._factor, (int, float)):
+            return self._factor
+        if isinstance(self._factor, list):
+            f = float(self._factor[self._index])
+            self._index += 1
+            return f
+        return self._factor.get(name)  # dict: None if name not found
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Apply factor and op to data.nparray in-place."""
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        factor = self._get_factor(data.name)
+        if factor is None:
+            return  # dict mode: name not in dict of factors — skip
+        data.nparray = _apply_op(data.nparray.astype(float), factor, self._op)
+        self._add_note(
+            data, "NMArithmetic(factor=%.6g,op=%s)" % (factor, self._op)
+        )
+
+
+# =========================================================================
+# Arithmetic (element-wise arithmetic operation)
+# =========================================================================
+
+
+class NMMainOpArithmeticByArray(NMMainOp):
+    """Apply an element-wise arithmetic operation using a reference array.
+
+    The operation is applied as ``data = data op ref`` element-by-element.
+    When ``data`` and ``ref`` differ in length the operation is applied to
+    the overlap (``min(len(data), len(ref))``); elements beyond the overlap
+    are left unchanged.
+
+    Parameters:
+        ref: Reference operand — either an ``np.ndarray`` or a ``str`` data
+            name that will be looked up in the source folder at run time.
+        op: Operation string — same choices as :class:`NMMainOpArithmetic`.
+            Default is ``"x"``.
+    """
+
+    name = "arithmetic_by_array"
+
+    def __init__(self, ref: np.ndarray | str | None = None, op: str = "x") -> None:
+        self.ref = np.zeros(0) if ref is None else ref
+        self.op = op
+        self._resolved_ref: np.ndarray | None = None
+
+    @property
+    def ref(self) -> np.ndarray | str:
+        """Reference operand (array or data name string)."""
+        return self._ref
+
+    @ref.setter
+    def ref(self, value: np.ndarray | str) -> None:
+        if isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ref", "np.ndarray or str"))
+        if not isinstance(value, (np.ndarray, str)):
+            raise TypeError(nmu.type_error_str(value, "ref", "np.ndarray or str"))
+        self._ref = value
+
+    @property
+    def op(self) -> str:
+        """Operation string."""
+        return self._op
+
+    @op.setter
+    def op(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "op", "str"))
+        if value not in _VALID_ARITH_OPS:
+            raise ValueError(
+                "op must be one of %s, got %r" % (sorted(_VALID_ARITH_OPS), value)
+            )
+        self._op = value
+
+    def run_init(self) -> None:
+        """Resolve the reference array before the per-item loop.
+
+        Reads ``self._folder`` (set by :meth:`NMMainOp.run_all`) to look up a
+        string ref name.  Stores the resolved array in ``self._resolved_ref``.
+        """
+        folder = self._folder
+        if isinstance(self._ref, str):
+            if folder is None:
+                raise ValueError(
+                    "folder required to resolve ref %r" % self._ref
+                )
+            ref_data = folder.data.get(self._ref)
+            if ref_data is None or not isinstance(ref_data.nparray, np.ndarray):
+                raise ValueError(
+                    "ref %r not found in folder %r" % (self._ref, folder.name)
+                )
+            self._resolved_ref = ref_data.nparray.astype(float)
+        else:
+            self._resolved_ref = self._ref.astype(float)
+        ref_len = len(self._resolved_ref)
+        for data, _ in self._data_items:
+            if isinstance(data.nparray, np.ndarray) and len(data.nparray) != ref_len:
+                raise ValueError(
+                    "NMMainOpArithmeticByArray: length mismatch for %r "
+                    "(data has %d points, ref has %d)"
+                    % (data.name, len(data.nparray), ref_len)
+                )
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Apply ref and op to data.nparray element-wise in-place."""
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        arr = data.nparray.astype(float)
+        data.nparray = _apply_op(arr, self._resolved_ref, self._op)
+        ref_label = self._ref if isinstance(self._ref, str) else "array"
+        self._add_note(
+            data, "NMArithmeticByArray(ref=%s,op=%s)" % (ref_label, self._op)
+        )
+
+
+# =========================================================================
 # Redimension
 # =========================================================================
 
@@ -826,6 +1058,38 @@ def _compute_ref(arr: np.ndarray, fxn: str, n_mean: int) -> float:
         half = n_mean // 2
         return float(np.nanmean(arr[max(0, i - half):i + half + 1]))
     return float("nan")
+
+
+_VALID_ARITH_OPS: frozenset[str] = frozenset({"x", "/", "+", "-", "=", "**"})
+
+
+def _apply_op(arr: np.ndarray, value, op: str) -> np.ndarray:
+    """Apply a binary operation between arr and value.
+
+    Args:
+        arr: Input array.
+        value: Scalar float or ndarray of the same length as arr.
+        op: One of ``"x"`` (multiply), ``"/"`` (divide), ``"+"`` (add),
+            ``"-"`` (subtract), ``"="`` (assign constant/array),
+            ``"**"`` (exponentiate).
+
+    Returns:
+        Result array (same dtype promotion as numpy default, except ``"="``
+        which returns float64).
+    """
+    if op == "x":
+        return arr * value
+    if op == "/":
+        return arr / value
+    if op == "+":
+        return arr + value
+    if op == "-":
+        return arr - value
+    if op == "=":
+        return np.full_like(arr, value, dtype=float)
+    if op == "**":
+        return arr ** value
+    raise ValueError("unknown op: %r" % op)
 
 
 # =========================================================================
@@ -1659,6 +1923,8 @@ class NMMainOpNormalize(NMMainOp):
 
 
 _OP_REGISTRY: dict[str, type[NMMainOp]] = {
+    "arithmetic": NMMainOpArithmetic,
+    "arithmetic_by_array": NMMainOpArithmeticByArray,
     "average": NMMainOpAverage,
     "baseline": NMMainOpBaseline,
     "delete_nans": NMMainOpDeleteNaNs,
