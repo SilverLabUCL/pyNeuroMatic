@@ -17,6 +17,8 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.analysis.nm_main_op import (
     NMMainOp,
     NMMainOpAccumulate,
+    NMMainOpArithmetic,
+    NMMainOpArithmeticByArray,
     NMMainOpAverage,
     NMMainOpBaseline,
     NMMainOpDeleteNaNs,
@@ -928,6 +930,14 @@ class TestOpFromName(unittest.TestCase):
         op = op_from_name("max")
         self.assertIsInstance(op, NMMainOpMax)
 
+    def test_arithmetic_by_name(self):
+        op = op_from_name("arithmetic")
+        self.assertIsInstance(op, NMMainOpArithmetic)
+
+    def test_arithmetic_by_array_by_name(self):
+        op = op_from_name("arithmetic_by_array")
+        self.assertIsInstance(op, NMMainOpArithmeticByArray)
+
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")
         self.assertIsInstance(op, NMMainOpAverage)
@@ -1798,6 +1808,251 @@ class TestNMToolMain(unittest.TestCase):
         # Most recent entry should contain the op class name
         last_msg = fresh_history.buffer[-1]["message"]
         self.assertIn("NMMainOpScale", last_msg)
+
+
+# ===========================================================================
+# TestNMMainOpArithmetic
+# ===========================================================================
+
+
+class TestNMMainOpArithmetic(unittest.TestCase):
+    """Tests for NMMainOpArithmetic (scalar, list, and dict factor modes)."""
+
+    def _make_items(self, names, arrays):
+        return [(_make_data(n, a), None) for n, a in zip(names, arrays)]
+
+    # ------------------------------------------------------------------
+    # scalar mode
+
+    def _run_scalar(self, arr, factor, op):
+        op_obj = NMMainOpArithmetic(factor=factor, op=op)
+        d = _make_data("RecordA0", arr)
+        op_obj.run_all([(d, None)], folder=None)
+        return d.nparray
+
+    def test_scalar_multiply(self):
+        result = self._run_scalar([1.0, 2.0, 3.0], factor=2.0, op="x")
+        np.testing.assert_array_almost_equal(result, [2.0, 4.0, 6.0])
+
+    def test_scalar_add(self):
+        result = self._run_scalar([1.0, 2.0, 3.0], factor=10.0, op="+")
+        np.testing.assert_array_almost_equal(result, [11.0, 12.0, 13.0])
+
+    def test_scalar_subtract(self):
+        result = self._run_scalar([5.0, 6.0, 7.0], factor=2.0, op="-")
+        np.testing.assert_array_almost_equal(result, [3.0, 4.0, 5.0])
+
+    def test_scalar_divide(self):
+        result = self._run_scalar([4.0, 6.0, 8.0], factor=2.0, op="/")
+        np.testing.assert_array_almost_equal(result, [2.0, 3.0, 4.0])
+
+    def test_scalar_assign(self):
+        result = self._run_scalar([1.0, 2.0, 3.0], factor=99.0, op="=")
+        np.testing.assert_array_almost_equal(result, [99.0, 99.0, 99.0])
+
+    def test_scalar_exponentiate(self):
+        result = self._run_scalar([2.0, 3.0, 4.0], factor=2.0, op="**")
+        np.testing.assert_array_almost_equal(result, [4.0, 9.0, 16.0])
+
+    # ------------------------------------------------------------------
+    # list mode
+
+    def test_list_multiply(self):
+        items = self._make_items(
+            ["RecordA0", "RecordA1", "RecordA2"],
+            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+        )
+        op = NMMainOpArithmetic(factor=[2.0, 3.0, 4.0], op="x")
+        op.run_all(items, folder=None)
+        np.testing.assert_array_almost_equal(items[0][0].nparray, [2.0, 4.0])
+        np.testing.assert_array_almost_equal(items[1][0].nparray, [9.0, 12.0])
+        np.testing.assert_array_almost_equal(items[2][0].nparray, [20.0, 24.0])
+
+    def test_list_add(self):
+        items = self._make_items(["RecordA0", "RecordA1"], [[1.0], [2.0]])
+        op = NMMainOpArithmetic(factor=[10.0, 20.0], op="+")
+        op.run_all(items, folder=None)
+        np.testing.assert_array_almost_equal(items[0][0].nparray, [11.0])
+        np.testing.assert_array_almost_equal(items[1][0].nparray, [22.0])
+
+    def test_list_length_mismatch_raises_before_any_run(self):
+        items = self._make_items(["RecordA0", "RecordA1"], [[1.0], [2.0]])
+        op = NMMainOpArithmetic(factor=[2.0])  # 1 factor for 2 items
+        with self.assertRaises(IndexError):
+            op.run_all(items, folder=None)
+        # error raised in run_init — no items should have been modified
+        np.testing.assert_array_almost_equal(items[0][0].nparray, [1.0])
+        np.testing.assert_array_almost_equal(items[1][0].nparray, [2.0])
+
+    def test_list_too_long_raises(self):
+        items = self._make_items(["RecordA0"], [[1.0]])
+        op = NMMainOpArithmetic(factor=[2.0, 3.0])  # 2 factors for 1 item
+        with self.assertRaises(IndexError):
+            op.run_all(items, folder=None)
+
+    def test_list_state_reset_between_runs(self):
+        items = self._make_items(["RecordA0"], [[1.0]])
+        op = NMMainOpArithmetic(factor=[5.0], op="x")
+        op.run_all(items, folder=None)
+        np.testing.assert_array_almost_equal(items[0][0].nparray, [5.0])
+        items2 = self._make_items(["RecordA0"], [[2.0]])
+        op.run_all(items2, folder=None)
+        np.testing.assert_array_almost_equal(items2[0][0].nparray, [10.0])
+
+    def test_list_element_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpArithmetic(factor=[1.0, True])
+
+    # ------------------------------------------------------------------
+    # dict mode
+
+    def test_dict_multiply(self):
+        items = self._make_items(
+            ["RecordA0", "RecordA1"], [[2.0, 3.0], [4.0, 5.0]]
+        )
+        op = NMMainOpArithmetic(factor={"RecordA0": 10.0, "RecordA1": 0.5}, op="x")
+        op.run_all(items, folder=None)
+        np.testing.assert_array_almost_equal(items[0][0].nparray, [20.0, 30.0])
+        np.testing.assert_array_almost_equal(items[1][0].nparray, [2.0, 2.5])
+
+    def test_dict_missing_key_skips(self):
+        d = _make_data("RecordA0", [3.0, 4.0])
+        op = NMMainOpArithmetic(factor={"RecordA1": 2.0}, op="x")
+        op.run_all([(d, None)], folder=None)
+        np.testing.assert_array_almost_equal(d.nparray, [3.0, 4.0])
+
+    def test_factor_rejects_tuple(self):
+        with self.assertRaises(TypeError):
+            NMMainOpArithmetic(factor=(1.0, 2.0))
+
+    # ------------------------------------------------------------------
+    # validation
+
+    def test_op_default_is_multiply(self):
+        op = NMMainOpArithmetic(factor=3.0)
+        self.assertEqual(op.op, "x")
+
+    def test_op_rejects_unknown(self):
+        with self.assertRaises(ValueError):
+            NMMainOpArithmetic(factor=1.0, op="^")
+
+    def test_op_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpArithmetic(factor=1.0, op=2)
+
+    def test_factor_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpArithmetic(factor=True)
+
+    def test_factor_rejects_str(self):
+        with self.assertRaises(TypeError):
+            NMMainOpArithmetic(factor="2")
+
+    def test_skips_non_ndarray(self):
+        op = NMMainOpArithmetic(factor=2.0)
+        d = NMData("RecordA0")
+        op.run(d)
+
+    def test_note_written(self):
+        op = NMMainOpArithmetic(factor=2.0, op="x")
+        d = _make_data("RecordA0", [1.0, 2.0])
+        op.run(d)
+        notes = [e["note"] for e in d.notes._entries]
+        self.assertTrue(any("NMArithmetic(factor=2,op=x)" in n for n in notes))
+
+
+# ===========================================================================
+# TestNMMainOpArithmeticByArray
+# ===========================================================================
+
+
+def _make_folder_with_ref(folder_name, data_name, arr):
+    """Return (folder, NMData) with a data item pre-loaded."""
+    folder = NMFolder(name=folder_name)
+    folder.data.new(data_name, nparray=np.array(arr, dtype=float))
+    return folder, folder.data.get(data_name)
+
+
+class TestNMMainOpArithmeticByArray(unittest.TestCase):
+    """Tests for NMMainOpArithmeticByArray (element-wise reference arithmetic)."""
+
+    def _run(self, data_arr, ref_arr, op):
+        d = _make_data("RecordA0", data_arr)
+        ref = np.array(ref_arr, dtype=float)
+        op_obj = NMMainOpArithmeticByArray(ref=ref, op=op)
+        op_obj.run_all([(d, None)], folder=None)
+        return d.nparray
+
+    def test_multiply_by_array(self):
+        result = self._run([1.0, 2.0, 3.0], [2.0, 3.0, 4.0], "x")
+        np.testing.assert_array_almost_equal(result, [2.0, 6.0, 12.0])
+
+    def test_subtract_array(self):
+        result = self._run([5.0, 6.0, 7.0], [1.0, 2.0, 3.0], "-")
+        np.testing.assert_array_almost_equal(result, [4.0, 4.0, 4.0])
+
+    def test_assign_array(self):
+        result = self._run([1.0, 2.0, 3.0], [9.0, 8.0, 7.0], "=")
+        np.testing.assert_array_almost_equal(result, [9.0, 8.0, 7.0])
+
+    def test_ref_by_name(self):
+        folder, _ = _make_folder_with_ref("Folder1", "RefWave", [2.0, 4.0, 6.0])
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0])
+        items = [(d, None)]
+        op = NMMainOpArithmeticByArray(ref="RefWave", op="x")
+        op.run_all(items, folder=folder)
+        np.testing.assert_array_almost_equal(d.nparray, [2.0, 8.0, 18.0])
+
+    def test_ref_wave_not_found_raises(self):
+        folder = NMFolder(name="Folder1")
+        d = _make_data("RecordA0", [1.0, 2.0])
+        op = NMMainOpArithmeticByArray(ref="NoSuchWave", op="x")
+        with self.assertRaises(ValueError):
+            op.run_all([(d, None)], folder=folder)
+
+    def test_no_folder_with_string_ref_raises(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        op = NMMainOpArithmeticByArray(ref="RefWave", op="x")
+        with self.assertRaises(ValueError):
+            op.run_all([(d, None)], folder=None)
+
+    def test_length_mismatch_short_ref_raises_before_any_run(self):
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0])
+        ref = np.array([10.0, 10.0], dtype=float)
+        op = NMMainOpArithmeticByArray(ref=ref, op="x")
+        with self.assertRaises(ValueError):
+            op.run_all([(d, None)], folder=None)
+        # error raised in run_init — data should be unchanged
+        np.testing.assert_array_almost_equal(d.nparray, [1.0, 2.0, 3.0, 4.0])
+
+    def test_length_mismatch_long_ref_raises_before_any_run(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        ref = np.array([3.0, 4.0, 5.0, 6.0], dtype=float)
+        op = NMMainOpArithmeticByArray(ref=ref, op="x")
+        with self.assertRaises(ValueError):
+            op.run_all([(d, None)], folder=None)
+        # error raised in run_init — data should be unchanged
+        np.testing.assert_array_almost_equal(d.nparray, [1.0, 2.0])
+
+    def test_ref_rejects_non_array_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpArithmeticByArray(ref=42)
+
+    def test_note_with_name_ref(self):
+        folder, _ = _make_folder_with_ref("Folder1", "RefWave", [1.0, 1.0])
+        d = _make_data("RecordA0", [2.0, 3.0])
+        op = NMMainOpArithmeticByArray(ref="RefWave", op="x")
+        op.run_all([(d, None)], folder=folder)
+        notes = [e["note"] for e in d.notes._entries]
+        self.assertTrue(any("NMArithmeticByArray(ref=RefWave,op=x)" in n for n in notes))
+
+    def test_note_with_array_ref(self):
+        d = _make_data("RecordA0", [2.0, 3.0])
+        ref = np.array([1.0, 1.0])
+        op = NMMainOpArithmeticByArray(ref=ref, op="+")
+        op.run_all([(d, None)], folder=None)
+        notes = [e["note"] for e in d.notes._entries]
+        self.assertTrue(any("NMArithmeticByArray(ref=array,op=+)" in n for n in notes))
 
 
 if __name__ == "__main__":
