@@ -28,6 +28,7 @@ import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
+import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -1872,6 +1873,145 @@ class NMMainOpNormalize(NMMainOp):
 
 
 # =========================================================================
+# NMMainOpInequality
+# =========================================================================
+
+
+class NMMainOpInequality(NMMainOp):
+    """Apply an inequality test point-by-point to each data array.
+
+    Output is written as a new array ``IQ_{data.name}`` in the source
+    folder (non-destructive).  Original data is unchanged.
+
+    Args:
+        op:            Operator string (see
+                       :data:`~pyneuromatic.core.nm_math.VALID_INEQUALITY_OPS`).
+        a:             Threshold / lower bound.
+        b:             Upper bound; required for range ops, else None.
+        binary_output: If True (default), output values are 1.0 (pass) or
+                       0.0 (fail).  If False, output is the original value
+                       where the condition is met and NaN elsewhere.
+    """
+
+    name = "inequality"
+
+    def __init__(
+        self,
+        op: str = ">",
+        a: float = 0.0,
+        b: float | None = None,
+        binary_output: bool = True,
+    ) -> None:
+        self.op = op
+        self.a = a
+        self.b = b
+        self.binary_output = binary_output
+        self._results: dict = {}
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def op(self) -> str:
+        return self._op
+
+    @op.setter
+    def op(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "op", "string"))
+        if value not in nm_math.VALID_INEQUALITY_OPS:
+            raise ValueError(
+                "unknown operator %r. Valid ops: %s"
+                % (value, sorted(nm_math.VALID_INEQUALITY_OPS))
+            )
+        self._op = value
+
+    @property
+    def a(self) -> float:
+        return self._a
+
+    @a.setter
+    def a(self, value: float) -> None:
+        if isinstance(value, bool):
+            raise TypeError("a must be a number, not bool")
+        if not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "a", "number"))
+        self._a = float(value)
+
+    @property
+    def b(self) -> float | None:
+        return self._b
+
+    @b.setter
+    def b(self, value: float | None) -> None:
+        if value is None:
+            self._b = None
+            return
+        if isinstance(value, bool):
+            raise TypeError("b must be a number or None, not bool")
+        if not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "b", "number"))
+        self._b = float(value)
+
+    @property
+    def binary_output(self) -> bool:
+        return self._binary_output
+
+    @binary_output.setter
+    def binary_output(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "binary_output", "bool"))
+        self._binary_output = value
+
+    @property
+    def results(self) -> dict:
+        """Per-output-wave dict; populated after :meth:`run_all`."""
+        return self._results
+
+    # ------------------------------------------------------------------
+    # NMMainOp interface
+    # ------------------------------------------------------------------
+
+    def run_init(self) -> None:
+        self._results = {}
+        if self._op in nm_math._RANGE_INEQUALITY_OPS and self._b is None:
+            raise ValueError("range op %r requires b" % self._op)
+
+    def run(self, data: NMData, channel_name: str | None = None) -> None:
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        arr = data.nparray.astype(float)
+        mask = nm_math.inequality_mask(arr, self._op, self._a, self._b)
+        result = (
+            mask.astype(float)
+            if self._binary_output
+            else np.where(mask, arr, np.nan)
+        )
+        successes = int(np.sum(mask))
+        condition = nm_math.inequality_condition_str(self._op, self._a, self._b)
+        out_name = "IQ_" + data.name
+        if self._folder is not None:
+            xscale = {
+                "start": data.xscale.start,
+                "delta": data.xscale.delta,
+                "label": data.xscale.label,
+                "units": data.xscale.units,
+            }
+            yscale = {"label": data.yscale.label, "units": data.yscale.units}
+            self._folder.data.new(out_name, nparray=result,
+                                  xscale=xscale, yscale=yscale)
+            out_data = self._folder.data.get(out_name)
+            if out_data is not None:
+                self._add_note(out_data, "NMInequality(%s)" % condition)
+        self._results[out_name] = {
+            "successes": successes,
+            "failures": len(arr) - successes,
+            "condition": condition,
+        }
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
@@ -1884,6 +2024,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "delete_nans": NMMainOpDeleteNaNs,
     "delete_points": NMMainOpDeletePoints,
     "differentiate": NMMainOpDifferentiate,
+    "inequality": NMMainOpInequality,
     "insert_points": NMMainOpInsertPoints,
     "integrate": NMMainOpIntegrate,
     "max": NMMainOpMax,
