@@ -24,6 +24,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpDeleteNaNs,
     NMMainOpDeletePoints,
     NMMainOpDifferentiate,
+    NMMainOpInequality,
     NMMainOpInsertPoints,
     NMMainOpIntegrate,
     NMMainOpMax,
@@ -1968,6 +1969,141 @@ class TestNMMainOpArithmeticByArray(unittest.TestCase):
         op.run_all([(d, None)], folder=None)
         notes = [e["note"] for e in d.notes._entries]
         self.assertTrue(any("NMArithmeticByArray(ref=array,op=+)" in n for n in notes))
+
+
+# ===========================================================================
+# TestNMMainOpInequality
+# ===========================================================================
+
+
+class TestNMMainOpInequality(unittest.TestCase):
+
+    def _run(self, op, arrays_by_name):
+        """Run op and return the folder."""
+        return _run_op_directly(op, arrays_by_name)
+
+    # --- basic output ---
+
+    def test_gt_binary(self):
+        op = NMMainOpInequality(op=">", a=2.0, binary_output=True)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        out = folder.data.get("IQ_RecordA0")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_equal(out.nparray, [0.0, 0.0, 1.0, 1.0, 1.0])
+
+    def test_lt_non_binary(self):
+        op = NMMainOpInequality(op="<", a=4.0, binary_output=False)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        out = folder.data.get("IQ_RecordA0")
+        self.assertIsNotNone(out)
+        arr = out.nparray
+        np.testing.assert_array_equal(arr[:3], [1.0, 2.0, 3.0])
+        self.assertTrue(math.isnan(arr[3]))
+        self.assertTrue(math.isnan(arr[4]))
+
+    def test_range_op(self):
+        op = NMMainOpInequality(op="<=<=", a=2.0, b=4.0, binary_output=True)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        out = folder.data.get("IQ_RecordA0")
+        np.testing.assert_array_equal(out.nparray, [0.0, 1.0, 1.0, 1.0, 0.0])
+
+    # --- output wave in folder ---
+
+    def test_output_wave_created_in_folder(self):
+        op = NMMainOpInequality(op=">", a=0.0)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0]})
+        self.assertIsNotNone(folder.data.get("IQ_RecordA0"))
+
+    def test_output_wave_values(self):
+        op = NMMainOpInequality(op=">=", a=3.0, binary_output=True)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0]})
+        out = folder.data.get("IQ_RecordA0")
+        np.testing.assert_array_equal(out.nparray, [0.0, 0.0, 1.0, 1.0])
+
+    def test_xscale_copied(self):
+        folder = NMFolder(name="folder0")
+        folder.data.new(
+            "RecordA0",
+            nparray=np.array([1.0, 2.0, 3.0], dtype=float),
+            xscale={"start": 0.5, "delta": 0.1, "label": "Time", "units": "ms"},
+            yscale={"label": "Vm", "units": "mV"},
+        )
+        src = folder.data.get("RecordA0")
+        op = NMMainOpInequality(op=">", a=1.5)
+        op.run_all([(src, None)], folder=folder)
+        out = folder.data.get("IQ_RecordA0")
+        self.assertAlmostEqual(out.xscale.start, 0.5)
+        self.assertAlmostEqual(out.xscale.delta, 0.1)
+
+    # --- results dict ---
+
+    def test_results_populated(self):
+        op = NMMainOpInequality(op=">", a=2.0)
+        self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        r = op.results["IQ_RecordA0"]
+        self.assertEqual(r["successes"], 3)
+        self.assertEqual(r["failures"], 2)
+        self.assertEqual(r["condition"], "y > 2")
+
+    def test_multiple_waves(self):
+        op = NMMainOpInequality(op=">", a=0.0)
+        folder = self._run(op, {
+            "RecordA0": [1.0],
+            "RecordA1": [2.0],
+            "RecordA2": [3.0],
+        })
+        self.assertIsNotNone(folder.data.get("IQ_RecordA0"))
+        self.assertIsNotNone(folder.data.get("IQ_RecordA1"))
+        self.assertIsNotNone(folder.data.get("IQ_RecordA2"))
+        self.assertEqual(len(op.results), 3)
+
+    # --- validation ---
+
+    def test_range_op_without_b_raises_in_run_init(self):
+        op = NMMainOpInequality(op="<<", a=1.0)   # b=None
+        folder = NMFolder(name="folder0")
+        d = folder.data.new("RecordA0", nparray=np.array([1.0, 2.0]))
+        with self.assertRaises(ValueError):
+            op.run_all([(d, None)], folder=folder)
+
+    def test_unknown_op_raises_in_setter(self):
+        with self.assertRaises(ValueError):
+            NMMainOpInequality(op="^", a=1.0)
+
+    def test_a_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpInequality(op=">", a=True)
+
+    def test_b_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpInequality(op="<<", a=1.0, b=True)
+
+    def test_b_none_valid(self):
+        op = NMMainOpInequality(op=">", a=1.0, b=None)
+        self.assertIsNone(op.b)
+
+    def test_skips_non_ndarray(self):
+        op = NMMainOpInequality(op=">", a=0.0)
+        folder = NMFolder(name="folder0")
+        d = folder.data.new("RecordA0")   # no nparray
+        op.run_all([(d, None)], folder=folder)
+        # no output wave created, no error
+        self.assertIsNone(folder.data.get("IQ_RecordA0"))
+
+    # --- note ---
+
+    def test_note_written(self):
+        op = NMMainOpInequality(op=">", a=2.0)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0]})
+        out = folder.data.get("IQ_RecordA0")
+        notes = [e["note"] for e in out.notes._entries]
+        self.assertTrue(any("NMInequality(y > 2)" in n for n in notes))
+
+    # --- registry ---
+
+    def test_inequality_by_name(self):
+        op = op_from_name("inequality")
+        self.assertIsInstance(op, NMMainOpInequality)
 
 
 if __name__ == "__main__":

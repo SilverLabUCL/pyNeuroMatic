@@ -35,6 +35,7 @@ from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
+import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -837,21 +838,18 @@ class NMToolStats2:
             ValueError: If the named array has no data, op is unrecognised,
                 or a range op is given without b.
         """
-        _SINGLE_OPS = frozenset({">", ">=", "<", "<=", "==", "!="})
-        _RANGE_OPS = frozenset({"<<", "<=<=", "<=<", "<<="})
-
         if not isinstance(toolfolder, NMToolFolder):
             raise TypeError(
                 nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
             )
         if not isinstance(name, str):
             raise TypeError(nmu.type_error_str(name, "name", "string"))
-        if op not in _SINGLE_OPS | _RANGE_OPS:
+        if op not in nm_math.VALID_INEQUALITY_OPS:
             raise ValueError(
                 "unknown operator %r. Single: %s; range: %s"
-                % (op, sorted(_SINGLE_OPS), sorted(_RANGE_OPS))
+                % (op, sorted(nm_math._SINGLE_INEQUALITY_OPS), sorted(nm_math._RANGE_INEQUALITY_OPS))
             )
-        if op in _RANGE_OPS and b is None:
+        if op in nm_math._RANGE_INEQUALITY_OPS and b is None:
             raise ValueError(
                 "range operator %r requires b to be specified" % op
             )
@@ -864,27 +862,7 @@ class NMToolStats2:
 
         arr = d.nparray.astype(float)
 
-        # Build boolean mask — NaN propagates as False in comparisons
-        if op == ">":
-            mask = arr > a
-        elif op == ">=":
-            mask = arr >= a
-        elif op == "<":
-            mask = arr < a
-        elif op == "<=":
-            mask = arr <= a
-        elif op == "==":
-            mask = arr == a
-        elif op == "!=":
-            mask = arr != a
-        elif op == "<<":     # a < y < b
-            mask = (arr > a) & (arr < b)
-        elif op == "<=<=":   # a <= y <= b
-            mask = (arr >= a) & (arr <= b)
-        elif op == "<=<":    # a <= y < b
-            mask = (arr >= a) & (arr < b)
-        else:                # op == "<<="  a < y <= b
-            mask = (arr > a) & (arr <= b)
+        mask = nm_math.inequality_mask(arr, op, a, b)
 
         if binary_output:
             result = mask.astype(float)
@@ -894,7 +872,7 @@ class NMToolStats2:
         successes = int(np.sum(mask))
         failures = len(mask) - successes
 
-        condition = NMToolStats2._inequality_condition_str(op, a, b)
+        condition = nm_math.inequality_condition_str(op, a, b)
 
         if save_to_numpy and toolfolder.data is not None:
             toolfolder.data.new("IQ_%s" % name, nparray=result)
@@ -916,24 +894,6 @@ class NMToolStats2:
             "failures": failures,
             "condition": condition,
         }
-
-    @staticmethod
-    def _inequality_condition_str(op: str, a: float, b: float | None) -> str:
-        """Build a human-readable condition string for inequality().
-
-        Examples: ``"y > 50"``, ``"2 < y < 5"``, ``"y == 0"``.
-        """
-        if op == ">":   return "y > %g" % a
-        if op == ">=":  return "y >= %g" % a
-        if op == "<":   return "y < %g" % a
-        if op == "<=":  return "y <= %g" % a
-        if op == "==":  return "y == %g" % a
-        if op == "!=":  return "y != %g" % a
-        if op == "<<":   return "%g < y < %g" % (a, b)
-        if op == "<=<=": return "%g <= y <= %g" % (a, b)
-        if op == "<=<":  return "%g <= y < %g" % (a, b)
-        if op == "<<=":  return "%g < y <= %g" % (a, b)
-        return ""
 
     @staticmethod
     def _add_epoch_sets_from_mask(
