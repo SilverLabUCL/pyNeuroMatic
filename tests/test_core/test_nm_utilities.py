@@ -384,5 +384,114 @@ class TestParseDataName(unittest.TestCase):
         self.assertEqual(result, ("Record", "A", 0))
 
 
+# ===========================================================================
+# TestFormatEpochString
+# ===========================================================================
+
+class TestFormatEpochString(unittest.TestCase):
+    """Tests for nmu.format_epoch_string()."""
+
+    # --- consecutive epochs → range notation ---
+
+    def test_consecutive_returns_range(self):
+        self.assertEqual(nmu.format_epoch_string(["RecordA0", "RecordA1", "RecordA2"]), "0-2")
+
+    def test_two_consecutive(self):
+        self.assertEqual(nmu.format_epoch_string(["RecordA4", "RecordA5"]), "4-5")
+
+    def test_large_consecutive_range(self):
+        names = ["RecordA%d" % i for i in range(10)]
+        self.assertEqual(nmu.format_epoch_string(names), "0-9")
+
+    # --- non-consecutive epochs → bracket notation ---
+
+    def test_non_consecutive_returns_brackets(self):
+        self.assertEqual(nmu.format_epoch_string(["RecordA0", "RecordA2", "RecordA5"]), "[0,2,5]")
+
+    def test_single_gap(self):
+        self.assertEqual(nmu.format_epoch_string(["RecordA0", "RecordA2"]), "[0,2]")
+
+    # --- single wave ---
+
+    def test_single_wave_returns_single_number(self):
+        self.assertEqual(nmu.format_epoch_string(["RecordA3"]), "[3]")
+
+    # --- unparseable names fall back to the raw name ---
+
+    def test_unparseable_name_uses_raw(self):
+        result = nmu.format_epoch_string(["nopattern"])
+        self.assertIn("nopattern", result)
+
+    def test_mixed_parseable_and_not(self):
+        # One parseable, one not — should not raise
+        result = nmu.format_epoch_string(["RecordA0", "nopattern"])
+        self.assertIsInstance(result, str)
+
+    # --- empty list ---
+
+    def test_empty_list_returns_string(self):
+        # min/max on empty list raises ValueError, caught internally
+        result = nmu.format_epoch_string([])
+        self.assertIsInstance(result, str)
+
+    # --- channel/prefix independence ---
+
+    def test_different_prefix_same_epochs(self):
+        self.assertEqual(nmu.format_epoch_string(["StimulusA0", "StimulusA1"]), "0-1")
+
+    def test_multi_digit_epoch(self):
+        self.assertEqual(nmu.format_epoch_string(["RecordA10", "RecordA11", "RecordA12"]), "10-12")
+
+    # --- arithmetic series (constant step > 1) ---
+
+    def test_arithmetic_series_step3(self):
+        names = ["RecordA%d" % i for i in [1, 4, 7, 10, 13]]
+        self.assertEqual(nmu.format_epoch_string(names), "1-13:3")
+
+    def test_arithmetic_series_step2(self):
+        names = ["RecordA%d" % i for i in [0, 2, 4, 6]]
+        self.assertEqual(nmu.format_epoch_string(names), "0-6:2")
+
+    def test_arithmetic_series_step5(self):
+        names = ["RecordA%d" % i for i in [5, 10, 15]]
+        self.assertEqual(nmu.format_epoch_string(names), "5-15:5")
+
+    def test_arithmetic_series_requires_n3(self):
+        # n=2 with step > 1 should NOT use arithmetic notation
+        self.assertEqual(nmu.format_epoch_string(["RecordA1", "RecordA4"]), "[1,4]")
+
+    def test_non_constant_step_not_arithmetic(self):
+        # steps 2, 3 — not constant, falls through to grouped format
+        names = ["RecordA%d" % i for i in [0, 2, 5]]
+        self.assertEqual(nmu.format_epoch_string(names), "[0,2,5]")
+
+    # --- grouped consecutive runs ---
+
+    def test_two_groups(self):
+        names = ["RecordA%d" % i for i in [0, 1, 2, 3, 4, 10, 11, 12, 13, 14]]
+        self.assertEqual(nmu.format_epoch_string(names), "[0-4,10-14]")
+
+    def test_two_groups_short(self):
+        # 2-element runs listed individually, not as range
+        names = ["RecordA%d" % i for i in [0, 1, 5, 6, 7]]
+        self.assertEqual(nmu.format_epoch_string(names), "[0,1,5-7]")
+
+    def test_three_groups(self):
+        names = ["RecordA%d" % i for i in [0, 1, 2, 5, 6, 10]]
+        self.assertEqual(nmu.format_epoch_string(names), "[0-2,5,6,10]")
+
+    def test_groups_with_singletons(self):
+        # Mix of ranges and single points
+        names = ["RecordA%d" % i for i in [0, 1, 2, 5, 8, 11]]
+        self.assertEqual(nmu.format_epoch_string(names), "[0-2,5,8,11]")
+
+    # --- sorting ---
+
+    def test_unsorted_input_sorted_in_output(self):
+        # Names given out of order — result should be sorted
+        names = ["RecordA2", "RecordA0", "RecordA1"]
+        self.assertEqual(nmu.format_epoch_string(names), "0-2")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

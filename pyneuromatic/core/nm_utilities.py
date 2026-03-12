@@ -561,9 +561,74 @@ def parse_data_name(
     return (prefix, channel_char, epoch_num)
 
 
+def format_epoch_string(data_names: list[str]) -> str:
+    """Format a list of wave names as a compact epoch string for notes.
+
+    Extracts epoch numbers via ``parse_data_name``, sorts them, then chooses
+    the most compact representation:
+
+    1. **Consecutive** (step = 1, n ≥ 2): ``"0-9"``
+    2. **Arithmetic series** (constant step > 1, n ≥ 3): ``"1-13:3"``
+    3. **Grouped ranges** (multiple consecutive runs): ``"[0-4,10-14]"``
+    4. **Everything else**: ``"[0,2,5]"``
+
+    Args:
+        data_names: List of NMData wave names (e.g. ``["RecordA0", "RecordA2"]``).
+
+    Returns:
+        Compact epoch string.
+
+    Examples:
+        >>> format_epoch_string(["RecordA0", "RecordA1", "RecordA2"])
+        '0-2'
+        >>> format_epoch_string(["RecordA1", "RecordA4", "RecordA7", "RecordA10"])
+        '1-10:3'
+        >>> format_epoch_string(["RecordA0", "RecordA1", "RecordA10", "RecordA11"])
+        '[0-1,10-11]'
+        >>> format_epoch_string(["RecordA0", "RecordA2", "RecordA5"])
+        '[0,2,5]'
+    """
+    epoch_nums = []
+    for dname in data_names:
+        parsed = parse_data_name(dname)
+        epoch_nums.append(str(parsed[2]) if parsed is not None else dname)
+    try:
+        ints = sorted(int(e) for e in epoch_nums)
+    except ValueError:
+        return "[" + ",".join(epoch_nums) + "]"
+
+    if not ints:
+        return "[]"
+
+    lo, hi = ints[0], ints[-1]
+
+    if len(ints) == 1:
+        return "[%d]" % lo
+
+    # Case 1: all consecutive (step = 1)
+    if ints == list(range(lo, hi + 1)):
+        return "%d-%d" % (lo, hi)
+
+    # Case 2: arithmetic series with constant step > 1 (requires n >= 3)
+    if len(ints) >= 3:
+        step = ints[1] - ints[0]
+        if step > 1 and all(ints[i] - ints[i - 1] == step for i in range(1, len(ints))):
+            return "%d-%d:%d" % (lo, hi, step)
+
+    # Case 3: group into maximal consecutive runs, format each as "lo" or "lo-hi"
+    groups: list[list[int]] = [[ints[0]]]
+    for x in ints[1:]:
+        if x == groups[-1][-1] + 1:
+            groups[-1].append(x)
+        else:
+            groups.append([x])
+    parts = ["%d-%d" % (g[0], g[-1]) if len(g) > 2 else ",".join(str(x) for x in g) for g in groups]
+    return "[" + ",".join(parts) + "]"
+
+
 def type_error_str(
-    obj: object, 
-    obj_name: str, 
+    obj: object,
+    obj_name: str,
     type_str: str
 ) -> str:
     """Create error message for TypeError.
