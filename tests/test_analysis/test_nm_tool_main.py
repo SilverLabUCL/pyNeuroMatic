@@ -16,6 +16,7 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.analysis.nm_main_op import (
     NMMainOp,
+    NMMainOpAccumulate,
     NMMainOpAverage,
     NMMainOpBaseline,
     NMMainOpDeleteNaNs,
@@ -23,12 +24,16 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpDifferentiate,
     NMMainOpInsertPoints,
     NMMainOpIntegrate,
+    NMMainOpMax,
+    NMMainOpMin,
     NMMainOpNormalize,
     NMMainOpRedimension,
     NMMainOpReplaceValues,
     NMMainOpReverse,
     NMMainOpRotate,
     NMMainOpScale,
+    NMMainOpSum,
+    NMMainOpSumSqr,
     op_from_name,
 )
 from pyneuromatic.analysis.nm_tool_main import NMToolMain
@@ -110,13 +115,9 @@ class TestNMMainOpAverage(unittest.TestCase):
 
     # --- output naming and results dict ---
 
-    def test_output_in_folder(self):
-        self._run()
-        self.assertIsNotNone(self.op.results)
-        self.assertIn("A", self.op.results)
-
     def test_output_name_in_results(self):
         self._run()
+        self.assertIn("A", self.op.results)
         self.assertEqual(self.op.results["A"], "Avg_RecordA")
 
     def test_results_populated_after_run(self):
@@ -126,6 +127,7 @@ class TestNMMainOpAverage(unittest.TestCase):
     # --- NaN handling ---
 
     def test_nanmean_ignores_nan(self):
+        # self.op.ignore_nans = True by default
         arrays = {
             "RecordA0": [2.0, math.nan, 2.0],
             "RecordA1": [4.0, 4.0,      4.0],
@@ -133,8 +135,9 @@ class TestNMMainOpAverage(unittest.TestCase):
         folder = self._run(arrays)
         out = folder.data.get("Avg_RecordA")
         self.assertIsNotNone(out)
-        # nanmean of [2, nan] and [4, 4] at index 1 = mean([4]) = 4.0
+        # nanmean of [2, nan, 2] and [4, 4, 4] at index 1 = mean([nan, 4]) = 4.0
         self.assertTrue(np.isfinite(out.nparray[1]))
+        np.testing.assert_array_almost_equal(out.nparray, [3.0, 4.0, 3.0])
 
     def test_mean_nan_propagates(self):
         self.op.ignore_nans = False
@@ -233,6 +236,290 @@ class TestNMMainOpAverage(unittest.TestCase):
         out = folder.data.get("Avg_RecordA")
         note = out.notes[0]["note"]
         self.assertIn("epochs=[0,2,5]", note)
+
+    # --- compute_stdv / compute_var / compute_sem ---
+
+    def test_compute_stdv_default_false(self):
+        self.assertFalse(self.op.compute_stdv)
+
+    def test_compute_var_default_false(self):
+        self.assertFalse(self.op.compute_var)
+
+    def test_compute_sem_default_false(self):
+        self.assertFalse(self.op.compute_sem)
+
+    def test_compute_stdv_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.compute_stdv = 1
+
+    def test_compute_var_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.compute_var = "yes"
+
+    def test_compute_sem_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.op.compute_sem = 0
+
+    def test_compute_stdv_writes_wave(self):
+        self.op.compute_stdv = True
+        folder = self._run()
+        self.assertIsNotNone(folder.data.get("Stdv_RecordA"))
+
+    def test_compute_stdv_values(self):
+        # [2,2,2], [4,4,4], [6,6,6] → stdv (ddof=1) = 2.0 at each point
+        self.op.compute_stdv = True
+        folder = self._run()
+        out = folder.data.get("Stdv_RecordA")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_almost_equal(out.nparray, [2.0, 2.0, 2.0])
+
+    def test_compute_var_values(self):
+        self.op.compute_var = True
+        folder = self._run()
+        out = folder.data.get("Var_RecordA")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_almost_equal(out.nparray, [4.0, 4.0, 4.0])
+
+    def test_compute_sem_values(self):
+        import math
+        self.op.compute_sem = True
+        folder = self._run()
+        out = folder.data.get("SEM_RecordA")
+        self.assertIsNotNone(out)
+        # stdv=2.0, n=3, sem=2/sqrt(3)
+        expected = 2.0 / math.sqrt(3)
+        np.testing.assert_array_almost_equal(out.nparray, [expected, expected, expected])
+
+    def test_all_three_writes_three_extra_waves(self):
+        self.op.compute_stdv = True
+        self.op.compute_var = True
+        self.op.compute_sem = True
+        folder = self._run()
+        self.assertIsNotNone(folder.data.get("Stdv_RecordA"))
+        self.assertIsNotNone(folder.data.get("Var_RecordA"))
+        self.assertIsNotNone(folder.data.get("SEM_RecordA"))
+
+    def test_stdv_note_on_output_wave(self):
+        self.op.compute_stdv = True
+        folder = self._run({"RecordA0": [2.0, 2.0], "RecordA1": [4.0, 4.0], "RecordA2": [6.0, 6.0]})
+        out = folder.data.get("Stdv_RecordA")
+        self.assertIsNotNone(out)
+        self.assertEqual(len(out.notes), 1)
+        note = out.notes[0]["note"]
+        self.assertIn("NMStdv(folder=folder0", note)
+        self.assertIn("channel=A", note)
+        self.assertIn("n_epochs=3", note)
+
+
+# ===========================================================================
+# TestNMMainOpSum
+# ===========================================================================
+
+class TestNMMainOpSum(unittest.TestCase):
+    """Test NMMainOpSum directly."""
+
+    def setUp(self):
+        self.op = NMMainOpSum()
+        self.arrays = {
+            "RecordA0": [1.0, 2.0, 3.0],
+            "RecordA1": [4.0, 5.0, 6.0],
+        }
+
+    def _run(self, arrays=None):
+        if arrays is None:
+            arrays = self.arrays
+        return _run_op_directly(self.op, arrays)
+
+    def test_correct_values(self):
+        folder = self._run()
+        out = folder.data.get("Sum_RecordA")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_almost_equal(out.nparray, [5.0, 7.0, 9.0])
+
+    def test_output_name(self):
+        folder = self._run()
+        self.assertIsNotNone(folder.data.get("Sum_RecordA"))
+
+    def test_nan_handling_ignore_nans(self):
+        # self.op.ignore_nans = True by default
+        arrays = {
+            "RecordA0": [math.nan, 2.0],
+            "RecordA1": [4.0, 5.0],
+        }
+        folder = self._run(arrays)
+        out = folder.data.get("Sum_RecordA")
+        self.assertIsNotNone(out)
+        # nansum treats nan as 0, so [nan+4, 2+5] = [4, 7]
+        np.testing.assert_array_almost_equal(out.nparray, [4.0, 7.0])
+
+    def test_nan_propagates_when_ignore_nans_false(self):
+        self.op.ignore_nans = False
+        arrays = {
+            "RecordA0": [math.nan, 2.0],
+            "RecordA1": [4.0, 5.0],
+        }
+        folder = self._run(arrays)
+        out = folder.data.get("Sum_RecordA")
+        self.assertTrue(math.isnan(out.nparray[0]))
+        self.assertEqual(out.nparray[1], 7.0)
+
+    def test_two_channels(self):
+        arrays = {
+            "RecordA0": [1.0, 2.0],
+            "RecordA1": [3.0, 4.0],
+            "RecordB0": [5.0, 6.0],
+            "RecordB1": [7.0, 8.0],
+        }
+        folder = self._run(arrays)
+        self.assertIsNotNone(folder.data.get("Sum_RecordA"))
+        self.assertIsNotNone(folder.data.get("Sum_RecordB"))
+
+    def test_no_folder_graceful(self):
+        data_items = [(_make_data("RecordA0", [1.0, 2.0]), None)]
+        self.op.run_all(data_items, None)
+        self.assertEqual(self.op.results, {})
+
+    def test_note_written(self):
+        folder = self._run({"RecordA0": [1.0], "RecordA1": [2.0]})
+        out = folder.data.get("Sum_RecordA")
+        self.assertIsNotNone(out)
+        self.assertEqual(len(out.notes), 1)
+        note = out.notes[0]["note"]
+        self.assertIn("NMSum(folder=folder0", note)
+        self.assertIn("channel=A", note)
+        self.assertIn("n_epochs=2", note)
+
+
+# ===========================================================================
+# TestNMMainOpSumSqr
+# ===========================================================================
+
+class TestNMMainOpSumSqr(unittest.TestCase):
+    """Test NMMainOpSumSqr directly."""
+
+    def setUp(self):
+        self.op = NMMainOpSumSqr()
+
+    def _run(self, arrays):
+        return _run_op_directly(self.op, arrays)
+
+    def test_correct_values(self):
+        # [1,2] and [3,4] → [1²+3², 2²+4²] = [10, 20]
+        folder = self._run({"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0]})
+        out = folder.data.get("SumSqr_RecordA")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_almost_equal(out.nparray, [10.0, 20.0])
+
+    def test_output_name(self):
+        folder = self._run({"RecordA0": [1.0], "RecordA1": [2.0]})
+        self.assertIsNotNone(folder.data.get("SumSqr_RecordA"))
+
+    def test_nan_handling_ignore_nans(self):
+        arrays = {
+            "RecordA0": [math.nan, 2.0],
+            "RecordA1": [3.0, 4.0],
+        }
+        folder = self._run(arrays)
+        out = folder.data.get("SumSqr_RecordA")
+        self.assertIsNotNone(out)
+        # nansum: [nan²+9, 4+16] = [9, 20]
+        np.testing.assert_array_almost_equal(out.nparray, [9.0, 20.0])
+
+    def test_note_written(self):
+        folder = self._run({"RecordA0": [1.0], "RecordA1": [2.0]})
+        out = folder.data.get("SumSqr_RecordA")
+        self.assertIsNotNone(out)
+        note = out.notes[0]["note"]
+        self.assertIn("NMSumSqr(folder=folder0", note)
+        self.assertIn("channel=A", note)
+
+
+# ===========================================================================
+# TestNMMainOpMin
+# ===========================================================================
+
+class TestNMMainOpMin(unittest.TestCase):
+    """Test NMMainOpMin directly."""
+
+    def setUp(self):
+        self.op = NMMainOpMin()
+
+    def _run(self, arrays):
+        return _run_op_directly(self.op, arrays)
+
+    def test_correct_values(self):
+        # [1,5] and [3,2] → point-by-point min = [1, 2]
+        folder = self._run({"RecordA0": [1.0, 5.0], "RecordA1": [3.0, 2.0]})
+        out = folder.data.get("Min_RecordA")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_almost_equal(out.nparray, [1.0, 2.0])
+
+    def test_output_name(self):
+        folder = self._run({"RecordA0": [1.0], "RecordA1": [2.0]})
+        self.assertIsNotNone(folder.data.get("Min_RecordA"))
+
+    def test_nan_handling_ignore_nans(self):
+        arrays = {
+            "RecordA0": [math.nan, 5.0],
+            "RecordA1": [3.0, 2.0],
+        }
+        folder = self._run(arrays)
+        out = folder.data.get("Min_RecordA")
+        self.assertIsNotNone(out)
+        # nanmin ignores nan: [3.0, 2.0]
+        np.testing.assert_array_almost_equal(out.nparray, [3.0, 2.0])
+
+    def test_note_written(self):
+        folder = self._run({"RecordA0": [1.0], "RecordA1": [2.0]})
+        out = folder.data.get("Min_RecordA")
+        self.assertIsNotNone(out)
+        note = out.notes[0]["note"]
+        self.assertIn("NMMin(folder=folder0", note)
+        self.assertIn("channel=A", note)
+
+
+# ===========================================================================
+# TestNMMainOpMax
+# ===========================================================================
+
+class TestNMMainOpMax(unittest.TestCase):
+    """Test NMMainOpMax directly."""
+
+    def setUp(self):
+        self.op = NMMainOpMax()
+
+    def _run(self, arrays):
+        return _run_op_directly(self.op, arrays)
+
+    def test_correct_values(self):
+        # [1,5] and [3,2] → point-by-point max = [3, 5]
+        folder = self._run({"RecordA0": [1.0, 5.0], "RecordA1": [3.0, 2.0]})
+        out = folder.data.get("Max_RecordA")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_almost_equal(out.nparray, [3.0, 5.0])
+
+    def test_output_name(self):
+        folder = self._run({"RecordA0": [1.0], "RecordA1": [2.0]})
+        self.assertIsNotNone(folder.data.get("Max_RecordA"))
+
+    def test_nan_handling_ignore_nans(self):
+        arrays = {
+            "RecordA0": [math.nan, 5.0],
+            "RecordA1": [3.0, 2.0],
+        }
+        folder = self._run(arrays)
+        out = folder.data.get("Max_RecordA")
+        self.assertIsNotNone(out)
+        # nanmax ignores nan: [3.0, 5.0]
+        np.testing.assert_array_almost_equal(out.nparray, [3.0, 5.0])
+
+    def test_note_written(self):
+        folder = self._run({"RecordA0": [1.0], "RecordA1": [2.0]})
+        out = folder.data.get("Max_RecordA")
+        self.assertIsNotNone(out)
+        note = out.notes[0]["note"]
+        self.assertIn("NMMax(folder=folder0", note)
+        self.assertIn("channel=A", note)
 
 
 # ===========================================================================
@@ -624,6 +911,22 @@ class TestOpFromName(unittest.TestCase):
     def test_normalize_by_name(self):
         op = op_from_name("normalize")
         self.assertIsInstance(op, NMMainOpNormalize)
+
+    def test_sum_by_name(self):
+        op = op_from_name("sum")
+        self.assertIsInstance(op, NMMainOpSum)
+
+    def test_sum_sqr_by_name(self):
+        op = op_from_name("sum_sqr")
+        self.assertIsInstance(op, NMMainOpSumSqr)
+
+    def test_min_by_name(self):
+        op = op_from_name("min")
+        self.assertIsInstance(op, NMMainOpMin)
+
+    def test_max_by_name(self):
+        op = op_from_name("max")
+        self.assertIsInstance(op, NMMainOpMax)
 
     def test_case_insensitive(self):
         op = op_from_name("AVERAGE")

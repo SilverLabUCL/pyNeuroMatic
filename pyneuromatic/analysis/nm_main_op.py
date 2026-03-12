@@ -117,23 +117,30 @@ class NMMainOp:
 
 
 # =========================================================================
-# Average
+# Accumulate (base for Average, Sum, SumSqr, Min, Max)
 # =========================================================================
 
 
-class NMMainOpAverage(NMMainOp):
-    """Average selected data waves per channel.
+class NMMainOpAccumulate(NMMainOp):
+    """Base class for ops that accumulate waves and reduce them per channel.
 
-    Accumulates arrays by channel, truncates all arrays to the shortest
-    length, and writes the mean as a new NMData wave
-    ``Avg_{prefix}{channel}`` (e.g. ``Avg_RecordA``) into the source folder.
+    Subclasses set two class attributes and override ``_reduce()``:
+
+    - ``_output_prefix``: prefix for the output wave name (e.g. ``"Avg_"``).
+    - ``_note_name``: op name used in the note string (e.g. ``"NMAverage"``).
+    - ``_reduce(stack)``: compute the per-channel result from the stacked array.
+
+    The full lifecycle is handled here: ``run_init`` resets buffers,
+    ``run`` accumulates per-channel arrays, and ``run_finish`` reduces
+    and writes one output wave per channel.
 
     Parameters:
-        ignore_nans: If True (default) use ``np.nanmean``; otherwise
-            ``np.mean`` (NaN propagates to the result).
+        ignore_nans: If True (default) use NaN-aware reductions
+            (``np.nanmean``, ``np.nansum``, etc.); otherwise NaN propagates.
     """
 
-    name = "average"
+    _output_prefix: str = ""
+    _note_name: str = ""
 
     def __init__(self, ignore_nans: bool = True) -> None:
         if not isinstance(ignore_nans, bool):
@@ -145,7 +152,7 @@ class NMMainOpAverage(NMMainOp):
 
     @property
     def ignore_nans(self) -> bool:
-        """If True, NaN values are excluded from the mean (np.nanmean)."""
+        """If True, NaN values are excluded from the reduction."""
         return self._ignore_nans
 
     @ignore_nans.setter
@@ -158,6 +165,22 @@ class NMMainOpAverage(NMMainOp):
     def results(self) -> dict[str, str]:
         """Read-only dict mapping channel name → output NMData name."""
         return dict(self._results)
+
+    def _reduce(self, stack: np.ndarray) -> np.ndarray:
+        """Reduce the stacked array to a single output array.
+
+        Args:
+            stack: 2-D array of shape (n_waves, n_points).
+
+        Returns:
+            1-D reduced array of shape (n_points,).
+
+        Raises:
+            NotImplementedError: If the subclass does not override this method.
+        """
+        raise NotImplementedError(
+            "%s._reduce() not implemented" % self.__class__.__name__
+        )
 
     def run_init(self) -> None:
         """Reset accumulation state for a new run."""
@@ -199,15 +222,89 @@ class NMMainOpAverage(NMMainOp):
         self._accum[channel_name].append(data.nparray.astype(float).copy())
         self._data_names.setdefault(channel_name, []).append(data.name)
 
+    def _epoch_str(self, cname: str) -> str:
+        """Format the epoch list for the note string."""
+        return nmu.format_epoch_string(self._data_names.get(cname, []))
+
+    def _make_note_str(
+        self,
+        note_name: str,
+        folder_name: str,
+        ds_name: str,
+        cname: str,
+        epoch_str: str,
+        n: int,
+    ) -> str:
+        """Build the note string for an output wave."""
+        return (
+            "%s(folder=%s,dataseries=%s,channel=%s,epochs=%s,n_epochs=%d)"
+            % (note_name, folder_name, ds_name, cname, epoch_str, n)
+        )
+
+    def _write_output_wave(
+        self,
+        folder: NMFolder,
+        out_name: str,
+        arr: np.ndarray,
+        note_name: str,
+        folder_name: str,
+        ds_name: str,
+        cname: str,
+        epoch_str: str,
+        n: int,
+    ) -> None:
+        """Create an output wave in folder and add a note to it."""
+        folder.data.new(
+            out_name,
+            nparray=arr,
+            xscale=self._xscales[cname],
+            yscale=self._yscales[cname],
+        )
+        out_data = folder.data.get(out_name)
+        if out_data is not None:
+            self._add_note(
+                out_data,
+                self._make_note_str(note_name, folder_name, ds_name, cname, epoch_str, n),
+            )
+
+    def _process_channel(
+        self,
+        folder: NMFolder,
+        pfx: str,
+        cname: str,
+        arrays: list[np.ndarray],
+    ) -> None:
+        """Reduce and write one output wave for a single channel.
+
+        Subclasses may override to write additional output waves (e.g.
+        Stdv, Var, SEM alongside the mean).
+
+        Args:
+            folder: Destination NMFolder.
+            pfx: Dataseries prefix for the output wave name.
+            cname: Channel name.
+            arrays: List of accumulated arrays for this channel.
+        """
+        min_len = min(len(a) for a in arrays)
+        stack = np.stack([a[:min_len] for a in arrays])
+        n = len(arrays)
+        epoch_str = self._epoch_str(cname)
+        arr = self._reduce(stack)
+        out_name = self._output_prefix + pfx + cname
+        self._write_output_wave(
+            folder, out_name, arr, self._note_name, folder.name, pfx, cname, epoch_str, n
+        )
+        self._results[cname] = out_name
+
     def run_finish(
         self,
         folder: NMFolder | None = None,
         prefix: str | None = None,
     ) -> None:
-        """Compute the mean and write one output wave per channel to folder.
+        """Reduce and write one output wave per channel to folder.
 
         Args:
-            folder: Destination NMFolder for the averaged waves.
+            folder: Destination NMFolder for the output waves.
             prefix: Dataseries name used as the output wave prefix.  Falls
                 back to the prefix parsed from the first wave name if None.
         """
@@ -216,39 +313,195 @@ class NMMainOpAverage(NMMainOp):
 
         pfx = prefix if prefix is not None else (self._parsed_prefix or "")
         for cname, arrays in self._accum.items():
-            min_len = min(len(a) for a in arrays)
-            stack = np.stack([a[:min_len] for a in arrays])
-            avg = np.nanmean(stack, axis=0) if self._ignore_nans else np.mean(stack, axis=0)
-            out_name = "Avg_" + pfx + cname
-            folder.data.new(
-                out_name,
-                nparray=avg,
-                xscale=self._xscales[cname],
-                yscale=self._yscales[cname],
+            self._process_channel(folder, pfx, cname, arrays)
+
+
+# =========================================================================
+# Average
+# =========================================================================
+
+
+class NMMainOpAverage(NMMainOpAccumulate):
+    """Average selected data waves per channel.
+
+    Accumulates arrays by channel, truncates all arrays to the shortest
+    length, and writes the mean as ``Avg_{prefix}{channel}``
+    (e.g. ``Avg_RecordA``) into the source folder.
+
+    Optionally also writes Stdv, Var, and/or SEM waves (sample statistics,
+    ``ddof=1``) when the corresponding ``compute_*`` parameter is True.
+
+    Parameters:
+        ignore_nans: If True (default) use ``np.nanmean``; otherwise
+            ``np.mean`` (NaN propagates to the result).
+        compute_stdv: If True, write ``Stdv_{prefix}{channel}`` (default False).
+        compute_var: If True, write ``Var_{prefix}{channel}`` (default False).
+        compute_sem: If True, write ``SEM_{prefix}{channel}`` (default False).
+    """
+
+    name = "average"
+    _output_prefix = "Avg_"
+    _note_name = "NMAverage"
+
+    def __init__(
+        self,
+        ignore_nans: bool = True,
+        compute_stdv: bool = False,
+        compute_var: bool = False,
+        compute_sem: bool = False,
+    ) -> None:
+        super().__init__(ignore_nans)
+        self.compute_stdv = compute_stdv  # setters validate bool
+        self.compute_var = compute_var
+        self.compute_sem = compute_sem
+
+    @property
+    def compute_stdv(self) -> bool:
+        """If True, write a Stdv output wave alongside the mean."""
+        return self._compute_stdv
+
+    @compute_stdv.setter
+    def compute_stdv(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "compute_stdv", "boolean"))
+        self._compute_stdv = value
+
+    @property
+    def compute_var(self) -> bool:
+        """If True, write a Var output wave alongside the mean."""
+        return self._compute_var
+
+    @compute_var.setter
+    def compute_var(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "compute_var", "boolean"))
+        self._compute_var = value
+
+    @property
+    def compute_sem(self) -> bool:
+        """If True, write a SEM output wave alongside the mean."""
+        return self._compute_sem
+
+    @compute_sem.setter
+    def compute_sem(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "compute_sem", "boolean"))
+        self._compute_sem = value
+
+    def _reduce(self, stack: np.ndarray) -> np.ndarray:
+        return np.nanmean(stack, axis=0) if self._ignore_nans else np.mean(stack, axis=0)
+
+    def _process_channel(
+        self,
+        folder: NMFolder,
+        pfx: str,
+        cname: str,
+        arrays: list[np.ndarray],
+    ) -> None:
+        """Write mean wave, then optionally Stdv/Var/SEM waves."""
+        super()._process_channel(folder, pfx, cname, arrays)
+        if not (self._compute_stdv or self._compute_var or self._compute_sem):
+            return
+        min_len = min(len(a) for a in arrays)
+        stack = np.stack([a[:min_len] for a in arrays])
+        n = len(arrays)
+        epoch_str = self._epoch_str(cname)
+        std_fn = np.nanstd if self._ignore_nans else np.std
+        std = std_fn(stack, axis=0, ddof=1)
+        if self._compute_stdv:
+            self._write_output_wave(
+                folder, "Stdv_" + pfx + cname, std,
+                "NMStdv", folder.name, pfx, cname, epoch_str, n,
             )
-            out_data = folder.data.get(out_name)
-            if out_data is not None:
-                n = len(arrays)
-                ds_name = prefix if prefix is not None else (self._parsed_prefix or "")
-                epoch_nums = []
-                for dname in self._data_names.get(cname, []):
-                    parsed = nmu.parse_data_name(dname)
-                    epoch_nums.append(str(parsed[2]) if parsed is not None else dname)
-                try:
-                    ints = [int(e) for e in epoch_nums]
-                    lo, hi = min(ints), max(ints)
-                    if len(ints) > 1 and ints == list(range(lo, hi + 1)):
-                        epoch_str = "%d-%d" % (lo, hi)
-                    else:
-                        epoch_str = "[" + ",".join(epoch_nums) + "]"
-                except ValueError:
-                    epoch_str = "[" + ",".join(epoch_nums) + "]"
-                self._add_note(
-                    out_data,
-                    "NMAverage(folder=%s,dataseries=%s,channel=%s,epochs=%s,n_epochs=%d)"
-                    % (folder.name, ds_name, cname, epoch_str, n),
-                )
-            self._results[cname] = out_name
+        if self._compute_var:
+            self._write_output_wave(
+                folder, "Var_" + pfx + cname, std ** 2,
+                "NMVar", folder.name, pfx, cname, epoch_str, n,
+            )
+        if self._compute_sem:
+            self._write_output_wave(
+                folder, "SEM_" + pfx + cname, std / np.sqrt(n),
+                "NMSEM", folder.name, pfx, cname, epoch_str, n,
+            )
+
+
+# =========================================================================
+# Sum, SumSqr, Min, Max  (NMMainOpAccumulate subclasses)
+# =========================================================================
+
+
+class NMMainOpSum(NMMainOpAccumulate):
+    """Sum selected data waves point-by-point per channel.
+
+    Writes ``Sum_{prefix}{channel}`` (e.g. ``Sum_RecordA``) to the folder.
+
+    Parameters:
+        ignore_nans: If True (default) use ``np.nansum`` (NaN treated as 0);
+            otherwise ``np.sum`` (NaN propagates).
+    """
+
+    name = "sum"
+    _output_prefix = "Sum_"
+    _note_name = "NMSum"
+
+    def _reduce(self, stack: np.ndarray) -> np.ndarray:
+        return np.nansum(stack, axis=0) if self._ignore_nans else np.sum(stack, axis=0)
+
+
+class NMMainOpSumSqr(NMMainOpAccumulate):
+    """Sum of squares of selected data waves point-by-point per channel.
+
+    Squares each wave then sums, writing ``SumSqr_{prefix}{channel}``
+    (e.g. ``SumSqr_RecordA``) to the folder.
+
+    Parameters:
+        ignore_nans: If True (default) use ``np.nansum`` on the squared array;
+            otherwise ``np.sum`` (NaN propagates).
+    """
+
+    name = "sum_sqr"
+    _output_prefix = "SumSqr_"
+    _note_name = "NMSumSqr"
+
+    def _reduce(self, stack: np.ndarray) -> np.ndarray:
+        sq = stack ** 2
+        return np.nansum(sq, axis=0) if self._ignore_nans else np.sum(sq, axis=0)
+
+
+class NMMainOpMin(NMMainOpAccumulate):
+    """Point-by-point minimum across selected data waves per channel.
+
+    Writes ``Min_{prefix}{channel}`` (e.g. ``Min_RecordA``) to the folder.
+
+    Parameters:
+        ignore_nans: If True (default) use ``np.nanmin`` (NaN ignored);
+            otherwise ``np.min`` (NaN propagates).
+    """
+
+    name = "min"
+    _output_prefix = "Min_"
+    _note_name = "NMMin"
+
+    def _reduce(self, stack: np.ndarray) -> np.ndarray:
+        return np.nanmin(stack, axis=0) if self._ignore_nans else np.min(stack, axis=0)
+
+
+class NMMainOpMax(NMMainOpAccumulate):
+    """Point-by-point maximum across selected data waves per channel.
+
+    Writes ``Max_{prefix}{channel}`` (e.g. ``Max_RecordA``) to the folder.
+
+    Parameters:
+        ignore_nans: If True (default) use ``np.nanmax`` (NaN ignored);
+            otherwise ``np.max`` (NaN propagates).
+    """
+
+    name = "max"
+    _output_prefix = "Max_"
+    _note_name = "NMMax"
+
+    def _reduce(self, stack: np.ndarray) -> np.ndarray:
+        return np.nanmax(stack, axis=0) if self._ignore_nans else np.max(stack, axis=0)
 
 
 # =========================================================================
@@ -1413,12 +1666,16 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "differentiate": NMMainOpDifferentiate,
     "insert_points": NMMainOpInsertPoints,
     "integrate": NMMainOpIntegrate,
+    "max": NMMainOpMax,
+    "min": NMMainOpMin,
     "normalize": NMMainOpNormalize,
     "redimension": NMMainOpRedimension,
     "replace_values": NMMainOpReplaceValues,
     "reverse": NMMainOpReverse,
     "rotate": NMMainOpRotate,
     "scale": NMMainOpScale,
+    "sum": NMMainOpSum,
+    "sum_sqr": NMMainOpSumSqr,
 }
 
 
