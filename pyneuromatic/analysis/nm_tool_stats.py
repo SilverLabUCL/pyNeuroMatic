@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_stat_utilities import stats
+from pyneuromatic.analysis.nm_stat_utilities import stat
 from pyneuromatic.analysis.nm_stat_win import NMStatWinContainer  # noqa: F401
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_config import NMToolConfig
@@ -639,7 +639,7 @@ class NMToolStats2:
 
         for d in targets:
             r: dict[str, Any] = {}
-            stats(d.nparray, ignore_nans=ignore_nans, results=r)
+            nm_math.array_stats(d.nparray, ignore_nans=ignore_nans, results=r)
             results[d.name] = r
 
         if results_to_history:

@@ -1,10 +1,18 @@
 """Pure math utility functions shared across pyNeuroMatic.
 
-No NM object dependencies — only numpy.
+No NM object dependencies — only numpy/math and nm_utilities.
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
+
+import pyneuromatic.core.nm_utilities as nmu
+
+# =========================================================================
+# Inequality helpers
+# =========================================================================
 
 _SINGLE_INEQUALITY_OPS: frozenset[str] = frozenset({">", ">=", "<", "<=", "==", "!="})
 _RANGE_INEQUALITY_OPS: frozenset[str] = frozenset({"<<", "<=<=", "<=<", "<<="})
@@ -109,3 +117,442 @@ def inequality_condition_str(op: str, a: float, b: float | None) -> str:
     if op == "<=<":  return "%g <= y < %g" % (a, b)
     if op == "<<=":  return "%g < y <= %g" % (a, b)
     return ""
+
+
+# =========================================================================
+# Arithmetic helpers
+# =========================================================================
+
+VALID_ARITH_OPS: frozenset[str] = frozenset({"x", "/", "+", "-", "=", "**"})
+
+
+def apply_arithmetic(arr: np.ndarray, value, op: str) -> np.ndarray:
+    """Apply a binary arithmetic operation between *arr* and *value*.
+
+    Args:
+        arr:   Input array.
+        value: Scalar float or ndarray of the same length as *arr*.
+        op:    One of ``"x"`` (multiply), ``"/"`` (divide), ``"+"`` (add),
+               ``"-"`` (subtract), ``"="`` (assign constant/array),
+               ``"**"`` (exponentiate).
+
+    Returns:
+        Result array (same dtype promotion as numpy default, except ``"="``
+        which returns float64).
+
+    Raises:
+        ValueError: If *op* is not in ``VALID_ARITH_OPS``.
+    """
+    if op == "x":
+        return arr * value
+    if op == "/":
+        return arr / value
+    if op == "+":
+        return arr + value
+    if op == "-":
+        return arr - value
+    if op == "=":
+        return np.full_like(arr, value, dtype=float)
+    if op == "**":
+        return arr ** value
+    raise ValueError("unknown op: %r" % op)
+
+
+# =========================================================================
+# Reference-value helper
+# =========================================================================
+
+
+def compute_ref_value(arr: np.ndarray, fxn: str, n_mean: int) -> float:
+    """Compute a scalar reference value from *arr* using the given function.
+
+    Args:
+        arr:    Array slice to compute the reference from.
+        fxn:    One of ``"mean"``, ``"min"``, ``"max"``, ``"mean@min"``,
+                ``"mean@max"``.
+        n_mean: Number of points to average around the extremum (used
+                only for ``"mean@min"`` and ``"mean@max"``).
+
+    Returns:
+        Scalar reference value, or ``float("nan")`` if *arr* is empty.
+    """
+    if len(arr) == 0:
+        return float("nan")
+    if fxn == "mean":
+        return float(np.nanmean(arr))
+    if fxn == "min":
+        return float(np.nanmin(arr))
+    if fxn == "max":
+        return float(np.nanmax(arr))
+    if fxn == "mean@min":
+        i = int(np.nanargmin(arr))
+        half = n_mean // 2
+        return float(np.nanmean(arr[max(0, i - half):i + half + 1]))
+    if fxn == "mean@max":
+        i = int(np.nanargmax(arr))
+        half = n_mean // 2
+        return float(np.nanmean(arr[max(0, i - half):i + half + 1]))
+    return float("nan")
+
+
+# =========================================================================
+# Time-window helper
+# =========================================================================
+
+
+def time_window_to_slice(
+    arr: np.ndarray,
+    xscale_dict: dict,
+    t_begin: float,
+    t_end: float,
+) -> slice:
+    """Convert a time window to an array slice using xscale start/delta.
+
+    Clips to valid range; returns an empty slice if the window is fully
+    outside the array bounds.
+
+    Args:
+        arr:         Array whose length defines the valid index range.
+        xscale_dict: Dict with ``"start"`` and ``"delta"`` keys (floats).
+        t_begin:     Start of the time window.
+        t_end:       End of the time window (inclusive).
+
+    Returns:
+        A :class:`slice` suitable for indexing *arr*.
+    """
+    start = xscale_dict.get("start", 0.0)
+    delta = xscale_dict.get("delta", 1.0)
+    if delta == 0:
+        return slice(0, 0)
+    i0 = int(round((t_begin - start) / delta))
+    i1 = int(round((t_end - start) / delta)) + 1  # inclusive end
+    i0 = max(0, i0)
+    i1 = min(len(arr), i1)
+    return slice(i0, i1)
+
+
+# =========================================================================
+# Array statistics
+# =========================================================================
+
+
+def array_stats(
+    yarray: np.ndarray,
+    ignore_nans: bool = False,
+    results: dict | None = None,
+) -> dict:
+    """Compute all summary statistics of a numpy array in a single pass.
+
+    Computes mean, std, sem, rms, N, NaNs, INFs, min, max.
+
+    Args:
+        yarray:      Input numpy array.
+        ignore_nans: If True, exclude NaN values from calculations.
+        results:     Optional dict to populate. Created if None.
+
+    Returns:
+        Results dict with keys: mean, std, sem, rms, N, NaNs, INFs, min, max.
+
+    Raises:
+        TypeError: If *yarray* is not a numpy ndarray or *results* is not
+            a dict.
+    """
+    if not isinstance(yarray, np.ndarray):
+        raise TypeError(nmu.type_error_str(yarray, "yarray", "NumPy ndarray"))
+    if results is None:
+        results = {}
+    elif not isinstance(results, dict):
+        raise TypeError(nmu.type_error_str(results, "results", "dictionary"))
+
+    nans = int(np.count_nonzero(np.isnan(yarray)))
+    infs = int(np.count_nonzero(np.isinf(yarray)))
+    results["NaNs"] = nans
+    results["INFs"] = infs
+
+    if ignore_nans:
+        arr = yarray[~np.isnan(yarray)]
+    else:
+        arr = yarray
+
+    n = arr.size
+    results["N"] = n
+
+    if n == 0:
+        results["mean"] = math.nan
+        results["std"] = math.nan
+        results["sem"] = math.nan
+        results["rms"] = math.nan
+        results["min"] = math.nan
+        results["max"] = math.nan
+        return results
+
+    results["mean"] = float(np.mean(arr))
+    results["std"] = float(np.std(arr, ddof=1) if n > 1 else math.nan)
+    results["sem"] = (results["std"] / math.sqrt(n) if n > 1 else math.nan)
+    results["rms"] = float(math.sqrt(np.mean(np.square(arr))))
+    results["min"] = float(np.min(arr))
+    results["max"] = float(np.max(arr))
+
+    return results
+
+
+# =========================================================================
+# Level crossings
+# =========================================================================
+
+
+def interp_x(ylevel: float, x0: float, y0: float, x1: float, y1: float) -> float:
+    """Interpolate the x-coordinate where a line segment crosses *ylevel*.
+
+    Fits a line through (x0, y0) and (x1, y1) and returns the x-value
+    where that line equals *ylevel*.
+
+    Args:
+        ylevel: The y-axis threshold to intersect.
+        x0, y0: Coordinates of the first point.
+        x1, y1: Coordinates of the second point.
+
+    Returns:
+        Interpolated x-value (float) at y = ylevel.
+    """
+    dx = x1 - x0
+    dy = y1 - y0
+    m = dy / dx
+    b = y1 - m * x1
+    x = (ylevel - b) / m
+    return x
+
+
+def find_level_crossings(
+    yarray: np.ndarray,
+    ylevel: float,
+    func_name: str = "level",
+    xarray: np.ndarray | None = None,
+    xstart: float = 0,
+    xdelta: float = 1,
+    i_nearest: bool = True,
+    x_interp: bool = True,
+    ignore_nans: bool = True,
+) -> tuple:
+    """Find crossings of a y-axis level in a data array.
+
+    A crossing is detected wherever the signal transitions across *ylevel*
+    (i.e. ``np.diff(yarray > ylevel)`` is True). For each crossing, the
+    nearest sample index and interpolated x-value are returned.
+
+    Args:
+        yarray:      1-D numpy array of y-values to search.
+        ylevel:      The y-axis threshold to search for.
+        func_name:   Controls which crossing directions are returned:
+                     ``"level"`` — all crossings (both rising and falling).
+                     ``"level+"`` — rising crossings only.
+                     ``"level-"`` — falling crossings only.
+        xarray:      Optional 1-D numpy array of x-values (same size as
+                     *yarray*). Used instead of *xstart*/*xdelta* when
+                     provided.
+        xstart:      X-scale start value; used when *xarray* is None.
+        xdelta:      X-scale sample interval; used when *xarray* is None.
+        i_nearest:   If True (default), returns the sample index nearest to
+                     the crossing via linear interpolation. If False, returns
+                     the index immediately after the crossing.
+        x_interp:    If True (default), returns the interpolated x-value at
+                     the exact crossing. If False, returns the x-value at
+                     the nearest sample index.
+        ignore_nans: If True (default), NaN values are included in the
+                     transition detection.
+
+    Returns:
+        Tuple ``(indexes, xvalues)`` of numpy arrays:
+        *indexes* — sample indices (int) nearest to each crossing.
+        *xvalues* — x-values (float) at each crossing location.
+        Both arrays are empty if no crossings are found.
+
+    Raises:
+        TypeError:  If *func_name* is not a string, or *yarray*/*xarray* is
+                    not a numpy ndarray.
+        ValueError: If *func_name* does not contain ``"level"``, *ylevel*
+                    is inf/nan, *xstart*/*xdelta* is inf/nan, or *xarray*
+                    size differs from *yarray*.
+    """
+    if not isinstance(func_name, str):
+        raise TypeError(nmu.type_error_str(func_name, "func_name", "string"))
+
+    f = func_name.lower()
+    if "level" not in f:
+        raise ValueError("func_name: '%s'" % func_name)
+
+    if isinstance(ylevel, float):
+        if math.isinf(ylevel) or math.isnan(ylevel):
+            raise ValueError("ylevel: '%s'" % ylevel)
+    else:
+        ylevel = float(ylevel)
+
+    if not isinstance(yarray, np.ndarray):
+        raise TypeError(nmu.type_error_str(yarray, "yarray", "NumPy.ndarray"))
+
+    found_xarray = False
+
+    if xarray is None:
+        pass
+    elif isinstance(xarray, np.ndarray):
+        if xarray.size == yarray.size:
+            found_xarray = True
+        else:
+            raise ValueError(
+                "x-y paired NumPy arrays have different size: %s != %s"
+                % (xarray.size, yarray.size)
+            )
+    else:
+        raise TypeError(nmu.type_error_str(xarray, "xarray", "NumPy.ndarray"))
+
+    if isinstance(xstart, float):
+        if math.isinf(xstart) or math.isnan(xstart):
+            raise ValueError("xstart: '%s'" % xstart)
+    else:
+        xstart = float(xstart)
+
+    if isinstance(xdelta, float):
+        if math.isinf(xdelta) or math.isnan(xdelta):
+            raise ValueError("xdelta: '%s'" % xdelta)
+    else:
+        xdelta = float(xdelta)
+
+    if not isinstance(i_nearest, bool):
+        i_nearest = True
+    if not isinstance(x_interp, bool):
+        x_interp = True
+    if not isinstance(ignore_nans, bool):
+        ignore_nans = True
+
+    level_crossings = np.diff(yarray > ylevel, prepend=False)
+    locations = np.argwhere(level_crossings)
+    if len(locations.shape) != 2:
+        raise RuntimeError("locations shape should be 2")
+    locations = locations[:, 0]
+    indexes = []
+    xvalues = []
+
+    for i in locations:
+        if i == 0:
+            continue
+
+        y0 = yarray[i - 1]
+        y1 = yarray[i]
+
+        if f == "level+":
+            if y1 <= y0:
+                continue
+        elif f == "level-":
+            if y1 >= y0:
+                continue
+
+        if found_xarray:
+            x0 = xarray[i - 1]
+            x1 = xarray[i]
+            dx = x1 - x0
+        else:
+            x0 = xstart + (i - 1) * xdelta
+            x1 = xstart + i * xdelta
+            dx = xdelta
+
+        if not i_nearest:
+            indexes.append(i)
+            xvalues.append(x1)
+            continue
+
+        dy = y1 - y0
+        m = dy / dx
+        b = y1 - m * x1
+        x = (ylevel - b) / m
+
+        if abs(x - x0) <= abs(x - x1):
+            indexes.append(i - 1)
+            xvalues.append(x if x_interp else x0)
+        else:
+            indexes.append(i)
+            xvalues.append(x if x_interp else x1)
+
+    return (np.array(indexes), np.array(xvalues))
+
+
+# =========================================================================
+# Linear regression
+# =========================================================================
+
+
+def linear_regression(
+    yarray: np.ndarray,
+    xarray: np.ndarray | None = None,
+    xstart: float = 0,
+    xdelta: float = 1,
+    ignore_nans: bool = True,
+) -> tuple:
+    """Fit a linear regression line to y-data using ``numpy.polyfit``.
+
+    Args:
+        yarray:      1-D numpy array of y-values.
+        xarray:      Optional 1-D numpy array of x-values (same size as
+                     *yarray*). Used instead of *xstart*/*xdelta* when
+                     provided.
+        xstart:      X-scale start value; used to build a uniform x-array
+                     when *xarray* is None.
+        xdelta:      X-scale sample interval; used to build a uniform
+                     x-array when *xarray* is None.
+        ignore_nans: If True (default), NaN samples are removed from both
+                     arrays before fitting.
+
+    Returns:
+        Tuple ``(m, b)`` where *m* is the slope and *b* is the y-intercept.
+
+    Raises:
+        TypeError:  If *yarray* or *xarray* is not a numpy ndarray, or
+                    *xstart*/*xdelta* is not a number.
+        ValueError: If *xstart*/*xdelta* is inf/nan, or array sizes differ.
+    """
+    if not isinstance(yarray, np.ndarray):
+        raise TypeError(nmu.type_error_str(yarray, "yarray", "NumPy.ndarray"))
+
+    found_xarray = False
+
+    if xarray is None:
+        pass
+    elif isinstance(xarray, np.ndarray):
+        if xarray.size == yarray.size:
+            found_xarray = True
+        else:
+            raise ValueError(
+                "x-y paired NumPy arrays have different size: %s != %s"
+                % (xarray.size, yarray.size)
+            )
+    else:
+        raise TypeError(nmu.type_error_str(xarray, "xarray", "NumPy.ndarray"))
+
+    if not found_xarray:
+        if isinstance(xstart, float):
+            if math.isinf(xstart) or math.isnan(xstart):
+                raise ValueError("xstart: '%s'" % xstart)
+        elif isinstance(xstart, int) and not isinstance(xstart, bool):
+            pass
+        else:
+            raise TypeError(nmu.type_error_str(xstart, "xstart", "float"))
+
+        if isinstance(xdelta, float):
+            if math.isinf(xdelta) or math.isnan(xdelta):
+                raise ValueError("xdelta: '%s'" % xdelta)
+        elif isinstance(xdelta, int) and not isinstance(xdelta, bool):
+            pass
+        else:
+            raise TypeError(nmu.type_error_str(xdelta, "xdelta", "float"))
+
+        x0 = xstart
+        x1 = xstart + (yarray.size - 1) * xdelta
+        xarray = np.linspace(x0, x1, yarray.size)
+
+    if ignore_nans:
+        mask = ~np.isnan(yarray)
+        xarray = xarray[mask]
+        yarray = yarray[mask]
+
+    m, b = np.polyfit(xarray, yarray, deg=1)
+
+    return (m, b)
