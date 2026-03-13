@@ -435,28 +435,28 @@ class TestNMToolStats2Histogram(unittest.TestCase):
 
     def test_histogram_saves_counts_array(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        self.assertIn("HIST_ST_w0_mean_y_counts", self.tf.data)
+        self.assertIn("H_ST_w0_mean_y_counts", self.tf.data)
 
     def test_histogram_saves_edges_array(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        self.assertIn("HIST_ST_w0_mean_y_edges", self.tf.data)
+        self.assertIn("H_ST_w0_mean_y_edges", self.tf.data)
 
     def test_histogram_xscale_start(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        d = self.tf.data.get("HIST_ST_w0_mean_y_counts")
+        d = self.tf.data.get("H_ST_w0_mean_y_counts")
         self.assertAlmostEqual(d.xscale.start, 1.0)
 
     def test_histogram_xscale_delta(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        d = self.tf.data.get("HIST_ST_w0_mean_y_counts")
+        d = self.tf.data.get("H_ST_w0_mean_y_counts")
         self.assertAlmostEqual(d.xscale.delta, 1.0)  # (5 - 1) / 4 = 1.0
 
     # --- save_to_numpy=False ---
 
     def test_histogram_no_save_skips_arrays(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, save_to_numpy=False)
-        self.assertNotIn("HIST_ST_w0_mean_y_counts", self.tf.data)
-        self.assertNotIn("HIST_ST_w0_mean_y_edges", self.tf.data)
+        self.assertNotIn("H_ST_w0_mean_y_counts", self.tf.data)
+        self.assertNotIn("H_ST_w0_mean_y_edges", self.tf.data)
 
     def test_histogram_no_save_still_returns_dict(self):
         r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4,

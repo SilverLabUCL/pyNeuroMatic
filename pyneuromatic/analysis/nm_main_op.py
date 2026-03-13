@@ -24,6 +24,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
+import math
 import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
@@ -981,9 +982,9 @@ class NMMainOpBaseline(NMMainOp):
       wave in that channel.
 
     Parameters:
-        t_begin: Baseline window start in time units (default 0.0).
-        t_end: Baseline window end in time units (default 0.0).  Must be >=
-            ``t_begin``.
+        x0: Baseline window start in time units (default 0.0).
+        x1: Baseline window end in time units (default 0.0).  Must be >=
+            ``x0``.
         mode: ``"per_wave"`` (default) or ``"average"``.
         ignore_nans: If True (default) use ``np.nanmean``; otherwise ``np.mean``
             (NaN propagates to the result).
@@ -995,13 +996,13 @@ class NMMainOpBaseline(NMMainOp):
 
     def __init__(
         self,
-        t_begin: float = 0.0,
-        t_end: float = 0.0,
+        x0: float = 0.0,
+        x1: float = 0.0,
         mode: str = "per_wave",
         ignore_nans: bool = True,
     ) -> None:
-        self.t_begin = t_begin
-        self.t_end = t_end
+        self.x0 = x0
+        self.x1 = x1
         self.mode = mode
         self.ignore_nans = ignore_nans
 
@@ -1009,26 +1010,26 @@ class NMMainOpBaseline(NMMainOp):
     # Properties
 
     @property
-    def t_begin(self) -> float:
+    def x0(self) -> float:
         """Baseline window start (time units)."""
-        return self._t_begin
+        return self._x0
 
-    @t_begin.setter
-    def t_begin(self, value: float) -> None:
+    @x0.setter
+    def x0(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "t_begin", "float"))
-        self._t_begin = float(value)
+            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+        self._x0 = float(value)
 
     @property
-    def t_end(self) -> float:
+    def x1(self) -> float:
         """Baseline window end (time units)."""
-        return self._t_end
+        return self._x1
 
-    @t_end.setter
-    def t_end(self, value: float) -> None:
+    @x1.setter
+    def x1(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "t_end", "float"))
-        self._t_end = float(value)
+            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+        self._x1 = float(value)
 
     @property
     def mode(self) -> str:
@@ -1060,9 +1061,9 @@ class NMMainOpBaseline(NMMainOp):
     # Validation helper
 
     def _validate_window(self) -> None:
-        if self._t_end < self._t_begin:
+        if self._x1 < self._x0:
             raise ValueError(
-                "t_end (%g) must be >= t_begin (%g)" % (self._t_end, self._t_begin)
+                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
             )
 
     # ------------------------------------------------------------------
@@ -1094,7 +1095,7 @@ class NMMainOpBaseline(NMMainOp):
             channel_name = parsed[1] if parsed is not None else "A"
 
         sl = nm_math.time_window_to_slice(
-            data.nparray, data.xscale.to_dict(), self._t_begin, self._t_end
+            data.nparray, data.xscale.to_dict(), self._x0, self._x1
         )
         segment = data.nparray[sl].astype(float)
         if len(segment) == 0:
@@ -1108,8 +1109,8 @@ class NMMainOpBaseline(NMMainOp):
             data.nparray = data.nparray.astype(float) - baseline
             self._add_note(
                 data,
-                "NMBaseline(t_begin=%.6g,t_end=%.6g,mode=per_wave,baseline=%.6g)"
-                % (self._t_begin, self._t_end, baseline),
+                "NMBaseline(x0=%.6g,x1=%.6g,mode=per_wave,baseline=%.6g)"
+                % (self._x0, self._x1, baseline),
             )
         else:  # "average"
             self._baseline_accum.setdefault(channel_name, []).append(baseline)
@@ -1136,8 +1137,8 @@ class NMMainOpBaseline(NMMainOp):
                 d.nparray = d.nparray.astype(float) - avg_baseline
                 self._add_note(
                     d,
-                    "NMBaseline(t_begin=%.6g,t_end=%.6g,mode=average,channel=%s,baseline=%.6g)"
-                    % (self._t_begin, self._t_end, channel_name, avg_baseline),
+                    "NMBaseline(x0=%.6g,x1=%.6g,mode=average,channel=%s,baseline=%.6g)"
+                    % (self._x0, self._x1, channel_name, avg_baseline),
                 )
 
 
@@ -1486,9 +1487,9 @@ class NMMainOpNormalize(NMMainOp):
 
     Two independent time windows are used:
 
-    - Window 1 (``t_begin1``/``t_end1``) computes the "low" reference via
+    - Window 1 (``x0_min``/``x1_min``) computes the "low" reference via
       ``fxn1`` (``"mean"``, ``"min"``, or ``"mean@min"``).
-    - Window 2 (``t_begin2``/``t_end2``) computes the "high" reference via
+    - Window 2 (``x0_max``/``x1_max``) computes the "high" reference via
       ``fxn2`` (``"mean"``, ``"max"``, or ``"mean@max"``).
 
     Two modes (matching NMMainOpBaseline):
@@ -1498,13 +1499,13 @@ class NMMainOpNormalize(NMMainOp):
       then applied to every wave in that channel.
 
     Parameters:
-        t_begin1: Window 1 start in time units (default 0.0).
-        t_end1: Window 1 end in time units (default 0.0).
+        x0_min: Window 1 start in time units (default 0.0).
+        x1_min: Window 1 end in time units (default 0.0).
         fxn1: Function for the low reference: ``"mean"``, ``"min"``, or
             ``"mean@min"`` (default ``"mean"``).
         n_mean1: Points around min for ``mean@min`` (default 1).
-        t_begin2: Window 2 start in time units (default 0.0).
-        t_end2: Window 2 end in time units (default 0.0).
+        x0_max: Window 2 start in time units (default 0.0).
+        x1_max: Window 2 end in time units (default 0.0).
         fxn2: Function for the high reference: ``"mean"``, ``"max"``, or
             ``"mean@max"`` (default ``"mean"``).
         n_mean2: Points around max for ``mean@max`` (default 1).
@@ -1521,24 +1522,24 @@ class NMMainOpNormalize(NMMainOp):
 
     def __init__(
         self,
-        t_begin1: float = 0.0,
-        t_end1: float = 0.0,
+        x0_min: float = 0.0,
+        x1_min: float = 0.0,
         fxn1: str = "mean",
         n_mean1: int = 1,
-        t_begin2: float = 0.0,
-        t_end2: float = 0.0,
+        x0_max: float = 0.0,
+        x1_max: float = 0.0,
         fxn2: str = "mean",
         n_mean2: int = 1,
         norm_min: float = 0.0,
         norm_max: float = 1.0,
         mode: str = "per_wave",
     ) -> None:
-        self.t_begin1 = t_begin1
-        self.t_end1 = t_end1
+        self.x0_min = x0_min
+        self.x1_min = x1_min
         self.fxn1 = fxn1
         self.n_mean1 = n_mean1
-        self.t_begin2 = t_begin2
-        self.t_end2 = t_end2
+        self.x0_max = x0_max
+        self.x1_max = x1_max
         self.fxn2 = fxn2
         self.n_mean2 = n_mean2
         self.norm_min = norm_min
@@ -1549,26 +1550,26 @@ class NMMainOpNormalize(NMMainOp):
     # Properties
 
     @property
-    def t_begin1(self) -> float:
+    def x0_min(self) -> float:
         """Window 1 start (time units)."""
-        return self._t_begin1
+        return self._x0_min
 
-    @t_begin1.setter
-    def t_begin1(self, value: float) -> None:
+    @x0_min.setter
+    def x0_min(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "t_begin1", "float"))
-        self._t_begin1 = float(value)
+            raise TypeError(nmu.type_error_str(value, "x0_min", "float"))
+        self._x0_min = float(value)
 
     @property
-    def t_end1(self) -> float:
+    def x1_min(self) -> float:
         """Window 1 end (time units)."""
-        return self._t_end1
+        return self._x1_min
 
-    @t_end1.setter
-    def t_end1(self, value: float) -> None:
+    @x1_min.setter
+    def x1_min(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "t_end1", "float"))
-        self._t_end1 = float(value)
+            raise TypeError(nmu.type_error_str(value, "x1_min", "float"))
+        self._x1_min = float(value)
 
     @property
     def fxn1(self) -> str:
@@ -1599,26 +1600,26 @@ class NMMainOpNormalize(NMMainOp):
         self._n_mean1 = value
 
     @property
-    def t_begin2(self) -> float:
+    def x0_max(self) -> float:
         """Window 2 start (time units)."""
-        return self._t_begin2
+        return self._x0_max
 
-    @t_begin2.setter
-    def t_begin2(self, value: float) -> None:
+    @x0_max.setter
+    def x0_max(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "t_begin2", "float"))
-        self._t_begin2 = float(value)
+            raise TypeError(nmu.type_error_str(value, "x0_max", "float"))
+        self._x0_max = float(value)
 
     @property
-    def t_end2(self) -> float:
+    def x1_max(self) -> float:
         """Window 2 end (time units)."""
-        return self._t_end2
+        return self._x1_max
 
-    @t_end2.setter
-    def t_end2(self, value: float) -> None:
+    @x1_max.setter
+    def x1_max(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "t_end2", "float"))
-        self._t_end2 = float(value)
+            raise TypeError(nmu.type_error_str(value, "x1_max", "float"))
+        self._x1_max = float(value)
 
     @property
     def fxn2(self) -> str:
@@ -1689,13 +1690,13 @@ class NMMainOpNormalize(NMMainOp):
     # Validation helper
 
     def _validate_windows(self) -> None:
-        if self._t_end1 < self._t_begin1:
+        if self._x1_min < self._x0_min:
             raise ValueError(
-                "t_end1 (%g) must be >= t_begin1 (%g)" % (self._t_end1, self._t_begin1)
+                "x1_min (%g) must be >= x0_min (%g)" % (self._x1_min, self._x0_min)
             )
-        if self._t_end2 < self._t_begin2:
+        if self._x1_max < self._x0_max:
             raise ValueError(
-                "t_end2 (%g) must be >= t_begin2 (%g)" % (self._t_end2, self._t_begin2)
+                "x1_max (%g) must be >= x0_max (%g)" % (self._x1_max, self._x0_max)
             )
 
     # ------------------------------------------------------------------
@@ -1710,12 +1711,12 @@ class NMMainOpNormalize(NMMainOp):
 
     def _note_str(self, ref_min: float, ref_max: float, channel_name: str | None = None) -> str:
         note = (
-            "NMNormalize(t_begin1=%.6g,t_end1=%.6g,fxn1=%s,"
-            "t_begin2=%.6g,t_end2=%.6g,fxn2=%s,"
+            "NMNormalize(x0_min=%.6g,x1_min=%.6g,fxn1=%s,"
+            "x0_max=%.6g,x1_max=%.6g,fxn2=%s,"
             "norm_min=%.6g,norm_max=%.6g,mode=%s"
         ) % (
-            self._t_begin1, self._t_end1, self._fxn1,
-            self._t_begin2, self._t_end2, self._fxn2,
+            self._x0_min, self._x1_min, self._fxn1,
+            self._x0_max, self._x1_max, self._fxn2,
             self._norm_min, self._norm_max, self._mode,
         )
         if channel_name is not None:
@@ -1754,8 +1755,8 @@ class NMMainOpNormalize(NMMainOp):
 
         arr = data.nparray.astype(float)
         xd = data.xscale.to_dict()
-        sl1 = nm_math.time_window_to_slice(arr, xd, self._t_begin1, self._t_end1)
-        sl2 = nm_math.time_window_to_slice(arr, xd, self._t_begin2, self._t_end2)
+        sl1 = nm_math.time_window_to_slice(arr, xd, self._x0_min, self._x1_min)
+        sl2 = nm_math.time_window_to_slice(arr, xd, self._x0_max, self._x1_max)
         ref_min = nm_math.compute_ref_value(arr[sl1], self._fxn1, self._n_mean1)
         ref_max = nm_math.compute_ref_value(arr[sl2], self._fxn2, self._n_mean2)
 
@@ -1929,6 +1930,183 @@ class NMMainOpInequality(NMMainOp):
 
 
 # =========================================================================
+# NMMainOpHistogram
+# =========================================================================
+
+
+class NMMainOpHistogram(NMMainOp):
+    """Compute an amplitude histogram for each data waveform.
+
+    For each wave, all sample values are passed to ``numpy.histogram``
+    and the resulting bin-counts array is written as a new wave
+    ``H_{data.name}`` in the source folder (non-destructive).
+
+    The output wave's x-scale represents the histogram bins:
+    ``xscale.start`` = left edge of the first bin,
+    ``xscale.delta`` = uniform bin width.
+    ``xscale.label`` / ``xscale.units`` are taken from the input
+    wave's y-scale so axis labels remain meaningful.
+
+    NaN and Inf values are silently excluded before histogramming
+    (same behaviour as ``NMToolStats2.histogram``).
+
+    Args:
+        bins:    Number of equal-width bins (int) or explicit bin-edge
+                 list.  Defaults to 10.
+        x0:      Start of the time window (default ``-inf`` = beginning
+                 of wave).
+        x1:      End of the time window (default ``+inf`` = end of wave).
+        xrange:  ``(min, max)`` tuple to restrict the amplitude range.
+                 Defaults to None (full range of each wave).
+        density: If True, return probability density instead of counts.
+                 Defaults to False.
+    """
+
+    name = "histogram"
+
+    def __init__(
+        self,
+        bins: int | list = 10,
+        x0: float = -math.inf,
+        x1: float = math.inf,
+        xrange: tuple | None = None,
+        density: bool = False,
+    ) -> None:
+        self.bins = bins
+        self.x0 = x0
+        self.x1 = x1
+        self.xrange = xrange
+        self.density = density
+        self._results: dict = {}
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def bins(self):
+        return self._bins
+
+    @bins.setter
+    def bins(self, value) -> None:
+        if isinstance(value, bool):
+            raise TypeError("bins must be int or list, not bool")
+        if isinstance(value, int):
+            if value < 1:
+                raise ValueError("bins must be >= 1, got %d" % value)
+        elif isinstance(value, list):
+            pass  # numpy validates content at histogram time
+        else:
+            raise TypeError(nmu.type_error_str(value, "bins", "int or list"))
+        self._bins = value
+
+    @property
+    def x0(self) -> float:
+        """Start of the time window (default ``-inf``)."""
+        return self._x0
+
+    @x0.setter
+    def x0(self, value: float) -> None:
+        value = float(value)
+        if math.isnan(value):
+            raise ValueError("x0 must not be NaN")
+        self._x0 = -math.inf if math.isinf(value) else value
+
+    @property
+    def x1(self) -> float:
+        """End of the time window (default ``+inf``)."""
+        return self._x1
+
+    @x1.setter
+    def x1(self, value: float) -> None:
+        value = float(value)
+        if math.isnan(value):
+            raise ValueError("x1 must not be NaN")
+        self._x1 = math.inf if math.isinf(value) else value
+
+    @property
+    def xrange(self) -> tuple | None:
+        return self._xrange
+
+    @xrange.setter
+    def xrange(self, value: tuple | None) -> None:
+        if value is None:
+            self._xrange = None
+            return
+        if not isinstance(value, tuple) or len(value) != 2:
+            raise TypeError("xrange must be a 2-tuple (min, max) or None")
+        self._xrange = value
+
+    @property
+    def density(self) -> bool:
+        return self._density
+
+    @density.setter
+    def density(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "density", "bool"))
+        self._density = value
+
+    @property
+    def results(self) -> dict:
+        """Per-output-wave dict; populated after :meth:`run_all`."""
+        return self._results
+
+    # ------------------------------------------------------------------
+    # NMMainOp interface
+    # ------------------------------------------------------------------
+
+    def run_init(self) -> None:
+        self._results = {}
+
+    def run(self, data: NMData, channel_name: str | None = None) -> None:
+        if not isinstance(data.nparray, np.ndarray):
+            return
+        arr = data.nparray.astype(float)
+
+        # Apply time window if either bound is finite
+        if not (self._x0 == -math.inf and self._x1 == math.inf):
+            sl = nm_math.time_window_to_slice(
+                arr, data.xscale.to_dict(), self._x0, self._x1
+            )
+            arr = arr[sl]
+
+        arr_finite = arr[np.isfinite(arr)]  # exclude NaN and Inf
+
+        counts, edges = np.histogram(
+            arr_finite, bins=self._bins,
+            range=self._xrange, density=self._density,
+        )
+
+        out_name = "H_" + data.name
+        if self._folder is not None:
+            xscale = {
+                "start": float(edges[0]),
+                "delta": float(edges[1] - edges[0]),
+                "label": data.yscale.label,  # input y-axis → output x-axis
+                "units": data.yscale.units,
+            }
+            yscale = {
+                "label": "density" if self._density else "counts",
+                "units": "",
+            }
+            self._folder.data.new(out_name, nparray=counts.astype(float),
+                                  xscale=xscale, yscale=yscale)
+            out_data = self._folder.data.get(out_name)
+            if out_data is not None:
+                self._add_note(
+                    out_data,
+                    "NMHistogram(bins=%s,x0=%s,x1=%s,density=%s)"
+                    % (self._bins, self._x0, self._x1, self._density),
+                )
+        self._results[out_name] = {
+            "counts": counts,
+            "edges": edges,
+            "n_excluded": data.nparray.size - len(arr_finite),
+        }
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
@@ -1941,6 +2119,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "delete_nans": NMMainOpDeleteNaNs,
     "delete_points": NMMainOpDeletePoints,
     "differentiate": NMMainOpDifferentiate,
+    "histogram": NMMainOpHistogram,
     "inequality": NMMainOpInequality,
     "insert_points": NMMainOpInsertPoints,
     "integrate": NMMainOpIntegrate,
