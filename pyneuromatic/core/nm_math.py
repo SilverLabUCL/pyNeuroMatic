@@ -203,19 +203,22 @@ def compute_ref_value(arr: np.ndarray, fxn: str, n_mean: int) -> float:
 def time_window_to_slice(
     arr: np.ndarray,
     xscale_dict: dict,
-    t_begin: float,
-    t_end: float,
+    x0: float,
+    x1: float,
 ) -> slice:
     """Convert a time window to an array slice using xscale start/delta.
 
     Clips to valid range; returns an empty slice if the window is fully
-    outside the array bounds.
+    outside the array bounds.  Infinite bounds are treated as array
+    boundaries (``-inf`` → index 0, ``+inf`` → index len(arr)).
 
     Args:
         arr:         Array whose length defines the valid index range.
         xscale_dict: Dict with ``"start"`` and ``"delta"`` keys (floats).
-        t_begin:     Start of the time window.
-        t_end:       End of the time window (inclusive).
+        x0:     Start of the time window.  ``-inf`` selects from the
+                     beginning of the array.
+        x1:       End of the time window (inclusive).  ``+inf`` selects
+                     to the end of the array.
 
     Returns:
         A :class:`slice` suitable for indexing *arr*.
@@ -224,8 +227,8 @@ def time_window_to_slice(
     delta = xscale_dict.get("delta", 1.0)
     if delta == 0:
         return slice(0, 0)
-    i0 = int(round((t_begin - start) / delta))
-    i1 = int(round((t_end - start) / delta)) + 1  # inclusive end
+    i0 = 0 if math.isinf(x0) else int(round((x0 - start) / delta))
+    i1 = len(arr) if math.isinf(x1) else int(round((x1 - start) / delta)) + 1
     i0 = max(0, i0)
     i1 = min(len(arr), i1)
     return slice(i0, i1)

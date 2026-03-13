@@ -24,6 +24,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpDeleteNaNs,
     NMMainOpDeletePoints,
     NMMainOpDifferentiate,
+    NMMainOpHistogram,
     NMMainOpInequality,
     NMMainOpInsertPoints,
     NMMainOpIntegrate,
@@ -637,7 +638,7 @@ class TestNMMainOpInsertPoints(unittest.TestCase):
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [0.0, 1.0, 2.0, 3.0])
 
-    def test_insert_at_end(self):
+    def test_insert_ax1(self):
         self.op.index = 3
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 0.0])
@@ -716,7 +717,7 @@ class TestNMMainOpDeletePoints(unittest.TestCase):
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [2.0, 3.0, 4.0, 5.0])
 
-    def test_delete_at_end(self):
+    def test_delete_ax1(self):
         self.op.index = 4
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0])
@@ -880,7 +881,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_per_wave_subtracts_correct_baseline(self):
         # window [0,1] covers first 2 points [2,2] → baseline=2
-        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_wave")
         d = _make_data("RecordA0", [2.0, 2.0, 4.0, 4.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
@@ -888,7 +889,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_per_wave_different_baselines(self):
         # Two waves with different values in baseline window → independent shifts
-        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="per_wave")
         d1 = _make_data("RecordA0", [1.0, 5.0], xstart=0.0, xdelta=1.0)
         d2 = _make_data("RecordA1", [3.0, 7.0], xstart=0.0, xdelta=1.0)
         op.run_init()
@@ -898,7 +899,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
         np.testing.assert_array_almost_equal(d2.nparray, [0.0, 4.0])
 
     def test_per_wave_nan_ignored(self):
-        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="per_wave", ignore_nans=True)
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_wave", ignore_nans=True)
         d = _make_data("RecordA0", [np.nan, 2.0, 5.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
@@ -907,7 +908,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
         self.assertAlmostEqual(float(d.nparray[2]), 3.0)
 
     def test_per_wave_nan_propagates(self):
-        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="per_wave", ignore_nans=False)
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_wave", ignore_nans=False)
         d = _make_data("RecordA0", [np.nan, 2.0, 5.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
@@ -916,7 +917,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_window_out_of_range_no_subtraction(self):
         # Window is past end of array → empty slice → baseline=0 → no change
-        op = NMMainOpBaseline(t_begin=100.0, t_end=200.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=100.0, x1=200.0, mode="per_wave")
         d = _make_data("RecordA0", [5.0, 6.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
@@ -924,7 +925,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_window_partial_clip(self):
         # Window extends beyond array end — only existing samples used
-        op = NMMainOpBaseline(t_begin=1.0, t_end=10.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=1.0, x1=10.0, mode="per_wave")
         # xdelta=1, array=[0,1,2,3]; window 1..10 clips to indices 1..4
         d = _make_data("RecordA0", [0.0, 2.0, 4.0, 6.0], xstart=0.0, xdelta=1.0)
         op.run_init()
@@ -938,7 +939,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
     def test_average_mode_shared_baseline(self):
         # 3 waves [2,2], [4,4], [6,6]; window covers full wave → baselines 2,4,6
         # avg baseline = 4; all shifted by -4
-        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="average")
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="average")
         d1 = _make_data("RecordA0", [2.0, 2.0], xstart=0.0, xdelta=1.0)
         d2 = _make_data("RecordA1", [4.0, 4.0], xstart=0.0, xdelta=1.0)
         d3 = _make_data("RecordA2", [6.0, 6.0], xstart=0.0, xdelta=1.0)
@@ -953,7 +954,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_average_mode_per_channel(self):
         # Channel A: baselines 2,4 → avg=3; Channel B: baseline 10 → avg=10
-        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="average")
+        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="average")
         a0 = _make_data("RecordA0", [2.0, 8.0], xstart=0.0, xdelta=1.0)
         a1 = _make_data("RecordA1", [4.0, 8.0], xstart=0.0, xdelta=1.0)
         b0 = _make_data("RecordB0", [10.0, 5.0], xstart=0.0, xdelta=1.0)
@@ -970,7 +971,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_average_mode_nan_ignored(self):
         # NaN in baseline window → nanmean used, result finite
-        op = NMMainOpBaseline(t_begin=0.0, t_end=1.0, mode="average", ignore_nans=True)
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="average", ignore_nans=True)
         d = _make_data("RecordA0", [np.nan, 4.0, 10.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d, "A")
@@ -989,18 +990,18 @@ class TestNMMainOpBaseline(unittest.TestCase):
         with self.assertRaises(TypeError):
             NMMainOpBaseline(mode=1)
 
-    def test_t_end_before_t_begin_raises(self):
-        op = NMMainOpBaseline(t_begin=5.0, t_end=2.0)
+    def test_x1_before_x0_raises(self):
+        op = NMMainOpBaseline(x0=5.0, x1=2.0)
         with self.assertRaises(ValueError):
             op.run_init()  # calls _validate_window → raises
 
-    def test_t_begin_rejects_bool(self):
+    def test_x0_rejects_bool(self):
         with self.assertRaises(TypeError):
-            NMMainOpBaseline(t_begin=True)
+            NMMainOpBaseline(x0=True)
 
-    def test_t_end_rejects_bool(self):
+    def test_x1_rejects_bool(self):
         with self.assertRaises(TypeError):
-            NMMainOpBaseline(t_end=True)
+            NMMainOpBaseline(x1=True)
 
     def test_ignore_nans_rejects_non_bool(self):
         with self.assertRaises(TypeError):
@@ -1015,16 +1016,16 @@ class TestNMMainOpBaseline(unittest.TestCase):
     # --- notes ---
 
     def test_per_wave_note_written(self):
-        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="per_wave")
         d = _make_data("RecordA0", [3.0, 5.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
         self.assertEqual(len(d.notes), 1)
         note = d.notes[0]["note"]
-        self.assertIn("NMBaseline(t_begin=0,t_end=0,mode=per_wave,baseline=3)", note)
+        self.assertIn("NMBaseline(x0=0,x1=0,mode=per_wave,baseline=3)", note)
 
     def test_average_note_written(self):
-        op = NMMainOpBaseline(t_begin=0.0, t_end=0.0, mode="average")
+        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="average")
         d1 = _make_data("RecordA0", [2.0, 8.0], xstart=0.0, xdelta=1.0)
         d2 = _make_data("RecordA1", [4.0, 6.0], xstart=0.0, xdelta=1.0)
         op.run_init()
@@ -1035,7 +1036,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
         for d in (d1, d2):
             self.assertEqual(len(d.notes), 1)
             note = d.notes[0]["note"]
-            self.assertIn("NMBaseline(t_begin=0,t_end=0,mode=average,channel=A,baseline=3)", note)
+            self.assertIn("NMBaseline(x0=0,x1=0,mode=average,channel=A,baseline=3)", note)
 
 
 # ===========================================================================
@@ -1443,8 +1444,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_wave_min_max(self):
         # [0,5,10], fxn1=min→0, fxn2=max→10, range=10 → [0.0, 0.5, 1.0]
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=2.0, fxn1="min",
-            t_begin2=0.0, t_end2=2.0, fxn2="max",
+            x0_min=0.0, x1_min=2.0, fxn1="min",
+            x0_max=0.0, x1_max=2.0, fxn2="max",
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
         op.run_init()
@@ -1454,8 +1455,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_wave_mean_zero_range(self):
         # fxn1=mean and fxn2=mean over same window → ref_min==ref_max → norm_min everywhere
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=4.0, fxn1="mean",
-            t_begin2=0.0, t_end2=4.0, fxn2="mean",
+            x0_min=0.0, x1_min=4.0, fxn1="mean",
+            x0_max=0.0, x1_max=4.0, fxn2="mean",
             norm_min=-99.0,
         )
         data = _make_data("RecordA0", [0.0, 2.0, 4.0, 6.0, 8.0])
@@ -1466,8 +1467,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_wave_uses_windows(self):
         # [0,1,2,3,4] xdelta=1; window1=[0,0]→first point(0), window2=[4,4]→last point(4)
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=0.0, fxn1="mean",
-            t_begin2=4.0, t_end2=4.0, fxn2="mean",
+            x0_min=0.0, x1_min=0.0, fxn1="mean",
+            x0_max=4.0, x1_max=4.0, fxn2="mean",
         )
         data = _make_data("RecordA0", [0.0, 1.0, 2.0, 3.0, 4.0])
         op.run_init()
@@ -1477,8 +1478,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_wave_custom_norm_range(self):
         # norm_min=-1, norm_max=1; [0,5,10]→ref_min=0,ref_max=10 → [-1,0,1]
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=2.0, fxn1="min",
-            t_begin2=0.0, t_end2=2.0, fxn2="max",
+            x0_min=0.0, x1_min=2.0, fxn1="min",
+            x0_max=0.0, x1_max=2.0, fxn2="max",
             norm_min=-1.0, norm_max=1.0,
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
@@ -1490,8 +1491,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
         # [3,1,2], fxn1=mean@min, n_mean1=3; min at i=1, mean of [3,1,2]=2.0 → ref_min=2.0
         # fxn2=max → ref_max=3.0; range=1; normalized: arr-2.0 → [1,-1,0]
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=2.0, fxn1="mean@min", n_mean1=3,
-            t_begin2=0.0, t_end2=2.0, fxn2="max",
+            x0_min=0.0, x1_min=2.0, fxn1="mean@min", n_mean1=3,
+            x0_max=0.0, x1_max=2.0, fxn2="max",
         )
         data = _make_data("RecordA0", [3.0, 1.0, 2.0])
         op.run_init()
@@ -1502,8 +1503,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
         # [1,5,3], fxn2=mean@max, n_mean2=3; max at i=1, mean of [1,5,3]=3.0 → ref_max=3.0
         # fxn1=min → ref_min=1.0; range=2; normalized: (arr-1)/2 → [0,2,1]
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=2.0, fxn1="min",
-            t_begin2=0.0, t_end2=2.0, fxn2="mean@max", n_mean2=3,
+            x0_min=0.0, x1_min=2.0, fxn1="min",
+            x0_max=0.0, x1_max=2.0, fxn2="mean@max", n_mean2=3,
         )
         data = _make_data("RecordA0", [1.0, 5.0, 3.0])
         op.run_init()
@@ -1512,8 +1513,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_per_wave_preserves_length(self):
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=99.0, fxn1="min",
-            t_begin2=0.0, t_end2=99.0, fxn2="max",
+            x0_min=0.0, x1_min=99.0, fxn1="min",
+            x0_max=0.0, x1_max=99.0, fxn2="max",
         )
         data = _make_data("RecordA0", list(range(100)))
         op.run_init()
@@ -1526,8 +1527,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_average_mode_shared_refs(self):
         # 2 waves same channel; ref_mins=[0,2]→avg=1, ref_maxes=[4,6]→avg=5, range=4
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=1.0, fxn1="min",
-            t_begin2=0.0, t_end2=1.0, fxn2="max",
+            x0_min=0.0, x1_min=1.0, fxn1="min",
+            x0_max=0.0, x1_max=1.0, fxn2="max",
             mode="average",
         )
         d0 = _make_data("RecordA0", [0.0, 4.0])
@@ -1539,8 +1540,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_average_mode_per_channel(self):
         # Channel A ref_max=10, channel B ref_max=5 — independent
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=1.0, fxn1="min",
-            t_begin2=0.0, t_end2=1.0, fxn2="max",
+            x0_min=0.0, x1_min=1.0, fxn1="min",
+            x0_max=0.0, x1_max=1.0, fxn2="max",
             mode="average",
         )
         dA = _make_data("RecordA0", [0.0, 10.0])
@@ -1589,8 +1590,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
         with self.assertRaises(ValueError):
             NMMainOpNormalize(mode="bad")
 
-    def test_t_end1_before_t_begin1_raises(self):
-        op = NMMainOpNormalize(t_begin1=5.0, t_end1=0.0)
+    def test_x1_min_before_x0_min_raises(self):
+        op = NMMainOpNormalize(x0_min=5.0, x1_min=0.0)
         with self.assertRaises(ValueError):
             op.run_init()
 
@@ -1606,8 +1607,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_note_per_wave(self):
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=2.0, fxn1="min",
-            t_begin2=0.0, t_end2=2.0, fxn2="max",
+            x0_min=0.0, x1_min=2.0, fxn1="min",
+            x0_max=0.0, x1_max=2.0, fxn2="max",
             mode="per_wave",
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
@@ -1622,8 +1623,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_note_average(self):
         op = NMMainOpNormalize(
-            t_begin1=0.0, t_end1=1.0, fxn1="min",
-            t_begin2=0.0, t_end2=1.0, fxn2="max",
+            x0_min=0.0, x1_min=1.0, fxn1="min",
+            x0_max=0.0, x1_max=1.0, fxn2="max",
             mode="average",
         )
         data = _make_data("RecordA0", [0.0, 10.0])
@@ -2104,6 +2105,260 @@ class TestNMMainOpInequality(unittest.TestCase):
     def test_inequality_by_name(self):
         op = op_from_name("inequality")
         self.assertIsInstance(op, NMMainOpInequality)
+
+
+# ===========================================================================
+# TestNMMainOpHistogram
+# ===========================================================================
+
+
+class TestNMMainOpHistogram(unittest.TestCase):
+    """Tests for NMMainOpHistogram."""
+
+    def _run(self, op, arrays_by_name):
+        return _run_op_directly(op, arrays_by_name)
+
+    def _run_with_yscale(self, op, arrays_by_name, yscale):
+        """Like _run_op_directly but sets yscale on each NMData wave."""
+        folder = NMFolder(name="folder0")
+        data_items = []
+        for name, arr in arrays_by_name.items():
+            d = folder.data.new(name, nparray=np.array(arr, dtype=float),
+                                yscale=yscale)
+            data_items.append((d, None))
+        op.run_all(data_items, folder)
+        return folder
+
+    # --- output wave created ---
+
+    def test_output_wave_created(self):
+        op = NMMainOpHistogram()
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        self.assertIsNotNone(folder.data.get("H_RecordA0"))
+
+    def test_counts_length_equals_bins(self):
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": list(range(20))})
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(len(out.nparray), 5)
+
+    def test_counts_sum_equals_n_finite(self):
+        arr = [1.0, 2.0, 3.0, 4.0, 5.0]
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": arr})
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(int(out.nparray.sum()), len(arr))
+
+    # --- default and custom bins ---
+
+    def test_default_bins_is_10(self):
+        self.assertEqual(NMMainOpHistogram().bins, 10)
+
+    def test_custom_bins(self):
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": list(range(10))})
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(len(out.nparray), 5)
+
+    def test_list_bins(self):
+        op = NMMainOpHistogram(bins=[0.0, 2.0, 4.0, 6.0])
+        folder = self._run(op, {"RecordA0": [1.0, 3.0, 5.0]})
+        out = folder.data.get("H_RecordA0")
+        # 3 bin edges → 3 bins, all values land in one of them
+        self.assertEqual(len(out.nparray), 3)
+
+    # --- xrange ---
+
+    def test_xrange(self):
+        op = NMMainOpHistogram(bins=3, xrange=(1.0, 4.0))
+        folder = self._run(op, {"RecordA0": [0.0, 1.5, 2.5, 3.5, 5.0]})
+        out = folder.data.get("H_RecordA0")
+        # values outside [1,4] are not counted
+        self.assertEqual(int(out.nparray.sum()), 3)
+
+    # --- density ---
+
+    def test_density_output(self):
+        arr = list(range(100))
+        op = NMMainOpHistogram(bins=10, density=True)
+        folder = self._run(op, {"RecordA0": arr})
+        out = folder.data.get("H_RecordA0")
+        counts = out.nparray
+        bin_width = out.xscale.delta
+        self.assertAlmostEqual(float((counts * bin_width).sum()), 1.0, places=10)
+
+    # --- xscale ---
+
+    def test_xscale_start(self):
+        arr = [1.0, 2.0, 3.0, 4.0, 5.0]
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": arr})
+        out = folder.data.get("H_RecordA0")
+        import numpy as _np
+        _, edges = _np.histogram(arr, bins=5)
+        self.assertAlmostEqual(out.xscale.start, float(edges[0]))
+
+    def test_xscale_delta(self):
+        arr = [1.0, 2.0, 3.0, 4.0, 5.0]
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": arr})
+        out = folder.data.get("H_RecordA0")
+        import numpy as _np
+        _, edges = _np.histogram(arr, bins=5)
+        self.assertAlmostEqual(out.xscale.delta, float(edges[1] - edges[0]))
+
+    def test_xscale_label_from_yscale(self):
+        op = NMMainOpHistogram(bins=5)
+        yscale = {"label": "Vm", "units": "mV"}
+        folder = self._run_with_yscale(op, {"RecordA0": [1.0, 2.0, 3.0]}, yscale)
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(out.xscale.label, "Vm")
+        self.assertEqual(out.xscale.units, "mV")
+
+    # --- yscale of output ---
+
+    def test_yscale_counts_label(self):
+        op = NMMainOpHistogram(density=False)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0]})
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(out.yscale.label, "counts")
+
+    def test_yscale_density_label(self):
+        op = NMMainOpHistogram(density=True)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0]})
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(out.yscale.label, "density")
+
+    # --- NaN / Inf exclusion ---
+
+    def test_nan_inf_excluded(self):
+        arr = [1.0, float("nan"), 3.0, float("inf"), 5.0]
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": arr})
+        out = folder.data.get("H_RecordA0")
+        # 3 finite values should be counted
+        self.assertEqual(int(out.nparray.sum()), 3)
+
+    def test_n_excluded_in_results(self):
+        arr = [1.0, float("nan"), 3.0, float("inf")]
+        op = NMMainOpHistogram(bins=3)
+        folder = self._run(op, {"RecordA0": arr})
+        r = op.results["H_RecordA0"]
+        self.assertEqual(r["n_excluded"], 2)
+
+    # --- results dict ---
+
+    def test_results_populated(self):
+        op = NMMainOpHistogram(bins=5)
+        self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        r = op.results["H_RecordA0"]
+        self.assertIn("counts", r)
+        self.assertIn("edges", r)
+        self.assertIn("n_excluded", r)
+
+    def test_multiple_waves(self):
+        op = NMMainOpHistogram(bins=5)
+        arrays = {"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0],
+                  "RecordA2": [5.0, 6.0]}
+        folder = self._run(op, arrays)
+        self.assertEqual(len(op.results), 3)
+        for name in ("RecordA0", "RecordA1", "RecordA2"):
+            self.assertIsNotNone(folder.data.get("H_" + name))
+
+    # --- skips non-nparray ---
+
+    def test_skips_non_nparray(self):
+        op = NMMainOpHistogram()
+        folder = NMFolder(name="folder0")
+        d = folder.data.new("RecordA0")  # no nparray
+        op.run_all([(d, None)], folder)
+        self.assertIsNone(folder.data.get("H_RecordA0"))
+
+    # --- note ---
+
+    def test_note_written(self):
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0]})
+        out = folder.data.get("H_RecordA0")
+        notes = [e["note"] for e in out.notes._entries]
+        self.assertTrue(any("NMHistogram" in n for n in notes))
+
+    # --- time window (x0 / x1) ---
+
+    def test_default_x0_is_neg_inf(self):
+        self.assertTrue(math.isinf(NMMainOpHistogram().x0))
+        self.assertLess(NMMainOpHistogram().x0, 0)
+
+    def test_default_x1_is_pos_inf(self):
+        self.assertTrue(math.isinf(NMMainOpHistogram().x1))
+        self.assertGreater(NMMainOpHistogram().x1, 0)
+
+    def test_x0_x1_window(self):
+        # 10 samples at x=0..9; window x0=2, x1=4 → 3 samples (indices 2,3,4)
+        op = NMMainOpHistogram(bins=3, x0=2.0, x1=4.0)
+        folder = NMFolder(name="folder0")
+        d = folder.data.new(
+            "RecordA0",
+            nparray=np.arange(10, dtype=float),
+            xscale={"start": 0.0, "delta": 1.0},
+        )
+        op.run_all([(d, None)], folder)
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(int(out.nparray.sum()), 3)
+
+    def test_x1_only(self):
+        # window = -inf..4 → samples at x=0..4 = 5 samples
+        op = NMMainOpHistogram(bins=5, x1=4.0)
+        folder = NMFolder(name="folder0")
+        d = folder.data.new(
+            "RecordA0",
+            nparray=np.arange(10, dtype=float),
+            xscale={"start": 0.0, "delta": 1.0},
+        )
+        op.run_all([(d, None)], folder)
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(int(out.nparray.sum()), 5)
+
+    def test_x0_only(self):
+        # window = 7.0..+inf → samples at x=7,8,9 = 3 samples
+        op = NMMainOpHistogram(bins=3, x0=7.0)
+        folder = NMFolder(name="folder0")
+        d = folder.data.new(
+            "RecordA0",
+            nparray=np.arange(10, dtype=float),
+            xscale={"start": 0.0, "delta": 1.0},
+        )
+        op.run_all([(d, None)], folder)
+        out = folder.data.get("H_RecordA0")
+        self.assertEqual(int(out.nparray.sum()), 3)
+
+    def test_x0_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpHistogram(x0=float("nan"))
+
+    def test_x1_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpHistogram(x1=float("nan"))
+
+    # --- validation ---
+
+    def test_bins_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpHistogram(bins=True)
+
+    def test_bins_rejects_zero(self):
+        with self.assertRaises(ValueError):
+            NMMainOpHistogram(bins=0)
+
+    def test_density_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpHistogram(density=1)
+
+    # --- registry ---
+
+    def test_histogram_by_name(self):
+        op = op_from_name("histogram")
+        self.assertIsInstance(op, NMMainOpHistogram)
 
 
 if __name__ == "__main__":

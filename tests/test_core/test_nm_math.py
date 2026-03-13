@@ -274,6 +274,18 @@ class TestTimeWindowToSlice:
         # i0 = round((1.0-0)/0.5)=2, i1 = round((2.0-0)/0.5)+1=5
         assert s == slice(2, 5)
 
+    def test_neg_inf_begin(self):
+        s = time_window_to_slice(self.ARR, self.XD, -math.inf, 4.0)
+        assert s.start == 0
+
+    def test_pos_inf_end(self):
+        s = time_window_to_slice(self.ARR, self.XD, 2.0, math.inf)
+        assert s.stop == len(self.ARR)
+
+    def test_both_inf(self):
+        s = time_window_to_slice(self.ARR, self.XD, -math.inf, math.inf)
+        assert s == slice(0, len(self.ARR))
+
 
 # ---------------------------------------------------------------------------
 # TestArrayStats

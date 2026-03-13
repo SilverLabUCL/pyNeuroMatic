@@ -733,8 +733,8 @@ class NMToolStats2:
                 Defaults to None (full data range).
             density: If True, return probability density instead of counts.
                 Defaults to False.
-            save_to_numpy: If True, save ``HIST_{name}_counts`` and
-                ``HIST_{name}_edges`` as NMData arrays in toolfolder.
+            save_to_numpy: If True, save ``H_{name}_counts`` and
+                ``H_{name}_edges`` as NMData arrays in toolfolder.
                 Defaults to True.
 
         Returns:
@@ -770,12 +770,12 @@ class NMToolStats2:
             xscale = {"start": float(edges[0]),
                       "delta": float(edges[1] - edges[0])}
             toolfolder.data.new(
-                "HIST_%s_counts" % name,
+                "H_%s_counts" % name,
                 nparray=counts.astype(float),
                 xscale=xscale,
             )
             toolfolder.data.new(
-                "HIST_%s_edges" % name,
+                "H_%s_edges" % name,
                 nparray=edges,
             )
 
