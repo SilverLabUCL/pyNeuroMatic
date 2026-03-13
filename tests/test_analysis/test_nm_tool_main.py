@@ -23,6 +23,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpBaseline,
     NMMainOpDeleteNaNs,
     NMMainOpDeletePoints,
+    NMMainOpDFOF,
     NMMainOpDifferentiate,
     NMMainOpHistogram,
     NMMainOpInequality,
@@ -1003,6 +1004,14 @@ class TestNMMainOpBaseline(unittest.TestCase):
         with self.assertRaises(TypeError):
             NMMainOpBaseline(x1=True)
 
+    def test_x0_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpBaseline(x0=float("nan"))
+
+    def test_x1_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpBaseline(x1=float("nan"))
+
     def test_ignore_nans_rejects_non_bool(self):
         with self.assertRaises(TypeError):
             NMMainOpBaseline(ignore_nans=1)
@@ -1594,6 +1603,22 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op = NMMainOpNormalize(x0_min=5.0, x1_min=0.0)
         with self.assertRaises(ValueError):
             op.run_init()
+
+    def test_x0_min_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(x0_min=float("nan"))
+
+    def test_x1_min_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(x1_min=float("nan"))
+
+    def test_x0_max_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(x0_max=float("nan"))
+
+    def test_x1_max_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpNormalize(x1_max=float("nan"))
 
     # ------------------------------------------------------------------
     # edge cases / notes
@@ -2332,6 +2357,14 @@ class TestNMMainOpHistogram(unittest.TestCase):
         out = folder.data.get("H_RecordA0")
         self.assertEqual(int(out.nparray.sum()), 3)
 
+    def test_x0_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpHistogram(x0=True)
+
+    def test_x1_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpHistogram(x1=True)
+
     def test_x0_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpHistogram(x0=float("nan"))
@@ -2339,6 +2372,11 @@ class TestNMMainOpHistogram(unittest.TestCase):
     def test_x1_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpHistogram(x1=float("nan"))
+
+    def test_x1_before_x0_raises(self):
+        op = NMMainOpHistogram(x0=5.0, x1=2.0)
+        with self.assertRaises(ValueError):
+            op.run_init()
 
     # --- validation ---
 
@@ -2508,6 +2546,244 @@ class TestOverwriteAndPrefixAccumulate(unittest.TestCase):
         self.assertIsNotNone(folder.data.get("Avg_RecordA_1"))
         self.assertIsNotNone(folder.data.get("Stdv_RecordA_1"))
         self.assertIsNone(folder.data.get("Avg_RecordA"))  # bare name never created
+
+
+class TestNMMainOpDFOF(unittest.TestCase):
+    """Tests for NMMainOpDFOF (per_array and average modes)."""
+
+    # ------------------------------------------------------------------
+    # per_array mode — basic behaviour
+
+    def test_in_place_modification(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0)
+        d = _make_data("RecordA0", [2.0, 2.0, 4.0], xstart=0.0, xdelta=1.0)
+        original_id = id(d)
+        op.run_init()
+        op.run(d)
+        self.assertEqual(id(d), original_id)  # same NMData object
+        self.assertFalse(np.array_equal(d.nparray, [2.0, 2.0, 4.0]))
+
+    def test_basic_computation(self):
+        # window [0,1] → F0 = mean([1.0, 3.0]) = 2.0
+        # dF/F = ([1,3,5] - 2) / 2 = [-0.5, 0.5, 1.5]
+        op = NMMainOpDFOF(x0=0.0, x1=1.0)
+        d = _make_data("RecordA0", [1.0, 3.0, 5.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [-0.5, 0.5, 1.5])
+
+    def test_f0_zero_sets_nan(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0)
+        d = _make_data("RecordA0", [0.0, 0.0, 1.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertTrue(np.all(np.isnan(d.nparray)))
+
+    def test_default_window_uses_full_array(self):
+        # x0=-inf, x1=+inf → F0 = mean of entire array = 3.0
+        op = NMMainOpDFOF()
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0, 5.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        # (arr - 3) / 3
+        f0 = 3.0
+        np.testing.assert_array_almost_equal(
+            d.nparray, [(1-f0)/f0, (2-f0)/f0, (3-f0)/f0, (4-f0)/f0, (5-f0)/f0]
+        )
+
+    def test_x0_x1_window(self):
+        # window [2,3] → indices 2,3 → values [3,4] → F0 = 3.5
+        op = NMMainOpDFOF(x0=2.0, x1=3.0)
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0, 5.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        f0 = 3.5
+        np.testing.assert_array_almost_equal(
+            d.nparray, [(1-f0)/f0, (2-f0)/f0, (3-f0)/f0, (4-f0)/f0, (5-f0)/f0]
+        )
+
+    def test_mode_per_array_independent_f0(self):
+        # Two arrays with different baselines → independent F0 per array
+        op = NMMainOpDFOF(x0=0.0, x1=0.0)
+        d1 = _make_data("RecordA0", [2.0, 4.0], xstart=0.0, xdelta=1.0)
+        d2 = _make_data("RecordA1", [4.0, 8.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d1)
+        op.run(d2)
+        # d1: F0=2 → [0, 1]; d2: F0=4 → [0, 1]
+        np.testing.assert_array_almost_equal(d1.nparray, [0.0, 1.0])
+        np.testing.assert_array_almost_equal(d2.nparray, [0.0, 1.0])
+
+    # ------------------------------------------------------------------
+    # average mode
+
+    def test_mode_average_shared_f0(self):
+        # F0 values: 2, 4, 6 → mean F0 = 4 per channel
+        op = NMMainOpDFOF(x0=0.0, x1=1.0, mode="average")
+        d1 = _make_data("RecordA0", [2.0, 2.0], xstart=0.0, xdelta=1.0)
+        d2 = _make_data("RecordA1", [4.0, 4.0], xstart=0.0, xdelta=1.0)
+        d3 = _make_data("RecordA2", [6.0, 6.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d1, "A")
+        op.run(d2, "A")
+        op.run(d3, "A")
+        op.run_finish()
+        # mean_f0 = 4; dF/F = (val - 4) / 4
+        np.testing.assert_array_almost_equal(d1.nparray, [-0.5, -0.5])
+        np.testing.assert_array_almost_equal(d2.nparray, [0.0, 0.0])
+        np.testing.assert_array_almost_equal(d3.nparray, [0.5, 0.5])
+
+    def test_mode_average_per_channel(self):
+        # Channel A: F0 values 2, 4 → mean=3; Channel B: F0=10 → mean=10
+        op = NMMainOpDFOF(x0=0.0, x1=0.0, mode="average")
+        a0 = _make_data("RecordA0", [2.0, 6.0], xstart=0.0, xdelta=1.0)
+        a1 = _make_data("RecordA1", [4.0, 6.0], xstart=0.0, xdelta=1.0)
+        b0 = _make_data("RecordB0", [10.0, 20.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(a0, "A")
+        op.run(a1, "A")
+        op.run(b0, "B")
+        op.run_finish()
+        # A: mean_f0=3 → (2-3)/3=-1/3, (6-3)/3=1
+        np.testing.assert_array_almost_equal(a0.nparray, [-1/3, 1.0])
+        np.testing.assert_array_almost_equal(a1.nparray, [1/3, 1.0])
+        # B: mean_f0=10 → (10-10)/10=0, (20-10)/10=1
+        np.testing.assert_array_almost_equal(b0.nparray, [0.0, 1.0])
+
+    # ------------------------------------------------------------------
+    # NaN handling
+
+    def test_ignore_nans_true(self):
+        # NaN in baseline window excluded → nanmean([nan, 4]) = 4
+        op = NMMainOpDFOF(x0=0.0, x1=1.0, ignore_nans=True)
+        d = _make_data("RecordA0", [np.nan, 4.0, 8.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        # F0=4 → (8-4)/4 = 1.0
+        self.assertAlmostEqual(float(d.nparray[2]), 1.0)
+
+    def test_ignore_nans_false(self):
+        # NaN in window → F0=nan → all-NaN result
+        op = NMMainOpDFOF(x0=0.0, x1=1.0, ignore_nans=False)
+        d = _make_data("RecordA0", [np.nan, 4.0, 8.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertTrue(np.all(np.isnan(d.nparray)))
+
+    # ------------------------------------------------------------------
+    # yscale update
+
+    def test_yscale_label_updated(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0)
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertEqual(d.yscale.label, "dF/F")
+
+    def test_yscale_units_cleared(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0)
+        d = _make_data("RecordA0", [1.0, 2.0, 3.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertEqual(d.yscale.units, "")
+
+    # ------------------------------------------------------------------
+    # Notes
+
+    def test_note_written(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0)
+        d = _make_data("RecordA0", [2.0, 2.0, 4.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertGreater(len(d.notes), 0)
+        self.assertIn("NMdFoF", d.notes[0]["note"])
+
+    def test_note_contains_f0(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0)
+        d = _make_data("RecordA0", [2.0, 2.0, 4.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertIn("F0=", d.notes[0]["note"])
+
+    def test_note_mode_per_array(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0, mode="per_array")
+        d = _make_data("RecordA0", [2.0, 2.0, 4.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d)
+        self.assertIn("per_array", d.notes[0]["note"])
+
+    def test_note_mode_average(self):
+        op = NMMainOpDFOF(x0=0.0, x1=1.0, mode="average")
+        d = _make_data("RecordA0", [2.0, 2.0, 4.0], xstart=0.0, xdelta=1.0)
+        op.run_init()
+        op.run(d, "A")
+        op.run_finish()
+        self.assertGreater(len(d.notes), 0)
+        self.assertIn("average", d.notes[0]["note"])
+
+    # ------------------------------------------------------------------
+    # Edge cases
+
+    def test_skips_non_ndarray(self):
+        op = NMMainOpDFOF()
+        d = NMData(NM, name="RecordA0")  # no nparray
+        op.run_init()
+        op.run(d)  # should not raise
+
+    def test_multiple_waves(self):
+        op = NMMainOpDFOF(x0=0.0, x1=0.0)
+        waves = [
+            _make_data("RecordA0", [1.0, 5.0], xstart=0.0, xdelta=1.0),
+            _make_data("RecordA1", [2.0, 6.0], xstart=0.0, xdelta=1.0),
+            _make_data("RecordA2", [4.0, 8.0], xstart=0.0, xdelta=1.0),
+        ]
+        op.run_init()
+        for w in waves:
+            op.run(w)
+        # Each wave transformed independently
+        np.testing.assert_array_almost_equal(waves[0].nparray, [0.0, 4.0])
+        np.testing.assert_array_almost_equal(waves[1].nparray, [0.0, 2.0])
+        np.testing.assert_array_almost_equal(waves[2].nparray, [0.0, 1.0])
+
+    # ------------------------------------------------------------------
+    # Validation
+
+    def test_x0_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpDFOF(x0=True)
+
+    def test_x1_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpDFOF(x1=True)
+
+    def test_x0_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpDFOF(x0=float("nan"))
+
+    def test_x1_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            NMMainOpDFOF(x1=float("nan"))
+
+    def test_x1_before_x0_raises(self):
+        op = NMMainOpDFOF(x0=5.0, x1=2.0)
+        with self.assertRaises(ValueError):
+            op.run_init()
+
+    def test_mode_rejects_invalid(self):
+        with self.assertRaises(ValueError):
+            NMMainOpDFOF(mode="median")
+
+    def test_mode_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpDFOF(mode=1)
+
+    def test_ignore_nans_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpDFOF(ignore_nans=1)
+
+    def test_dfof_by_name(self):
+        op = op_from_name("dfof")
+        self.assertIsInstance(op, NMMainOpDFOF)
 
 
 if __name__ == "__main__":

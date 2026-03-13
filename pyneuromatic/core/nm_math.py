@@ -235,6 +235,28 @@ def time_window_to_slice(
 
 
 # =========================================================================
+# Fluorescence dF/F₀ helper
+# =========================================================================
+
+
+def apply_dfof(arr: np.ndarray, f0: float) -> np.ndarray:
+    """Return dF/F₀ = (arr − f0) / f0.
+
+    If *f0* is zero, returns an array of NaN (avoids division by zero).
+
+    Args:
+        arr: Input fluorescence array (float).
+        f0:  Baseline scalar F₀.
+
+    Returns:
+        ndarray with same shape as *arr*.
+    """
+    if f0 == 0.0:
+        return np.full_like(arr, np.nan, dtype=float)
+    return (arr - f0) / f0
+
+
+# =========================================================================
 # Array statistics
 # =========================================================================
 
