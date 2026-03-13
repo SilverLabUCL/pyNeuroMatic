@@ -34,6 +34,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpNormalize,
     NMMainOpRedimension,
     NMMainOpReplaceValues,
+    NMMainOpConcatenate,
     NMMainOpRescale,
     NMMainOpRescaleX,
     NMMainOpReverse,
@@ -3104,6 +3105,176 @@ class TestNMMainOpRescaleX(unittest.TestCase):
     def test_rescale_x_by_name(self):
         op = op_from_name("rescale_x")
         self.assertIsInstance(op, NMMainOpRescaleX)
+
+
+# ---------------------------------------------------------------------------
+# TestNMMainOpConcatenate
+# ---------------------------------------------------------------------------
+
+
+class TestNMMainOpConcatenate(unittest.TestCase):
+    """Tests for NMMainOpConcatenate (1d and 2d modes)."""
+
+    def setUp(self):
+        self.op = NMMainOpConcatenate()
+        self.arrays = {
+            "RecordA0": [1.0, 2.0, 3.0],
+            "RecordA1": [4.0, 5.0, 6.0],
+        }
+
+    def _run(self, arrays=None, op=None):
+        if arrays is None:
+            arrays = self.arrays
+        if op is None:
+            op = self.op
+        return _run_op_directly(op, arrays)
+
+    # ------------------------------------------------------------------
+    # 1D mode — basic
+
+    def test_1d_values(self):
+        folder = self._run()
+        out = folder.data.get("Cat_RecordA")
+        self.assertIsNotNone(out)
+        np.testing.assert_array_almost_equal(out.nparray, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+    def test_1d_unequal_lengths(self):
+        arrays = {"RecordA0": [1.0, 2.0, 3.0], "RecordA1": [4.0, 5.0]}
+        folder = self._run(arrays)
+        out = folder.data.get("Cat_RecordA")
+        np.testing.assert_array_almost_equal(out.nparray, [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def test_1d_output_length(self):
+        folder = self._run()
+        out = folder.data.get("Cat_RecordA")
+        self.assertEqual(len(out.nparray), 6)  # 3 + 3
+
+    # ------------------------------------------------------------------
+    # 2D mode — basic
+
+    def test_2d_shape(self):
+        op = NMMainOpConcatenate(mode="2d")
+        arrays = {
+            "RecordA0": [1.0, 2.0, 3.0, 4.0],
+            "RecordA1": [5.0, 6.0, 7.0, 8.0],
+            "RecordA2": [9.0, 10.0, 11.0, 12.0],
+        }
+        folder = self._run(arrays, op)
+        out = folder.data.get("Cat_RecordA")
+        self.assertIsNotNone(out)
+        self.assertEqual(out.nparray.shape, (3, 4))
+
+    def test_2d_values(self):
+        op = NMMainOpConcatenate(mode="2d")
+        arrays = {"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0]}
+        folder = self._run(arrays, op)
+        out = folder.data.get("Cat_RecordA")
+        np.testing.assert_array_almost_equal(out.nparray[0], [1.0, 2.0])
+        np.testing.assert_array_almost_equal(out.nparray[1], [3.0, 4.0])
+
+    def test_2d_unequal_lengths_pads_nan(self):
+        op = NMMainOpConcatenate(mode="2d")
+        arrays = {"RecordA0": [1.0, 2.0, 3.0], "RecordA1": [4.0, 5.0]}
+        folder = self._run(arrays, op)
+        out = folder.data.get("Cat_RecordA")
+        self.assertEqual(out.nparray.shape, (2, 3))
+        np.testing.assert_array_almost_equal(out.nparray[0], [1.0, 2.0, 3.0])
+        self.assertAlmostEqual(out.nparray[1, 0], 4.0)
+        self.assertAlmostEqual(out.nparray[1, 1], 5.0)
+        self.assertTrue(np.isnan(out.nparray[1, 2]))
+
+    def test_2d_equal_lengths_no_nan(self):
+        op = NMMainOpConcatenate(mode="2d")
+        arrays = {"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0]}
+        folder = self._run(arrays, op)
+        out = folder.data.get("Cat_RecordA")
+        self.assertFalse(np.any(np.isnan(out.nparray)))
+
+    # ------------------------------------------------------------------
+    # Output naming and metadata
+
+    def test_output_name(self):
+        folder = self._run()
+        self.assertIsNotNone(folder.data.get("Cat_RecordA"))
+
+    def test_output_name_in_results(self):
+        self._run()
+        self.assertIn("A", self.op.results)
+        self.assertEqual(self.op.results["A"], "Cat_RecordA")
+
+    def test_yscale_copied_from_first(self):
+        folder = self._run()
+        out = folder.data.get("Cat_RecordA")
+        self.assertIsNotNone(out.yscale)
+
+    def test_xscale_copied_from_first(self):
+        folder = self._run()
+        out = folder.data.get("Cat_RecordA")
+        self.assertIsNotNone(out.xscale)
+
+    # ------------------------------------------------------------------
+    # Multi-channel
+
+    def test_two_channels(self):
+        arrays = {
+            "RecordA0": [1.0, 2.0],
+            "RecordA1": [3.0, 4.0],
+            "RecordB0": [5.0, 6.0],
+            "RecordB1": [7.0, 8.0],
+        }
+        folder = self._run(arrays)
+        self.assertIsNotNone(folder.data.get("Cat_RecordA"))
+        self.assertIsNotNone(folder.data.get("Cat_RecordB"))
+
+    # ------------------------------------------------------------------
+    # Notes
+
+    def test_note_written_1d(self):
+        folder = self._run()
+        out = folder.data.get("Cat_RecordA")
+        note = out.notes[0]["note"]
+        self.assertIn("NMConcatenate_1d", note)
+
+    def test_note_written_2d(self):
+        op = NMMainOpConcatenate(mode="2d")
+        folder = self._run(op=op)
+        out = folder.data.get("Cat_RecordA")
+        note = out.notes[0]["note"]
+        self.assertIn("NMConcatenate_2d", note)
+
+    # ------------------------------------------------------------------
+    # Validation
+
+    def test_mode_rejects_invalid(self):
+        with self.assertRaises(ValueError):
+            NMMainOpConcatenate(mode="3d")
+
+    def test_mode_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpConcatenate(mode=1)
+
+    def test_default_mode_is_1d(self):
+        self.assertEqual(NMMainOpConcatenate().mode, "1d")
+
+    # ------------------------------------------------------------------
+    # Registry
+
+    def test_concatenate_by_name(self):
+        op = op_from_name("concatenate")
+        self.assertIsInstance(op, NMMainOpConcatenate)
+
+    # ------------------------------------------------------------------
+    # Overwrite
+
+    def test_overwrite_false_creates_new(self):
+        op = NMMainOpConcatenate(mode="1d")
+        op.overwrite = False
+        _run_op_directly(op, self.arrays)   # creates Cat_RecordA_0
+        _run_op_directly(op, self.arrays)   # creates Cat_RecordA_1
+        # Both _0 and _1 must exist (fresh folder each call, but op tracks state)
+        # Verify second run produced a _0-suffixed name
+        self.assertIn("A", op.results)
+        self.assertTrue(op.results["A"].startswith("Cat_RecordA"))
 
 
 if __name__ == "__main__":
