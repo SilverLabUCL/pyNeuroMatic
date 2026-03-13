@@ -11,6 +11,7 @@ from pyneuromatic.core.nm_math import (
     VALID_ARITH_OPS,
     VALID_INEQUALITY_OPS,
     apply_arithmetic,
+    apply_dfof,
     apply_inequality,
     array_stats,
     compute_ref_value,
@@ -416,3 +417,38 @@ class TestLinearRegression:
     def test_non_array_raises(self):
         with pytest.raises(TypeError):
             linear_regression([1.0, 2.0, 3.0])
+
+
+# ---------------------------------------------------------------------------
+# TestApplyDFOF
+# ---------------------------------------------------------------------------
+
+
+class TestApplyDFOF:
+    def test_basic_dfof(self):
+        arr = np.array([0.0, 1.0, 2.0])
+        result = apply_dfof(arr, f0=1.0)
+        np.testing.assert_array_almost_equal(result, [-1.0, 0.0, 1.0])
+
+    def test_f0_zero_returns_nan(self):
+        arr = np.array([1.0, 2.0])
+        result = apply_dfof(arr, f0=0.0)
+        assert np.all(np.isnan(result))
+
+    def test_negative_f0(self):
+        arr = np.array([0.0, -1.0, -2.0])
+        result = apply_dfof(arr, f0=-1.0)
+        # (arr - (-1)) / (-1) = (arr + 1) / (-1) = -(arr + 1)
+        np.testing.assert_array_almost_equal(result, [-1.0, 0.0, 1.0])
+
+    def test_shape_preserved(self):
+        arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = apply_dfof(arr, f0=2.0)
+        assert result.shape == arr.shape
+
+    def test_nan_in_arr_propagates(self):
+        arr = np.array([1.0, np.nan, 3.0])
+        result = apply_dfof(arr, f0=1.0)
+        assert np.isnan(result[1])
+        assert not np.isnan(result[0])
+        assert not np.isnan(result[2])

@@ -645,183 +645,6 @@ class NMMainOpDeletePoints(NMMainOp):
 
 
 # =========================================================================
-# Baseline
-# =========================================================================
-
-
-class NMMainOpBaseline(NMMainOp):
-    """Subtract a baseline from each selected array.
-
-    Two modes are supported:
-
-    - **per_array**: Each array's own baseline (mean of the window) is subtracted
-      from that array independently.
-    - **average**: A single shared baseline per channel is computed as the mean
-      of all per-array baselines for that channel, then subtracted from every
-      array in that channel.
-
-    Parameters:
-        x0: Baseline window start in time units (default 0.0).
-        x1: Baseline window end in time units (default 0.0).  Must be >=
-            ``x0``.
-        mode: ``"per_array"`` (default) or ``"average"``.
-        ignore_nans: If True (default) use ``np.nanmean``; otherwise ``np.mean``
-            (NaN propagates to the result).
-    """
-
-    name = "baseline"
-
-    _VALID_MODES = {"per_array", "average"}
-
-    def __init__(
-        self,
-        x0: float = 0.0,
-        x1: float = 0.0,
-        mode: str = "per_array",
-        ignore_nans: bool = True,
-    ) -> None:
-        self.x0 = x0
-        self.x1 = x1
-        self.mode = mode
-        self.ignore_nans = ignore_nans
-
-    # ------------------------------------------------------------------
-    # Properties
-
-    @property
-    def x0(self) -> float:
-        """Baseline window start (time units)."""
-        return self._x0
-
-    @x0.setter
-    def x0(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0", "float"))
-        self._x0 = float(value)
-
-    @property
-    def x1(self) -> float:
-        """Baseline window end (time units)."""
-        return self._x1
-
-    @x1.setter
-    def x1(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1", "float"))
-        self._x1 = float(value)
-
-    @property
-    def mode(self) -> str:
-        """Subtraction mode: ``'per_array'`` or ``'average'``."""
-        return self._mode
-
-    @mode.setter
-    def mode(self, value: str) -> None:
-        if not isinstance(value, str):
-            raise TypeError(nmu.type_error_str(value, "mode", "string"))
-        if value not in self._VALID_MODES:
-            raise ValueError(
-                "mode must be one of %s, got %r" % (sorted(self._VALID_MODES), value)
-            )
-        self._mode = value
-
-    @property
-    def ignore_nans(self) -> bool:
-        """If True, NaN values are excluded from baseline mean (np.nanmean)."""
-        return self._ignore_nans
-
-    @ignore_nans.setter
-    def ignore_nans(self, value: bool) -> None:
-        if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
-        self._ignore_nans = value
-
-    # ------------------------------------------------------------------
-    # Validation helper
-
-    def _validate_window(self) -> None:
-        if self._x1 < self._x0:
-            raise ValueError(
-                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
-            )
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-
-    def run_init(self) -> None:
-        """Reset per-run accumulators."""
-        self._validate_window()
-        self._baseline_accum: dict[str, list[float]] = {}
-        self._data_refs: dict[str, list[NMData]] = {}
-
-    def run(
-        self,
-        data: NMData,
-        channel_name: str | None = None,
-    ) -> None:
-        """Compute and (optionally) apply baseline for one array.
-
-        Args:
-            data: The NMData object to process.
-            channel_name: Channel name from the selection context, or None
-                (parsed from data.name as a fallback).
-        """
-        if not isinstance(data.nparray, np.ndarray):
-            return
-
-        if channel_name is None:
-            parsed = nmu.parse_data_name(data.name)
-            channel_name = parsed[1] if parsed is not None else "A"
-
-        sl = nm_math.time_window_to_slice(
-            data.nparray, data.xscale.to_dict(), self._x0, self._x1
-        )
-        segment = data.nparray[sl].astype(float)
-        if len(segment) == 0:
-            baseline = 0.0
-        elif self._ignore_nans:
-            baseline = float(np.nanmean(segment))
-        else:
-            baseline = float(np.mean(segment))
-
-        if self._mode == "per_array":
-            data.nparray = data.nparray.astype(float) - baseline
-            self._add_note(
-                data,
-                "NMBaseline(x0=%.6g,x1=%.6g,mode=per_array,baseline=%.6g)"
-                % (self._x0, self._x1, baseline),
-            )
-        else:  # "average"
-            self._baseline_accum.setdefault(channel_name, []).append(baseline)
-            self._data_refs.setdefault(channel_name, []).append(data)
-
-    def run_finish(
-        self,
-        folder: NMFolder | None = None,
-        prefix: str | None = None,
-    ) -> None:
-        """Apply averaged baseline (average mode only).
-
-        In ``per_array`` mode this is a no-op (subtraction was done in ``run()``).
-        In ``average`` mode the average of all per-array baselines for each channel
-        is computed and subtracted from every array in that channel.
-        """
-        if self._mode == "per_array":
-            return
-        for channel_name, baselines in self._baseline_accum.items():
-            avg_baseline = float(
-                np.nanmean(baselines) if self._ignore_nans else np.mean(baselines)
-            )
-            for d in self._data_refs[channel_name]:
-                d.nparray = d.nparray.astype(float) - avg_baseline
-                self._add_note(
-                    d,
-                    "NMBaseline(x0=%.6g,x1=%.6g,mode=average,channel=%s,baseline=%.6g)"
-                    % (self._x0, self._x1, channel_name, avg_baseline),
-                )
-
-
-# =========================================================================
 # Reverse
 # =========================================================================
 
@@ -1157,6 +980,187 @@ class NMMainOpDeleteNaNs(NMMainOp):
 
 
 # =========================================================================
+# Baseline
+# =========================================================================
+
+
+class NMMainOpBaseline(NMMainOp):
+    """Subtract a baseline from each selected array.
+
+    Two modes are supported:
+
+    - **per_array**: Each array's own baseline (mean of the window) is subtracted
+      from that array independently.
+    - **average**: A single shared baseline per channel is computed as the mean
+      of all per-array baselines for that channel, then subtracted from every
+      array in that channel.
+
+    Parameters:
+        x0: Baseline window start in time units (default 0.0).
+        x1: Baseline window end in time units (default 0.0).  Must be >=
+            ``x0``.
+        mode: ``"per_array"`` (default) or ``"average"``.
+        ignore_nans: If True (default) use ``np.nanmean``; otherwise ``np.mean``
+            (NaN propagates to the result).
+    """
+
+    name = "baseline"
+
+    _VALID_MODES = {"per_array", "average"}
+
+    def __init__(
+        self,
+        x0: float = 0.0,
+        x1: float = 0.0,
+        mode: str = "per_array",
+        ignore_nans: bool = True,
+    ) -> None:
+        self.x0 = x0
+        self.x1 = x1
+        self.mode = mode
+        self.ignore_nans = ignore_nans
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def x0(self) -> float:
+        """Baseline window start (time units)."""
+        return self._x0
+
+    @x0.setter
+    def x0(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x0 must not be NaN")
+        self._x0 = float(value)
+
+    @property
+    def x1(self) -> float:
+        """Baseline window end (time units)."""
+        return self._x1
+
+    @x1.setter
+    def x1(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x1 must not be NaN")
+        self._x1 = float(value)
+
+    @property
+    def mode(self) -> str:
+        """Subtraction mode: ``'per_array'`` or ``'average'``."""
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "mode", "string"))
+        if value not in self._VALID_MODES:
+            raise ValueError(
+                "mode must be one of %s, got %r" % (sorted(self._VALID_MODES), value)
+            )
+        self._mode = value
+
+    @property
+    def ignore_nans(self) -> bool:
+        """If True, NaN values are excluded from baseline mean (np.nanmean)."""
+        return self._ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self._ignore_nans = value
+
+    # ------------------------------------------------------------------
+    # Validation helper
+
+    def _validate_window(self) -> None:
+        if self._x1 < self._x0:
+            raise ValueError(
+                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
+            )
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+
+    def run_init(self) -> None:
+        """Reset per-run accumulators."""
+        self._validate_window()
+        self._baseline_accum: dict[str, list[float]] = {}
+        self._data_refs: dict[str, list[NMData]] = {}
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Compute and (optionally) apply baseline for one array.
+
+        Args:
+            data: The NMData object to process.
+            channel_name: Channel name from the selection context, or None
+                (parsed from data.name as a fallback).
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+
+        if channel_name is None:
+            parsed = nmu.parse_data_name(data.name)
+            channel_name = parsed[1] if parsed is not None else "A"
+
+        sl = nm_math.time_window_to_slice(
+            data.nparray, data.xscale.to_dict(), self._x0, self._x1
+        )
+        segment = data.nparray[sl].astype(float)
+        if len(segment) == 0:
+            baseline = 0.0
+        elif self._ignore_nans:
+            baseline = float(np.nanmean(segment))
+        else:
+            baseline = float(np.mean(segment))
+
+        if self._mode == "per_array":
+            data.nparray = data.nparray.astype(float) - baseline
+            self._add_note(
+                data,
+                "NMBaseline(x0=%.6g,x1=%.6g,mode=per_array,baseline=%.6g)"
+                % (self._x0, self._x1, baseline),
+            )
+        else:  # "average"
+            self._baseline_accum.setdefault(channel_name, []).append(baseline)
+            self._data_refs.setdefault(channel_name, []).append(data)
+
+    def run_finish(
+        self,
+        folder: NMFolder | None = None,
+        prefix: str | None = None,
+    ) -> None:
+        """Apply averaged baseline (average mode only).
+
+        In ``per_array`` mode this is a no-op (subtraction was done in ``run()``).
+        In ``average`` mode the average of all per-array baselines for each channel
+        is computed and subtracted from every array in that channel.
+        """
+        if self._mode == "per_array":
+            return
+        for channel_name, baselines in self._baseline_accum.items():
+            avg_baseline = float(
+                np.nanmean(baselines) if self._ignore_nans else np.mean(baselines)
+            )
+            for d in self._data_refs[channel_name]:
+                d.nparray = d.nparray.astype(float) - avg_baseline
+                self._add_note(
+                    d,
+                    "NMBaseline(x0=%.6g,x1=%.6g,mode=average,channel=%s,baseline=%.6g)"
+                    % (self._x0, self._x1, channel_name, avg_baseline),
+                )
+
+
+# =========================================================================
 # Normalize
 # =========================================================================
 
@@ -1237,6 +1241,8 @@ class NMMainOpNormalize(NMMainOp):
     def x0_min(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "x0_min", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x0_min must not be NaN")
         self._x0_min = float(value)
 
     @property
@@ -1248,6 +1254,8 @@ class NMMainOpNormalize(NMMainOp):
     def x1_min(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "x1_min", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x1_min must not be NaN")
         self._x1_min = float(value)
 
     @property
@@ -1287,6 +1295,8 @@ class NMMainOpNormalize(NMMainOp):
     def x0_max(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "x0_max", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x0_max must not be NaN")
         self._x0_max = float(value)
 
     @property
@@ -1298,6 +1308,8 @@ class NMMainOpNormalize(NMMainOp):
     def x1_max(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "x1_max", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x1_max must not be NaN")
         self._x1_max = float(value)
 
     @property
@@ -1467,6 +1479,207 @@ class NMMainOpNormalize(NMMainOp):
                 arr = d.nparray.astype(float)
                 d.nparray = self._apply(arr, avg_ref_min, avg_ref_max)
                 self._add_note(d, self._note_str(avg_ref_min, avg_ref_max, channel_name))
+
+
+# =========================================================================
+# DFOF
+# =========================================================================
+
+
+class NMMainOpDFOF(NMMainOp):
+    """Compute dF/F₀ = (F − F₀) / F₀ in-place for each data array.
+
+    F₀ is the mean fluorescence over the baseline time window [x0, x1].
+    The array name is unchanged; a note records the transformation and F₀.
+    After transformation, ``yscale.label`` is set to ``"dF/F"`` and
+    ``yscale.units`` to ``""`` (dimensionless).
+
+    Two modes are supported:
+
+    - **per_array**: Each array's own F₀ (mean of the window) is used
+      independently.
+    - **average**: A single shared F₀ per channel is computed as the mean
+      of all per-array F₀ values for that channel, then applied to every
+      array in that channel.
+
+    Parameters:
+        x0:          Baseline window start in x-axis units.  Default ``-inf``
+                     (start of array).
+        x1:          Baseline window end in x-axis units.  Default ``+inf``
+                     (end of array).
+        mode:        ``"per_array"`` (default) or ``"average"``.
+        ignore_nans: If True (default) use ``np.nanmean``; otherwise
+                     ``np.mean`` (NaN propagates to the result).
+    """
+
+    name = "dfof"
+
+    _VALID_MODES = {"per_array", "average"}
+
+    def __init__(
+        self,
+        x0: float = -math.inf,
+        x1: float = math.inf,
+        mode: str = "per_array",
+        ignore_nans: bool = True,
+    ) -> None:
+        self.x0 = x0
+        self.x1 = x1
+        self.mode = mode
+        self.ignore_nans = ignore_nans
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def x0(self) -> float:
+        """Baseline window start (x-axis units)."""
+        return self._x0
+
+    @x0.setter
+    def x0(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x0 must not be NaN")
+        self._x0 = float(value)
+
+    @property
+    def x1(self) -> float:
+        """Baseline window end (x-axis units)."""
+        return self._x1
+
+    @x1.setter
+    def x1(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("x1 must not be NaN")
+        self._x1 = float(value)
+
+    @property
+    def mode(self) -> str:
+        """F₀ mode: ``'per_array'`` or ``'average'``."""
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "mode", "string"))
+        if value not in self._VALID_MODES:
+            raise ValueError(
+                "mode must be one of %s, got %r" % (sorted(self._VALID_MODES), value)
+            )
+        self._mode = value
+
+    @property
+    def ignore_nans(self) -> bool:
+        """If True, NaN values are excluded from F₀ mean (np.nanmean)."""
+        return self._ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self._ignore_nans = value
+
+    # ------------------------------------------------------------------
+    # Validation helper
+
+    def _validate_window(self) -> None:
+        if self._x1 < self._x0:
+            raise ValueError(
+                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
+            )
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+
+    def run_init(self) -> None:
+        """Reset per-run accumulators."""
+        self._validate_window()
+        self._f0_accum: dict[str, list[float]] = {}
+        self._data_refs: dict[str, list[NMData]] = {}
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Compute and (optionally) apply dF/F₀ for one array.
+
+        Args:
+            data: The NMData object to process.
+            channel_name: Channel name from the selection context, or None
+                (parsed from data.name as a fallback).
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+
+        if channel_name is None:
+            parsed = nmu.parse_data_name(data.name)
+            channel_name = parsed[1] if parsed is not None else "A"
+
+        arr = data.nparray.astype(float)
+        sl = nm_math.time_window_to_slice(
+            arr, data.xscale.to_dict(), self._x0, self._x1
+        )
+        segment = arr[sl]
+        if len(segment) == 0:
+            f0 = 0.0
+        elif self._ignore_nans:
+            f0 = float(np.nanmean(segment))
+        else:
+            f0 = float(np.mean(segment))
+
+        if self._mode == "per_array":
+            self._apply(data, arr, f0, "per_array")
+        else:  # "average"
+            self._f0_accum.setdefault(channel_name, []).append(f0)
+            self._data_refs.setdefault(channel_name, []).append(data)
+
+    def run_finish(
+        self,
+        folder: NMFolder | None = None,
+        prefix: str | None = None,
+    ) -> None:
+        """Apply averaged F₀ (average mode only).
+
+        In ``per_array`` mode this is a no-op (transform was done in ``run()``).
+        In ``average`` mode the mean of all per-array F₀ values for each channel
+        is computed and used to transform every array in that channel.
+        """
+        if self._mode == "per_array":
+            return
+        for channel_name, f0_list in self._f0_accum.items():
+            mean_f0 = float(
+                np.nanmean(f0_list) if self._ignore_nans else np.mean(f0_list)
+            )
+            for d in self._data_refs[channel_name]:
+                self._apply(d, d.nparray.astype(float), mean_f0, "average",
+                            channel_name=channel_name)
+
+    def _apply(
+        self,
+        data: NMData,
+        arr: np.ndarray,
+        f0: float,
+        mode_label: str,
+        channel_name: str | None = None,
+    ) -> None:
+        data.nparray = nm_math.apply_dfof(arr, f0)
+        data.yscale.label = "dF/F"
+        data.yscale.units = ""
+        note = "NMdFoF(x0=%.6g,x1=%.6g,mode=%s,F0=%.6g)" % (
+            self._x0, self._x1, mode_label, f0
+        )
+        if channel_name is not None:
+            note = (
+                "NMdFoF(x0=%.6g,x1=%.6g,mode=%s,channel=%s,F0=%.6g)" % (
+                    self._x0, self._x1, mode_label, channel_name, f0
+                )
+            )
+        self._add_note(data, note)
 
 
 # =========================================================================
@@ -2114,10 +2327,11 @@ class NMMainOpHistogram(NMMainOp):
 
     @x0.setter
     def x0(self, value: float) -> None:
-        value = float(value)
-        if math.isnan(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+        if math.isnan(float(value)):
             raise ValueError("x0 must not be NaN")
-        self._x0 = -math.inf if math.isinf(value) else value
+        self._x0 = float(value)
 
     @property
     def x1(self) -> float:
@@ -2126,10 +2340,11 @@ class NMMainOpHistogram(NMMainOp):
 
     @x1.setter
     def x1(self, value: float) -> None:
-        value = float(value)
-        if math.isnan(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+        if math.isnan(float(value)):
             raise ValueError("x1 must not be NaN")
-        self._x1 = math.inf if math.isinf(value) else value
+        self._x1 = float(value)
 
     @property
     def xrange(self) -> tuple | None:
@@ -2160,10 +2375,20 @@ class NMMainOpHistogram(NMMainOp):
         return self._results
 
     # ------------------------------------------------------------------
+    # Validation helper
+
+    def _validate_window(self) -> None:
+        if self._x1 < self._x0:
+            raise ValueError(
+                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
+            )
+
+    # ------------------------------------------------------------------
     # NMMainOp interface
     # ------------------------------------------------------------------
 
     def run_init(self) -> None:
+        self._validate_window()
         self._results = {}
 
     def run(self, data: NMData, channel_name: str | None = None) -> None:
@@ -2226,6 +2451,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "average": NMMainOpAverage,
     "baseline": NMMainOpBaseline,
     "delete_nans": NMMainOpDeleteNaNs,
+    "dfof": NMMainOpDFOF,
     "delete_points": NMMainOpDeletePoints,
     "differentiate": NMMainOpDifferentiate,
     "histogram": NMMainOpHistogram,
