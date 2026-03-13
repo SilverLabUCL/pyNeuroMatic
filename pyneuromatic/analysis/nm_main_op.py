@@ -2265,6 +2265,92 @@ class NMMainOpMax(NMMainOpAccumulate):
 
 
 # =========================================================================
+# Concatenate
+# =========================================================================
+
+
+class NMMainOpConcatenate(NMMainOpAccumulate):
+    """Concatenate selected data arrays per channel into a single output array.
+
+    In ``"1d"`` mode arrays are joined end-to-end (``np.concatenate``);
+    unequal lengths are allowed.  In ``"2d"`` mode arrays are stacked as
+    rows (``np.stack``); shorter arrays are padded with NaN to ``max_len``
+    so no data is lost from longer waves.
+
+    Output array is written to the destination folder as
+    ``Cat_{prefix}{channel}`` (e.g. ``Cat_RecordA``).
+
+    Parameters:
+        mode:        ``"1d"`` (default) or ``"2d"``.
+        ignore_nans: Passed to the accumulate base (unused by concatenate
+                     itself, kept for API consistency).
+    """
+
+    name = "concatenate"
+    _output_prefix = "Cat_"
+    _note_name = "NMConcatenate"
+    _VALID_MODES: frozenset[str] = frozenset({"1d", "2d"})
+
+    def __init__(self, mode: str = "1d", ignore_nans: bool = True) -> None:
+        super().__init__(ignore_nans)
+        self.mode = mode
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "mode", "string"))
+        if value not in self._VALID_MODES:
+            raise ValueError(
+                "mode must be one of %s, got %r" % (sorted(self._VALID_MODES), value)
+            )
+        self._mode = value
+
+    # ------------------------------------------------------------------
+    # Subclass contract
+
+    def _reduce(self, stack: np.ndarray) -> np.ndarray:
+        # Not called — _process_channel is fully overridden.
+        return stack  # pragma: no cover
+
+    def _process_channel(
+        self,
+        folder: NMFolder,
+        pfx: str,
+        cname: str,
+        arrays: list[np.ndarray],
+    ) -> None:
+        if self._mode == "1d":
+            arr = np.concatenate(arrays)
+        else:  # "2d"
+            max_len = max(len(a) for a in arrays)
+            padded = []
+            for a in arrays:
+                deficit = max_len - len(a)
+                if deficit:
+                    a = np.concatenate([a, np.full(deficit, np.nan)])
+                padded.append(a)
+            arr = np.stack(padded)
+
+        n = len(arrays)
+        epoch_str = self._epoch_str(cname)
+        base_name = self._out_prefix + pfx + cname
+        out_name = self._make_out_name(folder, base_name)
+        note_name = "NMConcatenate_%s" % self._mode
+        self._write_output_array(
+            folder, out_name, arr, note_name,
+            folder.name, pfx, cname, epoch_str, n,
+        )
+        self._results[cname] = out_name
+
+
+# =========================================================================
 # NMMainOpInequality
 # =========================================================================
 
@@ -2627,6 +2713,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "arithmetic": NMMainOpArithmetic,
     "arithmetic_by_array": NMMainOpArithmeticByArray,
     "average": NMMainOpAverage,
+    "concatenate": NMMainOpConcatenate,
     "baseline": NMMainOpBaseline,
     "delete_nans": NMMainOpDeleteNaNs,
     "dfof": NMMainOpDFOF,
