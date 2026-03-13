@@ -411,9 +411,9 @@ class TestFormatEpochString(unittest.TestCase):
     def test_single_gap(self):
         self.assertEqual(nmu.format_epoch_string(["RecordA0", "RecordA2"]), "[0,2]")
 
-    # --- single wave ---
+    # --- single array ---
 
-    def test_single_wave_returns_single_number(self):
+    def test_single_array_returns_single_number(self):
         self.assertEqual(nmu.format_epoch_string(["RecordA3"]), "[3]")
 
     # --- unparseable names fall back to the raw name ---

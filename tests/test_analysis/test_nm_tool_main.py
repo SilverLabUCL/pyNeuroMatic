@@ -96,7 +96,7 @@ class TestNMMainOpAverage(unittest.TestCase):
 
     def setUp(self):
         self.op = NMMainOpAverage()
-        # Three A-channel waves; expected average = [4, 4, 4]
+        # Three A-channel arrays; expected average = [4, 4, 4]
         self.arrays = {
             "RecordA0": [2.0, 2.0, 2.0],
             "RecordA1": [4.0, 4.0, 4.0],
@@ -221,7 +221,7 @@ class TestNMMainOpAverage(unittest.TestCase):
 
     # --- notes ---
 
-    def test_note_on_output_wave(self):
+    def test_note_on_output_array(self):
         # consecutive epochs → range notation
         folder = self._run({"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0], "RecordA2": [5.0, 6.0]})
         out = folder.data.get("Avg_RecordA")
@@ -263,7 +263,7 @@ class TestNMMainOpAverage(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.op.compute_sem = 0
 
-    def test_compute_stdv_writes_wave(self):
+    def test_compute_stdv_writes_array(self):
         self.op.compute_stdv = True
         folder = self._run()
         self.assertIsNotNone(folder.data.get("Stdv_RecordA"))
@@ -293,7 +293,7 @@ class TestNMMainOpAverage(unittest.TestCase):
         expected = 2.0 / math.sqrt(3)
         np.testing.assert_array_almost_equal(out.nparray, [expected, expected, expected])
 
-    def test_all_three_writes_three_extra_waves(self):
+    def test_all_three_writes_three_extra_arrays(self):
         self.op.compute_stdv = True
         self.op.compute_var = True
         self.op.compute_sem = True
@@ -302,7 +302,7 @@ class TestNMMainOpAverage(unittest.TestCase):
         self.assertIsNotNone(folder.data.get("Var_RecordA"))
         self.assertIsNotNone(folder.data.get("SEM_RecordA"))
 
-    def test_stdv_note_on_output_wave(self):
+    def test_stdv_note_on_output_array(self):
         self.op.compute_stdv = True
         folder = self._run({"RecordA0": [2.0, 2.0], "RecordA1": [4.0, 4.0], "RecordA2": [6.0, 6.0]})
         out = folder.data.get("Stdv_RecordA")
@@ -874,22 +874,22 @@ class TestOpFromName(unittest.TestCase):
 
 
 class TestNMMainOpBaseline(unittest.TestCase):
-    """Tests for NMMainOpBaseline (per_wave and average modes)."""
+    """Tests for NMMainOpBaseline (per_array and average modes)."""
 
     # ------------------------------------------------------------------
-    # per_wave mode
+    # per_array mode
 
-    def test_per_wave_subtracts_correct_baseline(self):
+    def test_per_array_subtracts_correct_baseline(self):
         # window [0,1] covers first 2 points [2,2] → baseline=2
-        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_array")
         d = _make_data("RecordA0", [2.0, 2.0, 4.0, 4.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
         np.testing.assert_array_almost_equal(d.nparray, [0.0, 0.0, 2.0, 2.0])
 
-    def test_per_wave_different_baselines(self):
-        # Two waves with different values in baseline window → independent shifts
-        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="per_wave")
+    def test_per_array_different_baselines(self):
+        # Two arrays with different values in baseline window → independent shifts
+        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="per_array")
         d1 = _make_data("RecordA0", [1.0, 5.0], xstart=0.0, xdelta=1.0)
         d2 = _make_data("RecordA1", [3.0, 7.0], xstart=0.0, xdelta=1.0)
         op.run_init()
@@ -898,8 +898,8 @@ class TestNMMainOpBaseline(unittest.TestCase):
         np.testing.assert_array_almost_equal(d1.nparray, [0.0, 4.0])
         np.testing.assert_array_almost_equal(d2.nparray, [0.0, 4.0])
 
-    def test_per_wave_nan_ignored(self):
-        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_wave", ignore_nans=True)
+    def test_per_array_nan_ignored(self):
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_array", ignore_nans=True)
         d = _make_data("RecordA0", [np.nan, 2.0, 5.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
@@ -907,8 +907,8 @@ class TestNMMainOpBaseline(unittest.TestCase):
         self.assertTrue(math.isfinite(float(d.nparray[2])))
         self.assertAlmostEqual(float(d.nparray[2]), 3.0)
 
-    def test_per_wave_nan_propagates(self):
-        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_wave", ignore_nans=False)
+    def test_per_array_nan_propagates(self):
+        op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="per_array", ignore_nans=False)
         d = _make_data("RecordA0", [np.nan, 2.0, 5.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
@@ -917,7 +917,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_window_out_of_range_no_subtraction(self):
         # Window is past end of array → empty slice → baseline=0 → no change
-        op = NMMainOpBaseline(x0=100.0, x1=200.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=100.0, x1=200.0, mode="per_array")
         d = _make_data("RecordA0", [5.0, 6.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
@@ -925,7 +925,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     def test_window_partial_clip(self):
         # Window extends beyond array end — only existing samples used
-        op = NMMainOpBaseline(x0=1.0, x1=10.0, mode="per_wave")
+        op = NMMainOpBaseline(x0=1.0, x1=10.0, mode="per_array")
         # xdelta=1, array=[0,1,2,3]; window 1..10 clips to indices 1..4
         d = _make_data("RecordA0", [0.0, 2.0, 4.0, 6.0], xstart=0.0, xdelta=1.0)
         op.run_init()
@@ -937,7 +937,7 @@ class TestNMMainOpBaseline(unittest.TestCase):
     # average mode
 
     def test_average_mode_shared_baseline(self):
-        # 3 waves [2,2], [4,4], [6,6]; window covers full wave → baselines 2,4,6
+        # 3 arrays [2,2], [4,4], [6,6]; window covers full array → baselines 2,4,6
         # avg baseline = 4; all shifted by -4
         op = NMMainOpBaseline(x0=0.0, x1=1.0, mode="average")
         d1 = _make_data("RecordA0", [2.0, 2.0], xstart=0.0, xdelta=1.0)
@@ -1015,14 +1015,14 @@ class TestNMMainOpBaseline(unittest.TestCase):
 
     # --- notes ---
 
-    def test_per_wave_note_written(self):
-        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="per_wave")
+    def test_per_array_note_written(self):
+        op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="per_array")
         d = _make_data("RecordA0", [3.0, 5.0], xstart=0.0, xdelta=1.0)
         op.run_init()
         op.run(d)
         self.assertEqual(len(d.notes), 1)
         note = d.notes[0]["note"]
-        self.assertIn("NMBaseline(x0=0,x1=0,mode=per_wave,baseline=3)", note)
+        self.assertIn("NMBaseline(x0=0,x1=0,mode=per_array,baseline=3)", note)
 
     def test_average_note_written(self):
         op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="average")
@@ -1247,14 +1247,14 @@ class TestNMMainOpDifferentiate(unittest.TestCase):
         np.testing.assert_array_almost_equal(d.nparray, expected)
 
     def test_uses_delta(self):
-        # same wave with delta=0.5 → result scaled by 1/0.5
+        # same array with delta=0.5 → result scaled by 1/0.5
         arr = [0.0, 1.0, 4.0, 9.0]
         d = _make_data("RecordA0", arr, xdelta=0.5)
         NMMainOpDifferentiate().run(d)
         expected = np.gradient(np.array(arr), 0.5)
         np.testing.assert_array_almost_equal(d.nparray, expected)
 
-    def test_constant_wave_is_zero(self):
+    def test_constant_array_is_zero(self):
         d = _make_data("RecordA0", [5.0, 5.0, 5.0, 5.0], xdelta=1.0)
         NMMainOpDifferentiate().run(d)
         np.testing.assert_array_almost_equal(d.nparray, [0.0, 0.0, 0.0, 0.0])
@@ -1436,12 +1436,12 @@ class TestNMMainOpDeleteNaNs(unittest.TestCase):
 
 
 class TestNMMainOpNormalize(unittest.TestCase):
-    """Tests for NMMainOpNormalize (per_wave and average modes)."""
+    """Tests for NMMainOpNormalize (per_array and average modes)."""
 
     # ------------------------------------------------------------------
-    # per_wave mode — correct values
+    # per_array mode — correct values
 
-    def test_per_wave_min_max(self):
+    def test_per_array_min_max(self):
         # [0,5,10], fxn1=min→0, fxn2=max→10, range=10 → [0.0, 0.5, 1.0]
         op = NMMainOpNormalize(
             x0_min=0.0, x1_min=2.0, fxn1="min",
@@ -1452,7 +1452,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op.run(data, "A")
         np.testing.assert_array_almost_equal(data.nparray, [0.0, 0.5, 1.0])
 
-    def test_per_wave_mean_zero_range(self):
+    def test_per_array_mean_zero_range(self):
         # fxn1=mean and fxn2=mean over same window → ref_min==ref_max → norm_min everywhere
         op = NMMainOpNormalize(
             x0_min=0.0, x1_min=4.0, fxn1="mean",
@@ -1464,7 +1464,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op.run(data, "A")
         np.testing.assert_array_equal(data.nparray, [-99.0] * 5)
 
-    def test_per_wave_uses_windows(self):
+    def test_per_array_uses_windows(self):
         # [0,1,2,3,4] xdelta=1; window1=[0,0]→first point(0), window2=[4,4]→last point(4)
         op = NMMainOpNormalize(
             x0_min=0.0, x1_min=0.0, fxn1="mean",
@@ -1475,7 +1475,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op.run(data, "A")
         np.testing.assert_array_almost_equal(data.nparray, [0.0, 0.25, 0.5, 0.75, 1.0])
 
-    def test_per_wave_custom_norm_range(self):
+    def test_per_array_custom_norm_range(self):
         # norm_min=-1, norm_max=1; [0,5,10]→ref_min=0,ref_max=10 → [-1,0,1]
         op = NMMainOpNormalize(
             x0_min=0.0, x1_min=2.0, fxn1="min",
@@ -1487,7 +1487,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op.run(data, "A")
         np.testing.assert_array_almost_equal(data.nparray, [-1.0, 0.0, 1.0])
 
-    def test_per_wave_mean_at_min(self):
+    def test_per_array_mean_at_min(self):
         # [3,1,2], fxn1=mean@min, n_mean1=3; min at i=1, mean of [3,1,2]=2.0 → ref_min=2.0
         # fxn2=max → ref_max=3.0; range=1; normalized: arr-2.0 → [1,-1,0]
         op = NMMainOpNormalize(
@@ -1499,7 +1499,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op.run(data, "A")
         np.testing.assert_array_almost_equal(data.nparray, [1.0, -1.0, 0.0])
 
-    def test_per_wave_mean_at_max(self):
+    def test_per_array_mean_at_max(self):
         # [1,5,3], fxn2=mean@max, n_mean2=3; max at i=1, mean of [1,5,3]=3.0 → ref_max=3.0
         # fxn1=min → ref_min=1.0; range=2; normalized: (arr-1)/2 → [0,2,1]
         op = NMMainOpNormalize(
@@ -1511,7 +1511,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op.run(data, "A")
         np.testing.assert_array_almost_equal(data.nparray, [0.0, 2.0, 1.0])
 
-    def test_per_wave_preserves_length(self):
+    def test_per_array_preserves_length(self):
         op = NMMainOpNormalize(
             x0_min=0.0, x1_min=99.0, fxn1="min",
             x0_max=0.0, x1_max=99.0, fxn2="max",
@@ -1525,7 +1525,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
     # average mode
 
     def test_average_mode_shared_refs(self):
-        # 2 waves same channel; ref_mins=[0,2]→avg=1, ref_maxes=[4,6]→avg=5, range=4
+        # 2 arrays same channel; ref_mins=[0,2]→avg=1, ref_maxes=[4,6]→avg=5, range=4
         op = NMMainOpNormalize(
             x0_min=0.0, x1_min=1.0, fxn1="min",
             x0_max=0.0, x1_max=1.0, fxn2="max",
@@ -1605,11 +1605,11 @@ class TestNMMainOpNormalize(unittest.TestCase):
         op.run(d, "A")  # should not raise
         self.assertEqual(len(d.notes), 0)
 
-    def test_note_per_wave(self):
+    def test_note_per_array(self):
         op = NMMainOpNormalize(
             x0_min=0.0, x1_min=2.0, fxn1="min",
             x0_max=0.0, x1_max=2.0, fxn2="max",
-            mode="per_wave",
+            mode="per_array",
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
         op.run_init()
@@ -1617,7 +1617,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         self.assertEqual(len(data.notes), 1)
         note = data.notes[0]["note"]
         self.assertIn("NMNormalize", note)
-        self.assertIn("mode=per_wave", note)
+        self.assertIn("mode=per_array", note)
         self.assertIn("ref_min=", note)
         self.assertIn("ref_max=", note)
 
@@ -1913,23 +1913,23 @@ class TestNMMainOpArithmeticByArray(unittest.TestCase):
         np.testing.assert_array_almost_equal(result, [9.0, 8.0, 7.0])
 
     def test_ref_by_name(self):
-        folder, _ = _make_folder_with_ref("Folder1", "RefWave", [2.0, 4.0, 6.0])
+        folder, _ = _make_folder_with_ref("Folder1", "RefArray", [2.0, 4.0, 6.0])
         d = _make_data("RecordA0", [1.0, 2.0, 3.0])
         items = [(d, None)]
-        op = NMMainOpArithmeticByArray(ref="RefWave", op="x")
+        op = NMMainOpArithmeticByArray(ref="RefArray", op="x")
         op.run_all(items, folder=folder)
         np.testing.assert_array_almost_equal(d.nparray, [2.0, 8.0, 18.0])
 
-    def test_ref_wave_not_found_raises(self):
+    def test_ref_array_not_found_raises(self):
         folder = NMFolder(name="Folder1")
         d = _make_data("RecordA0", [1.0, 2.0])
-        op = NMMainOpArithmeticByArray(ref="NoSuchWave", op="x")
+        op = NMMainOpArithmeticByArray(ref="NoSuchArray", op="x")
         with self.assertRaises(ValueError):
             op.run_all([(d, None)], folder=folder)
 
     def test_no_folder_with_string_ref_raises(self):
         d = _make_data("RecordA0", [1.0, 2.0])
-        op = NMMainOpArithmeticByArray(ref="RefWave", op="x")
+        op = NMMainOpArithmeticByArray(ref="RefArray", op="x")
         with self.assertRaises(ValueError):
             op.run_all([(d, None)], folder=None)
 
@@ -1956,12 +1956,12 @@ class TestNMMainOpArithmeticByArray(unittest.TestCase):
             NMMainOpArithmeticByArray(ref=42)
 
     def test_note_with_name_ref(self):
-        folder, _ = _make_folder_with_ref("Folder1", "RefWave", [1.0, 1.0])
+        folder, _ = _make_folder_with_ref("Folder1", "RefArray", [1.0, 1.0])
         d = _make_data("RecordA0", [2.0, 3.0])
-        op = NMMainOpArithmeticByArray(ref="RefWave", op="x")
+        op = NMMainOpArithmeticByArray(ref="RefArray", op="x")
         op.run_all([(d, None)], folder=folder)
         notes = [e["note"] for e in d.notes._entries]
-        self.assertTrue(any("NMArithmeticByArray(ref=RefWave,op=x)" in n for n in notes))
+        self.assertTrue(any("NMArithmeticByArray(ref=RefArray,op=x)" in n for n in notes))
 
     def test_note_with_array_ref(self):
         d = _make_data("RecordA0", [2.0, 3.0])
@@ -2008,14 +2008,14 @@ class TestNMMainOpInequality(unittest.TestCase):
         out = folder.data.get("IQ_RecordA0")
         np.testing.assert_array_equal(out.nparray, [0.0, 1.0, 1.0, 1.0, 0.0])
 
-    # --- output wave in folder ---
+    # --- output array in folder ---
 
-    def test_output_wave_created_in_folder(self):
+    def test_output_array_created_in_folder(self):
         op = NMMainOpInequality(op=">", a=0.0)
         folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0]})
         self.assertIsNotNone(folder.data.get("IQ_RecordA0"))
 
-    def test_output_wave_values(self):
+    def test_output_array_values(self):
         op = NMMainOpInequality(op=">=", a=3.0, binary_output=True)
         folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0]})
         out = folder.data.get("IQ_RecordA0")
@@ -2046,7 +2046,7 @@ class TestNMMainOpInequality(unittest.TestCase):
         self.assertEqual(r["failures"], 2)
         self.assertEqual(r["condition"], "y > 2")
 
-    def test_multiple_waves(self):
+    def test_multiple_arrays(self):
         op = NMMainOpInequality(op=">", a=0.0)
         folder = self._run(op, {
             "RecordA0": [1.0],
@@ -2088,7 +2088,7 @@ class TestNMMainOpInequality(unittest.TestCase):
         folder = NMFolder(name="folder0")
         d = folder.data.new("RecordA0")   # no nparray
         op.run_all([(d, None)], folder=folder)
-        # no output wave created, no error
+        # no output array created, no error
         self.assertIsNone(folder.data.get("IQ_RecordA0"))
 
     # --- note ---
@@ -2119,7 +2119,7 @@ class TestNMMainOpHistogram(unittest.TestCase):
         return _run_op_directly(op, arrays_by_name)
 
     def _run_with_yscale(self, op, arrays_by_name, yscale):
-        """Like _run_op_directly but sets yscale on each NMData wave."""
+        """Like _run_op_directly but sets yscale on each NMData array."""
         folder = NMFolder(name="folder0")
         data_items = []
         for name, arr in arrays_by_name.items():
@@ -2129,9 +2129,9 @@ class TestNMMainOpHistogram(unittest.TestCase):
         op.run_all(data_items, folder)
         return folder
 
-    # --- output wave created ---
+    # --- output array created ---
 
-    def test_output_wave_created(self):
+    def test_output_array_created(self):
         op = NMMainOpHistogram()
         folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
         self.assertIsNotNone(folder.data.get("H_RecordA0"))
@@ -2256,7 +2256,7 @@ class TestNMMainOpHistogram(unittest.TestCase):
         self.assertIn("edges", r)
         self.assertIn("n_excluded", r)
 
-    def test_multiple_waves(self):
+    def test_multiple_arrays(self):
         op = NMMainOpHistogram(bins=5)
         arrays = {"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0],
                   "RecordA2": [5.0, 6.0]}
@@ -2359,6 +2359,155 @@ class TestNMMainOpHistogram(unittest.TestCase):
     def test_histogram_by_name(self):
         op = op_from_name("histogram")
         self.assertIsInstance(op, NMMainOpHistogram)
+
+    # --- out_prefix ---
+
+    def test_default_out_prefix(self):
+        self.assertEqual(NMMainOpHistogram().out_prefix, "H_")
+
+    def test_custom_out_prefix(self):
+        op = NMMainOpHistogram(bins=5)
+        op.out_prefix = "Histo_"
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0]})
+        self.assertIsNotNone(folder.data.get("Histo_RecordA0"))
+        self.assertIsNone(folder.data.get("H_RecordA0"))
+
+    def test_out_prefix_rejects_non_string(self):
+        op = NMMainOpHistogram()
+        with self.assertRaises(TypeError):
+            op.out_prefix = 123
+
+    # --- overwrite ---
+
+    def test_overwrite_default_is_true(self):
+        self.assertTrue(NMMainOpHistogram().overwrite)
+
+    def test_overwrite_true_replaces_existing(self):
+        op = NMMainOpHistogram(bins=5)
+        folder = self._run(op, {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        out_first = folder.data.get("H_RecordA0")
+        first_sum = float(out_first.nparray.sum())
+        # run again with different data → same name, updated content
+        d2 = folder.data.new("RecordA1", nparray=np.array([10.0, 20.0, 30.0]))
+        d2.name  # confirm created
+        op2 = NMMainOpHistogram(bins=5)
+        op2.overwrite = True
+        folder2 = NMFolder(name="folder0")
+        d_new = folder2.data.new("RecordA0",
+                                 nparray=np.array([10.0, 20.0, 30.0, 40.0, 50.0]))
+        op2.run_all([(d_new, None)], folder2)
+        op2.run_all([(d_new, None)], folder2)  # second run: same name
+        out = folder2.data.get("H_RecordA0")
+        self.assertIsNotNone(out)  # still one array, not two
+
+    def test_overwrite_false_sequences_from_zero(self):
+        op = NMMainOpHistogram(bins=5)
+        op.overwrite = False
+        folder = NMFolder(name="folder0")
+        d = folder.data.new("RecordA0",
+                            nparray=np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
+        op.run_all([(d, None)], folder)  # → H_RecordA0_0
+        op.run_all([(d, None)], folder)  # → H_RecordA0_1
+        op.run_all([(d, None)], folder)  # → H_RecordA0_2
+        self.assertIsNotNone(folder.data.get("H_RecordA0_0"))
+        self.assertIsNotNone(folder.data.get("H_RecordA0_1"))
+        self.assertIsNotNone(folder.data.get("H_RecordA0_2"))
+        self.assertIsNone(folder.data.get("H_RecordA0"))  # bare name never created
+
+    def test_overwrite_false_sequence_starts_at_zero(self):
+        op = NMMainOpHistogram(bins=5)
+        op.overwrite = False
+        folder = NMFolder(name="folder0")
+        d = folder.data.new("RecordA0",
+                            nparray=np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
+        op.run_all([(d, None)], folder)  # first run → H_RecordA0_0
+        self.assertIsNotNone(folder.data.get("H_RecordA0_0"))
+        self.assertIsNone(folder.data.get("H_RecordA0"))   # bare name not used
+        self.assertIsNone(folder.data.get("H_RecordA0_1"))
+
+    def test_overwrite_rejects_non_bool(self):
+        op = NMMainOpHistogram()
+        with self.assertRaises(TypeError):
+            op.overwrite = 1
+
+
+# ===========================================================================
+# TestOverwriteAndPrefixInequality
+# ===========================================================================
+
+
+class TestOverwriteAndPrefixInequality(unittest.TestCase):
+    """overwrite / out_prefix behaviour for NMMainOpInequality."""
+
+    def test_default_out_prefix(self):
+        self.assertEqual(NMMainOpInequality(op=">", a=0.0).out_prefix, "IQ_")
+
+    def test_custom_out_prefix(self):
+        op = NMMainOpInequality(op=">", a=2.0)
+        op.out_prefix = "MyIQ_"
+        folder = _run_op_directly(op, {"RecordA0": [1.0, 3.0]})
+        self.assertIsNotNone(folder.data.get("MyIQ_RecordA0"))
+        self.assertIsNone(folder.data.get("IQ_RecordA0"))
+
+    def test_overwrite_false_sequences(self):
+        op = NMMainOpInequality(op=">", a=0.0)
+        op.overwrite = False
+        folder = NMFolder(name="folder0")
+        d = folder.data.new("RecordA0", nparray=np.array([1.0, 2.0]))
+        op.run_all([(d, None)], folder)  # → IQ_RecordA0_0
+        op.run_all([(d, None)], folder)  # → IQ_RecordA0_1
+        self.assertIsNotNone(folder.data.get("IQ_RecordA0_0"))
+        self.assertIsNotNone(folder.data.get("IQ_RecordA0_1"))
+        self.assertIsNone(folder.data.get("IQ_RecordA0"))  # bare name never created
+
+
+# ===========================================================================
+# TestOverwriteAndPrefixAccumulate
+# ===========================================================================
+
+
+class TestOverwriteAndPrefixAccumulate(unittest.TestCase):
+    """overwrite / out_prefix behaviour for NMMainOpAccumulate subclasses."""
+
+    def _run_average(self, op, arrays_by_name):
+        return _run_op_directly(op, arrays_by_name)
+
+    def test_default_out_prefix_average(self):
+        self.assertEqual(NMMainOpAverage().out_prefix, "Avg_")
+
+    def test_custom_out_prefix_average(self):
+        op = NMMainOpAverage()
+        op.out_prefix = "Mean_"
+        folder = _run_op_directly(op, {"RecordA0": [1.0, 2.0],
+                                       "RecordA1": [3.0, 4.0]})
+        self.assertIsNotNone(folder.data.get("Mean_RecordA"))
+        self.assertIsNone(folder.data.get("Avg_RecordA"))
+
+    def test_overwrite_false_sequences_accumulate(self):
+        op = NMMainOpSum()
+        op.overwrite = False
+        folder = NMFolder(name="folder0")
+        d = folder.data.new("RecordA0", nparray=np.array([1.0, 2.0]))
+        op.run_all([(d, None)], folder)  # → Sum_RecordA_0
+        op.run_all([(d, None)], folder)  # → Sum_RecordA_1
+        self.assertIsNotNone(folder.data.get("Sum_RecordA_0"))
+        self.assertIsNotNone(folder.data.get("Sum_RecordA_1"))
+        self.assertIsNone(folder.data.get("Sum_RecordA"))  # bare name never created
+
+    def test_companion_arrays_share_suffix(self):
+        # overwrite=False: companions (Stdv_) always get same suffix as Avg_
+        op = NMMainOpAverage(compute_stdv=True)
+        op.overwrite = False
+        folder = NMFolder(name="folder0")
+        d0 = folder.data.new("RecordA0", nparray=np.array([1.0, 2.0]))
+        d1 = folder.data.new("RecordA1", nparray=np.array([3.0, 4.0]))
+        op.run_all([(d0, None), (d1, None)], folder)  # → Avg_RecordA_0, Stdv_RecordA_0
+        op.run_all([(d0, None), (d1, None)], folder)  # → Avg_RecordA_1, Stdv_RecordA_1
+        self.assertIsNotNone(folder.data.get("Avg_RecordA_0"))
+        self.assertIsNotNone(folder.data.get("Stdv_RecordA_0"))
+        self.assertIsNotNone(folder.data.get("Avg_RecordA_1"))
+        self.assertIsNotNone(folder.data.get("Stdv_RecordA_1"))
+        self.assertIsNone(folder.data.get("Avg_RecordA"))  # bare name never created
 
 
 if __name__ == "__main__":

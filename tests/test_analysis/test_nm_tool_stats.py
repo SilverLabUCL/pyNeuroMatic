@@ -127,11 +127,11 @@ class TestNMToolStats(unittest.TestCase):
         self.tool._select["folder"] = folder
         return folder
 
-    def _run_compute(self, func="mean", n_waves=3):
-        """Compute stat for n_waves and accumulate into tool results."""
+    def _run_compute(self, func="mean", n_arrays=3):
+        """Compute stat for n_arrays and accumulate into tool results."""
         w = list(self.tool.windows)[0]
         w.func = func
-        for k in range(n_waves):
+        for k in range(n_arrays):
             data = _make_data(name="recordA%d" % k)
             w.compute(data)
             wname = w.name
@@ -141,13 +141,13 @@ class TestNMToolStats(unittest.TestCase):
             else:
                 self.tool._NMToolStats__results[wname] = [results]
 
-    def _run_compute_with_bsln(self, func="mean", bsln_func="mean", n_waves=3):
-        """Compute stat with baseline enabled for n_waves."""
+    def _run_compute_with_bsln(self, func="mean", bsln_func="mean", n_arrays=3):
+        """Compute stat with baseline enabled for n_arrays."""
         w = list(self.tool.windows)[0]
         w.func = func
         w._bsln_on_set(True, quiet=True)
         w._bsln_func_set({"name": bsln_func}, quiet=True)
-        for k in range(n_waves):
+        for k in range(n_arrays):
             data = _make_data(name="recordA%d" % k)
             w.compute(data)
             wname = w.name
@@ -213,26 +213,26 @@ class TestNMToolStats(unittest.TestCase):
 
     def test_results_to_numpy_creates_data_array(self):
         self._setup_folder()
-        self._run_compute(n_waves=3)
+        self._run_compute(n_arrays=3)
         f = self.tool._results_to_numpy()
         self.assertIn("ST_w0_data", f.data)
 
     def test_results_to_numpy_data_array_length(self):
         self._setup_folder()
-        self._run_compute(n_waves=3)
+        self._run_compute(n_arrays=3)
         f = self.tool._results_to_numpy()
         d = f.data.get("ST_w0_data")
         self.assertEqual(len(d.nparray), 3)
 
     def test_results_to_numpy_creates_mean_y_array(self):
         self._setup_folder()
-        self._run_compute(func="mean", n_waves=3)
+        self._run_compute(func="mean", n_arrays=3)
         f = self.tool._results_to_numpy()
         self.assertIn("ST_w0_mean_y", f.data)
 
     def test_results_to_numpy_mean_y_array_length(self):
         self._setup_folder()
-        self._run_compute(func="mean", n_waves=3)
+        self._run_compute(func="mean", n_arrays=3)
         f = self.tool._results_to_numpy()
         d = f.data.get("ST_w0_mean_y")
         self.assertEqual(len(d.nparray), 3)
@@ -240,7 +240,7 @@ class TestNMToolStats(unittest.TestCase):
     def test_results_to_numpy_compound_mean_std_splits(self):
         # mean+std → ST_w0_mean_y AND ST_w0_std_y
         self._setup_folder()
-        self._run_compute(func="mean+std", n_waves=3)
+        self._run_compute(func="mean+std", n_arrays=3)
         f = self.tool._results_to_numpy()
         self.assertIn("ST_w0_mean_y", f.data)
         self.assertIn("ST_w0_std_y", f.data)
@@ -504,12 +504,12 @@ class TestNMToolStats2Inequality(unittest.TestCase):
         # ST_w0_mean_y: values 1..5
         self.arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         self.tf.data.new("ST_w0_mean_y", nparray=self.arr.copy())
-        # ST_w0_data: wave names for epoch set creation
-        self.wave_names = ["RecordA0", "RecordA1", "RecordA2",
+        # ST_w0_data: array names for epoch set creation
+        self.array_names = ["RecordA0", "RecordA1", "RecordA2",
                            "RecordA3", "RecordA4"]
         self.tf.data.new(
             "ST_w0_data",
-            nparray=np.array(self.wave_names, dtype=object),
+            nparray=np.array(self.array_names, dtype=object),
         )
 
         # Build a real NMDataSeries with 5 epochs for set-creation tests
@@ -937,11 +937,11 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
         nan_arr[15] = np.nan
         self.tf.data.new("ST_w0_nan_y", nparray=nan_arr)
 
-        # Wave-name array and dataseries for epoch-set tests
-        wave_names = ["RecordA%d" % i for i in range(20)]
+        # array names and dataseries for epoch-set tests
+        array_names = ["RecordA%d" % i for i in range(20)]
         self.tf.data.new(
             "ST_w0_data",
-            nparray=np.array(wave_names, dtype=object),
+            nparray=np.array(array_names, dtype=object),
         )
         self.nm = NMManager(quiet=True)
         assert self.nm.project.folders is not None
@@ -1127,11 +1127,11 @@ class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
         self.tf = NMToolFolder(name="stats0")
         # mask: [T, T, F, F, T] → true indices 0,1,4; false indices 2,3
         self.mask = np.array([True, True, False, False, True])
-        wave_names = ["RecordA0", "RecordA1", "RecordA2", "RecordA3", "RecordA4"]
+        array_names = ["RecordA0", "RecordA1", "RecordA2", "RecordA3", "RecordA4"]
         self.tf.data.new("ST_w0_mean_y", nparray=np.zeros(5))
         self.tf.data.new(
             "ST_w0_data",
-            nparray=np.array(wave_names, dtype=object),
+            nparray=np.array(array_names, dtype=object),
         )
         self.nm = NMManager(quiet=True)
         assert self.nm.project.folders is not None

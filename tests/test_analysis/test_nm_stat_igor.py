@@ -54,7 +54,7 @@ _X0, _X1 = 500.0, 1000.0  # ms
 _N_MEAN = 500  # n_mean for mean@max and mean@min (10 ms window at 0.02 ms sampling)
 
 # ---------------------------------------------------------------------------
-# Sine wave test parameters
+# Sine-wave test parameters
 # ---------------------------------------------------------------------------
 # Half-sine pulse: y = AMP * sin(π*(t - T0) / TAU) for t in [T0, T0+TAU],
 #                  y = 0 elsewhere.
@@ -318,7 +318,7 @@ class TestIgorFWHM(unittest.TestCase):
 
 
 # ===========================================================================
-# Sine wave analytical tests (synthetic data, analytically known values)
+# Sine-wave analytical tests (synthetic data, analytically known values)
 # ===========================================================================
 
 class TestSineWaveLevelCrossings(unittest.TestCase):

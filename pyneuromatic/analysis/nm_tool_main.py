@@ -30,7 +30,7 @@ import pyneuromatic.core.nm_utilities as nmu
 class NMToolMain(NMTool):
     """Main NM Tool — always loaded by default.
 
-    Provides core waveform operations (Average, Scale, …) via a pluggable
+    Provides core array operations (Average, Scale, …) via a pluggable
     ``op`` property.  Setting ``op`` to a string name (e.g. ``"average"``)
     looks up and instantiates the corresponding :class:`NMMainOp` subclass
     from the registry.  Setting it to an :class:`NMMainOp` instance allows
