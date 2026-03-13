@@ -1773,6 +1773,94 @@ class NMMainOpRescale(NMMainOp):
 
 
 # =========================================================================
+# RescaleX
+# =========================================================================
+
+
+class NMMainOpRescaleX(NMMainOp):
+    """Rescale the x-axis between SI-prefixed unit variants in-place.
+
+    Multiplies ``xscale.start`` and ``xscale.delta`` by the power-of-10
+    factor implied by the unit conversion and updates ``xscale.units``.
+
+    Supported base units include ``"s"`` (seconds), ``"m"`` (metres),
+    ``"V"`` (volts), ``"A"`` (amperes), and ``"Hz"`` (hertz).
+
+    Parameters:
+        to_units:   Target units string (e.g. ``"s"``).  Required; must
+                    not be empty at run time.
+        from_units: Source units string.  Defaults to ``None``, which
+                    means the source units are read from
+                    ``data.xscale.units`` at runtime.  Raises
+                    ``ValueError`` if that field is also empty.
+    """
+
+    name = "rescale_x"
+
+    def __init__(
+        self,
+        to_units: str = "",
+        from_units: str | None = None,
+    ) -> None:
+        self.to_units = to_units
+        self.from_units = from_units
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def to_units(self) -> str:
+        return self._to_units
+
+    @to_units.setter
+    def to_units(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "to_units", "string"))
+        self._to_units = value
+
+    @property
+    def from_units(self) -> str | None:
+        return self._from_units
+
+    @from_units.setter
+    def from_units(self, value: str | None) -> None:
+        if value is not None and not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "from_units", "string or None"))
+        self._from_units = value
+
+    # ------------------------------------------------------------------
+    # Validation
+
+    def _validate(self) -> None:
+        if not self._to_units:
+            raise ValueError("to_units must not be empty")
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+
+    def run_init(self) -> None:
+        self._validate()
+
+    def run(self, data: NMData, channel_name: str | None = None) -> None:
+        from_units = self._from_units if self._from_units is not None \
+            else data.xscale.units
+        if not from_units:
+            raise ValueError(
+                "from_units not set and data.xscale.units is empty for %r"
+                % data.name
+            )
+
+        factor = nm_math.si_scale_factor(from_units, self._to_units)
+        data.xscale.start = data.xscale.start * factor
+        data.xscale.delta = data.xscale.delta * factor
+        data.xscale.units = self._to_units
+        self._add_note(
+            data,
+            "NMRescaleX(from=%s,to=%s,factor=%.6g)" % (from_units, self._to_units, factor),
+        )
+
+
+# =========================================================================
 # Accumulate (base for Average, Sum, SumSqr, Min, Max)
 # =========================================================================
 
@@ -2554,6 +2642,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "redimension": NMMainOpRedimension,
     "replace_values": NMMainOpReplaceValues,
     "rescale": NMMainOpRescale,
+    "rescale_x": NMMainOpRescaleX,
     "reverse": NMMainOpReverse,
     "rotate": NMMainOpRotate,
     "sum": NMMainOpSum,

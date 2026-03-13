@@ -35,6 +35,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpRedimension,
     NMMainOpReplaceValues,
     NMMainOpRescale,
+    NMMainOpRescaleX,
     NMMainOpReverse,
     NMMainOpRotate,
     NMMainOpSum,
@@ -2938,6 +2939,171 @@ class TestNMMainOpRescale(unittest.TestCase):
     def test_rescale_by_name(self):
         op = op_from_name("rescale")
         self.assertIsInstance(op, NMMainOpRescale)
+
+
+# ---------------------------------------------------------------------------
+# TestNMMainOpRescaleX
+# ---------------------------------------------------------------------------
+
+
+class TestNMMainOpRescaleX(unittest.TestCase):
+    """Tests for NMMainOpRescaleX."""
+
+    # ------------------------------------------------------------------
+    # Basic rescaling
+
+    def test_basic_rescale(self):
+        d = _make_data("RecordA0", [1.0, 2.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.start, 0.0)
+        self.assertAlmostEqual(d.xscale.delta, 1e-3)
+
+    def test_scale_factor_up(self):
+        d = _make_data("RecordA0", [1.0, 2.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "s"
+        op = NMMainOpRescaleX(to_units="ms")
+        op.run_init()
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.start, 0.0)
+        self.assertAlmostEqual(d.xscale.delta, 1e3)
+
+    def test_same_units_factor_one(self):
+        d = _make_data("RecordA0", [1.0, 2.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="ms")
+        op.run_init()
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.start, 0.0)
+        self.assertAlmostEqual(d.xscale.delta, 1.0)
+
+    # ------------------------------------------------------------------
+    # xscale field updates
+
+    def test_xscale_start_updated(self):
+        d = _make_data("RecordA0", [1.0], xstart=10.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.start, 10e-3)
+
+    def test_xscale_delta_updated(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=0.1)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.delta, 0.1e-3)
+
+    def test_xscale_units_updated(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        op.run(d)
+        self.assertEqual(d.xscale.units, "s")
+
+    # ------------------------------------------------------------------
+    # from_units
+
+    def test_from_units_auto_detected(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.delta, 1e-3)
+
+    def test_from_units_explicit(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = ""   # empty — explicit from_units overrides
+        op = NMMainOpRescaleX(to_units="s", from_units="ms")
+        op.run_init()
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.delta, 1e-3)
+
+    def test_from_units_empty_raises(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = ""
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        with self.assertRaises(ValueError):
+            op.run(d)
+
+    # ------------------------------------------------------------------
+    # Validation
+
+    def test_to_units_empty_raises(self):
+        op = NMMainOpRescaleX(to_units="")
+        with self.assertRaises(ValueError):
+            op.run_init()
+
+    def test_base_mismatch_raises(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="V")
+        op.run_init()
+        with self.assertRaises(ValueError):
+            op.run(d)
+
+    def test_to_units_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpRescaleX(to_units=123)
+
+    def test_from_units_rejects_non_string_non_none(self):
+        with self.assertRaises(TypeError):
+            NMMainOpRescaleX(to_units="s", from_units=123)
+
+    # ------------------------------------------------------------------
+    # Notes
+
+    def test_note_written(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        op.run(d)
+        self.assertGreater(len(d.notes), 0)
+        note = d.notes[0]["note"]
+        self.assertIn("NMRescaleX", note)
+
+    def test_note_contains_factor(self):
+        d = _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0)
+        d.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        op.run(d)
+        note = d.notes[0]["note"]
+        self.assertIn("factor=", note)
+
+    # ------------------------------------------------------------------
+    # Other
+
+    def test_multiple_waves(self):
+        waves = [
+            _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0),
+            _make_data("RecordA1", [2.0], xstart=0.0, xdelta=2.0),
+            _make_data("RecordA2", [3.0], xstart=10.0, xdelta=0.5),
+        ]
+        for w in waves:
+            w.xscale.units = "ms"
+        op = NMMainOpRescaleX(to_units="s")
+        op.run_init()
+        for w in waves:
+            op.run(w)
+        self.assertAlmostEqual(waves[0].xscale.delta, 1e-3)
+        self.assertAlmostEqual(waves[1].xscale.delta, 2e-3)
+        self.assertAlmostEqual(waves[2].xscale.start, 10e-3)
+        self.assertAlmostEqual(waves[2].xscale.delta, 0.5e-3)
+        for w in waves:
+            self.assertEqual(w.xscale.units, "s")
+
+    def test_rescale_x_by_name(self):
+        op = op_from_name("rescale_x")
+        self.assertIsInstance(op, NMMainOpRescaleX)
 
 
 if __name__ == "__main__":
