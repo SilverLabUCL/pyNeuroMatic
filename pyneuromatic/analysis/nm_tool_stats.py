@@ -504,25 +504,25 @@ class NMToolStats(NMTool):
                 i += 1
 
         for wname, vlist in self.__results.items():
-            # vlist: list of lists, one inner list per data wave
-            # Each inner list contains result dicts for that wave
+            # vlist: list of lists, one inner list per data array
+            # Each inner list contains result dicts for that array
 
-            # Collect data path strings (one per wave, from first rdict)
+            # Collect data path strings (one per array, from first rdict)
             data_paths: list[str] = []
             # Collect result dicts grouped by id: {id_str: [rdict, ...]}
             id_rdicts: dict[str, list[dict]] = {}
 
             for ilist in vlist:
-                wave_path: str | None = None
+                array_path: str | None = None
                 for rdict in ilist:
                     id_str = rdict.get("id", "main")
-                    if wave_path is None:
-                        wave_path = rdict.get("data", "")
+                    if array_path is None:
+                        array_path = rdict.get("data", "")
                     if id_str not in id_rdicts:
                         id_rdicts[id_str] = []
                     id_rdicts[id_str].append(rdict)
-                if wave_path is not None:
-                    data_paths.append(wave_path)
+                if array_path is not None:
+                    data_paths.append(array_path)
 
             # Save data path strings
             if data_paths and f.data is not None:
@@ -906,7 +906,7 @@ class NMToolStats2:
     ) -> None:
         """Populate epoch sets from a boolean mask aligned to an ST_ array.
 
-        Looks up the ``ST_{wname}_data`` wave-name array in *toolfolder*,
+        Looks up the ``ST_{wname}_data`` array name in *toolfolder*,
         maps each index to an epoch via *dataseries*, and adds matching
         epoch names to *set_name_true* (where mask is True) and/or
         *set_name_false* (where mask is False).
@@ -938,10 +938,10 @@ class NMToolStats2:
 
         true_epochs: list[str] = []
         false_epochs: list[str] = []
-        for i, wave_name in enumerate(data_arr.nparray):
+        for i, array_name in enumerate(data_arr.nparray):
             if i >= len(mask):
                 break
-            parsed = nmu.parse_data_name(str(wave_name))
+            parsed = nmu.parse_data_name(str(array_name))
             if parsed is None:
                 continue
             ep_name = epoch_map.get(parsed[2])
@@ -1033,7 +1033,7 @@ class NMToolStats2:
         if not isinstance(d2.nparray, np.ndarray):
             raise ValueError("array has no nparray: %s" % name2)
 
-        # Strip NaN/Inf — matches Igor's Redimension after Sort + WaveStats
+        # Strip NaN/Inf
         arr1 = d1.nparray.astype(float)
         arr2 = d2.nparray.astype(float)
         arr1 = arr1[np.isfinite(arr1)]

@@ -562,7 +562,7 @@ def parse_data_name(
 
 
 def format_epoch_string(data_names: list[str]) -> str:
-    """Format a list of wave names as a compact epoch string for notes.
+    """Format a list of array names as a compact epoch string for notes.
 
     Extracts epoch numbers via ``parse_data_name``, sorts them, then chooses
     the most compact representation:
@@ -573,7 +573,7 @@ def format_epoch_string(data_names: list[str]) -> str:
     4. **Everything else**: ``"[0,2,5]"``
 
     Args:
-        data_names: List of NMData wave names (e.g. ``["RecordA0", "RecordA2"]``).
+        data_names: List of NMData array names (e.g. ``["RecordA0", "RecordA2"]``).
 
     Returns:
         Compact epoch string.
