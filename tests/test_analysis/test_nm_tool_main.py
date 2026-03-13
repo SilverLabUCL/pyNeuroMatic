@@ -34,6 +34,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpNormalize,
     NMMainOpRedimension,
     NMMainOpReplaceValues,
+    NMMainOpRescale,
     NMMainOpReverse,
     NMMainOpRotate,
     NMMainOpSum,
@@ -2784,6 +2785,159 @@ class TestNMMainOpDFOF(unittest.TestCase):
     def test_dfof_by_name(self):
         op = op_from_name("dfof")
         self.assertIsInstance(op, NMMainOpDFOF)
+
+
+# ---------------------------------------------------------------------------
+# TestNMMainOpRescale
+# ---------------------------------------------------------------------------
+
+
+class TestNMMainOpRescale(unittest.TestCase):
+    """Tests for NMMainOpRescale."""
+
+    # ------------------------------------------------------------------
+    # Basic rescaling
+
+    def test_basic_rescale(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        d.yscale.units = "pA"
+        op = NMMainOpRescale(to_units="nA")
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [1e-3, 2e-3])
+
+    def test_scale_factor_up(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        d.yscale.units = "V"
+        op = NMMainOpRescale(to_units="mV")
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [1e3, 2e3])
+
+    def test_same_units_factor_one(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        d.yscale.units = "pA"
+        op = NMMainOpRescale(to_units="pA")
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [1.0, 2.0])
+
+    # ------------------------------------------------------------------
+    # yscale update
+
+    def test_yscale_units_updated(self):
+        d = _make_data("RecordA0", [1.0])
+        d.yscale.units = "pA"
+        op = NMMainOpRescale(to_units="nA")
+        op.run_init()
+        op.run(d)
+        self.assertEqual(d.yscale.units, "nA")
+
+    # ------------------------------------------------------------------
+    # from_units
+
+    def test_from_units_auto_detected(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        d.yscale.units = "mV"
+        op = NMMainOpRescale(to_units="V")
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [1e-3, 2e-3])
+
+    def test_from_units_explicit(self):
+        d = _make_data("RecordA0", [1.0, 2.0])
+        d.yscale.units = ""   # yscale empty — explicit from_units overrides
+        op = NMMainOpRescale(to_units="nA", from_units="pA")
+        op.run_init()
+        op.run(d)
+        np.testing.assert_array_almost_equal(d.nparray, [1e-3, 2e-3])
+
+    def test_from_units_empty_raises(self):
+        d = _make_data("RecordA0", [1.0])
+        d.yscale.units = ""
+        op = NMMainOpRescale(to_units="nA")  # from_units=None, yscale empty
+        op.run_init()
+        with self.assertRaises(ValueError):
+            op.run(d)
+
+    # ------------------------------------------------------------------
+    # Validation
+
+    def test_to_units_empty_raises(self):
+        op = NMMainOpRescale(to_units="")
+        with self.assertRaises(ValueError):
+            op.run_init()
+
+    def test_base_mismatch_raises(self):
+        d = _make_data("RecordA0", [1.0])
+        d.yscale.units = "pA"
+        op = NMMainOpRescale(to_units="mV")
+        op.run_init()
+        with self.assertRaises(ValueError):
+            op.run(d)
+
+    def test_to_units_rejects_non_string(self):
+        with self.assertRaises(TypeError):
+            NMMainOpRescale(to_units=123)
+
+    def test_from_units_rejects_non_string_non_none(self):
+        with self.assertRaises(TypeError):
+            NMMainOpRescale(to_units="nA", from_units=123)
+
+    # ------------------------------------------------------------------
+    # Notes
+
+    def test_note_written(self):
+        d = _make_data("RecordA0", [1.0])
+        d.yscale.units = "pA"
+        op = NMMainOpRescale(to_units="nA")
+        op.run_init()
+        op.run(d)
+        self.assertGreater(len(d.notes), 0)
+        note = d.notes[0]["note"]
+        self.assertIn("NMRescale", note)
+
+    def test_note_contains_factor(self):
+        d = _make_data("RecordA0", [1.0])
+        d.yscale.units = "pA"
+        op = NMMainOpRescale(to_units="nA")
+        op.run_init()
+        op.run(d)
+        note = d.notes[0]["note"]
+        self.assertIn("factor=", note)
+
+    # ------------------------------------------------------------------
+    # Edge cases
+
+    def test_skips_non_ndarray(self):
+        d = _make_data("RecordA0", [1.0])
+        d.yscale.units = "pA"
+        d.nparray = None   # not an ndarray
+        op = NMMainOpRescale(to_units="nA")
+        op.run_init()
+        op.run(d)   # should not raise
+
+    def test_multiple_waves(self):
+        waves = [
+            _make_data("RecordA0", [1.0, 2.0]),
+            _make_data("RecordA1", [3.0, 4.0]),
+            _make_data("RecordA2", [5.0, 6.0]),
+        ]
+        for w in waves:
+            w.yscale.units = "mV"
+        op = NMMainOpRescale(to_units="V")
+        op.run_init()
+        for w in waves:
+            op.run(w)
+        np.testing.assert_array_almost_equal(waves[0].nparray, [1e-3, 2e-3])
+        np.testing.assert_array_almost_equal(waves[1].nparray, [3e-3, 4e-3])
+        np.testing.assert_array_almost_equal(waves[2].nparray, [5e-3, 6e-3])
+        for w in waves:
+            self.assertEqual(w.yscale.units, "V")
+
+    def test_rescale_by_name(self):
+        op = op_from_name("rescale")
+        self.assertIsInstance(op, NMMainOpRescale)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,8 @@ from pyneuromatic.core.nm_math import (
     inequality_mask,
     interp_x,
     linear_regression,
+    parse_si_units,
+    si_scale_factor,
     time_window_to_slice,
 )
 
@@ -452,3 +454,79 @@ class TestApplyDFOF:
         assert np.isnan(result[1])
         assert not np.isnan(result[0])
         assert not np.isnan(result[2])
+
+
+# ---------------------------------------------------------------------------
+# TestParseSiUnits
+# ---------------------------------------------------------------------------
+
+
+class TestParseSiUnits:
+    def test_prefix_and_base(self):
+        assert parse_si_units("pA") == ("p", "A")
+
+    def test_milli(self):
+        assert parse_si_units("mV") == ("m", "V")
+
+    def test_no_prefix(self):
+        assert parse_si_units("V") == ("", "V")
+
+    def test_single_char_no_prefix(self):
+        assert parse_si_units("A") == ("", "A")
+
+    def test_kilo(self):
+        assert parse_si_units("kHz") == ("k", "Hz")
+
+    def test_micro_ascii(self):
+        assert parse_si_units("uV") == ("u", "V")
+
+    def test_micro_unicode_b5(self):
+        assert parse_si_units("\u00b5V") == ("\u00b5", "V")
+
+    def test_multi_char_base(self):
+        assert parse_si_units("MOhm") == ("M", "Ohm")
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError):
+            parse_si_units("")
+
+
+# ---------------------------------------------------------------------------
+# TestSiScaleFactor
+# ---------------------------------------------------------------------------
+
+
+class TestSiScaleFactor:
+    def test_pA_to_nA(self):
+        assert si_scale_factor("pA", "nA") == pytest.approx(1e-3)
+
+    def test_nA_to_pA(self):
+        assert si_scale_factor("nA", "pA") == pytest.approx(1e3)
+
+    def test_mV_to_V(self):
+        assert si_scale_factor("mV", "V") == pytest.approx(1e-3)
+
+    def test_V_to_mV(self):
+        assert si_scale_factor("V", "mV") == pytest.approx(1e3)
+
+    def test_same_units(self):
+        assert si_scale_factor("mV", "mV") == pytest.approx(1.0)
+
+    def test_base_mismatch_raises(self):
+        with pytest.raises(ValueError, match="base units must match"):
+            si_scale_factor("pA", "mV")
+
+    def test_unknown_prefix_raises(self):
+        # "x" is not a recognised SI prefix, so parse_si_units treats "xA"
+        # as a bare base unit — base mismatch with "A" still raises ValueError
+        with pytest.raises(ValueError):
+            si_scale_factor("xA", "nA")
+
+    def test_no_prefix_to_prefix(self):
+        assert si_scale_factor("V", "mV") == pytest.approx(1e3)
+
+    def test_ohm_units(self):
+        assert si_scale_factor("MOhm", "kOhm") == pytest.approx(1e3)
+
+    def test_femto_to_base(self):
+        assert si_scale_factor("fA", "A") == pytest.approx(1e-15)

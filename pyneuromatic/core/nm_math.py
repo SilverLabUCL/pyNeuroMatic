@@ -257,6 +257,94 @@ def apply_dfof(arr: np.ndarray, f0: float) -> np.ndarray:
 
 
 # =========================================================================
+# SI unit helpers
+# =========================================================================
+
+# SI prefix → base-10 exponent
+_SI_PREFIX_EXPONENTS: dict[str, int] = {
+    "f": -15,       # femto
+    "p": -12,       # pico
+    "n": -9,        # nano
+    "u": -6,        # micro (ASCII)
+    "\u00b5": -6,   # µ (U+00B5 micro sign)
+    "\u03bc": -6,   # μ (U+03BC Greek mu)
+    "m": -3,        # milli
+    "":   0,        # (no prefix — base unit)
+    "k":  3,        # kilo
+    "M":  6,        # mega
+    "G":  9,        # giga
+    "T": 12,        # tera
+}
+
+
+def parse_si_units(units: str) -> tuple[str, str]:
+    """Split an SI-prefixed units string into ``(prefix, base_unit)``.
+
+    The first character is treated as a prefix if it is a known SI prefix
+    AND the string is longer than one character.
+
+    Examples::
+
+        parse_si_units("pA")  → ("p",  "A")
+        parse_si_units("mV")  → ("m",  "V")
+        parse_si_units("V")   → ("",   "V")
+        parse_si_units("ms")  → ("m",  "s")
+        parse_si_units("kHz") → ("k",  "Hz")
+
+    Args:
+        units: Non-empty units string (e.g. ``"pA"``, ``"mV"``).
+
+    Returns:
+        Tuple ``(prefix, base_unit)`` where *prefix* is ``""`` when no
+        recognised SI prefix is present.
+
+    Raises:
+        ValueError: If *units* is empty.
+    """
+    if not units:
+        raise ValueError("units string is empty")
+    first = units[0]
+    if len(units) > 1 and first in _SI_PREFIX_EXPONENTS:
+        return (first, units[1:])
+    return ("", units)
+
+
+def si_scale_factor(from_units: str, to_units: str) -> float:
+    """Return the multiplicative factor to convert *from_units* → *to_units*.
+
+    Both strings must share the same base unit (e.g. ``"A"``).
+
+    Examples::
+
+        si_scale_factor("pA", "nA") → 1e-3   (1 pA = 0.001 nA)
+        si_scale_factor("mV", "V")  → 1e-3
+        si_scale_factor("V",  "mV") → 1e3
+
+    Supported base units include ``"V"`` (volts), ``"A"`` (amperes),
+    ``"Ohm"`` or ``"Ω"`` (ohms), and ``"s"`` (seconds).
+
+    Args:
+        from_units: Source units string (e.g. ``"pA"``).
+        to_units:   Target units string (e.g. ``"nA"``).
+
+    Returns:
+        Float scale factor.
+
+    Raises:
+        ValueError: If base units differ, or either prefix is unrecognised.
+    """
+    from_prefix, from_base = parse_si_units(from_units)
+    to_prefix, to_base = parse_si_units(to_units)
+    if from_base != to_base:
+        raise ValueError(
+            "base units must match: %r (from %r) vs %r (from %r)"
+            % (from_base, from_units, to_base, to_units)
+        )
+    exp_diff = _SI_PREFIX_EXPONENTS[from_prefix] - _SI_PREFIX_EXPONENTS[to_prefix]
+    return 10.0 ** exp_diff
+
+
+# =========================================================================
 # Array statistics
 # =========================================================================
 
