@@ -17,6 +17,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.analysis.nm_main_op import (
     NMMainOp,
     NMMainOpAccumulate,
+    _epochs_repr,
     NMMainOpArithmetic,
     NMMainOpArithmeticByArray,
     NMMainOpAverage,
@@ -80,7 +81,7 @@ def _make_folder_with_data(arrays_by_name):
     return folder, targets
 
 
-def _run_op_directly(op, arrays_by_name):
+def _op_run_all(op, arrays_by_name):
     """Build folder + data_items, call op.run_all(), return folder."""
     folder = NMFolder(name="folder0")
     data_items = []
@@ -89,6 +90,37 @@ def _run_op_directly(op, arrays_by_name):
         data_items.append((d, None))   # channel_name=None → parsed from name
     op.run_all(data_items, folder)
     return folder
+
+
+# ===========================================================================
+# TestEpochsRepr
+# ===========================================================================
+
+class TestEpochsRepr(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(_epochs_repr([]), "[]")
+
+    def test_single(self):
+        self.assertEqual(_epochs_repr([3]), "[3]")
+
+    def test_two_elements(self):
+        self.assertEqual(_epochs_repr([2, 5]), "[2, 5]")
+
+    def test_contiguous_from_zero(self):
+        self.assertEqual(_epochs_repr(list(range(500))), "list(range(0, 500))")
+
+    def test_contiguous_offset(self):
+        self.assertEqual(_epochs_repr([5, 6, 7, 8]), "list(range(5, 9))")
+
+    def test_step_two(self):
+        self.assertEqual(_epochs_repr([0, 2, 4, 6]), "list(range(0, 8, 2))")
+
+    def test_non_arithmetic(self):
+        self.assertEqual(_epochs_repr([0, 2, 5]), "[0, 2, 5]")
+
+    def test_three_contiguous(self):
+        # minimum length that triggers range compression
+        self.assertEqual(_epochs_repr([1, 2, 3]), "list(range(1, 4))")
 
 
 # ===========================================================================
@@ -110,7 +142,7 @@ class TestNMMainOpAverage(unittest.TestCase):
     def _run(self, arrays=None):
         if arrays is None:
             arrays = self.arrays
-        return _run_op_directly(self.op, arrays)
+        return _op_run_all(self.op, arrays)
 
     # --- correct values ---
 
@@ -188,7 +220,7 @@ class TestNMMainOpAverage(unittest.TestCase):
         self._run()   # Avg_RecordA
         # Second run with different prefix — results should reflect new output name
         arrays2 = {"StimulusA0": [10.0], "StimulusA1": [20.0]}
-        _run_op_directly(self.op, arrays2)
+        _op_run_all(self.op, arrays2)
         # Channel is still "A" but prefix changed → output name differs
         self.assertEqual(self.op.results.get("A"), "Avg_StimulusA")
 
@@ -335,7 +367,7 @@ class TestNMMainOpSum(unittest.TestCase):
     def _run(self, arrays=None):
         if arrays is None:
             arrays = self.arrays
-        return _run_op_directly(self.op, arrays)
+        return _op_run_all(self.op, arrays)
 
     def test_correct_values(self):
         folder = self._run()
@@ -408,7 +440,7 @@ class TestNMMainOpSumSqr(unittest.TestCase):
         self.op = NMMainOpSumSqr()
 
     def _run(self, arrays):
-        return _run_op_directly(self.op, arrays)
+        return _op_run_all(self.op, arrays)
 
     def test_correct_values(self):
         # [1,2] and [3,4] → [1²+3², 2²+4²] = [10, 20]
@@ -452,7 +484,7 @@ class TestNMMainOpMin(unittest.TestCase):
         self.op = NMMainOpMin()
 
     def _run(self, arrays):
-        return _run_op_directly(self.op, arrays)
+        return _op_run_all(self.op, arrays)
 
     def test_correct_values(self):
         # [1,5] and [3,2] → point-by-point min = [1, 2]
@@ -496,7 +528,7 @@ class TestNMMainOpMax(unittest.TestCase):
         self.op = NMMainOpMax()
 
     def _run(self, arrays):
-        return _run_op_directly(self.op, arrays)
+        return _op_run_all(self.op, arrays)
 
     def test_correct_values(self):
         # [1,5] and [3,2] → point-by-point max = [3, 5]
@@ -610,7 +642,7 @@ class TestNMMainOpRedimension(unittest.TestCase):
         self.op.run(self.data)
         self.assertEqual(len(self.data.notes), 1)
         note = self.data.notes[0]["note"]
-        self.assertIn("NMRedimension(n_points=3)", note)
+        self.assertIn("NMRedimension(n_points=3, fill=0.0)", note)
 
     def test_note_pad(self):
         self.op.n_points = 7
@@ -618,7 +650,7 @@ class TestNMMainOpRedimension(unittest.TestCase):
         self.op.run(self.data)
         self.assertEqual(len(self.data.notes), 1)
         note = self.data.notes[0]["note"]
-        self.assertIn("NMRedimension(n_points=7,fill=9)", note)
+        self.assertIn("NMRedimension(n_points=7, fill=9.0)", note)
 
 
 # ===========================================================================
@@ -697,7 +729,7 @@ class TestNMMainOpInsertPoints(unittest.TestCase):
         self.op.run(self.data)
         self.assertEqual(len(self.data.notes), 1)
         note = self.data.notes[0]["note"]
-        self.assertIn("NMInsertPoints(index=1,n_points=2,fill=0)", note)
+        self.assertIn("NMInsertPoints(index=1, n_points=2, fill=0.0)", note)
 
 
 # ===========================================================================
@@ -774,7 +806,7 @@ class TestNMMainOpDeletePoints(unittest.TestCase):
         self.op.run(self.data)
         self.assertEqual(len(self.data.notes), 1)
         note = self.data.notes[0]["note"]
-        self.assertIn("NMDeletePoints(index=2,n_points=3)", note)
+        self.assertIn("NMDeletePoints(index=2, n_points=3)", note)
 
 
 # ===========================================================================
@@ -1034,7 +1066,10 @@ class TestNMMainOpBaseline(unittest.TestCase):
         op.run(d)
         self.assertEqual(len(d.notes), 1)
         note = d.notes[0]["note"]
-        self.assertIn("NMBaseline(x0=0,x1=0,mode=per_array,baseline=3)", note)
+        self.assertIn("NMBaseline(", note)
+        self.assertIn("x0=0.0", note)
+        self.assertIn("mode='per_array'", note)
+        self.assertIn("baseline=3", note)
 
     def test_average_note_written(self):
         op = NMMainOpBaseline(x0=0.0, x1=0.0, mode="average")
@@ -1048,7 +1083,11 @@ class TestNMMainOpBaseline(unittest.TestCase):
         for d in (d1, d2):
             self.assertEqual(len(d.notes), 1)
             note = d.notes[0]["note"]
-            self.assertIn("NMBaseline(x0=0,x1=0,mode=average,channel=A,baseline=3)", note)
+            self.assertIn("NMBaseline(", note)
+            self.assertIn("x0=0.0", note)
+            self.assertIn("mode='average'", note)
+            self.assertIn("channel=A", note)
+            self.assertIn("baseline=3", note)
 
 
 # ===========================================================================
@@ -1231,13 +1270,13 @@ class TestNMMainOpIntegrate(unittest.TestCase):
         d = _make_data("RecordA0", [1.0, 2.0])
         NMMainOpIntegrate(method="rectangular").run(d)
         self.assertEqual(len(d.notes), 1)
-        self.assertIn("NMIntegrate(method=rectangular)", d.notes[0]["note"])
+        self.assertIn("NMIntegrate(method='rectangular')", d.notes[0]["note"])
 
     def test_note_trapezoid(self):
         d = _make_data("RecordA0", [1.0, 2.0])
         NMMainOpIntegrate(method="trapezoid").run(d)
         self.assertEqual(len(d.notes), 1)
-        self.assertIn("NMIntegrate(method=trapezoid)", d.notes[0]["note"])
+        self.assertIn("NMIntegrate(method='trapezoid')", d.notes[0]["note"])
 
 
 # ===========================================================================
@@ -1347,12 +1386,12 @@ class TestNMMainOpReplaceValues(unittest.TestCase):
         d = _make_data("RecordA0", [1.0, 2.0, 3.0, 2.0, 1.0])
         NMMainOpReplaceValues(old_value=2.0, new_value=99.0).run(d)
         self.assertEqual(len(d.notes), 1)
-        self.assertIn("NMReplaceValues(old=2,new=99,n=2)", d.notes[0]["note"])
+        self.assertIn("NMReplaceValues(old_value=2.0, new_value=99.0, n=2)", d.notes[0]["note"])
 
     def test_note_nan_old(self):
         d = _make_data("RecordA0", [1.0, float("nan"), 3.0])
         NMMainOpReplaceValues(old_value=float("nan"), new_value=0.0).run(d)
-        self.assertIn("NMReplaceValues(old=nan,new=0,n=1)", d.notes[0]["note"])
+        self.assertIn("NMReplaceValues(old_value=nan, new_value=0.0, n=1)", d.notes[0]["note"])
 
     def test_note_written_when_no_match(self):
         d = _make_data("RecordA0", [1.0, 2.0, 3.0])
@@ -1433,7 +1472,7 @@ class TestNMMainOpDeleteNaNs(unittest.TestCase):
         d = _make_data("RecordA0", [1.0, float("nan"), 3.0])
         NMMainOpDeleteNaNs().run(d)
         self.assertEqual(len(d.notes), 1)
-        self.assertIn("NMDeleteNaNs(delete_nans=True,delete_infs=False,n=1)", d.notes[0]["note"])
+        self.assertIn("NMDeleteNaNs(delete_nans=True, delete_infs=False, n=1)", d.notes[0]["note"])
 
     def test_note_no_deletions(self):
         d = _make_data("RecordA0", [1.0, 2.0, 3.0])
@@ -1645,7 +1684,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         self.assertEqual(len(data.notes), 1)
         note = data.notes[0]["note"]
         self.assertIn("NMNormalize", note)
-        self.assertIn("mode=per_array", note)
+        self.assertIn("mode='per_array'", note)
         self.assertIn("ref_min=", note)
         self.assertIn("ref_max=", note)
 
@@ -1660,7 +1699,7 @@ class TestNMMainOpNormalize(unittest.TestCase):
         self.assertEqual(len(data.notes), 1)
         note = data.notes[0]["note"]
         self.assertIn("NMNormalize", note)
-        self.assertIn("mode=average", note)
+        self.assertIn("mode='average'", note)
         self.assertIn("channel=A", note)
         self.assertIn("ref_min=", note)
         self.assertIn("ref_max=", note)
@@ -1903,7 +1942,7 @@ class TestNMMainOpArithmetic(unittest.TestCase):
         d = _make_data("RecordA0", [1.0, 2.0])
         op.run(d)
         notes = [e["note"] for e in d.notes._entries]
-        self.assertTrue(any("NMArithmetic(factor=2,op=x)" in n for n in notes))
+        self.assertTrue(any("NMArithmetic(factor=2, op='x')" in n for n in notes))
 
 
 # ===========================================================================
@@ -1989,7 +2028,7 @@ class TestNMMainOpArithmeticByArray(unittest.TestCase):
         op = NMMainOpArithmeticByArray(ref="RefArray", op="x")
         op.run_all([(d, None)], folder=folder)
         notes = [e["note"] for e in d.notes._entries]
-        self.assertTrue(any("NMArithmeticByArray(ref=RefArray,op=x)" in n for n in notes))
+        self.assertTrue(any("NMArithmeticByArray(ref='RefArray', op='x')" in n for n in notes))
 
     def test_note_with_array_ref(self):
         d = _make_data("RecordA0", [2.0, 3.0])
@@ -1997,7 +2036,7 @@ class TestNMMainOpArithmeticByArray(unittest.TestCase):
         op = NMMainOpArithmeticByArray(ref=ref, op="+")
         op.run_all([(d, None)], folder=None)
         notes = [e["note"] for e in d.notes._entries]
-        self.assertTrue(any("NMArithmeticByArray(ref=array,op=+)" in n for n in notes))
+        self.assertTrue(any("NMArithmeticByArray(ref=np.array([...]), op='+')" in n for n in notes))
 
 
 # ===========================================================================
@@ -2009,7 +2048,7 @@ class TestNMMainOpInequality(unittest.TestCase):
 
     def _run(self, op, arrays_by_name):
         """Run op and return the folder."""
-        return _run_op_directly(op, arrays_by_name)
+        return _op_run_all(op, arrays_by_name)
 
     # --- basic output ---
 
@@ -2144,7 +2183,7 @@ class TestNMMainOpHistogram(unittest.TestCase):
     """Tests for NMMainOpHistogram."""
 
     def _run(self, op, arrays_by_name):
-        return _run_op_directly(op, arrays_by_name)
+        return _op_run_all(op, arrays_by_name)
 
     def _run_with_yscale(self, op, arrays_by_name, yscale):
         """Like _run_op_directly but sets yscale on each NMData array."""
@@ -2486,7 +2525,7 @@ class TestOverwriteAndPrefixInequality(unittest.TestCase):
     def test_custom_out_prefix(self):
         op = NMMainOpInequality(op=">", a=2.0)
         op.out_prefix = "MyIQ_"
-        folder = _run_op_directly(op, {"RecordA0": [1.0, 3.0]})
+        folder = _op_run_all(op, {"RecordA0": [1.0, 3.0]})
         self.assertIsNotNone(folder.data.get("MyIQ_RecordA0"))
         self.assertIsNone(folder.data.get("IQ_RecordA0"))
 
@@ -2511,7 +2550,7 @@ class TestOverwriteAndPrefixAccumulate(unittest.TestCase):
     """overwrite / out_prefix behaviour for NMMainOpAccumulate subclasses."""
 
     def _run_average(self, op, arrays_by_name):
-        return _run_op_directly(op, arrays_by_name)
+        return _op_run_all(op, arrays_by_name)
 
     def test_default_out_prefix_average(self):
         self.assertEqual(NMMainOpAverage().out_prefix, "Avg_")
@@ -2519,7 +2558,7 @@ class TestOverwriteAndPrefixAccumulate(unittest.TestCase):
     def test_custom_out_prefix_average(self):
         op = NMMainOpAverage()
         op.out_prefix = "Mean_"
-        folder = _run_op_directly(op, {"RecordA0": [1.0, 2.0],
+        folder = _op_run_all(op, {"RecordA0": [1.0, 2.0],
                                        "RecordA1": [3.0, 4.0]})
         self.assertIsNotNone(folder.data.get("Mean_RecordA"))
         self.assertIsNone(folder.data.get("Avg_RecordA"))
@@ -2699,7 +2738,7 @@ class TestNMMainOpDFOF(unittest.TestCase):
         op.run_init()
         op.run(d)
         self.assertGreater(len(d.notes), 0)
-        self.assertIn("NMdFoF", d.notes[0]["note"])
+        self.assertIn("NMDFOF", d.notes[0]["note"])
 
     def test_note_contains_f0(self):
         op = NMMainOpDFOF(x0=0.0, x1=1.0)
@@ -3127,7 +3166,7 @@ class TestNMMainOpConcatenate(unittest.TestCase):
             arrays = self.arrays
         if op is None:
             op = self.op
-        return _run_op_directly(op, arrays)
+        return _op_run_all(op, arrays)
 
     # ------------------------------------------------------------------
     # 1D mode — basic
@@ -3269,12 +3308,253 @@ class TestNMMainOpConcatenate(unittest.TestCase):
     def test_overwrite_false_creates_new(self):
         op = NMMainOpConcatenate(mode="1d")
         op.overwrite = False
-        _run_op_directly(op, self.arrays)   # creates Cat_RecordA_0
-        _run_op_directly(op, self.arrays)   # creates Cat_RecordA_1
+        _op_run_all(op, self.arrays)   # creates Cat_RecordA_0
+        _op_run_all(op, self.arrays)   # creates Cat_RecordA_1
         # Both _0 and _1 must exist (fresh folder each call, but op tracks state)
         # Verify second run produced a _0-suffixed name
         self.assertIn("A", op.results)
         self.assertTrue(op.results["A"].startswith("Cat_RecordA"))
+
+
+# ===========================================================================
+# TestCommandHistory — to_command_str() and run_all() history hook
+# ===========================================================================
+
+
+class TestCommandHistory(unittest.TestCase):
+    """Test that each NMMainOp subclass records an executable command string."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_command_history import (
+            NMCommandHistory,
+            set_command_history,
+        )
+        self._cmd_history = NMCommandHistory(quiet=True, log_to_nm_history=False)
+        set_command_history(self._cmd_history)
+
+    def tearDown(self):
+        from pyneuromatic.core.nm_command_history import (
+            NMCommandHistory,
+            set_command_history,
+        )
+        set_command_history(NMCommandHistory(quiet=True, log_to_nm_history=False))
+
+    def _arrays(self):
+        return {
+            "RecordA0": [1.0, 2.0, 3.0],
+            "RecordA1": [4.0, 5.0, 6.0],
+        }
+
+    def _run(self, op, arrays=None):
+        return _op_run_all(op, arrays or self._arrays())
+
+    # ------------------------------------------------------------------
+    # base: to_command_str returns None by default
+
+    def test_base_to_command_str_returns_none(self):
+        class _NopOp(NMMainOp):
+            def run(self, data, channel_name=None):
+                pass
+        op = _NopOp()
+        result = op.to_command_str("f", "R", ["A"], [0])
+        self.assertIsNone(result)
+
+    # ------------------------------------------------------------------
+    # run_all hook: each op logs to history
+
+    def test_arithmetic_logs_command(self):
+        self._run(NMMainOpArithmetic(factor=2.0, op="x"))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_arithmetic_by_array_logs_command(self):
+        self._run(NMMainOpArithmeticByArray(ref=np.ones(3), op="+"))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_baseline_logs_command(self):
+        self._run(NMMainOpBaseline(x0=0.0, x1=1.0))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_delete_nans_logs_command(self):
+        self._run(NMMainOpDeleteNaNs())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_delete_points_logs_command(self):
+        self._run(NMMainOpDeletePoints(index=0, n_points=1))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_differentiate_logs_command(self):
+        self._run(NMMainOpDifferentiate())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_integrate_logs_command(self):
+        self._run(NMMainOpIntegrate())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_insert_points_logs_command(self):
+        self._run(NMMainOpInsertPoints(index=0, n_points=1))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_redimension_logs_command(self):
+        self._run(NMMainOpRedimension(n_points=2))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_replace_values_logs_command(self):
+        self._run(NMMainOpReplaceValues(old_value=0.0, new_value=1.0))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_reverse_logs_command(self):
+        self._run(NMMainOpReverse())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_rotate_logs_command(self):
+        self._run(NMMainOpRotate(n_points=1))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_average_logs_command(self):
+        self._run(NMMainOpAverage())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_sum_logs_command(self):
+        self._run(NMMainOpSum())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_sum_sqr_logs_command(self):
+        self._run(NMMainOpSumSqr())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_min_logs_command(self):
+        self._run(NMMainOpMin())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_max_logs_command(self):
+        self._run(NMMainOpMax())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_concatenate_logs_command(self):
+        self._run(NMMainOpConcatenate())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_inequality_logs_command(self):
+        self._run(NMMainOpInequality(op=">", a=0.0))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_histogram_logs_command(self):
+        self._run(NMMainOpHistogram())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_normalize_logs_command(self):
+        self._run(NMMainOpNormalize(x0_min=0.0, x1_min=1.0, x0_max=1.0, x1_max=3.0))
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_rescale_logs_command(self):
+        arrays = {"RecordA0": [1.0, 2.0, 3.0]}
+        folder = NMFolder(name="folder0")
+        data_items = []
+        for name, arr in arrays.items():
+            d = folder.data.new(name, nparray=np.array(arr, dtype=float))
+            d.yscale.units = "mV"
+            data_items.append((d, None))
+        op = NMMainOpRescale(to_units="V", from_units="mV")
+        op.run_all(data_items, folder)
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_rescale_x_logs_command(self):
+        arrays = {"RecordA0": [1.0, 2.0, 3.0]}
+        folder = NMFolder(name="folder0")
+        data_items = []
+        for name, arr in arrays.items():
+            d = folder.data.new(name, nparray=np.array(arr, dtype=float))
+            d.xscale.units = "ms"
+            data_items.append((d, None))
+        op = NMMainOpRescaleX(to_units="s", from_units="ms")
+        op.run_all(data_items, folder)
+        self.assertEqual(len(self._cmd_history), 1)
+
+    def test_dfof_logs_command(self):
+        self._run(NMMainOpDFOF())
+        self.assertEqual(len(self._cmd_history), 1)
+
+    # ------------------------------------------------------------------
+    # command string content
+
+    def test_command_str_contains_class_name(self):
+        self._run(NMMainOpBaseline(x0=0.0, x1=1.0))
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("NMMainOpBaseline", cmd)
+
+    def test_command_str_contains_op_params(self):
+        self._run(NMMainOpBaseline(x0=0.5, x1=2.5, mode="per_array"))
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("0.5", cmd)
+        self.assertIn("2.5", cmd)
+        self.assertIn("per_array", cmd)
+
+    def test_command_str_contains_folder_name(self):
+        self._run(NMMainOpBaseline())
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("folder0", cmd)
+
+    def test_command_str_contains_prefix(self):
+        # run_all() is called with an explicit prefix so it appears in the command
+        folder = NMFolder(name="folder0")
+        data_items = []
+        for name, arr in self._arrays().items():
+            d = folder.data.new(name, nparray=np.array(arr, dtype=float))
+            data_items.append((d, None))
+        NMMainOpBaseline().run_all(data_items, folder, prefix="Record")
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("Record", cmd)
+
+    def test_command_str_contains_channel(self):
+        self._run(NMMainOpBaseline())
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("A", cmd)
+
+    def test_command_str_contains_epochs(self):
+        self._run(NMMainOpBaseline())
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("0", cmd)
+        self.assertIn("1", cmd)
+
+    def test_command_str_for_average(self):
+        op = NMMainOpAverage(ignore_nans=True, compute_stdv=True)
+        self._run(op)
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("NMMainOpAverage", cmd)
+        self.assertIn("ignore_nans=True", cmd)
+        self.assertIn("compute_stdv=True", cmd)
+
+    def test_command_str_for_arithmetic(self):
+        op = NMMainOpArithmetic(factor=3.0, op="/")
+        self._run(op)
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("NMMainOpArithmetic", cmd)
+        self.assertIn("3.0", cmd)
+        self.assertIn("/", cmd)
+
+    def test_command_str_for_concatenate(self):
+        op = NMMainOpConcatenate(mode="2d")
+        self._run(op)
+        cmd = self._cmd_history.buffer[0]["command"]
+        self.assertIn("NMMainOpConcatenate", cmd)
+        self.assertIn("2d", cmd)
+
+    # ------------------------------------------------------------------
+    # disabled history
+
+    def test_history_disabled_no_log(self):
+        from pyneuromatic.core.nm_command_history import disable_command_history
+        disable_command_history()
+        self._run(NMMainOpBaseline())
+        self.assertEqual(len(self._cmd_history), 0)
+
+    # ------------------------------------------------------------------
+    # multiple runs accumulate
+
+    def test_two_runs_log_two_entries(self):
+        self._run(NMMainOpBaseline(x0=0.0, x1=1.0))
+        self._run(NMMainOpAverage())
+        self.assertEqual(len(self._cmd_history), 2)
 
 
 if __name__ == "__main__":
