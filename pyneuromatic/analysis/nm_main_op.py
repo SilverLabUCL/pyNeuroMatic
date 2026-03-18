@@ -33,6 +33,35 @@ import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
 
 
+def _extract_channels_epochs(
+    data_items: list,
+    prefix: str | None,
+) -> tuple[list[str], list[int]]:
+    """Extract sorted unique channel chars and epoch ints from data item names."""
+    channels: set[str] = set()
+    epochs: set[int] = set()
+    for item, _ in data_items:
+        parsed = nmu.parse_data_name(item.name)
+        if parsed is not None:
+            _, ch, ep = parsed
+            channels.add(ch)
+            epochs.add(ep)
+    return sorted(channels), sorted(epochs)
+
+
+def _epochs_repr(epochs: list[int]) -> str:
+    """Compact representation of epoch list: range() for arithmetic sequences, else repr."""
+    if len(epochs) < 3:
+        return repr(epochs)
+    step = epochs[1] - epochs[0]
+    if all(b - a == step for a, b in zip(epochs, epochs[1:])):
+        stop = epochs[-1] + step
+        if step == 1:
+            return "list(range(%d, %d))" % (epochs[0], stop)
+        return "list(range(%d, %d, %d))" % (epochs[0], stop, step)
+    return repr(epochs)
+
+
 # =========================================================================
 # Base class
 # =========================================================================
@@ -165,6 +194,16 @@ class NMMainOp:
         for data, channel_name in data_items:
             self.run(data, channel_name)
         self.run_finish(folder, prefix)
+        channels, epochs = _extract_channels_epochs(data_items, prefix)
+        cmd = self.to_command_str(
+            folder.name if folder is not None else "",
+            prefix or "",
+            channels,
+            epochs,
+        )
+        if cmd is not None:
+            from pyneuromatic.core.nm_command_history import add_command
+            add_command(cmd)
 
     def run_init(self) -> None:
         """Called once before the per-item loop.  Override to reset state."""
@@ -199,6 +238,69 @@ class NMMainOp:
         notes = getattr(data, "notes", None)
         if notes is not None:
             notes.add(text)
+
+    def _add_op_note(self, data: NMData, body: str = "") -> None:
+        """Append a note in the form ``OpName(body)`` to *data*.
+
+        Equivalent to ``_add_note(data, f"{self._op_name}({body})")``.
+        Use instead of :meth:`_add_note` whenever the note starts with the
+        op name — avoids repeating ``self._op_name`` at every call site.
+        """
+        self._add_note(data, "%s(%s)" % (self._op_name, body))
+
+    @property
+    def _op_name(self) -> str:
+        """Op name used in note strings, derived from the class name.
+
+        ``NMMainOpBaseline`` → ``"NMBaseline"``, ``NMMainOpSum`` → ``"NMSum"``,
+        etc.  Subclasses may override with a plain string attribute when the
+        derived name is not suitable.
+        """
+        return type(self).__name__.replace("NMMainOp", "NM")
+
+    def _op_params_str(self) -> str | None:
+        """Return constructor keyword arguments as a string for this operation.
+
+        Subclasses override to return a string of ``key=value`` pairs that
+        exactly matches the op's constructor signature (using ``%r`` format so
+        values are valid Python literals).  The returned string is shared by
+        both :meth:`to_command_str` (for command history) and
+        :meth:`run` / :meth:`run_finish` callers that build note strings.
+
+        Return ``None`` to suppress command-history logging for this op.
+        """
+        return None
+
+    def to_command_str(
+        self,
+        folder_name: str,
+        prefix: str,
+        channels: list[str],
+        epochs: list[int],
+    ) -> str | None:
+        """Return a Python-executable command string for this operation.
+
+        Delegates to :meth:`_op_params_str`; returns ``None`` when that
+        method returns ``None`` (suppressing history logging).
+        """
+        params = self._op_params_str()
+        if params is None:
+            return None
+        return self._base_cmd(params, folder_name, prefix, channels, epochs)
+
+    def _base_cmd(
+        self,
+        op_kwargs: str,
+        folder_name: str,
+        prefix: str,
+        channels: list[str],
+        epochs: list[int],
+    ) -> str:
+        """Format a standard run_all() command string."""
+        return (
+            "%s(%s).run_all(\n    folder=%r, prefix=%r, channels=%r, epochs=%s)"
+            % (type(self).__name__, op_kwargs, folder_name, prefix, channels, _epochs_repr(epochs))
+        )
 
 
 # =========================================================================
@@ -317,9 +419,10 @@ class NMMainOpArithmetic(NMMainOp):
         if factor is None:
             return  # dict mode: name not in dict of factors — skip
         data.nparray = nm_math.apply_arithmetic(data.nparray.astype(float), factor, self._op)
-        self._add_note(
-            data, "NMArithmetic(factor=%.6g,op=%s)" % (factor, self._op)
-        )
+        self._add_op_note(data, "factor=%.6g, op=%r" % (factor, self._op))
+
+    def _op_params_str(self) -> str:
+        return "factor=%r, op=%r" % (self._factor, self._op)
 
 
 # =========================================================================
@@ -416,10 +519,11 @@ class NMMainOpArithmeticByArray(NMMainOp):
             return
         arr = data.nparray.astype(float)
         data.nparray = nm_math.apply_arithmetic(arr, self._resolved_ref, self._op)
-        ref_label = self._ref if isinstance(self._ref, str) else "array"
-        self._add_note(
-            data, "NMArithmeticByArray(ref=%s,op=%s)" % (ref_label, self._op)
-        )
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        ref_repr = "%r" % self._ref if isinstance(self._ref, str) else "np.array([...])"
+        return "ref=%s, op=%r" % (ref_repr, self._op)
 
 
 # =========================================================================
@@ -486,10 +590,12 @@ class NMMainOpRedimension(NMMainOp):
         old_len = len(arr)
         if n <= old_len:
             data.nparray = arr[:n]
-            self._add_note(data, "NMRedimension(n_points=%d)" % n)
         else:
             data.nparray = np.concatenate([arr, np.full(n - old_len, self._fill)])
-            self._add_note(data, "NMRedimension(n_points=%d,fill=%.6g)" % (n, self._fill))
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        return "n_points=%d, fill=%r" % (self._n_points, self._fill)
 
 
 # =========================================================================
@@ -568,11 +674,11 @@ class NMMainOpInsertPoints(NMMainOp):
         data.nparray = np.insert(
             data.nparray, self._index, np.full(self._n_points, self._fill)
         )
-        self._add_note(
-            data,
-            "NMInsertPoints(index=%d,n_points=%d,fill=%.6g)"
-            % (self._index, self._n_points, self._fill),
-        )
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        return "index=%d, n_points=%d, fill=%r" % (
+            self._index, self._n_points, self._fill)
 
 
 # =========================================================================
@@ -638,10 +744,10 @@ class NMMainOpDeletePoints(NMMainOp):
         data.nparray = np.delete(
             data.nparray, np.arange(self._index, self._index + self._n_points)
         )
-        self._add_note(
-            data,
-            "NMDeletePoints(index=%d,n_points=%d)" % (self._index, self._n_points),
-        )
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        return "index=%d, n_points=%d" % (self._index, self._n_points)
 
 
 # =========================================================================
@@ -671,7 +777,10 @@ class NMMainOpReverse(NMMainOp):
         if not isinstance(data.nparray, np.ndarray):
             return
         data.nparray = np.flip(data.nparray)
-        self._add_note(data, "NMReverse()")
+        self._add_op_note(data)
+
+    def _op_params_str(self) -> str:
+        return ""
 
 
 # =========================================================================
@@ -721,7 +830,10 @@ class NMMainOpRotate(NMMainOp):
         if not isinstance(data.nparray, np.ndarray):
             return
         data.nparray = np.roll(data.nparray, self._n_points)
-        self._add_note(data, "NMRotate(n_points=%d)" % self._n_points)
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        return "n_points=%d" % self._n_points
 
 
 # =========================================================================
@@ -786,7 +898,10 @@ class NMMainOpIntegrate(NMMainOp):
         else:  # "trapezoid"
             steps = 0.5 * (arr[:-1] + arr[1:]) * delta
             data.nparray = np.concatenate([[0.0], np.cumsum(steps)])
-        self._add_note(data, "NMIntegrate(method=%s)" % self._method)
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        return "method=%r" % self._method
 
 
 # =========================================================================
@@ -823,7 +938,10 @@ class NMMainOpDifferentiate(NMMainOp):
             data.nparray = np.gradient(arr, delta)
         else:
             data.nparray = np.gradient(arr)
-        self._add_note(data, "NMDifferentiate()")
+        self._add_op_note(data)
+
+    def _op_params_str(self) -> str:
+        return ""
 
 
 # =========================================================================
@@ -894,11 +1012,10 @@ class NMMainOpReplaceValues(NMMainOp):
         n = int(np.count_nonzero(mask))
         arr[mask] = self._new_value
         data.nparray = arr
-        self._add_note(
-            data,
-            "NMReplaceValues(old=%.6g,new=%.6g,n=%d)"
-            % (self._old_value, self._new_value, n),
-        )
+        self._add_op_note(data, "%s, n=%d" % (self._op_params_str(), n))
+
+    def _op_params_str(self) -> str:
+        return "old_value=%r, new_value=%r" % (self._old_value, self._new_value)
 
 
 # =========================================================================
@@ -972,11 +1089,10 @@ class NMMainOpDeleteNaNs(NMMainOp):
             mask |= np.isinf(arr)
         n = int(np.count_nonzero(mask))
         data.nparray = arr[~mask]
-        self._add_note(
-            data,
-            "NMDeleteNaNs(delete_nans=%s,delete_infs=%s,n=%d)"
-            % (self._delete_nans, self._delete_infs, n),
-        )
+        self._add_op_note(data, "%s, n=%d" % (self._op_params_str(), n))
+
+    def _op_params_str(self) -> str:
+        return "delete_nans=%r, delete_infs=%r" % (self._delete_nans, self._delete_infs)
 
 
 # =========================================================================
@@ -1125,11 +1241,7 @@ class NMMainOpBaseline(NMMainOp):
 
         if self._mode == "per_array":
             data.nparray = data.nparray.astype(float) - baseline
-            self._add_note(
-                data,
-                "NMBaseline(x0=%.6g,x1=%.6g,mode=per_array,baseline=%.6g)"
-                % (self._x0, self._x1, baseline),
-            )
+            self._add_op_note(data, "%s, baseline=%.6g" % (self._op_params_str(), baseline))
         else:  # "average"
             self._baseline_accum.setdefault(channel_name, []).append(baseline)
             self._data_refs.setdefault(channel_name, []).append(data)
@@ -1153,11 +1265,14 @@ class NMMainOpBaseline(NMMainOp):
             )
             for d in self._data_refs[channel_name]:
                 d.nparray = d.nparray.astype(float) - avg_baseline
-                self._add_note(
-                    d,
-                    "NMBaseline(x0=%.6g,x1=%.6g,mode=average,channel=%s,baseline=%.6g)"
-                    % (self._x0, self._x1, channel_name, avg_baseline),
+                self._add_op_note(
+                    d, "%s, channel=%s, baseline=%.6g"
+                    % (self._op_params_str(), channel_name, avg_baseline),
                 )
+
+    def _op_params_str(self) -> str:
+        return "x0=%r, x1=%r, mode=%r, ignore_nans=%r" % (
+            self._x0, self._x1, self._mode, self._ignore_nans)
 
 
 # =========================================================================
@@ -1401,18 +1516,10 @@ class NMMainOpNormalize(NMMainOp):
         return (arr - ref_min) / range * (self._norm_max - self._norm_min) + self._norm_min
 
     def _note_str(self, ref_min: float, ref_max: float, channel_name: str | None = None) -> str:
-        note = (
-            "NMNormalize(x0_min=%.6g,x1_min=%.6g,fxn1=%s,"
-            "x0_max=%.6g,x1_max=%.6g,fxn2=%s,"
-            "norm_min=%.6g,norm_max=%.6g,mode=%s"
-        ) % (
-            self._x0_min, self._x1_min, self._fxn1,
-            self._x0_max, self._x1_max, self._fxn2,
-            self._norm_min, self._norm_max, self._mode,
-        )
+        note = "%s(%s" % (self._op_name, self._op_params_str())
         if channel_name is not None:
-            note += ",channel=%s" % channel_name
-        note += ",ref_min=%.6g,ref_max=%.6g)" % (ref_min, ref_max)
+            note += ", channel=%s" % channel_name
+        note += ", ref_min=%.6g, ref_max=%.6g)" % (ref_min, ref_max)
         return note
 
     # ------------------------------------------------------------------
@@ -1479,6 +1586,17 @@ class NMMainOpNormalize(NMMainOp):
                 arr = d.nparray.astype(float)
                 d.nparray = self._apply(arr, avg_ref_min, avg_ref_max)
                 self._add_note(d, self._note_str(avg_ref_min, avg_ref_max, channel_name))
+
+    def _op_params_str(self) -> str:
+        return (
+            "x0_min=%r, x1_min=%r, fxn1=%r, n_mean1=%d, "
+            "x0_max=%r, x1_max=%r, fxn2=%r, n_mean2=%d, "
+            "norm_min=%r, norm_max=%r, mode=%r"
+        ) % (
+            self._x0_min, self._x1_min, self._fxn1, self._n_mean1,
+            self._x0_max, self._x1_max, self._fxn2, self._n_mean2,
+            self._norm_min, self._norm_max, self._mode,
+        )
 
 
 # =========================================================================
@@ -1670,16 +1788,15 @@ class NMMainOpDFOF(NMMainOp):
         data.nparray = nm_math.apply_dfof(arr, f0)
         data.yscale.label = "dF/F"
         data.yscale.units = ""
-        note = "NMdFoF(x0=%.6g,x1=%.6g,mode=%s,F0=%.6g)" % (
-            self._x0, self._x1, mode_label, f0
-        )
         if channel_name is not None:
-            note = (
-                "NMdFoF(x0=%.6g,x1=%.6g,mode=%s,channel=%s,F0=%.6g)" % (
-                    self._x0, self._x1, mode_label, channel_name, f0
-                )
-            )
-        self._add_note(data, note)
+            self._add_op_note(data, "%s, channel=%s, F0=%.6g" % (
+                self._op_params_str(), channel_name, f0))
+        else:
+            self._add_op_note(data, "%s, F0=%.6g" % (self._op_params_str(), f0))
+
+    def _op_params_str(self) -> str:
+        return "x0=%r, x1=%r, mode=%r, ignore_nans=%r" % (
+            self._x0, self._x1, self._mode, self._ignore_nans)
 
 
 # =========================================================================
@@ -1766,10 +1883,11 @@ class NMMainOpRescale(NMMainOp):
         factor = nm_math.si_scale_factor(from_units, self._to_units)
         data.nparray = data.nparray.astype(float) * factor
         data.yscale.units = self._to_units
-        self._add_note(
-            data,
-            "NMRescale(from=%s,to=%s,factor=%.6g)" % (from_units, self._to_units, factor),
-        )
+        self._add_op_note(data, "%s, from=%s, factor=%.6g" % (
+            self._op_params_str(), from_units, factor))
+
+    def _op_params_str(self) -> str:
+        return "to_units=%r, from_units=%r" % (self._to_units, self._from_units)
 
 
 # =========================================================================
@@ -1854,10 +1972,11 @@ class NMMainOpRescaleX(NMMainOp):
         data.xscale.start = data.xscale.start * factor
         data.xscale.delta = data.xscale.delta * factor
         data.xscale.units = self._to_units
-        self._add_note(
-            data,
-            "NMRescaleX(from=%s,to=%s,factor=%.6g)" % (from_units, self._to_units, factor),
-        )
+        self._add_op_note(data, "%s, from=%s, factor=%.6g" % (
+            self._op_params_str(), from_units, factor))
+
+    def _op_params_str(self) -> str:
+        return "to_units=%r, from_units=%r" % (self._to_units, self._from_units)
 
 
 # =========================================================================
@@ -1871,7 +1990,6 @@ class NMMainOpAccumulate(NMMainOp):
     Subclasses set two class attributes and override ``_reduce()``:
 
     - ``_output_prefix``: prefix for the output array name (e.g. ``"Avg_"``).
-    - ``_note_name``: op name used in the note string (e.g. ``"NMAverage"``).
     - ``_reduce(stack)``: compute the per-channel result from the stacked array.
 
     The full lifecycle is handled here: ``run_init`` resets buffers,
@@ -1884,7 +2002,6 @@ class NMMainOpAccumulate(NMMainOp):
     """
 
     _output_prefix: str = ""
-    _note_name: str = ""
 
     def __init__(self, ignore_nans: bool = True) -> None:
         if not isinstance(ignore_nans, bool):
@@ -1921,6 +2038,10 @@ class NMMainOpAccumulate(NMMainOp):
     def results(self) -> dict[str, str]:
         """Read-only dict mapping channel name → output NMData name."""
         return dict(self._results)
+
+    def _op_params_str(self) -> str:
+        """Default params for accumulate ops; includes ignore_nans."""
+        return "ignore_nans=%r" % self._ignore_nans
 
     def _reduce(self, stack: np.ndarray) -> np.ndarray:
         """Reduce the stacked array to a single output array.
@@ -1984,7 +2105,7 @@ class NMMainOpAccumulate(NMMainOp):
 
     def _make_note_str(
         self,
-        note_name: str,
+        op_name: str,
         folder_name: str,
         ds_name: str,
         cname: str,
@@ -1994,7 +2115,7 @@ class NMMainOpAccumulate(NMMainOp):
         """Build the note string for an output array."""
         return (
             "%s(folder=%s,dataseries=%s,channel=%s,epochs=%s,n_epochs=%d)"
-            % (note_name, folder_name, ds_name, cname, epoch_str, n)
+            % (op_name, folder_name, ds_name, cname, epoch_str, n)
         )
 
     def _write_output_array(
@@ -2002,7 +2123,7 @@ class NMMainOpAccumulate(NMMainOp):
         folder: NMFolder,
         out_name: str,
         arr: np.ndarray,
-        note_name: str,
+        op_name: str,
         folder_name: str,
         ds_name: str,
         cname: str,
@@ -2018,7 +2139,7 @@ class NMMainOpAccumulate(NMMainOp):
         if out_data is not None:
             self._add_note(
                 out_data,
-                self._make_note_str(note_name, folder_name, ds_name, cname, epoch_str, n),
+                self._make_note_str(op_name, folder_name, ds_name, cname, epoch_str, n),
             )
 
     def _process_channel(
@@ -2047,7 +2168,7 @@ class NMMainOpAccumulate(NMMainOp):
         base_name = self._out_prefix + pfx + cname
         out_name = self._make_out_name(folder, base_name)
         self._write_output_array(
-            folder, out_name, arr, self._note_name, folder.name, pfx, cname, epoch_str, n
+            folder, out_name, arr, self._op_name, folder.name, pfx, cname, epoch_str, n
         )
         self._results[cname] = out_name
 
@@ -2096,7 +2217,6 @@ class NMMainOpAverage(NMMainOpAccumulate):
 
     name = "average"
     _output_prefix = "Avg_"
-    _note_name = "NMAverage"
 
     def __init__(
         self,
@@ -2184,6 +2304,11 @@ class NMMainOpAverage(NMMainOpAccumulate):
                 "NMSEM", folder.name, pfx, cname, epoch_str, n,
             )
 
+    def _op_params_str(self) -> str:
+        return (
+            "ignore_nans=%r, compute_stdv=%r, compute_var=%r, compute_sem=%r"
+        ) % (self._ignore_nans, self._compute_stdv, self._compute_var, self._compute_sem)
+
 
 # =========================================================================
 # Sum, SumSqr, Min, Max  (NMMainOpAccumulate subclasses)
@@ -2202,7 +2327,6 @@ class NMMainOpSum(NMMainOpAccumulate):
 
     name = "sum"
     _output_prefix = "Sum_"
-    _note_name = "NMSum"
 
     def _reduce(self, stack: np.ndarray) -> np.ndarray:
         return np.nansum(stack, axis=0) if self._ignore_nans else np.sum(stack, axis=0)
@@ -2221,7 +2345,6 @@ class NMMainOpSumSqr(NMMainOpAccumulate):
 
     name = "sum_sqr"
     _output_prefix = "SumSqr_"
-    _note_name = "NMSumSqr"
 
     def _reduce(self, stack: np.ndarray) -> np.ndarray:
         sq = stack ** 2
@@ -2240,7 +2363,6 @@ class NMMainOpMin(NMMainOpAccumulate):
 
     name = "min"
     _output_prefix = "Min_"
-    _note_name = "NMMin"
 
     def _reduce(self, stack: np.ndarray) -> np.ndarray:
         return np.nanmin(stack, axis=0) if self._ignore_nans else np.min(stack, axis=0)
@@ -2258,7 +2380,6 @@ class NMMainOpMax(NMMainOpAccumulate):
 
     name = "max"
     _output_prefix = "Max_"
-    _note_name = "NMMax"
 
     def _reduce(self, stack: np.ndarray) -> np.ndarray:
         return np.nanmax(stack, axis=0) if self._ignore_nans else np.max(stack, axis=0)
@@ -2288,7 +2409,6 @@ class NMMainOpConcatenate(NMMainOpAccumulate):
 
     name = "concatenate"
     _output_prefix = "Cat_"
-    _note_name = "NMConcatenate"
     _VALID_MODES: frozenset[str] = frozenset({"1d", "2d"})
 
     def __init__(self, mode: str = "1d", ignore_nans: bool = True) -> None:
@@ -2342,12 +2462,15 @@ class NMMainOpConcatenate(NMMainOpAccumulate):
         epoch_str = self._epoch_str(cname)
         base_name = self._out_prefix + pfx + cname
         out_name = self._make_out_name(folder, base_name)
-        note_name = "NMConcatenate_%s" % self._mode
+        op_name = "%s_%s" % (self._op_name, self._mode)
         self._write_output_array(
-            folder, out_name, arr, note_name,
+            folder, out_name, arr, op_name,
             folder.name, pfx, cname, epoch_str, n,
         )
         self._results[cname] = out_name
+
+    def _op_params_str(self) -> str:
+        return "mode=%r, ignore_nans=%r" % (self._mode, self._ignore_nans)
 
 
 # =========================================================================
@@ -2493,12 +2616,16 @@ class NMMainOpInequality(NMMainOp):
             out_data = self._write_out_array(self._folder, out_name, result,
                                             xscale=xscale, yscale=yscale)
             if out_data is not None:
-                self._add_note(out_data, "NMInequality(%s)" % condition)
+                self._add_op_note(out_data, condition)
         self._results[out_name] = {
             "successes": successes,
             "failures": len(arr) - successes,
             "condition": condition,
         }
+
+    def _op_params_str(self) -> str:
+        return "op=%r, a=%r, b=%r, binary_output=%r" % (
+            self._op, self._a, self._b, self._binary_output)
 
 
 # =========================================================================
@@ -2692,16 +2819,16 @@ class NMMainOpHistogram(NMMainOp):
                 xscale=xscale, yscale=yscale,
             )
             if out_data is not None:
-                self._add_note(
-                    out_data,
-                    "NMHistogram(bins=%s,x0=%s,x1=%s,density=%s)"
-                    % (self._bins, self._x0, self._x1, self._density),
-                )
+                self._add_op_note(out_data, self._op_params_str())
         self._results[out_name] = {
             "counts": counts,
             "edges": edges,
             "n_excluded": data.nparray.size - len(arr_finite),
         }
+
+    def _op_params_str(self) -> str:
+        return "bins=%r, x0=%r, x1=%r, xrange=%r, density=%r" % (
+            self._bins, self._x0, self._x1, self._xrange, self._density)
 
 
 # =========================================================================
