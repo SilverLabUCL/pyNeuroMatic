@@ -10,6 +10,7 @@ import unittest
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_project import NMProject
+from pyneuromatic.core.nm_command_history import NMCommandHistory, get_command_history
 
 QUIET = True
 NUMFOLDERS = 5
@@ -597,6 +598,63 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         self.assertEqual(self.nm.select_keys["folder"], "folder0")
         self.assertEqual(self.nm.select_keys["dataseries"], "avg")
         # Channel/epoch should be whatever is selected in "avg" dataseries
+
+
+class TestNMManagerCommandHistory(NMManagerTestBase):
+    """Tests for NMManager command history logging."""
+
+    def test_command_history_property_returns_instance(self):
+        self.assertIsInstance(self.nm.command_history, NMCommandHistory)
+
+    def test_init_logs_nm_manager(self):
+        # A fresh NMManager logs exactly one command
+        fresh = NMManager(quiet=True)
+        buf = fresh.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm = NMManager()")
+
+    def test_run_keys_set_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.run_keys_set({
+            "folder": "folder0",
+            "dataseries": "data",
+            "channel": "all",
+            "epoch": "all",
+        })
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        cmd = buf[0]["command"]
+        self.assertIn("nm.run_keys_set(", cmd)
+        self.assertIn("folder0", cmd)
+        self.assertIn("dataseries", cmd)
+        self.assertIn("channel", cmd)
+        self.assertIn("epoch", cmd)
+
+    def test_run_keys_set_data_mode_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.run_keys_set({"folder": "folder0", "data": "data0"})
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertIn("nm.run_keys_set(", buf[0]["command"])
+
+    def test_run_keys_set_logs_normalised_keys(self):
+        # Keys are normalised to lowercase before logging
+        self.nm.command_history.clear()
+        self.nm.run_keys_set({
+            "Folder": "folder0",
+            "Dataseries": "data",
+            "Channel": "all",
+            "Epoch": "all",
+        })
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertIn("'folder'", cmd)
+        self.assertNotIn("'Folder'", cmd)
+
+    def test_failed_run_keys_set_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm.run_keys_set({"folder": "folder0"})  # missing data/dataseries
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
 
 
 if __name__ == "__main__":
