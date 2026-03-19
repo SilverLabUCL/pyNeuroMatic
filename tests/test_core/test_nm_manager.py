@@ -696,6 +696,43 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
             self.nm.run_keys_set({"folder": "folder0"})  # missing data/dataseries
         self.assertEqual(len(self.nm.command_history.buffer), 0)
 
+    def test_run_reset_all_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.run_reset_all()
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.run_reset_all()")
+
+    def test_run_tool_default_logs_resolved_name(self):
+        self.nm.tool_add("main", select=True)
+        self.nm.run_keys_set({
+            "folder": "folder0", "dataseries": "data",
+            "channel": "all", "epoch": "all",
+        })
+        self.nm.command_history.clear()
+        self.nm.run_tool()
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.run_tool('main')")
+
+    def test_run_tool_explicit_name_logs_name(self):
+        self.nm.tool_add("main", select=True)
+        self.nm.run_keys_set({
+            "folder": "folder0", "dataseries": "data",
+            "channel": "all", "epoch": "all",
+        })
+        self.nm.command_history.clear()
+        self.nm.run_tool("main")
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.run_tool('main')")
+
+    def test_run_tool_invalid_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm.run_tool("nonexistent")
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
