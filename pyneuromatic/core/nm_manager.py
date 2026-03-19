@@ -32,6 +32,7 @@ from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
+import pyneuromatic.core.nm_command_history as nmch
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_configurations as nmc
 from pyneuromatic.core.nm_project import NMProject
@@ -99,6 +100,11 @@ class NMManager:
         # Initialize centralized history logging
         self.__history = nmh.NMHistory(quiet=quiet)
         nmh.set_history(self.__history)
+
+        # Initialize centralized command history
+        self.__command_history = nmch.NMCommandHistory(quiet=quiet)
+        nmch.set_command_history(self.__command_history)
+        nmch.add_command("nm = NMManager()")
 
         # Create project (root)
         self.__project = NMProject(parent=self, name="root")
@@ -193,6 +199,10 @@ class NMManager:
         self.__toolkit[tname] = tool
         if select:
             self.__toolselect = tname
+        if select:
+            nmch.add_command("nm.tool_add(%r, select=True)" % tname)
+        else:
+            nmch.add_command("nm.tool_add(%r)" % tname)
 
     def tool_remove(self, toolname: str) -> bool:
         """
@@ -213,6 +223,7 @@ class NMManager:
                     self.__toolselect = next(iter(self.__toolkit.keys()))
                 else:
                     self.__toolselect = None
+            nmch.add_command("nm.tool_remove(%r)" % tname)
             return True
         return False
 
@@ -228,6 +239,7 @@ class NMManager:
         tname = toolname.lower()
         if tname in self.__toolkit:
             self.__toolselect = tname
+            nmch.add_command("nm.tool_select = %r" % tname)
         else:
             raise KeyError("NM tool key '%s' does not exist" % tname)
 
@@ -235,6 +247,11 @@ class NMManager:
     def history(self) -> nmh.NMHistory:
         """Access the centralized NM history log."""
         return self.__history
+
+    @property
+    def command_history(self) -> nmch.NMCommandHistory:
+        """Access the centralized NM command history."""
+        return self.__command_history
 
     @property
     def project(self) -> NMProject:
@@ -326,6 +343,8 @@ class NMManager:
             if tier not in HIERARCHY_SELECT_KEYS:
                 raise KeyError(f"'{tier}' is not a valid selection tier. "
                                f"Valid tiers: {HIERARCHY_SELECT_KEYS}")
+
+        nmch.add_command("nm.select_keys = %r" % (select,))
 
         # Traverse hierarchy, setting values as we go so subsequent tiers
         # use the newly selected parent
@@ -573,6 +592,7 @@ class NMManager:
             result = self.run_keys(dataseries_priority=False)
             self._run_check_max_targets(result, max_targets)
             self.__run_config = dict(run)
+            nmch.add_command("nm.run_keys_set(%r)" % (run,))
             return result
 
         # Dataseries mode - requires dataseries, channel, epoch
@@ -596,6 +616,7 @@ class NMManager:
         result = self.run_keys(dataseries_priority=True)
         self._run_check_max_targets(result, max_targets)
         self.__run_config = dict(run)
+        nmch.add_command("nm.run_keys_set(%r)" % (run,))
         return result
 
     def _run_check_max_targets(
@@ -629,6 +650,7 @@ class NMManager:
                 ds.channels.run_target = RUN_SELECTED
                 ds.epochs.run_target = RUN_SELECTED
         self.__run_config = None
+        nmch.add_command("nm.run_reset_all()")
         return None
 
     def run_tool(
@@ -673,7 +695,9 @@ class NMManager:
         targets = self.run_values()
         if not targets:
             print("nothing to run")
-        return tool.run_all(targets, run_keys=self.__run_config)
+        result = tool.run_all(targets, run_keys=self.__run_config)
+        nmch.add_command("nm.run_tool(%r)" % tname)
+        return result
 
     # Workspace methods
 

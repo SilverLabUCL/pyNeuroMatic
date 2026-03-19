@@ -10,6 +10,7 @@ import unittest
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_project import NMProject
+from pyneuromatic.core.nm_command_history import NMCommandHistory, get_command_history
 
 QUIET = True
 NUMFOLDERS = 5
@@ -597,6 +598,180 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         self.assertEqual(self.nm.select_keys["folder"], "folder0")
         self.assertEqual(self.nm.select_keys["dataseries"], "avg")
         # Channel/epoch should be whatever is selected in "avg" dataseries
+
+
+class TestNMManagerCommandHistory(NMManagerTestBase):
+    """Tests for NMManager command history logging."""
+
+    def test_command_history_property_returns_instance(self):
+        self.assertIsInstance(self.nm.command_history, NMCommandHistory)
+
+    def test_init_logs_nm_manager(self):
+        # nm = NMManager() is the first entry; workspace tool_add() calls follow
+        fresh = NMManager(quiet=True)
+        buf = fresh.command_history.buffer
+        self.assertGreaterEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm = NMManager()")
+
+    def test_tool_add_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.tool_add("main")
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.tool_add('main')")
+
+    def test_tool_add_select_logs_select_true(self):
+        self.nm.command_history.clear()
+        self.nm.tool_add("main", select=True)
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertEqual(cmd, "nm.tool_add('main', select=True)")
+
+    def test_tool_remove_logs_command(self):
+        self.nm.tool_add("main")
+        self.nm.command_history.clear()
+        self.nm.tool_remove("main")
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.tool_remove('main')")
+
+    def test_tool_remove_not_found_does_not_log(self):
+        self.nm.command_history.clear()
+        self.nm.tool_remove("nonexistent")
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
+
+    def test_tool_select_setter_logs_command(self):
+        self.nm.tool_add("main")
+        self.nm.command_history.clear()
+        self.nm.tool_select = "main"
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.tool_select = 'main'")
+
+    def test_tool_select_invalid_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm.tool_select = "nonexistent"
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
+
+    def test_run_keys_set_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.run_keys_set({
+            "folder": "folder0",
+            "dataseries": "data",
+            "channel": "all",
+            "epoch": "all",
+        })
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        cmd = buf[0]["command"]
+        self.assertIn("nm.run_keys_set(", cmd)
+        self.assertIn("folder0", cmd)
+        self.assertIn("dataseries", cmd)
+        self.assertIn("channel", cmd)
+        self.assertIn("epoch", cmd)
+
+    def test_run_keys_set_data_mode_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.run_keys_set({"folder": "folder0", "data": "data0"})
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertIn("nm.run_keys_set(", buf[0]["command"])
+
+    def test_run_keys_set_logs_normalised_keys(self):
+        # Keys are normalised to lowercase before logging
+        self.nm.command_history.clear()
+        self.nm.run_keys_set({
+            "Folder": "folder0",
+            "Dataseries": "data",
+            "Channel": "all",
+            "Epoch": "all",
+        })
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertIn("'folder'", cmd)
+        self.assertNotIn("'Folder'", cmd)
+
+    def test_failed_run_keys_set_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm.run_keys_set({"folder": "folder0"})  # missing data/dataseries
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
+
+    def test_select_keys_set_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm._select_keys_set({"folder": "folder0"})
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertIn("nm.select_keys =", buf[0]["command"])
+        self.assertIn("folder0", buf[0]["command"])
+
+    def test_select_keys_set_logs_normalised_keys(self):
+        self.nm.command_history.clear()
+        self.nm._select_keys_set({"Folder": "folder0"})
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertIn("'folder'", cmd)
+        self.assertNotIn("'Folder'", cmd)
+
+    def test_select_keys_set_invalid_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm._select_keys_set({"invalid_tier": "folder0"})
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
+
+    def test_select_value_set_logs_via_select_keys(self):
+        self.nm.command_history.clear()
+        folder = self.nm.project.folders["folder0"]
+        self.nm.select_value_set(folder)
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        cmd = buf[0]["command"]
+        self.assertIn("nm.select_keys =", cmd)
+        self.assertIn("folder0", cmd)
+
+    def test_select_value_set_epoch_logs_full_chain(self):
+        self.nm.command_history.clear()
+        epoch = self.select_values["epoch"]
+        self.nm.select_value_set(epoch)
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertIn("folder", cmd)
+        self.assertIn("dataseries", cmd)
+        self.assertIn("epoch", cmd)
+
+    def test_run_reset_all_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.run_reset_all()
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.run_reset_all()")
+
+    def test_run_tool_default_logs_resolved_name(self):
+        self.nm.tool_add("main", select=True)
+        self.nm.run_keys_set({
+            "folder": "folder0", "dataseries": "data",
+            "channel": "all", "epoch": "all",
+        })
+        self.nm.command_history.clear()
+        self.nm.run_tool()
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.run_tool('main')")
+
+    def test_run_tool_explicit_name_logs_name(self):
+        self.nm.tool_add("main", select=True)
+        self.nm.run_keys_set({
+            "folder": "folder0", "dataseries": "data",
+            "channel": "all", "epoch": "all",
+        })
+        self.nm.command_history.clear()
+        self.nm.run_tool("main")
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.run_tool('main')")
+
+    def test_run_tool_invalid_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm.run_tool("nonexistent")
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
 
 
 if __name__ == "__main__":
