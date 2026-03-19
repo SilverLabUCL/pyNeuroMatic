@@ -3557,5 +3557,45 @@ class TestCommandHistory(unittest.TestCase):
         self.assertEqual(len(self._cmd_history), 2)
 
 
+# ===========================================================================
+# TestToolMainOpLogging
+# ===========================================================================
+
+class TestToolMainOpLogging(unittest.TestCase):
+    """Tests for command history logging of NMToolMain.op setter."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_command_history import (
+            NMCommandHistory, set_command_history, get_command_history,
+        )
+        self._ch = NMCommandHistory(quiet=True, log_to_nm_history=False)
+        set_command_history(self._ch)
+
+    def test_op_setter_logs_command(self):
+        tool = NMToolMain()
+        self._ch.clear()
+        tool.op = NMMainOpBaseline(x0=0.0, x1=10.0)
+        buf = self._ch.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertIn("NMMainOpBaseline", buf[0]["command"])
+        self.assertIn("tool_main.op", buf[0]["command"])
+
+    def test_op_setter_includes_params(self):
+        tool = NMToolMain()
+        self._ch.clear()
+        tool.op = NMMainOpBaseline(x0=0.0, x1=10.0, mode='per_array')
+        cmd = self._ch.buffer[0]["command"]
+        self.assertIn("x0=0.0", cmd)
+        self.assertIn("x1=10.0", cmd)
+        self.assertIn("mode='per_array'", cmd)
+
+    def test_op_setter_string_name_logs_resolved_class(self):
+        tool = NMToolMain()
+        self._ch.clear()
+        tool.op = "average"
+        cmd = self._ch.buffer[0]["command"]
+        self.assertIn("NMMainOpAverage", cmd)
+
+
 if __name__ == "__main__":
     unittest.main()
