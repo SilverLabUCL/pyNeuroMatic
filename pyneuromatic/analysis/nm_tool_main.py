@@ -76,6 +76,11 @@ class NMToolMain(NMTool):
             raise TypeError(
                 nmu.type_error_str(value, "op", "NMMainOp or string")
             )
+        from pyneuromatic.core.nm_command_history import add_nm_command
+        params = self._op._op_params_str()
+        if params is None:
+            params = ""
+        add_nm_command("tool_main.op = %s(%s)" % (type(self._op).__name__, params))
 
     # ------------------------------------------------------------------
     # Lifecycle hooks

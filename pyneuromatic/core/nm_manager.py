@@ -96,15 +96,16 @@ class NMManager:
         quiet: bool = False,
         workspace: str | None = None,
         config_dir: str | Path | None = None,
+        nm_name: str = "nm",
     ) -> None:
         # Initialize centralized history logging
         self.__history = nmh.NMHistory(quiet=quiet)
         nmh.set_history(self.__history)
 
         # Initialize centralized command history
-        self.__command_history = nmch.NMCommandHistory(quiet=quiet)
+        self.__command_history = nmch.NMCommandHistory(quiet=quiet, nm_name=nm_name)
         nmch.set_command_history(self.__command_history)
-        nmch.add_command("nm = NMManager()")
+        nmch.add_command(nm_name + " = NMManager()")
 
         # Create project (root)
         self.__project = NMProject(parent=self, name="root")
@@ -200,9 +201,9 @@ class NMManager:
         if select:
             self.__toolselect = tname
         if select:
-            nmch.add_command("nm.tool_add(%r, select=True)" % tname)
+            nmch.add_nm_command("tool_add(%r, select=True)" % tname)
         else:
-            nmch.add_command("nm.tool_add(%r)" % tname)
+            nmch.add_nm_command("tool_add(%r)" % tname)
 
     def tool_remove(self, toolname: str) -> bool:
         """
@@ -223,7 +224,7 @@ class NMManager:
                     self.__toolselect = next(iter(self.__toolkit.keys()))
                 else:
                     self.__toolselect = None
-            nmch.add_command("nm.tool_remove(%r)" % tname)
+            nmch.add_nm_command("tool_remove(%r)" % tname)
             return True
         return False
 
@@ -239,7 +240,7 @@ class NMManager:
         tname = toolname.lower()
         if tname in self.__toolkit:
             self.__toolselect = tname
-            nmch.add_command("nm.tool_select = %r" % tname)
+            nmch.add_nm_command("tool_select = %r" % tname)
         else:
             raise KeyError("NM tool key '%s' does not exist" % tname)
 
@@ -344,7 +345,7 @@ class NMManager:
                 raise KeyError(f"'{tier}' is not a valid selection tier. "
                                f"Valid tiers: {HIERARCHY_SELECT_KEYS}")
 
-        nmch.add_command("nm.select_keys = %r" % (select,))
+        nmch.add_nm_command("select_keys = %r" % (select,))
 
         # Traverse hierarchy, setting values as we go so subsequent tiers
         # use the newly selected parent
@@ -592,7 +593,7 @@ class NMManager:
             result = self.run_keys(dataseries_priority=False)
             self._run_check_max_targets(result, max_targets)
             self.__run_config = dict(run)
-            nmch.add_command("nm.run_keys_set(%r)" % (run,))
+            nmch.add_nm_command("run_keys_set(%r)" % (run,))
             return result
 
         # Dataseries mode - requires dataseries, channel, epoch
@@ -616,7 +617,7 @@ class NMManager:
         result = self.run_keys(dataseries_priority=True)
         self._run_check_max_targets(result, max_targets)
         self.__run_config = dict(run)
-        nmch.add_command("nm.run_keys_set(%r)" % (run,))
+        nmch.add_nm_command("run_keys_set(%r)" % (run,))
         return result
 
     def _run_check_max_targets(
@@ -650,7 +651,7 @@ class NMManager:
                 ds.channels.run_target = RUN_SELECTED
                 ds.epochs.run_target = RUN_SELECTED
         self.__run_config = None
-        nmch.add_command("nm.run_reset_all()")
+        nmch.add_nm_command("run_reset_all()")
         return None
 
     def run_tool(
@@ -696,7 +697,7 @@ class NMManager:
         if not targets:
             print("nothing to run")
         result = tool.run_all(targets, run_keys=self.__run_config)
-        nmch.add_command("nm.run_tool(%r)" % tname)
+        nmch.add_nm_command("run_tool(%r)" % tname)
         return result
 
     # Workspace methods

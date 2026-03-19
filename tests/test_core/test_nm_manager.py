@@ -613,6 +613,16 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
         self.assertGreaterEqual(len(buf), 1)
         self.assertEqual(buf[0]["command"], "nm = NMManager()")
 
+    def test_nm_name_default(self):
+        fresh = NMManager(quiet=True)
+        self.assertEqual(fresh.command_history.nm_name, "nm")
+
+    def test_nm_name_custom(self):
+        fresh = NMManager(quiet=True, nm_name="manager")
+        buf = fresh.command_history.buffer
+        self.assertEqual(fresh.command_history.nm_name, "manager")
+        self.assertEqual(buf[0]["command"], "manager = NMManager()")
+
     def test_tool_add_logs_command(self):
         self.nm.command_history.clear()
         self.nm.tool_add("main")

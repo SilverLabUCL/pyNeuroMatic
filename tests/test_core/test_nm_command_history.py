@@ -10,6 +10,7 @@ import pytest
 from pyneuromatic.core.nm_command_history import (
     NMCommandHistory,
     add_command,
+    add_nm_command,
     disable_command_history,
     enable_command_history,
     get_command_history,
@@ -143,7 +144,7 @@ class TestNMCommandHistoryAdd:
 
 class TestNMCommandHistoryQuiet:
     def test_quiet_suppresses_print(self, capsys):
-        h = NMCommandHistory(quiet=True)
+        h = NMCommandHistory(quiet=True, log_to_nm_history=False)
         h.add("silent_cmd")
         captured = capsys.readouterr()
         assert "silent_cmd" not in captured.out
@@ -490,3 +491,48 @@ class TestLogToNMHistory:
             assert "no_direct_print" not in captured.out
         finally:
             nmh.history = original
+
+
+# ---------------------------------------------------------------------------
+# nm_name and add_nm
+# ---------------------------------------------------------------------------
+
+
+class TestNMName:
+    def test_default_nm_name(self):
+        h = _fresh()
+        assert h.nm_name == "nm"
+
+    def test_custom_nm_name_constructor(self):
+        h = NMCommandHistory(quiet=True, log_to_nm_history=False, nm_name="manager")
+        assert h.nm_name == "manager"
+
+    def test_nm_name_setter(self):
+        h = _fresh()
+        h.nm_name = "my_nm"
+        assert h.nm_name == "my_nm"
+
+    def test_nm_name_rejects_empty(self):
+        with pytest.raises(TypeError):
+            NMCommandHistory(quiet=True, log_to_nm_history=False, nm_name="")
+
+    def test_nm_name_rejects_non_string(self):
+        with pytest.raises(TypeError):
+            NMCommandHistory(quiet=True, log_to_nm_history=False, nm_name=42)
+
+    def test_add_nm_prepends_nm_name_and_dot(self):
+        h = _fresh()
+        h.add_nm("tool_add('main')")
+        assert h.buffer[0]["command"] == "nm.tool_add('main')"
+
+    def test_add_nm_custom_name(self):
+        h = NMCommandHistory(quiet=True, log_to_nm_history=False, nm_name="manager")
+        h.add_nm("run_tool('main')")
+        assert h.buffer[0]["command"] == "manager.run_tool('main')"
+
+    def test_add_nm_command_module_level(self):
+        set_command_history(NMCommandHistory(quiet=True, log_to_nm_history=False))
+        add_nm_command("run_reset_all()")
+        assert get_command_history().buffer[0]["command"] == "nm.run_reset_all()"
+
+

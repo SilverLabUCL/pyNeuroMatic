@@ -115,6 +115,7 @@ class NMCommandHistory:
         enabled: bool = True,
         quiet: bool = False,
         log_to_nm_history: bool = True,
+        nm_name: str = "nm",
     ) -> None:
         if not isinstance(enabled, bool):
             raise TypeError("enabled must be a bool, got %r" % type(enabled).__name__)
@@ -125,9 +126,12 @@ class NMCommandHistory:
                 "log_to_nm_history must be a bool, got %r"
                 % type(log_to_nm_history).__name__
             )
+        if not isinstance(nm_name, str) or not nm_name:
+            raise TypeError("nm_name must be a non-empty string")
         self._enabled: bool = enabled
         self._quiet: bool = quiet
         self._log_to_nm_history: bool = log_to_nm_history
+        self._nm_name: str = nm_name
         self._buffer: list[dict] = []  # [{"date": ISO_str, "command": str}, ...]
 
     # ------------------------------------------------------------------
@@ -177,6 +181,22 @@ class NMCommandHistory:
         """
         return list(self._buffer)
 
+    @property
+    def nm_name(self) -> str:
+        """Variable name used for the NMManager instance (default ``"nm"``).
+
+        Used by :meth:`add_nm` to prefix commands with ``nm_name + suffix``.
+        Change this if your script uses a different variable name, e.g.
+        ``manager`` or ``my_nm``.
+        """
+        return self._nm_name
+
+    @nm_name.setter
+    def nm_name(self, value: str) -> None:
+        if not isinstance(value, str) or not value:
+            raise TypeError("nm_name must be a non-empty string")
+        self._nm_name = value
+
     # ------------------------------------------------------------------
     # Core
 
@@ -209,6 +229,18 @@ class NMCommandHistory:
             _nmh.history(command_str, path="NONE")
         elif not self._quiet:
             print(command_str)
+
+    def add_nm(self, suffix: str) -> None:
+        """Log a command prefixed with :attr:`nm_name` and a dot.
+
+        Equivalent to ``self.add(self.nm_name + "." + suffix)``.  Use this
+        for all NMManager attribute/method calls so the variable name is kept
+        in one place::
+
+            history.add_nm("tool_add('main')")     # → "nm.tool_add('main')"
+            history.add_nm("tool_select = 'main'") # → "nm.tool_select = 'main'"
+        """
+        self.add(self._nm_name + "." + suffix)
 
     def clear(self) -> None:
         """Remove all entries from the buffer."""
@@ -318,6 +350,11 @@ _nm_command_history: NMCommandHistory = NMCommandHistory(quiet=True, log_to_nm_h
 def add_command(command_str: str) -> None:
     """Log *command_str* to the global :class:`NMCommandHistory` instance."""
     _nm_command_history.add(command_str)
+
+
+def add_nm_command(suffix: str) -> None:
+    """Log a command prefixed with the global instance's :attr:`~NMCommandHistory.nm_name`."""
+    _nm_command_history.add_nm(suffix)
 
 
 def enable_command_history() -> None:
