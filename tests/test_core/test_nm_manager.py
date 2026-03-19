@@ -607,11 +607,51 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
         self.assertIsInstance(self.nm.command_history, NMCommandHistory)
 
     def test_init_logs_nm_manager(self):
-        # A fresh NMManager logs exactly one command
+        # nm = NMManager() is the first entry; workspace tool_add() calls follow
         fresh = NMManager(quiet=True)
         buf = fresh.command_history.buffer
-        self.assertEqual(len(buf), 1)
+        self.assertGreaterEqual(len(buf), 1)
         self.assertEqual(buf[0]["command"], "nm = NMManager()")
+
+    def test_tool_add_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm.tool_add("main")
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.tool_add('main')")
+
+    def test_tool_add_select_logs_select_true(self):
+        self.nm.command_history.clear()
+        self.nm.tool_add("main", select=True)
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertEqual(cmd, "nm.tool_add('main', select=True)")
+
+    def test_tool_remove_logs_command(self):
+        self.nm.tool_add("main")
+        self.nm.command_history.clear()
+        self.nm.tool_remove("main")
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.tool_remove('main')")
+
+    def test_tool_remove_not_found_does_not_log(self):
+        self.nm.command_history.clear()
+        self.nm.tool_remove("nonexistent")
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
+
+    def test_tool_select_setter_logs_command(self):
+        self.nm.tool_add("main")
+        self.nm.command_history.clear()
+        self.nm.tool_select = "main"
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertEqual(buf[0]["command"], "nm.tool_select = 'main'")
+
+    def test_tool_select_invalid_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm.tool_select = "nonexistent"
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
 
     def test_run_keys_set_logs_command(self):
         self.nm.command_history.clear()
