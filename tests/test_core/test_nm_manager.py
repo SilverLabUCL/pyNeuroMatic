@@ -696,6 +696,46 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
             self.nm.run_keys_set({"folder": "folder0"})  # missing data/dataseries
         self.assertEqual(len(self.nm.command_history.buffer), 0)
 
+    def test_select_keys_set_logs_command(self):
+        self.nm.command_history.clear()
+        self.nm._select_keys_set({"folder": "folder0"})
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        self.assertIn("nm.select_keys =", buf[0]["command"])
+        self.assertIn("folder0", buf[0]["command"])
+
+    def test_select_keys_set_logs_normalised_keys(self):
+        self.nm.command_history.clear()
+        self.nm._select_keys_set({"Folder": "folder0"})
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertIn("'folder'", cmd)
+        self.assertNotIn("'Folder'", cmd)
+
+    def test_select_keys_set_invalid_does_not_log(self):
+        self.nm.command_history.clear()
+        with self.assertRaises(KeyError):
+            self.nm._select_keys_set({"invalid_tier": "folder0"})
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
+
+    def test_select_value_set_logs_via_select_keys(self):
+        self.nm.command_history.clear()
+        folder = self.nm.project.folders["folder0"]
+        self.nm.select_value_set(folder)
+        buf = self.nm.command_history.buffer
+        self.assertEqual(len(buf), 1)
+        cmd = buf[0]["command"]
+        self.assertIn("nm.select_keys =", cmd)
+        self.assertIn("folder0", cmd)
+
+    def test_select_value_set_epoch_logs_full_chain(self):
+        self.nm.command_history.clear()
+        epoch = self.select_values["epoch"]
+        self.nm.select_value_set(epoch)
+        cmd = self.nm.command_history.buffer[0]["command"]
+        self.assertIn("folder", cmd)
+        self.assertIn("dataseries", cmd)
+        self.assertIn("epoch", cmd)
+
     def test_run_reset_all_logs_command(self):
         self.nm.command_history.clear()
         self.nm.run_reset_all()

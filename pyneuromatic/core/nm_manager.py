@@ -344,6 +344,8 @@ class NMManager:
                 raise KeyError(f"'{tier}' is not a valid selection tier. "
                                f"Valid tiers: {HIERARCHY_SELECT_KEYS}")
 
+        nmch.add_command("nm.select_keys = %r" % (select,))
+
         # Traverse hierarchy, setting values as we go so subsequent tiers
         # use the newly selected parent
         folders = self.__project.folders
