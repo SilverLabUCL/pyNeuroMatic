@@ -194,16 +194,6 @@ class NMMainOp:
         for data, channel_name in data_items:
             self.run(data, channel_name)
         self.run_finish(folder, prefix)
-        channels, epochs = _extract_channels_epochs(data_items, prefix)
-        cmd = self.to_command_str(
-            folder.name if folder is not None else "",
-            prefix or "",
-            channels,
-            epochs,
-        )
-        if cmd is not None:
-            from pyneuromatic.core.nm_command_history import add_command
-            add_command(cmd)
 
     def run_init(self) -> None:
         """Called once before the per-item loop.  Override to reset state."""
