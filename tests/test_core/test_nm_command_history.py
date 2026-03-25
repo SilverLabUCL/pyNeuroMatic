@@ -24,8 +24,8 @@ from pyneuromatic.core.nm_command_history import (
 
 
 def _fresh() -> NMCommandHistory:
-    """Return a new NMCommandHistory isolated from NMHistory (for unit tests)."""
-    return NMCommandHistory(quiet=True, log_to_nm_history=False)
+    """Return a new enabled NMCommandHistory isolated from NMHistory (for unit tests)."""
+    return NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=False)
 
 
 # ---------------------------------------------------------------------------
@@ -35,8 +35,8 @@ def _fresh() -> NMCommandHistory:
 
 class TestNMCommandHistoryInit:
     def test_defaults(self):
-        h = _fresh()
-        assert h.enabled is True
+        h = NMCommandHistory(quiet=True, log_to_nm_history=False)
+        assert h.enabled is False
         assert h.quiet is True
         assert h.buffer == []
         assert len(h) == 0
@@ -151,7 +151,7 @@ class TestNMCommandHistoryQuiet:
 
     def test_not_quiet_prints(self, capsys):
         # quiet=False + log_to_nm_history=False → direct print() to stdout
-        h = NMCommandHistory(quiet=False, log_to_nm_history=False)
+        h = NMCommandHistory(enabled=True, quiet=False, log_to_nm_history=False)
         h.add("loud_cmd")
         captured = capsys.readouterr()
         assert "loud_cmd" in captured.out
@@ -359,8 +359,8 @@ class TestNMCommandHistoryToScript:
 
 class TestModuleLevelAPI:
     def setup_method(self):
-        """Replace global instance with a fresh isolated one before each test."""
-        set_command_history(NMCommandHistory(quiet=True, log_to_nm_history=False))
+        """Replace global instance with a fresh isolated enabled one before each test."""
+        set_command_history(NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=False))
 
     def test_add_command_logs_to_global(self):
         add_command("global_cmd")
@@ -383,7 +383,7 @@ class TestModuleLevelAPI:
         assert isinstance(h, NMCommandHistory)
 
     def test_set_command_history_replaces_global(self):
-        custom = NMCommandHistory(quiet=True)
+        custom = NMCommandHistory(enabled=True, quiet=True)
         set_command_history(custom)
         add_command("in_custom")
         assert len(custom) == 1
@@ -433,7 +433,7 @@ class TestLogToNMHistory:
         original = nmh.history
         nmh.history = _fake_history
         try:
-            h = NMCommandHistory(quiet=True, log_to_nm_history=True)
+            h = NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=True)
             h.add("test_cmd_forward")
             assert "test_cmd_forward" in calls
         finally:
@@ -469,7 +469,7 @@ class TestLogToNMHistory:
         original = nmh.history
         nmh.history = _fake_history
         try:
-            h = NMCommandHistory(quiet=True, log_to_nm_history=True)
+            h = NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=True)
             h.add("cmd_path_check")
             assert received.get("path") == "NONE"
         finally:
@@ -485,7 +485,7 @@ class TestLogToNMHistory:
         original = nmh.history
         nmh.history = _noop
         try:
-            h = NMCommandHistory(quiet=False, log_to_nm_history=True)
+            h = NMCommandHistory(enabled=True, quiet=False, log_to_nm_history=True)
             h.add("no_direct_print")
             captured = capsys.readouterr()
             assert "no_direct_print" not in captured.out
@@ -526,12 +526,12 @@ class TestNMName:
         assert h.buffer[0]["command"] == "nm.tool_add('main')"
 
     def test_add_nm_custom_name(self):
-        h = NMCommandHistory(quiet=True, log_to_nm_history=False, nm_name="manager")
+        h = NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=False, nm_name="manager")
         h.add_nm("run_tool('main')")
         assert h.buffer[0]["command"] == "manager.run_tool('main')"
 
     def test_add_nm_command_module_level(self):
-        set_command_history(NMCommandHistory(quiet=True, log_to_nm_history=False))
+        set_command_history(NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=False))
         add_nm_command("run_reset_all()")
         assert get_command_history().buffer[0]["command"] == "nm.run_reset_all()"
 

@@ -95,13 +95,16 @@ class NMManager(NMObject):
         workspace: str | None = None,
         config_dir: str | Path | None = None,
         nm_name: str = "nm",
+        command_history: bool = False,
     ) -> None:
         # Initialize centralized history logging
         self.__history = nmh.NMHistory(quiet=quiet)
         nmh.set_history(self.__history)
 
-        # Initialize centralized command history
-        self.__command_history = nmch.NMCommandHistory(quiet=quiet, nm_name=nm_name)
+        # Initialize centralized command history (disabled by default; GUI enables explicitly)
+        self.__command_history = nmch.NMCommandHistory(
+            enabled=command_history, quiet=quiet, nm_name=nm_name
+        )
         nmch.set_command_history(self.__command_history)
         nmch.add_command(nm_name + " = NMManager()")
 
@@ -827,7 +830,7 @@ class NMManager(NMObject):
 
 if __name__ == "__main__":
     # Basic usage example
-    nm = NMManager()
+    nm = NMManager(command_history=True)
 
     # Create a folder and add data
     folder = nm.folders.new("folder0")
