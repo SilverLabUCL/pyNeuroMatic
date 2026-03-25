@@ -33,6 +33,7 @@ from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_math as nm_math
@@ -85,10 +86,10 @@ class NMToolStats(NMTool):
     """
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(name="stats")
         self._config = NMToolStatsConfig()
 
-        self.__win_container = NMStatWinContainer()
+        self.__win_container = NMStatWinContainer(nm_path="%s.windows" % self._name)
         self.__win_container.new()
 
         self.__xclip = True
@@ -147,6 +148,7 @@ class NMToolStats(NMTool):
             e = nmu.type_error_str(xclip, "xclip", "boolean")
             raise TypeError(e)
         nmh.history("set xclip=%s" % xclip, quiet=quiet)
+        nmch.add_nm_command("%s.xclip = %r" % (self._name, self.__xclip))
 
     @property
     def ignore_nans(self) -> bool:
@@ -175,6 +177,7 @@ class NMToolStats(NMTool):
             e = nmu.type_error_str(ignore_nans, "ignore_nans", "boolean")
             raise TypeError(e)
         nmh.history("set ignore_nans=%s" % ignore_nans, quiet=quiet)
+        nmch.add_nm_command("%s.ignore_nans = %r" % (self._name, self.__ignore_nans))
 
     @property
     def results_to_history(self) -> bool:
@@ -200,6 +203,7 @@ class NMToolStats(NMTool):
             raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
         self.__results_to_history = value
         nmh.history("set results_to_history=%s" % value, quiet=quiet)
+        nmch.add_nm_command("%s.results_to_history = %r" % (self._name, self.__results_to_history))
 
     @property
     def results_to_cache(self) -> bool:
@@ -226,6 +230,7 @@ class NMToolStats(NMTool):
             raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
         self.__results_to_cache = value
         nmh.history("set results_to_cache=%s" % value, quiet=quiet)
+        nmch.add_nm_command("%s.results_to_cache = %r" % (self._name, self.__results_to_cache))
 
     @property
     def results_to_numpy(self) -> bool:
@@ -252,6 +257,7 @@ class NMToolStats(NMTool):
             raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
         self.__results_to_numpy = value
         nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
+        nmch.add_nm_command("%s.results_to_numpy = %r" % (self._name, self.__results_to_numpy))
 
     # override, no super
     def run_init(self) -> bool:

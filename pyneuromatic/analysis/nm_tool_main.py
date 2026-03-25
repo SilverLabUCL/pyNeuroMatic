@@ -45,7 +45,7 @@ class NMToolMain(NMTool):
     """
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(name="tool_main")
         self._op: NMMainOp = NMMainOpAverage()
 
     # ------------------------------------------------------------------
@@ -80,7 +80,7 @@ class NMToolMain(NMTool):
         params = self._op._op_params_str()
         if params is None:
             params = ""
-        add_nm_command("tool_main.op = %s(%s)" % (type(self._op).__name__, params))
+        add_nm_command("%s.op = %s(%s)" % (self._name, type(self._op).__name__, params))
 
     # ------------------------------------------------------------------
     # Lifecycle hooks

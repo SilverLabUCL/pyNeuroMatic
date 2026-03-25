@@ -51,12 +51,18 @@ class NMTool:
                 return True
     """
 
-    def __init__(self) -> None:
+    def __init__(self, name: str = "") -> None:
+        self._name = name
         self._select: dict[str, NMObject | None] = {
             tier: None for tier in HIERARCHY_SELECT_KEYS
         }
         self._run_meta: dict = {}
         self._config: NMToolConfig | None = None
+
+    @property
+    def name(self) -> str:
+        """Tool name used in command history (e.g. ``'stats'``, ``'tool_main'``)."""
+        return self._name
 
     @property
     def config(self) -> NMToolConfig | None:

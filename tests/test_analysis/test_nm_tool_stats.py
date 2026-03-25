@@ -1263,5 +1263,210 @@ class TestNMToolStatsConfig(unittest.TestCase):
         self.assertTrue(t.config.xclip)
 
 
+class TestNMToolStatsCommandHistory(unittest.TestCase):
+    """Tests for command history logging of NMToolStats, NMStatWin, NMStatWinContainer."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_command_history import (
+            NMCommandHistory, set_command_history,
+        )
+        self._ch = NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=False)
+        set_command_history(self._ch)
+        self.tool = nms.NMToolStats()
+        self.w0 = self.tool.windows['w0']
+
+    # ------------------------------------------------------------------
+    # NMStatWin.func setter
+
+    def test_func_setter_logs_basic(self):
+        self._ch.clear()
+        self.w0.func = 'mean'
+        self.assertEqual(len(self._ch.buffer), 1)
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].func", cmd)
+        self.assertIn("NMStatFuncBasic", cmd)
+        self.assertIn("'mean'", cmd)
+
+    def test_func_setter_logs_maxmin_no_n_mean(self):
+        self._ch.clear()
+        self.w0.func = 'max'
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncMaxMin", cmd)
+        self.assertIn("'max'", cmd)
+        self.assertNotIn("n_mean", cmd)
+
+    def test_func_setter_logs_maxmin_with_n_mean(self):
+        self._ch.clear()
+        self.w0.func = {'name': 'mean@max', 'n_mean': 3}
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncMaxMin", cmd)
+        self.assertIn("'mean@max'", cmd)
+        self.assertIn("n_mean=3", cmd)
+
+    def test_func_setter_logs_level(self):
+        self._ch.clear()
+        self.w0.func = {'name': 'level', 'ylevel': 10.0}
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncLevel", cmd)
+        self.assertIn("ylevel=10.0", cmd)
+
+    def test_func_setter_logs_levelnstd(self):
+        self._ch.clear()
+        self.w0.func = {'name': 'level', 'n_std': 2.0}
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncLevelNstd", cmd)
+        self.assertIn("n_std=2.0", cmd)
+
+    def test_func_setter_logs_risetime(self):
+        self._ch.clear()
+        self.w0.func = {'name': 'risetime+', 'p0': 10.0, 'p1': 90.0}
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncRiseTime", cmd)
+        self.assertIn("p0=10.0", cmd)
+        self.assertIn("p1=90.0", cmd)
+
+    def test_func_setter_logs_decaytime_default_p0(self):
+        self._ch.clear()
+        self.w0.func = 'decaytime+'
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncDecayTime", cmd)
+        self.assertIn("p0=", cmd)
+
+    def test_func_setter_logs_decaytime_custom_p0(self):
+        self._ch.clear()
+        self.w0.func = {'name': 'decaytime+', 'p0': 50.0}
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncDecayTime", cmd)
+        self.assertIn("p0=50.0", cmd)
+
+    def test_func_setter_logs_fwhm_default_p0_p1(self):
+        self._ch.clear()
+        self.w0.func = 'fwhm+'
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncFWHM", cmd)
+        self.assertIn("p0=", cmd)
+        self.assertIn("p1=", cmd)
+
+    def test_func_setter_logs_fwhm_custom_p0_p1(self):
+        self._ch.clear()
+        self.w0.func = {'name': 'fwhm+', 'p0': 30.0, 'p1': 70.0}
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("NMStatFuncFWHM", cmd)
+        self.assertIn("p0=30.0", cmd)
+        self.assertIn("p1=70.0", cmd)
+
+    def test_func_setter_none_does_not_log(self):
+        self._ch.clear()
+        self.w0.func = None
+        self.assertEqual(len(self._ch.buffer), 0)
+
+    # ------------------------------------------------------------------
+    # NMStatWin scalar setters
+
+    def test_x0_setter_logs(self):
+        self._ch.clear()
+        self.w0.x0 = 100.0
+        self.assertEqual(len(self._ch.buffer), 1)
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].x0", cmd)
+        self.assertIn("100.0", cmd)
+
+    def test_x1_setter_logs(self):
+        self._ch.clear()
+        self.w0.x1 = 200.0
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].x1", cmd)
+        self.assertIn("200.0", cmd)
+
+    def test_on_setter_logs_false(self):
+        self._ch.clear()
+        self.w0.on = False
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].on", cmd)
+        self.assertIn("False", cmd)
+
+    def test_bsln_on_setter_logs_true(self):
+        self._ch.clear()
+        self.w0.bsln_on = True
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].bsln_on", cmd)
+        self.assertIn("True", cmd)
+
+    def test_bsln_x0_setter_logs(self):
+        self._ch.clear()
+        self.w0.bsln_x0 = -10.0
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].bsln_x0", cmd)
+        self.assertIn("-10.0", cmd)
+
+    def test_bsln_x1_setter_logs(self):
+        self._ch.clear()
+        self.w0.bsln_x1 = 0.0
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].bsln_x1", cmd)
+        self.assertIn("0.0", cmd)
+
+    def test_bsln_func_setter_logs(self):
+        self._ch.clear()
+        self.w0.bsln_func = 'mean'
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows['w0'].bsln_func", cmd)
+        self.assertIn("'mean'", cmd)
+
+    def test_bsln_func_setter_none_does_not_log(self):
+        self._ch.clear()
+        self.w0.bsln_func = None
+        self.assertEqual(len(self._ch.buffer), 0)
+
+    # ------------------------------------------------------------------
+    # NMStatWinContainer.new()
+
+    def test_windows_new_logs(self):
+        self._ch.clear()
+        self.tool.windows.new()
+        self.assertEqual(len(self._ch.buffer), 1)
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.windows.new(", cmd)
+        self.assertIn("'w1'", cmd)
+
+    # ------------------------------------------------------------------
+    # NMToolStats tool-level flag setters
+
+    def test_xclip_setter_logs(self):
+        self._ch.clear()
+        self.tool.xclip = True
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.xclip", cmd)
+        self.assertIn("True", cmd)
+
+    def test_ignore_nans_setter_logs(self):
+        self._ch.clear()
+        self.tool.ignore_nans = True
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.ignore_nans", cmd)
+        self.assertIn("True", cmd)
+
+    def test_results_to_history_setter_logs(self):
+        self._ch.clear()
+        self.tool.results_to_history = True
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.results_to_history", cmd)
+        self.assertIn("True", cmd)
+
+    def test_results_to_cache_setter_logs_false(self):
+        self._ch.clear()
+        self.tool.results_to_cache = False
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.results_to_cache", cmd)
+        self.assertIn("False", cmd)
+
+    def test_results_to_numpy_setter_logs(self):
+        self._ch.clear()
+        self.tool.results_to_numpy = True
+        cmd = self._ch.buffer[0]['command']
+        self.assertIn("stats.results_to_numpy", cmd)
+        self.assertIn("True", cmd)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
