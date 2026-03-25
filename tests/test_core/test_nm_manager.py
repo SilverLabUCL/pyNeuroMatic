@@ -9,7 +9,6 @@ acquiring and simulating electrophysiology data.
 import unittest
 
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.core.nm_project import NMProject
 from pyneuromatic.core.nm_command_history import NMCommandHistory, get_command_history
 
 QUIET = True
@@ -30,17 +29,15 @@ class NMManagerTestBase(unittest.TestCase):
         self.select_values = {}
         self.select_keys = {}
 
-        p = self.nm.project
-
         for ifolder in range(NUMFOLDERS):
             fselect = False
             if ilast or ifolder == ISELECT:
-                f = p.folders.new(select=True)
+                f = self.nm.folders.new(select=True)
                 self.select_values["folder"] = f
                 self.select_keys["folder"] = f.name
                 fselect = True
             else:
-                f = p.folders.new(select=False)
+                f = self.nm.folders.new(select=False)
             jdata = 0
             for idataseries in range(len(DATASERIES)):
                 prefix = DATASERIES[idataseries]
@@ -88,20 +85,21 @@ class NMManagerTestBase(unittest.TestCase):
             self.data_set0 = ["data0", "avg0", "stim0"]
             f.data.sets.add("set0", self.data_set0)
             f.dataseries.sets.add("set0", ["data", "avg"])
-        p.folders.sets.add("set0", ["folder0", "folder1"])
+        self.nm.folders.sets.add("set0", ["folder0", "folder1"])
 
 
 class TestNMManagerInit(NMManagerTestBase):
     """Tests for NMManager initialization."""
 
-    def test_creates_project(self):
-        self.assertIsInstance(self.nm.project, NMProject)
+    def test_has_folders(self):
+        from pyneuromatic.core.nm_folder import NMFolderContainer
+        self.assertIsInstance(self.nm.folders, NMFolderContainer)
 
-    def test_project_named_root(self):
-        self.assertEqual(self.nm.project.name, "root")
+    def test_name_is_nm(self):
+        self.assertEqual(self.nm.name, "nm")
 
-    def test_project_not_none(self):
-        self.assertIsNotNone(self.nm.project)
+    def test_folders_not_none(self):
+        self.assertIsNotNone(self.nm.folders)
 
 
 class TestNMManagerSelect(NMManagerTestBase):
@@ -231,14 +229,12 @@ class TestNMManagerRunKeys(NMManagerTestBase):
         self.assertEqual(elist, [s])
 
     def test_run_keys_with_folder_set(self):
-        p = self.nm.project
-        p.folders.run_target = "set0"
+        self.nm.folders.run_target = "set0"
         elist = self.nm.run_keys(dataseries_priority=True)
         self.assertEqual(len(elist), 2)  # set0 has folder0 and folder1
 
     def test_run_keys_with_folder_all(self):
-        p = self.nm.project
-        p.folders.run_target = "all"
+        self.nm.folders.run_target = "all"
         elist = self.nm.run_keys(dataseries_priority=True)
         self.assertEqual(len(elist), NUMFOLDERS)
 
@@ -441,8 +437,7 @@ class TestNMManagerRunGroupTarget(NMManagerTestBase):
         self.assertGreater(len(elist), 0)
 
     def test_group_target_string_is_preserved_in_run_target(self):
-        p = self.nm.project
-        f = p.folders.get("folder1")
+        f = self.nm.folders.get("folder1")
         ds = f.dataseries.get("stim")
         ds.epochs.run_target = "group0"
         self.assertEqual(ds.epochs.run_target, "group0")
@@ -523,7 +518,7 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
 
     def test_select_epoch(self):
         # Get a specific epoch from a different folder/dataseries
-        f = self.nm.project.folders["folder2"]
+        f = self.nm.folders["folder2"]
         ds = f.dataseries["stim"]
         epoch = ds.epochs["E3"]
 
@@ -535,7 +530,7 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
 
     def test_select_channel(self):
         # Get a specific channel
-        f = self.nm.project.folders["folder1"]
+        f = self.nm.folders["folder1"]
         ds = f.dataseries["avg"]
         channel = ds.channels["B"]
 
@@ -548,7 +543,7 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         self.assertIn("epoch", self.nm.select_keys)
 
     def test_select_dataseries(self):
-        f = self.nm.project.folders["folder3"]
+        f = self.nm.folders["folder3"]
         ds = f.dataseries["stim"]
 
         self.nm.select_value_set(ds)
@@ -560,7 +555,7 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         self.assertIn("epoch", self.nm.select_keys)
 
     def test_select_folder(self):
-        f = self.nm.project.folders["folder4"]
+        f = self.nm.folders["folder4"]
 
         self.nm.select_value_set(f)
 
@@ -571,7 +566,7 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         self.assertIn("epoch", self.nm.select_keys)
 
     def test_select_data(self):
-        f = self.nm.project.folders["folder1"]
+        f = self.nm.folders["folder1"]
         data = f.data["data5"]
 
         self.nm.select_value_set(data)
@@ -589,7 +584,7 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         }
 
         # Now select a different dataseries in same folder
-        f = self.nm.project.folders["folder0"]
+        f = self.nm.folders["folder0"]
         ds = f.dataseries["avg"]
 
         self.nm.select_value_set(ds)
@@ -729,7 +724,7 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
 
     def test_select_value_set_logs_via_select_keys(self):
         self.nm.command_history.clear()
-        folder = self.nm.project.folders["folder0"]
+        folder = self.nm.folders["folder0"]
         self.nm.select_value_set(folder)
         buf = self.nm.command_history.buffer
         self.assertEqual(len(buf), 1)

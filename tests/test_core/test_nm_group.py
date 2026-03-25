@@ -469,7 +469,7 @@ class TestNMEpochContainerGroups(unittest.TestCase):
 
     def setUp(self):
         self.nm = NMManager(quiet=QUIET)
-        folder = self.nm.project.folders.new("f0")
+        folder = self.nm.folders.new("f0")
         self.ds = folder.dataseries.new("Record")
         # Create 6 epochs
         for i in range(6):

@@ -265,8 +265,8 @@ class TestNMObjectContainerParameters(NMObjectContainerTestBase):
 
     def test_map1_copy_has_copy_of(self):
         plist = self.map1_copy.parameters
-        # NMManager is not an NMObject, so path_str is just the container name
-        self.assertEqual(plist["copy of"], CNAME1)
+        # path_str includes NMManager (NMObject root) prefix
+        self.assertEqual(plist["copy of"], NM1.name + "." + CNAME1)
 
 
 class TestNMObjectContainerContentType(NMObjectContainerTestBase):
@@ -850,14 +850,14 @@ class TestNMObjectContainerDuplicate(NMObjectContainerTestBase):
         o = self.map0.get(ONLIST0[1])
         self.assertFalse(c == o)
         pc = c.parameters
-        self.assertEqual(pc["copy of"], ONLIST0[1])
+        self.assertEqual(pc["copy of"], NM0.name + "." + ONLIST0[1])
 
     def test_duplicate_with_custom_name(self):
         c = self.map0.duplicate(ONLIST0[0], "test")
         self.assertEqual(c.name, "test")
         self.assertEqual(len(self.map0), len(ONLIST0) + 1)
         pc = c.parameters
-        self.assertEqual(pc["copy of"], ONLIST0[0])
+        self.assertEqual(pc["copy of"], NM0.name + "." + ONLIST0[0])
 
 
 class TestNMObjectContainerNew(NMObjectContainerTestBase):

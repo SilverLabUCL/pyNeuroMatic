@@ -15,7 +15,6 @@ __license__ = "MIT"
 # Import core components for convenient access
 try:
     from pyneuromatic.core.nm_manager import NMManager
-    from pyneuromatic.core.nm_project import NMProject
     from pyneuromatic.core.nm_folder import NMFolder
     from pyneuromatic.core.nm_data import NMData
     
@@ -29,7 +28,6 @@ try:
         '__license__',
         # Core classes
         'NMManager',
-        'NMProject',
         'NMFolder',
         'NMData',
         # Submodules

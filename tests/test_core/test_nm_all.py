@@ -15,7 +15,6 @@ import tests.test_core.test_nm_folder as test_nm_folder
 import tests.test_core.test_nm_manager as test_nm_manager
 import tests.test_core.test_nm_object as test_nm_object
 import tests.test_core.test_nm_object_container as test_nm_object_container
-import tests.test_core.test_nm_project as test_nm_project
 import tests.test_core.test_nm_sets as test_nm_sets
 import tests.test_core.test_nm_utilities as test_nm_utilities
 
@@ -36,7 +35,6 @@ if __name__ == "__main__":
     # suite.addTests(loader.loadTestsFromModule(nm_data_test))
     # suite.addTests(loader.loadTestsFromModule(nm_dataseries_test))
     # suite.addTests(loader.loadTestsFromModule(nm_folder_test))
-    # suite.addTests(loader.loadTestsFromModule(nm_project_test))
     # suite.addTests(loader.loadTestsFromModule(test_nm_channel))
     # suite.addTests(loader.loadTestsFromModule(nm_epoch_test))
 

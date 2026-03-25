@@ -514,8 +514,8 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
         # Build a real NMDataSeries with 5 epochs for set-creation tests
         self.nm = NMManager(quiet=True)
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("f0")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("f0")
         self.ds = self.folder.dataseries.new("Record")
         for i in range(5):
             self.ds.epochs.new("E%d" % i)
@@ -944,8 +944,8 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
             nparray=np.array(array_names, dtype=object),
         )
         self.nm = NMManager(quiet=True)
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("f0")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("f0")
         self.ds = self.folder.dataseries.new("Record")
         for i in range(20):
             self.ds.epochs.new("E%d" % i)
@@ -1134,8 +1134,8 @@ class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
             nparray=np.array(array_names, dtype=object),
         )
         self.nm = NMManager(quiet=True)
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("f0")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("f0")
         self.ds = self.folder.dataseries.new("Record")
         for i in range(5):
             self.ds.epochs.new("E%d" % i)

@@ -244,7 +244,9 @@ class TestNMObjectContent(NMObjectTestBase):
         self.assertEqual(self.o0.content, {"nmobject": self.o0.name})
 
     def test_content_tree(self):
-        ct = {"nmobject": self.o0.name}
+        # content_tree walks up parent chain; o0's parent is NM0 (NMManager, NMObject)
+        ct = dict(NM0.content)
+        ct.update(self.o0.content)
         self.assertEqual(self.o0.content_tree, ct)
 
 
@@ -252,26 +254,33 @@ class TestNMObjectPath(NMObjectTestBase):
     """Tests for NMObject path properties."""
 
     def test_path_list(self):
-        expected_path = [self.o0.name]
+        # o0's parent is NM0 (NMManager, NMObject) so path includes manager name
+        expected_path = [NM0.name, self.o0.name]
         self.assertEqual(self.o0.path, expected_path)
 
     def test_path_str(self):
-        expected_str = self.o0.name
+        expected_str = NM0.name + "." + self.o0.name
         self.assertEqual(self.o0.path_str, expected_str)
 
     def test_path_objects(self):
         path_objs = self.o0.path_objects
-        self.assertEqual(len(path_objs), 1)
-        self.assertIs(path_objs[0], self.o0)
+        self.assertEqual(len(path_objs), 2)
+        self.assertIs(path_objs[0], NM0)
+        self.assertIs(path_objs[1], self.o0)
+
+    def test_path_without_parent(self):
+        o_root = NMObject(parent=None, name=ONAME0)
+        self.assertEqual(o_root.path, [ONAME0])
+        self.assertEqual(o_root.path_str, ONAME0)
 
     def test_nested_object_path(self):
         o2 = NMObject2(parent=NM0, name=ONAME0)
-        expected_path = [ONAME0, "myobject"]
+        expected_path = [NM0.name, ONAME0, "myobject"]
         self.assertEqual(o2.myobject.path, expected_path)
 
     def test_nested_object_path_str(self):
         o2 = NMObject2(parent=NM0, name=ONAME0)
-        expected_str = ONAME0 + ".myobject"
+        expected_str = NM0.name + "." + ONAME0 + ".myobject"
         self.assertEqual(o2.myobject.path_str, expected_str)
 
 

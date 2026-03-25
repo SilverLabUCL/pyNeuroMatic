@@ -38,10 +38,9 @@ import pyneuromatic.core.nm_utilities as nmu
 """
 NM class tree:
 
-NMManager
-    NMProject (root)
-        NMFolderContainer
-            NMFolder (folder0, folder1...)
+NMManager (NMObject, root)
+    NMFolderContainer
+        NMFolder (folder0, folder1...)
                 NMDataContainer
                     NMData (recordA0, recordA1... avgA0, avgB0)
                 NMDataSeriesContainer
@@ -452,7 +451,7 @@ class NMFolderContainer(NMObjectContainer):
         quiet: bool = nmc.QUIET
     ) -> NMFolder | None:
         actual_name = self._newkey(name)
-        # Use self._parent (NMProject) to skip container in parent chain,
+        # Use self._parent (NMManager) to skip container in parent chain,
         # consistent with NMData, NMDataSeries, NMChannel, NMEpoch
         f = NMFolder(parent=self._parent, name=actual_name)
         if super()._add(f, select=select, quiet=quiet):
