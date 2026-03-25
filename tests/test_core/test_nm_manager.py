@@ -598,22 +598,79 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
 class TestNMManagerCommandHistory(NMManagerTestBase):
     """Tests for NMManager command history logging."""
 
+    def setUp(self):
+        # Use command_history=True so history is active for all tests in this class.
+        # NMManagerTestBase.setUp hardcodes NMManager(quiet=QUIET), so we replicate
+        # it here with the extra flag instead of calling super().
+        self.nm = NMManager(quiet=QUIET, command_history=True)
+        ilast = ISELECT == -1
+        self.select_values = {}
+        self.select_keys = {}
+
+        for ifolder in range(NUMFOLDERS):
+            fselect = False
+            if ilast or ifolder == ISELECT:
+                f = self.nm.folders.new(select=True)
+                self.select_values["folder"] = f
+                self.select_keys["folder"] = f.name
+                fselect = True
+            else:
+                f = self.nm.folders.new(select=False)
+            jdata = 0
+            for idataseries in range(len(DATASERIES)):
+                prefix = DATASERIES[idataseries]
+                for idata in range(NUMDATA[idataseries]):
+                    n = prefix + str(idata)
+                    if ilast or jdata == ISELECT:
+                        d = f.data.new(n, select=True)
+                        if fselect:
+                            self.select_values["data"] = d
+                            self.select_keys["data"] = d.name
+                    else:
+                        d = f.data.new(n, select=False)
+                    jdata += 1
+                ds_select = False
+                if ilast or idataseries == ISELECT:
+                    ds = f.dataseries.new(prefix, select=True)
+                    if fselect:
+                        self.select_values["dataseries"] = ds
+                        self.select_keys["dataseries"] = ds.name
+                        ds_select = True
+                else:
+                    ds = f.dataseries.new(prefix, select=False)
+                for ichannel in range(NUMCHANNELS[idataseries]):
+                    if ilast or ichannel == ISELECT:
+                        c = ds.channels.new(select=True)
+                        if ds_select:
+                            self.select_values["channel"] = c
+                            self.select_keys["channel"] = c.name
+                    else:
+                        c = ds.channels.new(select=False)
+                for iepoch in range(NUMEPOCHS[idataseries]):
+                    if ilast or iepoch == ISELECT:
+                        e = ds.epochs.new(select=True)
+                        if ds_select:
+                            self.select_values["epoch"] = e
+                            self.select_keys["epoch"] = e.name
+                    else:
+                        e = ds.epochs.new(select=False)
+
     def test_command_history_property_returns_instance(self):
         self.assertIsInstance(self.nm.command_history, NMCommandHistory)
 
     def test_init_logs_nm_manager(self):
         # nm = NMManager() is the first entry; workspace tool_add() calls follow
-        fresh = NMManager(quiet=True)
+        fresh = NMManager(quiet=True, command_history=True)
         buf = fresh.command_history.buffer
         self.assertGreaterEqual(len(buf), 1)
         self.assertEqual(buf[0]["command"], "nm = NMManager()")
 
     def test_nm_name_default(self):
-        fresh = NMManager(quiet=True)
+        fresh = NMManager(quiet=True, command_history=True)
         self.assertEqual(fresh.command_history.nm_name, "nm")
 
     def test_nm_name_custom(self):
-        fresh = NMManager(quiet=True, nm_name="manager")
+        fresh = NMManager(quiet=True, nm_name="manager", command_history=True)
         buf = fresh.command_history.buffer
         self.assertEqual(fresh.command_history.nm_name, "manager")
         self.assertEqual(buf[0]["command"], "manager = NMManager()")

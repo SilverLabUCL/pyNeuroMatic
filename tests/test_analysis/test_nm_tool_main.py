@@ -3327,7 +3327,7 @@ class TestToolMainOpLogging(unittest.TestCase):
         from pyneuromatic.core.nm_command_history import (
             NMCommandHistory, set_command_history, get_command_history,
         )
-        self._ch = NMCommandHistory(quiet=True, log_to_nm_history=False)
+        self._ch = NMCommandHistory(enabled=True, quiet=True, log_to_nm_history=False)
         set_command_history(self._ch)
 
     def test_op_setter_logs_command(self):
