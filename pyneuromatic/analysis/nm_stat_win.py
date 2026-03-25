@@ -43,6 +43,7 @@ from pyneuromatic.analysis.nm_stat_func import (
     FUNC_NAMES_BSLN,
     _stat_func_from_dict,
 )
+from pyneuromatic.core.nm_command_history import add_nm_command
 from pyneuromatic.analysis.nm_stat_utilities import stat
 from pyneuromatic.core.nm_data import NMData
 import pyneuromatic.core.nm_history as nmh
@@ -82,12 +83,14 @@ class NMStatWin:
         self,
         name: str = "NMStatWin0",
         win: dict[str, object] | None = None,
+        nm_path: str = "stats.windows",
     ) -> None:
         if not isinstance(name, str):
             raise TypeError(nmu.type_error_str(name, "name", "string"))
         if not name or not nmu.name_ok(name):
             raise ValueError("name: %s" % name)
         self._name = name
+        self._nm_path = nm_path
 
         self.__on = True
         self.__func: NMStatFunc | None = None
@@ -191,7 +194,9 @@ class NMStatWin:
 
     @on.setter
     def on(self, on: bool) -> None:
-        return self._on_set(on)
+        self._on_set(on)
+        add_nm_command("%s[%r].on = %r" % (self._nm_path, self._name, self.__on))
+        return None
 
     def _on_set(self, on: bool, quiet: bool = nmc.QUIET) -> None:
         """Set the on flag; raises TypeError if not bool."""
@@ -210,6 +215,12 @@ class NMStatWin:
     @func.setter
     def func(self, func: dict | str) -> None:
         self._func_set(func)
+        if self.__func is not None:
+            params = self.__func._params_str()
+            add_nm_command(
+                "%s[%r].func = %s(%s)"
+                % (self._nm_path, self._name, type(self.__func).__name__, params)
+            )
         return None
 
     def _func_set(
@@ -248,7 +259,9 @@ class NMStatWin:
 
     @x0.setter
     def x0(self, x0: float) -> None:
-        return self._x_set("x0", x0)
+        self._x_set("x0", x0)
+        add_nm_command("%s[%r].x0 = %r" % (self._nm_path, self._name, self.__x0))
+        return None
 
     def _x_set(
         self,
@@ -289,7 +302,9 @@ class NMStatWin:
 
     @x1.setter
     def x1(self, x1: float) -> None:
-        return self._x_set("x1", x1)
+        self._x_set("x1", x1)
+        add_nm_command("%s[%r].x1 = %r" % (self._nm_path, self._name, self.__x1))
+        return None
 
     @property
     def transform(self) -> list[NMTransform] | None:
@@ -339,7 +354,9 @@ class NMStatWin:
 
     @bsln_on.setter
     def bsln_on(self, on: bool) -> None:
-        return self._bsln_on_set(on)
+        self._bsln_on_set(on)
+        add_nm_command("%s[%r].bsln_on = %r" % (self._nm_path, self._name, self.__bsln_on))
+        return None
 
     def _bsln_on_set(self, on: bool, quiet: bool = nmc.QUIET) -> None:
         """Set the bsln_on flag; raises TypeError if not bool."""
@@ -358,6 +375,10 @@ class NMStatWin:
     @bsln_func.setter
     def bsln_func(self, func: dict | str) -> None:
         self._bsln_func_set(func)
+        if self.__bsln_func:
+            add_nm_command(
+                "%s[%r].bsln_func = %r" % (self._nm_path, self._name, self.__bsln_func)
+            )
         return None
 
     def _bsln_func_set(
@@ -418,7 +439,9 @@ class NMStatWin:
 
     @bsln_x0.setter
     def bsln_x0(self, x0: float) -> None:
-        return self._x_set("bsln_x0", x0)
+        self._x_set("bsln_x0", x0)
+        add_nm_command("%s[%r].bsln_x0 = %r" % (self._nm_path, self._name, self.__bsln_x0))
+        return None
 
     @property
     def bsln_x1(self) -> float:
@@ -427,7 +450,9 @@ class NMStatWin:
 
     @bsln_x1.setter
     def bsln_x1(self, x1: float) -> None:
-        return self._x_set("bsln_x1", x1)
+        self._x_set("bsln_x1", x1)
+        add_nm_command("%s[%r].bsln_x1 = %r" % (self._nm_path, self._name, self.__bsln_x1))
+        return None
 
     @property
     def results(self) -> list[dict]:
@@ -552,8 +577,10 @@ class NMStatWinContainer:
     def __init__(
         self,
         name_prefix: str = "w",
+        nm_path: str = "stats.windows",
     ) -> None:
         self._prefix = name_prefix
+        self._nm_path = nm_path
         self._windows: dict[str, NMStatWin] = {}
         self._count = 0
         self.selected_name: str | None = None
@@ -562,11 +589,12 @@ class NMStatWinContainer:
         """Create, register, and return a new NMStatWin with an auto-name."""
         name = "%s%d" % (self._prefix, self._count)
         self._count += 1
-        w = NMStatWin(name=name)
+        w = NMStatWin(name=name, nm_path=self._nm_path)
         self._windows[name] = w
         if self.selected_name is None:
             self.selected_name = name
         nmh.history("new NMStatWin=%s" % name, quiet=quiet)
+        add_nm_command("%s.new(%r)" % (self._nm_path, name))
         return w
 
     def __iter__(self):

@@ -168,6 +168,17 @@ class NMStatFunc:
             r["Δs"] = ds
         return ds
 
+    def _params_str(self) -> str:
+        """Return constructor args as a string for command history logging.
+
+        The name is always the first positional arg.  Subclasses append
+        keyword args for any non-default parameters, e.g.::
+
+            NMStatFuncBasic('mean')          → "'mean'"
+            NMStatFuncMaxMin('max', n_mean=3) → "'max', n_mean=3"
+        """
+        return "%r" % self._name
+
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
         """Execute the stat computation, appending results via run_stat.
@@ -258,6 +269,12 @@ class NMStatFuncMaxMin(NMStatFunc):
             d["n_mean"] = self._n_mean
         return d
 
+    def _params_str(self) -> str:
+        s = "%r" % self._name
+        if self._n_mean is not None:
+            s += ", n_mean=%r" % self._n_mean
+        return s
+
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
         """Run the max/min stat; warn if n_mean <= 1 for mean@ variants."""
@@ -304,6 +321,9 @@ class NMStatFuncLevel(NMStatFunc):
     def to_dict(self) -> dict:
         return {"name": self._name, "ylevel": self._ylevel}
 
+    def _params_str(self) -> str:
+        return "%r, ylevel=%r" % (self._name, self._ylevel)
+
     def compute(self, data, x0, x1, xclip, ignore_nans, run_stat,
                 bsln_result):
         """Find the level crossing at ylevel and optionally add baseline delta."""
@@ -345,6 +365,9 @@ class NMStatFuncLevelNstd(NMStatFunc):
 
     def to_dict(self) -> dict:
         return {"name": self._name, "n_std": self._n_std}
+
+    def _params_str(self) -> str:
+        return "%r, n_std=%r" % (self._name, self._n_std)
 
     @property
     def needs_baseline(self) -> bool:
@@ -423,6 +446,9 @@ class NMStatFuncRiseTime(NMStatFunc):
 
     def to_dict(self) -> dict:
         return {"name": self._name, "p0": self._p0, "p1": self._p1}
+
+    def _params_str(self) -> str:
+        return "%r, p0=%r, p1=%r" % (self._name, self._p0, self._p1)
 
     @property
     def needs_baseline(self) -> bool:
@@ -545,6 +571,9 @@ class NMStatFuncFallTime(NMStatFunc):
     def to_dict(self) -> dict:
         return {"name": self._name, "p0": self._p0, "p1": self._p1}
 
+    def _params_str(self) -> str:
+        return "%r, p0=%r, p1=%r" % (self._name, self._p0, self._p1)
+
     @property
     def needs_baseline(self) -> bool:
         return True
@@ -644,6 +673,9 @@ class NMStatFuncDecayTime(NMStatFunc):
     def to_dict(self) -> dict:
         return {"name": self._name, "p0": self._p0}
 
+    def _params_str(self) -> str:
+        return "%r, p0=%r" % (self._name, self._p0)
+
     @property
     def needs_baseline(self) -> bool:
         return True
@@ -741,6 +773,9 @@ class NMStatFuncFWHM(NMStatFunc):
 
     def to_dict(self) -> dict:
         return {"name": self._name, "p0": self._p0, "p1": self._p1}
+
+    def _params_str(self) -> str:
+        return "%r, p0=%r, p1=%r" % (self._name, self._p0, self._p1)
 
     @property
     def needs_baseline(self) -> bool:
