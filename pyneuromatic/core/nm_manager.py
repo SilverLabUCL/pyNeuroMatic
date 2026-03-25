@@ -30,12 +30,11 @@ from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import NMEpoch
-from pyneuromatic.core.nm_folder import NMFolder
+from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_command_history as nmch
 from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_configurations as nmc
-from pyneuromatic.core.nm_project import NMProject
 from pyneuromatic.core.nm_tool_registry import get_global_registry, NMToolRegistry
 from pyneuromatic.core.nm_workspace import NMWorkspace, NMWorkspaceManager
 import pyneuromatic.core.nm_utilities as nmu
@@ -55,35 +54,34 @@ RUN_ALL = "all"
 """
 NM class tree:
 
-NMManager
-    NMProject (root)
-        NMFolderContainer
-            NMFolder (folder0, folder1...)
-                NMDataContainer
-                    NMData (recordA0, recordA1... avgA0, avgB0)
-                NMDataSeriesContainer
-                    NMDataSeries (record, avg...)
-                        NMChannelContainer
-                            NMChannel (A, B, C...)
-                        NMEpochContainer
-                            NMEpoch (E0, E1, E2...)
+NMManager (NMObject, root)
+    NMFolderContainer
+        NMFolder (folder0, folder1...)
+            NMDataContainer
+                NMData (recordA0, recordA1... avgA0, avgB0)
+            NMDataSeriesContainer
+                NMDataSeries (record, avg...)
+                    NMChannelContainer
+                        NMChannel (A, B, C...)
+                    NMEpochContainer
+                        NMEpoch (E0, E1, E2...)
 """
 
 
-class NMManager:
+class NMManager(NMObject):
     """
     NM Manager - Central manager for pyNeuroMatic.
 
-    Manages the project, tools, and workspaces. Tools are loaded lazily from the
+    Manages folders, tools, and workspaces. Tools are loaded lazily from the
     registry based on the active workspace configuration.
 
-    Note: NMManager is not an NMObject - it sits outside the object hierarchy.
-    The hierarchy starts at NMProject (root).
+    NMManager is the root of the NM object hierarchy (name = nm_name).
 
     Args:
         quiet: Suppress history messages
         workspace: Workspace name to load (None for default)
         config_dir: Custom configuration directory (None for platform default)
+        nm_name: Variable name used in command history (default "nm")
 
     Example:
         nm = NMManager(workspace="spike_analysis")
@@ -107,8 +105,11 @@ class NMManager:
         nmch.set_command_history(self.__command_history)
         nmch.add_command(nm_name + " = NMManager()")
 
-        # Create project (root)
-        self.__project = NMProject(parent=self, name="root")
+        # NMManager is the root NMObject (name = nm_name)
+        super().__init__(parent=None, name=nm_name)
+
+        # Create folder container directly (NMManager is the root)
+        self.__folders = NMFolderContainer(parent=self)
 
         # Initialize tool registry and workspace manager
         self._tool_registry: NMToolRegistry = get_global_registry()
@@ -125,7 +126,6 @@ class NMManager:
 
         tstr = str(datetime.datetime.now())
         nmh.history(f"created NM manager {tstr}", quiet=quiet)
-        nmh.history("current NM project is '%s'" % self.__project.name, quiet=quiet)
         nmh.history("current NM tool is '%s'" % self.__toolselect, quiet=quiet)
 
     def _load_workspace_internal(
@@ -254,9 +254,26 @@ class NMManager:
         """Access the centralized NM command history."""
         return self.__command_history
 
+    # override: deep copy not supported (NMManager holds global singletons
+    # like history and command history that cannot be meaningfully duplicated)
+    def __deepcopy__(self, memo: dict) -> None:
+        raise NotImplementedError("NMManager cannot be deep-copied")
+
+    # override: identity-based equality (NMManager is a root object)
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
     @property
-    def project(self) -> NMProject:
-        return self.__project
+    def folders(self) -> NMFolderContainer:
+        return self.__folders
+
+    # override
+    @property
+    def content(self) -> dict:
+        k = super().content
+        if self.__folders is not None:
+            k.update(self.__folders.content)
+        return k
 
     def _iter_select_hierarchy(self):
         """
@@ -271,7 +288,7 @@ class NMManager:
             - container: the NMObjectContainer at this tier
             - selected_value: the currently selected object (or None)
         """
-        folders = self.__project.folders
+        folders = self.__folders
         if folders is None:
             return
 
@@ -349,7 +366,7 @@ class NMManager:
 
         # Traverse hierarchy, setting values as we go so subsequent tiers
         # use the newly selected parent
-        folders = self.__project.folders
+        folders = self.__folders
         if folders is None:
             return
 
@@ -410,7 +427,7 @@ class NMManager:
         # - NMChannel._parent = NMDataSeries (not NMChannelContainer)
         # - NMDataSeries._parent = NMFolder (not NMDataSeriesContainer)
         # - NMData._parent = NMFolder (not NMDataContainer)
-        # - NMFolder._parent = NMProject (not NMFolderContainer)
+        # - NMFolder._parent = NMManager (not NMFolderContainer)
         select: dict[str, str] = {}
         current = obj
 
@@ -451,9 +468,7 @@ class NMManager:
         dataseries_priority: bool = True
     ) -> list[dict[str, NMObject]]:
         elist: list[dict[str, NMObject]] = []
-        # for p in self.__project_container.run_values:
-        p = self.__project
-        folders = p.folders
+        folders = self.__folders
         if folders is None:
             return elist
         flist = folders.run_targets
@@ -576,9 +591,9 @@ class NMManager:
         if "folder" not in run:
             raise KeyError("missing run 'folder' key")
 
-        folders = self.__project.folders
+        folders = self.__folders
         if folders is None:
-            raise ValueError("project has no folder container")
+            raise ValueError("no folder container")
 
         # Set folder run target (allows select/all/name/set)
         folders.run_target = run["folder"]
@@ -635,8 +650,7 @@ class NMManager:
 
     def run_reset_all(self) -> None:
         """Reset all run targets to use the selected item at each tier."""
-        p = self.__project
-        folders = p.folders
+        folders = self.__folders
         if folders is None:
             return None
         folders.run_target = RUN_SELECTED
@@ -812,70 +826,17 @@ class NMManager:
 
 
 if __name__ == "__main__":
-
-    pnts = 30
-
+    # Basic usage example
     nm = NMManager()
-    # p = nm.projects.select_value
-    # p = nm.project
-    assert nm.project.folders is not None
-    f0 = nm.project.folders.new("myfolder0")
-    f1 = nm.project.folders.new("myfolder1")
-    nm.project.folders.selected_name = "myfolder1"
-    assert isinstance(f1, NMFolder)
 
-    ydata = np.random.normal(loc=0, scale=1, size=pnts)
-    f1.data.new("recordA0", nparray=ydata)
+    # Create a folder and add data
+    folder = nm.folders.new("folder0")
+    folder.data.new("recordA0", nparray=np.array([1.0, 2.0, 3.0]))
+    folder.data.new("recordA1", nparray=np.array([4.0, 5.0, 6.0]))
 
-    ydata = np.random.normal(loc=0, scale=1, size=pnts)
-    dx = 1
-    xdata = np.arange(0, pnts * dx, dx)
-    ydata = 3.2 * xdata + 5.7
-    f1.data.new("recordA1", nparray=ydata)
+    # Set run targets and run a tool
+    nm.run_keys_set({"folder": "folder0", "data": "all"})
+    nm.run_tool(toolname="stats")
 
-    ydata = np.random.normal(loc=0, scale=1, size=pnts)
-    f1.data.new("recordA2", nparray=ydata)
+    print(nm.command_history.buffer)
 
-    ydata = np.random.normal(loc=0, scale=1, size=pnts)
-    f1.data.new("recordA3", nparray=ydata)
-
-    f1.data.sets.new("set1")
-    f1.data.sets.add("set1", ["recordA0", "recordA2", "recordA3"])
-
-    e = {
-         "folder": "myfolder1",
-         "data": "set1"
-         }
-
-    nm.run_keys_set(e)
-
-    stats = nm.stats
-
-    if stats:
-        w0 = nm.stats.windows.get("w0")
-        w0.func = "mean"
-        w1 = nm.stats.windows.new()
-        w1.func = "mean"
-        # w1.x0 = 3 * dx
-        # w1.x1 = 50 * dx
-        w1.bsln_on = True
-        w1.bsln_x0 = 0
-        w1.bsln_x1 = 10
-        w1.bsln_func = "mean"
-        w1.bsln_subtract = True
-        w2 = nm.stats.windows.new()
-        w2.func = "mean+sem"
-        w3 = nm.stats.windows.new()
-        w3.func = "median"
-
-    for i in range(1):
-        nm.run_tool()
-
-    # f1.toolresults.clear()
-    # print(len(f1.toolresults))
-
-    # print(nm.projects.run_key)
-    # print(nm.run_keys())
-
-    # p = nm.projects.new("project0")
-    # p.folders.new("folder0")

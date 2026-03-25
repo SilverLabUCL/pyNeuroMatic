@@ -27,7 +27,6 @@ from typing import overload, TYPE_CHECKING
 if TYPE_CHECKING:
     from pyneuromatic.core.nm_folder import NMFolder
     from pyneuromatic.core.nm_manager import NMManager
-    from pyneuromatic.core.nm_project import NMProject
 
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
@@ -41,27 +40,26 @@ class NMObject(object):
 
     NM class tree:
 
-    NMManager (not an NMObject)
-        NMProject (root)
-            NMFolderContainer
-                NMFolder (folder0, folder1...)
-                    NMDataContainer
-                        NMData (recordA0, recordA1... avgA0, avgB0)
-                    NMDataSeriesContainer
-                        NMDataSeries (record, avg...)
-                            NMChannelContainer
-                                NMChannel (A, B, C...)
-                            NMEpochContainer
-                                NMEpoch (E0, E1, E2...)
+    NMManager (NMObject, root)
+        NMFolderContainer
+            NMFolder (folder0, folder1...)
+                NMDataContainer
+                    NMData (recordA0, recordA1... avgA0, avgB0)
+                NMDataSeriesContainer
+                    NMDataSeries (record, avg...)
+                        NMChannelContainer
+                            NMChannel (A, B, C...)
+                        NMEpochContainer
+                            NMEpoch (E0, E1, E2...)
 
     Each NMObject has a path in the hierarchy:
-        - path: list of names, e.g. ['root', 'folder0', 'recordA0']
-        - path_str: dotted string, e.g. 'root.folder0.recordA0'
+        - path: list of names, e.g. ['nm', 'folder0', 'recordA0']
+        - path_str: dotted string, e.g. 'nm.folder0.recordA0'
         - path_objects: list of NMObject references
 
     Known children of NMObject:
-        NMChannel, NMData, NMDataSeries, NMEpoch, NMFolder, NMObjectContainer,
-        NMProject
+        NMChannel, NMData, NMDataSeries, NMEpoch, NMFolder, NMManager,
+        NMObjectContainer
 
     Attributes:
         __created (str): creation date of NMObject.
@@ -83,7 +81,6 @@ class NMObject(object):
         path_objects
         name
         _manager
-        _project
         _folder
 
     Children of this class should override:
@@ -288,7 +285,7 @@ class NMObject(object):
     def path(self) -> list[str]:
         """Hierarchy path as list of names.
 
-        Example: ['root', 'folder0', 'recordA0']
+        Example: ['nm', 'folder0', 'recordA0']
 
         Returns:
             List of NMObject names from root to this object.
@@ -303,7 +300,7 @@ class NMObject(object):
     def path_str(self) -> str:
         """Hierarchy path as dotted string.
 
-        Example: 'root.folder0.recordA0'
+        Example: 'nm.folder0.recordA0'
 
         Returns:
             Dotted string path from root to this object.
@@ -314,7 +311,7 @@ class NMObject(object):
     def path_objects(self) -> list[NMObject]:
         """Hierarchy path as list of NMObject references.
 
-        Example: [<NMProject>, <NMFolder>, <NMData>]
+        Example: [<NMManager>, <NMFolder>, <NMData>]
 
         Returns:
             List of NMObject references from root to this object.
@@ -363,10 +360,6 @@ class NMObject(object):
     @property
     def _manager(self) -> NMManager | None:  # find NMManager of this NMObject
         return self._find_parent("NMManager")
-
-    @property
-    def _project(self) -> NMProject | None:  # find NMProject of this NMObject
-        return self._find_parent("NMProject")
 
     @property
     def _folder(self) -> NMFolder | None:  # find NMFolder of this NMObject

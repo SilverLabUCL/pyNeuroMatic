@@ -42,8 +42,8 @@ class TestNMToolProperties(unittest.TestCase):
         self.tool = NMTool()
 
         # Create test objects
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("test_folder")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("test_folder")
         assert isinstance(self.folder, NMFolder)
 
         self.data = self.folder.data.new("test_data")
@@ -121,8 +121,8 @@ class TestNMToolSelectValues(unittest.TestCase):
         self.nm = NMManager(quiet=QUIET)
         self.tool = NMTool()
 
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("test_folder")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("test_folder")
         assert isinstance(self.folder, NMFolder)
 
         self.dataseries = self.folder.dataseries.new("test_ds")
@@ -198,8 +198,8 @@ class TestNMToolSelectKeys(unittest.TestCase):
         self.nm = NMManager(quiet=QUIET)
         self.tool = NMTool()
 
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("test_folder")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("test_folder")
         assert isinstance(self.folder, NMFolder)
 
         self.dataseries = self.folder.dataseries.new("test_ds")
@@ -246,8 +246,8 @@ class TestNMToolRunAll(unittest.TestCase):
 
     def setUp(self):
         self.nm = NMManager(quiet=QUIET)
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("test_folder")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("test_folder")
         assert isinstance(self.folder, NMFolder)
         self.dataseries = self.folder.dataseries.new("test_ds")
         assert isinstance(self.dataseries, NMDataSeries)
@@ -436,8 +436,8 @@ class TestNMToolSubclass(unittest.TestCase):
 
     def test_subclass_can_access_selection(self):
         nm = NMManager(quiet=QUIET)
-        assert nm.project.folders is not None
-        folder = nm.project.folders.new("test_folder")
+        assert nm.folders is not None
+        folder = nm.folders.new("test_folder")
         assert isinstance(folder, NMFolder)
 
         class CustomTool(NMTool):
@@ -479,8 +479,8 @@ class TestNMToolIntegration(unittest.TestCase):
 
     def setUp(self):
         self.nm = NMManager(quiet=QUIET)
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("test_folder")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("test_folder")
         assert isinstance(self.folder, NMFolder)
 
         self.dataseries = self.folder.dataseries.new("test_ds")
@@ -528,8 +528,8 @@ class TestNMToolRunMeta(unittest.TestCase):
 
     def setUp(self):
         self.nm = NMManager(quiet=QUIET)
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("test_folder")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("test_folder")
         assert isinstance(self.folder, NMFolder)
         self.dataseries = self.folder.dataseries.new("test_ds")
         assert isinstance(self.dataseries, NMDataSeries)
@@ -695,8 +695,8 @@ class TestNMManagerRunConfig(unittest.TestCase):
 
     def setUp(self):
         self.nm = NMManager(quiet=QUIET)
-        assert self.nm.project.folders is not None
-        self.folder = self.nm.project.folders.new("folder0")
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("folder0")
         assert isinstance(self.folder, NMFolder)
         self.dataseries = self.folder.dataseries.new("Record")
         assert isinstance(self.dataseries, NMDataSeries)

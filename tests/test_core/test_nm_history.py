@@ -195,10 +195,8 @@ class NMHistoryIntegrationTest(unittest.TestCase):
         self.assertTrue(len(buf) > 0)
         messages = [e["message"] for e in buf]
         found_created = any("created NM manager" in m for m in messages)
-        found_project = any("current NM project" in m for m in messages)
         found_tool = any("current NM tool" in m for m in messages)
         self.assertTrue(found_created)
-        self.assertTrue(found_project)
         self.assertTrue(found_tool)
 
     def test02_nmu_history_routes_to_buffer(self):

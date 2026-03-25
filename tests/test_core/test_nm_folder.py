@@ -14,7 +14,7 @@ from pyneuromatic.core.nm_dataseries import NMDataSeriesContainer
 from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.core.nm_project import NMProject
+from pyneuromatic.core.nm_object import NMObject
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -41,9 +41,9 @@ class TestNMFolderInit(NMFolderTestBase):
         self.assertEqual(folder._parent, self.nm)
 
     def test_init_rejects_invalid_copy_arg(self):
-        p = NMProject()
+        obj = NMObject()
         with self.assertRaises(TypeError):
-            NMFolder(copy=p)
+            NMFolder(copy=obj)
 
     def test_data_property(self):
         self.assertIsInstance(self.folder.data, NMDataContainer)
@@ -196,8 +196,7 @@ class TestNMFolderContainer(unittest.TestCase):
 
     def setUp(self):
         self.nm = NMManager(quiet=True)
-        self.project = NMProject(parent=self.nm)
-        self.container = NMFolderContainer(parent=self.project)
+        self.container = NMFolderContainer(parent=self.nm)
 
     def test_content_type(self):
         self.assertEqual(self.container.content_type(), "NMFolder")
@@ -212,9 +211,9 @@ class TestNMFolderContainer(unittest.TestCase):
         self.assertEqual(self.container.selected_name, "folder0")
 
     def test_new_sets_correct_parent(self):
-        # Parent should be container's parent (NMProject), not container itself
+        # Parent should be container's parent (NMManager), not container itself
         folder = self.container.new(name="folder0")
-        self.assertEqual(folder._parent, self.project)
+        self.assertEqual(folder._parent, self.nm)
 
     def test_auto_naming(self):
         f0 = self.container.new()

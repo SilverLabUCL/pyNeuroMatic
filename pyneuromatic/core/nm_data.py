@@ -41,10 +41,9 @@ NP_FILL_VALUE = numpy.nan
 """
 NM class tree:
 
-NMManager
-    NMProject (root)
-        NMFolderContainer
-            NMFolder (folder0, folder1...)
+NMManager (NMObject, root)
+    NMFolderContainer
+        NMFolder (folder0, folder1...)
                 NMDataContainer
                     NMData (recordA0, recordA1... avgA0, avgB0)
                 NMDataSeriesContainer
