@@ -25,7 +25,7 @@ from typing import Any
 import h5py
 
 from pyneuromatic.core.nm_data import NMDataContainer
-from pyneuromatic.core.nm_dataseries import NMDataSeriesContainer
+from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
@@ -273,7 +273,9 @@ class NMFolder(NMObject):
         """
         return self.__metadata
 
-    # DataSeries creation from data names
+    # ------------------------------------------------------------------
+    # Helpers for dataseries methods
+    # ------------------------------------------------------------------
 
     def detect_data_prefixes(self) -> list[str]:
         """Detect unique data prefixes in this folder's data container.
@@ -295,6 +297,86 @@ class NMFolder(NMObject):
                 prefix, _, _ = parsed
                 prefixes.add(prefix)
         return sorted(prefixes)
+
+    def _get_dataseries(self, prefix: str):
+        """Return the NMDataSeries for *prefix*, or raise ValueError."""
+        ds = self.dataseries.get(prefix)
+        if ds is None:
+            raise ValueError("dataseries %r not found" % prefix)
+        return ds
+
+    def _resolve_channel_names(self, ds, channel) -> list[str]:
+        """Resolve *channel* (str | int | list | range) to a list of channel chars.
+
+        Raises TypeError for unsupported types, ValueError for chars not in *ds*.
+        """
+        if isinstance(channel, range):
+            items = list(channel)
+        elif isinstance(channel, list):
+            items = channel
+        else:
+            items = [channel]
+
+        names: list[str] = []
+        for item in items:
+            if isinstance(item, bool):
+                raise TypeError(
+                    "channel must be str or int, got bool"
+                )
+            if isinstance(item, int):
+                ch_name = nmu.channel_char(item)
+                if not ch_name:
+                    raise ValueError("invalid channel number: %d" % item)
+            elif isinstance(item, str):
+                ch_name = item.upper()
+            else:
+                raise TypeError(
+                    "channel must be str or int, got %s" % type(item).__name__
+                )
+            if ds.channels.get(ch_name) is None:
+                raise ValueError(
+                    "channel %r not found in dataseries %r" % (ch_name, ds.name)
+                )
+            names.append(ch_name)
+        return names
+
+    def _resolve_epoch_names(self, ds, epoch) -> list[str]:
+        """Resolve *epoch* (str | int | list | range) to a list of epoch names.
+
+        Epoch names are stored as 'E0', 'E1', etc.
+        Raises TypeError for unsupported types, ValueError for names not in *ds*.
+        """
+        if isinstance(epoch, range):
+            items = list(epoch)
+        elif isinstance(epoch, list):
+            items = epoch
+        else:
+            items = [epoch]
+
+        names: list[str] = []
+        for item in items:
+            if isinstance(item, bool):
+                raise TypeError(
+                    "epoch must be str or int, got bool"
+                )
+            if isinstance(item, int):
+                ep_name = "E%d" % item
+            elif isinstance(item, str):
+                ep_name = item
+            else:
+                raise TypeError(
+                    "epoch must be str or int, got %s" % type(item).__name__
+                )
+            if ds.epochs.get(ep_name) is None:
+                raise ValueError(
+                    "epoch %r not found in dataseries %r" % (ep_name, ds.name)
+                )
+            names.append(ep_name)
+        return names
+
+    # ------------------------------------------------------------------
+    # Dataseries methods
+    # ------------------------------------------------------------------
 
     def new_dataseries(
         self,
@@ -546,89 +628,144 @@ class NMFolder(NMObject):
 
         return ds
 
-    # ------------------------------------------------------------------
-    # Private helpers for dataseries remove_* methods
-    # ------------------------------------------------------------------
+    def copy_dataseries(
+        self,
+        prefix: str,
+        new_prefix: str | None = None,
+        channel=None,
+        epoch=None,
+        folder: "NMFolder | None" = None,
+        quiet: bool = nmc.QUIET,
+    ) -> NMDataSeries | None:
+        """Copy a dataseries to the same or a different folder.
 
-    def _get_dataseries(self, prefix: str):
-        """Return the NMDataSeries for *prefix*, or raise ValueError."""
-        ds = self.dataseries.get(prefix)
-        if ds is None:
-            raise ValueError("dataseries %r not found" % prefix)
+        Deep-copies the NMData arrays for the specified channels and epochs,
+        creates them in the target folder under *new_prefix*, then calls
+        :meth:`assemble_dataseries` to build the dataseries structure.
+
+        Args:
+            prefix: Source dataseries name.
+            new_prefix: Destination prefix.  When copying within the same
+                folder and *new_prefix* is ``None``, ``"C_"`` is prepended
+                automatically.  When copying to a different folder and
+                *new_prefix* is ``None``, *prefix* is reused.
+            channel: Channels to copy — ``None`` (all), str, int, list, or
+                range.
+            epoch: Epochs to copy — ``None`` (all), str, int, list, or
+                range.
+            folder: Destination :class:`NMFolder`.  ``None`` means the same
+                folder.
+            quiet: Suppress history messages.
+
+        Returns:
+            The new :class:`NMDataSeries` in the target folder, or ``None``
+            on failure.
+
+        Raises:
+            ValueError: If source dataseries not found, *new_prefix* already
+                exists in the target folder, or any NMData name would conflict.
+        """
+        import numpy as np
+
+        src_ds = self._get_dataseries(prefix)
+        target = folder if folder is not None else self
+
+        # Resolve new prefix
+        if new_prefix is None:
+            new_prefix = ("C_" + prefix) if (target is self) else prefix
+
+        # Pre-flight: new_prefix must not already be a dataseries in target
+        if target.dataseries.get(new_prefix) is not None:
+            raise ValueError(
+                "dataseries %r already exists in target folder" % new_prefix
+            )
+
+        # Resolve channel/epoch subsets
+        if channel is None:
+            ch_names = list(src_ds.channels)
+        else:
+            ch_names = self._resolve_channel_names(src_ds, channel)
+
+        if epoch is None:
+            ep_names = list(src_ds.epochs)
+        else:
+            ep_names = self._resolve_epoch_names(src_ds, epoch)
+
+        # Map epoch names → epoch numbers for make_data_name
+        ep_nums = []
+        for ep_name in ep_names:
+            try:
+                ep_nums.append(int(ep_name[1:]))
+            except (ValueError, IndexError):
+                raise ValueError("cannot parse epoch number from %r" % ep_name)
+
+        # Build a lookup: (ch_char, ep_num) → source NMData
+        src_lookup: dict[tuple[str, int], object] = {}
+        for ch_name in ch_names:
+            ch = src_ds.channels.get(ch_name)
+            for ep_name, ep_num in zip(ep_names, ep_nums):
+                ep = src_ds.epochs.get(ep_name)
+                # Find the NMData that belongs to both this channel and epoch
+                src_data = None
+                for d in ch.data:
+                    if d in ep.data:
+                        src_data = d
+                        break
+                if src_data is not None:
+                    src_lookup[(ch_name, ep_num)] = src_data
+
+        # Pre-flight: check for NMData name conflicts in target folder
+        ch_indices = {ch: i for i, ch in enumerate(ch_names)}
+        new_names = []
+        for ch_name in ch_names:
+            ch_idx = ch_indices[ch_name]
+            for ep_num in ep_nums:
+                from pyneuromatic.io.base import make_data_name
+                name = make_data_name(new_prefix, ch_idx, ep_num)
+                if target.data.get(name) is not None:
+                    raise ValueError(
+                        "NMData name %r already exists in target folder" % name
+                    )
+                new_names.append(name)
+
+        # Copy data into target folder
+        for ch_name in ch_names:
+            ch_idx = ch_indices[ch_name]
+            for ep_num in ep_nums:
+                from pyneuromatic.io.base import make_data_name
+                name = make_data_name(new_prefix, ch_idx, ep_num)
+                src_data = src_lookup.get((ch_name, ep_num))
+                arr = (
+                    src_data.nparray.copy()
+                    if src_data is not None and src_data.nparray is not None
+                    else np.array([])
+                )
+                # Read xscale/yscale from the source NMData object; channel
+                # xscale is a separate object not propagated by assemble_dataseries
+                xscale_dict = src_data.xscale.to_dict() if src_data is not None else {}
+                yscale_dict = src_data.yscale.to_dict() if src_data is not None else {}
+                target.data.new(
+                    name,
+                    nparray=arr,
+                    xscale=xscale_dict if xscale_dict else None,
+                    yscale=yscale_dict if yscale_dict else None,
+                    quiet=True,
+                )
+
+        ds = target.assemble_dataseries(new_prefix, quiet=True)
+
+        n_ch = len(ch_names)
+        n_ep = len(ep_nums)
+        src_desc = "'%s' -> '%s'" % (prefix, new_prefix)
+        if target is not self:
+            src_desc += " (to folder '%s')" % target.name
+        nmh.history(
+            "copied dataseries %s: %d channel(s), %d epoch(s)"
+            % (src_desc, n_ch, n_ep),
+            path=self.path_str,
+            quiet=quiet,
+        )
         return ds
-
-    def _resolve_channel_names(self, ds, channel) -> list[str]:
-        """Resolve *channel* (str | int | list | range) to a list of channel chars.
-
-        Raises TypeError for unsupported types, ValueError for chars not in *ds*.
-        """
-        if isinstance(channel, range):
-            items = list(channel)
-        elif isinstance(channel, list):
-            items = channel
-        else:
-            items = [channel]
-
-        names: list[str] = []
-        for item in items:
-            if isinstance(item, bool):
-                raise TypeError(
-                    "channel must be str or int, got bool"
-                )
-            if isinstance(item, int):
-                ch_name = nmu.channel_char(item)
-                if not ch_name:
-                    raise ValueError("invalid channel number: %d" % item)
-            elif isinstance(item, str):
-                ch_name = item.upper()
-            else:
-                raise TypeError(
-                    "channel must be str or int, got %s" % type(item).__name__
-                )
-            if ds.channels.get(ch_name) is None:
-                raise ValueError(
-                    "channel %r not found in dataseries %r" % (ch_name, ds.name)
-                )
-            names.append(ch_name)
-        return names
-
-    def _resolve_epoch_names(self, ds, epoch) -> list[str]:
-        """Resolve *epoch* (str | int | list | range) to a list of epoch names.
-
-        Epoch names are stored as 'E0', 'E1', etc.
-        Raises TypeError for unsupported types, ValueError for names not in *ds*.
-        """
-        if isinstance(epoch, range):
-            items = list(epoch)
-        elif isinstance(epoch, list):
-            items = epoch
-        else:
-            items = [epoch]
-
-        names: list[str] = []
-        for item in items:
-            if isinstance(item, bool):
-                raise TypeError(
-                    "epoch must be str or int, got bool"
-                )
-            if isinstance(item, int):
-                ep_name = "E%d" % item
-            elif isinstance(item, str):
-                ep_name = item
-            else:
-                raise TypeError(
-                    "epoch must be str or int, got %s" % type(item).__name__
-                )
-            if ds.epochs.get(ep_name) is None:
-                raise ValueError(
-                    "epoch %r not found in dataseries %r" % (ep_name, ds.name)
-                )
-            names.append(ep_name)
-        return names
-
-    # ------------------------------------------------------------------
-    # Public dataseries remove methods
-    # ------------------------------------------------------------------
 
     def remove_dataseries(
         self,
