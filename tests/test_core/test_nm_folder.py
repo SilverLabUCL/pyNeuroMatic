@@ -607,6 +607,119 @@ class TestNMFolderNewDataseries(NMFolderTestBase):
         self.assertNotIn("RecordA0", self.folder.data)
 
 
+class TestNMFolderCopyDataseries(NMFolderTestBase):
+    """Tests for NMFolder.copy_dataseries()."""
+
+    def setUp(self):
+        super().setUp()
+        self.folder.new_dataseries(
+            "Record", n_channels=2, n_epochs=3, n_points=10,
+            x_start=0.0, dx=0.1, x_units="ms", y_units="mV", quiet=True,
+        )
+        self.ds = self.folder.dataseries.get("Record")
+
+    # --- auto prefix ---
+
+    def test_auto_prefix_same_folder(self):
+        ds2 = self.folder.copy_dataseries("Record", quiet=True)
+        self.assertIsNotNone(ds2)
+        self.assertIsNotNone(self.folder.dataseries.get("C_Record"))
+
+    def test_explicit_new_prefix(self):
+        self.folder.copy_dataseries("Record", "Avg_Record", quiet=True)
+        self.assertIsNotNone(self.folder.dataseries.get("Avg_Record"))
+
+    def test_copy_to_other_folder_reuses_prefix(self):
+        other = NMFolder(parent=self.nm, name="Other")
+        self.folder.copy_dataseries("Record", folder=other, quiet=True)
+        self.assertIsNotNone(other.dataseries.get("Record"))
+
+    def test_copy_to_other_folder_explicit_prefix(self):
+        other = NMFolder(parent=self.nm, name="Other")
+        self.folder.copy_dataseries("Record", "Stim", folder=other, quiet=True)
+        self.assertIsNotNone(other.dataseries.get("Stim"))
+
+    # --- data integrity ---
+
+    def test_nparray_is_deep_copied(self):
+        import numpy as np
+        for name in list(self.folder.data):
+            self.folder.data.get(name).nparray = np.ones(10) * 42.0
+        self.folder.copy_dataseries("Record", quiet=True)
+        # Mutate source; copy must be unaffected
+        for name in list(self.folder.data):
+            if not name.startswith("C_"):
+                self.folder.data.get(name).nparray[:] = 0.0
+        copy_ds = self.folder.dataseries.get("C_Record")
+        ch_a = copy_ds.channels.get("A")
+        self.assertTrue(all(d.nparray[0] == 42.0 for d in ch_a.data))
+
+    def test_xscale_preserved(self):
+        copy_ds = self.folder.copy_dataseries("Record", quiet=True)
+        ch_a = copy_ds.channels.get("A")
+        # xscale lives on individual NMData objects (channel xscale is separate)
+        d = ch_a.data[0]
+        self.assertAlmostEqual(d.xscale.start, 0.0)
+        self.assertAlmostEqual(d.xscale.delta, 0.1)
+        self.assertEqual(d.xscale.units, "ms")
+
+    def test_yscale_preserved(self):
+        copy_ds = self.folder.copy_dataseries("Record", quiet=True)
+        ch_a = copy_ds.channels.get("A")
+        d = ch_a.data[0]
+        self.assertEqual(d.yscale.units, "mV")
+
+    def test_original_dataseries_unchanged(self):
+        self.folder.copy_dataseries("Record", quiet=True)
+        self.assertIsNotNone(self.folder.dataseries.get("Record"))
+        self.assertEqual(len(list(self.ds.channels)), 2)
+        self.assertEqual(len(list(self.ds.epochs)), 3)
+
+    # --- channel/epoch subsetting ---
+
+    def test_copy_subset_channels(self):
+        ds2 = self.folder.copy_dataseries("Record", channel="A", quiet=True)
+        self.assertIsNotNone(ds2.channels.get("A"))
+        self.assertIsNone(ds2.channels.get("B"))
+
+    def test_copy_subset_channels_by_int(self):
+        ds2 = self.folder.copy_dataseries("Record", channel=0, quiet=True)
+        self.assertIsNotNone(ds2.channels.get("A"))
+        self.assertIsNone(ds2.channels.get("B"))
+
+    def test_copy_subset_epochs(self):
+        ds2 = self.folder.copy_dataseries("Record", epoch=range(0, 2), quiet=True)
+        self.assertIsNotNone(ds2.epochs.get("E0"))
+        self.assertIsNotNone(ds2.epochs.get("E1"))
+        self.assertIsNone(ds2.epochs.get("E2"))
+
+    def test_copy_subset_channel_and_epoch(self):
+        ds2 = self.folder.copy_dataseries(
+            "Record", channel="A", epoch=[0, 2], quiet=True
+        )
+        self.assertEqual(len(list(ds2.channels)), 1)
+        self.assertEqual(len(list(ds2.epochs)), 2)
+
+    # --- error cases ---
+
+    def test_raises_for_unknown_source(self):
+        with self.assertRaises(ValueError):
+            self.folder.copy_dataseries("NoSuch", quiet=True)
+
+    def test_raises_if_new_prefix_already_exists(self):
+        self.folder.copy_dataseries("Record", quiet=True)  # creates C_Record
+        with self.assertRaises(ValueError):
+            self.folder.copy_dataseries("Record", quiet=True)  # C_Record exists
+
+    def test_raises_for_unknown_channel(self):
+        with self.assertRaises(ValueError):
+            self.folder.copy_dataseries("Record", channel="Z", quiet=True)
+
+    def test_raises_for_unknown_epoch(self):
+        with self.assertRaises(ValueError):
+            self.folder.copy_dataseries("Record", epoch=99, quiet=True)
+
+
 class TestNMFolderRemoveDataseries(NMFolderTestBase):
     """Tests for NMFolder.remove_dataseries()."""
 
