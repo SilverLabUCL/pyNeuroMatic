@@ -230,33 +230,33 @@ class TestNMFolderContainer(unittest.TestCase):
 
 
 # =============================================================================
-# Tests for detect_prefixes method
+# Tests for detect_data_prefixes method
 # =============================================================================
 
-class TestNMFolderDetectPrefixes(NMFolderTestBase):
-    """Tests for NMFolder.detect_prefixes() method."""
+class TestNMFolderDetectDataPrefixes(NMFolderTestBase):
+    """Tests for NMFolder.detect_data_prefixes() method."""
 
     def test_empty_folder(self):
-        result = self.folder.detect_prefixes()
+        result = self.folder.detect_data_prefixes()
         self.assertEqual(result, [])
 
     def test_single_prefix(self):
         for name in ["RecordA0", "RecordA1", "RecordB0", "RecordB1"]:
             self.folder.data.new(name)
-        result = self.folder.detect_prefixes()
+        result = self.folder.detect_data_prefixes()
         self.assertEqual(result, ["Record"])
 
     def test_multiple_prefixes(self):
         for name in ["RecordA0", "RecordB0", "avgA0", "avgB0"]:
             self.folder.data.new(name)
-        result = self.folder.detect_prefixes()
+        result = self.folder.detect_data_prefixes()
         self.assertEqual(result, ["Record", "avg"])
 
     def test_ignores_non_matching_names(self):
         self.folder.data.new("RecordA0")
         self.folder.data.new("SomeOtherData")  # no channel/epoch pattern
         self.folder.data.new("avgB1")
-        result = self.folder.detect_prefixes()
+        result = self.folder.detect_data_prefixes()
         self.assertEqual(result, ["Record", "avg"])
 
 
@@ -605,6 +605,179 @@ class TestNMFolderNewDataseries(NMFolderTestBase):
             self.folder.new_dataseries("Record", n_epochs=3)
         # RecordA0 should NOT have been created
         self.assertNotIn("RecordA0", self.folder.data)
+
+
+class TestNMFolderRemoveDataseries(NMFolderTestBase):
+    """Tests for NMFolder.remove_dataseries()."""
+
+    def setUp(self):
+        super().setUp()
+        self.folder.new_dataseries(
+            "Record", n_channels=2, n_epochs=3, quiet=True
+        )
+
+    def test_removes_dataseries(self):
+        self.folder.remove_dataseries("Record", quiet=True)
+        self.assertIsNone(self.folder.dataseries.get("Record"))
+
+    def test_data_not_deleted_by_default(self):
+        self.folder.remove_dataseries("Record", quiet=True)
+        self.assertIn("RecordA0", self.folder.data)
+
+    def test_delete_data_true_removes_data(self):
+        self.folder.remove_dataseries("Record", delete_data=True, quiet=True)
+        self.assertNotIn("RecordA0", self.folder.data)
+        self.assertNotIn("RecordB2", self.folder.data)
+
+    def test_raises_for_unknown_prefix(self):
+        with self.assertRaises(ValueError):
+            self.folder.remove_dataseries("NoSuch", quiet=True)
+
+    def test_folder_data_unaffected_after_removal_without_delete(self):
+        # 2 channels × 3 epochs = 6 NMData objects
+        self.folder.remove_dataseries("Record", quiet=True)
+        self.assertEqual(len(self.folder.data), 6)
+
+
+class TestNMFolderRemoveDataseriesChannel(NMFolderTestBase):
+    """Tests for NMFolder.remove_dataseries_channel()."""
+
+    def setUp(self):
+        super().setUp()
+        self.folder.new_dataseries(
+            "Record", n_channels=3, n_epochs=2, quiet=True
+        )
+        self.ds = self.folder.dataseries.get("Record")
+
+    def test_remove_dataseries_channel_by_char(self):
+        self.folder.remove_dataseries_channel("Record", "B", quiet=True)
+        self.assertIsNone(self.ds.channels.get("B"))
+
+    def test_remove_dataseries_channel_by_int(self):
+        self.folder.remove_dataseries_channel("Record", 0, quiet=True)
+        self.assertIsNone(self.ds.channels.get("A"))
+
+    def test_remove_dataseries_channel_list(self):
+        self.folder.remove_dataseries_channel("Record", ["A", "C"], quiet=True)
+        self.assertIsNone(self.ds.channels.get("A"))
+        self.assertIsNone(self.ds.channels.get("C"))
+        self.assertIsNotNone(self.ds.channels.get("B"))
+
+    def test_remove_dataseries_channel_range(self):
+        self.folder.remove_dataseries_channel("Record", range(2), quiet=True)
+        self.assertIsNone(self.ds.channels.get("A"))
+        self.assertIsNone(self.ds.channels.get("B"))
+        self.assertIsNotNone(self.ds.channels.get("C"))
+
+    def test_data_not_deleted_by_default(self):
+        self.folder.remove_dataseries_channel("Record", "A", quiet=True)
+        self.assertIn("RecordA0", self.folder.data)
+        self.assertIn("RecordA1", self.folder.data)
+
+    def test_delete_data_true_removes_data(self):
+        self.folder.remove_dataseries_channel("Record", "A", delete_data=True, quiet=True)
+        self.assertNotIn("RecordA0", self.folder.data)
+        self.assertNotIn("RecordA1", self.folder.data)
+        self.assertIn("RecordB0", self.folder.data)
+
+    def test_removed_channel_data_no_longer_in_epochs(self):
+        ch_a_data = list(self.ds.channels.get("A").data)
+        self.folder.remove_dataseries_channel("Record", "A", quiet=True)
+        for ep_name in self.ds.epochs:
+            ep = self.ds.epochs.get(ep_name)
+            for d in ch_a_data:
+                self.assertNotIn(d, ep.data)
+
+    def test_raises_for_unknown_channel(self):
+        with self.assertRaises(ValueError):
+            self.folder.remove_dataseries_channel("Record", "Z", quiet=True)
+
+    def test_raises_for_unknown_prefix(self):
+        with self.assertRaises(ValueError):
+            self.folder.remove_dataseries_channel("NoSuch", "A", quiet=True)
+
+    def test_raises_for_bool_channel(self):
+        with self.assertRaises(TypeError):
+            self.folder.remove_dataseries_channel("Record", True, quiet=True)
+
+
+class TestNMFolderRemoveDataseriesEpoch(NMFolderTestBase):
+    """Tests for NMFolder.remove_dataseries_epoch()."""
+
+    def setUp(self):
+        super().setUp()
+        self.folder.new_dataseries(
+            "Record", n_channels=2, n_epochs=4, quiet=True
+        )
+        self.ds = self.folder.dataseries.get("Record")
+
+    def test_remove_dataseries_epoch_by_int(self):
+        self.folder.remove_dataseries_epoch("Record", 0, quiet=True)
+        self.assertIsNone(self.ds.epochs.get("E0"))
+
+    def test_remove_dataseries_epoch_by_str(self):
+        self.folder.remove_dataseries_epoch("Record", "E1", quiet=True)
+        self.assertIsNone(self.ds.epochs.get("E1"))
+
+    def test_remove_dataseries_epoch_list(self):
+        self.folder.remove_dataseries_epoch("Record", [0, 2], quiet=True)
+        self.assertIsNone(self.ds.epochs.get("E0"))
+        self.assertIsNone(self.ds.epochs.get("E2"))
+        self.assertIsNotNone(self.ds.epochs.get("E1"))
+        self.assertIsNotNone(self.ds.epochs.get("E3"))
+
+    def test_remove_dataseries_epoch_range(self):
+        self.folder.remove_dataseries_epoch("Record", range(1, 3), quiet=True)
+        self.assertIsNone(self.ds.epochs.get("E1"))
+        self.assertIsNone(self.ds.epochs.get("E2"))
+        self.assertIsNotNone(self.ds.epochs.get("E0"))
+        self.assertIsNotNone(self.ds.epochs.get("E3"))
+
+    def test_data_not_deleted_by_default(self):
+        self.folder.remove_dataseries_epoch("Record", 0, quiet=True)
+        self.assertIn("RecordA0", self.folder.data)
+
+    def test_delete_data_true_removes_data(self):
+        self.folder.remove_dataseries_epoch("Record", 0, delete_data=True, quiet=True)
+        self.assertNotIn("RecordA0", self.folder.data)
+        self.assertNotIn("RecordB0", self.folder.data)
+        self.assertIn("RecordA1", self.folder.data)
+
+    def test_removed_epoch_data_no_longer_in_channels(self):
+        ep0 = self.ds.epochs.get("E0")
+        ep0_data = list(ep0.data)
+        self.folder.remove_dataseries_epoch("Record", 0, quiet=True)
+        for ch_name in self.ds.channels:
+            ch = self.ds.channels.get(ch_name)
+            for d in ep0_data:
+                self.assertNotIn(d, ch.data)
+
+    def test_raises_for_unknown_epoch_int(self):
+        with self.assertRaises(ValueError):
+            self.folder.remove_dataseries_epoch("Record", 99, quiet=True)
+
+    def test_raises_for_unknown_epoch_str(self):
+        with self.assertRaises(ValueError):
+            self.folder.remove_dataseries_epoch("Record", "E99", quiet=True)
+
+    def test_raises_for_unknown_prefix(self):
+        with self.assertRaises(ValueError):
+            self.folder.remove_dataseries_epoch("NoSuch", 0, quiet=True)
+
+    def test_raises_for_bool_epoch(self):
+        with self.assertRaises(TypeError):
+            self.folder.remove_dataseries_epoch("Record", True, quiet=True)
+
+    def test_remove_range_200_epochs(self):
+        # Simulate use-case: 200 epochs, remove the last 100
+        self.folder.new_dataseries(
+            "Big", n_channels=1, n_epochs=200, quiet=True
+        )
+        ds = self.folder.dataseries.get("Big")
+        self.folder.remove_dataseries_epoch("Big", range(100, 200), quiet=True)
+        self.assertEqual(len(list(ds.epochs)), 100)
+        self.assertIsNotNone(ds.epochs.get("E99"))
+        self.assertIsNone(ds.epochs.get("E100"))
 
 
 class TestNMFolderToolResults(NMFolderTestBase):

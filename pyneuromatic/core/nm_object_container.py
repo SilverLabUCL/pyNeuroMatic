@@ -464,7 +464,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             return default  # type: ignore
         if isinstance(self.selected_name, str):
             if self.selected_name.lower() == actual_key.lower():
-                self.selected_name = None
+                self._selected_name_set(None, quiet=quiet)
         self.sets.remove_from_all(actual_key)
         o = self.__map.pop(actual_key)
         o._container = None
