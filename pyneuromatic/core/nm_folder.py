@@ -275,7 +275,7 @@ class NMFolder(NMObject):
 
     # DataSeries creation from data names
 
-    def detect_prefixes(self) -> list[str]:
+    def detect_data_prefixes(self) -> list[str]:
         """Detect unique data prefixes in this folder's data container.
 
         Scans all data names and parses them to find NeuroMatic naming patterns
@@ -545,6 +545,222 @@ class NMFolder(NMObject):
         )
 
         return ds
+
+    # ------------------------------------------------------------------
+    # Private helpers for dataseries remove_* methods
+    # ------------------------------------------------------------------
+
+    def _get_dataseries(self, prefix: str):
+        """Return the NMDataSeries for *prefix*, or raise ValueError."""
+        ds = self.dataseries.get(prefix)
+        if ds is None:
+            raise ValueError("dataseries %r not found" % prefix)
+        return ds
+
+    def _resolve_channel_names(self, ds, channel) -> list[str]:
+        """Resolve *channel* (str | int | list | range) to a list of channel chars.
+
+        Raises TypeError for unsupported types, ValueError for chars not in *ds*.
+        """
+        if isinstance(channel, range):
+            items = list(channel)
+        elif isinstance(channel, list):
+            items = channel
+        else:
+            items = [channel]
+
+        names: list[str] = []
+        for item in items:
+            if isinstance(item, bool):
+                raise TypeError(
+                    "channel must be str or int, got bool"
+                )
+            if isinstance(item, int):
+                ch_name = nmu.channel_char(item)
+                if not ch_name:
+                    raise ValueError("invalid channel number: %d" % item)
+            elif isinstance(item, str):
+                ch_name = item.upper()
+            else:
+                raise TypeError(
+                    "channel must be str or int, got %s" % type(item).__name__
+                )
+            if ds.channels.get(ch_name) is None:
+                raise ValueError(
+                    "channel %r not found in dataseries %r" % (ch_name, ds.name)
+                )
+            names.append(ch_name)
+        return names
+
+    def _resolve_epoch_names(self, ds, epoch) -> list[str]:
+        """Resolve *epoch* (str | int | list | range) to a list of epoch names.
+
+        Epoch names are stored as 'E0', 'E1', etc.
+        Raises TypeError for unsupported types, ValueError for names not in *ds*.
+        """
+        if isinstance(epoch, range):
+            items = list(epoch)
+        elif isinstance(epoch, list):
+            items = epoch
+        else:
+            items = [epoch]
+
+        names: list[str] = []
+        for item in items:
+            if isinstance(item, bool):
+                raise TypeError(
+                    "epoch must be str or int, got bool"
+                )
+            if isinstance(item, int):
+                ep_name = "E%d" % item
+            elif isinstance(item, str):
+                ep_name = item
+            else:
+                raise TypeError(
+                    "epoch must be str or int, got %s" % type(item).__name__
+                )
+            if ds.epochs.get(ep_name) is None:
+                raise ValueError(
+                    "epoch %r not found in dataseries %r" % (ep_name, ds.name)
+                )
+            names.append(ep_name)
+        return names
+
+    # ------------------------------------------------------------------
+    # Public dataseries remove methods
+    # ------------------------------------------------------------------
+
+    def remove_dataseries(
+        self,
+        prefix: str,
+        delete_data: bool = False,
+        quiet: bool = nmc.QUIET,
+    ) -> None:
+        """Remove a dataseries from this folder.
+
+        Args:
+            prefix: Name of the dataseries to remove.
+            delete_data: If True, also delete all NMData objects that belong
+                to this dataseries from the folder's data container.
+            quiet: Suppress history messages.
+
+        Raises:
+            ValueError: If no dataseries with *prefix* exists.
+        """
+        ds = self._get_dataseries(prefix)
+
+        if delete_data:
+            # Collect unique data names across all channels
+            data_names: set[str] = set()
+            for ch_name in ds.channels:
+                ch = ds.channels.get(ch_name)
+                for d in list(ch.data):
+                    data_names.add(d.name)
+            for name in data_names:
+                self.data.pop(name, default=None, quiet=True)
+
+        self.dataseries.pop(prefix, quiet=True)
+        msg = "removed dataseries '%s'" % prefix
+        if delete_data:
+            msg += " (and %d data objects)" % len(data_names)
+        nmh.history(msg, path=self.path_str, quiet=quiet)
+
+    def remove_dataseries_channel(
+        self,
+        prefix: str,
+        channel,
+        delete_data: bool = False,
+        quiet: bool = nmc.QUIET,
+    ) -> None:
+        """Remove one or more channels from a dataseries.
+
+        Args:
+            prefix: Name of the dataseries.
+            channel: Channel(s) to remove — str ('A'), int (0), list, or range.
+            delete_data: If True, delete the associated NMData from the folder.
+            quiet: Suppress history messages.
+
+        Raises:
+            ValueError: If dataseries or channel not found.
+            TypeError: If *channel* has an unsupported type.
+        """
+        ds = self._get_dataseries(prefix)
+        ch_names = self._resolve_channel_names(ds, channel)
+        n_deleted = 0
+
+        for ch_name in ch_names:
+            ch = ds.channels.get(ch_name)
+            data_list = list(ch.data)
+
+            if delete_data:
+                for d in data_list:
+                    self.data.pop(d.name, default=None, quiet=True)
+                n_deleted += len(data_list)
+
+            # Remove data refs from all epochs
+            for ep_name in ds.epochs:
+                ep = ds.epochs.get(ep_name)
+                for d in data_list:
+                    if d in ep.data:
+                        ep.data.remove(d)
+
+            ds.channels.pop(ch_name, quiet=True)
+
+        ch_str = ", ".join(ch_names)
+        msg = "removed channel(s) [%s] from dataseries '%s'" % (ch_str, prefix)
+        if delete_data:
+            msg += " (and %d data objects)" % n_deleted
+        nmh.history(msg, path=self.path_str, quiet=quiet)
+
+    def remove_dataseries_epoch(
+        self,
+        prefix: str,
+        epoch,
+        delete_data: bool = False,
+        quiet: bool = nmc.QUIET,
+    ) -> None:
+        """Remove one or more epochs from a dataseries.
+
+        Args:
+            prefix: Name of the dataseries.
+            epoch: Epoch(s) to remove — str ('E0'), int (0), list, or range.
+            delete_data: If True, delete the associated NMData from the folder.
+            quiet: Suppress history messages.
+
+        Raises:
+            ValueError: If dataseries or epoch not found.
+            TypeError: If *epoch* has an unsupported type.
+        """
+        ds = self._get_dataseries(prefix)
+        ep_names = self._resolve_epoch_names(ds, epoch)
+        n_deleted = 0
+
+        for ep_name in ep_names:
+            ep = ds.epochs.get(ep_name)
+            data_list = list(ep.data)
+
+            if delete_data:
+                for d in data_list:
+                    self.data.pop(d.name, default=None, quiet=True)
+                n_deleted += len(data_list)
+
+            # Remove data refs from all channels
+            for ch_name in ds.channels:
+                ch = ds.channels.get(ch_name)
+                for d in data_list:
+                    if d in ch.data:
+                        ch.data.remove(d)
+
+            ds.epochs.pop(ep_name, quiet=True)
+
+        if len(ep_names) == 1:
+            ep_str = ep_names[0]
+        else:
+            ep_str = "%s..%s (%d epochs)" % (ep_names[0], ep_names[-1], len(ep_names))
+        msg = "removed epoch(s) [%s] from dataseries '%s'" % (ep_str, prefix)
+        if delete_data:
+            msg += " (and %d data objects)" % n_deleted
+        nmh.history(msg, path=self.path_str, quiet=quiet)
 
 
 class NMFolderContainer(NMObjectContainer):

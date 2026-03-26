@@ -130,7 +130,7 @@ def read_axograph(
 
     # Optionally create dataseries
     if make_dataseries:
-        prefixes = folder.detect_prefixes()
+        prefixes = folder.detect_data_prefixes()
         for p in prefixes:
             folder.assemble_dataseries(p)
 
