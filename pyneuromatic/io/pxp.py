@@ -173,7 +173,7 @@ def read_pxp(
     if make_dataseries:
         prefixes = folder.detect_prefixes()
         for p in prefixes:
-            folder.make_dataseries(p)
+            folder.assemble_dataseries(p)
 
     return folder
 
