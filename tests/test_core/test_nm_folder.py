@@ -233,7 +233,7 @@ class TestNMFolderContainer(unittest.TestCase):
 # Tests for detect_prefixes method
 # =============================================================================
 
-class TestDetectPrefixes(NMFolderTestBase):
+class TestNMFolderDetectPrefixes(NMFolderTestBase):
     """Tests for NMFolder.detect_prefixes() method."""
 
     def test_empty_folder(self):
@@ -261,11 +261,11 @@ class TestDetectPrefixes(NMFolderTestBase):
 
 
 # =============================================================================
-# Tests for make_dataseries method
+# Tests for assemble_dataseries method
 # =============================================================================
 
-class TestMakeDataSeries(NMFolderTestBase):
-    """Tests for NMFolder.make_dataseries() method."""
+class TestNMFolderAssembleDataSeries(NMFolderTestBase):
+    """Tests for NMFolder.assemble_dataseries() method."""
 
     def setUp(self):
         super().setUp()
@@ -276,25 +276,25 @@ class TestMakeDataSeries(NMFolderTestBase):
                 self.folder.data.new(name)
 
     def test_creates_dataseries(self):
-        ds = self.folder.make_dataseries("Record")
+        ds = self.folder.assemble_dataseries("Record")
         self.assertIsNotNone(ds)
         self.assertEqual(ds.name, "Record")
 
     def test_creates_channels(self):
-        ds = self.folder.make_dataseries("Record")
+        ds = self.folder.assemble_dataseries("Record")
         self.assertEqual(len(ds.channels), 2)
         self.assertIn("A", ds.channels)
         self.assertIn("B", ds.channels)
 
     def test_creates_epochs(self):
-        ds = self.folder.make_dataseries("Record")
+        ds = self.folder.assemble_dataseries("Record")
         self.assertEqual(len(ds.epochs), 3)
         self.assertIn("E0", ds.epochs)
         self.assertIn("E1", ds.epochs)
         self.assertIn("E2", ds.epochs)
 
     def test_links_data_to_channels(self):
-        ds = self.folder.make_dataseries("Record")
+        ds = self.folder.assemble_dataseries("Record")
         chan_a = ds.channels.get("A")
         self.assertEqual(len(chan_a.data), 3)
         data_names = [d.name for d in chan_a.data]
@@ -303,7 +303,7 @@ class TestMakeDataSeries(NMFolderTestBase):
         self.assertIn("RecordA2", data_names)
 
     def test_links_data_to_epochs(self):
-        ds = self.folder.make_dataseries("Record")
+        ds = self.folder.assemble_dataseries("Record")
         epoch_0 = ds.epochs.get("E0")
         self.assertEqual(len(epoch_0.data), 2)
         data_names = [d.name for d in epoch_0.data]
@@ -312,43 +312,43 @@ class TestMakeDataSeries(NMFolderTestBase):
 
     def test_partial_prefix_match(self):
         # User enters "Rec" but full prefix is "Record"
-        ds = self.folder.make_dataseries("Rec")
+        ds = self.folder.assemble_dataseries("Rec")
         self.assertIsNotNone(ds)
         self.assertEqual(ds.name, "Record")
 
     def test_case_insensitive_prefix(self):
-        ds = self.folder.make_dataseries("record")
+        ds = self.folder.assemble_dataseries("record")
         self.assertIsNotNone(ds)
         self.assertEqual(ds.name, "Record")
 
     def test_no_match_returns_none(self):
-        ds = self.folder.make_dataseries("NoMatch")
+        ds = self.folder.assemble_dataseries("NoMatch")
         self.assertIsNone(ds)
 
     def test_empty_prefix_returns_none(self):
-        ds = self.folder.make_dataseries("")
+        ds = self.folder.assemble_dataseries("")
         self.assertIsNone(ds)
 
     def test_none_prefix_returns_none(self):
-        ds = self.folder.make_dataseries(None)
+        ds = self.folder.assemble_dataseries(None)
         self.assertIsNone(ds)
 
     def test_select_parameter(self):
-        self.folder.make_dataseries("Record", select=True)
+        self.folder.assemble_dataseries("Record", select=True)
         self.assertEqual(self.folder.dataseries.selected_name, "Record")
 
     def test_adds_to_dataseries_container(self):
-        self.folder.make_dataseries("Record")
+        self.folder.assemble_dataseries("Record")
         self.assertIn("Record", self.folder.dataseries)
 
-    def test_does_not_duplicate_dataseries(self):
-        ds1 = self.folder.make_dataseries("Record")
-        ds2 = self.folder.make_dataseries("Record")
+    def test_returns_existing_dataseries_on_second_call(self):
+        ds1 = self.folder.assemble_dataseries("Record")
+        ds2 = self.folder.assemble_dataseries("Record")
         self.assertIsNotNone(ds1)
-        self.assertIsNone(ds2)  # Already exists
+        self.assertIs(ds1, ds2)  # Same object, not duplicated
 
     def test_get_data_works_after_make(self):
-        ds = self.folder.make_dataseries("Record")
+        ds = self.folder.assemble_dataseries("Record")
         ds.channels.selected_name = "A"
         ds.epochs.selected_name = "E1"
         data = ds.get_data()
@@ -356,8 +356,8 @@ class TestMakeDataSeries(NMFolderTestBase):
         self.assertEqual(data.name, "RecordA1")
 
 
-class TestMakeDataSeriesMultiplePrefixes(NMFolderTestBase):
-    """Tests for make_dataseries with multiple prefixes in folder."""
+class TestNMFolderAssembleDataSeriesMultiplePrefixes(NMFolderTestBase):
+    """Tests for assemble_dataseries with multiple prefixes in folder."""
 
     def setUp(self):
         super().setUp()
@@ -368,15 +368,15 @@ class TestMakeDataSeriesMultiplePrefixes(NMFolderTestBase):
                 self.folder.data.new(f"avg{ch}{ep}")
 
     def test_creates_correct_dataseries(self):
-        ds_record = self.folder.make_dataseries("Record")
-        ds_avg = self.folder.make_dataseries("avg")
+        ds_record = self.folder.assemble_dataseries("Record")
+        ds_avg = self.folder.assemble_dataseries("avg")
 
         self.assertEqual(ds_record.name, "Record")
         self.assertEqual(ds_avg.name, "avg")
 
     def test_dataseries_have_correct_data(self):
-        ds_record = self.folder.make_dataseries("Record")
-        ds_avg = self.folder.make_dataseries("avg")
+        ds_record = self.folder.assemble_dataseries("Record")
+        ds_avg = self.folder.assemble_dataseries("avg")
 
         # Check Record dataseries
         chan_a = ds_record.channels.get("A")
@@ -389,6 +389,222 @@ class TestMakeDataSeriesMultiplePrefixes(NMFolderTestBase):
         data_names = [d.name for d in chan_a.data]
         self.assertIn("avgA0", data_names)
         self.assertNotIn("RecordA0", data_names)
+
+    def test_record_and_avg_record_prefixes(self):
+        """Avg_Record prefix must not cross-contaminate Record dataseries.
+
+        NMMainOpAverage produces output named Avg_{prefix}, e.g. Avg_RecordA0.
+        When the folder contains both RecordA0 and Avg_RecordA0, assembling
+        "Record" should include only Record* data and assembling "Avg_Record"
+        should include only Avg_Record* data.
+
+        setUp already creates RecordA0/A1/B0/B1; we add Avg_Record* here.
+        """
+        # setUp created RecordA0, RecordA1, RecordB0, RecordB1
+        # Add the averaged output that NMMainOpAverage would produce
+        for ch in ["A", "B"]:
+            for ep in range(2):
+                self.folder.data.new("Avg_Record%s%d" % (ch, ep))
+
+        ds_rec = self.folder.assemble_dataseries("Record")
+        ds_avg = self.folder.assemble_dataseries("Avg_Record")
+
+        self.assertEqual(ds_rec.name, "Record")
+        self.assertEqual(ds_avg.name, "Avg_Record")
+
+        # Record dataseries contains only Record* data
+        rec_chan_a = ds_rec.channels.get("A")
+        rec_names = [d.name for d in rec_chan_a.data]
+        self.assertIn("RecordA0", rec_names)
+        self.assertNotIn("Avg_RecordA0", rec_names)
+        self.assertEqual(len(rec_chan_a.data), 2)  # A0, A1
+
+        # Avg_Record dataseries contains only Avg_Record* data
+        avg_chan_a = ds_avg.channels.get("A")
+        avg_names = [d.name for d in avg_chan_a.data]
+        self.assertIn("Avg_RecordA0", avg_names)
+        self.assertNotIn("RecordA0", avg_names)
+        self.assertEqual(len(avg_chan_a.data), 2)  # Avg_RecordA0, Avg_RecordA1
+
+
+# =============================================================================
+# Tests for new_dataseries method
+# =============================================================================
+
+class TestNMFolderNewDataseries(NMFolderTestBase):
+    """Tests for NMFolder.new_dataseries()."""
+
+    def test_returns_dataseries(self):
+        ds = self.folder.new_dataseries("Record")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Record")
+
+    def test_default_single_channel_single_epoch(self):
+        ds = self.folder.new_dataseries("Record")
+        self.assertEqual(len(ds.channels), 1)
+        self.assertEqual(len(ds.epochs), 1)
+
+    def test_n_channels_and_n_epochs(self):
+        ds = self.folder.new_dataseries("Record", n_channels=3, n_epochs=5)
+        self.assertEqual(len(ds.channels), 3)
+        self.assertEqual(len(ds.epochs), 5)
+        self.assertIn("A", ds.channels)
+        self.assertIn("B", ds.channels)
+        self.assertIn("C", ds.channels)
+
+    def test_data_objects_created_in_folder(self):
+        self.folder.new_dataseries("Record", n_channels=2, n_epochs=3)
+        for ch in ["A", "B"]:
+            for ep in range(3):
+                self.assertIn("Record%s%d" % (ch, ep), self.folder.data)
+
+    def test_fill_default_zeros(self):
+        import numpy as np
+        ds = self.folder.new_dataseries("Record", n_points=50)
+        data = self.folder.data.get("RecordA0")
+        self.assertTrue(np.all(data.nparray == 0.0))
+        self.assertEqual(len(data.nparray), 50)
+
+    def test_fill_scalar_zero(self):
+        import numpy as np
+        ds = self.folder.new_dataseries("Record", n_points=50, fill=0.0)
+        data = self.folder.data.get("RecordA0")
+        self.assertTrue(np.all(data.nparray == 0.0))
+
+    def test_fill_scalar_nan(self):
+        import numpy as np
+        ds = self.folder.new_dataseries("Record", n_points=50, fill=np.nan)
+        data = self.folder.data.get("RecordA0")
+        self.assertTrue(np.all(np.isnan(data.nparray)))
+
+    def test_fill_scalar_sentinel(self):
+        import numpy as np
+        ds = self.folder.new_dataseries("Record", n_points=10, fill=-9999.0)
+        data = self.folder.data.get("RecordA0")
+        self.assertTrue(np.all(data.nparray == -9999.0))
+
+    def test_fill_callable_numpy_ones(self):
+        import numpy as np
+        ds = self.folder.new_dataseries("Record", n_points=50, fill=np.ones)
+        data = self.folder.data.get("RecordA0")
+        self.assertTrue(np.all(data.nparray == 1.0))
+
+    def test_fill_callable_numpy_random(self):
+        import numpy as np
+        ds = self.folder.new_dataseries("Record", n_points=50, fill=np.random.random)
+        data = self.folder.data.get("RecordA0")
+        self.assertEqual(len(data.nparray), 50)
+        self.assertFalse(np.all(data.nparray == 0.0))
+
+    def test_fill_callable_lambda_noise(self):
+        import numpy as np
+        noise_std = 2.0
+        ds = self.folder.new_dataseries(
+            "Record", n_points=500,
+            fill=lambda n: np.random.normal(0, noise_std, n),
+        )
+        data = self.folder.data.get("RecordA0")
+        self.assertEqual(len(data.nparray), 500)
+        # SE of sample std ≈ sigma/sqrt(2*n) ≈ 0.063 for n=500;
+        # delta=0.3 covers > 99.9 % of random draws without a fixed seed.
+        self.assertAlmostEqual(np.std(data.nparray), noise_std, delta=0.3)
+
+    def test_xscale(self):
+        self.folder.new_dataseries(
+            "Record", n_points=100, dx=0.1, x_start=5.0,
+            x_label="Time", x_units="ms",
+        )
+        data = self.folder.data.get("RecordA0")
+        self.assertAlmostEqual(data.xscale.delta, 0.1)
+        self.assertAlmostEqual(data.xscale.start, 5.0)
+        self.assertEqual(data.xscale.label, "Time")
+        self.assertEqual(data.xscale.units, "ms")
+
+    def test_yscale(self):
+        self.folder.new_dataseries("Record", y_label="Voltage", y_units="mV")
+        data = self.folder.data.get("RecordA0")
+        self.assertEqual(data.yscale.label, "Voltage")
+        self.assertEqual(data.yscale.units, "mV")
+
+    def test_select_parameter(self):
+        self.folder.new_dataseries("Record", select=True)
+        self.assertEqual(self.folder.dataseries.selected_name, "Record")
+
+    def test_invalid_prefix_type(self):
+        with self.assertRaises(TypeError):
+            self.folder.new_dataseries(123)
+
+    def test_invalid_prefix_value(self):
+        with self.assertRaises(ValueError):
+            self.folder.new_dataseries("")
+        with self.assertRaises(ValueError):
+            self.folder.new_dataseries("bad name!")
+
+    def test_invalid_n_channels_type(self):
+        with self.assertRaises(TypeError):
+            self.folder.new_dataseries("Record", n_channels=1.0)
+
+    def test_invalid_n_channels_zero(self):
+        with self.assertRaises(ValueError):
+            self.folder.new_dataseries("Record", n_channels=0)
+
+    def test_invalid_n_epochs_zero(self):
+        with self.assertRaises(ValueError):
+            self.folder.new_dataseries("Record", n_epochs=0)
+
+    def test_invalid_n_points_negative(self):
+        with self.assertRaises(ValueError):
+            self.folder.new_dataseries("Record", n_points=-1)
+
+    def test_n_points_zero_creates_empty_arrays(self):
+        ds = self.folder.new_dataseries("Record", n_points=0)
+        self.assertIsNotNone(ds)
+        data = self.folder.data.get("RecordA0")
+        self.assertIsNotNone(data)
+        self.assertEqual(len(data.nparray), 0)
+
+    def test_invalid_fill_type(self):
+        with self.assertRaises(TypeError):
+            self.folder.new_dataseries("Record", fill="zeros")
+
+    def test_append_epochs(self):
+        self.folder.new_dataseries("Record", n_channels=2, n_epochs=3)
+        ds = self.folder.new_dataseries("Record", n_channels=2, n_epochs=2, ep_start=3)
+        self.assertIsNotNone(ds)
+        self.assertEqual(len(ds.epochs), 5)
+        self.assertEqual(len(ds.channels), 2)
+        chan_a = ds.channels.get("A")
+        self.assertEqual(len(chan_a.data), 5)
+
+    def test_append_channel(self):
+        self.folder.new_dataseries("Record", n_channels=1, n_epochs=3)
+        ds = self.folder.new_dataseries("Record", n_channels=1, n_epochs=3, ch_start=1)
+        self.assertIsNotNone(ds)
+        self.assertEqual(len(ds.channels), 2)
+        self.assertIn("A", ds.channels)
+        self.assertIn("B", ds.channels)
+
+    def test_append_does_not_duplicate_existing_data_links(self):
+        self.folder.new_dataseries("Record", n_channels=2, n_epochs=3)
+        self.folder.new_dataseries("Record", n_channels=2, n_epochs=2, ep_start=3)
+        ds = self.folder.dataseries.get("Record")
+        chan_a = ds.channels.get("A")
+        # RecordA0..RecordA4 — each should appear exactly once
+        names = [d.name for d in chan_a.data]
+        self.assertEqual(len(names), len(set(names)))
+
+    def test_raises_if_data_name_collision(self):
+        self.folder.data.new("RecordA0")
+        with self.assertRaises(ValueError):
+            self.folder.new_dataseries("Record")
+
+    def test_no_partial_state_on_data_collision(self):
+        # RecordA1 exists but RecordA0 does not — collision on second iteration
+        self.folder.data.new("RecordA1")
+        with self.assertRaises(ValueError):
+            self.folder.new_dataseries("Record", n_epochs=3)
+        # RecordA0 should NOT have been created
+        self.assertNotIn("RecordA0", self.folder.data)
 
 
 class TestNMFolderToolResults(NMFolderTestBase):

@@ -296,121 +296,250 @@ class NMFolder(NMObject):
                 prefixes.add(prefix)
         return sorted(prefixes)
 
-    def make_dataseries(
+    def new_dataseries(
+        self,
+        prefix: str,
+        n_channels: int = 1,
+        n_epochs: int = 1,
+        n_points: int = 100,
+        dx: float = 1.0,
+        x_start: float = 0.0,
+        x_label: str = "",
+        x_units: str = "",
+        y_label: str = "",
+        y_units: str = "",
+        fill=0.0,
+        ch_start: int = 0,
+        ep_start: int = 0,
+        select: bool = False,
+        quiet: bool = nmc.QUIET,
+    ) -> NMDataSeries | None:
+        """Create or extend an NMDataSeries with synthetic NumPy arrays.
+
+        Generates ``n_channels * n_epochs`` NMData objects named
+        ``{prefix}{chan}{epoch}`` (e.g. RecordA0, RecordA1, RecordB0 ...),
+        fills each array according to ``fill``, then calls
+        :meth:`assemble_dataseries` which creates the dataseries if it does not
+        yet exist, or extends it with any new channels and epochs if it does.
+
+        Use ``ch_start`` and ``ep_start`` to append to an existing dataseries::
+
+            folder.new_dataseries("Record", n_channels=2, n_epochs=5)
+            # Later, append 3 more epochs to both channels:
+            folder.new_dataseries("Record", n_channels=2, n_epochs=3, ep_start=5)
+
+        Args:
+            prefix: Wave prefix (e.g. ``"Record"``). Must satisfy
+                ``nmu.name_ok()``.
+            n_channels: Number of channels to generate.
+            n_epochs: Number of epochs to generate.
+            n_points: Number of samples per array (0 creates empty arrays).
+            dx: X-axis sample interval.
+            x_start: X-axis start value (default ``0.0``).
+            x_label: X-axis label (e.g. ``"Time"``).
+            x_units: X-axis units (e.g. ``"ms"``).
+            y_label: Y-axis label (e.g. ``"Voltage"``).
+            y_units: Y-axis units (e.g. ``"mV"``).
+            fill: How to populate each array.  Two forms are accepted:
+
+                - **Scalar** (``int``, ``float``, or ``numpy.nan``) — passed
+                  to ``numpy.full(n_points, fill)``.  Examples::
+
+                      fill=0.0        # zeros (default)
+                      fill=numpy.nan  # NaN
+                      fill=1.0        # ones
+                      fill=-9999.0    # sentinel value
+
+                - **Callable** ``f(n_points) -> numpy.ndarray`` — called once
+                  per array.  Any NumPy factory or custom function works::
+
+                      fill=numpy.zeros
+                      fill=numpy.ones
+                      fill=numpy.random.random          # uniform [0, 1)
+                      fill=lambda n: numpy.random.normal(0, 2.0, n)
+
+            ch_start: Index of the first channel to generate (0 = A, 1 = B,
+                ...). Default ``0``.
+            ep_start: Index of the first epoch to generate. Default ``0``.
+            select: Whether to select the dataseries after creation/update.
+            quiet: If True, suppress history output.
+
+        Returns:
+            The NMDataSeries (new or updated), or None on failure.
+
+        Raises:
+            TypeError: If ``prefix`` is not a string, numeric args have wrong
+                type, or ``fill`` is neither a scalar nor a callable.
+            ValueError: If ``prefix`` fails name validation,
+                ``n_channels`` / ``n_epochs`` > 0 violated,
+                ``n_points`` / ``ch_start`` / ``ep_start`` < 0 violated, or
+                any generated data name already exists.
+        """
+        import numpy as np
+
+        if not isinstance(prefix, str):
+            raise TypeError(nmu.type_error_str(prefix, "prefix", "string"))
+        if not prefix or not nmu.name_ok(prefix):
+            raise ValueError("prefix: %r" % prefix)
+        for arg_name, arg_val, min_val in (
+            ("n_channels", n_channels, 1),
+            ("n_epochs",   n_epochs,   1),
+            ("n_points",   n_points,   0),
+            ("ch_start",   ch_start,   0),
+            ("ep_start",   ep_start,   0),
+        ):
+            if isinstance(arg_val, bool) or not isinstance(arg_val, int):
+                raise TypeError(nmu.type_error_str(arg_val, arg_name, "int"))
+            if arg_val < min_val:
+                raise ValueError(
+                    "%s must be >= %d, got %d" % (arg_name, min_val, arg_val)
+                )
+        if not callable(fill) and not isinstance(fill, (int, float)):
+            raise TypeError(
+                "fill must be a numeric scalar or callable, got %r" % type(fill).__name__
+            )
+
+        # Pre-flight: check data names don't conflict before touching any state
+        for ch_i in range(ch_start, ch_start + n_channels):
+            ch_char = nmu.channel_char(ch_i)
+            for ep in range(ep_start, ep_start + n_epochs):
+                name = "%s%s%d" % (prefix, ch_char, ep)
+                if name in self.data:
+                    raise ValueError("data %r already exists" % name)
+
+        xscale = {
+            "start": x_start, "delta": dx, "label": x_label, "units": x_units,
+        }
+        yscale = {"label": y_label, "units": y_units}
+
+        for ch_i in range(ch_start, ch_start + n_channels):
+            ch_char = nmu.channel_char(ch_i)
+            for ep in range(ep_start, ep_start + n_epochs):
+                name = "%s%s%d" % (prefix, ch_char, ep)
+                arr = fill(n_points) if callable(fill) else np.full(n_points, fill)
+                self.data.new(
+                    name=name, nparray=arr, xscale=xscale, yscale=yscale,
+                    quiet=True,
+                )
+
+        return self.assemble_dataseries(prefix, select=select, quiet=quiet)
+
+    def assemble_dataseries(
         self,
         prefix: str,
         select: bool = False,
         quiet: bool = nmc.QUIET,
     ) -> NMDataSeries | None:
-        """Create a dataseries from data matching a prefix pattern.
+        """Create or update a dataseries from data in the folder matching a prefix.
 
         Scans the data container for names matching the NeuroMatic pattern
-        {prefix}{channel}{epoch} and creates a dataseries with appropriate
-        channels and epochs, linking the NMData objects.
+        ``{prefix}{channel}{epoch}`` and creates or extends the dataseries:
 
-        The prefix can be partial - for example, "Rec" will match "RecordA0".
-        The full detected prefix (e.g., "Record") becomes the dataseries name.
+        - If the dataseries does not yet exist, creates it with the matched
+          channels and epochs.
+        - If it already exists, adds any channels and epochs not already
+          present; data already linked to existing channels/epochs is skipped.
+
+        The prefix can be partial — ``"Rec"`` will match ``"RecordA0"``.
+        The full detected prefix (e.g. ``"Record"``) becomes the dataseries name.
 
         Args:
             prefix: Prefix to match (case-insensitive). Can be partial.
-            select: Whether to select the new dataseries.
+            select: Whether to select the dataseries after creation/update.
             quiet: If True, suppress history output.
 
         Returns:
-            The created NMDataSeries, or None if no matching data found.
+            The NMDataSeries (new or updated), or None if no matching data found.
 
         Example:
-            >>> folder.make_dataseries("Record")
-            # Creates dataseries "Record" with channels A, B and epochs E0, E1
-            # if folder contains RecordA0, RecordA1, RecordB0, RecordB1
+            >>> folder.assemble_dataseries("Record")
+            # Creates or updates dataseries "Record" from RecordA0, RecordB0 …
         """
         from pyneuromatic.core.nm_data import NMData
-        from pyneuromatic.core.nm_dataseries import NMDataSeries
 
         if not prefix or not isinstance(prefix, str):
             return None
 
-        # Find all data matching the prefix pattern
+        # Find ALL data in the folder matching the prefix pattern.
         # Key: (channel_char, epoch_num), Value: NMData
         matches: dict[tuple[str, int], NMData] = {}
         actual_prefix: str | None = None
 
         for name, data in self.data.items():
-            # Check if name starts with user's prefix (case-insensitive)
             if not name.lower().startswith(prefix.lower()):
                 continue
-
-            # Parse the name from the end to find channel and epoch
             parsed = nmu.parse_data_name(name)
             if parsed is None:
                 continue
-
             detected_prefix, channel_char, epoch_num = parsed
-
-            # Verify detected prefix starts with user's prefix
             if not detected_prefix.lower().startswith(prefix.lower()):
                 continue
-
-            # Use first detected prefix as the actual prefix for dataseries name
             if actual_prefix is None:
                 actual_prefix = detected_prefix
             elif actual_prefix != detected_prefix:
-                # Different prefix detected, skip this data
                 continue
-
             matches[(channel_char, epoch_num)] = data
 
         if not matches or actual_prefix is None:
             return None
 
-        # Check if dataseries already exists
-        if actual_prefix in self.dataseries:
-            return None  # Could also raise an error or return existing
+        # Get or create the dataseries
+        is_new = actual_prefix not in self.dataseries
+        if is_new:
+            ds = self.dataseries.new(name=actual_prefix, select=select, quiet=True)
+            if ds is None:
+                return None
+            channel_map: dict[str, object] = {}
+            epoch_map: dict[int, object] = {}
+        else:
+            ds = self.dataseries.get(actual_prefix)
+            if select:
+                self.dataseries.selected_name = actual_prefix
+            # Pre-populate maps from existing channels and epochs so we can
+            # detect what is new vs already present
+            channel_map = {
+                ch_name: ds.channels.get(ch_name) for ch_name in ds.channels
+            }
+            epoch_map = {}
+            for ep_name in ds.epochs:
+                try:
+                    epoch_map[int(ep_name[1:])] = ds.epochs.get(ep_name)
+                except (ValueError, IndexError):
+                    pass
 
-        # Create the dataseries, channels, and epochs with quiet=True
-        # to suppress individual history entries; log a summary below
-        ds = self.dataseries.new(name=actual_prefix, select=select, quiet=True)
-        if ds is None:
-            return None
-
-        # Determine unique channels and epochs
+        # Determine which channels/epochs appear in the matches
         channel_chars = sorted(set(ch for ch, _ in matches.keys()))
         epoch_nums = sorted(set(ep for _, ep in matches.keys()))
 
-        # Create channels (NMChannelContainer auto-names A, B, C...)
-        # We need to create channels in order, so if data has A, B, C, we create 3
-        channel_map: dict[str, object] = {}  # channel_char -> NMChannel
+        # Create only channels/epochs not already in the dataseries
         for ch_char in channel_chars:
-            channel = ds.channels.new(quiet=True)
-            if channel is not None:
-                channel_map[ch_char] = channel
+            if ch_char not in channel_map:
+                channel = ds.channels.new(quiet=True)
+                if channel is not None:
+                    channel_map[ch_char] = channel
 
-        # Create epochs (NMEpochContainer auto-names E0, E1, E2...)
-        epoch_map: dict[int, object] = {}  # epoch_num -> NMEpoch
         for ep_num in epoch_nums:
-            epoch = ds.epochs.new(quiet=True)
-            if epoch is not None:
-                epoch_map[ep_num] = epoch
+            if ep_num not in epoch_map:
+                epoch = ds.epochs.new(quiet=True)
+                if epoch is not None:
+                    epoch_map[ep_num] = epoch
 
-        # Link data to channels and epochs
+        # Link data to channels and epochs; skip if already linked
         for (ch_char, ep_num), data in matches.items():
             channel = channel_map.get(ch_char)
             epoch = epoch_map.get(ep_num)
-
-            if channel is not None:
+            if channel is not None and data not in channel.data:
                 channel.data.append(data)
-            if epoch is not None:
+            if epoch is not None and data not in epoch.data:
                 epoch.data.append(data)
 
         # Log summary
         ch_str = ", ".join(channel_chars)
-        if epoch_nums:
-            ep_str = "E%d..E%d" % (epoch_nums[0], epoch_nums[-1])
-        else:
-            ep_str = ""
+        ep_str = ("E%d..E%d" % (epoch_nums[0], epoch_nums[-1])) if epoch_nums else ""
+        action = "new" if is_new else "updated"
         nmh.history(
-            "new dataseries '%s': channels %s; epochs %s"
-            % (actual_prefix, ch_str, ep_str),
+            "%s dataseries '%s': channels %s; epochs %s"
+            % (action, actual_prefix, ch_str, ep_str),
             path=self.path_str,
             quiet=quiet,
         )
