@@ -15,6 +15,8 @@ from pyneuromatic.core.nm_folder import NMFolder, NMFolderContainer
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
+import pyneuromatic.core.nm_command_history as nmch
+from pyneuromatic.core.nm_command_history import NMCommandHistory
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -1171,6 +1173,86 @@ class TestNMFolderRemoveDataseriesEpoch(NMFolderTestBase):
         self.assertEqual(len(list(ds.epochs)), 100)
         self.assertIsNotNone(ds.epochs.get("E99"))
         self.assertIsNone(ds.epochs.get("E100"))
+
+
+# =============================================================================
+# Tests for command history logging
+# =============================================================================
+
+class TestNMFolderCommandHistory(NMFolderTestBase):
+    """Tests that dataseries methods record Python-replayable commands."""
+
+    def setUp(self):
+        super().setUp()
+        self._ch = NMCommandHistory(enabled=True)
+        nmch.set_command_history(self._ch)
+        for ch in ["A", "B"]:
+            for ep in range(2):
+                self.folder.data.new(f"Record{ch}{ep}", quiet=True)
+
+    def tearDown(self):
+        nmch.set_command_history(NMCommandHistory())
+
+    def _last_command(self):
+        return self._ch.buffer[-1]["command"]
+
+    def test_new_dataseries_recorded(self):
+        self.folder.new_dataseries("Wave", n_channels=2, n_epochs=3)
+        cmd = self._last_command()
+        self.assertIn('new_dataseries', cmd)
+        self.assertIn("'Wave'", cmd)
+        self.assertIn('n_channels=2', cmd)
+        self.assertIn('n_epochs=3', cmd)
+
+    def test_new_dataseries_uses_nm_path(self):
+        self.folder.new_dataseries("Wave")
+        cmd = self._last_command()
+        self.assertIn('folders["%s"]' % self.folder.name, cmd)
+
+    def test_sync_dataseries_recorded(self):
+        self.folder.sync_dataseries("Record")
+        cmd = self._last_command()
+        self.assertIn('sync_dataseries', cmd)
+        self.assertIn("'Record'", cmd)
+
+    def test_sync_dataseries_uses_actual_prefix(self):
+        # User passes partial pattern; recorded command uses resolved prefix
+        self.folder.sync_dataseries("Rec")
+        cmd = self._last_command()
+        self.assertIn("'Record'", cmd)
+
+    def test_copy_dataseries_recorded(self):
+        self.folder.sync_dataseries("Record", quiet=True)
+        self.folder.copy_dataseries("Record", new_prefix="avg")
+        cmd = self._last_command()
+        self.assertIn('copy_dataseries', cmd)
+        self.assertIn("'Record'", cmd)
+        self.assertIn("new_prefix='avg'", cmd)
+        self.assertIn('folder=None', cmd)
+
+    def test_remove_dataseries_recorded(self):
+        self.folder.sync_dataseries("Record", quiet=True)
+        self.folder.remove_dataseries("Record")
+        cmd = self._last_command()
+        self.assertIn('remove_dataseries(', cmd)
+        self.assertIn("'Record'", cmd)
+        self.assertIn('delete_data=False', cmd)
+
+    def test_remove_dataseries_channel_recorded(self):
+        self.folder.sync_dataseries("Record", quiet=True)
+        self.folder.remove_dataseries_channel("Record", "B")
+        cmd = self._last_command()
+        self.assertIn('remove_dataseries_channel', cmd)
+        self.assertIn("'B'", cmd)
+        self.assertIn('delete_data=False', cmd)
+
+    def test_remove_dataseries_epoch_recorded(self):
+        self.folder.sync_dataseries("Record", quiet=True)
+        self.folder.remove_dataseries_epoch("Record", 1)
+        cmd = self._last_command()
+        self.assertIn('remove_dataseries_epoch', cmd)
+        self.assertIn('1', cmd)
+        self.assertIn('delete_data=False', cmd)
 
 
 class TestNMFolderToolResults(NMFolderTestBase):
