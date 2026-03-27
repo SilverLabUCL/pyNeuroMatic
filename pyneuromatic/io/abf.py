@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_folder import NMFolder
 
 from pyneuromatic.io.base import make_data_name
+import pyneuromatic.core.nm_utilities as nmu
 
 
 def read_abf(
@@ -95,7 +96,8 @@ def read_abf(
     x_delta = abf.dataSecPerPoint * 1000  # sec -> ms
     x_units = "ms"
 
-    # Process sweeps and channels
+    # Process sweeps and channels; build matches dict as we go
+    matches = {}
     for sweep in range(abf.sweepCount):
         for channel in range(abf.channelCount):
             abf.setSweep(sweep, channel=channel)
@@ -119,10 +121,12 @@ def read_abf(
             # Set y data
             data.nparray = abf.sweepY.copy()
 
-    # Optionally create dataseries
-    if make_dataseries:
-        prefixes = folder.detect_data_prefixes()
-        for p in prefixes:
-            folder.assemble_dataseries(p)
+            ch_char = nmu.channel_char(channel)
+            if ch_char:
+                matches[(ch_char, sweep)] = data
+
+    # Optionally create dataseries directly from the matches dict
+    if make_dataseries and matches:
+        folder.build_dataseries(prefix, matches)
 
     return folder
