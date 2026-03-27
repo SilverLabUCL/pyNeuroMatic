@@ -425,6 +425,60 @@ class TestNMFolderBuildDataseries(NMFolderTestBase):
 
 
 # =============================================================================
+# Tests for scan_dataseries method
+# =============================================================================
+
+class TestNMFolderScanDataseries(NMFolderTestBase):
+    """Tests for NMFolder.scan_dataseries() — preview without side effects."""
+
+    def setUp(self):
+        super().setUp()
+        for ch in ["A", "B"]:
+            for ep in range(3):
+                self.folder.data.new(f"Record{ch}{ep}")
+
+    def test_returns_correct_prefix(self):
+        info = self.folder.scan_dataseries("Record")
+        self.assertIsNotNone(info)
+        self.assertEqual(info.prefix, "Record")
+
+    def test_returns_correct_channels(self):
+        info = self.folder.scan_dataseries("Record")
+        self.assertEqual(info.channels, ["A", "B"])
+
+    def test_returns_correct_epochs(self):
+        info = self.folder.scan_dataseries("Record")
+        self.assertEqual(info.epochs, [0, 1, 2])
+
+    def test_returns_correct_n_data(self):
+        info = self.folder.scan_dataseries("Record")
+        self.assertEqual(info.n_data, 6)
+
+    def test_no_side_effects(self):
+        self.folder.scan_dataseries("Record")
+        self.assertEqual(len(self.folder.dataseries), 0)
+
+    def test_no_match_returns_none(self):
+        self.assertIsNone(self.folder.scan_dataseries("NoMatch"))
+
+    def test_empty_prefix_returns_none(self):
+        self.assertIsNone(self.folder.scan_dataseries(""))
+
+    def test_none_prefix_returns_none(self):
+        self.assertIsNone(self.folder.scan_dataseries(None))
+
+    def test_wildcard_pattern(self):
+        info = self.folder.scan_dataseries("Rec*")
+        self.assertIsNotNone(info)
+        self.assertEqual(info.prefix, "Record")
+
+    def test_partial_prefix(self):
+        info = self.folder.scan_dataseries("Rec")
+        self.assertIsNotNone(info)
+        self.assertEqual(info.prefix, "Record")
+
+
+# =============================================================================
 # Tests for sync_dataseries method
 # =============================================================================
 
@@ -589,6 +643,68 @@ class TestNMFolderSyncDataSeriesMultiplePrefixes(NMFolderTestBase):
         self.assertIn("Avg_RecordA0", avg_names)
         self.assertNotIn("RecordA0", avg_names)
         self.assertEqual(len(avg_chan_a.data), 2)  # Avg_RecordA0, Avg_RecordA1
+
+
+# =============================================================================
+# Tests for sync_dataseries wildcard support
+# =============================================================================
+
+class TestNMFolderSyncDataSeriesWildcard(NMFolderTestBase):
+    """Tests for wildcard pattern support in NMFolder.sync_dataseries()."""
+
+    def setUp(self):
+        super().setUp()
+        # Two prefixes starting with "Rec": "Recent" sorts before "Record"
+        for ch in ["A", "B"]:
+            self.folder.data.new(f"Record{ch}0")
+            self.folder.data.new(f"Recent{ch}0")
+        self.folder.data.new("avgA0")
+
+    def test_star_matches_full_prefix(self):
+        ds = self.folder.sync_dataseries("Record*")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Record")
+
+    def test_star_matches_partial_prefix_alphabetically_first(self):
+        # "Rec*" matches both "Recent" and "Record"; "Recent" < "Record" alphabetically
+        ds = self.folder.sync_dataseries("Rec*")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Recent")
+
+    def test_question_mark_wildcard(self):
+        # "Rec?rd" matches "Record" (? = exactly one character)
+        ds = self.folder.sync_dataseries("Rec?rd")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Record")
+
+    def test_star_only_returns_alphabetically_first(self):
+        # "*" matches all prefixes; "Recent" < "Record" < "avg" alphabetically
+        ds = self.folder.sync_dataseries("*")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Recent")
+
+    def test_wildcard_no_match_returns_none(self):
+        ds = self.folder.sync_dataseries("Xyz*")
+        self.assertIsNone(ds)
+
+    def test_wildcard_case_insensitive(self):
+        ds = self.folder.sync_dataseries("rec*")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Recent")
+
+    def test_non_wildcard_partial_still_alphabetically_first(self):
+        # No wildcard: falls back to startswith — "Rec" matches "Recent" and "Record"
+        ds = self.folder.sync_dataseries("Rec")
+        self.assertIsNotNone(ds)
+        self.assertEqual(ds.name, "Recent")
+
+    def test_wildcard_links_correct_data(self):
+        ds = self.folder.sync_dataseries("Record*")
+        chan_a = ds.channels.get("A")
+        names = [d.name for d in chan_a.data]
+        self.assertIn("RecordA0", names)
+        self.assertNotIn("RecentA0", names)
+        self.assertNotIn("avgA0", names)
 
 
 # =============================================================================
