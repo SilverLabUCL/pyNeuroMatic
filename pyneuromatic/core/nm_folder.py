@@ -31,6 +31,7 @@ from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolderContainer
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
@@ -395,6 +396,19 @@ class NMFolder(NMObject):
     # Dataseries methods (build, new, sync, copy, remove)
     # ------------------------------------------------------------------
 
+    @property
+    def _nm_path(self) -> str:
+        """Command-history path for this folder, derived from parent.
+
+        Returns e.g. ``'folders["TestFolder"]'`` when the parent is an
+        NMManager, so that ``nmch.add_nm_command(_nm_path + ".method()")``
+        produces ``nm.folders["TestFolder"].method()``.
+        """
+        from pyneuromatic.core.nm_manager import NMManager
+        if isinstance(self._parent, NMManager):
+            return 'folders["%s"]' % self.name
+        return self.name
+
     def build_dataseries(
         self,
         prefix: str,
@@ -626,6 +640,15 @@ class NMFolder(NMObject):
             path=self.path_str,
             quiet=quiet,
         )
+        _p = '%s["%s"]' % (self._nm_path, self.name)
+        nmch.add_nm_command(
+            '%s.new_dataseries(%r, n_channels=%r, n_epochs=%r, n_points=%r, '
+            'dx=%r, x_start=%r, x_label=%r, x_units=%r, y_label=%r, y_units=%r, '
+            'fill=%r, ch_start=%r, ep_start=%r)'
+            % (_p, prefix, n_channels, n_epochs, n_points,
+               dx, x_start, x_label, x_units, y_label, y_units,
+               fill, ch_start, ep_start)
+        )
         return ds
 
     def _scan_dataseries(
@@ -759,7 +782,8 @@ class NMFolder(NMObject):
             path=self.path_str,
             quiet=quiet,
         )
-
+        _p = '%s["%s"]' % (self._nm_path, self.name)
+        nmch.add_nm_command('%s.sync_dataseries(%r)' % (_p, actual_prefix))
         return ds
 
     def copy_dataseries(
@@ -905,6 +929,12 @@ class NMFolder(NMObject):
             path=self.path_str,
             quiet=quiet,
         )
+        _p = '%s["%s"]' % (self._nm_path, self.name)
+        folder_str = ('%s["%s"]' % (folder._nm_path, folder.name)) if folder is not None else "None"
+        nmch.add_nm_command(
+            '%s.copy_dataseries(%r, new_prefix=%r, channel=%r, epoch=%r, folder=%s)'
+            % (_p, prefix, new_prefix, channel, epoch, folder_str)
+        )
         return ds
 
     def remove_dataseries(
@@ -941,6 +971,10 @@ class NMFolder(NMObject):
         if delete_data:
             msg += " (and %d data objects)" % len(data_names)
         nmh.history(msg, path=self.path_str, quiet=quiet)
+        _p = '%s["%s"]' % (self._nm_path, self.name)
+        nmch.add_nm_command(
+            '%s.remove_dataseries(%r, delete_data=%r)' % (_p, prefix, delete_data)
+        )
 
     def remove_dataseries_channel(
         self,
@@ -988,6 +1022,11 @@ class NMFolder(NMObject):
         if delete_data:
             msg += " (and %d data objects)" % n_deleted
         nmh.history(msg, path=self.path_str, quiet=quiet)
+        _p = '%s["%s"]' % (self._nm_path, self.name)
+        nmch.add_nm_command(
+            '%s.remove_dataseries_channel(%r, %r, delete_data=%r)'
+            % (_p, prefix, channel, delete_data)
+        )
 
     def remove_dataseries_epoch(
         self,
@@ -1038,6 +1077,11 @@ class NMFolder(NMObject):
         if delete_data:
             msg += " (and %d data objects)" % n_deleted
         nmh.history(msg, path=self.path_str, quiet=quiet)
+        _p = '%s["%s"]' % (self._nm_path, self.name)
+        nmch.add_nm_command(
+            '%s.remove_dataseries_epoch(%r, %r, delete_data=%r)'
+            % (_p, prefix, epoch, delete_data)
+        )
 
 
 class NMFolderContainer(NMObjectContainer):
