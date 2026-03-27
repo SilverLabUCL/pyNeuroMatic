@@ -20,6 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 import copy
+import dataclasses
 import datetime
 from typing import Any
 import h5py
@@ -50,6 +51,22 @@ NMManager (NMObject, root)
                         NMEpochContainer
                             NMEpoch (E0, E1, E2...)
 """
+
+
+@dataclasses.dataclass(frozen=True)
+class NMDataSeriesScan:
+    """Result of :meth:`NMFolder.scan_dataseries` — what would be created.
+
+    Attributes:
+        prefix:   Detected dataseries name (e.g. ``"Record"``).
+        channels: Sorted list of channel characters (e.g. ``["A", "B"]``).
+        epochs:   Sorted list of epoch numbers (e.g. ``[0, 1, 2]``).
+        n_data:   Total number of matching data items.
+    """
+    prefix: str
+    channels: list
+    epochs: list
+    n_data: int
 
 
 class NMFolder(NMObject):
@@ -611,6 +628,73 @@ class NMFolder(NMObject):
         )
         return ds
 
+    def _scan_dataseries(
+        self,
+        prefix: str,
+    ) -> tuple[str, dict] | None:
+        """Scan folder data for names matching *prefix* without creating anything.
+
+        Returns:
+            ``(actual_prefix, matches)`` where *matches* maps
+            ``(channel_char, epoch_num)`` to :class:`NMData`, or ``None`` if
+            no matching data is found.
+        """
+        matches: dict[tuple[str, int], NMData] = {}
+        actual_prefix: str | None = None
+
+        for name, data in sorted(self.data.items()):
+            parsed = nmu.parse_data_name(name)
+            if parsed is None:
+                continue
+            detected_prefix, channel_char, epoch_num = parsed
+            if not nmu.match_prefix(prefix, detected_prefix):
+                continue
+            if actual_prefix is None:
+                actual_prefix = detected_prefix
+            elif actual_prefix != detected_prefix:
+                continue
+            matches[(channel_char, epoch_num)] = data
+
+        if not matches or actual_prefix is None:
+            return None
+        return actual_prefix, matches
+
+    def scan_dataseries(self, prefix: str) -> NMDataSeriesScan | None:
+        """Return a preview of what sync_dataseries() would create, without side effects.
+
+        Useful as a first step before committing to dataseries creation — e.g.
+        a GUI can call this, show the user the detected channels and epochs, and
+        only call :meth:`sync_dataseries` on confirmation.
+
+        Args:
+            prefix: Prefix or wildcard pattern (same as :meth:`sync_dataseries`).
+
+        Returns:
+            :class:`NMDataSeriesScan` with detected prefix, channels, epochs and
+            data count, or ``None`` if no matching data is found.
+
+        Example:
+            >>> info = folder.scan_dataseries("Record")
+            >>> info.prefix    # "Record"
+            >>> info.channels  # ["A", "B"]
+            >>> info.epochs    # [0, 1, 2]
+            >>> info.n_data    # 6
+        """
+        if not prefix or not isinstance(prefix, str):
+            return None
+        result = self._scan_dataseries(prefix)
+        if result is None:
+            return None
+        actual_prefix, matches = result
+        channels = sorted(set(ch for ch, _ in matches.keys()))
+        epochs = sorted(set(ep for _, ep in matches.keys()))
+        return NMDataSeriesScan(
+            prefix=actual_prefix,
+            channels=channels,
+            epochs=epochs,
+            n_data=len(matches),
+        )
+
     def sync_dataseries(
         self,
         prefix: str,
@@ -630,8 +714,15 @@ class NMFolder(NMObject):
         The prefix can be partial — ``"Rec"`` will match ``"RecordA0"``.
         The full detected prefix (e.g. ``"Record"``) becomes the dataseries name.
 
+        Wildcard patterns (``*``, ``?``, ``[seq]``) are also supported via
+        :mod:`fnmatch` — e.g. ``"Rec*"`` or ``"Avg_*"``.  When a wildcard
+        matches more than one distinct prefix the alphabetically-first prefix
+        is used.
+
+        For a non-destructive preview use :meth:`scan_dataseries` first.
+
         Args:
-            prefix: Prefix to match (case-insensitive). Can be partial.
+            prefix: Prefix or wildcard pattern to match (case-insensitive).
             select: Whether to select the dataseries after creation/update.
             quiet: If True, suppress history output.
 
@@ -641,32 +732,16 @@ class NMFolder(NMObject):
         Example:
             >>> folder.sync_dataseries("Record")
             # Creates or updates dataseries "Record" from RecordA0, RecordB0 …
+            >>> folder.sync_dataseries("Avg_*")
+            # Matches "Avg_Record", "Avg_Test", etc. (alphabetically first wins)
         """
         if not prefix or not isinstance(prefix, str):
             return None
 
-        # Scan folder: build matches dict from all data whose names fit
-        # the NeuroMatic pattern and start with the requested prefix.
-        matches: dict[tuple[str, int], NMData] = {}
-        actual_prefix: str | None = None
-
-        for name, data in self.data.items():
-            if not name.lower().startswith(prefix.lower()):
-                continue
-            parsed = nmu.parse_data_name(name)
-            if parsed is None:
-                continue
-            detected_prefix, channel_char, epoch_num = parsed
-            if not detected_prefix.lower().startswith(prefix.lower()):
-                continue
-            if actual_prefix is None:
-                actual_prefix = detected_prefix
-            elif actual_prefix != detected_prefix:
-                continue
-            matches[(channel_char, epoch_num)] = data
-
-        if not matches or actual_prefix is None:
+        result = self._scan_dataseries(prefix)
+        if result is None:
             return None
+        actual_prefix, matches = result
 
         is_new = actual_prefix not in self.dataseries
         ds = self.build_dataseries(actual_prefix, matches, select=select, quiet=True)

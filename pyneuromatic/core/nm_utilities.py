@@ -20,6 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
+import fnmatch
 import inspect
 import math
 from typing import Callable
@@ -559,6 +560,26 @@ def parse_data_name(
         return None
 
     return (prefix, channel_char, epoch_num)
+
+
+def match_prefix(pattern: str, prefix: str) -> bool:
+    """Return True if *pattern* matches *prefix* (case-insensitive).
+
+    If *pattern* contains ``*``, ``?``, or ``[``, uses :mod:`fnmatch`
+    wildcard matching against the full prefix.  Otherwise falls back to
+    a case-insensitive ``startswith`` check so that partial prefixes
+    (e.g. ``"Rec"`` matching ``"Record"``) continue to work as before.
+
+    Args:
+        pattern: User-supplied prefix or wildcard pattern.
+        prefix:  Detected prefix from :func:`parse_data_name`.
+
+    Returns:
+        True if the pattern matches the prefix.
+    """
+    if any(c in pattern for c in ('*', '?', '[')):
+        return fnmatch.fnmatch(prefix.lower(), pattern.lower())
+    return prefix.lower().startswith(pattern.lower())
 
 
 def format_epoch_string(data_names: list[str]) -> str:
