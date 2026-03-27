@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_folder import NMFolder
 
 from pyneuromatic.io.base import parse_units_from_label, make_data_name
+import pyneuromatic.core.nm_utilities as nmu
 
 
 def read_axograph(
@@ -104,7 +105,8 @@ def read_axograph(
         col["epoch"] = epoch_counter[title]
         epoch_counter[title] += 1
 
-    # Process data columns
+    # Process data columns; build matches dict as we go
+    matches = {}
     for col in data_columns:
         channel = col["channel"]
         epoch = col["epoch"]
@@ -128,11 +130,13 @@ def read_axograph(
 
         data.nparray = y_data
 
-    # Optionally create dataseries
-    if make_dataseries:
-        prefixes = folder.detect_data_prefixes()
-        for p in prefixes:
-            folder.assemble_dataseries(p)
+        ch_char = nmu.channel_char(channel)
+        if ch_char:
+            matches[(ch_char, epoch)] = data
+
+    # Optionally create dataseries directly from the matches dict
+    if make_dataseries and matches:
+        folder.build_dataseries(prefix, matches)
 
     return folder
 

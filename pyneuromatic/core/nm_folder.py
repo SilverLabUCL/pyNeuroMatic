@@ -24,7 +24,7 @@ import datetime
 from typing import Any
 import h5py
 
-from pyneuromatic.core.nm_data import NMDataContainer
+from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
@@ -375,8 +375,91 @@ class NMFolder(NMObject):
         return names
 
     # ------------------------------------------------------------------
-    # Dataseries methods
+    # Dataseries methods (build, new, sync, copy, remove)
     # ------------------------------------------------------------------
+
+    def build_dataseries(
+        self,
+        prefix: str,
+        matches: dict[tuple[str, int], NMData],
+        select: bool = False,
+        quiet: bool = nmc.QUIET,
+    ) -> NMDataSeries | None:
+        """Build or extend an NMDataSeries from an explicit matches mapping.
+
+        Creates the dataseries if it does not yet exist, then creates any
+        channels and epochs not already present, and links each NMData to
+        its channel and epoch.  Already-linked data is silently skipped so
+        this method is safe to call on an existing dataseries.
+
+        This is the core implementation shared by :meth:`sync_dataseries`
+        (which first scans the folder to build *matches*) and
+        :meth:`copy_dataseries` (which builds *matches* directly).
+
+        Args:
+            prefix: Exact dataseries name to create or update.
+            matches: Mapping of ``(channel_char, epoch_num) -> NMData``.
+                Channel chars must be single uppercase letters (e.g. ``"A"``);
+                epoch numbers are zero-based integers.
+            select: Whether to select the dataseries after creation/update.
+            quiet: Suppress history messages (caller is responsible for
+                logging a meaningful summary).
+
+        Returns:
+            The NMDataSeries (new or updated), or ``None`` on failure.
+        """
+        if not matches:
+            return None
+
+        # Get or create the dataseries
+        is_new = prefix not in self.dataseries
+        if is_new:
+            ds = self.dataseries.new(name=prefix, select=select, quiet=True)
+            if ds is None:
+                return None
+            channel_map: dict[str, object] = {}
+            epoch_map: dict[int, object] = {}
+        else:
+            ds = self.dataseries.get(prefix)
+            if select:
+                self.dataseries.selected_name = prefix
+            # Pre-populate so we only create genuinely new channels/epochs
+            channel_map = {
+                ch_name: ds.channels.get(ch_name) for ch_name in ds.channels
+            }
+            epoch_map = {}
+            for ep_name in ds.epochs:
+                try:
+                    epoch_map[int(ep_name[1:])] = ds.epochs.get(ep_name)
+                except (ValueError, IndexError):
+                    pass
+
+        channel_chars = sorted(set(ch for ch, _ in matches.keys()))
+        epoch_nums = sorted(set(ep for _, ep in matches.keys()))
+
+        # Create only channels/epochs not already present
+        for ch_char in channel_chars:
+            if ch_char not in channel_map:
+                channel = ds.channels.new(quiet=True)
+                if channel is not None:
+                    channel_map[ch_char] = channel
+
+        for ep_num in epoch_nums:
+            if ep_num not in epoch_map:
+                epoch = ds.epochs.new(quiet=True)
+                if epoch is not None:
+                    epoch_map[ep_num] = epoch
+
+        # Link data to channels and epochs; skip if already linked
+        for (ch_char, ep_num), data in matches.items():
+            channel = channel_map.get(ch_char)
+            epoch = epoch_map.get(ep_num)
+            if channel is not None and data not in channel.data:
+                channel.data.append(data)
+            if epoch is not None and data not in epoch.data:
+                epoch.data.append(data)
+
+        return ds
 
     def new_dataseries(
         self,
@@ -401,7 +484,7 @@ class NMFolder(NMObject):
         Generates ``n_channels * n_epochs`` NMData objects named
         ``{prefix}{chan}{epoch}`` (e.g. RecordA0, RecordA1, RecordB0 ...),
         fills each array according to ``fill``, then calls
-        :meth:`assemble_dataseries` which creates the dataseries if it does not
+        :meth:`sync_dataseries` which creates the dataseries if it does not
         yet exist, or extends it with any new channels and epochs if it does.
 
         Use ``ch_start`` and ``ep_start`` to append to an existing dataseries::
@@ -481,10 +564,13 @@ class NMFolder(NMObject):
                 "fill must be a numeric scalar or callable, got %r" % type(fill).__name__
             )
 
+        ch_nums = range(ch_start, ch_start + n_channels)
+        ep_nums = range(ep_start, ep_start + n_epochs)
+
         # Pre-flight: check data names don't conflict before touching any state
-        for ch_i in range(ch_start, ch_start + n_channels):
+        for ch_i in ch_nums:
             ch_char = nmu.channel_char(ch_i)
-            for ep in range(ep_start, ep_start + n_epochs):
+            for ep in ep_nums:
                 name = "%s%s%d" % (prefix, ch_char, ep)
                 if name in self.data:
                     raise ValueError("data %r already exists" % name)
@@ -494,19 +580,38 @@ class NMFolder(NMObject):
         }
         yscale = {"label": y_label, "units": y_units}
 
-        for ch_i in range(ch_start, ch_start + n_channels):
+        matches: dict[tuple[str, int], NMData] = {}
+        for ch_i in ch_nums:
             ch_char = nmu.channel_char(ch_i)
-            for ep in range(ep_start, ep_start + n_epochs):
+            for ep in ep_nums:
                 name = "%s%s%d" % (prefix, ch_char, ep)
                 arr = fill(n_points) if callable(fill) else np.full(n_points, fill)
-                self.data.new(
+                data = self.data.new(
                     name=name, nparray=arr, xscale=xscale, yscale=yscale,
                     quiet=True,
                 )
+                if data is not None:
+                    matches[(ch_char, ep)] = data
 
-        return self.assemble_dataseries(prefix, select=select, quiet=quiet)
+        is_new = prefix not in self.dataseries
+        ds = self.build_dataseries(prefix, matches, select=select, quiet=True)
+        if ds is None:
+            return None
 
-    def assemble_dataseries(
+        channel_chars = sorted(set(ch for ch, _ in matches.keys()))
+        epoch_nums = sorted(set(ep for _, ep in matches.keys()))
+        ch_str = ", ".join(channel_chars)
+        ep_str = ("E%d..E%d" % (epoch_nums[0], epoch_nums[-1])) if epoch_nums else ""
+        action = "new" if is_new else "updated"
+        nmh.history(
+            "%s dataseries '%s': channels %s; epochs %s"
+            % (action, prefix, ch_str, ep_str),
+            path=self.path_str,
+            quiet=quiet,
+        )
+        return ds
+
+    def sync_dataseries(
         self,
         prefix: str,
         select: bool = False,
@@ -534,16 +639,14 @@ class NMFolder(NMObject):
             The NMDataSeries (new or updated), or None if no matching data found.
 
         Example:
-            >>> folder.assemble_dataseries("Record")
+            >>> folder.sync_dataseries("Record")
             # Creates or updates dataseries "Record" from RecordA0, RecordB0 …
         """
-        from pyneuromatic.core.nm_data import NMData
-
         if not prefix or not isinstance(prefix, str):
             return None
 
-        # Find ALL data in the folder matching the prefix pattern.
-        # Key: (channel_char, epoch_num), Value: NMData
+        # Scan folder: build matches dict from all data whose names fit
+        # the NeuroMatic pattern and start with the requested prefix.
         matches: dict[tuple[str, int], NMData] = {}
         actual_prefix: str | None = None
 
@@ -565,57 +668,13 @@ class NMFolder(NMObject):
         if not matches or actual_prefix is None:
             return None
 
-        # Get or create the dataseries
         is_new = actual_prefix not in self.dataseries
-        if is_new:
-            ds = self.dataseries.new(name=actual_prefix, select=select, quiet=True)
-            if ds is None:
-                return None
-            channel_map: dict[str, object] = {}
-            epoch_map: dict[int, object] = {}
-        else:
-            ds = self.dataseries.get(actual_prefix)
-            if select:
-                self.dataseries.selected_name = actual_prefix
-            # Pre-populate maps from existing channels and epochs so we can
-            # detect what is new vs already present
-            channel_map = {
-                ch_name: ds.channels.get(ch_name) for ch_name in ds.channels
-            }
-            epoch_map = {}
-            for ep_name in ds.epochs:
-                try:
-                    epoch_map[int(ep_name[1:])] = ds.epochs.get(ep_name)
-                except (ValueError, IndexError):
-                    pass
+        ds = self.build_dataseries(actual_prefix, matches, select=select, quiet=True)
+        if ds is None:
+            return None
 
-        # Determine which channels/epochs appear in the matches
         channel_chars = sorted(set(ch for ch, _ in matches.keys()))
         epoch_nums = sorted(set(ep for _, ep in matches.keys()))
-
-        # Create only channels/epochs not already in the dataseries
-        for ch_char in channel_chars:
-            if ch_char not in channel_map:
-                channel = ds.channels.new(quiet=True)
-                if channel is not None:
-                    channel_map[ch_char] = channel
-
-        for ep_num in epoch_nums:
-            if ep_num not in epoch_map:
-                epoch = ds.epochs.new(quiet=True)
-                if epoch is not None:
-                    epoch_map[ep_num] = epoch
-
-        # Link data to channels and epochs; skip if already linked
-        for (ch_char, ep_num), data in matches.items():
-            channel = channel_map.get(ch_char)
-            epoch = epoch_map.get(ep_num)
-            if channel is not None and data not in channel.data:
-                channel.data.append(data)
-            if epoch is not None and data not in epoch.data:
-                epoch.data.append(data)
-
-        # Log summary
         ch_str = ", ".join(channel_chars)
         ep_str = ("E%d..E%d" % (epoch_nums[0], epoch_nums[-1])) if epoch_nums else ""
         action = "new" if is_new else "updated"
@@ -641,7 +700,7 @@ class NMFolder(NMObject):
 
         Deep-copies the NMData arrays for the specified channels and epochs,
         creates them in the target folder under *new_prefix*, then calls
-        :meth:`assemble_dataseries` to build the dataseries structure.
+        :meth:`sync_dataseries` to build the dataseries structure.
 
         Args:
             prefix: Source dataseries name.
@@ -728,11 +787,14 @@ class NMFolder(NMObject):
                     )
                 new_names.append(name)
 
-        # Copy data into target folder
+        # Copy data into target folder and build matches dict directly
+        from pyneuromatic.io.base import make_data_name
+        new_matches: dict[tuple[str, int], NMData] = {}
+
         for ch_name in ch_names:
             ch_idx = ch_indices[ch_name]
+            new_ch_char = nmu.channel_char(ch_idx)
             for ep_num in ep_nums:
-                from pyneuromatic.io.base import make_data_name
                 name = make_data_name(new_prefix, ch_idx, ep_num)
                 src_data = src_lookup.get((ch_name, ep_num))
                 arr = (
@@ -740,19 +802,22 @@ class NMFolder(NMObject):
                     if src_data is not None and src_data.nparray is not None
                     else np.array([])
                 )
-                # Read xscale/yscale from the source NMData object; channel
-                # xscale is a separate object not propagated by assemble_dataseries
+                # Read xscale/yscale from the source NMData object; the
+                # channel xscale is a separate object not propagated by
+                # build_dataseries
                 xscale_dict = src_data.xscale.to_dict() if src_data is not None else {}
                 yscale_dict = src_data.yscale.to_dict() if src_data is not None else {}
-                target.data.new(
+                new_data = target.data.new(
                     name,
                     nparray=arr,
                     xscale=xscale_dict if xscale_dict else None,
                     yscale=yscale_dict if yscale_dict else None,
                     quiet=True,
                 )
+                if new_data is not None:
+                    new_matches[(new_ch_char, ep_num)] = new_data
 
-        ds = target.assemble_dataseries(new_prefix, quiet=True)
+        ds = target.build_dataseries(new_prefix, new_matches, quiet=True)
 
         n_ch = len(ch_names)
         n_ep = len(ep_nums)

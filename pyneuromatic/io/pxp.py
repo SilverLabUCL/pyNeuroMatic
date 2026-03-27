@@ -125,7 +125,8 @@ def read_pxp(
     root_meta = folder.metadata.get("root", {})
     x_units = root_meta.get("xLabel", "ms")
 
-    # Process data wave records
+    # Process data wave records; build matches dict as we go
+    matches = {}
     for record in wave_records:
         wave = record.wave["wave"]
         wave_header = wave["wave_header"]
@@ -169,11 +170,11 @@ def read_pxp(
         # Set y data
         data.nparray = wave["wData"]
 
-    # Optionally create dataseries
-    if make_dataseries:
-        prefixes = folder.detect_data_prefixes()
-        for p in prefixes:
-            folder.assemble_dataseries(p)
+        matches[(channel_char, epoch_num)] = data
+
+    # Optionally create dataseries directly from the matches dict
+    if make_dataseries and matches:
+        folder.build_dataseries(prefix, matches)
 
     return folder
 
