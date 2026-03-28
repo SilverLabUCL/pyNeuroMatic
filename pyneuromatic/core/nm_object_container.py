@@ -24,6 +24,7 @@ from collections.abc import MutableMapping
 from enum import Enum, auto
 
 from pyneuromatic.core.nm_object import NMObject
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 from pyneuromatic.core.nm_sets import NMSets
@@ -449,6 +450,17 @@ class NMObjectContainer(NMObject, MutableMapping):
     # Sentinel value to distinguish "no default provided" from "default is None"
     _POPDEFAULT = object()
 
+    @property
+    def _nm_cmd_path(self) -> str | None:
+        """Command-history path for this container.
+
+        Returns the dotted access path used to build ``nmch.add_nm_command()``
+        strings, e.g. ``"folders"`` or ``'folders["f0"].data'``.
+        Returns ``None`` to opt out of command-history logging (default).
+        Subclasses override this for containers that should be logged.
+        """
+        return None
+
     # override MutableMapping mixin method
     def pop(  # type: ignore[override]
         self,
@@ -469,6 +481,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         o = self.__map.pop(actual_key)
         o._container = None
         nmh.history("removed '%s'" % actual_key, path=self.path_str, quiet=quiet)
+        if self._nm_cmd_path is not None:
+            nmch.add_nm_command('%s.pop(%r)' % (self._nm_cmd_path, actual_key))
         return o
 
     # override MutableMapping mixin method
@@ -502,6 +516,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.sets.empty_all()
         self.__map.clear()
         nmh.history("cleared all: %s" % names, path=self.path_str, quiet=quiet)
+        if self._nm_cmd_path is not None:
+            nmch.add_nm_command('%s.clear()' % self._nm_cmd_path)
 
     # override MutableMapping mixin method
     # add/update NMObject to map
@@ -661,6 +677,10 @@ class NMObjectContainer(NMObject, MutableMapping):
             "renamed '%s' as '%s'" % (key, actual_newname),
             path=self.path_str, quiet=quiet,
         )
+        if self._nm_cmd_path is not None:
+            nmch.add_nm_command(
+                '%s.rename(%r, %r)' % (self._nm_cmd_path, key, actual_newname)
+            )
         return True
 
     def reorder(
@@ -721,6 +741,10 @@ class NMObjectContainer(NMObject, MutableMapping):
             "duplicated '%s' as '%s'" % (key, c.name),
             path=self.path_str, quiet=quiet,
         )
+        if self._nm_cmd_path is not None:
+            nmch.add_nm_command(
+                '%s.duplicate(%r, %r)' % (self._nm_cmd_path, key, c.name)
+            )
         return c
 
     # children should override
@@ -756,6 +780,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         if isinstance(select, bool) and select:
             self.__selected_name = newkey
         nmh.history("new '%s'" % newkey, path=self.path_str, quiet=quiet)
+        if self._nm_cmd_path is not None:
+            nmch.add_nm_command('%s.new(%r)' % (self._nm_cmd_path, newkey))
         return True
 
     @property
@@ -924,9 +950,13 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     @selected_name.setter
     def selected_name(
-        self, 
+        self,
         name: str | None
     ) -> None:
+        if self._nm_cmd_path is not None:
+            nmch.add_nm_command(
+                '%s.selected_name = %r' % (self._nm_cmd_path, name)
+            )
         self._selected_name_set(name)
 
     def _selected_name_set(

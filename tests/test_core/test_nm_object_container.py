@@ -9,6 +9,8 @@ acquiring and simulating electrophysiology data.
 import copy
 import unittest
 
+import pyneuromatic.core.nm_command_history as nmch
+from pyneuromatic.core.nm_command_history import NMCommandHistory
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
@@ -1320,6 +1322,79 @@ class TestNMObjectContainerHistory(unittest.TestCase):
     def test_update_none_no_log(self):
         self.container.update(None, quiet=False)
         self.assertEqual(len(self.nm.history.buffer), 0)
+
+
+class _NMObjectContainerLogged(NMObjectContainer):
+    """NMObjectContainer subclass that opts in to command-history logging."""
+
+    @property
+    def _nm_cmd_path(self) -> str:
+        return "container"
+
+
+class TestNMObjectContainerCommandHistory(unittest.TestCase):
+    """Tests that NMObjectContainer records Python-replayable commands."""
+
+    def setUp(self):
+        self._ch = NMCommandHistory(enabled=True)
+        nmch.set_command_history(self._ch)
+        self.container = _NMObjectContainerLogged(
+            parent=None,
+            name="container",
+            auto_name_prefix="NMObject",
+        )
+        self.container.new(name="NMObject0", quiet=True)
+        self._ch.clear()  # discard setUp actions; tests start with empty buffer
+
+    def tearDown(self):
+        nmch.set_command_history(NMCommandHistory())
+
+    def _last_command(self):
+        return self._ch.buffer[-1]["command"]
+
+    def test_new_recorded(self):
+        self.container.new(name="NMObject1", quiet=True)
+        cmd = self._last_command()
+        self.assertIn('container.new(', cmd)
+        self.assertIn("'NMObject1'", cmd)
+
+    def test_pop_recorded(self):
+        self.container.pop("NMObject0", quiet=True)
+        cmd = self._last_command()
+        self.assertIn('container.pop(', cmd)
+        self.assertIn("'NMObject0'", cmd)
+
+    def test_rename_recorded(self):
+        self.container.rename("NMObject0", "NMObject0renamed", quiet=True)
+        cmd = self._last_command()
+        self.assertIn('container.rename(', cmd)
+        self.assertIn("'NMObject0'", cmd)
+        self.assertIn("'NMObject0renamed'", cmd)
+
+    def test_duplicate_recorded(self):
+        self.container.duplicate("NMObject0", "NMObject0copy", quiet=True)
+        cmd = self._last_command()
+        self.assertIn('container.duplicate(', cmd)
+        self.assertIn("'NMObject0'", cmd)
+
+    def test_selected_name_recorded(self):
+        self.container.new(name="NMObject1", quiet=True)
+        self.container.selected_name = "NMObject1"
+        cmd = self._last_command()
+        self.assertIn('container.selected_name', cmd)
+        self.assertIn("'NMObject1'", cmd)
+
+    def test_clear_recorded(self):
+        self.container.clear(quiet=True)
+        cmd = self._last_command()
+        self.assertIn('container.clear()', cmd)
+
+    def test_no_log_when_nm_cmd_path_none(self):
+        # Plain NMObjectContainer has _nm_cmd_path=None — nothing recorded
+        plain = NMObjectContainer(parent=None, name="plain")
+        count_before = len(self._ch.buffer)
+        plain.new(quiet=True)
+        self.assertEqual(len(self._ch.buffer), count_before)
 
 
 if __name__ == "__main__":
