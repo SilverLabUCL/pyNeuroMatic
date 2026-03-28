@@ -1204,7 +1204,7 @@ class TestNMFolderCommandHistory(NMFolderTestBase):
         self.assertIn('n_channels=2', cmd)
         self.assertIn('n_epochs=3', cmd)
 
-    def test_new_dataseries_uses_nm_path(self):
+    def test_new_dataseries_uses_nm_cmd_path(self):
         self.folder.new_dataseries("Wave")
         cmd = self._last_command()
         self.assertIn('folders["%s"]' % self.folder.name, cmd)
@@ -1253,6 +1253,18 @@ class TestNMFolderCommandHistory(NMFolderTestBase):
         self.assertIn('remove_dataseries_epoch', cmd)
         self.assertIn('1', cmd)
         self.assertIn('delete_data=False', cmd)
+
+    def test_data_container_nm_cmd_path(self):
+        self.assertEqual(
+            self.folder.data._nm_cmd_path,
+            'folders["%s"].data' % self.folder.name,
+        )
+
+    def test_dataseries_container_nm_cmd_path(self):
+        self.assertEqual(
+            self.folder.dataseries._nm_cmd_path,
+            'folders["%s"].dataseries' % self.folder.name,
+        )
 
 
 class TestNMFolderToolResults(NMFolderTestBase):

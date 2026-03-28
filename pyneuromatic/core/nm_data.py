@@ -499,6 +499,14 @@ class NMDataContainer(NMObjectContainer):
             auto_name_seq_format=name_seq_format,
         )
 
+    # override
+    @property
+    def _nm_cmd_path(self) -> str | None:
+        from pyneuromatic.core.nm_folder import NMFolder
+        if isinstance(self._parent, NMFolder):
+            return '%s.data' % self._parent._nm_cmd_path
+        return None
+
     # override, no super
     def content_type(self) -> str:
         return NMData.__name__
