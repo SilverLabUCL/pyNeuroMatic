@@ -262,13 +262,8 @@ class NMObjectContainer(NMObject, MutableMapping):
         key: str,
         nmobject: NMObject  # key is equal to NMObject name
     ) -> None:
-        """
-        called by '=' and update()
-        override below: update()
-        e.g. mymap['recorda0'] = mynmobject
-        """
-        # print('__setitem__, ' + str(key) + ', ' + str(nmobject))
-        self.update({key: nmobject})  # key is not used
+        """e.g. mymap['recorda0'] = mynmobject  (key is not used; name taken from nmobject)"""
+        self.update(nmobject)  # key is not used
 
     # MutableMapping required abstract method
     def __delitem__(
@@ -523,59 +518,20 @@ class NMObjectContainer(NMObject, MutableMapping):
     # add/update NMObject to map
     def update(  # type: ignore[override]
         self,
-        nmobjects: NMObject | list[NMObject] | dict[str, NMObject] | NMObjectContainer | None = None,
+        nmobject: NMObject,
         quiet: bool = nmc.QUIET,
     ) -> None:
-        olist: list[NMObject]
-        if nmobjects is None:
-            nmobjects = []
-        if isinstance(nmobjects, NMObject) and self.content_type_ok(nmobjects):
-            olist = [nmobjects]
-        elif isinstance(nmobjects, list):
-            olist = nmobjects
-        elif isinstance(nmobjects, NMObjectContainer):
-            olist = list(nmobjects.__map.values())
-        elif isinstance(nmobjects, dict):
-            olist = []
-            for k, o in nmobjects.items():
-                # key is not used, key is NMObject name
-                if not self.content_type_ok(o):
-                    e = "nmobjects: '%s' value" % k
-                    e = nmu.type_error_str(o, e, self.content_type())
-                    raise TypeError(e)
-                if k is None:
-                    k = o.name
-                if not isinstance(k, str):
-                    e = nmu.type_error_str(k, "nmobjects: key", "string")
-                    raise TypeError(e)
-                if k.lower() != o.name.lower():
-                    raise KeyError("key and name mismatch: '%s' != '%s'" % (k, o.name))
-                olist.append(o)
-        else:
-            e = (
-                self.content_type()
-                + " or list or dictionary or "
-                + self.__class__.__name__
-            )
-            e = nmu.type_error_str(nmobjects, "nmobjects", e)
+        if not self.content_type_ok(nmobject):
+            e = nmu.type_error_str(nmobject, "nmobject", self.content_type())
             raise TypeError(e)
-        updated: list[str] = []
-        for o in olist:
-            if self.content_type_ok(o):
-                key = self._getkey(o.name)
-                if key is None:
-                    key = self._newkey(o.name)
-                self.__map[key] = o
-                updated.append(key)
-            else:
-                e = "nmobjects: list item"
-                e = nmu.type_error_str(o, e, self.content_type())
-                raise TypeError(e)
-        if updated:
-            self.__update_nmobject_references()
-            nmh.history(
-                "updated %s" % updated, path=self.path_str, quiet=quiet
-            )
+        key = self._getkey(nmobject.name)
+        if key is None:
+            key = self._newkey(nmobject.name)
+        self.__map[key] = nmobject
+        self.__update_nmobject_references()
+        nmh.history("updated '%s'" % key, path=self.path_str, quiet=quiet)
+        if self._nm_cmd_path is not None:
+            nmch.add_nm_command('%s.update(%r)' % (self._nm_cmd_path, nmobject.name))
 
     def __update_nmobject_references(self):
         for o in self.__map.values():
