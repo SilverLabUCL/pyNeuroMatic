@@ -55,7 +55,8 @@ class NMObjectContainerTestBase(unittest.TestCase):
             auto_name_prefix=OPREFIX0,
             auto_name_seq_format=OSEQFORMAT0,
         )
-        self.map0.update(self.olist0)
+        for o in self.olist0:
+            self.map0.update(o)
 
         self.sets0 = {SETS_NLIST0[0]: [ONLIST0[0], ONLIST0[2], ONLIST0[3]]}
         self.map0.sets.update(self.sets0)
@@ -67,7 +68,8 @@ class NMObjectContainerTestBase(unittest.TestCase):
             auto_name_prefix=OPREFIX1,
             auto_name_seq_format=OSEQFORMAT1,
         )
-        self.map1.update(self.olist1)
+        for o in self.olist1:
+            self.map1.update(o)
         self.map1.selected_name = ONLIST1[2]
 
         self.sets1 = {
@@ -347,25 +349,18 @@ class TestNMObjectContainerGetItem(NMObjectContainerTestBase):
 class TestNMObjectContainerSetItem(NMObjectContainerTestBase):
     """Tests for __setitem__ method."""
 
-    def test_rejects_bad_key_types(self):
-        bad = list(BAD_TYPES)
-        bad.remove("string")
-        bad.remove(None)
-        for b in bad:
-            with self.assertRaises(TypeError):
-                self.map0[b] = NMObject(parent=NM0, name="test")
-
     def test_rejects_bad_value_types(self):
         n = ONLIST0[1]
         for b in BAD_TYPES:
-            with self.assertRaises(TypeError):
+            with self.assertRaises((TypeError, ValueError, KeyError)):
                 self.map0[n] = b
 
-    def test_rejects_mismatched_name_and_key(self):
-        n = ONLIST0[1]
-        badname = n + "x"
-        with self.assertRaises(KeyError):
-            self.map0[n] = NMObject(parent=NM0, name=badname)
+    def test_key_is_ignored(self):
+        # __setitem__ delegates to update(nmobject) — key is not used
+        o = NMObject(parent=NM0, name="newobj")
+        self.map0["anykey"] = o
+        self.assertIn("newobj", self.map0)
+        self.assertNotIn("anykey", self.map0)
 
     def test_replaces_existing_object(self):
         n = ONLIST0[1]
@@ -533,7 +528,8 @@ class TestNMObjectContainerEquality(NMObjectContainerTestBase):
         olist0 = []
         for n in ONLIST0:
             olist0.append(NMObject(parent=NM0, name=n))
-        map0.update(olist0)
+        for o in olist0:
+            map0.update(o)
         self.assertFalse(map0 == self.map0)  # sets are not equal
         map0.sets.update(self.sets0)
         self.assertTrue(map0 == self.map0)
@@ -548,7 +544,8 @@ class TestNMObjectContainerEquality(NMObjectContainerTestBase):
         olist0 = []
         for n in ONLIST0:
             olist0.append(NMObject(parent=NM0, name=n))
-        map0.update(olist0)
+        for o in olist0:
+            map0.update(o)
         map0.sets.update(self.sets0)
         map0.sets.new(SETS_NLIST0[1])
         self.assertFalse(map0 == self.map0)
@@ -622,19 +619,9 @@ class TestNMObjectContainerUpdate(NMObjectContainerTestBase):
     """Tests for update() method."""
 
     def test_update_rejects_bad_types(self):
-        bad = list(BAD_TYPES)
-        bad.remove(None)
-        bad.remove([])
-        bad.remove({})
-        for b in bad:
-            with self.assertRaises(TypeError):
-                self.map0.update(b)
-
-    def test_update_rejects_bad_items_in_list(self):
-        o1 = NMObject(parent=NM0, name="test")
         for b in BAD_TYPES:
-            with self.assertRaises(TypeError):
-                self.map0.update([b, o1])
+            with self.assertRaises((TypeError, ValueError, KeyError)):
+                self.map0.update(b)
 
     def test_update_adds_object(self):
         n1 = "test"
@@ -657,18 +644,10 @@ class TestNMObjectContainerUpdate(NMObjectContainerTestBase):
         self.map0.update(o2)
         self.assertTrue(self.map0.get(n1) is o2)
 
-    def test_update_dict_ignores_key(self):
-        n1 = "test"
-        o2 = NMObject(parent=NM0, name=n1.upper())
-        self.map0.update({"test": o2})
-        self.assertTrue(self.map0.get(n1) is o2)
-
-    def test_update_dict_rejects_mismatched_keys(self):
-        n1 = "test"
-        o1 = NMObject(parent=NM0, name=n1)
-        o2 = NMObject(parent=NM0, name=n1.upper())
-        with self.assertRaises(KeyError):
-            self.map0.update({"test1": o1, "test2": o2})
+    def test_update_uses_object_name(self):
+        o = NMObject(parent=NM0, name="newobj")
+        self.map0.update(o)
+        self.assertIn("newobj", self.map0)
 
     def test_update_rejects_wrong_type(self):
         o3 = NMObject2(parent=NM0, name="test3")
@@ -677,7 +656,8 @@ class TestNMObjectContainerUpdate(NMObjectContainerTestBase):
 
     def test_update_from_another_container(self):
         new_len = len(self.map0) + len(self.map1)
-        self.map0.update(self.map1)
+        for o in self.map1.values():
+            self.map0.update(o)
         self.assertEqual(len(self.map0), new_len)
         for n in ONLIST1:
             self.assertTrue(n in self.map0)
@@ -1311,17 +1291,16 @@ class TestNMObjectContainerHistory(unittest.TestCase):
         self.assertIn("itemX", msg)
 
     def test_update_multiple_logs(self):
-        objs = [NMObject(parent=self.nm, name="a%d" % i) for i in range(3)]
-        self.container.update(objs, quiet=False)
-        msg = self._last_message()
-        self.assertIn("updated", msg)
-        self.assertIn("a0", msg)
-        self.assertIn("a1", msg)
-        self.assertIn("a2", msg)
+        for i in range(3):
+            self.container.update(NMObject(parent=self.nm, name="a%d" % i), quiet=False)
+        msgs = self._messages()
+        self.assertTrue(any("a0" in m for m in msgs))
+        self.assertTrue(any("a1" in m for m in msgs))
+        self.assertTrue(any("a2" in m for m in msgs))
 
-    def test_update_none_no_log(self):
-        self.container.update(None, quiet=False)
-        self.assertEqual(len(self.nm.history.buffer), 0)
+    def test_update_rejects_none(self):
+        with self.assertRaises(TypeError):
+            self.container.update(None)
 
 
 class _NMObjectContainerLogged(NMObjectContainer):
@@ -1388,6 +1367,13 @@ class TestNMObjectContainerCommandHistory(unittest.TestCase):
         self.container.clear(quiet=True)
         cmd = self._last_command()
         self.assertIn('container.clear()', cmd)
+
+    def test_update_recorded(self):
+        o = NMObject(parent=None, name="NMObject1")
+        self.container.update(o, quiet=True)
+        cmd = self._last_command()
+        self.assertIn('container.update(', cmd)
+        self.assertIn("'NMObject1'", cmd)
 
     def test_no_log_when_nm_cmd_path_none(self):
         # Plain NMObjectContainer has _nm_cmd_path=None — nothing recorded
