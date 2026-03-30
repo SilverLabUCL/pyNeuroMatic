@@ -790,3 +790,237 @@ def smooth_savgol(
         )
     from scipy.signal import savgol_filter
     return savgol_filter(y.copy().astype(float), window, polyorder)
+
+
+# =========================================================================
+# Stats functions
+# =========================================================================
+
+
+def histogram(
+    y: np.ndarray,
+    bins: int | list = 10,
+    xrange: tuple | None = None,
+    density: bool = False,
+) -> dict:
+    """Compute a histogram of a 1-D array, excluding NaN and Inf values.
+
+    Args:
+        y: 1-D numpy array of values.
+        bins: Number of equal-width bins (int) or explicit bin edges (list).
+            Default 10.
+        xrange: ``(min, max)`` tuple to restrict the data range. Default None
+            (full data range).
+        density: If True, return probability density instead of counts.
+            Default False.
+
+    Returns:
+        Dict with keys:
+
+        - ``"counts"``: bin counts or density values (numpy array).
+        - ``"edges"``: bin edge values, length = bins + 1 (numpy array).
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    arr = y.astype(float)
+    arr = arr[np.isfinite(arr)]
+    counts, edges = np.histogram(arr, bins=bins, range=xrange, density=density)
+    return {"counts": counts, "edges": edges}
+
+
+def ks_test(
+    y1: np.ndarray,
+    y2: np.ndarray,
+    alpha: float = 0.05,
+    method: str = "auto",
+) -> dict:
+    """Two-sample Kolmogorov-Smirnov test on two 1-D arrays.
+
+    NaN and Inf values are excluded before testing, matching the Igor
+    ``NMKSTest()`` behaviour of removing NaNs before sorting.
+
+    This mirrors the Igor NeuroMatic ``NMKSTest()`` function
+    (``NM_StatsTabKolmogorov.ipf``), originally written by Dr. Angus
+    Silver (UCL) based on *Numerical Recipes*.
+
+    Args:
+        y1: First 1-D numpy array of values.
+        y2: Second 1-D numpy array of values.
+        alpha: Significance level; ``significant`` is True when
+            ``pvalue <= alpha``. Default 0.05.
+        method: P-value calculation method forwarded to
+            ``scipy.stats.ks_2samp``. One of ``"auto"`` (default),
+            ``"exact"``, or ``"asymp"``.
+
+    Returns:
+        Dict with keys:
+
+        - ``"d"``: KS statistic — max |CDF1 - CDF2|.
+        - ``"pvalue"``: p-value.
+        - ``"alpha"``: significance level (echoed from param).
+        - ``"significant"``: True if ``pvalue <= alpha``.
+        - ``"message"``: ``"different populations"`` or ``"same population"``.
+        - ``"n1"``: sample size of y1 after NaN/Inf removal.
+        - ``"n2"``: sample size of y2 after NaN/Inf removal.
+        - ``"sort1"``: sorted finite values of y1 (for empirical CDF).
+        - ``"ecdf1"``: empirical CDF values for y1.
+        - ``"sort2"``: sorted finite values of y2 (for empirical CDF).
+        - ``"ecdf2"``: empirical CDF values for y2.
+
+    Raises:
+        TypeError: If *y1* or *y2* are not numpy ndarrays.
+        ImportError: If scipy is not installed.
+    """
+    from scipy.stats import ks_2samp  # noqa: PLC0415
+
+    if not isinstance(y1, np.ndarray):
+        raise TypeError(nmu.type_error_str(y1, "y1", "numpy.ndarray"))
+    if not isinstance(y2, np.ndarray):
+        raise TypeError(nmu.type_error_str(y2, "y2", "numpy.ndarray"))
+    arr1 = y1.astype(float)
+    arr2 = y2.astype(float)
+    arr1 = arr1[np.isfinite(arr1)]
+    arr2 = arr2[np.isfinite(arr2)]
+    stat, pvalue = ks_2samp(arr1, arr2, method=method)
+    significant = bool(pvalue <= alpha)
+    sort1 = np.sort(arr1)
+    ecdf1 = np.arange(1, len(sort1) + 1) / len(sort1)
+    sort2 = np.sort(arr2)
+    ecdf2 = np.arange(1, len(sort2) + 1) / len(sort2)
+    return {
+        "d":           float(stat),
+        "pvalue":      float(pvalue),
+        "alpha":       float(alpha),
+        "significant": significant,
+        "message":     "different populations" if significant else "same population",
+        "n1":          int(len(arr1)),
+        "n2":          int(len(arr2)),
+        "sort1":       sort1,
+        "ecdf1":       ecdf1,
+        "sort2":       sort2,
+        "ecdf2":       ecdf2,
+    }
+
+
+def stability_test(
+    y: np.ndarray,
+    alpha: float = 0.05,
+    min_window: int = 10,
+) -> dict:
+    """Find the largest stable (trend-free) window in a 1-D array.
+
+    Tests whether consecutive subsets of values have no significant monotonic
+    trend over time using the Spearman rank-order correlation between values
+    and their array indices. Searches from the largest possible window down to
+    ``min_window``, stopping as soon as the largest stable window is found.
+
+    This mirrors the Igor NeuroMatic ``NMStabilityRankOrderTest()`` function
+    (``NM_StatsTabStability.ipf``, pass 1 only), originally written by
+    Dr. Angus Silver and Simon Mitchell (UCL), based on *Numerical Recipes in C*.
+
+    NaN and Inf values are excluded before the search; returned indices
+    (``start``, ``end``) refer to positions in the original array *y*.
+
+    Args:
+        y: 1-D numpy array of values.
+        alpha: Significance level. A window is "stable" when its Spearman
+            p-value exceeds this threshold. Default 0.05.
+        min_window: Minimum window size in data points. Must be >= 3 (scipy
+            requires at least 3 points to compute a p-value for non-constant
+            data). Default 10.
+
+    Returns:
+        Dict with keys:
+
+        - ``"stable"``: True if a stable region was found.
+        - ``"start"``: Index into original *y* of first stable point, or None.
+        - ``"end"``: Index into original *y* of last stable point
+          (inclusive), or None.
+        - ``"n"``: Window size (``end - start + 1``), or None.
+        - ``"rs"``: Spearman rs at best window, or None.
+        - ``"pvalue"``: p-value at best window, or None.
+        - ``"alpha"``: significance level (echoed from param).
+        - ``"mask"``: Boolean numpy array (length = len(y)), True where the
+          stable region falls.
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray.
+        ValueError: If *min_window* < 3 or > number of finite data points.
+        ImportError: If scipy is not installed.
+    """
+    import warnings  # noqa: PLC0415
+
+    from scipy.stats import spearmanr  # noqa: PLC0415
+
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+
+    arr = y.astype(float)
+    finite_mask = np.isfinite(arr)
+    finite_idx = np.where(finite_mask)[0]
+    arr_clean = arr[finite_mask]
+    n = len(arr_clean)
+
+    if min_window < 3:
+        raise ValueError("min_window must be >= 3, got %d" % min_window)
+    if min_window > n:
+        raise ValueError(
+            "min_window (%d) > available data points (%d)" % (min_window, n)
+        )
+
+    best_start: int | None = None
+    best_size: int = 0
+    best_rs: float | None = None
+    best_pvalue: float = 0.0
+
+    for w in range(n, min_window - 1, -1):
+        for i in range(n - w + 1):
+            x = np.arange(i, i + w, dtype=float)
+            ywin = arr_clean[i: i + w]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                rs, pvalue = spearmanr(x, ywin)
+            if math.isnan(rs):
+                rs, pvalue = 0.0, 1.0
+            elif math.isnan(pvalue):
+                continue
+            if pvalue > alpha and pvalue > best_pvalue:
+                best_start = i
+                best_size = w
+                best_rs = float(rs)
+                best_pvalue = float(pvalue)
+        if best_start is not None:
+            break
+
+    mask = np.zeros(len(arr), dtype=bool)
+
+    if best_start is None:
+        return {
+            "stable":  False,
+            "start":   None,
+            "end":     None,
+            "n":       None,
+            "rs":      None,
+            "pvalue":  None,
+            "alpha":   float(alpha),
+            "mask":    mask,
+        }
+
+    best_end = best_start + best_size - 1
+    orig_start = int(finite_idx[best_start])
+    orig_end = int(finite_idx[best_end])
+    mask[finite_idx[best_start: best_end + 1]] = True
+
+    return {
+        "stable":  True,
+        "start":   orig_start,
+        "end":     orig_end,
+        "n":       best_size,
+        "rs":      best_rs,
+        "pvalue":  best_pvalue,
+        "alpha":   float(alpha),
+        "mask":    mask,
+    }
