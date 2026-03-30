@@ -14,6 +14,7 @@ from pyneuromatic.core.nm_transform import (
     NMTransformIntegrate,
     NMTransformLog,
     NMTransformLn,
+    NMTransformSmooth,
     _transform_from_dict,
     _transforms_from_list,
     apply_transforms,
@@ -379,6 +380,86 @@ class TestApplyTransforms(unittest.TestCase):
         result = apply_transforms(y, [NMTransformDifferentiate()], xscale=xs)
         # dy/dx = 1/0.5 = 2.0
         np.testing.assert_allclose(result, 2.0)
+
+
+class TestNMTransformSmooth(unittest.TestCase):
+    """Tests for NMTransformSmooth."""
+
+    def setUp(self):
+        self.y = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+
+    def test_default_params(self):
+        t = NMTransformSmooth()
+        self.assertEqual(t.method, "boxcar")
+        self.assertEqual(t.window, 5)
+        self.assertEqual(t.passes, 1)
+        self.assertEqual(t.polyorder, 2)
+
+    def test_boxcar_output_length(self):
+        t = NMTransformSmooth(method="boxcar", window=3)
+        result = t.apply(self.y)
+        self.assertEqual(len(result), len(self.y))
+
+    def test_binomial_output_length(self):
+        t = NMTransformSmooth(method="binomial")
+        result = t.apply(self.y)
+        self.assertEqual(len(result), len(self.y))
+
+    def test_savgol_output_length(self):
+        t = NMTransformSmooth(method="savgol", window=5, polyorder=2)
+        result = t.apply(self.y)
+        self.assertEqual(len(result), len(self.y))
+
+    def test_flat_signal_boxcar(self):
+        t = NMTransformSmooth(method="boxcar", window=3)
+        y = np.ones(10)
+        result = t.apply(y)
+        np.testing.assert_allclose(result[1:-1], 1.0)
+
+    def test_to_dict(self):
+        t = NMTransformSmooth(method="savgol", window=7, passes=2, polyorder=3)
+        d = t.to_dict()
+        self.assertEqual(d["type"], "NMTransformSmooth")
+        self.assertEqual(d["method"], "savgol")
+        self.assertEqual(d["window"], 7)
+        self.assertEqual(d["passes"], 2)
+        self.assertEqual(d["polyorder"], 3)
+
+    def test_equality(self):
+        t1 = NMTransformSmooth(method="boxcar", window=5)
+        t2 = NMTransformSmooth(method="boxcar", window=5)
+        t3 = NMTransformSmooth(method="binomial")
+        self.assertEqual(t1, t2)
+        self.assertNotEqual(t1, t3)
+
+    def test_from_dict_registered(self):
+        t = NMTransformSmooth(method="binomial", passes=3)
+        d = t.to_dict()
+        t2 = _transform_from_dict(d)
+        self.assertIsInstance(t2, NMTransformSmooth)
+
+    def test_rejects_invalid_method(self):
+        with self.assertRaises(ValueError):
+            NMTransformSmooth(method="unknown")
+
+    def test_rejects_even_window(self):
+        with self.assertRaises(ValueError):
+            NMTransformSmooth(window=4)
+
+    def test_rejects_bool_passes(self):
+        with self.assertRaises(TypeError):
+            NMTransformSmooth(passes=True)
+
+    def test_savgol_passes_gt1_runs_without_error(self):
+        # passes > 1 is silently ignored for savgol (nmh.history ALERT issued)
+        t = NMTransformSmooth(method="savgol", window=5, passes=3)
+        result = t.apply(self.y)
+        self.assertEqual(len(result), len(self.y))
+
+    def test_repr(self):
+        t = NMTransformSmooth(method="boxcar", window=5, passes=1, polyorder=2)
+        self.assertIn("NMTransformSmooth", repr(t))
+        self.assertIn("boxcar", repr(t))
 
 
 if __name__ == "__main__":

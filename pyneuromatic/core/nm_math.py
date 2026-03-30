@@ -669,3 +669,124 @@ def linear_regression(
     m, b = np.polyfit(xarray, yarray, deg=1)
 
     return (m, b)
+
+
+# =========================================================================
+# Smooth functions
+# =========================================================================
+
+_VALID_SMOOTH_METHODS: frozenset[str] = frozenset({"boxcar", "binomial", "savgol"})
+
+
+def smooth_boxcar(
+    y: np.ndarray,
+    window: int,
+    passes: int = 1,
+) -> np.ndarray:
+    """Boxcar (moving average) smooth via ``np.convolve``.
+
+    Args:
+        y: 1-D numpy array of y-values.
+        window: Kernel width in points. Must be an odd integer >= 3.
+        passes: Number of times to apply the kernel. Must be >= 1. Default 1.
+
+    Returns:
+        Smoothed copy of *y* with the same length (``mode='same'``).
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray, or *window*/*passes* are
+            not integers (bool rejected).
+        ValueError: If *window* is not odd, < 3, or *passes* < 1.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if isinstance(window, bool) or not isinstance(window, int):
+        raise TypeError(nmu.type_error_str(window, "window", "int"))
+    if window < 3:
+        raise ValueError("window must be >= 3, got %d" % window)
+    if window % 2 == 0:
+        raise ValueError("window must be odd, got %d" % window)
+    if isinstance(passes, bool) or not isinstance(passes, int):
+        raise TypeError(nmu.type_error_str(passes, "passes", "int"))
+    if passes < 1:
+        raise ValueError("passes must be >= 1, got %d" % passes)
+    kernel = np.ones(window) / window
+    result = y.copy().astype(float)
+    for _ in range(passes):
+        result = np.convolve(result, kernel, mode='same')
+    return result
+
+
+def smooth_binomial(
+    y: np.ndarray,
+    passes: int = 1,
+) -> np.ndarray:
+    """Binomial smooth: apply 3-point binomial kernel via ``np.convolve``.
+
+    Args:
+        y: 1-D numpy array of y-values.
+        passes: Number of times to apply the 3-point binomial kernel.
+            Must be >= 1. More passes produce a wider effective smooth.
+
+    Returns:
+        Smoothed copy of *y* with the same length (``mode='same'``).
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray, or *passes* is not an
+            integer (bool rejected).
+        ValueError: If *passes* < 1.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if isinstance(passes, bool) or not isinstance(passes, int):
+        raise TypeError(nmu.type_error_str(passes, "passes", "int"))
+    if passes < 1:
+        raise ValueError("passes must be >= 1, got %d" % passes)
+    kernel = np.array([0.25, 0.5, 0.25]) # 3-point binomial filter
+    result = y.copy().astype(float)
+    for _ in range(passes):
+        result = np.convolve(result, kernel, mode='same')
+    return result
+
+
+def smooth_savgol(
+    y: np.ndarray,
+    window: int,
+    polyorder: int = 2,
+) -> np.ndarray:
+    """Savitzky-Golay smooth via ``scipy.signal.savgol_filter``.
+
+    Args:
+        y: 1-D numpy array of y-values.
+        window: Kernel width in points. Must be an odd integer and
+            >= *polyorder* + 2.
+        polyorder: Polynomial order. Must be an integer >= 1 and
+            < *window*. Default 2.
+
+    Returns:
+        Smoothed copy of *y* with the same length.
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray, or any numeric
+            parameter is not an integer (bool rejected).
+        ValueError: If *window* is not odd, too small, or *polyorder* is
+            out of range.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if isinstance(window, bool) or not isinstance(window, int):
+        raise TypeError(nmu.type_error_str(window, "window", "int"))
+    if window < 3:
+        raise ValueError("window must be >= 3, got %d" % window)
+    if window % 2 == 0:
+        raise ValueError("window must be odd, got %d" % window)
+    if isinstance(polyorder, bool) or not isinstance(polyorder, int):
+        raise TypeError(nmu.type_error_str(polyorder, "polyorder", "int"))
+    if polyorder < 1:
+        raise ValueError("polyorder must be >= 1, got %d" % polyorder)
+    if polyorder >= window:
+        raise ValueError(
+            "polyorder (%d) must be < window (%d)" % (polyorder, window)
+        )
+    from scipy.signal import savgol_filter
+    return savgol_filter(y.copy().astype(float), window, polyorder)

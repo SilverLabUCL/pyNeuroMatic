@@ -530,3 +530,159 @@ class TestSiScaleFactor:
 
     def test_femto_to_base(self):
         assert si_scale_factor("fA", "A") == pytest.approx(1e-15)
+
+
+# =============================================================================
+# smooth_boxcar
+# =============================================================================
+
+
+class TestSmoothBoxcar:
+    def test_basic_output_length(self):
+        y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = nm_math.smooth_boxcar(y, window=3)
+        assert len(result) == len(y)
+
+    def test_flat_signal_unchanged(self):
+        y = np.ones(10)
+        result = nm_math.smooth_boxcar(y, window=3)
+        np.testing.assert_allclose(result[1:-1], 1.0)
+
+    def test_window5_centre(self):
+        y = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+        result = nm_math.smooth_boxcar(y, window=5)
+        # centre point: mean of [2,3,4,5,6] = 4.0
+        assert result[3] == pytest.approx(4.0)
+
+    def test_returns_copy(self):
+        y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = nm_math.smooth_boxcar(y, window=3)
+        result[2] = 999.0
+        assert y[2] == 3.0
+
+    def test_rejects_bool_window(self):
+        with pytest.raises(TypeError):
+            nm_math.smooth_boxcar(np.ones(5), window=True)
+
+    def test_rejects_even_window(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_boxcar(np.ones(5), window=4)
+
+    def test_rejects_window_lt3(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_boxcar(np.ones(5), window=1)
+
+    def test_passes_increases_smoothing(self):
+        y = np.zeros(21)
+        y[10] = 1.0
+        r1 = nm_math.smooth_boxcar(y, window=3, passes=1)
+        r3 = nm_math.smooth_boxcar(y, window=3, passes=3)
+        # more passes → more non-zero points around centre
+        assert np.count_nonzero(r3) > np.count_nonzero(r1)
+
+    def test_rejects_passes_zero(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_boxcar(np.ones(5), window=3, passes=0)
+
+    def test_rejects_non_array(self):
+        with pytest.raises(TypeError):
+            nm_math.smooth_boxcar([1.0, 2.0, 3.0], window=3)
+
+
+# =============================================================================
+# smooth_binomial
+# =============================================================================
+
+
+class TestSmoothBinomial:
+    def test_basic_output_length(self):
+        y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = nm_math.smooth_binomial(y)
+        assert len(result) == len(y)
+
+    def test_flat_signal_unchanged(self):
+        y = np.ones(10)
+        result = nm_math.smooth_binomial(y, passes=1)
+        np.testing.assert_allclose(result[1:-1], 1.0)
+
+    def test_centre_point(self):
+        # [0,0,1,0,0] → after 1 pass centre should be 0.5
+        y = np.array([0.0, 0.0, 1.0, 0.0, 0.0])
+        result = nm_math.smooth_binomial(y, passes=1)
+        assert result[2] == pytest.approx(0.5)
+
+    def test_passes_spreads_impulse(self):
+        # More passes spread a central impulse over more points
+        y = np.zeros(21)
+        y[10] = 1.0
+        r1 = nm_math.smooth_binomial(y, passes=1)
+        r5 = nm_math.smooth_binomial(y, passes=5)
+        # More passes → more non-zero points around centre
+        nonzero1 = np.count_nonzero(r1)
+        nonzero5 = np.count_nonzero(r5)
+        assert nonzero5 > nonzero1
+
+    def test_returns_copy(self):
+        y = np.array([1.0, 2.0, 3.0])
+        result = nm_math.smooth_binomial(y)
+        result[1] = 999.0
+        assert y[1] == 2.0
+
+    def test_rejects_bool_passes(self):
+        with pytest.raises(TypeError):
+            nm_math.smooth_binomial(np.ones(5), passes=True)
+
+    def test_rejects_passes_zero(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_binomial(np.ones(5), passes=0)
+
+    def test_rejects_non_array(self):
+        with pytest.raises(TypeError):
+            nm_math.smooth_binomial([1.0, 2.0, 3.0])
+
+
+# =============================================================================
+# smooth_savgol
+# =============================================================================
+
+
+class TestSmoothSavgol:
+    def test_basic_output_length(self):
+        y = np.linspace(0, 1, 20)
+        result = nm_math.smooth_savgol(y, window=5)
+        assert len(result) == len(y)
+
+    def test_linear_signal_preserved(self):
+        y = np.linspace(0.0, 1.0, 20)
+        result = nm_math.smooth_savgol(y, window=5, polyorder=1)
+        np.testing.assert_allclose(result, y, atol=1e-10)
+
+    def test_returns_copy(self):
+        y = np.linspace(0.0, 1.0, 20)
+        result = nm_math.smooth_savgol(y, window=5)
+        result[5] = 999.0
+        assert y[5] != 999.0
+
+    def test_rejects_even_window(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_savgol(np.ones(10), window=4)
+
+    def test_rejects_window_lt3(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_savgol(np.ones(10), window=1)
+
+    def test_rejects_polyorder_gte_window(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_savgol(np.ones(10), window=5, polyorder=5)
+
+    def test_rejects_polyorder_zero(self):
+        with pytest.raises(ValueError):
+            nm_math.smooth_savgol(np.ones(10), window=5, polyorder=0)
+
+    def test_rejects_bool_window(self):
+        with pytest.raises(TypeError):
+            nm_math.smooth_savgol(np.ones(10), window=True)
+
+    def test_rejects_non_array(self):
+        with pytest.raises(TypeError):
+            nm_math.smooth_savgol([1.0, 2.0, 3.0], window=3)

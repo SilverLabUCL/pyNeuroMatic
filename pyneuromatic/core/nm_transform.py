@@ -29,6 +29,7 @@ import copy
 import numpy as np
 
 from pyneuromatic.core.nm_scale import NMScaleX
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -228,6 +229,155 @@ class NMTransformLn(NMTransform):
 
 
 # =========================================================================
+# Smooth transform
+# =========================================================================
+
+_VALID_SMOOTH_METHODS: frozenset[str] = frozenset({"boxcar", "binomial", "savgol"})
+
+
+class NMTransformSmooth(NMTransform):
+    """Smooth transform: boxcar, binomial, or Savitzky-Golay (polynomial).
+
+    Applies the chosen smooth method to y-data via the shared pure functions
+    in :mod:`pyneuromatic.core.nm_math`.
+
+    Args:
+        method: ``"boxcar"``, ``"binomial"``, or ``"savgol"``. Default ``"boxcar"``.
+        window: Kernel width in points (odd int >= 3). Used by boxcar and savgol.
+            Default 5.
+        passes: Number of times to apply the kernel (int >= 1). Default 1.
+            Used by boxcar and binomial; ignored by savgol.
+        polyorder: Polynomial order for savgol (int >= 1, < window). Default 2.
+    """
+
+    def __init__(
+        self,
+        parent: object | None = None,
+        method: str = "boxcar",
+        window: int = 5,
+        passes: int = 1,
+        polyorder: int = 2,
+    ) -> None:
+        super().__init__(parent=parent)
+        self.method = method
+        self.window = window
+        self.passes = passes
+        self.polyorder = polyorder
+
+    def __repr__(self) -> str:
+        return (
+            "%s(method=%r, window=%r, passes=%r, polyorder=%r)"
+            % (self.__class__.__name__, self._method, self._window,
+               self._passes, self._polyorder)
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, NMTransformSmooth):
+            return (
+                self._method == other._method
+                and self._window == other._window
+                and self._passes == other._passes
+                and self._polyorder == other._polyorder
+            )
+        if isinstance(other, dict):
+            return self.to_dict() == other
+        return NotImplemented
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def method(self) -> str:
+        """Smooth method: ``'boxcar'``, ``'binomial'``, or ``'savgol'``."""
+        return self._method
+
+    @method.setter
+    def method(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "method", "string"))
+        if value not in _VALID_SMOOTH_METHODS:
+            raise ValueError(
+                "method must be one of %s, got %r"
+                % (sorted(_VALID_SMOOTH_METHODS), value)
+            )
+        self._method = value
+
+    @property
+    def window(self) -> int:
+        """Kernel width in points (odd int >= 3). Used by boxcar and savgol."""
+        return self._window
+
+    @window.setter
+    def window(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "window", "int"))
+        if value < 3:
+            raise ValueError("window must be >= 3, got %d" % value)
+        if value % 2 == 0:
+            raise ValueError("window must be odd, got %d" % value)
+        self._window = value
+
+    @property
+    def passes(self) -> int:
+        """Number of times to apply the kernel (int >= 1). Used by boxcar and binomial."""
+        return self._passes
+
+    @passes.setter
+    def passes(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "passes", "int"))
+        if value < 1:
+            raise ValueError("passes must be >= 1, got %d" % value)
+        self._passes = value
+
+    @property
+    def polyorder(self) -> int:
+        """Polynomial order for savgol (int >= 1, < window)."""
+        return self._polyorder
+
+    @polyorder.setter
+    def polyorder(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "polyorder", "int"))
+        if value < 1:
+            raise ValueError("polyorder must be >= 1, got %d" % value)
+        self._polyorder = value
+
+    # ------------------------------------------------------------------
+    # Core
+
+    def apply(
+        self,
+        ydata: np.ndarray,
+        xscale: NMScaleX | None = None,
+    ) -> np.ndarray:
+        """Apply the smooth to *ydata* and return the result."""
+        import pyneuromatic.core.nm_math as nm_math
+        if self._method == "savgol" and self._passes > 1:
+            nmh.history(
+                "passes=%d ignored for savgol; savgol is applied once" % self._passes,
+                title="ALERT",
+                red=True,
+            )
+        if self._method == "boxcar":
+            return nm_math.smooth_boxcar(ydata, self._window, self._passes)
+        if self._method == "binomial":
+            return nm_math.smooth_binomial(ydata, self._passes)
+        # savgol
+        return nm_math.smooth_savgol(ydata, self._window, self._polyorder)
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            "method": self._method,
+            "window": self._window,
+            "passes": self._passes,
+            "polyorder": self._polyorder,
+        })
+        return d
+
+
+# =========================================================================
 # Registry and helper functions
 # =========================================================================
 
@@ -239,6 +389,7 @@ _TRANSFORM_REGISTRY: dict[str, type[NMTransform]] = {
     "NMTransformIntegrate": NMTransformIntegrate,
     "NMTransformLog": NMTransformLog,
     "NMTransformLn": NMTransformLn,
+    "NMTransformSmooth": NMTransformSmooth,
 }
 
 
@@ -268,7 +419,8 @@ def _transform_from_dict(
     if type_str not in _TRANSFORM_REGISTRY:
         raise ValueError("unknown transform type: '%s'" % type_str)
     cls = _TRANSFORM_REGISTRY[type_str]
-    return cls(parent=parent)
+    kwargs = {k: v for k, v in d.items() if k != "type"}
+    return cls(parent=parent, **kwargs)
 
 
 def _transforms_from_list(

@@ -29,6 +29,7 @@ import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
+import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -1263,6 +1264,137 @@ class NMMainOpBaseline(NMMainOp):
     def _op_params_str(self) -> str:
         return "x0=%r, x1=%r, mode=%r, ignore_nans=%r" % (
             self._x0, self._x1, self._mode, self._ignore_nans)
+
+
+# =========================================================================
+# Smooth
+# =========================================================================
+
+_VALID_SMOOTH_METHODS: frozenset[str] = frozenset({"boxcar", "binomial", "savgol"})
+
+
+class NMMainOpSmooth(NMMainOp):
+    """Smooth each selected array in-place: boxcar, binomial, or Savitzky-Golay.
+
+    Uses shared pure functions from :mod:`pyneuromatic.core.nm_math`.
+    Edge effects at both ends of each array (half a window-width of points)
+    are an inherent property of ``np.convolve`` with ``mode='same'``.
+
+    Parameters:
+        method: ``"boxcar"``, ``"binomial"``, or ``"savgol"``. Default ``"boxcar"``.
+        window: Kernel width in points (odd int >= 3). Used by boxcar and savgol.
+            Not used by binomial. Default 5.
+        passes: Number of times to apply the kernel (int >= 1). Default 1.
+            Used by boxcar and binomial; ignored by savgol.
+        polyorder: Polynomial order for savgol (int >= 1, < window). Default 2.
+    """
+
+    name = "smooth"
+
+    def __init__(
+        self,
+        method: str = "boxcar",
+        window: int = 5,
+        passes: int = 1,
+        polyorder: int = 2,
+    ) -> None:
+        self.method = method
+        self.window = window
+        self.passes = passes
+        self.polyorder = polyorder
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def method(self) -> str:
+        """Smooth method: ``'boxcar'``, ``'binomial'``, or ``'savgol'``."""
+        return self._method
+
+    @method.setter
+    def method(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "method", "string"))
+        if value not in _VALID_SMOOTH_METHODS:
+            raise ValueError(
+                "method must be one of %s, got %r"
+                % (sorted(_VALID_SMOOTH_METHODS), value)
+            )
+        self._method = value
+
+    @property
+    def window(self) -> int:
+        """Kernel width in points (odd int >= 3). Used by boxcar and savgol."""
+        return self._window
+
+    @window.setter
+    def window(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "window", "int"))
+        if value < 3:
+            raise ValueError("window must be >= 3, got %d" % value)
+        if value % 2 == 0:
+            raise ValueError("window must be odd, got %d" % value)
+        self._window = value
+
+    @property
+    def passes(self) -> int:
+        """Number of times to apply the kernel (int >= 1). Used by boxcar and binomial."""
+        return self._passes
+
+    @passes.setter
+    def passes(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "passes", "int"))
+        if value < 1:
+            raise ValueError("passes must be >= 1, got %d" % value)
+        self._passes = value
+
+    @property
+    def polyorder(self) -> int:
+        """Polynomial order for savgol (int >= 1, < window)."""
+        return self._polyorder
+
+    @polyorder.setter
+    def polyorder(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "polyorder", "int"))
+        if value < 1:
+            raise ValueError("polyorder must be >= 1, got %d" % value)
+        self._polyorder = value
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Smooth *data* in-place."""
+        import pyneuromatic.core.nm_math as nm_math
+        y = data.nparray
+        if y is None:
+            return
+        if self._method == "savgol" and self._passes > 1:
+            nmh.history(
+                "passes=%d ignored for savgol; savgol is applied once" % self._passes,
+                title="ALERT",
+                red=True,
+            )
+        if self._method == "boxcar":
+            data.nparray = nm_math.smooth_boxcar(y, self._window, self._passes)
+        elif self._method == "binomial":
+            data.nparray = nm_math.smooth_binomial(y, self._passes)
+        else:  # savgol
+            data.nparray = nm_math.smooth_savgol(y, self._window, self._polyorder)
+        self._add_op_note(data)
+
+    def _op_params_str(self) -> str:
+        effective_passes = 1 if self._method == "savgol" else self._passes
+        return "method=%r, window=%r, passes=%r, polyorder=%r" % (
+            self._method, self._window, effective_passes, self._polyorder
+        )
 
 
 # =========================================================================
@@ -2849,6 +2981,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "rescale_x": NMMainOpRescaleX,
     "reverse": NMMainOpReverse,
     "rotate": NMMainOpRotate,
+    "smooth": NMMainOpSmooth,
     "sum": NMMainOpSum,
     "sum_sqr": NMMainOpSumSqr,
 }
