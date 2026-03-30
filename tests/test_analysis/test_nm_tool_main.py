@@ -40,6 +40,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpRescaleX,
     NMMainOpReverse,
     NMMainOpRotate,
+    NMMainOpSmooth,
     NMMainOpSum,
     NMMainOpSumSqr,
     op_from_name,
@@ -3354,6 +3355,115 @@ class TestToolMainOpLogging(unittest.TestCase):
         tool.op = "average"
         cmd = self._ch.buffer[0]["command"]
         self.assertIn("NMMainOpAverage", cmd)
+
+
+# =============================================================================
+# NMMainOpSmooth
+# =============================================================================
+
+
+class TestNMMainOpSmooth(unittest.TestCase):
+    """Tests for NMMainOpSmooth."""
+
+    def test_default_params(self):
+        op = NMMainOpSmooth()
+        self.assertEqual(op.method, "boxcar")
+        self.assertEqual(op.window, 5)
+        self.assertEqual(op.passes, 1)
+        self.assertEqual(op.polyorder, 2)
+
+    def test_rejects_invalid_method(self):
+        with self.assertRaises(ValueError):
+            NMMainOpSmooth(method="unknown")
+
+    def test_rejects_even_window(self):
+        with self.assertRaises(ValueError):
+            NMMainOpSmooth(window=4)
+
+    def test_rejects_window_lt3(self):
+        with self.assertRaises(ValueError):
+            NMMainOpSmooth(window=1)
+
+    def test_rejects_passes_zero(self):
+        with self.assertRaises(ValueError):
+            NMMainOpSmooth(passes=0)
+
+    def test_rejects_bool_window(self):
+        with self.assertRaises(TypeError):
+            NMMainOpSmooth(window=True)
+
+    def test_op_params_str(self):
+        op = NMMainOpSmooth(method="savgol", window=7, passes=2, polyorder=3)
+        s = op._op_params_str()
+        self.assertIn("'savgol'", s)
+        self.assertIn("7", s)
+        self.assertIn("3", s)
+        # passes is forced to 1 in the note for savgol
+        self.assertIn("passes=1", s)
+
+    def test_op_params_str_boxcar_passes(self):
+        op = NMMainOpSmooth(method="boxcar", window=5, passes=3)
+        s = op._op_params_str()
+        self.assertIn("passes=3", s)
+
+    def test_savgol_passes_gt1_runs_without_error(self):
+        # passes > 1 is silently ignored for savgol (nmh.history ALERT issued)
+        folder, _ = _make_folder_with_data({"RecordA0": list(np.linspace(0.0, 1.0, 20))})
+        d = folder.data.get("RecordA0")
+        op = NMMainOpSmooth(method="savgol", window=5, passes=3)
+        op.run(d)  # should not raise
+        self.assertEqual(len(d.nparray), 20)
+
+    def test_boxcar_run_modifies_in_place(self):
+        folder, _ = _make_folder_with_data({"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]})
+        d = folder.data.get("RecordA0")
+        original = d.nparray.copy()
+        op = NMMainOpSmooth(method="boxcar", window=3)
+        op.run(d)
+        self.assertEqual(len(d.nparray), len(original))
+        # centre points should be averaged
+        self.assertAlmostEqual(d.nparray[3], np.mean(original[2:5]))
+
+    def test_binomial_run_preserves_length(self):
+        folder, _ = _make_folder_with_data({"RecordA0": list(range(20))})
+        d = folder.data.get("RecordA0")
+        op = NMMainOpSmooth(method="binomial", passes=3)
+        op.run(d)
+        self.assertEqual(len(d.nparray), 20)
+
+    def test_savgol_run_preserves_linear(self):
+        y = list(np.linspace(0.0, 1.0, 20))
+        folder, _ = _make_folder_with_data({"RecordA0": y})
+        d = folder.data.get("RecordA0")
+        op = NMMainOpSmooth(method="savgol", window=5, polyorder=1)
+        op.run(d)
+        np.testing.assert_allclose(d.nparray, np.linspace(0.0, 1.0, 20), atol=1e-10)
+
+    def test_run_skips_none_array(self):
+        d = NMData(NM, name="empty")
+        op = NMMainOpSmooth()
+        op.run(d)  # should not raise
+
+    def test_run_adds_note(self):
+        folder, _ = _make_folder_with_data({"RecordA0": list(range(10))})
+        d = folder.data.get("RecordA0")
+        op = NMMainOpSmooth(method="boxcar", window=3)
+        op.run(d)
+        self.assertTrue(len(d.notes) > 0)
+
+    def test_op_from_name_smooth(self):
+        op = op_from_name("smooth")
+        self.assertIsInstance(op, NMMainOpSmooth)
+
+    def test_run_all_via_op_run_all(self):
+        folder = _op_run_all(
+            NMMainOpSmooth(method="boxcar", window=3),
+            {"RecordA0": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+             "RecordA1": [7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]},
+        )
+        # index 3: mean([3,4,5]) = 4.0
+        np.testing.assert_allclose(folder.data.get("RecordA0").nparray[3], 4.0)
+        np.testing.assert_allclose(folder.data.get("RecordA1").nparray[3], 4.0)
 
 
 if __name__ == "__main__":
