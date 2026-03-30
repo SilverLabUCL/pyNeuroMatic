@@ -374,24 +374,24 @@ class NMManager(NMObject):
             return
 
         if "folder" in select:
-            folders.selected_name = select["folder"]
+            folders._selected_name_set(select["folder"])
         f = folders.selected_value
         if not isinstance(f, NMFolder):
             return
 
         if "data" in select:
-            f.data.selected_name = select["data"]
+            f.data._selected_name_set(select["data"])
         if "dataseries" in select:
-            f.dataseries.selected_name = select["dataseries"]
+            f.dataseries._selected_name_set(select["dataseries"])
 
         ds = f.dataseries.selected_value
         if not isinstance(ds, NMDataSeries):
             return
 
         if "channel" in select:
-            ds.channels.selected_name = select["channel"]
+            ds.channels._selected_name_set(select["channel"])
         if "epoch" in select:
-            ds.epochs.selected_name = select["epoch"]
+            ds.epochs._selected_name_set(select["epoch"])
 
     def select_value_set(self, obj: NMObject) -> None:
         """
