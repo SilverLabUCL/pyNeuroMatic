@@ -686,3 +686,221 @@ class TestSmoothSavgol:
     def test_rejects_non_array(self):
         with pytest.raises(TypeError):
             nm_math.smooth_savgol([1.0, 2.0, 3.0], window=3)
+
+
+# =============================================================================
+# histogram
+# =============================================================================
+
+
+class TestHistogram:
+    def test_returns_dict(self):
+        y = np.array([1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0])
+        r = nm_math.histogram(y, bins=4)
+        assert "counts" in r
+        assert "edges" in r
+
+    def test_counts_length(self):
+        y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        r = nm_math.histogram(y, bins=4)
+        assert len(r["counts"]) == 4
+
+    def test_edges_length(self):
+        y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        r = nm_math.histogram(y, bins=4)
+        assert len(r["edges"]) == 5  # bins + 1
+
+    def test_counts_sum(self):
+        y = np.array([1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0])
+        r = nm_math.histogram(y, bins=4)
+        assert sum(r["counts"]) == 9
+
+    def test_strips_nans(self):
+        y = np.array([1.0, 2.0, np.nan, 3.0])
+        r = nm_math.histogram(y, bins=3)
+        assert sum(r["counts"]) == 3
+
+    def test_strips_infs(self):
+        y = np.array([1.0, 2.0, np.inf, 3.0])
+        r = nm_math.histogram(y, bins=3)
+        assert sum(r["counts"]) == 3
+
+    def test_density_sums_to_approx_one(self):
+        y = np.linspace(0.0, 1.0, 100)
+        r = nm_math.histogram(y, bins=10, density=True)
+        # density * bin_width should sum to ~1.0
+        bin_width = r["edges"][1] - r["edges"][0]
+        assert abs(sum(r["counts"]) * bin_width - 1.0) < 1e-10
+
+    def test_rejects_non_array(self):
+        with pytest.raises(TypeError):
+            nm_math.histogram([1.0, 2.0, 3.0])
+
+
+# =============================================================================
+# ks_test
+# =============================================================================
+
+
+class TestKSTest:
+    def setup_method(self):
+        rng = np.random.default_rng(42)
+        self.pop1 = rng.normal(loc=0, scale=1, size=50)
+        self.pop2 = rng.normal(loc=10, scale=1, size=50)
+        self.same1 = rng.normal(loc=0, scale=1, size=50)
+        self.same2 = rng.normal(loc=0, scale=1, size=50)
+
+    def test_returns_dict_keys(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        for key in ("d", "pvalue", "alpha", "significant", "message",
+                    "n1", "n2", "sort1", "ecdf1", "sort2", "ecdf2"):
+            assert key in r
+
+    def test_d_range(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert 0.0 <= r["d"] <= 1.0
+
+    def test_pvalue_range(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert 0.0 <= r["pvalue"] <= 1.0
+
+    def test_significant_true(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert r["significant"] is True
+
+    def test_significant_false(self):
+        r = nm_math.ks_test(self.same1, self.same2)
+        assert r["significant"] is False
+
+    def test_message_different(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert r["message"] == "different populations"
+
+    def test_message_same(self):
+        r = nm_math.ks_test(self.same1, self.same2)
+        assert r["message"] == "same population"
+
+    def test_n1_n2(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert r["n1"] == 50
+        assert r["n2"] == 50
+
+    def test_strips_nans(self):
+        y1_nan = np.concatenate([self.pop1, [np.nan, np.nan]])
+        r = nm_math.ks_test(y1_nan, self.pop2)
+        assert r["n1"] == 50  # 2 NaNs removed
+
+    def test_alpha_echoed(self):
+        r = nm_math.ks_test(self.pop1, self.pop2, alpha=0.01)
+        assert r["alpha"] == pytest.approx(0.01)
+
+    def test_ecdf_values_in_range(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert np.all(r["ecdf1"] >= 0.0)
+        assert np.all(r["ecdf1"] <= 1.0)
+
+    def test_ecdf_last_value_is_one(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert r["ecdf1"][-1] == pytest.approx(1.0)
+
+    def test_sort_array_is_sorted(self):
+        r = nm_math.ks_test(self.pop1, self.pop2)
+        assert np.all(r["sort1"][:-1] <= r["sort1"][1:])
+
+    def test_rejects_non_array_y1(self):
+        with pytest.raises(TypeError):
+            nm_math.ks_test([1.0, 2.0], self.pop2)
+
+    def test_rejects_non_array_y2(self):
+        with pytest.raises(TypeError):
+            nm_math.ks_test(self.pop1, [1.0, 2.0])
+
+
+# =============================================================================
+# stability_test
+# =============================================================================
+
+
+class TestStabilityTest:
+    def setup_method(self):
+        self.flat = np.full(20, 3.0)
+        self.trend = np.arange(20, dtype=float)
+        nan_arr = np.full(20, 3.0)
+        nan_arr[5] = np.nan
+        nan_arr[15] = np.nan
+        self.nan_arr = nan_arr
+
+    def test_stable_region_found(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        assert r["stable"] is True
+
+    def test_returns_dict_keys(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        for key in ("stable", "start", "end", "n", "rs", "pvalue", "alpha", "mask"):
+            assert key in r
+
+    def test_start_end_not_none_when_stable(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        assert r["start"] is not None
+        assert r["end"] is not None
+
+    def test_n_matches_window(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        assert r["n"] == r["end"] - r["start"] + 1
+
+    def test_rs_range(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        assert -1.0 <= r["rs"] <= 1.0
+
+    def test_pvalue_range(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        assert 0.0 <= r["pvalue"] <= 1.0
+
+    def test_alpha_echoed(self):
+        r = nm_math.stability_test(self.flat, alpha=0.01, min_window=5)
+        assert r["alpha"] == pytest.approx(0.01)
+
+    def test_unstable_region(self):
+        r = nm_math.stability_test(self.trend, alpha=0.05, min_window=5)
+        assert r["stable"] is False
+
+    def test_start_end_none_when_not_stable(self):
+        r = nm_math.stability_test(self.trend, alpha=0.05, min_window=5)
+        assert r["start"] is None
+        assert r["end"] is None
+
+    def test_rs_none_when_not_stable(self):
+        r = nm_math.stability_test(self.trend, alpha=0.05, min_window=5)
+        assert r["rs"] is None
+
+    def test_mask_length_equals_input(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        assert len(r["mask"]) == len(self.flat)
+
+    def test_mask_true_at_stable_region(self):
+        r = nm_math.stability_test(self.flat, min_window=5)
+        assert np.all(r["mask"][r["start"]: r["end"] + 1])
+
+    def test_mask_all_false_when_not_stable(self):
+        r = nm_math.stability_test(self.trend, alpha=0.05, min_window=5)
+        assert not np.any(r["mask"])
+
+    def test_strips_nans_mask_length_unchanged(self):
+        r = nm_math.stability_test(self.nan_arr, min_window=5)
+        assert len(r["mask"]) == 20
+
+    def test_strips_nans_stable_found(self):
+        r = nm_math.stability_test(self.nan_arr, min_window=5)
+        assert r["stable"] is True
+
+    def test_min_window_too_large_raises(self):
+        with pytest.raises(ValueError):
+            nm_math.stability_test(self.flat, min_window=100)
+
+    def test_min_window_less_than_3_raises(self):
+        with pytest.raises(ValueError):
+            nm_math.stability_test(self.flat, min_window=2)
+
+    def test_rejects_non_array(self):
+        with pytest.raises(TypeError):
+            nm_math.stability_test([1.0, 2.0, 3.0])

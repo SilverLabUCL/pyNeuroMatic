@@ -765,19 +765,16 @@ class NMToolStats2:
         if not isinstance(d.nparray, np.ndarray):
             raise ValueError("array has no nparray: %s" % name)
 
-        arr = d.nparray
-        arr = arr[np.isfinite(arr)]  # exclude NaN and Inf
-
-        counts, edges = np.histogram(arr, bins=bins, range=xrange,
-                                     density=density)
+        result = nm_math.histogram(d.nparray, bins=bins, xrange=xrange,
+                                   density=density)
 
         if save_to_numpy:
-            # x-scaling: left edge of first bin, uniform bin width
+            edges = result["edges"]
             xscale = {"start": float(edges[0]),
                       "delta": float(edges[1] - edges[0])}
             toolfolder.data.new(
                 "H_%s_counts" % name,
-                nparray=counts.astype(float),
+                nparray=result["counts"].astype(float),
                 xscale=xscale,
             )
             toolfolder.data.new(
@@ -785,7 +782,7 @@ class NMToolStats2:
                 nparray=edges,
             )
 
-        return {"counts": counts, "edges": edges}
+        return result
 
     @staticmethod
     def inequality(
@@ -1016,8 +1013,6 @@ class NMToolStats2:
             ValueError: If the named array has no nparray data.
             ImportError: If scipy is not installed.
         """
-        from scipy.stats import ks_2samp  # noqa: PLC0415
-
         if not isinstance(toolfolder, NMToolFolder):
             raise TypeError(
                 nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
@@ -1039,36 +1034,17 @@ class NMToolStats2:
         if not isinstance(d2.nparray, np.ndarray):
             raise ValueError("array has no nparray: %s" % name2)
 
-        # Strip NaN/Inf
-        arr1 = d1.nparray.astype(float)
-        arr2 = d2.nparray.astype(float)
-        arr1 = arr1[np.isfinite(arr1)]
-        arr2 = arr2[np.isfinite(arr2)]
-
-        stat, pvalue = ks_2samp(arr1, arr2, method=method)
-
-        significant = bool(pvalue <= alpha)
-        message = "different populations" if significant else "same population"
+        result = nm_math.ks_test(d1.nparray, d2.nparray, alpha=alpha,
+                                 method=method)
 
         if save_to_numpy and toolfolder.data is not None:
-            sort1 = np.sort(arr1)
-            prob1 = np.arange(1, len(sort1) + 1) / len(sort1)
-            sort2 = np.sort(arr2)
-            prob2 = np.arange(1, len(sort2) + 1) / len(sort2)
-            toolfolder.data.new("KS_%s_sort" % name1, nparray=sort1)
-            toolfolder.data.new("KS_%s_ecdf" % name1, nparray=prob1)
-            toolfolder.data.new("KS_%s_sort" % name2, nparray=sort2)
-            toolfolder.data.new("KS_%s_ecdf" % name2, nparray=prob2)
+            toolfolder.data.new("KS_%s_sort" % name1, nparray=result["sort1"])
+            toolfolder.data.new("KS_%s_ecdf" % name1, nparray=result["ecdf1"])
+            toolfolder.data.new("KS_%s_sort" % name2, nparray=result["sort2"])
+            toolfolder.data.new("KS_%s_ecdf" % name2, nparray=result["ecdf2"])
 
-        return {
-            "d":           float(stat),
-            "pvalue":      float(pvalue),
-            "alpha":       float(alpha),
-            "significant": significant,
-            "message":     message,
-            "n1":          int(len(arr1)),
-            "n2":          int(len(arr2)),
-        }
+        return {k: result[k] for k in
+                ("d", "pvalue", "alpha", "significant", "message", "n1", "n2")}
 
     @staticmethod
     def stability_test(
@@ -1129,10 +1105,6 @@ class NMToolStats2:
             ValueError: If the array has no data, or min_window is out of
                 range.
         """
-        import warnings  # noqa: PLC0415
-
-        from scipy.stats import spearmanr  # noqa: PLC0415
-
         if not isinstance(toolfolder, NMToolFolder):
             raise TypeError(
                 nmu.type_error_str(toolfolder, "toolfolder", "NMToolFolder")
@@ -1146,84 +1118,17 @@ class NMToolStats2:
         if not isinstance(d.nparray, np.ndarray):
             raise ValueError("array has no nparray: %s" % name)
 
-        arr = d.nparray.astype(float)
-        finite_mask = np.isfinite(arr)
-        finite_idx = np.where(finite_mask)[0]  # original positions of valid points
-        arr_clean = arr[finite_mask]
-        n = len(arr_clean)
-
-        if min_window < 3:
-            raise ValueError("min_window must be >= 3, got %d" % min_window)
-        if min_window > n:
-            raise ValueError(
-                "min_window (%d) > available data points (%d)" % (min_window, n)
-            )
-
-        # Sliding-window Spearman search: largest window first
-        best_start: int | None = None
-        best_size: int = 0
-        best_rs: float | None = None
-        best_pvalue: float = 0.0
-
-        for w in range(n, min_window - 1, -1):
-            for i in range(n - w + 1):
-                x = np.arange(i, i + w, dtype=float)
-                y = arr_clean[i: i + w]
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    rs, pvalue = spearmanr(x, y)
-                # Constant y → spearmanr returns NaN for both rs and pvalue
-                # (ConstantInputWarning); no trend by definition → treat as
-                # perfectly stable.  NaN pvalue with valid rs (e.g. w=2 with
-                # non-constant data) → cannot assess stability → skip.
-                if math.isnan(rs):
-                    rs, pvalue = 0.0, 1.0
-                elif math.isnan(pvalue):
-                    continue
-                if pvalue > alpha and pvalue > best_pvalue:
-                    best_start = i
-                    best_size = w
-                    best_rs = float(rs)
-                    best_pvalue = float(pvalue)
-            if best_start is not None:
-                break  # largest stable window found; stop shrinking
-
-        mask = np.zeros(len(arr), dtype=bool)
-
-        if best_start is None:
-            return {
-                "stable":  False,
-                "start":   None,
-                "end":     None,
-                "n":       None,
-                "rs":      None,
-                "pvalue":  None,
-                "alpha":   float(alpha),
-                "mask":    mask,
-            }
-
-        best_end = best_start + best_size - 1
-        orig_start = int(finite_idx[best_start])
-        orig_end = int(finite_idx[best_end])
-        mask[finite_idx[best_start: best_end + 1]] = True
+        result = nm_math.stability_test(d.nparray, alpha=alpha,
+                                        min_window=min_window)
 
         if save_to_numpy and toolfolder.data is not None:
-            toolfolder.data.new("STAB_%s_mask" % name, nparray=mask.astype(float))
+            toolfolder.data.new("STAB_%s_mask" % name,
+                                nparray=result["mask"].astype(float))
 
-        # Create epoch set if dataseries and set name are given
         if isinstance(dataseries, NMDataSeries) and set_name_stable:
             NMToolStats2._add_epoch_sets_from_mask(
-                toolfolder, name, dataseries, mask,
+                toolfolder, name, dataseries, result["mask"],
                 set_name_true=set_name_stable,
             )
 
-        return {
-            "stable":  True,
-            "start":   orig_start,
-            "end":     orig_end,
-            "n":       best_size,
-            "rs":      best_rs,
-            "pvalue":  best_pvalue,
-            "alpha":   float(alpha),
-            "mask":    mask,
-        }
+        return result

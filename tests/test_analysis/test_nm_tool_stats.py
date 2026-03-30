@@ -403,7 +403,9 @@ class TestNMToolStats2(unittest.TestCase):
 
 
 class TestNMToolStats2Histogram(unittest.TestCase):
-    """Tests for NMToolStats2.histogram()."""
+    """Tests for NMToolStats2.histogram() — NM wrapper behaviour only.
+    Pure math tests are in test_nm_math.py::TestHistogram.
+    """
 
     def setUp(self):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
@@ -411,27 +413,7 @@ class TestNMToolStats2Histogram(unittest.TestCase):
         arr = np.array([1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0])
         self.tf.data.new("ST_w0_mean_y", nparray=arr)
 
-    # --- return value ---
-
-    def test_histogram_returns_dict(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y")
-        self.assertIsInstance(r, dict)
-        self.assertIn("counts", r)
-        self.assertIn("edges", r)
-
-    def test_histogram_counts_length(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        self.assertEqual(len(r["counts"]), 4)
-
-    def test_histogram_edges_length(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        self.assertEqual(len(r["edges"]), 5)  # bins + 1
-
-    def test_histogram_counts_sum(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        self.assertEqual(sum(r["counts"]), 9)  # all 9 values counted
-
-    # --- saved arrays (save_to_numpy=True, default) ---
+    # --- save_to_numpy ---
 
     def test_histogram_saves_counts_array(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
@@ -451,34 +433,12 @@ class TestNMToolStats2Histogram(unittest.TestCase):
         d = self.tf.data.get("H_ST_w0_mean_y_counts")
         self.assertAlmostEqual(d.xscale.delta, 1.0)  # (5 - 1) / 4 = 1.0
 
-    # --- save_to_numpy=False ---
-
     def test_histogram_no_save_skips_arrays(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, save_to_numpy=False)
         self.assertNotIn("H_ST_w0_mean_y_counts", self.tf.data)
         self.assertNotIn("H_ST_w0_mean_y_edges", self.tf.data)
 
-    def test_histogram_no_save_still_returns_dict(self):
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4,
-                                 save_to_numpy=False)
-        self.assertIn("counts", r)
-        self.assertIn("edges", r)
-
-    # --- NaN/Inf handling ---
-
-    def test_histogram_strips_nans(self):
-        arr_nan = np.array([1.0, 2.0, np.nan, 3.0])
-        self.tf.data.new("ST_w0_nan_s", nparray=arr_nan)
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_nan_s", bins=3)
-        self.assertEqual(sum(r["counts"]), 3)  # NaN excluded
-
-    def test_histogram_strips_infs(self):
-        arr_inf = np.array([1.0, 2.0, np.inf, 3.0])
-        self.tf.data.new("ST_w0_inf_s", nparray=arr_inf)
-        r = nms.NMToolStats2.histogram(self.tf, "ST_w0_inf_s", bins=3)
-        self.assertEqual(sum(r["counts"]), 3)  # Inf excluded
-
-    # --- type validation ---
+    # --- type and key validation ---
 
     def test_histogram_rejects_non_toolfolder(self):
         with self.assertRaises(TypeError):
@@ -750,102 +710,19 @@ class TestNMToolStats2Inequality(unittest.TestCase):
 
 
 class TestNMToolStats2KSTest(unittest.TestCase):
-    """Tests for NMToolStats2.ks_test()."""
+    """Tests for NMToolStats2.ks_test() — NM wrapper behaviour only.
+    Pure math tests are in test_nm_math.py::TestKSTest.
+    """
 
     def setUp(self):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 
         rng = np.random.default_rng(42)
         self.tf = NMToolFolder(name="stats0")
-
-        # Two clearly different distributions (mean 0 vs mean 10, n=50)
         self.pop1 = rng.normal(loc=0, scale=1, size=50)
         self.pop2 = rng.normal(loc=10, scale=1, size=50)
         self.tf.data.new("ST_w0_pop1_y", nparray=self.pop1.copy())
         self.tf.data.new("ST_w0_pop2_y", nparray=self.pop2.copy())
-
-        # Two samples from the same distribution
-        self.same1 = rng.normal(loc=0, scale=1, size=50)
-        self.same2 = rng.normal(loc=0, scale=1, size=50)
-        self.tf.data.new("ST_w0_same1_y", nparray=self.same1.copy())
-        self.tf.data.new("ST_w0_same2_y", nparray=self.same2.copy())
-
-    # --- return value structure ---
-
-    def test_ks_test_returns_dict(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
-        )
-        for key in ("d", "pvalue", "alpha", "significant", "message", "n1", "n2"):
-            self.assertIn(key, r)
-
-    def test_ks_test_d_range(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
-        )
-        self.assertGreaterEqual(r["d"], 0.0)
-        self.assertLessEqual(r["d"], 1.0)
-
-    def test_ks_test_pvalue_range(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
-        )
-        self.assertGreaterEqual(r["pvalue"], 0.0)
-        self.assertLessEqual(r["pvalue"], 1.0)
-
-    # --- significance ---
-
-    def test_ks_test_significant_true(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
-        )
-        self.assertTrue(r["significant"])
-
-    def test_ks_test_significant_false(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_same1_y", "ST_w0_same2_y", save_to_numpy=False
-        )
-        self.assertFalse(r["significant"])
-
-    # --- message ---
-
-    def test_ks_test_message_different(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
-        )
-        self.assertEqual(r["message"], "different populations")
-
-    def test_ks_test_message_same(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_same1_y", "ST_w0_same2_y", save_to_numpy=False
-        )
-        self.assertEqual(r["message"], "same population")
-
-    # --- n1/n2 ---
-
-    def test_ks_test_n1_n2(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
-        )
-        self.assertEqual(r["n1"], 50)
-        self.assertEqual(r["n2"], 50)
-
-    def test_ks_test_strips_nans(self):
-        arr_nan = np.concatenate([self.pop1, [np.nan, np.nan]])
-        self.tf.data.new("ST_w0_nan_y", nparray=arr_nan)
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_nan_y", "ST_w0_pop2_y", save_to_numpy=False
-        )
-        self.assertEqual(r["n1"], 50)  # 2 NaNs removed
-
-    # --- alpha ---
-
-    def test_ks_test_alpha_in_result(self):
-        r = nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y",
-            alpha=0.01, save_to_numpy=False
-        )
-        self.assertAlmostEqual(r["alpha"], 0.01)
 
     # --- save_to_numpy ---
 
@@ -863,28 +740,6 @@ class TestNMToolStats2KSTest(unittest.TestCase):
         self.assertIn("KS_ST_w0_pop1_y_ecdf", self.tf.data)
         self.assertIn("KS_ST_w0_pop2_y_ecdf", self.tf.data)
 
-    def test_ks_test_ecdf_values_in_range(self):
-        nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
-        )
-        ecdf = self.tf.data.get("KS_ST_w0_pop1_y_ecdf").nparray
-        self.assertTrue(np.all(ecdf >= 0.0))
-        self.assertTrue(np.all(ecdf <= 1.0))
-
-    def test_ks_test_ecdf_last_value_is_one(self):
-        nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
-        )
-        ecdf = self.tf.data.get("KS_ST_w0_pop1_y_ecdf").nparray
-        self.assertAlmostEqual(ecdf[-1], 1.0)
-
-    def test_ks_test_sort_array_is_sorted(self):
-        nms.NMToolStats2.ks_test(
-            self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=True
-        )
-        sort_arr = self.tf.data.get("KS_ST_w0_pop1_y_sort").nparray
-        self.assertTrue(np.all(sort_arr[:-1] <= sort_arr[1:]))
-
     def test_ks_test_no_save(self):
         nms.NMToolStats2.ks_test(
             self.tf, "ST_w0_pop1_y", "ST_w0_pop2_y", save_to_numpy=False
@@ -892,7 +747,7 @@ class TestNMToolStats2KSTest(unittest.TestCase):
         self.assertNotIn("KS_ST_w0_pop1_y_sort", self.tf.data)
         self.assertNotIn("KS_ST_w0_pop1_y_ecdf", self.tf.data)
 
-    # --- type validation ---
+    # --- type and key validation ---
 
     def test_ks_test_rejects_bad_toolfolder(self):
         with self.assertRaises(TypeError):
@@ -916,28 +771,17 @@ class TestNMToolStats2KSTest(unittest.TestCase):
 
 
 class TestNMToolStats2StabilityTest(unittest.TestCase):
-    """Tests for NMToolStats2.stability_test()."""
+    """Tests for NMToolStats2.stability_test() — NM wrapper behaviour only.
+    Pure math tests are in test_nm_math.py::TestStabilityTest.
+    """
 
     def setUp(self):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 
         self.tf = NMToolFolder(name="stats0")
-
-        # Flat array (constant) — no monotonic trend → always stable
         self.flat = np.full(20, 3.0)
         self.tf.data.new("ST_w0_flat_y", nparray=self.flat.copy())
 
-        # Strictly increasing — perfect monotonic trend → not stable
-        self.trend = np.arange(20, dtype=float)
-        self.tf.data.new("ST_w0_trend_y", nparray=self.trend.copy())
-
-        # Flat array with 2 NaN values
-        nan_arr = np.full(20, 3.0)
-        nan_arr[5] = np.nan
-        nan_arr[15] = np.nan
-        self.tf.data.new("ST_w0_nan_y", nparray=nan_arr)
-
-        # array names and dataseries for epoch-set tests
         array_names = ["RecordA%d" % i for i in range(20)]
         self.tf.data.new(
             "ST_w0_data",
@@ -949,112 +793,6 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
         self.ds = self.folder.dataseries.new("Record")
         for i in range(20):
             self.ds.epochs.new("E%d" % i)
-
-    # --- stable=True (flat array) ---
-
-    def test_stable_region_found(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        self.assertTrue(r["stable"])
-
-    def test_returns_dict_keys(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        for key in ("stable", "start", "end", "n", "rs", "pvalue", "alpha", "mask"):
-            self.assertIn(key, r)
-
-    def test_start_end_not_none_when_stable(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        self.assertIsNotNone(r["start"])
-        self.assertIsNotNone(r["end"])
-
-    def test_n_matches_window(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        self.assertEqual(r["n"], r["end"] - r["start"] + 1)
-
-    def test_rs_range(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        self.assertGreaterEqual(r["rs"], -1.0)
-        self.assertLessEqual(r["rs"], 1.0)
-
-    def test_pvalue_range(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        self.assertGreaterEqual(r["pvalue"], 0.0)
-        self.assertLessEqual(r["pvalue"], 1.0)
-
-    def test_alpha_echoed(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", alpha=0.01, min_window=5
-        )
-        self.assertAlmostEqual(r["alpha"], 0.01)
-
-    # --- stable=False (trending array) ---
-
-    def test_unstable_region(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
-        )
-        self.assertFalse(r["stable"])
-
-    def test_start_end_none_when_not_stable(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
-        )
-        self.assertIsNone(r["start"])
-        self.assertIsNone(r["end"])
-
-    def test_rs_none_when_not_stable(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
-        )
-        self.assertIsNone(r["rs"])
-
-    # --- mask ---
-
-    def test_mask_length_equals_original_array(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        self.assertEqual(len(r["mask"]), len(self.flat))
-
-    def test_mask_true_at_stable_region(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5
-        )
-        # Every index in [start, end] should be True in mask
-        self.assertTrue(np.all(r["mask"][r["start"]: r["end"] + 1]))
-
-    def test_mask_all_false_when_not_stable(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_trend_y", alpha=0.05, min_window=5
-        )
-        self.assertFalse(np.any(r["mask"]))
-
-    # --- NaN handling ---
-
-    def test_strips_nans_mask_length_unchanged(self):
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_nan_y", min_window=5
-        )
-        # mask length = length of original array (including NaN positions)
-        self.assertEqual(len(r["mask"]), 20)
-
-    def test_strips_nans_stable_found(self):
-        # Flat array with 2 NaNs removed → remaining 18 values are flat → stable
-        r = nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_nan_y", min_window=5
-        )
-        self.assertTrue(r["stable"])
 
     # --- save_to_numpy ---
 
@@ -1070,19 +808,23 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
         )
         self.assertNotIn("STAB_ST_w0_flat_y_mask", self.tf.data)
 
-    # --- min_window validation ---
+    # --- epoch sets ---
 
-    def test_min_window_too_large_raises(self):
-        with self.assertRaises(ValueError):
-            nms.NMToolStats2.stability_test(
-                self.tf, "ST_w0_flat_y", min_window=100
-            )
+    def test_set_name_stable_creates_epoch_set(self):
+        nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5,
+            dataseries=self.ds, set_name_stable="Stable",
+        )
+        self.assertIsNotNone(self.ds.epochs.sets.get_items("Stable"))
 
-    def test_min_window_less_than_3_raises(self):
-        with self.assertRaises(ValueError):
-            nms.NMToolStats2.stability_test(
-                self.tf, "ST_w0_flat_y", min_window=2
-            )
+    def test_set_name_stable_contains_correct_epochs(self):
+        nms.NMToolStats2.stability_test(
+            self.tf, "ST_w0_flat_y", min_window=5,
+            dataseries=self.ds, set_name_stable="Stable",
+        )
+        epoch_names = [ep.name for ep in self.ds.epochs.sets.get_items("Stable")]
+        self.assertIn("E0", epoch_names)
+        self.assertIn("E19", epoch_names)
 
     # --- type and key validation ---
 
@@ -1097,25 +839,6 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
     def test_unknown_name_raises(self):
         with self.assertRaises(KeyError):
             nms.NMToolStats2.stability_test(self.tf, "ST_w0_missing")
-
-    # --- epoch sets ---
-
-    def test_set_name_stable_creates_epoch_set(self):
-        nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5,
-            dataseries=self.ds, set_name_stable="Stable",
-        )
-        self.assertIsNotNone(self.ds.epochs.sets.get_items("Stable"))
-
-    def test_set_name_stable_contains_correct_epochs(self):
-        # Flat array → all 20 epochs should be in the stable set
-        nms.NMToolStats2.stability_test(
-            self.tf, "ST_w0_flat_y", min_window=5,
-            dataseries=self.ds, set_name_stable="Stable",
-        )
-        epoch_names = [ep.name for ep in self.ds.epochs.sets.get_items("Stable")]
-        self.assertIn("E0", epoch_names)
-        self.assertIn("E19", epoch_names)
 
 
 class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
