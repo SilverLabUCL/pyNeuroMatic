@@ -803,7 +803,7 @@ def histogram(
     xrange: tuple | None = None,
     density: bool = False,
 ) -> dict:
-    """Compute a histogram of a 1-D array, excluding NaN and Inf values.
+    """Thin wrapper around ``np.histogram`` that excludes NaN and Inf values.
 
     Args:
         y: 1-D numpy array of values.
@@ -844,7 +844,8 @@ def ks_test(
 
     This mirrors the Igor NeuroMatic ``NMKSTest()`` function
     (``NM_StatsTabKolmogorov.ipf``), originally written by Dr. Angus
-    Silver (UCL) based on *Numerical Recipes*.
+    Silver (UCL) based on *Numerical Recipes*, but now uses 
+    ``scipy.stats.ks_2samp`` for p-value calculation.
 
     Args:
         y1: First 1-D numpy array of values.
@@ -919,7 +920,8 @@ def stability_test(
 
     This mirrors the Igor NeuroMatic ``NMStabilityRankOrderTest()`` function
     (``NM_StatsTabStability.ipf``, pass 1 only), originally written by
-    Dr. Angus Silver and Simon Mitchell (UCL), based on *Numerical Recipes in C*.
+    Dr. Angus Silver and Simon Mitchell (UCL), based on *Numerical Recipes in C*,
+    but now uses ``scipy.stats.spearmanr`` for p-value calculation.
 
     NaN and Inf values are excluded before the search; returned indices
     (``start``, ``end``) refer to positions in the original array *y*.
