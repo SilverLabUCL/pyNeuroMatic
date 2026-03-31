@@ -1398,6 +1398,275 @@ class NMMainOpSmooth(NMMainOp):
 
 
 # =========================================================================
+# Resample
+# =========================================================================
+
+
+class NMMainOpResample(NMMainOp):
+    """Resample each array to a new sample interval using polyphase filtering.
+
+    Wraps ``scipy.signal.resample_poly`` via :func:`nm_math.resample`,
+    which applies an anti-aliasing FIR filter making it correct for both
+    upsampling and downsampling.  Updates ``xscale.delta`` after resampling;
+    ``xscale.start`` is unchanged.
+
+    Parameters:
+        delta: New sample interval in the same units as ``xscale.delta``.
+            Must be > 0.
+    """
+
+    name = "resample"
+
+    def __init__(self, delta: float) -> None:
+        self.delta = delta
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def delta(self) -> float:
+        """New sample interval in the same units as ``xscale.delta``."""
+        return self._delta
+
+    @delta.setter
+    def delta(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "delta", "float"))
+        if value <= 0:
+            raise ValueError("delta must be > 0, got %g" % value)
+        self._delta = float(value)
+
+    # ------------------------------------------------------------------
+    # Core
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Resample *data* in-place."""
+        y = data.nparray
+        if y is None:
+            return
+        data.nparray = nm_math.resample(y, data.xscale.delta, self._delta)
+        data.xscale.delta = self._delta
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        return "delta=%r" % self._delta
+
+
+# =========================================================================
+# Interpolate
+# =========================================================================
+
+_VALID_INTERP_X_SOURCES: frozenset[str] = frozenset({"common", "template"})
+_VALID_INTERP_X_EXTENT: frozenset[str] = frozenset({"overlap", "expand"})
+
+
+class NMMainOpInterpolate(NMMainOp):
+    """Re-grid each array onto a common x-axis via interpolation.
+
+    Useful when arrays were recorded at slightly different time points and
+    need to be aligned to a shared x-axis before averaging or comparison.
+    Uses :func:`nm_math.interpolate` (``scipy.interpolate``).
+
+    Two x-axis sources:
+
+    - ``"common"``: derive the target x-axis from the data themselves.
+      Requires ``run_all()`` (or ``NMToolMain``) so that all arrays are
+      visible before interpolation begins.
+    - ``"template"``: use the xscale of a named NMData array in the same
+      folder as the template x-axis.
+
+    When *x_source* is ``"common"``, *x_extent* controls the x-axis range:
+
+    - ``"overlap"`` (default): start = max of all array starts, end = min
+      of all array ends — only the region shared by every array is kept.
+    - ``"expand"``: start = min of all array starts, end = max of all array
+      ends — the full union is used.  Points outside an array's original
+      range are filled with NaN.
+
+    Parameters:
+        method: ``"linear"`` (default) or ``"cubic"``.
+        x_source: ``"common"`` (default) or ``"template"``.
+        x_extent: ``"overlap"`` (default) or ``"expand"``.
+            Only used when *x_source* is ``"common"``.
+        template_name: Name of the NMData template array.  Required when
+            *x_source* is ``"template"``.
+    """
+
+    name = "interpolate"
+
+    def __init__(
+        self,
+        method: str = "linear",
+        x_source: str = "common",
+        x_extent: str = "overlap",
+        template_name: str | None = None,
+    ) -> None:
+        self.method = method
+        self.x_source = x_source
+        self.x_extent = x_extent
+        self.template_name = template_name
+        self._x_new: np.ndarray | None = None
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def method(self) -> str:
+        """Interpolation method: ``'linear'`` or ``'cubic'``."""
+        return self._method
+
+    @method.setter
+    def method(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "method", "string"))
+        if value not in nm_math._VALID_INTERPOLATE_METHODS:
+            raise ValueError(
+                "method must be one of %s, got %r"
+                % (sorted(nm_math._VALID_INTERPOLATE_METHODS), value)
+            )
+        self._method = value
+
+    @property
+    def x_source(self) -> str:
+        """X-axis source: ``'common'`` or ``'template'``."""
+        return self._x_source
+
+    @x_source.setter
+    def x_source(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "x_source", "string"))
+        if value not in _VALID_INTERP_X_SOURCES:
+            raise ValueError(
+                "x_source must be one of %s, got %r"
+                % (sorted(_VALID_INTERP_X_SOURCES), value)
+            )
+        self._x_source = value
+
+    @property
+    def x_extent(self) -> str:
+        """X-axis extent when x_source='common': ``'overlap'`` or ``'expand'``."""
+        return self._x_extent
+
+    @x_extent.setter
+    def x_extent(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "x_extent", "string"))
+        if value not in _VALID_INTERP_X_EXTENT:
+            raise ValueError(
+                "x_extent must be one of %s, got %r"
+                % (sorted(_VALID_INTERP_X_EXTENT), value)
+            )
+        self._x_extent = value
+
+    @property
+    def template_name(self) -> str | None:
+        """Name of NMData template array (used when x_source='template')."""
+        return self._template_name
+
+    @template_name.setter
+    def template_name(self, value: str | None) -> None:
+        if value is not None and not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "template_name", "string"))
+        self._template_name = value
+
+    # ------------------------------------------------------------------
+    # Core
+
+    def run_init(self) -> None:
+        self._x_new = None
+        if self._x_source == "common":
+            self._x_new = self._compute_common_x()
+        elif self._x_source == "template":
+            self._x_new = self._compute_template_x()
+
+    def _compute_common_x(self) -> np.ndarray | None:
+        """Derive common x-axis from all data items.
+
+        ``x_extent='overlap'``: intersection of all x-ranges (no NaNs).
+        ``x_extent='expand'``: union of all x-ranges (NaN where an array has
+        no data).
+        """
+        items = getattr(self, "_data_items", None)
+        if not items:
+            return None
+        starts, ends, deltas = [], [], []
+        for data, _ in items:
+            y = data.nparray
+            if y is None or len(y) == 0:
+                continue
+            s = data.xscale.start
+            d = data.xscale.delta
+            starts.append(s)
+            ends.append(s + (len(y) - 1) * d)
+            deltas.append(d)
+        if not starts:
+            return None
+        if self._x_extent == "expand":
+            x_start = min(starts)   # union: earliest start
+            x_end = max(ends)       # union: latest end
+        else:
+            x_start = max(starts)   # overlap: latest start
+            x_end = min(ends)       # overlap: earliest end
+        x_delta = min(deltas)       # finest resolution
+        if x_end <= x_start:
+            return None
+        n = round((x_end - x_start) / x_delta) + 1
+        return np.linspace(x_start, x_end, n)
+
+    def _compute_template_x(self) -> np.ndarray | None:
+        """Derive x-axis from the named template NMData array."""
+        if not self._template_name:
+            return None
+        folder = getattr(self, "_folder", None)
+        if folder is None:
+            return None
+        d = folder.data.get(self._template_name)
+        if d is None or d.nparray is None:
+            return None
+        n = len(d.nparray)
+        return np.linspace(
+            d.xscale.start,
+            d.xscale.start + (n - 1) * d.xscale.delta,
+            n,
+        )
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Interpolate *data* in-place onto the target x-axis."""
+        y = data.nparray
+        if y is None:
+            return
+        if self._x_new is None:
+            raise ValueError(
+                "NMMainOpInterpolate: x_new not set — call run_all() or "
+                "run_init() before run(), or check x_source/template_name"
+            )
+        n = len(y)
+        x_old = np.linspace(
+            data.xscale.start,
+            data.xscale.start + (n - 1) * data.xscale.delta,
+            n,
+        )
+        data.nparray = nm_math.interpolate(y, x_old, self._x_new,
+                                           method=self._method)
+        data.xscale.start = float(self._x_new[0])
+        data.xscale.delta = float(self._x_new[1] - self._x_new[0])
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        return "method=%r, x_source=%r, x_extent=%r, template_name=%r" % (
+            self._method, self._x_source, self._x_extent, self._template_name
+        )
+
+
+# =========================================================================
 # Normalize
 # =========================================================================
 
@@ -2518,7 +2787,7 @@ class NMMainOpConcatenate(NMMainOpAccumulate):
     In ``"1d"`` mode arrays are joined end-to-end (``np.concatenate``);
     unequal lengths are allowed.  In ``"2d"`` mode arrays are stacked as
     rows (``np.stack``); shorter arrays are padded with NaN to ``max_len``
-    so no data is lost from longer waves.
+    so no data is lost from longer arrays.
 
     Output array is written to the destination folder as
     ``Cat_{prefix}{channel}`` (e.g. ``Cat_RecordA``).
@@ -2959,31 +3228,39 @@ class NMMainOpHistogram(NMMainOp):
 
 
 _OP_REGISTRY: dict[str, type[NMMainOp]] = {
-    "arithmetic": NMMainOpArithmetic,
-    "arithmetic_by_array": NMMainOpArithmeticByArray,
+    # --- accumulation (combine multiple arrays) ---
     "average": NMMainOpAverage,
     "concatenate": NMMainOpConcatenate,
-    "baseline": NMMainOpBaseline,
-    "delete_nans": NMMainOpDeleteNaNs,
-    "dfof": NMMainOpDFOF,
-    "delete_points": NMMainOpDeletePoints,
-    "differentiate": NMMainOpDifferentiate,
-    "histogram": NMMainOpHistogram,
-    "inequality": NMMainOpInequality,
-    "insert_points": NMMainOpInsertPoints,
-    "integrate": NMMainOpIntegrate,
-    "max": NMMainOpMax,
-    "min": NMMainOpMin,
-    "normalize": NMMainOpNormalize,
-    "redimension": NMMainOpRedimension,
-    "replace_values": NMMainOpReplaceValues,
-    "rescale": NMMainOpRescale,
-    "rescale_x": NMMainOpRescaleX,
-    "reverse": NMMainOpReverse,
-    "rotate": NMMainOpRotate,
-    "smooth": NMMainOpSmooth,
     "sum": NMMainOpSum,
     "sum_sqr": NMMainOpSumSqr,
+    # --- arithmetic / scaling (element-wise value operations) ---
+    "arithmetic": NMMainOpArithmetic,
+    "arithmetic_by_array": NMMainOpArithmeticByArray,
+    "baseline": NMMainOpBaseline,
+    "dfof": NMMainOpDFOF,
+    "normalize": NMMainOpNormalize,
+    "rescale": NMMainOpRescale,
+    # --- calculus / signal conditioning ---
+    "differentiate": NMMainOpDifferentiate,
+    "integrate": NMMainOpIntegrate,
+    "smooth": NMMainOpSmooth,
+    # --- statistics / comparison ---
+    "histogram": NMMainOpHistogram,
+    "inequality": NMMainOpInequality,
+    "max": NMMainOpMax,
+    "min": NMMainOpMin,
+    # --- array structure ---
+    "delete_nans": NMMainOpDeleteNaNs,
+    "delete_points": NMMainOpDeletePoints,
+    "insert_points": NMMainOpInsertPoints,
+    "redimension": NMMainOpRedimension,
+    "replace_values": NMMainOpReplaceValues,
+    "reverse": NMMainOpReverse,
+    "rotate": NMMainOpRotate,
+    # --- x-axis ---
+    "interpolate": NMMainOpInterpolate,
+    "resample": NMMainOpResample,
+    "rescale_x": NMMainOpRescaleX,
 }
 
 

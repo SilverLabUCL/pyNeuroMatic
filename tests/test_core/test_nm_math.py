@@ -904,3 +904,123 @@ class TestStabilityTest:
     def test_rejects_non_array(self):
         with pytest.raises(TypeError):
             nm_math.stability_test([1.0, 2.0, 3.0])
+
+
+# ---------------------------------------------------------------------------
+# resample
+# ---------------------------------------------------------------------------
+
+
+class TestResample:
+    """Tests for nm_math.resample()."""
+
+    def test_downsample_halves_length(self):
+        y = np.ones(100)
+        result = nm_math.resample(y, old_delta=0.1, new_delta=0.2)
+        assert len(result) == 50
+
+    def test_upsample_doubles_length(self):
+        y = np.ones(50)
+        result = nm_math.resample(y, old_delta=0.2, new_delta=0.1)
+        assert len(result) == 100
+
+    def test_same_delta_returns_same_length(self):
+        y = np.arange(10, dtype=float)
+        result = nm_math.resample(y, old_delta=0.1, new_delta=0.1)
+        assert len(result) == 10
+
+    def test_constant_signal_preserved(self):
+        # Use a long signal; polyphase resampling has edge transients, so
+        # check only the interior where the filter has fully settled.
+        y = np.ones(1000) * 3.0
+        result = nm_math.resample(y, old_delta=0.1, new_delta=0.2)
+        np.testing.assert_allclose(result[50:-50], 3.0, atol=1e-4)
+
+    def test_rejects_non_array(self):
+        with pytest.raises(TypeError):
+            nm_math.resample([1, 2, 3], old_delta=0.1, new_delta=0.2)
+
+    def test_rejects_zero_old_delta(self):
+        with pytest.raises(ValueError):
+            nm_math.resample(np.ones(10), old_delta=0.0, new_delta=0.1)
+
+    def test_rejects_zero_new_delta(self):
+        with pytest.raises(ValueError):
+            nm_math.resample(np.ones(10), old_delta=0.1, new_delta=0.0)
+
+    def test_rejects_negative_delta(self):
+        with pytest.raises(ValueError):
+            nm_math.resample(np.ones(10), old_delta=-0.1, new_delta=0.1)
+
+    def test_returns_ndarray(self):
+        result = nm_math.resample(np.ones(10), old_delta=0.1, new_delta=0.2)
+        assert isinstance(result, np.ndarray)
+
+
+# ---------------------------------------------------------------------------
+# interpolate
+# ---------------------------------------------------------------------------
+
+
+class TestInterpolate:
+    """Tests for nm_math.interpolate()."""
+
+    def test_linear_same_grid_unchanged(self):
+        x = np.linspace(0, 1, 11)
+        y = x ** 2
+        result = nm_math.interpolate(y, x, x, method="linear")
+        np.testing.assert_allclose(result, y, atol=1e-10)
+
+    def test_linear_coarser_grid(self):
+        x_old = np.linspace(0, 1, 101)
+        y = np.sin(x_old)
+        x_new = np.linspace(0, 1, 11)
+        result = nm_math.interpolate(y, x_old, x_new, method="linear")
+        assert len(result) == 11
+
+    def test_cubic_same_grid_unchanged(self):
+        x = np.linspace(0, 1, 21)
+        y = x ** 3
+        result = nm_math.interpolate(y, x, x, method="cubic")
+        np.testing.assert_allclose(result, y, atol=1e-10)
+
+    def test_outside_range_is_nan(self):
+        x_old = np.linspace(0, 1, 11)
+        y = np.ones(11)
+        x_new = np.array([-1.0, 0.5, 2.0])
+        result = nm_math.interpolate(y, x_old, x_new, method="linear")
+        assert np.isnan(result[0])
+        assert np.isnan(result[2])
+        assert not np.isnan(result[1])
+
+    def test_cubic_outside_range_is_nan(self):
+        x_old = np.linspace(0, 1, 21)
+        y = np.ones(21)
+        x_new = np.array([-1.0, 0.5, 2.0])
+        result = nm_math.interpolate(y, x_old, x_new, method="cubic")
+        assert np.isnan(result[0])
+        assert np.isnan(result[2])
+        assert not np.isnan(result[1])
+
+    def test_rejects_non_array_y(self):
+        with pytest.raises(TypeError):
+            nm_math.interpolate([1, 2, 3], np.array([0, 1, 2]),
+                                np.array([0, 1, 2]))
+
+    def test_rejects_non_array_x_old(self):
+        with pytest.raises(TypeError):
+            nm_math.interpolate(np.ones(3), [0, 1, 2], np.array([0, 1, 2]))
+
+    def test_rejects_non_array_x_new(self):
+        with pytest.raises(TypeError):
+            nm_math.interpolate(np.ones(3), np.array([0, 1, 2]), [0, 1, 2])
+
+    def test_rejects_invalid_method(self):
+        x = np.linspace(0, 1, 5)
+        with pytest.raises(ValueError):
+            nm_math.interpolate(np.ones(5), x, x, method="spline")
+
+    def test_returns_ndarray(self):
+        x = np.linspace(0, 1, 11)
+        result = nm_math.interpolate(np.ones(11), x, x)
+        assert isinstance(result, np.ndarray)

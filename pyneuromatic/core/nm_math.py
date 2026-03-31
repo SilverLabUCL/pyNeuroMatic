@@ -793,6 +793,106 @@ def smooth_savgol(
 
 
 # =========================================================================
+# Resample and interpolate
+# =========================================================================
+
+
+def resample(
+    y: np.ndarray,
+    old_delta: float,
+    new_delta: float,
+) -> np.ndarray:
+    """Resample a 1-D array to a new sample interval using polyphase filtering.
+
+    Wraps ``scipy.signal.resample_poly`` which applies an anti-aliasing FIR
+    filter before decimation, making it appropriate for both upsampling and
+    downsampling.  The ratio ``old_delta / new_delta`` is approximated as a
+    rational number (numerator / denominator, limited to 1000) to satisfy
+    ``resample_poly``'s integer ``up`` / ``down`` requirement.
+
+    Args:
+        y: 1-D numpy array of y-values.
+        old_delta: Current sample interval (any consistent units).
+        new_delta: Desired sample interval (same units as *old_delta*).
+
+    Returns:
+        Resampled copy of *y*.  Length will be approximately
+        ``len(y) * old_delta / new_delta``.
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray, or *old_delta*/*new_delta*
+            are not numeric.
+        ValueError: If *old_delta* or *new_delta* are <= 0.
+    """
+    from fractions import Fraction  # noqa: PLC0415
+
+    from scipy.signal import resample_poly  # noqa: PLC0415
+
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if not isinstance(old_delta, (int, float)) or isinstance(old_delta, bool):
+        raise TypeError(nmu.type_error_str(old_delta, "old_delta", "float"))
+    if not isinstance(new_delta, (int, float)) or isinstance(new_delta, bool):
+        raise TypeError(nmu.type_error_str(new_delta, "new_delta", "float"))
+    if old_delta <= 0:
+        raise ValueError("old_delta must be > 0, got %g" % old_delta)
+    if new_delta <= 0:
+        raise ValueError("new_delta must be > 0, got %g" % new_delta)
+    frac = Fraction(old_delta / new_delta).limit_denominator(1000)
+    up, down = frac.numerator, frac.denominator
+    return resample_poly(y.copy().astype(float), up, down)
+
+
+_VALID_INTERPOLATE_METHODS: frozenset[str] = frozenset({"linear", "cubic"})
+
+
+def interpolate(
+    y: np.ndarray,
+    x_old: np.ndarray,
+    x_new: np.ndarray,
+    method: str = "linear",
+) -> np.ndarray:
+    """Interpolate a 1-D array from one x-axis to another.
+
+    Uses ``numpy.interp`` for linear interpolation and
+    ``scipy.interpolate.CubicSpline`` for cubic interpolation.  Values
+    outside the range of *x_old* are filled with ``NaN``.
+
+    Args:
+        y: 1-D numpy array of y-values corresponding to *x_old*.
+        x_old: 1-D numpy array of original x-positions (must be strictly
+            increasing).
+        x_new: 1-D numpy array of target x-positions.
+        method: ``"linear"`` (default) or ``"cubic"``.
+
+    Returns:
+        1-D numpy array of interpolated y-values at *x_new* positions.
+
+    Raises:
+        TypeError: If any array argument is not a numpy ndarray.
+        ValueError: If *method* is not ``"linear"`` or ``"cubic"``.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if not isinstance(x_old, np.ndarray):
+        raise TypeError(nmu.type_error_str(x_old, "x_old", "numpy.ndarray"))
+    if not isinstance(x_new, np.ndarray):
+        raise TypeError(nmu.type_error_str(x_new, "x_new", "numpy.ndarray"))
+    if method not in _VALID_INTERPOLATE_METHODS:
+        raise ValueError(
+            "method must be one of %s, got %r"
+            % (sorted(_VALID_INTERPOLATE_METHODS), method)
+        )
+    if method == "linear":
+        return np.interp(x_new, x_old, y, left=np.nan, right=np.nan)
+    # cubic
+    from scipy.interpolate import CubicSpline  # noqa: PLC0415
+
+    cs = CubicSpline(x_old, y, extrapolate=False)
+    return cs(x_new).astype(float)
+
+
+# =========================================================================
 # Stats functions
 # =========================================================================
 

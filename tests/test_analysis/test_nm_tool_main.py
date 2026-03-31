@@ -37,6 +37,8 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpReplaceValues,
     NMMainOpConcatenate,
     NMMainOpRescale,
+    NMMainOpInterpolate,
+    NMMainOpResample,
     NMMainOpRescaleX,
     NMMainOpReverse,
     NMMainOpRotate,
@@ -2773,20 +2775,20 @@ class TestNMMainOpDFOF(unittest.TestCase):
         op.run_init()
         op.run(d)  # should not raise
 
-    def test_multiple_waves(self):
+    def test_multiple_records(self):
         op = NMMainOpDFOF(x0=0.0, x1=0.0)
-        waves = [
+        records = [
             _make_data("RecordA0", [1.0, 5.0], xstart=0.0, xdelta=1.0),
             _make_data("RecordA1", [2.0, 6.0], xstart=0.0, xdelta=1.0),
             _make_data("RecordA2", [4.0, 8.0], xstart=0.0, xdelta=1.0),
         ]
         op.run_init()
-        for w in waves:
-            op.run(w)
-        # Each wave transformed independently
-        np.testing.assert_array_almost_equal(waves[0].nparray, [0.0, 4.0])
-        np.testing.assert_array_almost_equal(waves[1].nparray, [0.0, 2.0])
-        np.testing.assert_array_almost_equal(waves[2].nparray, [0.0, 1.0])
+        for r in records:
+            op.run(r)
+        # Each record transformed independently
+        np.testing.assert_array_almost_equal(records[0].nparray, [0.0, 4.0])
+        np.testing.assert_array_almost_equal(records[1].nparray, [0.0, 2.0])
+        np.testing.assert_array_almost_equal(records[2].nparray, [0.0, 1.0])
 
     # ------------------------------------------------------------------
     # Validation
@@ -2959,23 +2961,23 @@ class TestNMMainOpRescale(unittest.TestCase):
         op.run_init()
         op.run(d)   # should not raise
 
-    def test_multiple_waves(self):
-        waves = [
+    def test_multiple_records(self):
+        records = [
             _make_data("RecordA0", [1.0, 2.0]),
             _make_data("RecordA1", [3.0, 4.0]),
             _make_data("RecordA2", [5.0, 6.0]),
         ]
-        for w in waves:
-            w.yscale.units = "mV"
+        for r in records:
+            r.yscale.units = "mV"
         op = NMMainOpRescale(to_units="V")
         op.run_init()
-        for w in waves:
-            op.run(w)
-        np.testing.assert_array_almost_equal(waves[0].nparray, [1e-3, 2e-3])
-        np.testing.assert_array_almost_equal(waves[1].nparray, [3e-3, 4e-3])
-        np.testing.assert_array_almost_equal(waves[2].nparray, [5e-3, 6e-3])
-        for w in waves:
-            self.assertEqual(w.yscale.units, "V")
+        for r in records:
+            op.run(r)
+        np.testing.assert_array_almost_equal(records[0].nparray, [1e-3, 2e-3])
+        np.testing.assert_array_almost_equal(records[1].nparray, [3e-3, 4e-3])
+        np.testing.assert_array_almost_equal(records[2].nparray, [5e-3, 6e-3])
+        for r in records:
+            self.assertEqual(r.yscale.units, "V")
 
     def test_rescale_by_name(self):
         op = op_from_name("rescale")
@@ -3123,23 +3125,23 @@ class TestNMMainOpRescaleX(unittest.TestCase):
     # ------------------------------------------------------------------
     # Other
 
-    def test_multiple_waves(self):
-        waves = [
+    def test_multiple_records(self):
+        records = [
             _make_data("RecordA0", [1.0], xstart=0.0, xdelta=1.0),
             _make_data("RecordA1", [2.0], xstart=0.0, xdelta=2.0),
             _make_data("RecordA2", [3.0], xstart=10.0, xdelta=0.5),
         ]
-        for w in waves:
+        for w in records:
             w.xscale.units = "ms"
         op = NMMainOpRescaleX(to_units="s")
         op.run_init()
-        for w in waves:
+        for w in records:
             op.run(w)
-        self.assertAlmostEqual(waves[0].xscale.delta, 1e-3)
-        self.assertAlmostEqual(waves[1].xscale.delta, 2e-3)
-        self.assertAlmostEqual(waves[2].xscale.start, 10e-3)
-        self.assertAlmostEqual(waves[2].xscale.delta, 0.5e-3)
-        for w in waves:
+        self.assertAlmostEqual(records[0].xscale.delta, 1e-3)
+        self.assertAlmostEqual(records[1].xscale.delta, 2e-3)
+        self.assertAlmostEqual(records[2].xscale.start, 10e-3)
+        self.assertAlmostEqual(records[2].xscale.delta, 0.5e-3)
+        for w in records:
             self.assertEqual(w.xscale.units, "s")
 
     def test_rescale_x_by_name(self):
@@ -3464,6 +3466,316 @@ class TestNMMainOpSmooth(unittest.TestCase):
         # index 3: mean([3,4,5]) = 4.0
         np.testing.assert_allclose(folder.data.get("RecordA0").nparray[3], 4.0)
         np.testing.assert_allclose(folder.data.get("RecordA1").nparray[3], 4.0)
+
+
+
+# ===========================================================================
+# TestNMMainOpResample
+# ===========================================================================
+
+
+class TestNMMainOpResample(unittest.TestCase):
+
+    # --- constructor validation ---
+
+    def test_rejects_no_args(self):
+        with self.assertRaises(TypeError):
+            NMMainOpResample()
+
+    def test_rejects_zero_delta(self):
+        with self.assertRaises(ValueError):
+            NMMainOpResample(delta=0.0)
+
+    def test_rejects_negative_delta(self):
+        with self.assertRaises(ValueError):
+            NMMainOpResample(delta=-0.1)
+
+    def test_rejects_bool_delta(self):
+        with self.assertRaises(TypeError):
+            NMMainOpResample(delta=True)
+
+    def test_rejects_string_delta(self):
+        with self.assertRaises(TypeError):
+            NMMainOpResample(delta="0.1")
+
+    # --- run: downsample ---
+
+    def test_downsample_halves_length(self):
+        d = _make_data("RecordA0", np.ones(100), xdelta=0.1)
+        op = NMMainOpResample(delta=0.2)
+        op.run(d)
+        self.assertEqual(len(d.nparray), 50)
+
+    def test_downsample_updates_xscale_delta(self):
+        d = _make_data("RecordA0", np.ones(100), xdelta=0.1)
+        op = NMMainOpResample(delta=0.2)
+        op.run(d)
+        self.assertAlmostEqual(d.xscale.delta, 0.2)
+
+    def test_upsample_doubles_length(self):
+        d = _make_data("RecordA0", np.ones(50), xdelta=0.2)
+        op = NMMainOpResample(delta=0.1)
+        op.run(d)
+        self.assertEqual(len(d.nparray), 100)
+
+    def test_constant_signal_preserved(self):
+        # Use a long signal; polyphase resampling has edge transients, so
+        # check only the interior where the filter has fully settled.
+        y = np.ones(1000) * 5.0
+        d = _make_data("RecordA0", y, xdelta=0.1)
+        op = NMMainOpResample(delta=0.2)
+        op.run(d)
+        np.testing.assert_allclose(d.nparray[50:-50], 5.0, atol=1e-4)
+
+    def test_run_skips_none_array(self):
+        d = NMData(NM, name="empty")
+        op = NMMainOpResample(delta=0.2)
+        op.run(d)  # should not raise
+
+    def test_run_note_contains_op_name(self):
+        d = _make_data("RecordA0", np.ones(100), xdelta=0.1)
+        NMMainOpResample(delta=0.2).run(d)
+        self.assertIn("NMResample(", d.notes[0]["note"])
+
+    def test_run_note_contains_delta(self):
+        d = _make_data("RecordA0", np.ones(100), xdelta=0.1)
+        NMMainOpResample(delta=0.2).run(d)
+        self.assertIn("delta=0.2", d.notes[0]["note"])
+
+    def test_op_from_name_resample(self):
+        with self.assertRaises(TypeError):
+            # registry entry exists but delta is required
+            op_from_name("resample")
+
+    def test_run_all_downsample(self):
+        folder = NMFolder(name="folder0")
+        data_items = []
+        for name in ["RecordA0", "RecordA1"]:
+            d = folder.data.new(
+                name,
+                nparray=np.ones(100),
+                xscale={"start": 0.0, "delta": 0.1},
+            )
+            data_items.append((d, None))
+        op = NMMainOpResample(delta=0.2)
+        op.run_all(data_items, folder)
+        for name in ["RecordA0", "RecordA1"]:
+            self.assertEqual(len(folder.data.get(name).nparray), 50)
+
+
+# ===========================================================================
+# TestNMMainOpInterpolate
+# ===========================================================================
+
+
+class TestNMMainOpInterpolate(unittest.TestCase):
+
+    # --- constructor validation ---
+
+    def test_rejects_invalid_method(self):
+        with self.assertRaises(ValueError):
+            NMMainOpInterpolate(method="spline")
+
+    def test_rejects_non_string_method(self):
+        with self.assertRaises(TypeError):
+            NMMainOpInterpolate(method=42)
+
+    def test_rejects_invalid_x_source(self):
+        with self.assertRaises(ValueError):
+            NMMainOpInterpolate(x_source="auto")
+
+    def test_rejects_invalid_x_extent(self):
+        with self.assertRaises(ValueError):
+            NMMainOpInterpolate(x_extent="union")
+
+    def test_rejects_non_string_x_extent(self):
+        with self.assertRaises(TypeError):
+            NMMainOpInterpolate(x_extent=1)
+
+    def test_rejects_non_string_template_name(self):
+        with self.assertRaises(TypeError):
+            NMMainOpInterpolate(template_name=123)
+
+    def test_template_name_none_ok(self):
+        op = NMMainOpInterpolate(x_source="template", template_name=None)
+        self.assertIsNone(op.template_name)
+
+    # --- run (common x-axis) ---
+
+    def test_same_x_axis_length_unchanged(self):
+        """Two records on identical x-axes: common grid matches, length unchanged."""
+        folder = NMFolder(name="folder0")
+        data_items = []
+        for name in ["RecordA0", "RecordA1"]:
+            d = folder.data.new(
+                name,
+                nparray=np.ones(101),
+                xscale={"start": 0.0, "delta": 0.01},
+            )
+            data_items.append((d, None))
+        # common grid: start=0, end=1, delta=0.01 → 101 points (unchanged)
+        op = NMMainOpInterpolate(method="linear", x_source="common")
+        op.run_all(data_items, folder)
+        for name in ["RecordA0", "RecordA1"]:
+            self.assertEqual(len(folder.data.get(name).nparray), 101)
+
+    def test_run_updates_xscale_start(self):
+        folder = NMFolder(name="folder0")
+        # record 0: starts at 0, record 1: starts at 0.5 → common start = 0.5
+        d0 = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(11),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        d1 = folder.data.new(
+            "RecordA1",
+            nparray=np.ones(11),
+            xscale={"start": 0.5, "delta": 0.1},
+        )
+        data_items = [(d0, None), (d1, None)]
+        op = NMMainOpInterpolate(method="linear", x_source="common")
+        op.run_all(data_items, folder)
+        # common start = max(0.0, 0.5) = 0.5
+        # x_extent="overlap" → x_start updated to common start
+        self.assertAlmostEqual(d0.xscale.start, 0.5, places=5)
+
+    def test_run_skips_none_array(self):
+        d = NMData(NM, name="empty")
+        op = NMMainOpInterpolate(method="linear", x_source="common")
+        # run_init with no data_items set → _x_new stays None
+        op.run_init()
+        # run() with None array should return early without raising
+        op._x_new = np.linspace(0, 1, 11)
+        op.run(d)
+
+    def test_run_raises_when_x_new_not_set(self):
+        folder = NMFolder(name="folder0")
+        d = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(11),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        op = NMMainOpInterpolate(method="linear", x_source="common")
+        # x_new is None (run_init never called)
+        with self.assertRaises(ValueError):
+            op.run(d)
+
+    def test_template_x_source(self):
+        folder = NMFolder(name="folder0")
+        tmpl = folder.data.new(
+            "template",
+            nparray=np.zeros(6),
+            xscale={"start": 0.0, "delta": 0.2},
+        )
+        d = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(11),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        data_items = [(d, None)]
+        op = NMMainOpInterpolate(
+            method="linear",
+            x_source="template",
+            template_name="template",
+        )
+        op.run_all(data_items, folder)
+        # template has 6 points at delta=0.2 → new array length = 6
+        self.assertEqual(len(d.nparray), 6)
+
+    def test_run_note_contains_op_name(self):
+        folder = NMFolder(name="folder0")
+        d = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(11),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        op = NMMainOpInterpolate(method="linear", x_source="common")
+        op.run_all([(d, None)], folder)
+        self.assertIn("NMInterpolate(", d.notes[0]["note"])
+
+    def test_run_note_contains_method(self):
+        folder = NMFolder(name="folder0")
+        d = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(11),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        op = NMMainOpInterpolate(method="cubic", x_source="common")
+        op.run_all([(d, None)], folder)
+        self.assertIn("method='cubic'", d.notes[0]["note"])
+
+    # --- x_extent="expand" ---
+
+    def test_expand_uses_union_x_range(self):
+        # record 0: x 0.0 .. 0.5 (6 pts, delta=0.1)
+        # record 1: x 0.3 .. 1.0 (8 pts, delta=0.1)
+        # expand → x_start=0.0, x_end=1.0 → 11 points
+        folder = NMFolder(name="folder0")
+        d0 = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(6),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        d1 = folder.data.new(
+            "RecordA1",
+            nparray=np.ones(8),
+            xscale={"start": 0.3, "delta": 0.1},
+        )
+        data_items = [(d0, None), (d1, None)]
+        op = NMMainOpInterpolate(method="linear", x_source="common",
+                                 x_extent="expand")
+        op.run_all(data_items, folder)
+        self.assertEqual(len(d0.nparray), 11)
+        self.assertEqual(len(d1.nparray), 11)
+
+    def test_expand_fills_nan_outside_range(self):
+        # record 0 covers 0.0..0.5; after expand to 0.0..1.0
+        # points beyond 0.5 should be NaN for record 0
+        folder = NMFolder(name="folder0")
+        d0 = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(6),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        d1 = folder.data.new(
+            "RecordA1",
+            nparray=np.ones(8),
+            xscale={"start": 0.3, "delta": 0.1},
+        )
+        data_items = [(d0, None), (d1, None)]
+        op = NMMainOpInterpolate(method="linear", x_source="common",
+                                 x_extent="expand")
+        op.run_all(data_items, folder)
+        # d0 should have NaN for x > 0.5 (last 5 of 11 points)
+        self.assertTrue(np.any(np.isnan(d0.nparray)))
+        self.assertTrue(np.isnan(d0.nparray[-1]))
+        # d0 should have NaN for x < 0.3 (first 3 of 11 points)
+        self.assertTrue(np.any(np.isnan(d1.nparray)))
+        self.assertTrue(np.isnan(d1.nparray[0]))
+
+    def test_overlap_no_nans(self):
+        # overlap mode: only shared region, so no NaN
+        folder = NMFolder(name="folder0")
+        d0 = folder.data.new(
+            "RecordA0",
+            nparray=np.ones(6),
+            xscale={"start": 0.0, "delta": 0.1},
+        )
+        d1 = folder.data.new(
+            "RecordA1",
+            nparray=np.ones(8),
+            xscale={"start": 0.3, "delta": 0.1},
+        )
+        data_items = [(d0, None), (d1, None)]
+        op = NMMainOpInterpolate(method="linear", x_source="common",
+                                 x_extent="overlap")
+        op.run_all(data_items, folder)
+        self.assertFalse(np.any(np.isnan(d0.nparray)))
+        self.assertFalse(np.any(np.isnan(d1.nparray)))
+
+    def test_op_from_name_interpolate(self):
+        op = op_from_name("interpolate")
+        self.assertIsInstance(op, NMMainOpInterpolate)
 
 
 if __name__ == "__main__":
