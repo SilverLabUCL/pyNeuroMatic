@@ -1398,6 +1398,202 @@ class NMMainOpSmooth(NMMainOp):
 
 
 # =========================================================================
+# Filter
+# =========================================================================
+
+
+class NMMainOpFilter(NMMainOp):
+    """Filter each array using Butterworth, Bessel, or notch filtering.
+
+    All filters are applied zero-phase (forward-backward) via
+    ``sosfiltfilt`` or ``filtfilt``, so no phase distortion is introduced.
+
+    Three filter types:
+
+    - ``"butterworth"``: maximally flat magnitude; general-purpose low-pass,
+      high-pass, or band-pass.
+    - ``"bessel"``: maximally flat group delay; preferred when waveform
+      shape must be preserved (e.g. spike kinetics, EPSC rise times).
+    - ``"notch"``: narrow band-stop at *cutoff* Hz; removes mains
+      interference (50 or 60 Hz).
+
+    Parameters:
+        filter_type: ``"butterworth"`` (default), ``"bessel"``, or
+            ``"notch"``.
+        cutoff: Cutoff frequency in Hz.  For ``btype='bandpass'`` supply
+            ``[low_hz, high_hz]``.  For ``"notch"`` this is the centre
+            frequency to remove.
+        order: Filter order (int >= 1).  Not used for ``"notch"``.
+            Default 4.
+        btype: ``"low"`` (default), ``"high"``, or ``"bandpass"``.
+            Not used for ``"notch"``.
+        q: Quality factor for ``"notch"`` — ratio of centre frequency to
+            bandwidth; higher values give a narrower notch. Default 30.
+        sample_rate: Sample rate in Hz.  If ``None`` (default), derived
+            from ``xscale.delta`` and ``xscale.units`` at run time
+            (assumes SI-prefixed time units, e.g. ``"ms"``).
+    """
+
+    name = "filter"
+
+    def __init__(
+        self,
+        filter_type: str = "butterworth",
+        cutoff: float | list[float] = 1000.0,
+        order: int = 4,
+        btype: str = "low",
+        q: float = 30.0,
+        sample_rate: float | None = None,
+    ) -> None:
+        self.filter_type = filter_type
+        self.cutoff = cutoff
+        self.order = order
+        self.btype = btype
+        self.q = q
+        self.sample_rate = sample_rate
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def filter_type(self) -> str:
+        """Filter type: ``'butterworth'``, ``'bessel'``, or ``'notch'``."""
+        return self._filter_type
+
+    @filter_type.setter
+    def filter_type(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "filter_type", "string"))
+        if value not in nm_math._VALID_FILTER_TYPES:
+            raise ValueError(
+                "filter_type must be one of %s, got %r"
+                % (sorted(nm_math._VALID_FILTER_TYPES), value)
+            )
+        self._filter_type = value
+
+    @property
+    def cutoff(self) -> float | list[float]:
+        """Cutoff frequency in Hz (float, or [low, high] for bandpass)."""
+        return self._cutoff
+
+    @cutoff.setter
+    def cutoff(self, value: float | list[float]) -> None:
+        if isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "cutoff", "float or list"))
+        if isinstance(value, (int, float)):
+            if value <= 0:
+                raise ValueError("cutoff must be > 0, got %g" % value)
+            self._cutoff = float(value)
+        elif isinstance(value, list):
+            self._cutoff = value
+        else:
+            raise TypeError(nmu.type_error_str(value, "cutoff", "float or list"))
+
+    @property
+    def order(self) -> int:
+        """Filter order (int >= 1). Not used for notch."""
+        return self._order
+
+    @order.setter
+    def order(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "order", "int"))
+        if value < 1:
+            raise ValueError("order must be >= 1, got %d" % value)
+        self._order = value
+
+    @property
+    def btype(self) -> str:
+        """Filter band type: ``'low'``, ``'high'``, or ``'bandpass'``. Not used for notch."""
+        return self._btype
+
+    @btype.setter
+    def btype(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "btype", "string"))
+        if value not in nm_math._VALID_FILTER_BTYPES:
+            raise ValueError(
+                "btype must be one of %s, got %r"
+                % (sorted(nm_math._VALID_FILTER_BTYPES), value)
+            )
+        self._btype = value
+
+    @property
+    def q(self) -> float:
+        """Quality factor for notch filter (float > 0). Not used for other types."""
+        return self._q
+
+    @q.setter
+    def q(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "q", "float"))
+        if value <= 0:
+            raise ValueError("q must be > 0, got %g" % value)
+        self._q = float(value)
+
+    @property
+    def sample_rate(self) -> float | None:
+        """Sample rate in Hz. If None, derived from xscale at run time."""
+        return self._sample_rate
+
+    @sample_rate.setter
+    def sample_rate(self, value: float | None) -> None:
+        if value is None:
+            self._sample_rate = None
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "sample_rate", "float"))
+        if value <= 0:
+            raise ValueError("sample_rate must be > 0, got %g" % value)
+        self._sample_rate = float(value)
+
+    # ------------------------------------------------------------------
+    # Core
+
+    def _resolve_sample_rate(self, data: NMData) -> float:
+        """Return sample rate in Hz from parameter or xscale."""
+        if self._sample_rate is not None:
+            return self._sample_rate
+        delta = data.xscale.delta
+        units = data.xscale.units
+        if units:
+            factor = nm_math.si_scale_factor(units, "s")
+            return 1.0 / (delta * factor)
+        return 1.0 / delta  # assume seconds
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Filter *data* in-place."""
+        y = data.nparray
+        if y is None:
+            return
+        sr = self._resolve_sample_rate(data)
+        if self._filter_type == "butterworth":
+            data.nparray = nm_math.filter_butterworth(
+                y, self._cutoff, sr, self._order, self._btype
+            )
+        elif self._filter_type == "bessel":
+            data.nparray = nm_math.filter_bessel(
+                y, self._cutoff, sr, self._order, self._btype
+            )
+        else:  # notch
+            data.nparray = nm_math.filter_notch(y, self._cutoff, sr, self._q)
+        self._add_op_note(data, self._op_params_str())
+
+    def _op_params_str(self) -> str:
+        if self._filter_type == "notch":
+            return "filter_type=%r, cutoff=%r, q=%r" % (
+                self._filter_type, self._cutoff, self._q
+            )
+        return "filter_type=%r, cutoff=%r, order=%r, btype=%r" % (
+            self._filter_type, self._cutoff, self._order, self._btype
+        )
+
+
+# =========================================================================
 # Resample
 # =========================================================================
 
@@ -3385,6 +3581,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "rescale": NMMainOpRescale,
     # --- calculus / signal conditioning ---
     "differentiate": NMMainOpDifferentiate,
+    "filter": NMMainOpFilter,
     "integrate": NMMainOpIntegrate,
     "smooth": NMMainOpSmooth,
     # --- statistics / comparison ---

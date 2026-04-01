@@ -793,6 +793,187 @@ def smooth_savgol(
 
 
 # =========================================================================
+# Filter functions
+# =========================================================================
+
+_VALID_FILTER_TYPES: frozenset[str] = frozenset({"butterworth", "bessel", "notch"})
+_VALID_FILTER_BTYPES: frozenset[str] = frozenset({"low", "high", "bandpass"})
+
+
+def filter_butterworth(
+    y: np.ndarray,
+    cutoff: float | list[float],
+    sample_rate: float,
+    order: int = 4,
+    btype: str = "low",
+) -> np.ndarray:
+    """Butterworth filter via ``scipy.signal.butter`` + ``sosfiltfilt``.
+
+    Applies a zero-phase Butterworth filter (forward-backward via
+    ``sosfiltfilt``), which introduces no phase distortion.  Suitable for
+    general-purpose low-pass, high-pass, and band-pass filtering.
+
+    Args:
+        y: 1-D numpy array of y-values.
+        cutoff: Cutoff frequency in Hz.  For ``btype='bandpass'`` supply a
+            two-element list ``[low_hz, high_hz]``.
+        sample_rate: Sample rate in Hz (must be > 0).
+        order: Filter order (int >= 1). Default 4.
+        btype: ``'low'``, ``'high'``, or ``'bandpass'``. Default ``'low'``.
+
+    Returns:
+        Filtered copy of *y* with the same length.
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray or numeric params have
+            wrong types (bool rejected for int params).
+        ValueError: If *sample_rate* <= 0, *order* < 1, *btype* is invalid,
+            or *cutoff* is at or above the Nyquist frequency.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if isinstance(sample_rate, bool) or not isinstance(sample_rate, (int, float)):
+        raise TypeError(nmu.type_error_str(sample_rate, "sample_rate", "float"))
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be > 0, got %g" % sample_rate)
+    if isinstance(order, bool) or not isinstance(order, int):
+        raise TypeError(nmu.type_error_str(order, "order", "int"))
+    if order < 1:
+        raise ValueError("order must be >= 1, got %d" % order)
+    if not isinstance(btype, str) or btype not in _VALID_FILTER_BTYPES:
+        raise ValueError(
+            "btype must be one of %s, got %r" % (sorted(_VALID_FILTER_BTYPES), btype)
+        )
+    if isinstance(cutoff, bool):
+        raise TypeError(nmu.type_error_str(cutoff, "cutoff", "float or list"))
+    if isinstance(cutoff, (int, float)):
+        if cutoff <= 0:
+            raise ValueError("cutoff must be > 0, got %g" % cutoff)
+    elif not isinstance(cutoff, list):
+        raise TypeError(nmu.type_error_str(cutoff, "cutoff", "float or list"))
+    from scipy.signal import butter, sosfiltfilt
+    nyq = sample_rate / 2.0
+    if isinstance(cutoff, (list, np.ndarray)):
+        norm = [c / nyq for c in cutoff]
+    else:
+        norm = cutoff / nyq
+    sos = butter(order, norm, btype=btype, output="sos")
+    return sosfiltfilt(sos, y.astype(float))
+
+
+def filter_bessel(
+    y: np.ndarray,
+    cutoff: float | list[float],
+    sample_rate: float,
+    order: int = 4,
+    btype: str = "low",
+) -> np.ndarray:
+    """Bessel filter via ``scipy.signal.bessel`` + ``sosfiltfilt``.
+
+    Applies a zero-phase Bessel filter (forward-backward via
+    ``sosfiltfilt``).  Bessel filters have maximally flat group delay,
+    which preserves waveform shape — preferred when timing is critical
+    (e.g. spike kinetics, EPSC rise times).
+
+    Args:
+        y: 1-D numpy array of y-values.
+        cutoff: Cutoff frequency in Hz.  For ``btype='bandpass'`` supply a
+            two-element list ``[low_hz, high_hz]``.
+        sample_rate: Sample rate in Hz (must be > 0).
+        order: Filter order (int >= 1). Default 4.
+        btype: ``'low'``, ``'high'``, or ``'bandpass'``. Default ``'low'``.
+
+    Returns:
+        Filtered copy of *y* with the same length.
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray or numeric params have
+            wrong types (bool rejected for int params).
+        ValueError: If *sample_rate* <= 0, *order* < 1, *btype* is invalid,
+            or *cutoff* is at or above the Nyquist frequency.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if isinstance(sample_rate, bool) or not isinstance(sample_rate, (int, float)):
+        raise TypeError(nmu.type_error_str(sample_rate, "sample_rate", "float"))
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be > 0, got %g" % sample_rate)
+    if isinstance(order, bool) or not isinstance(order, int):
+        raise TypeError(nmu.type_error_str(order, "order", "int"))
+    if order < 1:
+        raise ValueError("order must be >= 1, got %d" % order)
+    if not isinstance(btype, str) or btype not in _VALID_FILTER_BTYPES:
+        raise ValueError(
+            "btype must be one of %s, got %r" % (sorted(_VALID_FILTER_BTYPES), btype)
+        )
+    if isinstance(cutoff, bool):
+        raise TypeError(nmu.type_error_str(cutoff, "cutoff", "float or list"))
+    if isinstance(cutoff, (int, float)):
+        if cutoff <= 0:
+            raise ValueError("cutoff must be > 0, got %g" % cutoff)
+    elif not isinstance(cutoff, list):
+        raise TypeError(nmu.type_error_str(cutoff, "cutoff", "float or list"))
+    from scipy.signal import bessel, sosfiltfilt
+    nyq = sample_rate / 2.0
+    if isinstance(cutoff, (list, np.ndarray)):
+        norm = [c / nyq for c in cutoff]
+    else:
+        norm = cutoff / nyq
+    sos = bessel(order, norm, btype=btype, output="sos", norm="phase")
+    return sosfiltfilt(sos, y.astype(float))
+
+
+def filter_notch(
+    y: np.ndarray,
+    freq: float,
+    sample_rate: float,
+    q: float = 30.0,
+) -> np.ndarray:
+    """Notch (band-stop) filter via ``scipy.signal.iirnotch`` + ``filtfilt``.
+
+    Removes a narrow frequency band centred on *freq* (e.g. 50 or 60 Hz
+    mains interference).  Applies zero-phase filtering via ``filtfilt``.
+
+    Args:
+        y: 1-D numpy array of y-values.
+        freq: Centre frequency to remove, in Hz (must be > 0 and < Nyquist).
+        sample_rate: Sample rate in Hz (must be > 0).
+        q: Quality factor — ratio of centre frequency to bandwidth.
+            Higher values give a narrower notch. Default 30.
+
+    Returns:
+        Filtered copy of *y* with the same length.
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray or numeric params have
+            wrong types (bool rejected).
+        ValueError: If *sample_rate* <= 0, *freq* <= 0 or >= Nyquist,
+            or *q* <= 0.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if isinstance(sample_rate, bool) or not isinstance(sample_rate, (int, float)):
+        raise TypeError(nmu.type_error_str(sample_rate, "sample_rate", "float"))
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be > 0, got %g" % sample_rate)
+    if isinstance(freq, bool) or not isinstance(freq, (int, float)):
+        raise TypeError(nmu.type_error_str(freq, "freq", "float"))
+    nyq = sample_rate / 2.0
+    if freq <= 0 or freq >= nyq:
+        raise ValueError(
+            "freq must be > 0 and < Nyquist (%.6g Hz), got %g" % (nyq, freq)
+        )
+    if isinstance(q, bool) or not isinstance(q, (int, float)):
+        raise TypeError(nmu.type_error_str(q, "q", "float"))
+    if q <= 0:
+        raise ValueError("q must be > 0, got %g" % q)
+    from scipy.signal import iirnotch, sosfiltfilt, tf2sos
+    b, a = iirnotch(freq / nyq, q)
+    sos = tf2sos(b, a)
+    return sosfiltfilt(sos, y.astype(float))
+
+
+# =========================================================================
 # Resample and interpolate
 # =========================================================================
 

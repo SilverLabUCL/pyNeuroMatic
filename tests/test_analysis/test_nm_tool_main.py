@@ -26,6 +26,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpDeletePoints,
     NMMainOpDFOF,
     NMMainOpDifferentiate,
+    NMMainOpFilter,
     NMMainOpHistogram,
     NMMainOpInequality,
     NMMainOpInsertPoints,
@@ -3932,6 +3933,207 @@ class TestNMMainOpAlign(unittest.TestCase):
     def test_op_from_name_align(self):
         op = op_from_name("align")
         self.assertIsInstance(op, NMMainOpAlign)
+
+
+# ===========================================================================
+# TestNMMainOpFilter
+# ===========================================================================
+
+# Sample rate used across filter tests: 10 kHz (delta = 0.1 ms)
+_FILTER_SR = 10000.0
+_FILTER_N = 1000  # long enough for sosfiltfilt padding
+
+
+def _make_filter_data(name="RecordA0", n=_FILTER_N, sr=_FILTER_SR):
+    """NMData with a DC signal and xscale matching sample_rate."""
+    delta_ms = 1000.0 / sr
+    d = NMData(
+        NM,
+        name=name,
+        nparray=np.ones(n, dtype=float),
+        xscale={"start": 0.0, "delta": delta_ms, "label": "Time", "units": "ms"},
+    )
+    return d
+
+
+class TestNMMainOpFilter(unittest.TestCase):
+
+    # --- constructor / property validation ---
+
+    def test_rejects_invalid_filter_type(self):
+        with self.assertRaises(ValueError):
+            NMMainOpFilter(filter_type="gaussian")
+
+    def test_rejects_non_string_filter_type(self):
+        with self.assertRaises(TypeError):
+            NMMainOpFilter(filter_type=1)
+
+    def test_rejects_zero_cutoff(self):
+        with self.assertRaises(ValueError):
+            NMMainOpFilter(cutoff=0.0)
+
+    def test_rejects_bool_cutoff(self):
+        with self.assertRaises(TypeError):
+            NMMainOpFilter(cutoff=True)
+
+    def test_rejects_order_zero(self):
+        with self.assertRaises(ValueError):
+            NMMainOpFilter(order=0)
+
+    def test_rejects_bool_order(self):
+        with self.assertRaises(TypeError):
+            NMMainOpFilter(order=True)
+
+    def test_rejects_invalid_btype(self):
+        with self.assertRaises(ValueError):
+            NMMainOpFilter(btype="band")
+
+    def test_rejects_non_positive_q(self):
+        with self.assertRaises(ValueError):
+            NMMainOpFilter(q=0.0)
+
+    def test_rejects_non_positive_sample_rate(self):
+        with self.assertRaises(ValueError):
+            NMMainOpFilter(sample_rate=0.0)
+
+    def test_sample_rate_none_ok(self):
+        op = NMMainOpFilter()
+        self.assertIsNone(op.sample_rate)
+
+    # --- Butterworth low-pass ---
+
+    def test_butterworth_lowpass_preserves_dc(self):
+        # DC signal (all ones) should pass through a low-pass filter unchanged
+        d = _make_filter_data()
+        op = NMMainOpFilter(
+            filter_type="butterworth", cutoff=1000.0,
+            btype="low", sample_rate=_FILTER_SR,
+        )
+        op.run(d)
+        np.testing.assert_allclose(d.nparray, 1.0, atol=1e-6)
+
+    def test_butterworth_lowpass_output_length(self):
+        d = _make_filter_data()
+        NMMainOpFilter(
+            filter_type="butterworth", cutoff=1000.0,
+            btype="low", sample_rate=_FILTER_SR,
+        ).run(d)
+        self.assertEqual(len(d.nparray), _FILTER_N)
+
+    def test_butterworth_highpass_attenuates_dc(self):
+        # High-pass should remove DC component
+        d = _make_filter_data()
+        NMMainOpFilter(
+            filter_type="butterworth", cutoff=100.0,
+            btype="high", sample_rate=_FILTER_SR,
+        ).run(d)
+        np.testing.assert_allclose(d.nparray[100:-100], 0.0, atol=1e-6)
+
+    def test_butterworth_bandpass(self):
+        d = _make_filter_data()
+        NMMainOpFilter(
+            filter_type="butterworth", cutoff=[100.0, 2000.0],
+            btype="bandpass", sample_rate=_FILTER_SR,
+        ).run(d)
+        self.assertEqual(len(d.nparray), _FILTER_N)
+
+    # --- Bessel ---
+
+    def test_bessel_lowpass_preserves_dc(self):
+        d = _make_filter_data()
+        NMMainOpFilter(
+            filter_type="bessel", cutoff=1000.0,
+            btype="low", sample_rate=_FILTER_SR,
+        ).run(d)
+        np.testing.assert_allclose(d.nparray, 1.0, atol=1e-6)
+
+    def test_bessel_output_length(self):
+        d = _make_filter_data()
+        NMMainOpFilter(
+            filter_type="bessel", cutoff=1000.0,
+            btype="low", sample_rate=_FILTER_SR,
+        ).run(d)
+        self.assertEqual(len(d.nparray), _FILTER_N)
+
+    # --- Notch ---
+
+    def test_notch_output_length(self):
+        d = _make_filter_data()
+        NMMainOpFilter(
+            filter_type="notch", cutoff=60.0,
+            sample_rate=_FILTER_SR,
+        ).run(d)
+        self.assertEqual(len(d.nparray), _FILTER_N)
+
+    def test_notch_preserves_dc(self):
+        d = _make_filter_data()
+        NMMainOpFilter(
+            filter_type="notch", cutoff=60.0,
+            sample_rate=_FILTER_SR,
+        ).run(d)
+        np.testing.assert_allclose(d.nparray, 1.0, atol=1e-6)
+
+    def test_notch_attenuates_target_frequency(self):
+        # Signal = pure 60 Hz sine; after notch at 60 Hz, amplitude should drop.
+        # Uses a long signal (10000 pts) because Q=30 at 60 Hz has a slow
+        # transient (~1600 samples); check only the settled centre region.
+        n = 10000
+        t = np.arange(n) / _FILTER_SR
+        y = np.sin(2 * np.pi * 60.0 * t)
+        d = NMData(NM, name="RecordA0", nparray=y,
+                   xscale={"start": 0.0, "delta": 1000.0 / _FILTER_SR,
+                            "units": "ms"})
+        NMMainOpFilter(
+            filter_type="notch", cutoff=60.0, q=30.0,
+            sample_rate=_FILTER_SR,
+        ).run(d)
+        rms = np.sqrt(np.mean(d.nparray[2000:-2000] ** 2))
+        self.assertLess(rms, 0.1)  # amplitude substantially reduced
+
+    # --- sample_rate from xscale ---
+
+    def test_sample_rate_derived_from_xscale(self):
+        # delta=0.1 ms, units="ms" → sample_rate = 1/(0.1e-3) = 10000 Hz
+        d = _make_filter_data()
+        op = NMMainOpFilter(
+            filter_type="butterworth", cutoff=1000.0,
+            btype="low",  # sample_rate=None → derived
+        )
+        op.run(d)
+        self.assertEqual(len(d.nparray), _FILTER_N)
+
+    # --- run skips None array ---
+
+    def test_run_skips_none_array(self):
+        d = NMData(NM, name="empty")
+        NMMainOpFilter(filter_type="butterworth", cutoff=1000.0,
+                       sample_rate=_FILTER_SR).run(d)  # should not raise
+
+    # --- notes ---
+
+    def test_note_contains_op_name(self):
+        d = _make_filter_data()
+        NMMainOpFilter(filter_type="butterworth", cutoff=1000.0,
+                       sample_rate=_FILTER_SR).run(d)
+        self.assertIn("NMFilter(", d.notes[0]["note"])
+
+    def test_note_contains_filter_type(self):
+        d = _make_filter_data()
+        NMMainOpFilter(filter_type="bessel", cutoff=500.0,
+                       sample_rate=_FILTER_SR).run(d)
+        self.assertIn("filter_type='bessel'", d.notes[0]["note"])
+
+    def test_note_notch_contains_q(self):
+        d = _make_filter_data()
+        NMMainOpFilter(filter_type="notch", cutoff=60.0,
+                       q=30.0, sample_rate=_FILTER_SR).run(d)
+        self.assertIn("q=30.0", d.notes[0]["note"])
+
+    # --- registry ---
+
+    def test_op_from_name_filter(self):
+        op = op_from_name("filter")
+        self.assertIsInstance(op, NMMainOpFilter)
 
 
 if __name__ == "__main__":

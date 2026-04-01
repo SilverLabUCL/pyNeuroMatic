@@ -378,6 +378,230 @@ class NMTransformSmooth(NMTransform):
 
 
 # =========================================================================
+# Filter transform
+# =========================================================================
+
+
+class NMTransformFilter(NMTransform):
+    """Filter transform: Butterworth, Bessel, or notch.
+
+    Applies the chosen filter to y-data via the shared pure functions
+    in :mod:`pyneuromatic.core.nm_math`.  All filters are zero-phase
+    (forward-backward via ``sosfiltfilt``).
+
+    The sample rate can be supplied explicitly or derived at apply time
+    from the ``xscale`` argument passed to :meth:`apply`.  If neither is
+    available, :meth:`apply` raises a ``ValueError``.
+
+    Args:
+        filter_type: ``"butterworth"`` (default), ``"bessel"``, or
+            ``"notch"``.
+        cutoff: Cutoff frequency in Hz.  For ``btype='bandpass'`` supply
+            ``[low_hz, high_hz]``.  For ``"notch"`` this is the centre
+            frequency to remove.
+        sample_rate: Sample rate in Hz (must be > 0), or ``None`` to
+            derive it from the ``xscale`` passed to :meth:`apply`.
+        order: Filter order (int >= 1). Not used for ``"notch"``. Default 4.
+        btype: ``"low"`` (default), ``"high"``, or ``"bandpass"``.
+            Not used for ``"notch"``.
+        q: Quality factor for ``"notch"`` (float > 0). Default 30.
+    """
+
+    def __init__(
+        self,
+        parent: object | None = None,
+        filter_type: str = "butterworth",
+        cutoff: float | list[float] = 1000.0,
+        sample_rate: float | None = None,
+        order: int = 4,
+        btype: str = "low",
+        q: float = 30.0,
+    ) -> None:
+        super().__init__(parent=parent)
+        self.filter_type = filter_type
+        self.cutoff = cutoff
+        self.sample_rate = sample_rate
+        self.order = order
+        self.btype = btype
+        self.q = q
+
+    def __repr__(self) -> str:
+        sr = "" if self._sample_rate is None else ", sample_rate=%r" % self._sample_rate
+        if self._filter_type == "notch":
+            return "%s(filter_type=%r, cutoff=%r%s, q=%r)" % (
+                self.__class__.__name__, self._filter_type, self._cutoff, sr, self._q,
+            )
+        return (
+            "%s(filter_type=%r, cutoff=%r%s, order=%r, btype=%r)"
+            % (self.__class__.__name__, self._filter_type, self._cutoff,
+               sr, self._order, self._btype)
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, NMTransformFilter):
+            return (
+                self._filter_type == other._filter_type
+                and self._cutoff == other._cutoff
+                and self._sample_rate == other._sample_rate
+                and self._order == other._order
+                and self._btype == other._btype
+                and self._q == other._q
+            )
+        if isinstance(other, dict):
+            return self.to_dict() == other
+        return NotImplemented
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def filter_type(self) -> str:
+        """Filter type: ``'butterworth'``, ``'bessel'``, or ``'notch'``."""
+        return self._filter_type
+
+    @filter_type.setter
+    def filter_type(self, value: str) -> None:
+        import pyneuromatic.core.nm_math as nm_math
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "filter_type", "string"))
+        if value not in nm_math._VALID_FILTER_TYPES:
+            raise ValueError(
+                "filter_type must be one of %s, got %r"
+                % (sorted(nm_math._VALID_FILTER_TYPES), value)
+            )
+        self._filter_type = value
+
+    @property
+    def cutoff(self) -> float | list[float]:
+        """Cutoff frequency in Hz (float, or [low, high] for bandpass)."""
+        return self._cutoff
+
+    @cutoff.setter
+    def cutoff(self, value: float | list[float]) -> None:
+        if isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "cutoff", "float or list"))
+        if isinstance(value, (int, float)):
+            if value <= 0:
+                raise ValueError("cutoff must be > 0, got %g" % value)
+            self._cutoff = float(value)
+        elif isinstance(value, list):
+            self._cutoff = value
+        else:
+            raise TypeError(nmu.type_error_str(value, "cutoff", "float or list"))
+
+    @property
+    def sample_rate(self) -> float | None:
+        """Sample rate in Hz (must be > 0), or ``None`` to derive from xscale."""
+        return self._sample_rate
+
+    @sample_rate.setter
+    def sample_rate(self, value: float | None) -> None:
+        if value is None:
+            self._sample_rate = None
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "sample_rate", "float"))
+        if value <= 0:
+            raise ValueError("sample_rate must be > 0, got %g" % value)
+        self._sample_rate = float(value)
+
+    @property
+    def order(self) -> int:
+        """Filter order (int >= 1). Not used for notch."""
+        return self._order
+
+    @order.setter
+    def order(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "order", "int"))
+        if value < 1:
+            raise ValueError("order must be >= 1, got %d" % value)
+        self._order = value
+
+    @property
+    def btype(self) -> str:
+        """Filter band type: ``'low'``, ``'high'``, or ``'bandpass'``. Not used for notch."""
+        return self._btype
+
+    @btype.setter
+    def btype(self, value: str) -> None:
+        import pyneuromatic.core.nm_math as nm_math
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "btype", "string"))
+        if value not in nm_math._VALID_FILTER_BTYPES:
+            raise ValueError(
+                "btype must be one of %s, got %r"
+                % (sorted(nm_math._VALID_FILTER_BTYPES), value)
+            )
+        self._btype = value
+
+    @property
+    def q(self) -> float:
+        """Quality factor for notch filter (float > 0). Not used for other types."""
+        return self._q
+
+    @q.setter
+    def q(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "q", "float"))
+        if value <= 0:
+            raise ValueError("q must be > 0, got %g" % value)
+        self._q = float(value)
+
+    # ------------------------------------------------------------------
+    # Core
+
+    def _resolve_sample_rate(self, xscale: NMScaleX | None) -> float:
+        """Return the effective sample rate.
+
+        Uses ``self._sample_rate`` when set; otherwise derives it from
+        *xscale*.  Raises ``ValueError`` if neither is available.
+        """
+        if self._sample_rate is not None:
+            return self._sample_rate
+        if xscale is not None and xscale.delta and xscale.delta != 0:
+            import pyneuromatic.core.nm_math as nm_math
+            factor = nm_math.si_scale_factor(xscale.units, "s") if xscale.units else 1.0
+            return 1.0 / (xscale.delta * factor)
+        raise ValueError(
+            "NMTransformFilter: sample_rate is None and no usable xscale was provided"
+        )
+
+    def apply(
+        self,
+        ydata: np.ndarray,
+        xscale: NMScaleX | None = None,
+    ) -> np.ndarray:
+        """Apply the filter to *ydata* and return the result."""
+        import pyneuromatic.core.nm_math as nm_math
+        if not isinstance(ydata, np.ndarray):
+            raise TypeError(nmu.type_error_str(ydata, "ydata", "numpy.ndarray"))
+        sr = self._resolve_sample_rate(xscale)
+        if self._filter_type == "butterworth":
+            return nm_math.filter_butterworth(
+                ydata, self._cutoff, sr, self._order, self._btype
+            )
+        if self._filter_type == "bessel":
+            return nm_math.filter_bessel(
+                ydata, self._cutoff, sr, self._order, self._btype
+            )
+        # notch
+        return nm_math.filter_notch(ydata, self._cutoff, sr, self._q)
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            "filter_type": self._filter_type,
+            "cutoff": self._cutoff,
+            "sample_rate": self._sample_rate,
+            "order": self._order,
+            "btype": self._btype,
+            "q": self._q,
+        })
+        return d
+
+
+# =========================================================================
 # Registry and helper functions
 # =========================================================================
 
@@ -390,6 +614,7 @@ _TRANSFORM_REGISTRY: dict[str, type[NMTransform]] = {
     "NMTransformLog": NMTransformLog,
     "NMTransformLn": NMTransformLn,
     "NMTransformSmooth": NMTransformSmooth,
+    "NMTransformFilter": NMTransformFilter,
 }
 
 
