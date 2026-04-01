@@ -59,7 +59,7 @@ class NMData(NMObject):
     """
     NM Data class.
 
-    Holds a numpy array of data (y-values), optional x-array,
+    Holds a numpy array of data (yvalues), optional x-array,
     and x/y scale metadata as simple dicts.
     """
 
@@ -291,7 +291,7 @@ class NMData(NMObject):
         xvalue: float,
         clip: bool = False
     ) -> int | None:
-        """Convert an x-value to an array index.
+        """Convert an xvalue to an array index.
 
         Args:
             xvalue: The x-axis value to find.
@@ -350,7 +350,7 @@ class NMData(NMObject):
         index: int,
         clip: bool = False
     ) -> float | None:
-        """Convert an array index to an x-value.
+        """Convert an array index to an xvalue.
 
         Args:
             index: The array index.

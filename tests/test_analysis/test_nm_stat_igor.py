@@ -64,7 +64,7 @@ _N_MEAN = 500  # n_mean for mean@max and mean@min (10 ms window at 0.02 ms sampl
 #     baseline: mean over [0, T0-dx]
 #     signal:   [T0, T0+TAU]
 
-_S_DX  = 0.02   # ms, x-scale delta
+_S_DX  = 0.02   # ms, xscale delta
 _S_T0  = 10.0   # ms, pulse start (baseline ends just before this)
 _S_TAU = 20.0   # ms, half-sine duration (peak at T0 + TAU/2 = 20 ms)
 _S_AMP = 1.0    # amplitude (y-units)

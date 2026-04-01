@@ -110,7 +110,7 @@ def _stat_level(f, func, yarray, data, i0, ignore_nans, results, yunits,
             fxn.update({"yunits": yunits})
     if indexes.size > 0:  # return first level crossing
         results["i"] = indexes[0] + i0  # shift due to slicing
-        results["x"] = xvalues[0]  # shift not needed for x-values
+        results["x"] = xvalues[0]  # shift not needed for xvalues
         results["xunits"] = xunits
     else:
         results["i"] = None
@@ -320,7 +320,7 @@ def stat(
     """Compute a single statistic on an NMData object over an x-axis window.
 
     Args:
-        data: NMData containing the y-values (data.nparray) and x-scale.
+        data: NMData containing the yvalues (data.nparray) and x-scale.
         func: Dict specifying the statistic to compute. Must contain "name".
             Additional keys depend on the function type:
             - Basic stats (median, mean, var, std, sem, rms, sum, etc.):
@@ -358,7 +358,7 @@ def stat(
             "s"      — scalar result (float)
             "sunits" — units of "s" (str or None)
             "i"      — index of peak or level crossing (int or None)
-            "x"      — x-value at peak or level crossing (float or None)
+            "x"      — xvalue at peak or level crossing (float or None)
             "xunits" — units of "x" (str)
             "b"      — regression intercept (float), set by slope
             "bunits" — units of "b" (str or None), set by slope

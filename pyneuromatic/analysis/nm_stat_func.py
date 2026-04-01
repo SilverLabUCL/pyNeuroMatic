@@ -290,7 +290,7 @@ class NMStatFuncMaxMin(NMStatFunc):
 
 
 class NMStatFuncLevel(NMStatFunc):
-    """Level crossing with an explicit absolute y-value threshold.
+    """Level crossing with an explicit absolute yvalue threshold.
 
     Accepted names: level, level+, level-.
 

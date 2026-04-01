@@ -41,7 +41,7 @@ class NMTransform:
     that subclasses override.
 
     Transforms operate on numpy ndarrays (y-data) and optionally receive
-    NMScaleX for x-scale information. Simple transforms ignore xscale.
+    NMScaleX for xscale information. Simple transforms ignore xscale.
     """
 
     _path_suffix: str = "transform"
@@ -106,11 +106,11 @@ class NMTransform:
         """Apply this transform to y-data.
 
         Args:
-            ydata: numpy ndarray of y-values.
-            xscale: optional NMScaleX for x-scale info (start, delta).
+            ydata: numpy ndarray of yvalues.
+            xscale: optional NMScaleX for xscale info (start, delta).
 
         Returns:
-            numpy ndarray of transformed y-values.
+            numpy ndarray of transformed yvalues.
 
         Raises:
             NotImplementedError: if subclass does not override.
@@ -453,9 +453,9 @@ def apply_transforms(
     """Apply an ordered list of transforms to y-data.
 
     Args:
-        ydata: numpy ndarray of y-values.
+        ydata: numpy ndarray of yvalues.
         transforms: ordered list of NMTransform objects, or None.
-        xscale: optional NMScaleX for x-scale info.
+        xscale: optional NMScaleX for xscale info.
 
     Returns:
         Transformed numpy ndarray (copy; original is never modified).

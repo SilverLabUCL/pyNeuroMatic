@@ -94,8 +94,8 @@ class NMToolStats(NMTool):
 
         self.__xclip = True
         # if x0|x1 OOB, clip to data x-scale limits
-        # if x0 = -math.inf, then x0 will be clipped to smallest x-value
-        # if x1 = math.inf, then x1 will be clipped to largest x-value
+        # if x0 = -math.inf, then x0 will be clipped to smallest xvalue
+        # if x1 = math.inf, then x1 will be clipped to largest xvalue
 
         self.__ignore_nans = True
         # NumPy array analysis

@@ -431,7 +431,7 @@ class NMMainOpArithmeticByArray(NMMainOp):
 
     Parameters:
         ref: Reference operand — either an ``np.ndarray`` or a ``str`` data
-            name that will be looked up in the source folder at run time.
+            name that will be looked up in the source folder at runtime.
         op: Operation string — same choices as :class:`NMMainOpArithmetic`.
             Default is ``"x"``.
     """
@@ -1103,8 +1103,8 @@ class NMMainOpBaseline(NMMainOp):
       array in that channel.
 
     Parameters:
-        x0: Baseline window start in time units (default 0.0).
-        x1: Baseline window end in time units (default 0.0).  Must be >=
+        x0: Baseline window start in xscale units (default 0.0).
+        x1: Baseline window end in xscale units (default 0.0).  Must be >=
             ``x0``.
         mode: ``"per_array"`` (default) or ``"average"``.
         ignore_nans: If True (default) use ``np.nanmean``; otherwise ``np.mean``
@@ -1132,7 +1132,7 @@ class NMMainOpBaseline(NMMainOp):
 
     @property
     def x0(self) -> float:
-        """Baseline window start (time units)."""
+        """Baseline window start (xscale units)."""
         return self._x0
 
     @x0.setter
@@ -1145,7 +1145,7 @@ class NMMainOpBaseline(NMMainOp):
 
     @property
     def x1(self) -> float:
-        """Baseline window end (time units)."""
+        """Baseline window end (xscale units)."""
         return self._x1
 
     @x1.setter
@@ -1219,7 +1219,7 @@ class NMMainOpBaseline(NMMainOp):
             parsed = nmu.parse_data_name(data.name)
             channel_name = parsed[1] if parsed is not None else "A"
 
-        sl = nm_math.time_window_to_slice(
+        sl = nm_math.xscale_window_to_slice(
             data.nparray, data.xscale.to_dict(), self._x0, self._x1
         )
         segment = data.nparray[sl].astype(float)
@@ -1467,13 +1467,13 @@ _VALID_INTERP_X_EXTENT: frozenset[str] = frozenset({"overlap", "expand"})
 class NMMainOpInterpolate(NMMainOp):
     """Re-grid each array onto a common x-axis via interpolation.
 
-    Useful when arrays were recorded at slightly different time points and
-    need to be aligned to a shared x-axis before averaging or comparison.
+    Useful when arrays were recorded at slightly different sample rates and
+    need to be interpolated onto a shared x-axis before averaging or comparison.
     Uses :func:`nm_math.interpolate` (``scipy.interpolate``).
 
     Two x-axis sources:
 
-    - ``"common"``: derive the target x-axis from the data themselves.
+    - ``"common"``: derive the x-axis target from the data themselves.
       Requires ``run_all()`` (or ``NMToolMain``) so that all arrays are
       visible before interpolation begins.
     - ``"template"``: use the xscale of a named NMData array in the same
@@ -1639,7 +1639,7 @@ class NMMainOpInterpolate(NMMainOp):
         data: NMData,
         channel_name: str | None = None,
     ) -> None:
-        """Interpolate *data* in-place onto the target x-axis."""
+        """Interpolate *data* in-place onto the x-axis target."""
         y = data.nparray
         if y is None:
             return
@@ -1667,6 +1667,149 @@ class NMMainOpInterpolate(NMMainOp):
 
 
 # =========================================================================
+# Align
+# =========================================================================
+
+_VALID_ALIGN_TARGETS: frozenset[str] = frozenset({"mean", "min", "max"})
+
+
+class NMMainOpAlign(NMMainOp):
+    """Shift xscale.start of each array so reference xvalues align to a target.
+
+    For each array i, computes ``shift = target_value - xvalues[i]`` and sets::
+
+        data.xscale.start += shift
+
+    The data values and ``xscale.delta`` are unchanged.  To re-grid onto a
+    common x-axis after aligning, run :class:`NMMainOpInterpolate` afterwards.
+
+    Parameters:
+        xvalues: Reference xvalue(s), one per array:
+
+            - ``float``: the same xvalue is applied to every array.
+            - ``list[float]``: one per array in order; length must match
+              the number of data items.
+            - ``dict[str, float]``: lookup by data name; arrays whose name
+              is not in the dict are silently skipped.
+
+        target: Where to place the reference after alignment:
+
+            - ``float`` (default ``0.0``): a fixed xvalue.
+            - ``"mean"`` / ``"min"`` / ``"max"``: computed from *xvalues*
+              at runtime.
+    """
+
+    name = "align"
+
+    def __init__(
+        self,
+        xvalues: float | list[float] | dict[str, float] = 0.0,
+        target: float | str = 0.0,
+    ) -> None:
+        self.xvalues = xvalues
+        self.target = target
+        self._index: int = 0
+        self._target_xvalue: float = 0.0
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def xvalues(self) -> float | list[float] | dict[str, float]:
+        """Reference xvalues: float, list[float], or dict[str, float]."""
+        return self._xvalues
+
+    @xvalues.setter
+    def xvalues(self, value: float | list[float] | dict[str, float]) -> None:
+        if isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "xvalues", "float, list, or dict"))
+        if isinstance(value, (int, float)):
+            self._xvalues = float(value)
+        elif isinstance(value, list):
+            self._xvalues = value
+        elif isinstance(value, dict):
+            self._xvalues = value
+        else:
+            raise TypeError(nmu.type_error_str(value, "xvalues", "float, list, or dict"))
+
+    @property
+    def target(self) -> float | str:
+        """Alignment target: float or ``'mean'`` / ``'min'`` / ``'max'``."""
+        return self._target
+
+    @target.setter
+    def target(self, value: float | str) -> None:
+        if isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "target", "float or string"))
+        if isinstance(value, (int, float)):
+            self._target = float(value)
+        elif isinstance(value, str):
+            if value not in _VALID_ALIGN_TARGETS:
+                raise ValueError(
+                    "target must be a float or one of %s, got %r"
+                    % (sorted(_VALID_ALIGN_TARGETS), value)
+                )
+            self._target = value
+        else:
+            raise TypeError(nmu.type_error_str(value, "target", "float or string"))
+
+    # ------------------------------------------------------------------
+    # Core
+
+    def run_init(self) -> None:
+        self._index = 0
+        if isinstance(self._xvalues, list) and len(self._xvalues) != self._n_items:
+            raise IndexError(
+                "NMMainOpAlign: xvalues list length must match number of "
+                "data items (need %d, got %d)" % (self._n_items, len(self._xvalues))
+            )
+        if isinstance(self._target, (int, float)):
+            self._target_xvalue = float(self._target)
+        else:
+            values = self._collect_xvalues()
+            if self._target == "mean":
+                self._target_xvalue = float(np.mean(values))
+            elif self._target == "min":
+                self._target_xvalue = float(np.min(values))
+            else:  # "max"
+                self._target_xvalue = float(np.max(values))
+
+    def _collect_xvalues(self) -> list[float]:
+        """Flatten xvalues to a list of floats for target computation."""
+        if isinstance(self._xvalues, (int, float)):
+            return [self._xvalues] * self._n_items
+        if isinstance(self._xvalues, list):
+            return [float(v) for v in self._xvalues]
+        return [float(v) for v in self._xvalues.values()]  # dict
+
+    def _get_xvalue(self, name: str) -> float | None:
+        if isinstance(self._xvalues, (int, float)):
+            return self._xvalues
+        if isinstance(self._xvalues, list):
+            v = float(self._xvalues[self._index])
+            self._index += 1
+            return v
+        return self._xvalues.get(name)  # dict: None → skip
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Shift *data* xscale.start in-place."""
+        xvalue = self._get_xvalue(data.name)
+        if xvalue is None:
+            return  # dict mode: name not found — skip
+        xshift = self._target_xvalue - xvalue
+        data.xscale.start = data.xscale.start + xshift
+        self._add_op_note(data, "xvalue=%.6g, target=%.6g, xshift=%.6g" % (
+            xvalue, self._target_xvalue, xshift))
+
+    def _op_params_str(self) -> str:
+        return "xvalues=%r, target=%r" % (self._xvalues, self._target)
+
+
+# =========================================================================
 # Normalize
 # =========================================================================
 
@@ -1674,7 +1817,7 @@ class NMMainOpInterpolate(NMMainOp):
 class NMMainOpNormalize(NMMainOp):
     """Rescale each array so a low reference maps to norm_min and a high reference maps to norm_max.
 
-    Two independent time windows are used:
+    Two independent xscale windows are used:
 
     - Window 1 (``x0_min``/``x1_min``) computes the "low" reference via
       ``fxn1`` (``"mean"``, ``"min"``, or ``"mean@min"``).
@@ -1688,13 +1831,13 @@ class NMMainOpNormalize(NMMainOp):
       then applied to every array in that channel.
 
     Parameters:
-        x0_min: Window 1 start in time units (default 0.0).
-        x1_min: Window 1 end in time units (default 0.0).
+        x0_min: Window 1 start in xscale units (default 0.0).
+        x1_min: Window 1 end in xscale units (default 0.0).
         fxn1: Function for the low reference: ``"mean"``, ``"min"``, or
             ``"mean@min"`` (default ``"mean"``).
         n_mean1: Points around min for ``mean@min`` (default 1).
-        x0_max: Window 2 start in time units (default 0.0).
-        x1_max: Window 2 end in time units (default 0.0).
+        x0_max: Window 2 start in xscale units (default 0.0).
+        x1_max: Window 2 end in xscale units (default 0.0).
         fxn2: Function for the high reference: ``"mean"``, ``"max"``, or
             ``"mean@max"`` (default ``"mean"``).
         n_mean2: Points around max for ``mean@max`` (default 1).
@@ -1740,7 +1883,7 @@ class NMMainOpNormalize(NMMainOp):
 
     @property
     def x0_min(self) -> float:
-        """Window 1 start (time units)."""
+        """Window 1 start (xscale units)."""
         return self._x0_min
 
     @x0_min.setter
@@ -1753,7 +1896,7 @@ class NMMainOpNormalize(NMMainOp):
 
     @property
     def x1_min(self) -> float:
-        """Window 1 end (time units)."""
+        """Window 1 end (xscale units)."""
         return self._x1_min
 
     @x1_min.setter
@@ -1794,7 +1937,7 @@ class NMMainOpNormalize(NMMainOp):
 
     @property
     def x0_max(self) -> float:
-        """Window 2 start (time units)."""
+        """Window 2 start (xscale units)."""
         return self._x0_max
 
     @x0_max.setter
@@ -1807,7 +1950,7 @@ class NMMainOpNormalize(NMMainOp):
 
     @property
     def x1_max(self) -> float:
-        """Window 2 end (time units)."""
+        """Window 2 end (xscale units)."""
         return self._x1_max
 
     @x1_max.setter
@@ -1944,8 +2087,8 @@ class NMMainOpNormalize(NMMainOp):
 
         arr = data.nparray.astype(float)
         xd = data.xscale.to_dict()
-        sl1 = nm_math.time_window_to_slice(arr, xd, self._x0_min, self._x1_min)
-        sl2 = nm_math.time_window_to_slice(arr, xd, self._x0_max, self._x1_max)
+        sl1 = nm_math.xscale_window_to_slice(arr, xd, self._x0_min, self._x1_min)
+        sl2 = nm_math.xscale_window_to_slice(arr, xd, self._x0_max, self._x1_max)
         ref_min = nm_math.compute_ref_value(arr[sl1], self._fxn1, self._n_mean1)
         ref_max = nm_math.compute_ref_value(arr[sl2], self._fxn2, self._n_mean2)
 
@@ -1998,7 +2141,7 @@ class NMMainOpNormalize(NMMainOp):
 class NMMainOpDFOF(NMMainOp):
     """Compute dF/F₀ = (F − F₀) / F₀ in-place for each data array.
 
-    F₀ is the mean fluorescence over the baseline time window [x0, x1].
+    F₀ is the mean fluorescence over the baseline xscale window [x0, x1].
     The array name is unchanged; a note records the transformation and F₀.
     After transformation, ``yscale.label`` is set to ``"dF/F"`` and
     ``yscale.units`` to ``""`` (dimensionless).
@@ -2130,7 +2273,7 @@ class NMMainOpDFOF(NMMainOp):
             channel_name = parsed[1] if parsed is not None else "A"
 
         arr = data.nparray.astype(float)
-        sl = nm_math.time_window_to_slice(
+        sl = nm_math.xscale_window_to_slice(
             arr, data.xscale.to_dict(), self._x0, self._x1
         )
         segment = arr[sl]
@@ -2206,7 +2349,7 @@ class NMMainOpRescale(NMMainOp):
 
     Parameters:
         to_units:   Target units string (e.g. ``"nA"``).  Required; must
-                    not be empty at run time.
+                    not be empty at runtime.
         from_units: Source units string.  Defaults to ``None``, which
                     means the source units are read from
                     ``data.yscale.units`` at runtime.  Raises
@@ -2297,7 +2440,7 @@ class NMMainOpRescaleX(NMMainOp):
 
     Parameters:
         to_units:   Target units string (e.g. ``"s"``).  Required; must
-                    not be empty at run time.
+                    not be empty at runtime.
         from_units: Source units string.  Defaults to ``None``, which
                     means the source units are read from
                     ``data.xscale.units`` at runtime.  Raises
@@ -3031,7 +3174,7 @@ class NMMainOpHistogram(NMMainOp):
     and the resulting bin-counts array is written as a new array
     ``H_{data.name}`` in the source folder (non-destructive).
 
-    The output array's x-scale represents the histogram bins:
+    The output array's xscale represents the histogram bins:
     ``xscale.start`` = left edge of the first bin,
     ``xscale.delta`` = uniform bin width.
     ``xscale.label`` / ``xscale.units`` are taken from the input
@@ -3043,9 +3186,9 @@ class NMMainOpHistogram(NMMainOp):
     Args:
         bins:    Number of equal-width bins (int) or explicit bin-edge
                  list.  Defaults to 10.
-        x0:      Start of the time window (default ``-inf`` = beginning
+        x0:      Start of the xscale window (default ``-inf`` = beginning
                  of array).
-        x1:      End of the time window (default ``+inf`` = end of array).
+        x1:      End of the xscale window (default ``+inf`` = end of array).
         xrange:  ``(min, max)`` tuple to restrict the amplitude range.
                  Defaults to None (full range of each array).
         density: If True, return probability density instead of counts.
@@ -3097,14 +3240,14 @@ class NMMainOpHistogram(NMMainOp):
             if value < 1:
                 raise ValueError("bins must be >= 1, got %d" % value)
         elif isinstance(value, list):
-            pass  # numpy validates content at histogram time
+            pass  # numpy validates content at np.histogram in run()
         else:
             raise TypeError(nmu.type_error_str(value, "bins", "int or list"))
         self._bins = value
 
     @property
     def x0(self) -> float:
-        """Start of the time window (default ``-inf``)."""
+        """Start of the xscale window (default ``-inf``)."""
         return self._x0
 
     @x0.setter
@@ -3117,7 +3260,7 @@ class NMMainOpHistogram(NMMainOp):
 
     @property
     def x1(self) -> float:
-        """End of the time window (default ``+inf``)."""
+        """End of the xscale window (default ``+inf``)."""
         return self._x1
 
     @x1.setter
@@ -3178,9 +3321,9 @@ class NMMainOpHistogram(NMMainOp):
             return
         arr = data.nparray.astype(float)
 
-        # Apply time window if either bound is finite
+        # Apply xscale window if either bound is finite
         if not (self._x0 == -math.inf and self._x1 == math.inf):
-            sl = nm_math.time_window_to_slice(
+            sl = nm_math.xscale_window_to_slice(
                 arr, data.xscale.to_dict(), self._x0, self._x1
             )
             arr = arr[sl]
@@ -3258,6 +3401,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "reverse": NMMainOpReverse,
     "rotate": NMMainOpRotate,
     # --- x-axis ---
+    "align": NMMainOpAlign,
     "interpolate": NMMainOpInterpolate,
     "resample": NMMainOpResample,
     "rescale_x": NMMainOpRescaleX,
