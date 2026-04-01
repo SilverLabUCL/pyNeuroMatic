@@ -22,7 +22,7 @@ from pyneuromatic.core.nm_math import (
     linear_regression,
     parse_si_units,
     si_scale_factor,
-    time_window_to_slice,
+    xscale_window_to_slice,
 )
 
 
@@ -245,48 +245,48 @@ class TestComputeRefValue:
 
 
 # ---------------------------------------------------------------------------
-# TestTimeWindowToSlice
+# TestXscaleWindowToSlice
 # ---------------------------------------------------------------------------
 
 
-class TestTimeWindowToSlice:
+class TestXscaleWindowToSlice:
     ARR = np.zeros(10)
     XD = {"start": 0.0, "delta": 1.0}
 
     def test_basic_slice(self):
-        s = time_window_to_slice(self.ARR, self.XD, 2.0, 4.0)
+        s = xscale_window_to_slice(self.ARR, self.XD, 2.0, 4.0)
         assert s == slice(2, 5)
 
     def test_clips_low(self):
-        s = time_window_to_slice(self.ARR, self.XD, -5.0, 3.0)
+        s = xscale_window_to_slice(self.ARR, self.XD, -5.0, 3.0)
         assert s.start == 0
 
     def test_clips_high(self):
-        s = time_window_to_slice(self.ARR, self.XD, 7.0, 20.0)
+        s = xscale_window_to_slice(self.ARR, self.XD, 7.0, 20.0)
         assert s.stop == len(self.ARR)
 
     def test_zero_delta_returns_empty(self):
         xd = {"start": 0.0, "delta": 0.0}
-        s = time_window_to_slice(self.ARR, xd, 0.0, 5.0)
+        s = xscale_window_to_slice(self.ARR, xd, 0.0, 5.0)
         assert s == slice(0, 0)
 
     def test_non_unit_delta(self):
         xd = {"start": 0.0, "delta": 0.5}
         arr = np.zeros(20)
-        s = time_window_to_slice(arr, xd, 1.0, 2.0)
+        s = xscale_window_to_slice(arr, xd, 1.0, 2.0)
         # i0 = round((1.0-0)/0.5)=2, i1 = round((2.0-0)/0.5)+1=5
         assert s == slice(2, 5)
 
     def test_neg_inf_begin(self):
-        s = time_window_to_slice(self.ARR, self.XD, -math.inf, 4.0)
+        s = xscale_window_to_slice(self.ARR, self.XD, -math.inf, 4.0)
         assert s.start == 0
 
     def test_pos_inf_end(self):
-        s = time_window_to_slice(self.ARR, self.XD, 2.0, math.inf)
+        s = xscale_window_to_slice(self.ARR, self.XD, 2.0, math.inf)
         assert s.stop == len(self.ARR)
 
     def test_both_inf(self):
-        s = time_window_to_slice(self.ARR, self.XD, -math.inf, math.inf)
+        s = xscale_window_to_slice(self.ARR, self.XD, -math.inf, math.inf)
         assert s == slice(0, len(self.ARR))
 
 

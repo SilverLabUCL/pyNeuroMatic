@@ -37,6 +37,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpReplaceValues,
     NMMainOpConcatenate,
     NMMainOpRescale,
+    NMMainOpAlign,
     NMMainOpInterpolate,
     NMMainOpResample,
     NMMainOpRescaleX,
@@ -3776,6 +3777,161 @@ class TestNMMainOpInterpolate(unittest.TestCase):
     def test_op_from_name_interpolate(self):
         op = op_from_name("interpolate")
         self.assertIsInstance(op, NMMainOpInterpolate)
+
+
+# ===========================================================================
+# TestNMMainOpAlign
+# ===========================================================================
+
+
+class TestNMMainOpAlign(unittest.TestCase):
+
+    # --- constructor validation ---
+
+    def test_rejects_bool_xvalues(self):
+        with self.assertRaises(TypeError):
+            NMMainOpAlign(xvalues=True)
+
+    def test_rejects_string_xvalues(self):
+        with self.assertRaises(TypeError):
+            NMMainOpAlign(xvalues="0.1")
+
+    def test_rejects_bool_target(self):
+        with self.assertRaises(TypeError):
+            NMMainOpAlign(target=True)
+
+    def test_rejects_invalid_target_string(self):
+        with self.assertRaises(ValueError):
+            NMMainOpAlign(target="median")
+
+    def test_valid_target_strings(self):
+        for t in ("mean", "min", "max"):
+            op = NMMainOpAlign(target=t)
+            self.assertEqual(op.target, t)
+
+    # --- helpers ---
+
+    def _make_items(self, arrays_by_name, xstart=0.0, xdelta=0.1):
+        """Build NMFolder + data_items list from {name: array} dict."""
+        folder = NMFolder(name="folder0")
+        data_items = []
+        for name, arr in arrays_by_name.items():
+            d = folder.data.new(
+                name,
+                nparray=np.array(arr, dtype=float),
+                xscale={"start": xstart, "delta": xdelta},
+            )
+            data_items.append((d, None))
+        return folder, data_items
+
+    # --- scalar xvalues ---
+
+    def test_scalar_shifts_all_arrays(self):
+        # x_time=0.05 for all, target=0.0 → shift=-0.05
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0, 2.0], "RecordA1": [3.0, 4.0]}, xstart=0.0
+        )
+        op = NMMainOpAlign(xvalues=0.05, target=0.0)
+        op.run_all(data_items, folder)
+        for d, _ in data_items:
+            self.assertAlmostEqual(d.xscale.start, -0.05)
+
+    # --- list xvalues ---
+
+    def test_list_each_array_gets_own_shift(self):
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0], "RecordA1": [1.0], "RecordA2": [1.0]}, xstart=0.0
+        )
+        op = NMMainOpAlign(xvalues=[0.1, 0.2, 0.3], target=0.0)
+        op.run_all(data_items, folder)
+        expected = [-0.1, -0.2, -0.3]
+        for (d, _), exp in zip(data_items, expected):
+            self.assertAlmostEqual(d.xscale.start, exp)
+
+    def test_list_length_mismatch_raises(self):
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0], "RecordA1": [1.0]}
+        )
+        op = NMMainOpAlign(xvalues=[0.1, 0.2, 0.3])  # 3 != 2
+        with self.assertRaises(IndexError):
+            op.run_all(data_items, folder)
+
+    # --- dict xvalues ---
+
+    def test_dict_shifts_named_arrays(self):
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0], "RecordA1": [1.0]}, xstart=0.0
+        )
+        op = NMMainOpAlign(xvalues={"RecordA0": 0.1}, target=0.0)
+        op.run_all(data_items, folder)
+        self.assertAlmostEqual(folder.data.get("RecordA0").xscale.start, -0.1)
+        self.assertAlmostEqual(folder.data.get("RecordA1").xscale.start, 0.0)  # skipped
+
+    # --- target="mean" / "min" / "max" ---
+
+    def test_target_mean(self):
+        # xvalues=[0.1, 0.3] → mean=0.2; shifts: 0.1, -0.1
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0], "RecordA1": [1.0]}, xstart=0.0
+        )
+        op = NMMainOpAlign(xvalues=[0.1, 0.3], target="mean")
+        op.run_all(data_items, folder)
+        self.assertAlmostEqual(folder.data.get("RecordA0").xscale.start, 0.1)
+        self.assertAlmostEqual(folder.data.get("RecordA1").xscale.start, -0.1)
+
+    def test_target_min(self):
+        # xvalues=[0.1, 0.3] → min=0.1; shifts: 0.0, -0.2
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0], "RecordA1": [1.0]}, xstart=0.0
+        )
+        op = NMMainOpAlign(xvalues=[0.1, 0.3], target="min")
+        op.run_all(data_items, folder)
+        self.assertAlmostEqual(folder.data.get("RecordA0").xscale.start, 0.0)
+        self.assertAlmostEqual(folder.data.get("RecordA1").xscale.start, -0.2)
+
+    def test_target_max(self):
+        # xvalues=[0.1, 0.3] → max=0.3; shifts: 0.2, 0.0
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0], "RecordA1": [1.0]}, xstart=0.0
+        )
+        op = NMMainOpAlign(xvalues=[0.1, 0.3], target="max")
+        op.run_all(data_items, folder)
+        self.assertAlmostEqual(folder.data.get("RecordA0").xscale.start, 0.2)
+        self.assertAlmostEqual(folder.data.get("RecordA1").xscale.start, 0.0)
+
+    # --- data values and delta unchanged ---
+
+    def test_data_values_unchanged(self):
+        folder, data_items = self._make_items({"RecordA0": [1.0, 2.0, 3.0]})
+        NMMainOpAlign(xvalues=0.1, target=0.0).run_all(data_items, folder)
+        np.testing.assert_array_equal(
+            folder.data.get("RecordA0").nparray, [1.0, 2.0, 3.0]
+        )
+
+    def test_xscale_delta_unchanged(self):
+        folder, data_items = self._make_items(
+            {"RecordA0": [1.0, 2.0]}, xdelta=0.1
+        )
+        NMMainOpAlign(xvalues=0.05, target=0.0).run_all(data_items, folder)
+        self.assertAlmostEqual(data_items[0][0].xscale.delta, 0.1)
+
+    # --- notes ---
+
+    def test_note_contains_op_name(self):
+        folder, data_items = self._make_items({"RecordA0": [1.0]})
+        NMMainOpAlign(xvalues=0.1, target=0.0).run_all(data_items, folder)
+        self.assertIn("NMAlign(", folder.data.get("RecordA0").notes[0]["note"])
+
+    def test_note_contains_xshift(self):
+        folder, data_items = self._make_items({"RecordA0": [1.0]})
+        NMMainOpAlign(xvalues=0.1, target=0.0).run_all(data_items, folder)
+        self.assertIn("xshift=", folder.data.get("RecordA0").notes[0]["note"])
+
+    # --- registry ---
+
+    def test_op_from_name_align(self):
+        op = op_from_name("align")
+        self.assertIsInstance(op, NMMainOpAlign)
 
 
 if __name__ == "__main__":

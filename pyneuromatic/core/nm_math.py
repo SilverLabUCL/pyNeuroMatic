@@ -196,17 +196,17 @@ def compute_ref_value(arr: np.ndarray, fxn: str, n_mean: int) -> float:
 
 
 # =========================================================================
-# Time-window helper
+# Xscale-window helper
 # =========================================================================
 
 
-def time_window_to_slice(
+def xscale_window_to_slice(
     arr: np.ndarray,
     xscale_dict: dict,
     x0: float,
     x1: float,
 ) -> slice:
-    """Convert a time window to an array slice using xscale start/delta.
+    """Convert a xscale window to an array slice using xscale start/delta.
 
     Clips to valid range; returns an empty slice if the window is fully
     outside the array bounds.  Infinite bounds are treated as array
@@ -215,9 +215,9 @@ def time_window_to_slice(
     Args:
         arr:         Array whose length defines the valid index range.
         xscale_dict: Dict with ``"start"`` and ``"delta"`` keys (floats).
-        x0:     Start of the time window.  ``-inf`` selects from the
+        x0:     Start of the xscale window.  ``-inf`` selects from the
                      beginning of the array.
-        x1:       End of the time window (inclusive).  ``+inf`` selects
+        x1:       End of the xscale window (inclusive).  ``+inf`` selects
                      to the end of the array.
 
     Returns:
@@ -417,7 +417,7 @@ def array_stats(
 def interp_x(ylevel: float, x0: float, y0: float, x1: float, y1: float) -> float:
     """Interpolate the x-coordinate where a line segment crosses *ylevel*.
 
-    Fits a line through (x0, y0) and (x1, y1) and returns the x-value
+    Fits a line through (x0, y0) and (x1, y1) and returns the xvalue
     where that line equals *ylevel*.
 
     Args:
@@ -426,7 +426,7 @@ def interp_x(ylevel: float, x0: float, y0: float, x1: float, y1: float) -> float
         x1, y1: Coordinates of the second point.
 
     Returns:
-        Interpolated x-value (float) at y = ylevel.
+        Interpolated xvalue (float) at y = ylevel.
     """
     dx = x1 - x0
     dy = y1 - y0
@@ -451,16 +451,16 @@ def find_level_crossings(
 
     A crossing is detected wherever the signal transitions across *ylevel*
     (i.e. ``np.diff(yarray > ylevel)`` is True). For each crossing, the
-    nearest sample index and interpolated x-value are returned.
+    nearest sample index and interpolated xvalue are returned.
 
     Args:
-        yarray:      1-D numpy array of y-values to search.
+        yarray:      1-D numpy array of yvalues to search.
         ylevel:      The y-axis threshold to search for.
         func_name:   Controls which crossing directions are returned:
                      ``"level"`` — all crossings (both rising and falling).
                      ``"level+"`` — rising crossings only.
                      ``"level-"`` — falling crossings only.
-        xarray:      Optional 1-D numpy array of x-values (same size as
+        xarray:      Optional 1-D numpy array of xvalues (same size as
                      *yarray*). Used instead of *xstart*/*xdelta* when
                      provided.
         xstart:      X-scale start value; used when *xarray* is None.
@@ -468,8 +468,8 @@ def find_level_crossings(
         i_nearest:   If True (default), returns the sample index nearest to
                      the crossing via linear interpolation. If False, returns
                      the index immediately after the crossing.
-        x_interp:    If True (default), returns the interpolated x-value at
-                     the exact crossing. If False, returns the x-value at
+        x_interp:    If True (default), returns the interpolated xvalue at
+                     the exact crossing. If False, returns the xvalue at
                      the nearest sample index.
         ignore_nans: If True (default), NaN values are included in the
                      transition detection.
@@ -477,7 +477,7 @@ def find_level_crossings(
     Returns:
         Tuple ``(indexes, xvalues)`` of numpy arrays:
         *indexes* — sample indices (int) nearest to each crossing.
-        *xvalues* — x-values (float) at each crossing location.
+        *xvalues* — xvalues (float) at each crossing location.
         Both arrays are empty if no crossings are found.
 
     Raises:
@@ -603,8 +603,8 @@ def linear_regression(
     """Fit a linear regression line to y-data using ``numpy.polyfit``.
 
     Args:
-        yarray:      1-D numpy array of y-values.
-        xarray:      Optional 1-D numpy array of x-values (same size as
+        yarray:      1-D numpy array of yvalues.
+        xarray:      Optional 1-D numpy array of xvalues (same size as
                      *yarray*). Used instead of *xstart*/*xdelta* when
                      provided.
         xstart:      X-scale start value; used to build a uniform x-array
@@ -686,7 +686,7 @@ def smooth_boxcar(
     """Boxcar (moving average) smooth via ``np.convolve``.
 
     Args:
-        y: 1-D numpy array of y-values.
+        y: 1-D numpy array of yvalues.
         window: Kernel width in points. Must be an odd integer >= 3.
         passes: Number of times to apply the kernel. Must be >= 1. Default 1.
 
@@ -724,7 +724,7 @@ def smooth_binomial(
     """Binomial smooth: apply 3-point binomial kernel via ``np.convolve``.
 
     Args:
-        y: 1-D numpy array of y-values.
+        y: 1-D numpy array of yvalues.
         passes: Number of times to apply the 3-point binomial kernel.
             Must be >= 1. More passes produce a wider effective smooth.
 
@@ -757,7 +757,7 @@ def smooth_savgol(
     """Savitzky-Golay smooth via ``scipy.signal.savgol_filter``.
 
     Args:
-        y: 1-D numpy array of y-values.
+        y: 1-D numpy array of yvalues.
         window: Kernel width in points. Must be an odd integer and
             >= *polyorder* + 2.
         polyorder: Polynomial order. Must be an integer >= 1 and
@@ -811,7 +811,7 @@ def resample(
     ``resample_poly``'s integer ``up`` / ``down`` requirement.
 
     Args:
-        y: 1-D numpy array of y-values.
+        y: 1-D numpy array of yvalues.
         old_delta: Current sample interval (any consistent units).
         new_delta: Desired sample interval (same units as *old_delta*).
 
@@ -859,14 +859,14 @@ def interpolate(
     outside the range of *x_old* are filled with ``NaN``.
 
     Args:
-        y: 1-D numpy array of y-values corresponding to *x_old*.
+        y: 1-D numpy array of yvalues corresponding to *x_old*.
         x_old: 1-D numpy array of original x-positions (must be strictly
             increasing).
         x_new: 1-D numpy array of target x-positions.
         method: ``"linear"`` (default) or ``"cubic"``.
 
     Returns:
-        1-D numpy array of interpolated y-values at *x_new* positions.
+        1-D numpy array of interpolated yvalues at *x_new* positions.
 
     Raises:
         TypeError: If any array argument is not a numpy ndarray.
@@ -1014,7 +1014,7 @@ def stability_test(
     """Find the largest stable (trend-free) window in a 1-D array.
 
     Tests whether consecutive subsets of values have no significant monotonic
-    trend over time using the Spearman rank-order correlation between values
+    trend using the Spearman rank-order correlation between values
     and their array indices. Searches from the largest possible window down to
     ``min_window``, stopping as soon as the largest stable window is found.
 
