@@ -15,6 +15,7 @@ from pyneuromatic.core.nm_transform import (
     NMTransformLog,
     NMTransformLn,
     NMTransformSmooth,
+    NMTransformFilter,
     _transform_from_dict,
     _transforms_from_list,
     apply_transforms,
@@ -460,6 +461,224 @@ class TestNMTransformSmooth(unittest.TestCase):
         t = NMTransformSmooth(method="boxcar", window=5, passes=1, polyorder=2)
         self.assertIn("NMTransformSmooth", repr(t))
         self.assertIn("boxcar", repr(t))
+
+
+class TestNMTransformFilter(unittest.TestCase):
+    """Tests for NMTransformFilter."""
+
+    SR = 10000.0  # sample rate Hz used across tests
+
+    def setUp(self):
+        # 1000-point DC signal at sample rate 10 kHz
+        self.y_dc = np.ones(1000) * 5.0
+        # Low-frequency sine (100 Hz) — passes through a 1 kHz lowpass
+        t = np.arange(1000) / self.SR
+        self.y_low = np.sin(2 * np.pi * 100 * t)
+        # High-frequency sine (4 kHz) — attenuated by a 1 kHz lowpass
+        self.y_high = np.sin(2 * np.pi * 4000 * t)
+
+    # --- Constructor / property validation ---
+
+    def test_default_params(self):
+        t = NMTransformFilter()
+        self.assertEqual(t.filter_type, "butterworth")
+        self.assertEqual(t.cutoff, 1000.0)
+        self.assertIsNone(t.sample_rate)
+        self.assertEqual(t.order, 4)
+        self.assertEqual(t.btype, "low")
+        self.assertEqual(t.q, 30.0)
+
+    def test_sample_rate_explicit(self):
+        t = NMTransformFilter(sample_rate=self.SR)
+        self.assertEqual(t.sample_rate, self.SR)
+
+    def test_rejects_invalid_filter_type(self):
+        with self.assertRaises(ValueError):
+            NMTransformFilter(filter_type="fir", sample_rate=self.SR)
+
+    def test_rejects_non_string_filter_type(self):
+        with self.assertRaises(TypeError):
+            NMTransformFilter(filter_type=1, sample_rate=self.SR)
+
+    def test_rejects_zero_cutoff(self):
+        with self.assertRaises(ValueError):
+            NMTransformFilter(cutoff=0.0, sample_rate=self.SR)
+
+    def test_rejects_bool_cutoff(self):
+        with self.assertRaises(TypeError):
+            NMTransformFilter(cutoff=True, sample_rate=self.SR)
+
+    def test_rejects_non_positive_sample_rate(self):
+        with self.assertRaises(ValueError):
+            NMTransformFilter(sample_rate=0.0)
+
+    def test_rejects_bool_sample_rate(self):
+        with self.assertRaises(TypeError):
+            NMTransformFilter(sample_rate=True)
+
+    def test_rejects_invalid_btype(self):
+        with self.assertRaises(ValueError):
+            NMTransformFilter(btype="bandstop", sample_rate=self.SR)
+
+    def test_rejects_non_positive_order(self):
+        with self.assertRaises(ValueError):
+            NMTransformFilter(order=0, sample_rate=self.SR)
+
+    def test_rejects_bool_order(self):
+        with self.assertRaises(TypeError):
+            NMTransformFilter(order=True, sample_rate=self.SR)
+
+    def test_rejects_non_positive_q(self):
+        with self.assertRaises(ValueError):
+            NMTransformFilter(q=0.0, sample_rate=self.SR)
+
+    def test_rejects_bool_q(self):
+        with self.assertRaises(TypeError):
+            NMTransformFilter(q=True, sample_rate=self.SR)
+
+    # --- Output shape ---
+
+    def test_butterworth_output_length(self):
+        t = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                              sample_rate=self.SR)
+        result = t.apply(self.y_dc)
+        self.assertEqual(result.shape, self.y_dc.shape)
+
+    def test_bessel_output_length(self):
+        t = NMTransformFilter(filter_type="bessel", cutoff=1000.0,
+                              sample_rate=self.SR)
+        result = t.apply(self.y_dc)
+        self.assertEqual(result.shape, self.y_dc.shape)
+
+    def test_notch_output_length(self):
+        t = NMTransformFilter(filter_type="notch", cutoff=60.0,
+                              sample_rate=self.SR)
+        result = t.apply(self.y_dc)
+        self.assertEqual(result.shape, self.y_dc.shape)
+
+    # --- Functional behaviour ---
+
+    def test_butterworth_dc_preserved(self):
+        t = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                              sample_rate=self.SR)
+        result = t.apply(self.y_dc)
+        np.testing.assert_allclose(result[100:-100], 5.0, atol=1e-6)
+
+    def test_bessel_dc_preserved(self):
+        t = NMTransformFilter(filter_type="bessel", cutoff=1000.0,
+                              sample_rate=self.SR)
+        result = t.apply(self.y_dc)
+        np.testing.assert_allclose(result[100:-100], 5.0, atol=1e-6)
+
+    def test_butterworth_lowpass_passes_low_freq(self):
+        t = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                              sample_rate=self.SR)
+        result = t.apply(self.y_low)
+        # 100 Hz should pass — RMS should be close to input RMS
+        rms_in = np.sqrt(np.mean(self.y_low[100:-100] ** 2))
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        self.assertAlmostEqual(rms_in, rms_out, delta=0.05)
+
+    def test_butterworth_lowpass_attenuates_high_freq(self):
+        t = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                              sample_rate=self.SR)
+        result = t.apply(self.y_high)
+        # 4 kHz should be substantially attenuated
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        self.assertLess(rms_out, 0.1)
+
+    def test_highpass_attenuates_low_freq(self):
+        t = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                              sample_rate=self.SR, btype="high")
+        result = t.apply(self.y_low)
+        # 100 Hz should be attenuated by a 1 kHz highpass
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        self.assertLess(rms_out, 0.1)
+
+    def test_notch_attenuates_target_frequency(self):
+        # Use a longer signal so the high-Q notch transient decays
+        n = 10000
+        t_arr = np.arange(n) / self.SR
+        y_60 = np.sin(2 * np.pi * 60 * t_arr)
+        tf = NMTransformFilter(filter_type="notch", cutoff=60.0,
+                               sample_rate=self.SR, q=30.0)
+        result = tf.apply(y_60)
+        rms_out = np.sqrt(np.mean(result[2000:-2000] ** 2))
+        self.assertLess(rms_out, 0.1)
+
+    def test_apply_rejects_non_ndarray(self):
+        t = NMTransformFilter(sample_rate=self.SR)
+        with self.assertRaises(TypeError):
+            t.apply([1.0, 2.0, 3.0])
+
+    def test_apply_raises_without_sample_rate_or_xscale(self):
+        t = NMTransformFilter()  # sample_rate=None
+        with self.assertRaises(ValueError):
+            t.apply(self.y_dc)
+
+    def test_apply_derives_sample_rate_from_xscale(self):
+        from pyneuromatic.core.nm_scale import NMScaleX
+        t = NMTransformFilter(filter_type="butterworth", cutoff=1000.0)
+        xscale = NMScaleX()
+        xscale.delta = 1.0 / self.SR  # delta in seconds → SR = 10 kHz
+        result = t.apply(self.y_dc, xscale=xscale)
+        self.assertEqual(result.shape, self.y_dc.shape)
+        np.testing.assert_allclose(result[100:-100], 5.0, atol=1e-6)
+
+    # --- Serialisation / equality ---
+
+    def test_to_dict_butterworth(self):
+        t = NMTransformFilter(filter_type="butterworth", cutoff=500.0,
+                              sample_rate=self.SR, order=2, btype="high")
+        d = t.to_dict()
+        self.assertEqual(d["type"], "NMTransformFilter")
+        self.assertEqual(d["filter_type"], "butterworth")
+        self.assertEqual(d["cutoff"], 500.0)
+        self.assertEqual(d["sample_rate"], self.SR)
+        self.assertEqual(d["order"], 2)
+        self.assertEqual(d["btype"], "high")
+
+    def test_to_dict_notch(self):
+        t = NMTransformFilter(filter_type="notch", cutoff=60.0,
+                              sample_rate=self.SR, q=20.0)
+        d = t.to_dict()
+        self.assertEqual(d["filter_type"], "notch")
+        self.assertEqual(d["q"], 20.0)
+
+    def test_equality(self):
+        t1 = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                               sample_rate=self.SR, order=4, btype="low")
+        t2 = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                               sample_rate=self.SR, order=4, btype="low")
+        t3 = NMTransformFilter(filter_type="bessel", cutoff=1000.0,
+                               sample_rate=self.SR)
+        self.assertEqual(t1, t2)
+        self.assertNotEqual(t1, t3)
+
+    def test_from_dict_registered(self):
+        t = NMTransformFilter(filter_type="bessel", cutoff=500.0,
+                              sample_rate=self.SR, order=3)
+        d = t.to_dict()
+        t2 = _transform_from_dict(d)
+        self.assertIsInstance(t2, NMTransformFilter)
+        self.assertEqual(t, t2)
+
+    def test_repr_butterworth(self):
+        t = NMTransformFilter(filter_type="butterworth", cutoff=1000.0,
+                              sample_rate=self.SR)
+        r = repr(t)
+        self.assertIn("NMTransformFilter", r)
+        self.assertIn("butterworth", r)
+        self.assertIn("btype", r)
+
+    def test_repr_notch(self):
+        t = NMTransformFilter(filter_type="notch", cutoff=60.0,
+                              sample_rate=self.SR)
+        r = repr(t)
+        self.assertIn("NMTransformFilter", r)
+        self.assertIn("notch", r)
+        self.assertIn("q=", r)
+        self.assertNotIn("btype", r)
 
 
 if __name__ == "__main__":

@@ -1024,3 +1024,274 @@ class TestInterpolate:
         x = np.linspace(0, 1, 11)
         result = nm_math.interpolate(np.ones(11), x, x)
         assert isinstance(result, np.ndarray)
+
+# ---------------------------------------------------------------------------
+# filter helpers shared by Butterworth and Bessel tests
+# ---------------------------------------------------------------------------
+
+_SR = 10000.0  # sample rate (Hz) used across filter tests
+_N = 1000      # signal length
+
+
+def _dc(val=5.0):
+    return np.ones(_N) * val
+
+
+def _sine(freq):
+    t = np.arange(_N) / _SR
+    return np.sin(2 * np.pi * freq * t)
+
+
+# ---------------------------------------------------------------------------
+# filter_butterworth
+# ---------------------------------------------------------------------------
+
+
+class TestFilterButterworth:
+    """Tests for nm_math.filter_butterworth."""
+
+    # --- input validation ---
+
+    def test_rejects_non_array_y(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_butterworth([1.0, 2.0], 1000.0, _SR)
+
+    def test_rejects_bool_cutoff(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_butterworth(_dc(), True, _SR)
+
+    def test_rejects_zero_cutoff(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_butterworth(_dc(), 0.0, _SR)
+
+    def test_rejects_negative_cutoff(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_butterworth(_dc(), -500.0, _SR)
+
+    def test_rejects_string_cutoff(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_butterworth(_dc(), "1000", _SR)
+
+    def test_rejects_bool_sample_rate(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_butterworth(_dc(), 1000.0, True)
+
+    def test_rejects_zero_sample_rate(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_butterworth(_dc(), 1000.0, 0.0)
+
+    def test_rejects_bool_order(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_butterworth(_dc(), 1000.0, _SR, order=True)
+
+    def test_rejects_zero_order(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_butterworth(_dc(), 1000.0, _SR, order=0)
+
+    def test_rejects_invalid_btype(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_butterworth(_dc(), 1000.0, _SR, btype="bandstop")
+
+    # --- output ---
+
+    def test_output_is_ndarray(self):
+        result = nm_math.filter_butterworth(_dc(), 1000.0, _SR)
+        assert isinstance(result, np.ndarray)
+
+    def test_output_length_preserved(self):
+        result = nm_math.filter_butterworth(_dc(), 1000.0, _SR)
+        assert len(result) == _N
+
+    def test_accepts_list_cutoff_bandpass(self):
+        result = nm_math.filter_butterworth(_dc(), [500.0, 2000.0], _SR, btype="bandpass")
+        assert isinstance(result, np.ndarray)
+
+    # --- functional ---
+
+    def test_dc_preserved_lowpass(self):
+        result = nm_math.filter_butterworth(_dc(5.0), 1000.0, _SR)
+        np.testing.assert_allclose(result[100:-100], 5.0, atol=1e-6)
+
+    def test_lowpass_passes_low_freq(self):
+        y = _sine(100)  # 100 Hz << 1 kHz cutoff
+        result = nm_math.filter_butterworth(y, 1000.0, _SR)
+        rms_in = np.sqrt(np.mean(y[100:-100] ** 2))
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        assert abs(rms_in - rms_out) < 0.05
+
+    def test_lowpass_attenuates_high_freq(self):
+        y = _sine(4000)  # 4 kHz >> 1 kHz cutoff
+        result = nm_math.filter_butterworth(y, 1000.0, _SR)
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        assert rms_out < 0.1
+
+    def test_highpass_attenuates_low_freq(self):
+        y = _sine(100)  # 100 Hz << 1 kHz cutoff
+        result = nm_math.filter_butterworth(y, 1000.0, _SR, btype="high")
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        assert rms_out < 0.1
+
+
+# ---------------------------------------------------------------------------
+# filter_bessel
+# ---------------------------------------------------------------------------
+
+
+class TestFilterBessel:
+    """Tests for nm_math.filter_bessel."""
+
+    # --- input validation ---
+
+    def test_rejects_non_array_y(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_bessel([1.0, 2.0], 1000.0, _SR)
+
+    def test_rejects_bool_cutoff(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_bessel(_dc(), True, _SR)
+
+    def test_rejects_zero_cutoff(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_bessel(_dc(), 0.0, _SR)
+
+    def test_rejects_negative_cutoff(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_bessel(_dc(), -500.0, _SR)
+
+    def test_rejects_string_cutoff(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_bessel(_dc(), "1000", _SR)
+
+    def test_rejects_bool_sample_rate(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_bessel(_dc(), 1000.0, True)
+
+    def test_rejects_zero_sample_rate(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_bessel(_dc(), 1000.0, 0.0)
+
+    def test_rejects_bool_order(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_bessel(_dc(), 1000.0, _SR, order=True)
+
+    def test_rejects_zero_order(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_bessel(_dc(), 1000.0, _SR, order=0)
+
+    def test_rejects_invalid_btype(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_bessel(_dc(), 1000.0, _SR, btype="bandstop")
+
+    # --- output ---
+
+    def test_output_is_ndarray(self):
+        result = nm_math.filter_bessel(_dc(), 1000.0, _SR)
+        assert isinstance(result, np.ndarray)
+
+    def test_output_length_preserved(self):
+        result = nm_math.filter_bessel(_dc(), 1000.0, _SR)
+        assert len(result) == _N
+
+    def test_accepts_list_cutoff_bandpass(self):
+        result = nm_math.filter_bessel(_dc(), [500.0, 2000.0], _SR, btype="bandpass")
+        assert isinstance(result, np.ndarray)
+
+    # --- functional ---
+
+    def test_dc_preserved_lowpass(self):
+        result = nm_math.filter_bessel(_dc(5.0), 1000.0, _SR)
+        np.testing.assert_allclose(result[100:-100], 5.0, atol=1e-6)
+
+    def test_lowpass_passes_low_freq(self):
+        y = _sine(100)
+        result = nm_math.filter_bessel(y, 1000.0, _SR)
+        rms_in = np.sqrt(np.mean(y[100:-100] ** 2))
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        assert abs(rms_in - rms_out) < 0.05
+
+    def test_lowpass_attenuates_high_freq(self):
+        y = _sine(4000)
+        result = nm_math.filter_bessel(y, 1000.0, _SR)
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        assert rms_out < 0.1
+
+    def test_highpass_attenuates_low_freq(self):
+        y = _sine(100)
+        result = nm_math.filter_bessel(y, 1000.0, _SR, btype="high")
+        rms_out = np.sqrt(np.mean(result[100:-100] ** 2))
+        assert rms_out < 0.1
+
+
+# ---------------------------------------------------------------------------
+# filter_notch
+# ---------------------------------------------------------------------------
+
+
+class TestFilterNotch:
+    """Tests for nm_math.filter_notch."""
+
+    _N_LONG = 10000  # longer signal needed for high-Q transient to decay
+
+    def _sine_long(self, freq):
+        t = np.arange(self._N_LONG) / _SR
+        return np.sin(2 * np.pi * freq * t)
+
+    # --- input validation ---
+
+    def test_rejects_non_array_y(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_notch([1.0, 2.0], 60.0, _SR)
+
+    def test_rejects_bool_sample_rate(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_notch(_dc(), 60.0, True)
+
+    def test_rejects_zero_sample_rate(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_notch(_dc(), 60.0, 0.0)
+
+    def test_rejects_bool_freq(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_notch(_dc(), True, _SR)
+
+    def test_rejects_zero_freq(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_notch(_dc(), 0.0, _SR)
+
+    def test_rejects_bool_q(self):
+        with pytest.raises(TypeError):
+            nm_math.filter_notch(_dc(), 60.0, _SR, q=True)
+
+    def test_rejects_zero_q(self):
+        with pytest.raises(ValueError):
+            nm_math.filter_notch(_dc(), 60.0, _SR, q=0.0)
+
+    # --- output ---
+
+    def test_output_is_ndarray(self):
+        result = nm_math.filter_notch(_dc(), 60.0, _SR)
+        assert isinstance(result, np.ndarray)
+
+    def test_output_length_preserved(self):
+        result = nm_math.filter_notch(_dc(), 60.0, _SR)
+        assert len(result) == _N
+
+    # --- functional ---
+
+    def test_dc_preserved(self):
+        result = nm_math.filter_notch(_dc(3.0), 60.0, _SR)
+        np.testing.assert_allclose(result[100:-100], 3.0, atol=1e-6)
+
+    def test_attenuates_notch_frequency(self):
+        y = self._sine_long(60)
+        result = nm_math.filter_notch(y, 60.0, _SR, q=30.0)
+        rms_out = np.sqrt(np.mean(result[2000:-2000] ** 2))
+        assert rms_out < 0.1
+
+    def test_passes_off_notch_frequency(self):
+        y = self._sine_long(100)  # 100 Hz, notch at 60 Hz
+        result = nm_math.filter_notch(y, 60.0, _SR, q=30.0)
+        rms_in = np.sqrt(np.mean(y[2000:-2000] ** 2))
+        rms_out = np.sqrt(np.mean(result[2000:-2000] ** 2))
+        assert abs(rms_in - rms_out) < 0.05
+
