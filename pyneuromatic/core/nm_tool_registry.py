@@ -33,10 +33,12 @@ if TYPE_CHECKING:
 DEFAULT_TOOL_REGISTRY: dict[str, tuple[str, str]] = {
     "main": ("pyneuromatic.analysis.nm_tool_main", "NMToolMain"),
     "stats": ("pyneuromatic.analysis.nm_tool_stats", "NMToolStats"),
+    "spike": ("pyneuromatic.analysis.nm_tool_spike", "NMToolSpike"),
     # Future tools (uncomment when implemented):
-    # "spike": ("pyneuromatic.analysis.nm_tool_spike", "NMToolSpike"),
     # "event": ("pyneuromatic.analysis.nm_tool_event", "NMToolEvent"),
     # "fit": ("pyneuromatic.analysis.nm_tool_fit", "NMToolFit"),
+    # "art": ("pyneuromatic.analysis.nm_tool_fit", "NMToolArt"),
+    # "roi": ("pyneuromatic.analysis.nm_tool_fit", "NMToolROI"),
     # "pulse": ("pyneuromatic.analysis.nm_tool_pulse", "NMToolPulse"),
     # "model": ("pyneuromatic.analysis.nm_tool_model", "NMToolModel"),
     # "clamp": ("pyneuromatic.acquisition.nm_tool_clamp", "NMToolClamp"),

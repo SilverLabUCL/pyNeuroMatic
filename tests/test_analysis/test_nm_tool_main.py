@@ -4000,7 +4000,7 @@ class TestNMMainOpFilter(unittest.TestCase):
         op = NMMainOpFilter()
         self.assertIsNone(op.sample_rate)
 
-    # --- Butterworth low-pass ---
+    # --- Butterworth ---
 
     def test_butterworth_lowpass_preserves_dc(self):
         # DC signal (all ones) should pass through a low-pass filter unchanged
@@ -4029,7 +4029,7 @@ class TestNMMainOpFilter(unittest.TestCase):
         ).run(d)
         np.testing.assert_allclose(d.nparray[100:-100], 0.0, atol=1e-6)
 
-    def test_butterworth_bandpass(self):
+    def test_butterworth_bandpass_output_length(self):
         d = _make_filter_data()
         NMMainOpFilter(
             filter_type="butterworth", cutoff=[100.0, 2000.0],

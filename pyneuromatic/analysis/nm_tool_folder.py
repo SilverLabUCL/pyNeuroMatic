@@ -171,3 +171,38 @@ class NMToolFolderContainer(NMObjectContainer):
         if super()._add(f, select=select, quiet=quiet):
             return f
         return None
+
+    def get_or_create(
+        self,
+        base: str,
+        overwrite: bool = True,
+    ) -> NMToolFolder:
+        """Return a tool subfolder for *base*, respecting the overwrite flag.
+
+        Args:
+            base: Base name without trailing sequence number, e.g.
+                ``"spike_Record_A"`` or ``"stats_Record_A"``.
+            overwrite: If ``True`` (default), target ``{base}_0``.  If that
+                subfolder already exists, its data container is cleared and it
+                is returned for reuse.  If it does not exist, it is created.
+                If ``False``, find the first unused name ``{base}_0``,
+                ``{base}_1``, … and create a new subfolder there.
+
+        Returns:
+            The target :class:`NMToolFolder`.
+        """
+        if overwrite:
+            name = "%s_0" % base
+            existing = self.get(name)
+            if existing is not None:
+                existing.data.clear(quiet=True)
+                return existing
+            return self.new(name=name)
+        i = 0
+        f = None
+        while f is None:
+            try:
+                f = self.new(name="%s_%d" % (base, i))
+            except KeyError:
+                i += 1
+        return f
