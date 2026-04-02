@@ -501,13 +501,7 @@ class NMToolStats(NMTool):
         if ch is not None:
             parts.append(ch.name)
         base = "_".join(parts)
-        i = 0
-        f = None
-        while f is None:
-            try:
-                f = tf.new(name="%s_%d" % (base, i))
-            except KeyError:
-                i += 1
+        f = tf.get_or_create(base, overwrite=False)
 
         for wname, vlist in self.__results.items():
             # vlist: list of lists, one inner list per data array
