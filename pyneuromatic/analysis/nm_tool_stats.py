@@ -60,6 +60,7 @@ class NMToolStatsConfig(NMToolConfig):
     _schema = {
         "ignore_nans":        {"type": bool, "default": True},
         "xclip":              {"type": bool, "default": True},
+        "overwrite":          {"type": bool, "default": False},
         "results_to_history": {"type": bool, "default": False},
         "results_to_cache":   {"type": bool, "default": True},
         "results_to_numpy":   {"type": bool, "default": False},
@@ -111,6 +112,8 @@ class NMToolStats(NMTool):
         # for each data array there is a list [{}, {}] containing
         # results for each measure {} made for the stat window
         # e.g. baseline, main, p0, p1, slope, etc.
+
+        self.__overwrite = False
 
         self.__results_to_history = False
         self.__results_to_cache = True
@@ -258,6 +261,37 @@ class NMToolStats(NMTool):
         self.__results_to_numpy = value
         nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
         nmch.add_nm_command("%s.results_to_numpy = %r" % (self._name, self.__results_to_numpy))
+
+    @property
+    def overwrite(self) -> bool:
+        """If True, reuse ``{base}_0`` subfolder (clearing old arrays) on each run.
+
+        If False, each run creates a new numbered subfolder
+        (``{base}_0``, ``{base}_1``, …) preserving previous results.
+        Default False.
+        """
+        return self.__overwrite
+
+    @overwrite.setter
+    def overwrite(self, value: bool) -> None:
+        self._overwrite_set(value)
+
+    def _overwrite_set(
+        self,
+        value: bool,
+        quiet: bool = nmc.QUIET,
+    ) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "overwrite", "boolean"))
+        self.__overwrite = value
+        nmh.history("set overwrite=%s" % value, quiet=quiet)
+        nmch.add_nm_command("%s.overwrite = %r" % (self._name, self.__overwrite))
+
+    def _add_note(self, data: NMData, text: str) -> None:
+        """Append a note to *data*.notes if available."""
+        notes = getattr(data, "notes", None)
+        if notes is not None:
+            notes.add(text)
 
     # override, no super
     def run_init(self) -> bool:
@@ -501,7 +535,7 @@ class NMToolStats(NMTool):
         if ch is not None:
             parts.append(ch.name)
         base = "_".join(parts)
-        f = tf.get_or_create(base, overwrite=False)
+        f = tf.get_or_create(base, overwrite=self.__overwrite)
 
         for wname, vlist in self.__results.items():
             # vlist: list of lists, one inner list per data array
@@ -546,7 +580,21 @@ class NMToolStats(NMTool):
                     yscale = {"units": units} if units else None
                     dname = self._st_array_name(wname, func_name, id_str, rkey)
                     if f.data is not None:
-                        f.data.new(dname, nparray=arr, yscale=yscale)
+                        d = f.data.new(dname, nparray=arr, yscale=yscale)
+                        win = self.windows[wname] if wname in self.windows else None
+                        if id_str == "bsln" and win is not None:
+                            x0 = win.bsln_x0
+                            x1 = win.bsln_x1
+                            note_func = win.bsln_func.get("name", func_name)
+                        else:
+                            x0 = win.x0 if win is not None else None
+                            x1 = win.x1 if win is not None else None
+                            note_func = func_name
+                        self._add_note(
+                            d,
+                            "NMStats(win=%s, func=%s, id=%s, x0=%s, x1=%s, n=%d)"
+                            % (wname, note_func, id_str, x0, x1, len(rdicts)),
+                        )
 
                 # Save warnings if any occurred
                 warnings = [rdict.get("warning") for rdict in rdicts]

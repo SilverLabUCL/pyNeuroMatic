@@ -985,6 +985,205 @@ class TestNMToolStatsConfig(unittest.TestCase):
         self.assertTrue(t.config.ignore_nans)
         self.assertTrue(t.config.xclip)
 
+    def test_overwrite_default(self):
+        self.assertFalse(self.cfg.overwrite)
+
+    def test_overwrite_set_true(self):
+        self.cfg.overwrite = True
+        self.assertTrue(self.cfg.overwrite)
+
+    def test_overwrite_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.cfg.overwrite = 1
+
+    def test_to_dict_contains_all_keys(self):
+        d = self.cfg.to_dict()
+        for key in ("ignore_nans", "xclip", "overwrite",
+                    "results_to_history", "results_to_cache", "results_to_numpy"):
+            self.assertIn(key, d)
+
+
+class TestNMToolStatsOverwrite(unittest.TestCase):
+    """overwrite flag controls subfolder reuse vs. new numbered subfolders."""
+
+    def _setup(self, overwrite=False):
+        from pyneuromatic.core.nm_folder import NMFolder
+        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        tool = nms.NMToolStats()
+        tool.overwrite = overwrite
+        folder = NMFolder(name="F")
+        tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
+        tool._select["folder"] = folder
+        return tool, folder
+
+    def _fill_results(self, tool, func="mean", n=3):
+        w = list(tool.windows)[0]
+        w.func = func
+        for k in range(n):
+            data = _make_data(name="recordA%d" % k)
+            w.compute(data)
+            wname = w.name
+            results = w.results
+            if wname in tool._NMToolStats__results:
+                tool._NMToolStats__results[wname].append(results)
+            else:
+                tool._NMToolStats__results[wname] = [results]
+
+    def test_overwrite_false_default(self):
+        self.assertFalse(nms.NMToolStats().overwrite)
+
+    def test_overwrite_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            nms.NMToolStats().overwrite = 1
+
+    def test_overwrite_false_creates_stats_0(self):
+        tool, folder = self._setup(overwrite=False)
+        self._fill_results(tool)
+        tool._results_to_numpy()
+        self.assertIn("stats_0", folder.toolfolder)
+
+    def test_overwrite_false_creates_stats_1_on_second_run(self):
+        tool, folder = self._setup(overwrite=False)
+        self._fill_results(tool)
+        tool._results_to_numpy()
+        tool._NMToolStats__results.clear()
+        self._fill_results(tool)
+        tool._results_to_numpy()
+        self.assertIn("stats_0", folder.toolfolder)
+        self.assertIn("stats_1", folder.toolfolder)
+
+    def test_overwrite_true_creates_stats_0(self):
+        tool, folder = self._setup(overwrite=True)
+        self._fill_results(tool)
+        tool._results_to_numpy()
+        self.assertIn("stats_0", folder.toolfolder)
+
+    def test_overwrite_true_reuses_stats_0_on_second_run(self):
+        tool, folder = self._setup(overwrite=True)
+        self._fill_results(tool)
+        tool._results_to_numpy()
+        tool._NMToolStats__results.clear()
+        self._fill_results(tool)
+        tool._results_to_numpy()
+        self.assertIn("stats_0", folder.toolfolder)
+        self.assertNotIn("stats_1", folder.toolfolder)
+
+    def test_overwrite_true_replaces_st_arrays(self):
+        tool, folder = self._setup(overwrite=True)
+        self._fill_results(tool, n=3)
+        f = tool._results_to_numpy()
+        arr_first = f.data.get("ST_w0_mean_y").nparray.copy()
+        tool._NMToolStats__results.clear()
+        self._fill_results(tool, n=5)
+        f2 = tool._results_to_numpy()
+        self.assertIs(f, f2)
+        arr_second = f2.data.get("ST_w0_mean_y").nparray
+        self.assertEqual(len(arr_second), 5)
+        self.assertEqual(len(arr_first), 3)
+
+
+class TestNMToolStatsNotes(unittest.TestCase):
+    """Notes are attached to numeric ST_ arrays in _results_to_numpy()."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_folder import NMFolder
+        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        self.tool = nms.NMToolStats()
+        folder = NMFolder(name="F")
+        self.tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
+        self.tool._select["folder"] = folder
+        w = list(self.tool.windows)[0]
+        w.func = "mean"
+        w.x0 = 10.0
+        w.x1 = 50.0
+        self.n_arrays = 4
+        for k in range(self.n_arrays):
+            data = _make_data(name="recordA%d" % k)
+            w.compute(data)
+            wname = w.name
+            results = w.results
+            if wname in self.tool._NMToolStats__results:
+                self.tool._NMToolStats__results[wname].append(results)
+            else:
+                self.tool._NMToolStats__results[wname] = [results]
+        self.f = self.tool._results_to_numpy()
+        self.st_array = self.f.data.get("ST_w0_mean_y")
+
+    def _note_text(self):
+        notes = getattr(self.st_array, "notes", None)
+        if notes is None:
+            return ""
+        return " ".join(str(n) for n in notes)
+
+    def test_st_array_has_note(self):
+        notes = getattr(self.st_array, "notes", None)
+        self.assertIsNotNone(notes)
+        self.assertGreater(len(list(notes)), 0)
+
+    def test_note_contains_win(self):
+        self.assertIn("win=w0", self._note_text())
+
+    def test_note_contains_func(self):
+        self.assertIn("func=mean", self._note_text())
+
+    def test_note_contains_id(self):
+        self.assertIn("id=main", self._note_text())
+
+    def test_note_contains_x0(self):
+        self.assertIn("x0=10.0", self._note_text())
+
+    def test_note_contains_x1(self):
+        self.assertIn("x1=50.0", self._note_text())
+
+    def test_note_contains_n(self):
+        self.assertIn("n=%d" % self.n_arrays, self._note_text())
+
+    def test_st_data_array_has_no_note(self):
+        st_data = self.f.data.get("ST_w0_data")
+        if st_data is None:
+            self.skipTest("ST_w0_data not created for this func")
+        notes = getattr(st_data, "notes", None)
+        if notes is not None:
+            self.assertEqual(len(list(notes)), 0)
+
+    def test_bsln_array_note_uses_bsln_x_range(self):
+        # Set up a run with baseline enabled; ST_w0_bsln_y note should
+        # record the baseline x-range (bsln_x0/bsln_x1), not the main x0/x1.
+        from pyneuromatic.core.nm_folder import NMFolder
+        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        tool = nms.NMToolStats()
+        folder = NMFolder(name="F")
+        tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
+        tool._select["folder"] = folder
+        w = list(tool.windows)[0]
+        w.func = "mean"
+        w.x0 = 10.0
+        w.x1 = 50.0
+        w._bsln_on_set(True, quiet=True)
+        w._bsln_func_set({"name": "mean"}, quiet=True)
+        w._x_set("bsln_x0", 0.0, quiet=True)
+        w._x_set("bsln_x1", 20.0, quiet=True)
+        for k in range(3):
+            data = _make_data(name="recordA%d" % k)
+            w.compute(data)
+            wname = w.name
+            results = w.results
+            if wname in tool._NMToolStats__results:
+                tool._NMToolStats__results[wname].append(results)
+            else:
+                tool._NMToolStats__results[wname] = [results]
+        f = tool._results_to_numpy()
+        bsln_arr = f.data.get("ST_w0_bsln_y")
+        self.assertIsNotNone(bsln_arr)
+        notes = getattr(bsln_arr, "notes", None)
+        self.assertIsNotNone(notes)
+        note_text = " ".join(str(n) for n in notes)
+        self.assertIn("id=bsln", note_text)
+        self.assertIn("x0=0.0", note_text)
+        self.assertIn("x1=20.0", note_text)
+        # Main x0/x1 should NOT appear in the bsln note
+        self.assertNotIn("x0=10.0", note_text)
+
 
 class TestNMToolStatsCommandHistory(unittest.TestCase):
     """Tests for command history logging of NMToolStats, NMStatWin, NMStatWinContainer."""
