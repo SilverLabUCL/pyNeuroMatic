@@ -476,8 +476,15 @@ def find_level_crossings(
         x_interp:    If True (default), returns the interpolated xvalue at
                      the exact crossing. If False, returns the xvalue at
                      the nearest sample index.
-        ignore_nans: If True (default), NaN values are included in the
-                     transition detection.
+        ignore_nans: If True (default), NaN values are skipped during
+                     transition detection. A crossing between two non-NaN
+                     samples is still detected even if NaN values lie
+                     between them; the two bounding non-NaN samples and
+                     their x positions are used to linearly interpolate
+                     the crossing x location (Igor Pro behaviour).
+                     If False, a NaN sample acts as ``False`` in the
+                     ``y > ylevel`` comparison, which silently blocks
+                     detection of crossings that span a NaN gap.
 
     Returns:
         Tuple ``(indexes, xvalues)`` of numpy arrays:
@@ -558,6 +565,21 @@ def find_level_crossings(
     x_low  = min(x0, x1)
     x_high = max(x0, x1)
 
+    # NaN compaction (Igor Pro behaviour): remove NaN samples but keep their
+    # x positions so that a crossing between two non-NaN samples separated by
+    # a NaN gap is still detected via linear interpolation of their x values.
+    orig_indices = None  # maps compact index → original yarray index
+    if ignore_nans and np.any(np.isnan(yarray)):
+        keep = ~np.isnan(yarray)
+        orig_indices = np.where(keep)[0]
+        # Build explicit x values for the kept samples before discarding yarray
+        if found_xarray:
+            xarray = xarray[keep]
+        else:
+            xarray = xstart + orig_indices * xdelta
+            found_xarray = True
+        yarray = yarray[keep]
+
     n = len(yarray)
 
     # Slice yarray (and xarray) to the x-window before running np.diff.
@@ -628,10 +650,12 @@ def find_level_crossings(
             continue
 
         if abs(x_cross - xa) <= abs(x_cross - xb):
-            indexes.append(i - 1)
+            idx = int(orig_indices[i - 1]) if orig_indices is not None else i - 1
+            indexes.append(idx)
             xvalues.append(x_cross if x_interp else xa)
         else:
-            indexes.append(i)
+            idx = int(orig_indices[i]) if orig_indices is not None else i
+            indexes.append(idx)
             xvalues.append(x_cross if x_interp else xb)
 
     if backward:
