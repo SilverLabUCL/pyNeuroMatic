@@ -482,8 +482,9 @@ class NMToolSpike(NMTool):
     def pst(
         self,
         bins: int = 100,
-        tstart: float | None = None,
-        tend: float | None = None,
+        x0: float | None = None,
+        x1: float | None = None,
+        output_mode: str = "count",
     ) -> NMData | None:
         """Compute a peri-stimulus time (PST) histogram from spike times.
 
@@ -494,17 +495,33 @@ class NMToolSpike(NMTool):
 
         Args:
             bins: Number of histogram bins. Default 100.
-            tstart: Lower edge of the first bin (inclusive). Default None
+            x0: Lower edge of the first bin (inclusive). Default None
                 (use minimum spike time).
-            tend: Upper edge of the last bin (exclusive). Default None
+            x1: Upper edge of the last bin (exclusive). Default None
                 (use maximum spike time).
+            output_mode: Controls the y-axis values:
+
+                * ``"count"`` (default) — raw spike count per bin.
+                * ``"rate"`` — mean firing rate in Hz:
+                  ``count / (n_epochs × bin_width)``.
+                * ``"probability"`` — fraction of epochs with a spike in
+                  each bin: ``count / n_epochs`` (values in ``[0, 1]``).
 
         Returns:
             The new ``SP_PST`` NMData, or None if no spikes were detected.
 
         Raises:
             RuntimeError: If called before :meth:`run_all`.
+            ValueError: If *output_mode* is not ``"count"``, ``"rate"``,
+                or ``"probability"``.
         """
+        _VALID_MODES = ("count", "rate", "probability")
+        output_mode = output_mode.lower()
+        if output_mode not in _VALID_MODES:
+            raise ValueError(
+                "output_mode must be one of %s, got %r"
+                % (list(_VALID_MODES), output_mode)
+            )
         if self._toolfolder is None:
             raise RuntimeError(
                 "NMToolSpike.pst: no spike data — run detection first"
@@ -515,28 +532,38 @@ class NMToolSpike(NMTool):
         if len(all_times) == 0:
             return None
         xrange: tuple[float, float] | None = None
-        if tstart is not None or tend is not None:
-            lo = float(tstart) if tstart is not None else float(all_times.min())
-            hi = float(tend) if tend is not None else float(all_times.max())
+        if x0 is not None or x1 is not None:
+            lo = float(x0) if x0 is not None else float(all_times.min())
+            hi = float(x1) if x1 is not None else float(all_times.max())
             xrange = (lo, hi)
         result = nm_math.histogram(all_times, bins=bins, xrange=xrange)
         counts, edges = result["counts"], result["edges"]
         delta = float(edges[1] - edges[0])
+        n_epochs = len(self._spike_times)
+        if output_mode == "rate":
+            ydata = counts.astype(float) / (n_epochs * delta)
+            ylabel = "Spike rate (Hz)"
+        elif output_mode == "probability":
+            ydata = counts.astype(float) / n_epochs
+            ylabel = "Spike probability"
+        else:
+            ydata = counts.astype(float)
+            ylabel = "Spike count"
         d = self._toolfolder.data.new(
             "SP_PST",
-            nparray=counts.astype(float),
+            nparray=ydata,
             xscale={
                 "start": float(edges[0]),
                 "delta": delta,
                 "label": "Time",
                 "units": self._detected_xunits,
             },
-            yscale={"label": "Spike count"},
+            yscale={"label": ylabel},
         )
         self._add_note(
             d,
-            "NMSpike.pst(bins=%d, tstart=%s, tend=%s, n_spikes=%d)"
-            % (bins, tstart, tend, int(counts.sum())),
+            "NMSpike.pst(bins=%d, x0=%s, x1=%s, output_mode=%r, n_epochs=%d, n_spikes=%d)"
+            % (bins, x0, x1, output_mode, n_epochs, int(counts.sum())),
         )
         return d
 
