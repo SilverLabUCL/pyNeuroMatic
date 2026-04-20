@@ -402,10 +402,48 @@ class TestNMToolSpikePST(unittest.TestCase):
         expected_delta = (all_times.max() - all_times.min()) / 100
         self.assertAlmostEqual(result.xscale.delta, expected_delta, places=10)
 
-    def test_pst_tstart_tend_restricts_range(self):
-        result = self.tool.pst(bins=50, tstart=0.0, tend=0.05)
+    def test_pst_x0_x1_restricts_range(self):
+        result = self.tool.pst(bins=50, x0=0.0, x1=0.05)
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result.xscale.start, 0.0, places=10)
+
+    def test_pst_output_mode_count_matches_total_spikes(self):
+        f = self.folder.toolfolder.get("Spike_0")
+        total_spikes = int(f.data.get("SP_count").nparray.sum())
+        result = self.tool.pst(bins=50, output_mode="count")
+        self.assertEqual(int(result.nparray.sum()), total_spikes)
+
+    def test_pst_output_mode_rate_yscale_label(self):
+        result = self.tool.pst(bins=50, output_mode="rate")
+        self.assertIn("Hz", result.yscale.label)
+
+    def test_pst_output_mode_rate_values(self):
+        # rate = count / (n_epochs * bin_width); sum over bins * bin_width * n_epochs = total spikes
+        n_epochs = len(self.tool._spike_times)
+        result = self.tool.pst(bins=50, output_mode="rate")
+        bin_width = result.xscale.delta
+        reconstructed = result.nparray.sum() * bin_width * n_epochs
+        f = self.folder.toolfolder.get("Spike_0")
+        total_spikes = float(f.data.get("SP_count").nparray.sum())
+        self.assertAlmostEqual(reconstructed, total_spikes, places=6)
+
+    def test_pst_output_mode_probability_range(self):
+        result = self.tool.pst(bins=50, output_mode="probability")
+        self.assertTrue(np.all(result.nparray >= 0.0))
+        self.assertTrue(np.all(result.nparray <= 1.0))
+
+    def test_pst_output_mode_probability_yscale_label(self):
+        result = self.tool.pst(bins=50, output_mode="probability")
+        self.assertIn("probability", result.yscale.label.lower())
+
+    def test_pst_output_mode_case_insensitive(self):
+        # "Rate" should behave identically to "rate" — yscale label contains "Hz"
+        result = self.tool.pst(bins=50, output_mode="Rate")
+        self.assertIn("Hz", result.yscale.label)
+
+    def test_pst_output_mode_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            self.tool.pst(bins=50, output_mode="density")
 
     def test_pst_returns_none_when_no_spikes(self):
         tool2 = NMToolSpike()
@@ -624,6 +662,18 @@ class TestNMToolSpikeNotes(unittest.TestCase):
         self.tool.pst(bins=50)
         note = self.f.data.get("SP_PST").notes.note
         self.assertIn("n_spikes=", note)
+
+    def test_pst_note_contains_output_mode(self):
+        self.tool.pst(bins=50, output_mode="rate")
+        note = self.f.data.get("SP_PST").notes.note
+        self.assertIn("output_mode=", note)
+        self.assertIn("rate", note)
+
+    def test_pst_note_contains_x0_x1(self):
+        self.tool.pst(bins=50, x0=0.0, x1=0.05)
+        note = self.f.data.get("SP_PST").notes.note
+        self.assertIn("x0=", note)
+        self.assertIn("x1=", note)
 
     def test_isi_note_contains_nmspike_isi(self):
         self.tool.isi(bins=50)
