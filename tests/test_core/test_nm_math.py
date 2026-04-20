@@ -388,6 +388,43 @@ class TestFindLevelCrossings:
         with pytest.raises(TypeError):
             find_level_crossings([1.0, -1.0], 0.0)
 
+    # --- x_interp ---
+
+    def test_x_interp_true_returns_interpolated_x(self):
+        # Crossing between x=1 (y=0) and x=2 (y=1); ylevel=0.5 → x=1.5
+        y = np.array([0.0, 0.0, 1.0])
+        idx, xv = find_level_crossings(y, 0.5, xstart=0.0, xdelta=1.0,
+                                       x_interp=True)
+        assert len(xv) == 1
+        assert xv[0] == pytest.approx(1.5)
+
+    def test_x_interp_false_returns_nearest_sample_x(self):
+        # Same crossing; nearest sample to x=1.5 is equidistant — tie goes to i-1=1
+        y = np.array([0.0, 0.0, 1.0])
+        idx, xv = find_level_crossings(y, 0.5, xstart=0.0, xdelta=1.0,
+                                       x_interp=False)
+        assert len(xv) == 1
+        assert xv[0] in (1.0, 2.0)  # one of the two bounding sample x values
+
+    def test_x_interp_true_differs_from_false(self):
+        # With a lopsided crossing (y=0 → y=0.9), interpolated x ≠ sample x
+        y = np.array([0.0, 0.9])
+        idx_t, xv_t = find_level_crossings(y, 0.5, xstart=0.0, xdelta=10.0,
+                                           x_interp=True)
+        idx_f, xv_f = find_level_crossings(y, 0.5, xstart=0.0, xdelta=10.0,
+                                           x_interp=False)
+        assert len(xv_t) == 1
+        assert len(xv_f) == 1
+        assert xv_t[0] != xv_f[0]  # interpolated ≠ nearest sample
+
+    def test_x_interp_xarray_nonuniform(self):
+        # Non-uniform x: crossing between x=0 (y=0) and x=8 (y=1); ylevel=0.25 → x=2
+        y = np.array([0.0, 1.0])
+        xa = np.array([0.0, 8.0])
+        idx, xv = find_level_crossings(y, 0.25, xarray=xa, x_interp=True)
+        assert len(xv) == 1
+        assert xv[0] == pytest.approx(2.0)
+
     # --- x-window (forward, x0 <= x1) ---
 
     def test_x_window_default_returns_all(self):
@@ -475,6 +512,97 @@ class TestFindLevelCrossings:
     def test_x1_rejects_bool(self):
         with pytest.raises(TypeError):
             find_level_crossings(np.array([-1.0, 1.0]), 0.0, x1=False)
+
+    # --- xarray with non-uniform spacing ---
+
+    def test_xarray_nonuniform_crossing_x_value(self):
+        # Crossing between index 1 (x=1.0, y=0.0) and index 2 (x=5.0, y=1.0)
+        # Interpolated x = 1.0 + (0.5 - 0.0) / (1.0 - 0.0) * (5.0 - 1.0) = 3.0
+        y = np.array([0.0, 0.0, 1.0, 1.0])
+        xa = np.array([0.0, 1.0, 5.0, 6.0])
+        idx, xv = find_level_crossings(y, 0.5, xarray=xa)
+        assert len(idx) == 1
+        assert xv[0] == pytest.approx(3.0)
+
+    def test_xarray_nonuniform_window_respects_x_spacing(self):
+        # Two rising crossings: one at x≈3 (between x=1 and x=5),
+        # one at x≈15 (between x=10 and x=20).
+        # Window x0=0, x1=8 should include only the first.
+        y = np.array([0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0])
+        xa = np.array([0.0, 1.0, 5.0, 6.0, 10.0, 10.5, 20.0, 21.0])
+        all_idx, _ = find_level_crossings(y, 0.5, func_name="level+", xarray=xa)
+        win_idx, _ = find_level_crossings(
+            y, 0.5, func_name="level+", xarray=xa, x0=0.0, x1=8.0
+        )
+        assert len(all_idx) == 2
+        assert len(win_idx) == 1
+
+    def test_xarray_nonuniform_backward_search(self):
+        # Two rising crossings; backward search (x0 > x1) returns descending order
+        y = np.array([0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0])
+        xa = np.array([0.0, 1.0, 5.0, 6.0, 10.0, 10.5, 20.0, 21.0])
+        _, xv_fwd = find_level_crossings(y, 0.5, func_name="level+", xarray=xa)
+        _, xv_bwd = find_level_crossings(
+            y, 0.5, func_name="level+", xarray=xa, x0=25.0, x1=0.0
+        )
+        assert len(xv_bwd) == 2
+        assert xv_bwd[0] > xv_bwd[1]
+        # Same x values as forward, reversed
+        assert xv_bwd[0] == pytest.approx(xv_fwd[1])
+        assert xv_bwd[1] == pytest.approx(xv_fwd[0])
+
+    def test_xarray_size_mismatch_raises(self):
+        y = np.array([0.0, 1.0, 0.0])
+        xa = np.array([0.0, 1.0])  # wrong size
+        with pytest.raises((ValueError, TypeError)):
+            find_level_crossings(y, 0.5, xarray=xa)
+
+    # --- NaN handling ---
+
+    def test_ignore_nans_detects_crossing_across_nan_gap(self):
+        # NaN between y=0 and y=1; with ignore_nans=True the crossing is found
+        y = np.array([0.0, float("nan"), 1.0])
+        idx, xv = find_level_crossings(y, 0.5, xstart=0.0, xdelta=1.0,
+                                       ignore_nans=True)
+        assert len(idx) == 1
+
+    def test_ignore_nans_false_blocks_crossing_across_nan_gap(self):
+        # NaN between y=0 and y=1; with ignore_nans=False the crossing is missed
+        y = np.array([0.0, float("nan"), 1.0])
+        idx, xv = find_level_crossings(y, 0.5, xstart=0.0, xdelta=1.0,
+                                       ignore_nans=False)
+        assert len(idx) == 0
+
+    def test_ignore_nans_interpolates_x_using_non_nan_positions(self):
+        # Non-uniform xarray: y=0 at x=0, y=NaN at x=1, y=1 at x=5.
+        # Crossing should be interpolated between x=0 and x=5 → x=2.5
+        y = np.array([0.0, float("nan"), 1.0])
+        xa = np.array([0.0, 1.0, 5.0])
+        idx, xv = find_level_crossings(y, 0.5, xarray=xa, ignore_nans=True)
+        assert len(xv) == 1
+        assert xv[0] == pytest.approx(2.5)
+
+    def test_ignore_nans_returned_index_is_original_array_index(self):
+        # NaN at index 1; crossing is between original indices 0 and 2.
+        # Nearest sample to crossing x=2.5 is index 2 (x=5 is farther than x=0).
+        # Actually x_cross=2.5, xa=0.0, xb=5.0 → |2.5-0|=2.5, |2.5-5|=2.5 equal → i-1=0
+        y = np.array([0.0, float("nan"), 1.0])
+        xa = np.array([0.0, 1.0, 5.0])
+        idx, _ = find_level_crossings(y, 0.5, xarray=xa, ignore_nans=True)
+        assert idx[0] in (0, 2)  # original array index, not compact index 1
+
+    def test_ignore_nans_no_nans_unchanged(self):
+        # With no NaNs, ignore_nans=True gives same result as ignore_nans=False
+        y = np.array([0.0, 1.0, 0.0])
+        idx_t, xv_t = find_level_crossings(y, 0.5, xdelta=1.0, ignore_nans=True)
+        idx_f, xv_f = find_level_crossings(y, 0.5, xdelta=1.0, ignore_nans=False)
+        np.testing.assert_array_equal(idx_t, idx_f)
+        np.testing.assert_array_almost_equal(xv_t, xv_f)
+
+    def test_ignore_nans_all_nan_returns_empty(self):
+        y = np.array([float("nan"), float("nan"), float("nan")])
+        idx, xv = find_level_crossings(y, 0.5, ignore_nans=True)
+        assert len(idx) == 0
 
 
 # ---------------------------------------------------------------------------

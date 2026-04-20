@@ -32,6 +32,7 @@ import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
+from pyneuromatic.analysis.nm_tool_utilities import find_level_crossings_nmdata
 
 _VALID_FUNC_NAMES: frozenset[str] = frozenset({"level", "level+", "level-"})
 
@@ -266,17 +267,12 @@ class NMToolSpike(NMTool):
         data = self.data
         if not isinstance(data, NMData):
             raise RuntimeError("no data selected")
-        y = data.nparray
-        if y is None:
+        if data.nparray is None:
             return True
         if self._detected_xunits is None:
             self._detected_xunits = data.xscale.units
-        _indexes, x_times = nm_math.find_level_crossings(
-            y,
-            self.__ylevel,
-            func_name=self.__func_name,
-            xstart=data.xscale.start,
-            xdelta=data.xscale.delta,
+        _indexes, x_times = find_level_crossings_nmdata(
+            data, self.__ylevel, func_name=self.__func_name
         )
         self._spike_times.append(x_times)
         self._epoch_names.append(data.name)
