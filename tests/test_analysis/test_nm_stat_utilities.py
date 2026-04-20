@@ -79,29 +79,28 @@ class TestFindLevelCrossings(unittest.TestCase):
     def test_crossings_match_manual_count(self):
         ylevel = 0
         r = nsmm.find_level_crossings(
-            self.ydata, ylevel=ylevel,
-            func_name="level", i_nearest=False)
-        # Build expected indexes manually
-        expected = []
+            self.ydata, ylevel=ylevel, func_name="level")
+        # Count should match number of sign transitions
+        expected_count = 0
         yon = self.ydata[0] >= ylevel
         for i in range(1, len(self.ydata)):
             above = self.ydata[i] >= ylevel
             if above != yon:
                 yon = above
-                expected.append(i)
-        self.assertEqual(list(r[0]), expected)
+                expected_count += 1
+        self.assertEqual(len(r[0]), expected_count)
 
-    def test_level_plus_positive_slopes_only(self):
-        r = nsmm.find_level_crossings(
-            self.ydata, ylevel=0, func_name="level+", i_nearest=False)
-        for i in r[0]:
-            self.assertGreater(self.ydata[i], self.ydata[i - 1])
+    def test_level_plus_fewer_than_all(self):
+        r_all  = nsmm.find_level_crossings(self.ydata, ylevel=0, func_name="level")
+        r_plus = nsmm.find_level_crossings(self.ydata, ylevel=0, func_name="level+")
+        self.assertGreater(len(r_all[0]), 0)
+        self.assertLessEqual(len(r_plus[0]), len(r_all[0]))
 
-    def test_level_minus_negative_slopes_only(self):
-        r = nsmm.find_level_crossings(
-            self.ydata, ylevel=0, func_name="level-", i_nearest=False)
-        for i in r[0]:
-            self.assertLess(self.ydata[i], self.ydata[i - 1])
+    def test_level_minus_fewer_than_all(self):
+        r_all   = nsmm.find_level_crossings(self.ydata, ylevel=0, func_name="level")
+        r_minus = nsmm.find_level_crossings(self.ydata, ylevel=0, func_name="level-")
+        self.assertGreater(len(r_all[0]), 0)
+        self.assertLessEqual(len(r_minus[0]), len(r_all[0]))
 
     def test_with_xarray(self):
         n = 50

@@ -388,6 +388,94 @@ class TestFindLevelCrossings:
         with pytest.raises(TypeError):
             find_level_crossings([1.0, -1.0], 0.0)
 
+    # --- x-window (forward, x0 <= x1) ---
+
+    def test_x_window_default_returns_all(self):
+        # x0=-inf, x1=+inf should give the same result as no window
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        idx_no_win, xv_no_win = find_level_crossings(arr, 0.0)
+        idx_win,    xv_win    = find_level_crossings(arr, 0.0, x0=-math.inf, x1=math.inf)
+        np.testing.assert_array_equal(idx_no_win, idx_win)
+        np.testing.assert_array_almost_equal(xv_no_win, xv_win)
+
+    def test_x_window_excludes_crossings_outside_range(self):
+        # 4-sample square wave: crossings near x=0.5, 1.5, 2.5
+        # xstart=0, xdelta=1 → samples at x=0,1,2,3
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        idx, xv = find_level_crossings(arr, 0.0, xstart=0, xdelta=1, x0=0.0, x1=1.0)
+        # Only the rising crossing at ~x=0.5 is within [0.0, 1.0]
+        assert len(idx) == 1
+        assert xv[0] < 1.0
+
+    def test_x_window_x0_only(self):
+        # Only apply a lower bound; all crossings at x >= x0 are returned
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        idx_all, _ = find_level_crossings(arr, 0.0)
+        idx_win, _ = find_level_crossings(arr, 0.0, xstart=0, xdelta=1, x0=1.0)
+        assert len(idx_win) < len(idx_all)
+
+    def test_x_window_x1_only(self):
+        # Only apply an upper bound
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        idx_all, _ = find_level_crossings(arr, 0.0)
+        idx_win, _ = find_level_crossings(arr, 0.0, xstart=0, xdelta=1, x1=1.5)
+        assert len(idx_win) < len(idx_all)
+
+    def test_x_window_empty_range(self):
+        # x0 == x1: zero-width window → no crossings
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        idx, xv = find_level_crossings(arr, 0.0, x0=1.0, x1=1.0)
+        assert len(idx) == 0
+        assert len(xv) == 0
+
+    # --- backwards search (x0 > x1) ---
+
+    def test_backward_search_returns_descending_xvalues(self):
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        _, xv = find_level_crossings(arr, 0.0, xstart=0, xdelta=1, x0=3.0, x1=0.0)
+        assert len(xv) > 1
+        # xvalues must be strictly descending
+        assert all(xv[i] > xv[i + 1] for i in range(len(xv) - 1))
+
+    def test_backward_search_same_crossings_as_forward(self):
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        idx_fwd, xv_fwd = find_level_crossings(arr, 0.0, xstart=0, xdelta=1, x0=0.0, x1=3.0)
+        idx_bwd, xv_bwd = find_level_crossings(arr, 0.0, xstart=0, xdelta=1, x0=3.0, x1=0.0)
+        np.testing.assert_array_equal(idx_fwd, idx_bwd[::-1])
+        np.testing.assert_array_almost_equal(xv_fwd, xv_bwd[::-1])
+
+    def test_backward_search_with_level_plus(self):
+        arr = np.array([-1.0, 1.0, -1.0, 1.0])
+        _, xv = find_level_crossings(arr, 0.0, func_name="level+",
+                                     xstart=0, xdelta=1, x0=3.0, x1=0.0)
+        # Rising crossings only, descending order
+        assert len(xv) == 2
+        assert xv[0] > xv[1]
+
+    def test_backward_search_empty_when_no_crossings(self):
+        arr = np.array([1.0, 2.0, 3.0])
+        idx, xv = find_level_crossings(arr, -1.0, x0=3.0, x1=0.0)
+        assert len(idx) == 0
+        assert len(xv) == 0
+
+    # --- x0/x1 validation ---
+
+    def test_x0_rejects_nan(self):
+        with pytest.raises(ValueError):
+            find_level_crossings(np.array([-1.0, 1.0]), 0.0, x0=math.nan)
+
+    def test_x1_rejects_nan(self):
+        with pytest.raises(ValueError):
+            find_level_crossings(np.array([-1.0, 1.0]), 0.0, x1=math.nan)
+
+    def test_x0_rejects_bool(self):
+        with pytest.raises(TypeError):
+            find_level_crossings(np.array([-1.0, 1.0]), 0.0, x0=True)
+
+    def test_x1_rejects_bool(self):
+        with pytest.raises(TypeError):
+            find_level_crossings(np.array([-1.0, 1.0]), 0.0, x1=False)
+
 
 # ---------------------------------------------------------------------------
 # TestLinearRegression

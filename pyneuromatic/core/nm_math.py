@@ -443,7 +443,8 @@ def find_level_crossings(
     xarray: np.ndarray | None = None,
     xstart: float = 0,
     xdelta: float = 1,
-    i_nearest: bool = True,
+    x0: float = -math.inf,
+    x1: float = math.inf,
     x_interp: bool = True,
     ignore_nans: bool = True,
 ) -> tuple:
@@ -465,9 +466,13 @@ def find_level_crossings(
                      provided.
         xstart:      X-scale start value; used when *xarray* is None.
         xdelta:      X-scale sample interval; used when *xarray* is None.
-        i_nearest:   If True (default), returns the sample index nearest to
-                     the crossing via linear interpolation. If False, returns
-                     the index immediately after the crossing.
+        x0:          X-axis window start. Only crossings at x >= x0 are
+                     returned. Default ``-inf`` (no lower bound).
+                     If *x0* > *x1*, a backwards search is performed: the
+                     window is ``[x1, x0]`` and crossings are returned in
+                     descending x order.
+        x1:          X-axis window end. Only crossings at x <= x1 are
+                     returned. Default ``+inf`` (no upper bound).
         x_interp:    If True (default), returns the interpolated xvalue at
                      the exact crossing. If False, returns the xvalue at
                      the nearest sample index.
@@ -479,13 +484,15 @@ def find_level_crossings(
         *indexes* — sample indices (int) nearest to each crossing.
         *xvalues* — xvalues (float) at each crossing location.
         Both arrays are empty if no crossings are found.
+        If *x0* > *x1* (backwards search), both arrays are in descending
+        x order.
 
     Raises:
-        TypeError:  If *func_name* is not a string, or *yarray*/*xarray* is
-                    not a numpy ndarray.
+        TypeError:  If *func_name* is not a string, *yarray*/*xarray* is
+                    not a numpy ndarray, or *x0*/*x1* is a bool.
         ValueError: If *func_name* does not contain ``"level"``, *ylevel*
-                    is inf/nan, *xstart*/*xdelta* is inf/nan, or *xarray*
-                    size differs from *yarray*.
+                    is inf/nan, *xstart*/*xdelta* is inf/nan, *x0*/*x1*
+                    is NaN, or *xarray* size differs from *yarray*.
     """
     if not isinstance(func_name, str):
         raise TypeError(nmu.type_error_str(func_name, "func_name", "string"))
@@ -530,24 +537,66 @@ def find_level_crossings(
     else:
         xdelta = float(xdelta)
 
-    if not isinstance(i_nearest, bool):
-        i_nearest = True
     if not isinstance(x_interp, bool):
         x_interp = True
     if not isinstance(ignore_nans, bool):
         ignore_nans = True
 
-    level_crossings = np.diff(yarray > ylevel, prepend=False)
+    # Validate x0 / x1 window parameters
+    if isinstance(x0, bool):
+        raise TypeError(nmu.type_error_str(x0, "x0", "float"))
+    if isinstance(x1, bool):
+        raise TypeError(nmu.type_error_str(x1, "x1", "float"))
+    x0 = float(x0)
+    x1 = float(x1)
+    if math.isnan(x0):
+        raise ValueError("x0: '%s'" % x0)
+    if math.isnan(x1):
+        raise ValueError("x1: '%s'" % x1)
+
+    backward = x0 > x1
+    x_low  = min(x0, x1)
+    x_high = max(x0, x1)
+
+    n = len(yarray)
+
+    # Slice yarray (and xarray) to the x-window before running np.diff.
+    # A crossing between samples i-1 and i has x_cross in (x[i-1], x[i]).
+    # If x[i] < x_low the crossing is definitely before the window; if
+    # x[i-1] > x_high it is definitely after.  Convert the window to an
+    # index range (with floor/ceil so boundary crossings are never missed),
+    # then keep the precise x_cross check inside the loop.
+    if not found_xarray:
+        i_low  = (max(0, math.floor((x_low  - xstart) / xdelta))
+                  if not math.isinf(x_low)  else 0)
+        i_high = (min(n - 1, math.ceil((x_high - xstart) / xdelta))
+                  if not math.isinf(x_high) else n - 1)
+    else:
+        i_low  = (int(np.searchsorted(xarray, x_low,  side="left"))
+                  if not math.isinf(x_low)  else 0)
+        i_high = (int(np.searchsorted(xarray, x_high, side="right")) - 1
+                  if not math.isinf(x_high) else n - 1)
+        i_low  = max(0,     i_low)
+        i_high = min(n - 1, i_high)
+
+    # i_offset is added back to local indices after slicing
+    i_offset = i_low
+    y_slice  = yarray[i_low: i_high + 1]
+
+    level_crossings = np.diff(y_slice > ylevel, prepend=False)
     locations = np.argwhere(level_crossings)
     if len(locations.shape) != 2:
         raise RuntimeError("locations shape should be 2")
     locations = locations[:, 0]
+
     indexes = []
     xvalues = []
 
-    for i in locations:
-        if i == 0:
+    for i_local in locations:
+        if i_local == 0 and i_offset == 0:
             continue
+
+        i = i_local + i_offset   # global index in yarray
 
         y0 = yarray[i - 1]
         y1 = yarray[i]
@@ -560,30 +609,34 @@ def find_level_crossings(
                 continue
 
         if found_xarray:
-            x0 = xarray[i - 1]
-            x1 = xarray[i]
-            dx = x1 - x0
+            xa = xarray[i - 1]
+            xb = xarray[i]
+            dx = xb - xa
         else:
-            x0 = xstart + (i - 1) * xdelta
-            x1 = xstart + i * xdelta
+            xa = xstart + (i - 1) * xdelta
+            xb = xstart + i * xdelta
             dx = xdelta
 
-        if not i_nearest:
-            indexes.append(i)
-            xvalues.append(x1)
-            continue
-
+        # Interpolated crossing x — used for window check and nearest-sample logic
         dy = y1 - y0
         m = dy / dx
-        b = y1 - m * x1
-        x = (ylevel - b) / m
+        b = y1 - m * xb
+        x_cross = (ylevel - b) / m
 
-        if abs(x - x0) <= abs(x - x1):
+        # Precise window check (guards against floor/ceil boundary cases)
+        if not (x_low <= x_cross <= x_high):
+            continue
+
+        if abs(x_cross - xa) <= abs(x_cross - xb):
             indexes.append(i - 1)
-            xvalues.append(x if x_interp else x0)
+            xvalues.append(x_cross if x_interp else xa)
         else:
             indexes.append(i)
-            xvalues.append(x if x_interp else x1)
+            xvalues.append(x_cross if x_interp else xb)
+
+    if backward:
+        indexes.reverse()
+        xvalues.reverse()
 
     return (np.array(indexes), np.array(xvalues))
 
