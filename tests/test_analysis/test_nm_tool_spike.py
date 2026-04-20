@@ -519,6 +519,50 @@ class TestNMToolSpikeISI(unittest.TestCase):
         )
         self.assertEqual(int(result.nparray.sum()), total_intervals)
 
+    def test_isi_x0_x1_filters_spike_times(self):
+        # Restrict to first half of recording; fewer intervals than full range.
+        # Use separate tools/folders so SP_ISI name does not collide.
+        data = [_sine_data(name="recA%d" % i, freq=100.0, n=1000) for i in range(3)]
+        tool_full = NMToolSpike()
+        folder_full = _run(tool_full, data)
+        result_full = tool_full.isi(bins=50)
+        tool_win = NMToolSpike()
+        folder_win = _run(tool_win, data)
+        result_win = tool_win.isi(bins=50, x0=0.0, x1=0.05)
+        self.assertLess(int(result_win.nparray.sum()), int(result_full.nparray.sum()))
+
+    def test_isi_min_isi_sets_lower_bound(self):
+        result = self.tool.isi(bins=50, min_isi=0.001)
+        self.assertIsNotNone(result)
+        self.assertGreaterEqual(result.xscale.start, 0.001)
+
+    def test_isi_output_mode_probability_sums_to_one(self):
+        result = self.tool.isi(bins=50, output_mode="probability")
+        self.assertAlmostEqual(float(result.nparray.sum()), 1.0, places=6)
+
+    def test_isi_output_mode_probability_yscale_label(self):
+        result = self.tool.isi(bins=50, output_mode="probability")
+        self.assertIn("probability", result.yscale.label.lower())
+
+    def test_isi_output_mode_case_insensitive(self):
+        result = self.tool.isi(bins=50, output_mode="Probability")
+        self.assertIn("probability", result.yscale.label.lower())
+
+    def test_isi_output_mode_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            self.tool.isi(bins=50, output_mode="rate")
+
+    def test_isi_note_contains_new_params(self):
+        self.tool.isi(bins=50, x0=0.0, x1=0.08, min_isi=0.001, max_isi=0.05,
+                      output_mode="probability")
+        f = self.folder.toolfolder.get("Spike_0")
+        note = f.data.get("SP_ISI").notes.note
+        self.assertIn("x0=", note)
+        self.assertIn("x1=", note)
+        self.assertIn("min_isi=", note)
+        self.assertIn("max_isi=", note)
+        self.assertIn("output_mode=", note)
+
 
 class TestNMToolSpikeOverwrite(unittest.TestCase):
     """overwrite flag controls subfolder reuse vs. new numbered subfolders."""
