@@ -570,56 +570,103 @@ class NMToolSpike(NMTool):
     def isi(
         self,
         bins: int = 100,
+        x0: float | None = None,
+        x1: float | None = None,
+        min_isi: float | None = None,
         max_isi: float | None = None,
+        output_mode: str = "count",
     ) -> NMData | None:
         """Compute an interspike interval (ISI) histogram from spike times.
 
-        Computes ``numpy.diff`` of each epoch's spike times, pools the
-        intervals across all epochs, and writes the histogram as ``SP_ISI``
-        in the current Spike subfolder.  Epochs with fewer than two spikes
-        contribute no intervals.
+        Optionally filters spike times to a window [*x0*, *x1*] before
+        computing intervals. Computes ``numpy.diff`` of each epoch's
+        (filtered) spike times, pools the intervals across all epochs, and
+        writes the histogram as ``SP_ISI`` in the current Spike subfolder.
+        Epochs with fewer than two spikes (after filtering) contribute no
+        intervals.
 
         Args:
-            bins: Number of histogram bins. Default 100.
-            max_isi: Upper bound of the last bin. Default None (use the
-                maximum interval).
+            bins:        Number of histogram bins. Default 100.
+            x0:          Lower bound for filtering spike times before
+                         computing intervals. Default None (no lower bound).
+            x1:          Upper bound for filtering spike times before
+                         computing intervals. Default None (no upper bound).
+            min_isi:     Lower edge of the histogram x-axis. Default None
+                         (use the minimum interval). Useful for excluding
+                         refractory-period artefacts.
+            max_isi:     Upper edge of the histogram x-axis. Default None
+                         (use the maximum interval).
+            output_mode: Controls the y-axis values (case-insensitive):
+
+                         * ``"count"`` (default) — raw interval counts.
+                         * ``"probability"`` — count / total_intervals;
+                           normalised to a probability distribution
+                           (sums to 1.0).
 
         Returns:
-            The new ``SP_ISI`` NMData, or None if fewer than 2 spikes total.
+            The new ``SP_ISI`` NMData, or None if fewer than 2 spikes total
+            (after x0/x1 filtering).
 
         Raises:
             RuntimeError: If called before :meth:`run_all`.
+            ValueError:   If *output_mode* is not ``"count"`` or
+                          ``"probability"``.
         """
+        _VALID_MODES = ("count", "probability")
+        output_mode = output_mode.lower()
+        if output_mode not in _VALID_MODES:
+            raise ValueError(
+                "output_mode must be one of %s, got %r"
+                % (list(_VALID_MODES), output_mode)
+            )
         if self._toolfolder is None:
             raise RuntimeError(
                 "NMToolSpike.isi: no spike data — run detection first"
             )
-        intervals = [
-            np.diff(t) for t in self._spike_times if len(t) >= 2
-        ]
+        spike_times = self._spike_times
+        if x0 is not None or x1 is not None:
+            lo = float(x0) if x0 is not None else -math.inf
+            hi = float(x1) if x1 is not None else math.inf
+            spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
+        intervals = [np.diff(t) for t in spike_times if len(t) >= 2]
         if not intervals:
             return None
         all_isis = np.concatenate(intervals)
-        xrange: tuple[float, float] | None = (
-            (0.0, float(max_isi)) if max_isi is not None else None
-        )
+        lo_isi = float(min_isi) if min_isi is not None else None
+        hi_isi = float(max_isi) if max_isi is not None else None
+        if lo_isi is not None or hi_isi is not None:
+            xrange: tuple[float, float] | None = (
+                lo_isi if lo_isi is not None else float(all_isis.min()),
+                hi_isi if hi_isi is not None else float(all_isis.max()),
+            )
+        else:
+            xrange = None
         result = nm_math.histogram(all_isis, bins=bins, xrange=xrange)
         counts, edges = result["counts"], result["edges"]
         delta = float(edges[1] - edges[0])
+        n_intervals = int(counts.sum())
+        if output_mode == "probability":
+            total = float(len(all_isis))
+            ydata = counts.astype(float) / total if total > 0 else counts.astype(float)
+            ylabel = "ISI probability"
+        else:
+            ydata = counts.astype(float)
+            ylabel = "Count"
         d = self._toolfolder.data.new(
             "SP_ISI",
-            nparray=counts.astype(float),
+            nparray=ydata,
             xscale={
                 "start": float(edges[0]),
                 "delta": delta,
                 "label": "ISI",
                 "units": self._detected_xunits,
             },
-            yscale={"label": "Count"},
+            yscale={"label": ylabel},
         )
         self._add_note(
             d,
-            "NMSpike.isi(bins=%d, max_isi=%s, n_intervals=%d)"
-            % (bins, max_isi, int(counts.sum())),
+            "NMSpike.isi(bins=%d, x0=%s, x1=%s, min_isi=%s, max_isi=%s, "
+            "output_mode=%r, n_intervals=%d)"
+            % (bins, x0, x1, min_isi, max_isi, output_mode, n_intervals),
         )
         return d
