@@ -80,6 +80,17 @@ class TestNMToolSpikeDefaults(unittest.TestCase):
     def test_func_name_default(self):
         self.assertEqual(self.tool.func_name, "level+")
 
+    def test_x0_default(self):
+        import math
+        self.assertEqual(self.tool.x0, -math.inf)
+
+    def test_x1_default(self):
+        import math
+        self.assertEqual(self.tool.x1, math.inf)
+
+    def test_ignore_nans_default(self):
+        self.assertTrue(self.tool.ignore_nans)
+
     def test_results_to_history_default(self):
         self.assertFalse(self.tool.results_to_history)
 
@@ -129,6 +140,47 @@ class TestNMToolSpikeProperties(unittest.TestCase):
     def test_func_name_rejects_non_string(self):
         with self.assertRaises(TypeError):
             self.tool.func_name = 1
+
+    # x0 / x1
+    def test_x0_accepts_float(self):
+        self.tool.x0 = 0.01
+        self.assertAlmostEqual(self.tool.x0, 0.01)
+
+    def test_x0_accepts_inf(self):
+        import math
+        self.tool.x0 = -math.inf
+        self.assertEqual(self.tool.x0, -math.inf)
+
+    def test_x0_rejects_nan(self):
+        import math
+        with self.assertRaises(ValueError):
+            self.tool.x0 = math.nan
+
+    def test_x0_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.x0 = True
+
+    def test_x1_accepts_float(self):
+        self.tool.x1 = 0.05
+        self.assertAlmostEqual(self.tool.x1, 0.05)
+
+    def test_x1_rejects_nan(self):
+        import math
+        with self.assertRaises(ValueError):
+            self.tool.x1 = math.nan
+
+    def test_x1_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.x1 = False
+
+    # ignore_nans
+    def test_ignore_nans_set_false(self):
+        self.tool.ignore_nans = False
+        self.assertFalse(self.tool.ignore_nans)
+
+    def test_ignore_nans_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.ignore_nans = 1
 
     # results_to_* flags
     def test_results_to_history_set(self):
@@ -187,6 +239,41 @@ class TestNMToolSpikeDetection(unittest.TestCase):
         f = folder.toolfolder.get("Spike_0")
         count_arr = f.data.get("SP_count")
         self.assertEqual(int(count_arr.nparray[0]), 40)
+
+    def test_x0_x1_window_restricts_detection(self):
+        # 200 Hz sine → 20 rising crossings over 0.1 s (1000 samples at 10 kHz).
+        # Restrict to first half (0–0.05 s) → ~10 crossings.
+        d = _sine_data(freq=200.0, n=1000)
+        self.tool.x0 = 0.0
+        self.tool.x1 = 0.05
+        folder = _run(self.tool, [d])
+        f = folder.toolfolder.get("Spike_0")
+        count_full = 20
+        count_win = int(f.data.get("SP_count").nparray[0])
+        self.assertLess(count_win, count_full)
+        self.assertGreater(count_win, 0)
+
+    def test_ignore_nans_true_detects_crossing_across_nan_gap(self):
+        # y=0 at index 0, NaN at index 1, y=1 at index 2 → crossing exists
+        y = np.array([0.0, float("nan"), 1.0])
+        d = NMData(NM, name="recA0", nparray=y,
+                   xscale={"start": 0.0, "delta": _DELTA})
+        self.tool.ylevel = 0.5
+        self.tool.ignore_nans = True
+        folder = _run(self.tool, [d])
+        f = folder.toolfolder.get("Spike_0")
+        self.assertEqual(int(f.data.get("SP_count").nparray[0]), 1)
+
+    def test_ignore_nans_false_blocks_crossing_across_nan_gap(self):
+        # Same data; with ignore_nans=False the NaN blocks the crossing
+        y = np.array([0.0, float("nan"), 1.0])
+        d = NMData(NM, name="recA0", nparray=y,
+                   xscale={"start": 0.0, "delta": _DELTA})
+        self.tool.ylevel = 0.5
+        self.tool.ignore_nans = False
+        folder = _run(self.tool, [d])
+        f = folder.toolfolder.get("Spike_0")
+        self.assertEqual(int(f.data.get("SP_count").nparray[0]), 0)
 
     def test_per_epoch_sp_arrays_created(self):
         data = [_sine_data(name="recA%d" % i) for i in range(3)]
@@ -508,6 +595,16 @@ class TestNMToolSpikeNotes(unittest.TestCase):
     def test_sp_epoch_note_contains_spike_count(self):
         note = self.f.data.get("SP_recA0").notes.note
         self.assertIn("n=", note)
+
+    def test_sp_epoch_note_contains_x0_x1(self):
+        note = self.f.data.get("SP_recA0").notes.note
+        self.assertIn("x0=", note)
+        self.assertIn("x1=", note)
+
+    def test_sp_count_note_contains_x0_x1(self):
+        note = self.f.data.get("SP_count").notes.note
+        self.assertIn("x0=", note)
+        self.assertIn("x1=", note)
 
     def test_sp_count_note_contains_n_epochs(self):
         note = self.f.data.get("SP_count").notes.note

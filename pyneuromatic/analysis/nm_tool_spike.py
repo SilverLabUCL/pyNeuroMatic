@@ -20,6 +20,8 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from pyneuromatic.analysis.nm_tool import NMTool
@@ -44,6 +46,12 @@ class NMToolSpikeConfig(NMToolConfig):
         ylevel: Y-axis detection threshold. Default 0.0.
         func_name: Crossing direction — ``"level+"`` (rising, default),
             ``"level-"`` (falling), or ``"level"`` (both).
+        x0: X-axis window start for detection. Default ``-inf`` (no lower
+            bound). If *x0* > *x1*, a backwards search is performed.
+        x1: X-axis window end for detection. Default ``+inf`` (no upper
+            bound).
+        ignore_nans: If True (default), detect crossings across NaN gaps
+            via linear interpolation.
         results_to_history: If True, print spike counts to the history log
             after each run. Default False.
         results_to_cache: If True, save spike times dict to
@@ -57,6 +65,9 @@ class NMToolSpikeConfig(NMToolConfig):
         "ylevel":             {"type": float, "default": 0.0},
         "func_name":          {"type": str,   "default": "level+",
                                "choices": ["level", "level+", "level-"]},
+        "x0":                 {"type": float, "default": -math.inf},
+        "x1":                 {"type": float, "default":  math.inf},
+        "ignore_nans":        {"type": bool,  "default": True},
         "overwrite":          {"type": bool,  "default": True},
         "results_to_history": {"type": bool,  "default": False},
         "results_to_cache":   {"type": bool,  "default": True},
@@ -79,6 +90,10 @@ class NMToolSpike(NMTool):
         ylevel: Y-axis detection threshold. Default 0.0.
         func_name: Crossing direction — ``"level+"`` (rising, default),
             ``"level-"`` (falling), or ``"level"`` (both).
+        x0: X-axis window start. Default ``-inf`` (no lower bound).
+        x1: X-axis window end. Default ``+inf`` (no upper bound).
+        ignore_nans: If True (default), detect crossings across NaN gaps
+            via linear interpolation.
         results_to_history: If True, print spike counts to the history log
             after each run. Default False.
         results_to_cache: If True, save spike times dict to
@@ -93,6 +108,9 @@ class NMToolSpike(NMTool):
 
         self.__ylevel: float = 0.0
         self.__func_name: str = "level+"
+        self.__x0: float = -math.inf
+        self.__x1: float = math.inf
+        self.__ignore_nans: bool = True
         self.__overwrite: bool = True
 
         self.__results_to_history: bool = False
@@ -156,6 +174,58 @@ class NMToolSpike(NMTool):
         self.__func_name = value
         nmh.history("set func_name=%r" % self.__func_name, quiet=quiet)
         nmch.add_nm_command("%s.func_name = %r" % (self._name, self.__func_name))
+
+    @property
+    def x0(self) -> float:
+        """X-axis window start for detection. Default ``-inf`` (no lower bound)."""
+        return self.__x0
+
+    @x0.setter
+    def x0(self, value: float) -> None:
+        self._x0_set(value)
+
+    def _x0_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+        if math.isnan(value):
+            raise ValueError("x0 cannot be NaN")
+        self.__x0 = float(value)
+        nmh.history("set x0=%g" % self.__x0, quiet=quiet)
+        nmch.add_nm_command("%s.x0 = %r" % (self._name, self.__x0))
+
+    @property
+    def x1(self) -> float:
+        """X-axis window end for detection. Default ``+inf`` (no upper bound)."""
+        return self.__x1
+
+    @x1.setter
+    def x1(self, value: float) -> None:
+        self._x1_set(value)
+
+    def _x1_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+        if math.isnan(value):
+            raise ValueError("x1 cannot be NaN")
+        self.__x1 = float(value)
+        nmh.history("set x1=%g" % self.__x1, quiet=quiet)
+        nmch.add_nm_command("%s.x1 = %r" % (self._name, self.__x1))
+
+    @property
+    def ignore_nans(self) -> bool:
+        """If True (default), detect crossings across NaN gaps."""
+        return self.__ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        self._ignore_nans_set(value)
+
+    def _ignore_nans_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self.__ignore_nans = value
+        nmh.history("set ignore_nans=%s" % value, quiet=quiet)
+        nmch.add_nm_command("%s.ignore_nans = %r" % (self._name, self.__ignore_nans))
 
     @property
     def overwrite(self) -> bool:
@@ -272,7 +342,11 @@ class NMToolSpike(NMTool):
         if self._detected_xunits is None:
             self._detected_xunits = data.xscale.units
         _indexes, x_times = find_level_crossings_nmdata(
-            data, self.__ylevel, func_name=self.__func_name
+            data, self.__ylevel,
+            func_name=self.__func_name,
+            x0=self.__x0,
+            x1=self.__x1,
+            ignore_nans=self.__ignore_nans,
         )
         self._spike_times.append(x_times)
         self._epoch_names.append(data.name)
@@ -331,15 +405,17 @@ class NMToolSpike(NMTool):
             )
             self._add_note(
                 d,
-                "NMSpike(source=%s, ylevel=%g, func_name=%r, n=%d)"
-                % (name, self.__ylevel, self.__func_name, len(times)),
+                "NMSpike(source=%s, ylevel=%g, func_name=%r, x0=%s, x1=%s, n=%d)"
+                % (name, self.__ylevel, self.__func_name,
+                   self.__x0, self.__x1, len(times)),
             )
         counts = np.array([len(t) for t in self._spike_times], dtype=float)
         d_count = f.data.new("SP_count", nparray=counts)
         self._add_note(
             d_count,
-            "NMSpike(ylevel=%g, func_name=%r, n_epochs=%d)"
-            % (self.__ylevel, self.__func_name, len(self._epoch_names)),
+            "NMSpike(ylevel=%g, func_name=%r, x0=%s, x1=%s, n_epochs=%d)"
+            % (self.__ylevel, self.__func_name,
+               self.__x0, self.__x1, len(self._epoch_names)),
         )
         return f
 
