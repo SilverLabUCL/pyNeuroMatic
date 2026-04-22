@@ -517,6 +517,7 @@ class NMDataContainer(NMObjectContainer):
         name: str | None = None,
         select: bool = False,
         nparray: numpy.ndarray | None = None,
+        xarray: numpy.ndarray | None = None,
         xscale: dict | None = None,
         yscale: dict | None = None,
         quiet: bool = nmc.QUIET
@@ -528,6 +529,7 @@ class NMDataContainer(NMObjectContainer):
             parent=self._parent,
             name=actual_name,
             nparray=nparray,
+            xarray=xarray,
             xscale=xscale,
             yscale=yscale,
         )

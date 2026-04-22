@@ -320,6 +320,7 @@ class NMToolSpike(NMTool):
         """Reset internal state before the run loop."""
         self._spike_times = []
         self._epoch_names = []
+        self._source_data: list[NMData] = []
         self._detected_xunits = None
         self._toolfolder = None
         return True
@@ -350,6 +351,7 @@ class NMToolSpike(NMTool):
         )
         self._spike_times.append(x_times)
         self._epoch_names.append(data.name)
+        self._source_data.append(data)
         return True
 
     def run_finish(self) -> bool:
@@ -475,6 +477,218 @@ class NMToolSpike(NMTool):
                 "NMToolSpike.raster: no spike data — run detection first"
             )
         return list(self._spike_times), list(self._epoch_names)
+
+    def extract_spike_waveforms(
+        self,
+        pre: float,
+        post: float,
+        clip_to_next_spike: bool = False,
+        edge: str = "skip",
+        align: str = "zero",
+    ) -> list[NMData]:
+        """Extract fixed-width waveform snippets around each detected spike.
+
+        For each spike detected during the most recent :meth:`run_all` call,
+        extracts a ``[−pre, +post]`` window of samples from the source epoch
+        array and writes the snippet as a new NMData array (``SPK_{epoch}_{n}``)
+        in the Spike subfolder.
+
+        Args:
+            pre:               Time before spike in source x-units. Must be > 0.
+            post:              Time after spike in source x-units. Must be > 0.
+            clip_to_next_spike: If True, samples in the post window that fall
+                beyond the next spike time are replaced with ``NaN``, so the
+                snippet does not contain data from the next spike's waveform.
+                All snippets remain the same length (``pre + post`` samples).
+                The last spike in each epoch is never clipped.
+            edge:              How to handle spikes whose window extends
+                beyond the recording edge (case-insensitive):
+
+                * ``"skip"`` (default) — omit the spike; no array is written.
+                * ``"pad"``  — write a full-length snippet, filling
+                  out-of-bounds samples with ``NaN``.
+
+            align:             X-axis alignment of output snippets
+                (case-insensitive):
+
+                * ``"zero"`` (default) — x starts at 0 (runs 0 to
+                  ``pre + post``).
+                * ``"spike"`` — x=0 at the threshold crossing (runs
+                  ``−pre`` to ``+post``).
+                * ``"source"`` — x values preserved from the source
+                  recording; no shift is applied.
+
+        Returns:
+            List of newly created NMData arrays, one per non-skipped spike
+            across all processed epochs.
+
+        Raises:
+            RuntimeError: If called before :meth:`run_all`.
+            ValueError:   If *pre* or *post* <= 0, or *edge* is not
+                          ``"skip"`` or ``"pad"``.
+            ValueError:   If *align* is not ``"zero"``, ``"spike"``, or
+                          ``"source"``.
+            TypeError:    If *pre*, *post*, or *clip_to_next_spike* have
+                          wrong types.
+        """
+        _VALID_EDGES = ("skip", "pad")
+        edge = edge.lower()
+        if edge not in _VALID_EDGES:
+            raise ValueError(
+                "edge must be one of %s, got %r" % (list(_VALID_EDGES), edge)
+            )
+        if isinstance(pre, bool) or not isinstance(pre, (int, float)):
+            raise TypeError(nmu.type_error_str(pre, "pre", "float"))
+        if pre <= 0:
+            raise ValueError("pre must be > 0, got %g" % pre)
+        if isinstance(post, bool) or not isinstance(post, (int, float)):
+            raise TypeError(nmu.type_error_str(post, "post", "float"))
+        if post <= 0:
+            raise ValueError("post must be > 0, got %g" % post)
+        if not isinstance(clip_to_next_spike, bool):
+            raise TypeError(
+                nmu.type_error_str(clip_to_next_spike, "clip_to_next_spike", "boolean")
+            )
+        _VALID_ALIGNS = ("zero", "spike", "source")
+        if not isinstance(align, str):
+            raise TypeError(nmu.type_error_str(align, "align", "str"))
+        align = align.lower()
+        if align not in _VALID_ALIGNS:
+            raise ValueError(
+                "align must be one of %s, got %r" % (list(_VALID_ALIGNS), align)
+            )
+        if not self._epoch_names:
+            raise RuntimeError(
+                "NMToolSpike.extract_spike_waveforms: no spike data — run detection first"
+            )
+        if self._toolfolder is None:
+            self._toolfolder = self._make_toolfolder()
+
+        output: list[NMData] = []
+
+        for epoch_name, spike_times_arr, source in zip(
+            self._epoch_names, self._spike_times, self._source_data
+        ):
+            ydata = source.nparray
+            if ydata is None:
+                continue
+            n_total = ydata.size
+
+            # Sample interval for converting pre/post to sample counts
+            if source.xarray is not None and len(source.xarray) >= 2:
+                delta_for_samples = float(np.median(np.diff(source.xarray)))
+            else:
+                delta_for_samples = float(source.xscale.delta)
+
+            pre_samples = int(round(pre / abs(delta_for_samples)))
+
+            post_samples = max(int(round(post / abs(delta_for_samples))), 1)
+
+            for n, spike_x in enumerate(spike_times_arr):
+                # Nearest sample index to spike
+                i_spike = source.get_xindex(spike_x, clip=False)
+                if i_spike is None:
+                    continue
+
+                i0 = i_spike - pre_samples
+                i1 = i_spike + post_samples
+
+                # Edge handling: build full-length y snippet (and x if needed)
+                use_xarray = source.xarray is not None
+                if i0 < 0 or i1 > n_total:
+                    if edge == "skip":
+                        continue
+                    # "pad": full-length NaN array, fill valid region
+                    snippet = np.full(pre_samples + post_samples, np.nan)
+                    src_start = max(i0, 0)
+                    src_end   = min(i1, n_total)
+                    dst_start = src_start - i0
+                    dst_end   = dst_start + (src_end - src_start)
+                    snippet[dst_start:dst_end] = ydata[src_start:src_end]
+                    n_padded = (pre_samples + post_samples) - (src_end - src_start)
+                    if use_xarray:
+                        # Extrapolate out-of-bounds x-values using delta
+                        x_snippet = np.full(pre_samples + post_samples, np.nan)
+                        x_snippet[dst_start:dst_end] = source.xarray[src_start:src_end]
+                        # fill left pad by stepping backwards from first valid x
+                        if dst_start > 0:
+                            x0_valid = source.xarray[src_start]
+                            for k in range(dst_start - 1, -1, -1):
+                                x_snippet[k] = x0_valid - (dst_start - k) * delta_for_samples
+                        # fill right pad by stepping forwards from last valid x
+                        if dst_end < len(x_snippet):
+                            x1_valid = source.xarray[src_end - 1]
+                            for k in range(dst_end, len(x_snippet)):
+                                x_snippet[k] = x1_valid + (k - dst_end + 1) * delta_for_samples
+                else:
+                    snippet = ydata[i0:i1].copy()
+                    n_padded = 0
+                    if use_xarray:
+                        x_snippet = source.xarray[i0:i1].copy()
+
+                # clip_to_next_spike: NaN-fill samples beyond next spike time
+                n_nan_clipped = 0
+                if clip_to_next_spike and n + 1 < len(spike_times_arr):
+                    next_interval = float(spike_times_arr[n + 1]) - float(spike_x)
+                    clip_samples = int(round(next_interval / abs(delta_for_samples)))
+                    clip_samples = max(clip_samples, 1)
+                    if clip_samples < post_samples:
+                        snippet = snippet.copy()
+                        snippet[pre_samples + clip_samples:] = np.nan
+                        n_nan_clipped = post_samples - clip_samples
+
+                # Build output x-scale or xarray
+                if use_xarray:
+                    if align == "spike":
+                        x_snippet = x_snippet - float(spike_x)
+                    elif align == "zero":
+                        x_snippet = x_snippet - float(x_snippet[0])
+                    # align == "source": no shift
+                    out_xscale = {
+                        "label": source.xscale.label,
+                        "units": source.xscale.units,
+                    }
+                else:
+                    x_snippet = None
+                    if align == "spike":
+                        xstart = -float(pre)
+                    elif align == "zero":
+                        xstart = 0.0
+                    else:  # "source"
+                        xstart = float(source.xscale.start) + i0 * float(source.xscale.delta)
+                    out_xscale = {
+                        "start": xstart,
+                        "delta": float(source.xscale.delta),
+                        "label": source.xscale.label,
+                        "units": source.xscale.units,
+                    }
+                out_yscale = {
+                    "label": source.yscale.label,
+                    "units": source.yscale.units,
+                }
+                array_name = "SPK_%s_%d" % (epoch_name, n)
+                d = self._toolfolder.data.new(
+                    array_name,
+                    nparray=snippet,
+                    xarray=x_snippet,
+                    xscale=out_xscale,
+                    yscale=out_yscale,
+                )
+                note = (
+                    "NMSpike.extract_spike_waveforms(source=%s, spike_x=%.6g, "
+                    "pre=%g, post=%g, clip_to_next_spike=%s, edge=%r, align=%s"
+                    % (epoch_name, float(spike_x), pre, post,
+                       clip_to_next_spike, edge, align)
+                )
+                if n_padded:
+                    note += ", n_padded=%d" % n_padded
+                if n_nan_clipped:
+                    note += ", n_nan_clipped=%d" % n_nan_clipped
+                note += ")"
+                self._add_note(d, note)
+                output.append(d)
+
+        return output
 
     # ------------------------------------------------------------------
     # Histogram methods (called after run_all)

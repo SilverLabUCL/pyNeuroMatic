@@ -214,6 +214,35 @@ class NMDataTest(unittest.TestCase):
         c0.sets.add("set0", dnlist0[0])
         self.assertTrue(c0_copy == c0)
 
+class TestNMDataContainerNew(unittest.TestCase):
+    """Tests for NMDataContainer.new()."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_folder import NMFolder
+        self.folder = NMFolder(parent=NM, name="TestFolder")
+
+    def test_new_returns_nmdata(self):
+        d = self.folder.data.new("wave0", nparray=NPARRAY0)
+        self.assertIsInstance(d, NMData)
+
+    def test_new_accepts_xarray(self):
+        xa = numpy.linspace(0.0, 0.003, len(NPARRAY0))
+        d = self.folder.data.new("wave0", nparray=NPARRAY0, xarray=xa)
+        self.assertIsInstance(d, NMData)
+        numpy.testing.assert_array_equal(d.xarray, xa)
+
+    def test_new_xarray_none_by_default(self):
+        d = self.folder.data.new("wave0", nparray=NPARRAY0)
+        self.assertIsNone(d.xarray)
+
+    def test_new_xarray_and_xscale_coexist(self):
+        xa = numpy.linspace(0.0, 0.003, len(NPARRAY0))
+        d = self.folder.data.new("wave0", nparray=NPARRAY0,
+                                 xarray=xa, xscale=XSCALE0)
+        numpy.testing.assert_array_equal(d.xarray, xa)
+        self.assertEqual(d.xscale.units, XSCALE0["units"])
+
+
 class TestNMDataNotes(unittest.TestCase):
     """Tests for NMData notes integration with NMNotes."""
 

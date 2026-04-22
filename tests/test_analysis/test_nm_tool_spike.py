@@ -564,6 +564,388 @@ class TestNMToolSpikeISI(unittest.TestCase):
         self.assertIn("output_mode=", note)
 
 
+class TestNMToolSpikeExtractSpikeWaveforms(unittest.TestCase):
+    """extract_spike_waveforms() extracts waveform snippets around detected spikes."""
+
+    # 100 Hz sine, 1000 samples at 10 kHz → 10 rising crossings.
+    # Spikes near samples 0, 100, 200, ..., 900.
+    # pre=post=0.003 s (30 samples) leaves comfortable margin.
+    _PRE  = 0.003
+    _POST = 0.003
+
+    def setUp(self):
+        self.tool = NMToolSpike()
+        self.data = _sine_data(name="recA0", freq=100.0, n=1000)
+        self.folder = _run(self.tool, [self.data])
+
+    # --- guards ---
+
+    def test_raises_before_run(self):
+        with self.assertRaises(RuntimeError):
+            NMToolSpike().extract_spike_waveforms(self._PRE, self._POST)
+
+    def test_raises_for_zero_pre(self):
+        with self.assertRaises(ValueError):
+            self.tool.extract_spike_waveforms(0.0, self._POST)
+
+    def test_raises_for_negative_pre(self):
+        with self.assertRaises(ValueError):
+            self.tool.extract_spike_waveforms(-0.001, self._POST)
+
+    def test_raises_for_zero_post(self):
+        with self.assertRaises(ValueError):
+            self.tool.extract_spike_waveforms(self._PRE, 0.0)
+
+    def test_raises_for_bool_pre(self):
+        with self.assertRaises(TypeError):
+            self.tool.extract_spike_waveforms(True, self._POST)
+
+    def test_raises_for_invalid_edge(self):
+        with self.assertRaises(ValueError):
+            self.tool.extract_spike_waveforms(self._PRE, self._POST, edge="truncate")
+
+    def test_raises_for_non_str_align(self):
+        with self.assertRaises(TypeError):
+            self.tool.extract_spike_waveforms(self._PRE, self._POST, align=1)
+
+    def test_raises_for_invalid_align(self):
+        with self.assertRaises(ValueError):
+            self.tool.extract_spike_waveforms(self._PRE, self._POST, align="center")
+
+    # --- basic output ---
+
+    def test_returns_list(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertIsInstance(result, list)
+
+    def test_arrays_written_to_subfolder(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertGreater(len(result), 0)
+        f = self.folder.toolfolder.get("Spike_0")
+        self.assertIn(result[0].name, f.data)
+
+    def test_array_name_format(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        names = [d.name for d in result]
+        for i, name in enumerate(names):
+            self.assertTrue(name.startswith("SPK_recA0_"))
+
+    def test_snippet_length(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        pre_samples  = int(round(self._PRE  / _DELTA))
+        post_samples = int(round(self._POST / _DELTA))
+        for d in result:
+            self.assertEqual(len(d.nparray), pre_samples + post_samples)
+
+    # --- xscale ---
+
+    def test_xscale_start_zero_by_default(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertAlmostEqual(result[0].xscale.start, 0.0, places=10)
+
+    def test_xscale_start_equals_minus_pre_when_align_spike(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST, align="spike")
+        self.assertAlmostEqual(result[0].xscale.start, -self._PRE, places=10)
+
+    def test_xscale_start_source_preserves_recording_time(self):
+        # align="source": xscale.start should reflect the original recording time
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST, align="source")
+        for d in result:
+            # start must be >= source xscale.start (snippet begins inside recording)
+            self.assertGreaterEqual(d.xscale.start, self.data.xscale.start)
+
+    def test_align_case_insensitive(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST, align="Zero")
+        self.assertIsInstance(result, list)
+
+    def test_xscale_delta_matches_source(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertAlmostEqual(result[0].xscale.delta, self.data.xscale.delta)
+
+    def test_xscale_units_match_source(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertEqual(result[0].xscale.units, self.data.xscale.units)
+
+    def test_yscale_copied_from_source(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertEqual(result[0].yscale.label, self.data.yscale.label)
+        self.assertEqual(result[0].yscale.units, self.data.yscale.units)
+
+    # --- edge handling ---
+
+    def test_edge_skip_omits_spikes_near_start(self):
+        # Large pre so spikes near the start of recording are skipped
+        result_small = self.tool.extract_spike_waveforms(self._PRE, self._POST, edge="skip")
+        # Use a fresh tool to avoid name collision in the same subfolder
+        tool2 = NMToolSpike()
+        _run(tool2, [_sine_data(name="recA0", freq=100.0, n=1000)])
+        result_large = tool2.extract_spike_waveforms(0.05, self._POST, edge="skip")
+        # Large pre skips more spikes
+        self.assertLess(len(result_large), len(result_small))
+
+    def test_edge_pad_returns_full_length_snippets(self):
+        pre_samples  = int(round(0.05 / _DELTA))
+        post_samples = int(round(self._POST / _DELTA))
+        result = self.tool.extract_spike_waveforms(0.05, self._POST, edge="pad")
+        for d in result:
+            self.assertEqual(len(d.nparray), pre_samples + post_samples)
+
+    def test_edge_pad_fills_out_of_bounds_with_nan(self):
+        # Use a large pre so the first spike's snippet definitely extends before index 0
+        result = self.tool.extract_spike_waveforms(0.05, self._POST, edge="pad")
+        # At least one snippet should contain NaN (from padding)
+        has_nan = any(np.any(np.isnan(d.nparray)) for d in result)
+        self.assertTrue(has_nan)
+
+    def test_edge_case_insensitive(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST, edge="skip")
+        self.assertIsInstance(result, list)
+
+    # --- clip_to_next_spike ---
+
+    def test_clip_to_next_spike_same_length_as_unclipped(self):
+        # Snippets should always be the same length regardless of clipping
+        # 100 Hz → ISI ≈ 0.01 s; post=0.02 s > ISI so NaN-clipping applies
+        result_clip = self.tool.extract_spike_waveforms(
+            self._PRE, 0.02, clip_to_next_spike=True
+        )
+        tool2 = NMToolSpike()
+        _run(tool2, [_sine_data(name="recA0", freq=100.0, n=1000)])
+        result_full = tool2.extract_spike_waveforms(
+            self._PRE, 0.02, clip_to_next_spike=False
+        )
+        self.assertEqual(len(result_clip), len(result_full))
+        pre_samples  = int(round(self._PRE / _DELTA))
+        post_samples = int(round(0.02 / _DELTA))
+        expected_len = pre_samples + post_samples
+        for d in result_clip:
+            self.assertEqual(len(d.nparray), expected_len)
+        for d in result_full:
+            self.assertEqual(len(d.nparray), expected_len)
+
+    def test_clip_to_next_spike_nans_beyond_next_spike(self):
+        # 100 Hz → ISI ≈ 0.01 s; post=0.02 s > ISI → tail of snippet is NaN
+        result = self.tool.extract_spike_waveforms(
+            self._PRE, 0.02, clip_to_next_spike=True
+        )
+        # Non-last spikes should have NaN in the clipped tail
+        has_nan = any(np.any(np.isnan(d.nparray)) for d in result[:-1])
+        self.assertTrue(has_nan)
+
+    def test_clip_to_next_spike_last_has_no_nan(self):
+        # Last spike is never clipped, so no NaN from clipping
+        # Use post small enough that it stays within bounds
+        result = self.tool.extract_spike_waveforms(
+            self._PRE, self._POST, clip_to_next_spike=True
+        )
+        self.assertGreater(len(result), 0)
+        last = result[-1]
+        self.assertFalse(np.any(np.isnan(last.nparray)))
+
+    # --- no spikes ---
+
+    def test_no_spikes_returns_empty_list(self):
+        tool2 = NMToolSpike()
+        y = np.ones(500) * 5.0
+        d = NMData(NM, name="flat", nparray=y,
+                   xscale={"start": 0.0, "delta": _DELTA})
+        _run(tool2, [d])
+        result = tool2.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertEqual(result, [])
+
+    # --- notes ---
+
+    def test_note_contains_source_epoch(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        note = result[0].notes.note
+        self.assertIn("recA0", note)
+
+    def test_note_contains_spike_x(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        note = result[0].notes.note
+        self.assertIn("spike_x=", note)
+
+    def test_note_contains_pre_post(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        note = result[0].notes.note
+        self.assertIn("pre=", note)
+        self.assertIn("post=", note)
+
+    def test_note_contains_align(self):
+        result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        note = result[0].notes.note
+        self.assertIn("align=", note)
+
+    # --- xarray source ---
+
+    def test_xarray_source_sets_xarray_on_snippet(self):
+        # Source with non-uniform xarray → snippet should have xarray, not xscale
+        n = 1000
+        t = np.cumsum(np.ones(n) * _DELTA)  # uniform but stored as xarray
+        t[500:] += 0.001  # introduce a gap to make it non-uniform
+        y = np.sin(2 * np.pi * 100.0 * np.arange(n) * _DELTA)
+        data_xa = NMData(NM, name="recA0", nparray=y,
+                         xscale={"label": "Time", "units": "s"})
+        data_xa.xarray = t
+        tool_xa = NMToolSpike()
+        _run(tool_xa, [data_xa])
+        result = tool_xa.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertGreater(len(result), 0)
+        for d in result:
+            self.assertIsNotNone(d.xarray)
+            self.assertEqual(len(d.xarray), len(d.nparray))
+
+    def test_xarray_source_align_zero_starts_at_zero(self):
+        n = 1000
+        t = np.arange(n, dtype=float) * _DELTA
+        y = np.sin(2 * np.pi * 100.0 * t)
+        data_xa = NMData(NM, name="recA0", nparray=y,
+                         xscale={"label": "Time", "units": "s"})
+        data_xa.xarray = t
+        tool_xa = NMToolSpike()
+        _run(tool_xa, [data_xa])
+        result = tool_xa.extract_spike_waveforms(self._PRE, self._POST, align="zero")
+        self.assertGreater(len(result), 0)
+        self.assertAlmostEqual(result[0].xarray[0], 0.0, places=10)
+
+    def test_xarray_source_align_spike_zero_at_spike(self):
+        n = 1000
+        t = np.arange(n, dtype=float) * _DELTA
+        y = np.sin(2 * np.pi * 100.0 * t)
+        data_xa = NMData(NM, name="recA0", nparray=y,
+                         xscale={"label": "Time", "units": "s"})
+        data_xa.xarray = t
+        tool_xa = NMToolSpike()
+        _run(tool_xa, [data_xa])
+        result = tool_xa.extract_spike_waveforms(self._PRE, self._POST, align="spike")
+        self.assertGreater(len(result), 0)
+        pre_samples = int(round(self._PRE / _DELTA))
+        # x at the spike sample should be within one delta of 0
+        self.assertLess(abs(result[0].xarray[pre_samples]), _DELTA)
+
+    # --- non-uniform xarray ---
+
+    def _make_nonuniform_data(self, name="recA0"):
+        """Signal with two segments at different sample rates.
+
+        Samples 0-499: delta = _DELTA     (10 kHz)
+        Samples 500-999: delta = _DELTA*2 (5 kHz)
+        A threshold crossing is placed in each segment (samples 200 and 700).
+        """
+        n1, n2 = 500, 500
+        t1 = np.arange(n1, dtype=float) * _DELTA
+        t2 = t1[-1] + _DELTA + np.arange(1, n2 + 1, dtype=float) * (_DELTA * 2)
+        t = np.concatenate([t1, t2])
+        y = np.zeros(len(t))
+        y[200] = 1.0   # rising crossing near sample 200 (10 kHz region)
+        y[700] = 1.0   # rising crossing near sample 700 (5 kHz region)
+        d = NMData(NM, name=name, nparray=y,
+                   xscale={"label": "Time", "units": "s"})
+        d.xarray = t
+        return d, t
+
+    def test_nonuniform_xarray_snippet_matches_source_slice(self):
+        # Snippet xarray values must exactly equal the corresponding
+        # slice of the source xarray (before alignment shift).
+        data_nu, t = self._make_nonuniform_data()
+        tool_nu = NMToolSpike()
+        _run(tool_nu, [data_nu])
+        # Use align="zero" so shift is x_snippet[0]; we can recover the
+        # original slice by adding back the first source x value.
+        result = tool_nu.extract_spike_waveforms(self._PRE, self._POST,
+                                                 align="zero")
+        self.assertGreater(len(result), 0)
+        for d in result:
+            # Key property: spacing pattern should match source spacing
+            src_diffs = np.diff(t)
+            snip_diffs = np.diff(d.xarray)
+            # All snippet intervals must appear somewhere in source intervals
+            for interval in snip_diffs:
+                self.assertTrue(
+                    np.any(np.isclose(src_diffs, interval, rtol=1e-9)),
+                    msg="interval %g not found in source xarray diffs" % interval,
+                )
+
+    def test_nonuniform_xarray_diffs_not_all_equal(self):
+        # Verify the snippet xarray is genuinely non-uniform when the spike
+        # spans the boundary between the two sample-rate regions.
+        # Place spike exactly at sample 499 (boundary) with large pre+post.
+        n1, n2 = 500, 500
+        t1 = np.arange(n1, dtype=float) * _DELTA
+        t2 = t1[-1] + _DELTA + np.arange(1, n2 + 1, dtype=float) * (_DELTA * 2)
+        t = np.concatenate([t1, t2])
+        y = np.zeros(len(t))
+        y[499] = 1.0   # crossing at boundary
+        data_bd = NMData(NM, name="recA0", nparray=y,
+                         xscale={"label": "Time", "units": "s"})
+        data_bd.xarray = t
+        tool_bd = NMToolSpike()
+        _run(tool_bd, [data_bd])
+        # pre=0.003 s (30 samples at 10 kHz) → straddles the boundary
+        result = tool_bd.extract_spike_waveforms(0.003, 0.003)
+        self.assertGreater(len(result), 0)
+        diffs = np.diff(result[0].xarray)
+        # Should contain both _DELTA and _DELTA*2 intervals
+        has_fine   = np.any(np.isclose(diffs, _DELTA,     rtol=1e-9))
+        has_coarse = np.any(np.isclose(diffs, _DELTA * 2, rtol=1e-9))
+        self.assertTrue(has_fine,   "expected fine intervals (_DELTA) in snippet")
+        self.assertTrue(has_coarse, "expected coarse intervals (_DELTA*2) in snippet")
+
+    def test_nonuniform_xarray_align_zero_starts_zero(self):
+        data_nu, _ = self._make_nonuniform_data()
+        tool_nu = NMToolSpike()
+        _run(tool_nu, [data_nu])
+        result = tool_nu.extract_spike_waveforms(self._PRE, self._POST, align="zero")
+        self.assertGreater(len(result), 0)
+        for d in result:
+            self.assertAlmostEqual(d.xarray[0], 0.0, places=10)
+
+    def test_nonuniform_xarray_align_spike_near_zero(self):
+        data_nu, t = self._make_nonuniform_data()
+        tool_nu = NMToolSpike()
+        _run(tool_nu, [data_nu])
+        result = tool_nu.extract_spike_waveforms(self._PRE, self._POST, align="spike")
+        self.assertGreater(len(result), 0)
+        median_delta = float(np.median(np.diff(t)))
+        pre_s = int(round(self._PRE / abs(median_delta)))
+        for d in result:
+            # x at the spike sample index should be within one median delta of 0
+            self.assertLess(abs(d.xarray[pre_s]), median_delta)
+
+    def test_nonuniform_xarray_align_source_preserves_values(self):
+        data_nu, t = self._make_nonuniform_data()
+        tool_nu = NMToolSpike()
+        _run(tool_nu, [data_nu])
+        result = tool_nu.extract_spike_waveforms(self._PRE, self._POST, align="source")
+        self.assertGreater(len(result), 0)
+        for d in result:
+            # xarray values must all appear in the source xarray
+            for xval in d.xarray:
+                self.assertTrue(
+                    np.any(np.isclose(t, xval, rtol=1e-9)),
+                    msg="x value %g not found in source xarray" % xval,
+                )
+
+    def test_align_source_xscale_start_in_recording_range(self):
+        # align="source" with uniform xscale: start reflects original position
+        result = self.tool.extract_spike_waveforms(
+            self._PRE, self._POST, align="source"
+        )
+        self.assertGreater(len(result), 0)
+        for d in result:
+            self.assertGreaterEqual(d.xscale.start, self.data.xscale.start)
+
+    # --- results_to_numpy=False ---
+
+    def test_works_when_results_to_numpy_false(self):
+        tool2 = NMToolSpike()
+        tool2.results_to_numpy = False
+        folder2 = _run(tool2, [_sine_data(name="recA0", freq=100.0)])
+        result = tool2.extract_spike_waveforms(self._PRE, self._POST)
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+
+
 class TestNMToolSpikeOverwrite(unittest.TestCase):
     """overwrite flag controls subfolder reuse vs. new numbered subfolders."""
 
