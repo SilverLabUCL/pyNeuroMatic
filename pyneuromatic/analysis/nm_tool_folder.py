@@ -21,7 +21,8 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 from __future__ import annotations
 import copy
 
-from pyneuromatic.core.nm_data import NMDataContainer
+from pyneuromatic.core.nm_data import NMData, NMDataContainer
+from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 import pyneuromatic.core.nm_configurations as nmc
@@ -37,6 +38,7 @@ class NMToolFolder(NMObject):
     _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
         "_NMToolFolder__data_container",
         "_NMToolFolder__dataseries_container",
+        "_NMToolFolder__dataseries",
     })
 
     def __init__(
@@ -47,7 +49,7 @@ class NMToolFolder(NMObject):
         super().__init__(parent=parent, name=name)
 
         self.__data_container: NMDataContainer = NMDataContainer(parent=self)
-        self.__dataseries_container: NMDataContainer | None = None
+        self.__dataseries: NMDataSeriesContainer = NMDataSeriesContainer(parent=self)
 
     # override
     def __eq__(
@@ -106,14 +108,14 @@ class NMToolFolder(NMObject):
         else:
             result._NMToolFolder__data_container = NMDataContainer(parent=result)
 
-        # __dataseries_container: deep copy and update parent
-        if self._NMToolFolder__dataseries_container is not None:
-            result._NMToolFolder__dataseries_container = copy.deepcopy(
-                self._NMToolFolder__dataseries_container, memo
+        # __dataseries: deep copy and update parent
+        if self._NMToolFolder__dataseries is not None:
+            result._NMToolFolder__dataseries = copy.deepcopy(
+                self._NMToolFolder__dataseries, memo
             )
-            result._NMToolFolder__dataseries_container._parent = result
+            result._NMToolFolder__dataseries._parent = result
         else:
-            result._NMToolFolder__dataseries_container = None
+            result._NMToolFolder__dataseries = NMDataSeriesContainer(parent=result)
 
         return result
 
@@ -130,8 +132,80 @@ class NMToolFolder(NMObject):
         return self.__data_container
 
     @property
-    def dataseries(self) -> NMDataContainer | None:
-        return self.__dataseries_container
+    def dataseries(self) -> NMDataSeriesContainer:
+        return self.__dataseries
+
+    def build_dataseries(
+        self,
+        prefix: str,
+        matches: dict[tuple[str, int], NMData],
+    ) -> NMDataSeries | None:
+        """Build or extend an :class:`~pyneuromatic.core.nm_dataseries.NMDataSeries`
+        from an explicit matches mapping.
+
+        Creates the dataseries if it does not yet exist, then creates any
+        channels and epochs not already present, and links each NMData to its
+        channel and epoch.  Already-linked data is silently skipped so this
+        method is safe to call on an existing dataseries.
+
+        Modelled on :meth:`~pyneuromatic.core.nm_folder.NMFolder.build_dataseries`.
+
+        Args:
+            prefix:  Dataseries name (e.g. ``"SPK_"``).
+            matches: Mapping of ``(channel_char, epoch_num) -> NMData``.
+                Channel chars must be single uppercase letters (e.g. ``"A"``);
+                epoch numbers are zero-based integers.
+
+        Returns:
+            The :class:`~pyneuromatic.core.nm_dataseries.NMDataSeries` (new or
+            updated), or ``None`` if *matches* is empty.
+        """
+        if not matches:
+            return None
+
+        is_new = prefix not in self.__dataseries
+        if is_new:
+            ds = self.__dataseries.new(name=prefix, quiet=True)
+            if ds is None:
+                return None
+            channel_map: dict[str, object] = {}
+            epoch_map: dict[int, object] = {}
+        else:
+            ds = self.__dataseries.get(prefix)
+            channel_map = {
+                ch_name: ds.channels.get(ch_name) for ch_name in ds.channels
+            }
+            epoch_map = {}
+            for ep_name in ds.epochs:
+                try:
+                    epoch_map[int(ep_name[1:])] = ds.epochs.get(ep_name)
+                except (ValueError, IndexError):
+                    pass
+
+        channel_chars = sorted(set(ch for ch, _ in matches.keys()))
+        epoch_nums = sorted(set(ep for _, ep in matches.keys()))
+
+        for ch_char in channel_chars:
+            if ch_char not in channel_map:
+                ch = ds.channels.new(quiet=True)
+                if ch is not None:
+                    channel_map[ch_char] = ch
+
+        for ep_num in epoch_nums:
+            if ep_num not in epoch_map:
+                ep = ds.epochs.new(quiet=True)
+                if ep is not None:
+                    epoch_map[ep_num] = ep
+
+        for (ch_char, ep_num), data in matches.items():
+            ch = channel_map.get(ch_char)
+            ep = epoch_map.get(ep_num)
+            if ch is not None and data not in ch.data:
+                ch.data.append(data)
+            if ep is not None and data not in ep.data:
+                ep.data.append(data)
+
+        return ds
 
 
 class NMToolFolderContainer(NMObjectContainer):
