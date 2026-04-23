@@ -120,7 +120,6 @@ class NMToolSpike(NMTool):
         # Internal run state — reset by run_init()
         self._spike_times: list[np.ndarray] = []
         self._epoch_names: list[str] = []
-        self._channel_char: str = ""
         self._detected_xunits: str | None = None
         self._toolfolder: NMToolFolder | None = None
 
@@ -321,7 +320,6 @@ class NMToolSpike(NMTool):
         """Reset internal state before the run loop."""
         self._spike_times = []
         self._epoch_names = []
-        self._channel_char = ""
         self._source_data: list[NMData] = []
         self._detected_xunits = None
         self._toolfolder = None
@@ -351,7 +349,6 @@ class NMToolSpike(NMTool):
             x1=self.__x1,
             ignore_nans=self.__ignore_nans,
         )
-        self._channel_char = self.channel.name if self.channel is not None else "A"
         self._spike_times.append(x_times)
         self._epoch_names.append(data.name)
         self._source_data.append(data)
@@ -556,7 +553,7 @@ class NMToolSpike(NMTool):
             )
 
         output: list[NMData] = []
-        ch_char = self._channel_char or "A"
+        ch_char = self.channel.name if self.channel is not None else "A"
         toolfolder: NMToolFolder | None = None
         spike_counter: int = 0
         matches: dict[tuple[str, int], NMData] = {}
