@@ -851,5 +851,89 @@ class TestNMToolConfigProperty(unittest.TestCase):
         self.assertIsNone(t.config)
 
 
+class TestRunToolPerChannelGrouping(unittest.TestCase):
+    """Tests that run_tool() calls run_all() once per channel group."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("folder0")
+        self.ds = self.folder.dataseries.new("Record")
+        self.ch_a = self.ds.channels.new("A")
+        self.ch_b = self.ds.channels.new("B")
+        self.e0 = self.ds.epochs.new("E0")
+        self.e1 = self.ds.epochs.new("E1")
+        self.folder.data.new("RecordA0")
+        self.folder.data.new("RecordA1")
+        self.folder.data.new("RecordB0")
+        self.folder.data.new("RecordB1")
+        self.ds.channels.get("A").data.append(self.folder.data.get("RecordA0"))
+        self.ds.channels.get("A").data.append(self.folder.data.get("RecordA1"))
+        self.ds.channels.get("B").data.append(self.folder.data.get("RecordB0"))
+        self.ds.channels.get("B").data.append(self.folder.data.get("RecordB1"))
+        self.ds.epochs.get("E0").data.append(self.folder.data.get("RecordA0"))
+        self.ds.epochs.get("E0").data.append(self.folder.data.get("RecordB0"))
+        self.ds.epochs.get("E1").data.append(self.folder.data.get("RecordA1"))
+        self.ds.epochs.get("E1").data.append(self.folder.data.get("RecordB1"))
+
+    def test_run_all_called_once_per_channel(self):
+        run_finish_calls = []
+
+        class TrackTool(NMTool):
+            def run_finish(self):
+                run_finish_calls.append(self.channel.name if self.channel else None)
+                return True
+
+        self.nm.tool_add("track", TrackTool(), select=True)
+        self.nm.run_keys_set({
+            "folder": "selected", "dataseries": "selected",
+            "channel": "all", "epoch": "all",
+        })
+        self.nm.run_tool()
+        self.assertEqual(run_finish_calls, ["A", "B"])
+
+    def test_channel_consistent_within_run_all(self):
+        seen_channels: list[list[str]] = []
+        current: list[str] = []
+
+        class TrackTool(NMTool):
+            def run_init(self):
+                current.clear()
+                return True
+
+            def run(self):
+                current.append(self.channel.name if self.channel else "?")
+                return True
+
+            def run_finish(self):
+                seen_channels.append(list(current))
+                return True
+
+        self.nm.tool_add("track", TrackTool(), select=True)
+        self.nm.run_keys_set({
+            "folder": "selected", "dataseries": "selected",
+            "channel": "all", "epoch": "all",
+        })
+        self.nm.run_tool()
+        self.assertEqual(seen_channels, [["A", "A"], ["B", "B"]])
+
+    def test_run_tool_returns_false_on_first_group_failure(self):
+        call_count = [0]
+
+        class FailFirstTool(NMTool):
+            def run_finish(self):
+                call_count[0] += 1
+                return call_count[0] > 1  # False on first call
+
+        self.nm.tool_add("fail", FailFirstTool(), select=True)
+        self.nm.run_keys_set({
+            "folder": "selected", "dataseries": "selected",
+            "channel": "all", "epoch": "all",
+        })
+        result = self.nm.run_tool()
+        self.assertFalse(result)
+        self.assertEqual(call_count[0], 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

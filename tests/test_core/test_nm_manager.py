@@ -8,7 +8,7 @@ acquiring and simulating electrophysiology data.
 """
 import unittest
 
-from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.core.nm_manager import NMManager, _split_targets_by_channel
 from pyneuromatic.core.nm_command_history import NMCommandHistory, get_command_history
 
 QUIET = True
@@ -834,6 +834,71 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
         with self.assertRaises(KeyError):
             self.nm.run_tool("nonexistent")
         self.assertEqual(len(self.nm.command_history.buffer), 0)
+
+
+class TestSplitTargetsByChannel(unittest.TestCase):
+    """Tests for _split_targets_by_channel()."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("folder0")
+        self.ds = self.folder.dataseries.new("Record")
+        self.ch_a = self.ds.channels.new("A")
+        self.ch_b = self.ds.channels.new("B")
+        self.e0 = self.ds.epochs.new("E0")
+        self.e1 = self.ds.epochs.new("E1")
+
+    def _t(self, ch, ep):
+        return {"folder": self.folder, "dataseries": self.ds, "channel": ch, "epoch": ep}
+
+    def _d(self, name):
+        d = self.folder.data.new(name)
+        return {"folder": self.folder, "data": d}
+
+    def test_empty_targets_returns_empty(self):
+        self.assertEqual(_split_targets_by_channel([]), [])
+
+    def test_single_channel_single_epoch_is_one_split(self):
+        targets = [self._t(self.ch_a, self.e0)]
+        splits = _split_targets_by_channel(targets)
+        self.assertEqual(len(splits), 1)
+        self.assertEqual(len(splits[0]), 1)
+
+    def test_single_channel_two_epochs_is_one_split(self):
+        targets = [self._t(self.ch_a, self.e0), self._t(self.ch_a, self.e1)]
+        splits = _split_targets_by_channel(targets)
+        self.assertEqual(len(splits), 1)
+        self.assertEqual(len(splits[0]), 2)
+
+    def test_two_channels_become_two_splits(self):
+        targets = [
+            self._t(self.ch_a, self.e0), self._t(self.ch_a, self.e1),
+            self._t(self.ch_b, self.e0), self._t(self.ch_b, self.e1),
+        ]
+        splits = _split_targets_by_channel(targets)
+        self.assertEqual(len(splits), 2)
+        self.assertEqual(len(splits[0]), 2)
+        self.assertEqual(len(splits[1]), 2)
+
+    def test_channel_order_preserved(self):
+        targets = [self._t(self.ch_a, self.e0), self._t(self.ch_b, self.e0)]
+        splits = _split_targets_by_channel(targets)
+        self.assertIs(splits[0][0]["channel"], self.ch_a)
+        self.assertIs(splits[1][0]["channel"], self.ch_b)
+
+    def test_data_mode_targets_form_one_split(self):
+        targets = [self._d("d0"), self._d("d1"), self._d("d2")]
+        splits = _split_targets_by_channel(targets)
+        self.assertEqual(len(splits), 1)
+        self.assertEqual(len(splits[0]), 3)
+
+    def test_data_mode_split_appended_last(self):
+        targets = [self._t(self.ch_a, self.e0), self._d("d0")]
+        splits = _split_targets_by_channel(targets)
+        self.assertEqual(len(splits), 2)
+        self.assertIn("channel", splits[0][0])
+        self.assertNotIn("channel", splits[1][0])
 
 
 if __name__ == "__main__":

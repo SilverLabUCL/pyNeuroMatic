@@ -68,6 +68,40 @@ NMManager (NMObject, root)
 """
 
 
+def _split_targets_by_channel(
+    targets: list[dict],
+) -> list[list[dict]]:
+    """Group run targets by (folder, dataseries, channel) for dataseries mode.
+
+    Dataseries-mode targets (those with a ``"channel"`` key) are split into
+    one group per unique ``(folder, dataseries, channel)`` combination,
+    preserving the order of first encounter.  Data-mode targets (no
+    ``"channel"`` key) are collected into a single group appended last.
+
+    Args:
+        targets: Flat list of target dicts as returned by
+            ``NMManager.run_values()``.
+
+    Returns:
+        List of target-dict groups, each suitable for a single
+        ``tool.run_all()`` call.
+    """
+    ds_groups: dict[tuple, list[dict]] = {}
+    data_targets: list[dict] = []
+    for t in targets:
+        if "channel" in t:
+            key = (id(t.get("folder")), id(t.get("dataseries")), id(t.get("channel")))
+            if key not in ds_groups:
+                ds_groups[key] = []
+            ds_groups[key].append(t)
+        else:
+            data_targets.append(t)
+    groups: list[list[dict]] = list(ds_groups.values())
+    if data_targets:
+        groups.append(data_targets)
+    return groups
+
+
 class NMManager(NMObject):
     """
     NM Manager - Central manager for pyNeuroMatic.
@@ -678,15 +712,20 @@ class NMManager(NMObject):
         """Run the selected (or named) tool over all current run targets.
 
         Resolves the tool by name, fetches run targets from the project
-        hierarchy via ``run_values()``, and delegates the execution loop
-        to ``tool.run_all(targets)``.
+        hierarchy via ``run_values()``, and calls ``tool.run_all()`` once per
+        ``(folder, dataseries, channel)`` group so that each invocation of the
+        ``run_init / run / run_finish`` lifecycle sees exactly one channel.
+        Data-mode targets (no dataseries) are passed as a single group.
+
+        Stops and returns ``False`` as soon as any group's ``run_all()``
+        returns ``False``.
 
         Args:
             toolname: Name of the tool to run, or ``"selected"`` (default)
                 to use the currently selected tool.
 
         Returns:
-            Return value of ``tool.run_finish()``.
+            ``True`` if all groups complete successfully, ``False`` otherwise.
 
         Raises:
             TypeError: If toolname is not a string.
@@ -713,7 +752,12 @@ class NMManager(NMObject):
         targets = self.run_values()
         if not targets:
             print("nothing to run")
-        result = tool.run_all(targets, run_keys=self.__run_config)
+        groups = _split_targets_by_channel(targets)
+        result = True
+        for group in groups:
+            if not tool.run_all(group, run_keys=self.__run_config):
+                result = False
+                break
         nmch.add_nm_command("run_tool(%r)" % tname)
         return result
 
