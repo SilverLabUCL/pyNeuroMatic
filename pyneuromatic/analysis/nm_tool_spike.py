@@ -462,7 +462,7 @@ class NMToolSpike(NMTool):
         Raises:
             RuntimeError: If called before :meth:`run_all`.
         """
-        if self._toolfolder is None and not self._epoch_names:
+        if not self._epoch_names:
             raise RuntimeError(
                 "NMToolSpike.raster: no spike data — run detection first"
             )
@@ -734,12 +734,10 @@ class NMToolSpike(NMTool):
                 "output_mode must be one of %s, got %r"
                 % (list(_VALID_MODES), output_mode)
             )
-        if self._toolfolder is None:
+        if not self._spike_times:
             raise RuntimeError(
                 "NMToolSpike.pst: no spike data — run detection first"
             )
-        if not self._spike_times:
-            return None
         all_times = np.concatenate(self._spike_times)
         if len(all_times) == 0:
             return None
@@ -761,6 +759,8 @@ class NMToolSpike(NMTool):
         else:
             ydata = counts.astype(float)
             ylabel = "Spike count"
+        if self._toolfolder is None:
+            self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
         d = self._toolfolder.data.new(
             "SP_PST",
             nparray=ydata,
@@ -831,7 +831,7 @@ class NMToolSpike(NMTool):
                 "output_mode must be one of %s, got %r"
                 % (list(_VALID_MODES), output_mode)
             )
-        if self._toolfolder is None:
+        if not self._spike_times:
             raise RuntimeError(
                 "NMToolSpike.isi: no spike data — run detection first"
             )
@@ -864,6 +864,8 @@ class NMToolSpike(NMTool):
         else:
             ydata = counts.astype(float)
             ylabel = "Count"
+        if self._toolfolder is None:
+            self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
         d = self._toolfolder.data.new(
             "SP_ISI",
             nparray=ydata,
