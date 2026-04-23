@@ -120,6 +120,7 @@ class NMToolSpike(NMTool):
         # Internal run state — reset by run_init()
         self._spike_times: list[np.ndarray] = []
         self._epoch_names: list[str] = []
+        self._channel_chars: list[str] = []
         self._detected_xunits: str | None = None
         self._toolfolder: NMToolFolder | None = None
 
@@ -320,6 +321,7 @@ class NMToolSpike(NMTool):
         """Reset internal state before the run loop."""
         self._spike_times = []
         self._epoch_names = []
+        self._channel_chars = []
         self._source_data: list[NMData] = []
         self._detected_xunits = None
         self._toolfolder = None
@@ -349,8 +351,10 @@ class NMToolSpike(NMTool):
             x1=self.__x1,
             ignore_nans=self.__ignore_nans,
         )
+        ch_char = self.channel.name if self.channel is not None else "A"
         self._spike_times.append(x_times)
         self._epoch_names.append(data.name)
+        self._channel_chars.append(ch_char)
         self._source_data.append(data)
         return True
 
@@ -397,7 +401,8 @@ class NMToolSpike(NMTool):
         """
         if not isinstance(self.folder, NMFolder):
             return None
-        self._toolfolder = self._make_toolfolder()
+        ch = self._channel_chars[0] if self._channel_chars else "A"
+        self._toolfolder = self._make_toolfolder(ch)
         f = self._toolfolder
         for name, times in zip(self._epoch_names, self._spike_times):
             d = f.data.new(
@@ -436,13 +441,22 @@ class NMToolSpike(NMTool):
         for name, times in zip(self._epoch_names, self._spike_times):
             nmh.history("spike: %s: %d spike(s)" % (name, len(times)))
 
-    def _make_toolfolder(self) -> NMToolFolder:
-        """Return the target ``spike_{dataseries}_{channel}_N`` subfolder."""
+    def _make_toolfolder(self, channel_name: str | None = None) -> NMToolFolder:
+        """Return the target ``Spike_{dataseries}_{channel}_N`` subfolder.
+
+        Args:
+            channel_name: Channel name to use in the subfolder name.  If
+                ``None``, falls back to ``self.channel.name`` (used by the
+                normal results path).
+        """
         parts = ["Spike"]
         if self.dataseries is not None:
             parts.append(self.dataseries.name)
-        if self.channel is not None:
-            parts.append(self.channel.name)
+        ch = channel_name if channel_name is not None else (
+            self.channel.name if self.channel is not None else None
+        )
+        if ch is not None:
+            parts.append(ch)
         base = "_".join(parts)
         return self.folder.toolfolder.get_or_create(base, overwrite=self.__overwrite)
 
@@ -490,7 +504,7 @@ class NMToolSpike(NMTool):
 
         For each spike detected during the most recent :meth:`run_all` call,
         extracts a ``[−pre, +post]`` window of samples from the source epoch
-        array and writes the snippet as a new NMData array (``SPK_{epoch}_{n}``)
+        array and writes the snippet as a new NMData array (``SPK_{ch}{n}``)
         in the Spike subfolder.
 
         Args:
@@ -561,13 +575,18 @@ class NMToolSpike(NMTool):
             raise RuntimeError(
                 "NMToolSpike.extract_spike_waveforms: no spike data — run detection first"
             )
-        if self._toolfolder is None:
-            self._toolfolder = self._make_toolfolder()
 
         output: list[NMData] = []
 
-        for epoch_name, spike_times_arr, source in zip(
-            self._epoch_names, self._spike_times, self._source_data
+        # Per-channel toolfolder, spike counter, and matches
+        ch_toolfolders: dict[str, NMToolFolder] = {}
+        channel_counters: dict[str, int] = {}
+        # per-channel matches for build_dataseries: ch_char -> {(ch, ep): NMData}
+        ch_matches: dict[str, dict[tuple[str, int], NMData]] = {}
+
+        for epoch_name, spike_times_arr, source, ch_char in zip(
+            self._epoch_names, self._spike_times, self._source_data,
+            self._channel_chars
         ):
             ydata = source.nparray
             if ydata is None:
@@ -666,14 +685,21 @@ class NMToolSpike(NMTool):
                     "label": source.yscale.label,
                     "units": source.yscale.units,
                 }
-                array_name = "SPK_%s_%d" % (epoch_name, n)
-                d = self._toolfolder.data.new(
+                if ch_char not in ch_toolfolders:
+                    ch_toolfolders[ch_char] = self._make_toolfolder(ch_char)
+                    ch_matches[ch_char] = {}
+                tf = ch_toolfolders[ch_char]
+                spike_n = channel_counters.get(ch_char, 0)
+                channel_counters[ch_char] = spike_n + 1
+                array_name = "SPK_%s%d" % (ch_char, spike_n)
+                d = tf.data.new(
                     array_name,
                     nparray=snippet,
                     xarray=x_snippet,
                     xscale=out_xscale,
                     yscale=out_yscale,
                 )
+                ch_matches[ch_char][ch_char, spike_n] = d
                 note = (
                     "NMSpike.extract_spike_waveforms(source=%s, spike_x=%.6g, "
                     "pre=%g, post=%g, clip_to_next_spike=%s, edge=%r, align=%s"
@@ -688,6 +714,8 @@ class NMToolSpike(NMTool):
                 self._add_note(d, note)
                 output.append(d)
 
+        for ch_char, tf in ch_toolfolders.items():
+            tf.build_dataseries("SPK_", ch_matches[ch_char])
         return output
 
     # ------------------------------------------------------------------
