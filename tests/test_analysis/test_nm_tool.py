@@ -16,6 +16,7 @@ from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_config import NMToolConfig
+from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 
 QUIET = True
 
@@ -760,6 +761,83 @@ class TestNMManagerRunConfig(unittest.TestCase):
         # After reset, run_config is None so epoch_set should be None
         self.nm.run_tool()
         self.assertEqual(captured.get("run_keys"), {})
+
+
+class TestNMToolMakeToolfolder(unittest.TestCase):
+    """Tests for NMTool._make_toolfolder()."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        assert self.nm.folders is not None
+        self.folder = self.nm.folders.new("folder0")
+        assert isinstance(self.folder, NMFolder)
+        self.tool = NMTool()
+        self.tool._select["folder"] = self.folder
+
+    def test_returns_nmtoolfolder(self):
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertIsInstance(tf, NMToolFolder)
+
+    def test_prefix_only_name(self):
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_0")
+
+    def test_prefix_with_dataseries(self):
+        ds = self.folder.dataseries.new("Record")
+        self.tool._select["dataseries"] = ds
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_Record_0")
+
+    def test_prefix_with_channel(self):
+        self.tool._select["channel"] = NMChannel(name="A")
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_A_0")
+
+    def test_prefix_with_dataseries_and_channel(self):
+        ds = self.folder.dataseries.new("Record")
+        self.tool._select["dataseries"] = ds
+        self.tool._select["channel"] = NMChannel(name="A")
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_Record_A_0")
+
+    def test_epoch_set_included_when_present(self):
+        ds = self.folder.dataseries.new("Record")
+        self.tool._select["dataseries"] = ds
+        self.tool._select["channel"] = NMChannel(name="A")
+        self.tool._run_meta = {"run_keys": {"epoch": "Set1"}}
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_Record_A_Set1_0")
+
+    def test_epoch_set_all_included(self):
+        self.tool._run_meta = {"run_keys": {"epoch": "All"}}
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_All_0")
+
+    def test_epoch_set_omitted_when_empty_string(self):
+        self.tool._run_meta = {"run_keys": {"epoch": ""}}
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_0")
+
+    def test_epoch_set_omitted_when_not_in_run_keys(self):
+        self.tool._run_meta = {"run_keys": {}}
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_0")
+
+    def test_second_call_increments_n(self):
+        self.tool._make_toolfolder("Stats")
+        tf = self.tool._make_toolfolder("Stats")
+        self.assertEqual(tf.name, "Stats_1")
+
+    def test_overwrite_reuses_n0(self):
+        self.tool._make_toolfolder("Stats", overwrite=True)
+        tf = self.tool._make_toolfolder("Stats", overwrite=True)
+        self.assertEqual(tf.name, "Stats_0")
+
+    def test_different_prefixes_are_independent(self):
+        tf_stats = self.tool._make_toolfolder("Stats")
+        tf_spike = self.tool._make_toolfolder("Spike")
+        self.assertEqual(tf_stats.name, "Stats_0")
+        self.assertEqual(tf_spike.name, "Spike_0")
 
 
 class TestNMToolConfigProperty(unittest.TestCase):
