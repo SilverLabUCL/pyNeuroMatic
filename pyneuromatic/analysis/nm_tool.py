@@ -30,6 +30,7 @@ from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS
 from pyneuromatic.analysis.nm_tool_config import NMToolConfig
+from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
 
 
 class NMTool:
@@ -181,6 +182,32 @@ class NMTool:
     def run_finish(self) -> bool:
         """Called once after run loop. Override in subclass."""
         return True
+
+    def _make_toolfolder(
+        self,
+        prefix: str,
+        overwrite: bool = False,
+    ) -> NMToolFolder:
+        """Return the target ``{prefix}_{dataseries}_{channel}_{epoch_set}_N`` subfolder.
+
+        Assembles the name from ``self.dataseries``, ``self.channel``, and
+        ``run_keys["epoch"]`` (when present).
+
+        Args:
+            prefix: Tool-specific prefix, e.g. ``"Spike"`` or ``"Stats"``.
+            overwrite: If True, clear and reuse ``{base}_0``; otherwise pick
+                the next unused ``{base}_N``.
+        """
+        parts = [prefix]
+        if self.dataseries is not None:
+            parts.append(self.dataseries.name)
+        if self.channel is not None:
+            parts.append(self.channel.name)
+        epoch_set = self._run_meta.get("run_keys", {}).get("epoch")
+        if epoch_set:
+            parts.append(epoch_set)
+        base = "_".join(parts)
+        return self.folder.toolfolder.get_or_create(base, overwrite=overwrite)
 
     def run_all(
         self,

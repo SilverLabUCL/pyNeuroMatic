@@ -27,6 +27,7 @@ import numpy as np
 from pyneuromatic.analysis.nm_tool import NMTool
 from pyneuromatic.analysis.nm_tool_config import NMToolConfig
 from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_command_history as nmch
@@ -402,7 +403,8 @@ class NMToolSpike(NMTool):
         if not isinstance(self.folder, NMFolder):
             return None
         ch = self._channel_chars[0] if self._channel_chars else "A"
-        self._toolfolder = self._make_toolfolder(ch)
+        self._select["channel"] = NMChannel(name=ch)
+        self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
         f = self._toolfolder
         for name, times in zip(self._epoch_names, self._spike_times):
             d = f.data.new(
@@ -440,25 +442,6 @@ class NMToolSpike(NMTool):
         """Print spike counts to the history log."""
         for name, times in zip(self._epoch_names, self._spike_times):
             nmh.history("spike: %s: %d spike(s)" % (name, len(times)))
-
-    def _make_toolfolder(self, channel_name: str | None = None) -> NMToolFolder:
-        """Return the target ``Spike_{dataseries}_{channel}_N`` subfolder.
-
-        Args:
-            channel_name: Channel name to use in the subfolder name.  If
-                ``None``, falls back to ``self.channel.name`` (used by the
-                normal results path).
-        """
-        parts = ["Spike"]
-        if self.dataseries is not None:
-            parts.append(self.dataseries.name)
-        ch = channel_name if channel_name is not None else (
-            self.channel.name if self.channel is not None else None
-        )
-        if ch is not None:
-            parts.append(ch)
-        base = "_".join(parts)
-        return self.folder.toolfolder.get_or_create(base, overwrite=self.__overwrite)
 
     # ------------------------------------------------------------------
     # Convenience methods (called after run_all)
@@ -686,7 +669,8 @@ class NMToolSpike(NMTool):
                     "units": source.yscale.units,
                 }
                 if ch_char not in ch_toolfolders:
-                    ch_toolfolders[ch_char] = self._make_toolfolder(ch_char)
+                    self._select["channel"] = NMChannel(name=ch_char)
+                    ch_toolfolders[ch_char] = self._make_toolfolder("Spike", overwrite=self.__overwrite)
                     ch_matches[ch_char] = {}
                 tf = ch_toolfolders[ch_char]
                 spike_n = channel_counters.get(ch_char, 0)

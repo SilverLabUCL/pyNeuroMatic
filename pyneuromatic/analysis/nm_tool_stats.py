@@ -501,10 +501,14 @@ class NMToolStats(NMTool):
     def _results_to_numpy(self) -> NMToolFolder | None:
         """Write results as ST_ NMData arrays in a new NMToolFolder.
 
-        Creates a new folder named ``stats_{dataseries}_0``,
-        ``stats_{dataseries}_1``, … (first unused name) under the current
-        folder's toolfolder, then writes one NMData array per numeric result
-        key per window/func combination.  Array naming rules:
+        Creates a subfolder named ``Stats_{dataseries}_{channel}_{epoch_set}_N``
+        (first unused N) under the current folder's toolfolder.  Components are
+        omitted when not set; epoch set is included only when present in
+        ``run_keys``.  Examples: ``Stats_0``, ``Stats_Record_A_0``,
+        ``Stats_Record_A_Set1_0``.
+
+        Writes one NMData array per numeric result key per window/func
+        combination.  Array naming rules:
 
         * Primary stat value (``"s"`` key): ``ST_{w}_{func}_y``
           e.g. ``ST_w0_mean_y``, ``ST_w0_max_y``.
@@ -525,17 +529,7 @@ class NMToolStats(NMTool):
         if not self.__results:
             raise RuntimeError("there are no results to save")
 
-        # Find next unused folder name stats_{dataseries}_{channel}_N, ...
-        tf = self.folder.toolfolder
-        ds = self.dataseries
-        ch = self.channel
-        parts = ["stats"]
-        if ds is not None:
-            parts.append(ds.name)
-        if ch is not None:
-            parts.append(ch.name)
-        base = "_".join(parts)
-        f = tf.get_or_create(base, overwrite=self.__overwrite)
+        f = self._make_toolfolder("Stats", overwrite=self.__overwrite)
 
         for wname, vlist in self.__results.items():
             # vlist: list of lists, one inner list per data array

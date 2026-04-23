@@ -165,21 +165,21 @@ class TestNMToolStats(unittest.TestCase):
         self.assertIsInstance(f, NMToolFolder)
 
     def test_results_to_numpy_folder_named_stats_0_no_dataseries(self):
-        # No dataseries selected → fallback name "stats_0"
+        # No dataseries selected → fallback name "Stats_0"
         self._setup_folder()
         self._run_compute()
         f = self.tool._results_to_numpy()
-        self.assertEqual(f.name, "stats_0")
+        self.assertEqual(f.name, "Stats_0")
 
     def test_results_to_numpy_second_run_named_stats_1_no_dataseries(self):
-        # Second run with no dataseries → "stats_1"
+        # Second run with no dataseries → "Stats_1"
         self._setup_folder()
         self._run_compute()
         self.tool._results_to_numpy()
         self.tool._NMToolStats__results.clear()
         self._run_compute()
         f = self.tool._results_to_numpy()
-        self.assertEqual(f.name, "stats_1")
+        self.assertEqual(f.name, "Stats_1")
 
     def test_results_to_numpy_folder_named_with_dataseries(self):
         # Dataseries selected → name uses dataseries name
@@ -189,10 +189,10 @@ class TestNMToolStats(unittest.TestCase):
         self.tool._select["dataseries"] = ds
         self._run_compute()
         f = self.tool._results_to_numpy()
-        self.assertEqual(f.name, "stats_Record_0")
+        self.assertEqual(f.name, "Stats_Record_0")
 
     def test_results_to_numpy_folder_named_with_dataseries_and_channel(self):
-        # Dataseries + channel → stats_{ds}_{ch}_N
+        # Dataseries + channel → Stats_{ds}_{ch}_N
         from pyneuromatic.core.nm_dataseries import NMDataSeries
         from pyneuromatic.core.nm_channel import NMChannel
         self._setup_folder()
@@ -200,16 +200,16 @@ class TestNMToolStats(unittest.TestCase):
         self.tool._select["channel"] = NMChannel(name="A")
         self._run_compute()
         f = self.tool._results_to_numpy()
-        self.assertEqual(f.name, "stats_Record_A_0")
+        self.assertEqual(f.name, "Stats_Record_A_0")
 
     def test_results_to_numpy_folder_named_channel_only(self):
-        # Channel but no dataseries → stats_{ch}_N
+        # Channel but no dataseries → Stats_{ch}_N
         from pyneuromatic.core.nm_channel import NMChannel
         self._setup_folder()
         self.tool._select["channel"] = NMChannel(name="B")
         self._run_compute()
         f = self.tool._results_to_numpy()
-        self.assertEqual(f.name, "stats_B_0")
+        self.assertEqual(f.name, "Stats_B_0")
 
     def test_results_to_numpy_creates_data_array(self):
         self._setup_folder()
