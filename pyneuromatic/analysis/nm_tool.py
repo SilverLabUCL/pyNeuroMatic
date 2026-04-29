@@ -207,7 +207,7 @@ class NMTool:
         if epoch_set:
             parts.append(epoch_set)
         base = "_".join(parts)
-        return self.folder.toolfolder.get_or_create(base, overwrite=overwrite)
+        return self.folder.toolfolders.get_or_create(base, overwrite=overwrite)
 
     def run_all(
         self,

@@ -202,7 +202,7 @@ class NMFolder(NMObject):
         return self.__dataseries_container
 
     @property
-    def toolfolder(self) -> NMToolFolderContainer:
+    def toolfolders(self) -> NMToolFolderContainer:
         return self.__toolfolder_container
 
     @property

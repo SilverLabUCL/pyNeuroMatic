@@ -419,6 +419,10 @@ class NMToolSpike(NMTool):
             % (self.__ylevel, self.__func_name,
                self.__x0, self.__x1, len(self._epoch_names)),
         )
+        f.data.new(
+            "SP_epoch_names",
+            nparray=np.array(self._epoch_names, dtype=object),
+        )
         return f
 
     def _results_to_cache(self) -> None:
@@ -439,12 +443,66 @@ class NMToolSpike(NMTool):
     # ------------------------------------------------------------------
     # Convenience methods (called after run_all)
 
-    def raster(self) -> tuple[list[np.ndarray], list[str]]:
+    _SP_SKIP: frozenset[str] = frozenset({"SP_count", "SP_PST", "SP_ISI", "SP_epoch_names"})
+
+    def _spike_times_from_toolfolder(
+        self, toolfolder: NMToolFolder
+    ) -> tuple[list[np.ndarray], list[str], str | None]:
+        """Reconstruct spike times from SP_ arrays stored in *toolfolder*.
+
+        When ``SP_epoch_names`` is present (written by :meth:`_results_to_numpy`
+        since this feature was added), uses it as the authoritative ordered list
+        of epoch names and looks up the corresponding ``SP_{name}`` arrays by
+        position.  This avoids name-clash edge cases (e.g. an epoch named
+        ``"count"`` or ``"PST"``) and makes ordering explicit.
+
+        Falls back to scanning all ``SP_*`` arrays in insertion order.
+
+        Returns:
+            ``(spike_times, epoch_names, detected_xunits)``
+        """
+        names_d = toolfolder.data.get("SP_epoch_names")
+        if names_d is not None and names_d.nparray is not None:
+            epoch_names = [str(n) for n in names_d.nparray]
+            spike_times: list[np.ndarray] = []
+            detected_xunits: str | None = None
+            for en in epoch_names:
+                d = toolfolder.data.get("SP_" + en)
+                arr = d.nparray if d is not None else None
+                spike_times.append(arr if arr is not None else np.array([]))
+                if detected_xunits is None and d is not None:
+                    detected_xunits = d.yscale.units
+            return spike_times, epoch_names, detected_xunits
+        # Fallback: scan by name (backward compat — legacy toolfolders without SP_epoch_names)
+        spike_times = []
+        epoch_names = []
+        detected_xunits = None
+        for d in toolfolder.data.values():
+            if not isinstance(d, NMData):
+                continue
+            name = d.name
+            if not name.startswith("SP_"):
+                continue
+            if any(name == p or name.startswith(p + "_") for p in self._SP_SKIP):
+                continue
+            arr = d.nparray
+            spike_times.append(arr if arr is not None else np.array([]))
+            epoch_names.append(name[3:])
+            if detected_xunits is None:
+                detected_xunits = d.yscale.units
+        return spike_times, epoch_names, detected_xunits
+
+    def raster(
+        self,
+        x0: float | None = None,
+        x1: float | None = None,
+        toolfolder: NMToolFolder | None = None,
+    ) -> tuple[list[np.ndarray], list[str]]:
         """Return spike times and epoch labels ready for raster plotting.
 
-        Returns the internal spike times collected during the most recent
-        :meth:`run_all` call as a pair of parallel lists — one entry per
-        epoch — without requiring the caller to know the subfolder structure.
+        By default returns the internal spike times collected during the most
+        recent :meth:`run_all` call.  Pass *toolfolder* to reconstruct from
+        the ``SP_`` NMData arrays saved in a previous run's subfolder instead.
 
         Example::
 
@@ -454,27 +512,124 @@ class NMToolSpike(NMTool):
             ax.set_yticks(range(len(labels)))
             ax.set_yticklabels(labels)
 
+        Args:
+            x0: Lower bound for filtering spike times. Default None (no lower
+                bound).
+            x1: Upper bound for filtering spike times. Default None (no upper
+                bound).
+            toolfolder: Optional Spike toolfolder from a previous run.  When
+                provided, spike times are read from its ``SP_*`` arrays rather
+                than from in-memory state.
+
         Returns:
             ``(spike_times, epoch_names)`` where *spike_times* is a list of
             numpy arrays (one per epoch, possibly empty) and *epoch_names*
             is the corresponding list of data array names.
 
         Raises:
-            RuntimeError: If called before :meth:`run_all`.
+            RuntimeError: If called before :meth:`run_all` (no toolfolder)
+                or if the toolfolder contains no ``SP_`` arrays.
         """
-        if not self._epoch_names:
-            raise RuntimeError(
-                "NMToolSpike.raster: no spike data — run detection first"
-            )
-        return list(self._spike_times), list(self._epoch_names)
+        if toolfolder is not None:
+            spike_times, epoch_names, _ = self._spike_times_from_toolfolder(toolfolder)
+            if not epoch_names:
+                raise RuntimeError(
+                    "NMToolSpike.raster: no SP_ arrays found in toolfolder"
+                )
+        else:
+            if not self._epoch_names:
+                raise RuntimeError(
+                    "NMToolSpike.raster: no spike data — run detection first"
+                )
+            spike_times = list(self._spike_times)
+            epoch_names = list(self._epoch_names)
+        if x0 is not None or x1 is not None:
+            lo = float(x0) if x0 is not None else -math.inf
+            hi = float(x1) if x1 is not None else math.inf
+            spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
+        return spike_times, list(epoch_names)
+
+    def _result_array_name(
+        self, prefix: str, folder: NMToolFolder, overwrite: bool
+    ) -> str:
+        """Return a numbered array name for a PST/ISI result array.
+
+        With *overwrite* True returns ``{prefix}_0``.  With *overwrite* False
+        finds the first unused ``{prefix}_0``, ``{prefix}_1``, … in *folder*.
+        """
+        if overwrite:
+            return "%s_0" % prefix
+        i = 0
+        while ("%s_%d" % (prefix, i)) in folder.data:
+            i += 1
+        return "%s_%d" % (prefix, i)
+
+    def intervals(
+        self,
+        x0: float | None = None,
+        x1: float | None = None,
+        toolfolder: NMToolFolder | None = None,
+    ) -> tuple[list[np.ndarray], list[str]]:
+        """Return per-epoch interspike intervals ready for analysis or plotting.
+
+        For each epoch computes ``numpy.diff`` of the (optionally filtered)
+        spike times.  Epochs with fewer than two spikes produce an empty array.
+
+        By default reads from the most recent :meth:`run_all` call.  Pass
+        *toolfolder* to reconstruct from a previous run's ``SP_*`` arrays.
+
+        Example::
+
+            ivs, labels = tool.intervals()
+            for ivs_epoch, label in zip(ivs, labels):
+                print(label, ivs_epoch.mean())
+
+        Args:
+            x0: Lower bound for filtering spike times before computing
+                intervals. Default None (no lower bound).
+            x1: Upper bound for filtering spike times before computing
+                intervals. Default None (no upper bound).
+            toolfolder: Optional Spike toolfolder from a previous run.  When
+                provided, spike times are read from its ``SP_*`` arrays.
+
+        Returns:
+            ``(interval_arrays, epoch_names)`` where *interval_arrays* is a
+            list of numpy arrays (one per epoch, possibly empty) and
+            *epoch_names* is the corresponding list of data array names.
+
+        Raises:
+            RuntimeError: If called before :meth:`run_all` (no toolfolder)
+                or if the toolfolder contains no ``SP_`` arrays.
+        """
+        if toolfolder is not None:
+            spike_times, epoch_names, _ = self._spike_times_from_toolfolder(toolfolder)
+            if not epoch_names:
+                raise RuntimeError(
+                    "NMToolSpike.intervals: no SP_ arrays found in toolfolder"
+                )
+        else:
+            if not self._spike_times:
+                raise RuntimeError(
+                    "NMToolSpike.intervals: no spike data — run detection first"
+                )
+            spike_times = list(self._spike_times)
+            epoch_names = list(self._epoch_names)
+        if x0 is not None or x1 is not None:
+            lo = float(x0) if x0 is not None else -math.inf
+            hi = float(x1) if x1 is not None else math.inf
+            spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
+        return [np.diff(t) for t in spike_times], list(epoch_names)
 
     def extract_spike_waveforms(
         self,
         pre: float,
         post: float,
+        x0: float | None = None,
+        x1: float | None = None,
         clip_to_next_spike: bool = False,
         edge: str = "skip",
         align: str = "zero",
+        toolfolder: NMToolFolder | None = None,
     ) -> list[NMData]:
         """Extract fixed-width waveform snippets around each detected spike.
 
@@ -483,9 +638,20 @@ class NMToolSpike(NMTool):
         array and writes the snippet as a new NMData array (``SPK_{ch}{n}``)
         in the Spike subfolder.
 
+        Pass *toolfolder* to instead reconstruct spike times from a previous
+        run's ``SP_*`` arrays.  Source recordings are looked up by epoch name
+        from ``self.folder.data``; epochs whose source array cannot be found
+        are silently skipped.  Snippets are written back into *toolfolder*.
+
         Args:
             pre:               Time before spike in source x-units. Must be > 0.
             post:              Time after spike in source x-units. Must be > 0.
+            x0:                Lower bound for filtering spike times before
+                extracting waveforms. Default None (no lower bound). Spikes
+                with times < *x0* are skipped.
+            x1:                Upper bound for filtering spike times before
+                extracting waveforms. Default None (no upper bound). Spikes
+                with times > *x1* are skipped.
             clip_to_next_spike: If True, samples in the post window that fall
                 beyond the next spike time are replaced with ``NaN``, so the
                 snippet does not contain data from the next spike's waveform.
@@ -508,12 +674,29 @@ class NMToolSpike(NMTool):
                 * ``"source"`` — x values preserved from the source
                   recording; no shift is applied.
 
+            toolfolder:        Optional Spike toolfolder from a previous run.
+                When provided, spike times are read from its ``SP_*`` arrays,
+                source recordings are looked up from ``self.folder.data`` by
+                epoch name, and snippets are written into *toolfolder*.
+
         Returns:
             List of newly created NMData arrays, one per non-skipped spike
             across all processed epochs.
 
+        Note:
+            When the source array has a non-uniform xarray (e.g. a recording
+            with two different sample rates), the number of samples extracted
+            is determined by ``numpy.median(numpy.diff(xarray))`` — a
+            pragmatic single-pass estimate of the typical sample interval.
+            This means the actual duration covered by *pre* and *post* may
+            differ from requested for spikes in regions whose local sample
+            rate differs from the median.  The output xarray is always a
+            direct slice of the source (nonuniform spacing is preserved);
+            only the sample count is affected.
+
         Raises:
-            RuntimeError: If called before :meth:`run_all`.
+            RuntimeError: If called before :meth:`run_all` (no toolfolder)
+                or if the toolfolder contains no ``SP_`` arrays.
             ValueError:   If *pre* or *post* <= 0, or *edge* is not
                           ``"skip"`` or ``"pad"``.
             ValueError:   If *align* is not ``"zero"``, ``"spike"``, or
@@ -547,20 +730,41 @@ class NMToolSpike(NMTool):
             raise ValueError(
                 "align must be one of %s, got %r" % (list(_VALID_ALIGNS), align)
             )
-        if not self._epoch_names:
-            raise RuntimeError(
-                "NMToolSpike.extract_spike_waveforms: no spike data — run detection first"
-            )
+        if toolfolder is not None:
+            spike_times_list, epoch_names_list, _ = self._spike_times_from_toolfolder(toolfolder)
+            if not epoch_names_list:
+                raise RuntimeError(
+                    "NMToolSpike.extract_spike_waveforms: no SP_ arrays found in toolfolder"
+                )
+            source_data_list: list[NMData | None] = []
+            for en in epoch_names_list:
+                src = (
+                    self.folder.data.get(en)
+                    if isinstance(self.folder, NMFolder)
+                    else None
+                )
+                source_data_list.append(src)
+            out_folder: NMToolFolder | None = toolfolder
+        else:
+            if not self._epoch_names:
+                raise RuntimeError(
+                    "NMToolSpike.extract_spike_waveforms: no spike data — run detection first"
+                )
+            spike_times_list = self._spike_times
+            epoch_names_list = self._epoch_names
+            source_data_list = self._source_data
+            out_folder = None
 
         output: list[NMData] = []
         ch_char = self.channel.name if self.channel is not None else "A"
-        toolfolder: NMToolFolder | None = None
         spike_counter: int = 0
         matches: dict[tuple[str, int], NMData] = {}
 
         for epoch_name, spike_times_arr, source in zip(
-            self._epoch_names, self._spike_times, self._source_data
+            epoch_names_list, spike_times_list, source_data_list
         ):
+            if source is None:
+                continue
             ydata = source.nparray
             if ydata is None:
                 continue
@@ -571,6 +775,13 @@ class NMToolSpike(NMTool):
                 delta_for_samples = float(np.median(np.diff(source.xarray)))
             else:
                 delta_for_samples = float(source.xscale.delta)
+
+            if x0 is not None or x1 is not None:
+                lo = float(x0) if x0 is not None else -math.inf
+                hi = float(x1) if x1 is not None else math.inf
+                spike_times_arr = spike_times_arr[
+                    (spike_times_arr >= lo) & (spike_times_arr <= hi)
+                ]
 
             pre_samples = int(round(pre / abs(delta_for_samples)))
 
@@ -658,10 +869,10 @@ class NMToolSpike(NMTool):
                     "label": source.yscale.label,
                     "units": source.yscale.units,
                 }
-                if toolfolder is None:
-                    toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
+                if out_folder is None:
+                    out_folder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
                 array_name = "SPK_%s%d" % (ch_char, spike_counter)
-                d = toolfolder.data.new(
+                d = out_folder.data.new(
                     array_name,
                     nparray=snippet,
                     xarray=x_snippet,
@@ -684,8 +895,8 @@ class NMToolSpike(NMTool):
                 self._add_note(d, note)
                 output.append(d)
 
-        if toolfolder is not None:
-            toolfolder.build_dataseries("SPK_", matches)
+        if out_folder is not None:
+            out_folder.build_dataseries("SPK_", matches)
         return output
 
     # ------------------------------------------------------------------
@@ -697,13 +908,19 @@ class NMToolSpike(NMTool):
         x0: float | None = None,
         x1: float | None = None,
         output_mode: str = "count",
+        overwrite: bool = True,
+        toolfolder: NMToolFolder | None = None,
     ) -> NMData | None:
         """Compute a peri-stimulus time (PST) histogram from spike times.
 
-        Pools all spike times across epochs from the most recent
-        :meth:`run_all` call, computes a histogram via
+        Pools all spike times across epochs, computes a histogram via
         :func:`~pyneuromatic.core.nm_math.histogram`, and writes the result
-        as ``SP_PST`` in the current Spike subfolder.
+        as ``SP_PST`` in the Spike subfolder.
+
+        By default reads from the most recent :meth:`run_all` call's in-memory
+        state and writes to ``self._toolfolder``.  Pass *toolfolder* to instead
+        reconstruct spike times from a previous run's ``SP_*`` arrays and write
+        ``SP_PST`` back into that same subfolder.
 
         Args:
             bins: Number of histogram bins. Default 100.
@@ -719,11 +936,20 @@ class NMToolSpike(NMTool):
                 * ``"probability"`` — fraction of epochs with a spike in
                   each bin: ``count / n_epochs`` (values in ``[0, 1]``).
 
+            overwrite: If True (default), result is written as ``SP_PST_0``,
+                replacing any existing array of that name.  If False, a new
+                ``SP_PST_0``, ``SP_PST_1``, … is created so previous results
+                are preserved.
+            toolfolder: Optional Spike toolfolder from a previous run.  When
+                provided, spike times are read from its ``SP_*`` arrays and
+                the result is written back into it.
+
         Returns:
-            The new ``SP_PST`` NMData, or None if no spikes were detected.
+            The new ``SP_PST_N`` NMData, or None if no spikes were detected.
 
         Raises:
-            RuntimeError: If called before :meth:`run_all`.
+            RuntimeError: If called before :meth:`run_all` (no toolfolder)
+                or if the toolfolder contains no ``SP_`` arrays.
             ValueError: If *output_mode* is not ``"count"``, ``"rate"``,
                 or ``"probability"``.
         """
@@ -734,11 +960,24 @@ class NMToolSpike(NMTool):
                 "output_mode must be one of %s, got %r"
                 % (list(_VALID_MODES), output_mode)
             )
-        if not self._spike_times:
-            raise RuntimeError(
-                "NMToolSpike.pst: no spike data — run detection first"
-            )
-        all_times = np.concatenate(self._spike_times)
+        if toolfolder is not None:
+            spike_times, _, detected_xunits = self._spike_times_from_toolfolder(toolfolder)
+            if not spike_times:
+                raise RuntimeError(
+                    "NMToolSpike.pst: no SP_ arrays found in toolfolder"
+                )
+            out_folder = toolfolder
+        else:
+            if not self._spike_times:
+                raise RuntimeError(
+                    "NMToolSpike.pst: no spike data — run detection first"
+                )
+            spike_times = self._spike_times
+            detected_xunits = self._detected_xunits
+            if self._toolfolder is None:
+                self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
+            out_folder = self._toolfolder
+        all_times = np.concatenate(spike_times)
         if len(all_times) == 0:
             return None
         xrange: tuple[float, float] | None = None
@@ -749,7 +988,7 @@ class NMToolSpike(NMTool):
         result = nm_math.histogram(all_times, bins=bins, xrange=xrange)
         counts, edges = result["counts"], result["edges"]
         delta = float(edges[1] - edges[0])
-        n_epochs = len(self._spike_times)
+        n_epochs = len(spike_times)
         if output_mode == "rate":
             ydata = counts.astype(float) / (n_epochs * delta)
             ylabel = "Spike rate (Hz)"
@@ -759,16 +998,17 @@ class NMToolSpike(NMTool):
         else:
             ydata = counts.astype(float)
             ylabel = "Spike count"
-        if self._toolfolder is None:
-            self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
-        d = self._toolfolder.data.new(
-            "SP_PST",
+        pst_name = self._result_array_name("SP_PST", out_folder, overwrite)
+        if pst_name in out_folder.data:
+            del out_folder.data[pst_name]
+        d = out_folder.data.new(
+            pst_name,
             nparray=ydata,
             xscale={
                 "start": float(edges[0]),
                 "delta": delta,
                 "label": "Time",
-                "units": self._detected_xunits,
+                "units": detected_xunits,
             },
             yscale={"label": ylabel},
         )
@@ -787,15 +1027,22 @@ class NMToolSpike(NMTool):
         min_isi: float | None = None,
         max_isi: float | None = None,
         output_mode: str = "count",
+        overwrite: bool = True,
+        toolfolder: NMToolFolder | None = None,
     ) -> NMData | None:
         """Compute an interspike interval (ISI) histogram from spike times.
 
         Optionally filters spike times to a window [*x0*, *x1*] before
         computing intervals. Computes ``numpy.diff`` of each epoch's
         (filtered) spike times, pools the intervals across all epochs, and
-        writes the histogram as ``SP_ISI`` in the current Spike subfolder.
+        writes the histogram as ``SP_ISI`` in the Spike subfolder.
         Epochs with fewer than two spikes (after filtering) contribute no
         intervals.
+
+        By default reads from the most recent :meth:`run_all` call's in-memory
+        state.  Pass *toolfolder* to instead reconstruct spike times from a
+        previous run's ``SP_*`` arrays and write ``SP_ISI`` back into that
+        same subfolder.
 
         Args:
             bins:        Number of histogram bins. Default 100.
@@ -815,12 +1062,21 @@ class NMToolSpike(NMTool):
                            normalised to a probability distribution
                            (sums to 1.0).
 
+            overwrite:   If True (default), result is written as ``SP_ISI_0``,
+                         replacing any existing array of that name.  If False,
+                         a new ``SP_ISI_0``, ``SP_ISI_1``, … is created so
+                         previous results are preserved.
+            toolfolder:  Optional Spike toolfolder from a previous run.  When
+                         provided, spike times are read from its ``SP_*``
+                         arrays and the result is written back into it.
+
         Returns:
-            The new ``SP_ISI`` NMData, or None if fewer than 2 spikes total
+            The new ``SP_ISI_N`` NMData, or None if fewer than 2 spikes total
             (after x0/x1 filtering).
 
         Raises:
-            RuntimeError: If called before :meth:`run_all`.
+            RuntimeError: If called before :meth:`run_all` (no toolfolder)
+                or if the toolfolder contains no ``SP_`` arrays.
             ValueError:   If *output_mode* is not ``"count"`` or
                           ``"probability"``.
         """
@@ -831,19 +1087,21 @@ class NMToolSpike(NMTool):
                 "output_mode must be one of %s, got %r"
                 % (list(_VALID_MODES), output_mode)
             )
-        if not self._spike_times:
-            raise RuntimeError(
-                "NMToolSpike.isi: no spike data — run detection first"
-            )
-        spike_times = self._spike_times
-        if x0 is not None or x1 is not None:
-            lo = float(x0) if x0 is not None else -math.inf
-            hi = float(x1) if x1 is not None else math.inf
-            spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
-        intervals = [np.diff(t) for t in spike_times if len(t) >= 2]
-        if not intervals:
+        # intervals() validates spike data and applies x0/x1 filtering
+        interval_arrays, _ = self.intervals(x0=x0, x1=x1, toolfolder=toolfolder)
+        valid = [iv for iv in interval_arrays if len(iv) > 0]
+        if not valid:
             return None
-        all_isis = np.concatenate(intervals)
+        all_isis = np.concatenate(valid)
+        # output folder and x-units
+        if toolfolder is not None:
+            _, _, detected_xunits = self._spike_times_from_toolfolder(toolfolder)
+            out_folder = toolfolder
+        else:
+            detected_xunits = self._detected_xunits
+            if self._toolfolder is None:
+                self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
+            out_folder = self._toolfolder
         lo_isi = float(min_isi) if min_isi is not None else None
         hi_isi = float(max_isi) if max_isi is not None else None
         if lo_isi is not None or hi_isi is not None:
@@ -864,16 +1122,17 @@ class NMToolSpike(NMTool):
         else:
             ydata = counts.astype(float)
             ylabel = "Count"
-        if self._toolfolder is None:
-            self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
-        d = self._toolfolder.data.new(
-            "SP_ISI",
+        isi_name = self._result_array_name("SP_ISI", out_folder, overwrite)
+        if isi_name in out_folder.data:
+            del out_folder.data[isi_name]
+        d = out_folder.data.new(
+            isi_name,
             nparray=ydata,
             xscale={
                 "start": float(edges[0]),
                 "delta": delta,
                 "label": "ISI",
-                "units": self._detected_xunits,
+                "units": detected_xunits,
             },
             yscale={"label": ylabel},
         )

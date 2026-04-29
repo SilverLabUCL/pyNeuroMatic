@@ -1040,7 +1040,7 @@ class TestNMToolStatsOverwrite(unittest.TestCase):
         tool, folder = self._setup(overwrite=False)
         self._fill_results(tool)
         tool._results_to_numpy()
-        self.assertIn("stats_0", folder.toolfolder)
+        self.assertIn("stats_0", folder.toolfolders)
 
     def test_overwrite_false_creates_stats_1_on_second_run(self):
         tool, folder = self._setup(overwrite=False)
@@ -1049,14 +1049,14 @@ class TestNMToolStatsOverwrite(unittest.TestCase):
         tool._NMToolStats__results.clear()
         self._fill_results(tool)
         tool._results_to_numpy()
-        self.assertIn("stats_0", folder.toolfolder)
-        self.assertIn("stats_1", folder.toolfolder)
+        self.assertIn("stats_0", folder.toolfolders)
+        self.assertIn("stats_1", folder.toolfolders)
 
     def test_overwrite_true_creates_stats_0(self):
         tool, folder = self._setup(overwrite=True)
         self._fill_results(tool)
         tool._results_to_numpy()
-        self.assertIn("stats_0", folder.toolfolder)
+        self.assertIn("stats_0", folder.toolfolders)
 
     def test_overwrite_true_reuses_stats_0_on_second_run(self):
         tool, folder = self._setup(overwrite=True)
@@ -1065,8 +1065,8 @@ class TestNMToolStatsOverwrite(unittest.TestCase):
         tool._NMToolStats__results.clear()
         self._fill_results(tool)
         tool._results_to_numpy()
-        self.assertIn("stats_0", folder.toolfolder)
-        self.assertNotIn("stats_1", folder.toolfolder)
+        self.assertIn("stats_0", folder.toolfolders)
+        self.assertNotIn("stats_1", folder.toolfolders)
 
     def test_overwrite_true_replaces_st_arrays(self):
         tool, folder = self._setup(overwrite=True)
