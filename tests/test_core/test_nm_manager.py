@@ -86,6 +86,8 @@ class NMManagerTestBase(unittest.TestCase):
             f.data.sets.add("set0", self.data_set0)
             f.dataseries.sets.add("set0", ["data", "avg"])
         self.nm.folders.sets.add("set0", ["folder0", "folder1"])
+        self.select_values["toolfolder"] = None
+        self.select_keys["toolfolder"] = None
 
 
 class TestNMManagerInit(NMManagerTestBase):
@@ -124,6 +126,7 @@ class TestNMManagerSelect(NMManagerTestBase):
     def test_select_keys_set_updates_hierarchy(self):
         s1 = {
             "folder": "folder1",
+            "toolfolder": None,
             "data": "data3",
             "dataseries": "data",
             "channel": "A",
@@ -146,6 +149,7 @@ class TestNMManagerSelect(NMManagerTestBase):
         self.nm.select_keys = {"dataseries": "avg"}
         expected = {
             "folder": "folder1",
+            "toolfolder": None,
             "data": "data3",
             "dataseries": "avg",
             "channel": "A",  # First channel in avg dataseries
@@ -189,6 +193,7 @@ class TestNMManagerSelect(NMManagerTestBase):
         self.nm.select_keys = s1
         expected = {
             "folder": "folder1",
+            "toolfolder": None,
             "data": "data3",
             "dataseries": "data",
             "channel": "A",
@@ -210,6 +215,7 @@ class TestNMManagerRunKeys(NMManagerTestBase):
     def test_run_keys_returns_selected_dataseries(self):
         s = self.nm.select_keys.copy()
         s.pop("data")
+        s.pop("toolfolder")
         elist = self.nm.run_keys(dataseries_priority=True)
         self.assertEqual(elist, [s])
 
@@ -218,6 +224,7 @@ class TestNMManagerRunKeys(NMManagerTestBase):
         s.pop("dataseries")
         s.pop("channel")
         s.pop("epoch")
+        s.pop("toolfolder")
         elist = self.nm.run_keys(dataseries_priority=False)
         self.assertEqual(elist, [s])
 
@@ -225,6 +232,7 @@ class TestNMManagerRunKeys(NMManagerTestBase):
         self.nm.run_reset_all()
         s = self.nm.select_keys.copy()
         s.pop("data")
+        s.pop("toolfolder")
         elist = self.nm.run_keys(dataseries_priority=True)
         self.assertEqual(elist, [s])
 
@@ -340,6 +348,7 @@ class TestNMManagerRunKeysSet(NMManagerTestBase):
         elist = self.nm.run_keys_set(e1)
         select = self.nm.select_keys.copy()
         select.pop("data")
+        select.pop("toolfolder")
         self.assertEqual(elist, [select])
 
     def test_channel_all_expands_to_all_channels(self):
@@ -593,6 +602,103 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         self.assertEqual(self.nm.select_keys["folder"], "folder0")
         self.assertEqual(self.nm.select_keys["dataseries"], "avg")
         # Channel/epoch should be whatever is selected in "avg" dataseries
+
+    def test_select_toolfolder_sets_folder_and_toolfolder(self):
+        f = self.nm.folders["folder2"]
+        tf = f.toolfolders.new("Spike_0")
+        self.nm.select_value_set(tf)
+        self.assertEqual(self.nm.select_keys["folder"], "folder2")
+        self.assertEqual(self.nm.select_keys["toolfolder"], "Spike_0")
+
+    def test_select_toolfolder_raises_for_wrong_manager(self):
+        other_nm = NMManager(quiet=QUIET)
+        other_folder = other_nm.folders.new("other")
+        other_tf = other_folder.toolfolders.new("Spike_0")
+        with self.assertRaises(ValueError):
+            self.nm.select_value_set(other_tf)
+
+
+class TestNMManagerToolfolderSelect(unittest.TestCase):
+    """Tests for toolfolder in select_keys / select_values / _select_keys_set."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        self.folder = self.nm.folders.new("folder0")
+        self.tf = self.folder.toolfolders.new("Spike_0")
+
+    def test_select_keys_includes_toolfolder(self):
+        self.assertIn("toolfolder", self.nm.select_keys)
+
+    def test_toolfolder_not_auto_selected_on_first_create(self):
+        # Creating the first toolfolder must NOT auto-select it — selecting a
+        # toolfolder switches the data/dataseries/channel/epoch context, so
+        # auto-selection would silently redirect normal folder-level workflows.
+        self.assertIsNone(self.nm.select_keys["toolfolder"])
+
+    def test_select_keys_toolfolder_reflects_selected(self):
+        self.nm.select_keys = {"toolfolder": "Spike_0"}
+        self.assertEqual(self.nm.select_keys["toolfolder"], "Spike_0")
+
+    def test_select_keys_toolfolder_none_when_nothing_selected(self):
+        self.folder.toolfolders._selected_name_set(None)
+        self.assertIsNone(self.nm.select_keys["toolfolder"])
+
+    def test_select_values_includes_toolfolder_object(self):
+        self.nm.select_keys = {"toolfolder": "Spike_0"}
+        sv = self.nm.select_values
+        self.assertIs(sv["toolfolder"], self.tf)
+
+    def test_select_keys_set_toolfolder(self):
+        tf2 = self.folder.toolfolders.new("Spike_1")
+        self.nm.select_keys = {"toolfolder": "Spike_1"}
+        self.assertEqual(self.nm.select_keys["toolfolder"], "Spike_1")
+
+    def test_select_keys_set_toolfolder_with_none_clears_selection(self):
+        self.nm.select_keys = {"toolfolder": "Spike_0"}
+        self.nm.select_keys = {"toolfolder": None}
+        self.assertIsNone(self.nm.select_keys["toolfolder"])
+
+    def test_select_keys_set_nonexistent_toolfolder_raises(self):
+        with self.assertRaises(KeyError):
+            self.nm.select_keys = {"toolfolder": "Nonexistent"}
+
+    def test_select_keys_set_data_targets_toolfolder_when_selected(self):
+        self.nm.select_keys = {"toolfolder": "Spike_0"}
+        d = self.tf.data.new("SPK_A0")
+        self.nm.select_keys = {"data": "SPK_A0"}
+        self.assertIs(self.nm.select_values["data"], d)
+        self.assertNotIn("SPK_A0", self.folder.data)
+
+    def test_select_keys_set_dataseries_targets_toolfolder_when_selected(self):
+        self.nm.select_keys = {"toolfolder": "Spike_0"}
+        ds = self.tf.dataseries.new("SPK")
+        self.nm.select_keys = {"dataseries": "SPK"}
+        self.assertIs(self.nm.select_values["dataseries"], ds)
+        self.assertNotIn("SPK", self.folder.dataseries)
+
+    def test_select_keys_set_channel_epoch_from_toolfolder_dataseries(self):
+        self.nm.select_keys = {"toolfolder": "Spike_0"}
+        ds = self.tf.dataseries.new("SPK")
+        ch = ds.channels.new()
+        ep = ds.epochs.new()
+        self.nm.select_keys = {"dataseries": "SPK", "channel": ch.name, "epoch": ep.name}
+        self.assertIs(self.nm.select_values["channel"], ch)
+        self.assertIs(self.nm.select_values["epoch"], ep)
+
+    def test_select_keys_set_data_targets_folder_when_no_toolfolder(self):
+        # toolfolder is None by default; data key refers to folder.data
+        d = self.folder.data.new("RecordA0")
+        self.nm.select_keys = {"data": "RecordA0"}
+        self.assertIs(self.nm.select_values["data"], d)
+
+    def test_select_values_data_reflects_toolfolder_context(self):
+        self.nm.select_keys = {"toolfolder": "Spike_0"}
+        d_folder = self.folder.data.new("RecordA0")
+        d_tf = self.tf.data.new("SPK_A0")
+        self.tf.data._selected_name_set("SPK_A0")
+        sv = self.nm.select_values
+        self.assertIs(sv["data"], d_tf)
+        self.assertIsNot(sv["data"], d_folder)
 
 
 class TestNMManagerCommandHistory(NMManagerTestBase):
@@ -899,6 +1005,182 @@ class TestSplitTargetsByChannel(unittest.TestCase):
         self.assertEqual(len(splits), 2)
         self.assertIn("channel", splits[0][0])
         self.assertNotIn("channel", splits[1][0])
+
+    def _tf_data(self, tf, name):
+        d = self.folder.data.new(name)
+        return {"folder": self.folder, "toolfolder": tf, "data": d}
+
+    def _tf_ds(self, tf, ds, ch, ep):
+        return {"folder": self.folder, "toolfolder": tf, "dataseries": ds,
+                "channel": ch, "epoch": ep}
+
+    def test_toolfolder_data_targets_grouped_per_toolfolder(self):
+        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        tf0 = self.folder.toolfolders.new("tf0")
+        tf1 = self.folder.toolfolders.new("tf1")
+        targets = [self._tf_data(tf0, "a0"), self._tf_data(tf0, "a1"),
+                   self._tf_data(tf1, "b0")]
+        splits = _split_targets_by_channel(targets)
+        self.assertEqual(len(splits), 2)
+        self.assertEqual(len(splits[0]), 2)
+        self.assertEqual(len(splits[1]), 1)
+
+    def test_toolfolder_dataseries_targets_grouped_per_channel(self):
+        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        tf = self.folder.toolfolders.new("tf0")
+        ds = tf.dataseries.new("SPK_")
+        ch_a = ds.channels.new("A")
+        ch_b = ds.channels.new("B")
+        ep = ds.epochs.new("E0")
+        targets = [self._tf_ds(tf, ds, ch_a, ep), self._tf_ds(tf, ds, ch_b, ep)]
+        splits = _split_targets_by_channel(targets)
+        self.assertEqual(len(splits), 2)
+        self.assertIs(splits[0][0]["channel"], ch_a)
+        self.assertIs(splits[1][0]["channel"], ch_b)
+
+    def test_toolfolder_targets_appear_before_basic_data(self):
+        tf = self.folder.toolfolders.new("tf0")
+        targets = [self._d("basic"), self._tf_data(tf, "tf_d")]
+        splits = _split_targets_by_channel(targets)
+        # toolfolder group comes first, basic data group last
+        self.assertIn("toolfolder", splits[0][0])
+        self.assertNotIn("toolfolder", splits[1][0])
+
+
+class TestNMManagerToolfolderRunValues(unittest.TestCase):
+    """Tests for run_values() toolfolder traversal branches."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        self.folder = self.nm.folders.new("folder0")
+        self.tf = self.folder.toolfolders.new("Spike_0")
+        self.d0 = self.tf.data.new("SP_A0")
+        self.d1 = self.tf.data.new("SP_A1")
+        self.ds = self.tf.dataseries.new("SPK_")
+        self.ch = self.ds.channels.new("A")
+        self.ep = self.ds.epochs.new("E0")
+
+    def test_no_toolfolder_run_target_produces_no_tf_entries(self):
+        # With no toolfolders created the container is empty → no tf targets
+        nm = NMManager(quiet=QUIET)
+        nm.folders.new("empty_folder")
+        targets = nm.run_values()
+        tf_targets = [t for t in targets if "toolfolder" in t]
+        self.assertEqual(len(tf_targets), 0)
+
+    def test_toolfolder_data_targets_produced(self):
+        self.folder.toolfolders.run_target = "all"
+        self.tf.data.run_target = "all"
+        targets = self.nm.run_values(dataseries_priority=False)
+        tf_targets = [t for t in targets if "toolfolder" in t]
+        self.assertEqual(len(tf_targets), 2)
+        for t in tf_targets:
+            self.assertIs(t["folder"], self.folder)
+            self.assertIs(t["toolfolder"], self.tf)
+            self.assertIn("data", t)
+            self.assertNotIn("channel", t)
+
+    def test_toolfolder_dataseries_targets_produced(self):
+        self.folder.toolfolders.run_target = "all"
+        self.tf.dataseries.run_target = "all"
+        self.ds.channels.run_target = "all"
+        self.ds.epochs.run_target = "all"
+        targets = self.nm.run_values(dataseries_priority=True)
+        tf_ds_targets = [t for t in targets if "toolfolder" in t and "channel" in t]
+        self.assertEqual(len(tf_ds_targets), 1)
+        t = tf_ds_targets[0]
+        self.assertIs(t["folder"], self.folder)
+        self.assertIs(t["toolfolder"], self.tf)
+        self.assertIs(t["dataseries"], self.ds)
+        self.assertIs(t["channel"], self.ch)
+        self.assertIs(t["epoch"], self.ep)
+
+    def test_toolfolder_targets_appear_before_folder_targets(self):
+        self.folder.data.new("rec0")
+        self.folder.data.run_target = "all"
+        self.folder.toolfolders.run_target = "all"
+        self.tf.data.run_target = "all"
+        targets = self.nm.run_values(dataseries_priority=False)
+        first_tf = next(i for i, t in enumerate(targets) if "toolfolder" in t)
+        first_basic = next(i for i, t in enumerate(targets) if "toolfolder" not in t)
+        self.assertLess(first_tf, first_basic)
+
+
+class TestNMManagerToolfolderRunKeysSet(unittest.TestCase):
+    """Tests for run_keys_set() toolfolder+data and toolfolder+dataseries modes."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        self.folder = self.nm.folders.new("folder0")
+        self.tf = self.folder.toolfolders.new("Spike_0")
+        self.d0 = self.tf.data.new("SP_A0")
+        self.d1 = self.tf.data.new("SP_A1")
+        self.ds = self.tf.dataseries.new("SPK_")
+        self.ch = self.ds.channels.new("A")
+        self.ep = self.ds.epochs.new("E0")
+
+    def test_toolfolder_data_mode_returns_targets(self):
+        elist = self.nm.run_keys_set({
+            "folder": "all", "toolfolder": "all", "data": "all",
+        })
+        self.assertEqual(len(elist), 2)
+        for e in elist:
+            self.assertIn("toolfolder", e)
+            self.assertIn("data", e)
+            self.assertNotIn("channel", e)
+
+    def test_toolfolder_dataseries_mode_returns_targets(self):
+        elist = self.nm.run_keys_set({
+            "folder": "all", "toolfolder": "all",
+            "dataseries": "all", "channel": "all", "epoch": "all",
+        })
+        self.assertEqual(len(elist), 1)
+        e = elist[0]
+        self.assertIn("toolfolder", e)
+        self.assertIn("channel", e)
+        self.assertEqual(e["toolfolder"], "Spike_0")
+        self.assertEqual(e["channel"], "A")
+
+    def test_toolfolder_data_mode_target_dict_keys(self):
+        elist = self.nm.run_keys_set({
+            "folder": "folder0", "toolfolder": "Spike_0", "data": "SP_A0",
+        })
+        self.assertEqual(len(elist), 1)
+        self.assertEqual(elist[0]["folder"], "folder0")
+        self.assertEqual(elist[0]["toolfolder"], "Spike_0")
+        self.assertEqual(elist[0]["data"], "SP_A0")
+
+    def test_toolfolder_dataseries_requires_channel(self):
+        with self.assertRaises(KeyError):
+            self.nm.run_keys_set({
+                "folder": "folder0", "toolfolder": "Spike_0",
+                "dataseries": "SPK_", "epoch": "all",
+            })
+
+    def test_toolfolder_dataseries_requires_epoch(self):
+        with self.assertRaises(KeyError):
+            self.nm.run_keys_set({
+                "folder": "folder0", "toolfolder": "Spike_0",
+                "dataseries": "SPK_", "channel": "all",
+            })
+
+
+class TestNMManagerToolfolderRunReset(unittest.TestCase):
+    """Tests for run_reset_all() resetting toolfolder run targets."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        self.folder = self.nm.folders.new("folder0")
+        self.tf = self.folder.toolfolders.new("Spike_0")
+        self.tf.data.new("SP_A0")
+
+    def test_run_reset_all_clears_toolfolder_run_target(self):
+        self.folder.toolfolders.run_target = "all"
+        self.tf.data.run_target = "all"
+        self.nm.run_reset_all()
+        # After reset, run_target reverts to "selected" at each tier
+        self.assertEqual(self.folder.toolfolders.run_target, "selected")
+        self.assertEqual(self.tf.data.run_target, "selected")
 
 
 if __name__ == "__main__":

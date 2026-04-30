@@ -39,13 +39,15 @@ from pyneuromatic.core.nm_tool_registry import get_global_registry, NMToolRegist
 from pyneuromatic.core.nm_workspace import NMWorkspace, NMWorkspaceManager
 import pyneuromatic.core.nm_utilities as nmu
 
+from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+
 if TYPE_CHECKING:
     from pyneuromatic.analysis.nm_tool import NMTool
 
 nm = None  # holds Manager, accessed via console
 
 # Hierarchy tier selection keys (folder down to epoch)
-HIERARCHY_SELECT_KEYS = ("folder", "data", "dataseries", "channel", "epoch")
+HIERARCHY_SELECT_KEYS = ("folder", "toolfolder", "data", "dataseries", "channel", "epoch")
 
 # Run target constants (consistent with RunMode in NMObjectContainer)
 RUN_SELECTED = "selected"
@@ -71,12 +73,19 @@ NMManager (NMObject, root)
 def _split_targets_by_channel(
     targets: list[dict],
 ) -> list[list[dict]]:
-    """Group run targets by (folder, dataseries, channel) for dataseries mode.
+    """Group run targets by channel (or toolfolder) for per-channel tool calls.
 
-    Dataseries-mode targets (those with a ``"channel"`` key) are split into
-    one group per unique ``(folder, dataseries, channel)`` combination,
-    preserving the order of first encounter.  Data-mode targets (no
-    ``"channel"`` key) are collected into a single group appended last.
+    Targets are split into groups, each passed as a single ``tool.run_all()``
+    call, in this priority order:
+
+    1. Toolfolder+dataseries targets (``"toolfolder"`` and ``"channel"`` keys):
+       one group per ``(folder, toolfolder, dataseries, channel)`` combination.
+    2. Toolfolder+data targets (``"toolfolder"`` key, no ``"channel"``):
+       one group per ``(folder, toolfolder)`` combination.
+    3. Basic dataseries targets (``"channel"`` key, no ``"toolfolder"``):
+       one group per ``(folder, dataseries, channel)`` combination.
+    4. Basic data targets (neither ``"toolfolder"`` nor ``"channel"``):
+       collected into a single group appended last.
 
     Args:
         targets: Flat list of target dicts as returned by
@@ -86,17 +95,33 @@ def _split_targets_by_channel(
         List of target-dict groups, each suitable for a single
         ``tool.run_all()`` call.
     """
+    tf_ds_groups: dict[tuple, list[dict]] = {}
+    tf_data_groups: dict[tuple, list[dict]] = {}
     ds_groups: dict[tuple, list[dict]] = {}
     data_targets: list[dict] = []
     for t in targets:
-        if "channel" in t:
+        if "toolfolder" in t:
+            if "channel" in t:
+                key = (
+                    id(t.get("folder")),
+                    id(t.get("toolfolder")),
+                    id(t.get("dataseries")),
+                    id(t.get("channel")),
+                )
+                tf_ds_groups.setdefault(key, []).append(t)
+            else:
+                key = (id(t.get("folder")), id(t.get("toolfolder")))
+                tf_data_groups.setdefault(key, []).append(t)
+        elif "channel" in t:
             key = (id(t.get("folder")), id(t.get("dataseries")), id(t.get("channel")))
-            if key not in ds_groups:
-                ds_groups[key] = []
-            ds_groups[key].append(t)
+            ds_groups.setdefault(key, []).append(t)
         else:
             data_targets.append(t)
-    groups: list[list[dict]] = list(ds_groups.values())
+    groups: list[list[dict]] = (
+        list(tf_ds_groups.values())
+        + list(tf_data_groups.values())
+        + list(ds_groups.values())
+    )
     if data_targets:
         groups.append(data_targets)
     return groups
@@ -335,11 +360,17 @@ class NMManager(NMObject):
         if not isinstance(f, NMFolder):
             return
 
-        # Data and DataSeries are siblings at folder tier
-        yield ("data", f.data, f.data.selected_value)
+        # Toolfolder is resolved first — it acts as a context switch.
+        # When a toolfolder is selected, data/dataseries/channel/epoch
+        # draw from its containers instead of the folder's.
+        tf = f.toolfolders.selected_value
+        yield ("toolfolder", f.toolfolders, tf)
 
-        ds = f.dataseries.selected_value
-        yield ("dataseries", f.dataseries, ds)
+        ctx = tf if isinstance(tf, NMToolFolder) else f
+        yield ("data", ctx.data, ctx.data.selected_value)
+
+        ds = ctx.dataseries.selected_value
+        yield ("dataseries", ctx.dataseries, ds)
 
         if not isinstance(ds, NMDataSeries):
             return
@@ -350,7 +381,30 @@ class NMManager(NMObject):
 
     @property
     def select_values(self) -> dict[str, NMObject | None]:
-        """Get the currently selected object at each hierarchy tier."""
+        """Return the currently selected ``NMObject`` at each hierarchy tier.
+
+        Traverses the hierarchy from folder down to epoch, following the
+        selected item at each tier.  Tiers that have no selection, or whose
+        parent tier has no selection, are ``None``.
+
+        Returns a new dict on every call with keys from
+        ``HIERARCHY_SELECT_KEYS``: ``"folder"``, ``"toolfolder"``,
+        ``"data"``, ``"dataseries"``, ``"channel"``, ``"epoch"``.
+
+        ``"toolfolder"`` reflects the selected item in the current folder's
+        toolfolder container and is independent of ``"dataseries"``.
+        ``"channel"`` and ``"epoch"`` depend on ``"dataseries"`` being
+        selected — they are ``None`` if no dataseries is selected.
+
+        Returns:
+            Dict mapping tier name → selected ``NMObject``, or ``None`` if
+            nothing is selected at that tier.
+
+        See Also:
+            :attr:`select_keys` — same result with name strings instead of objects.
+            :attr:`select_keys` (setter) — set selection by name.
+            :meth:`select_value_set` — set selection by object reference.
+        """
         result: dict[str, NMObject | None] = {tier: None for tier in HIERARCHY_SELECT_KEYS}
         for tier, container, value in self._iter_select_hierarchy():
             result[tier] = value
@@ -358,7 +412,35 @@ class NMManager(NMObject):
 
     @property
     def select_keys(self) -> dict[str, str | None]:
-        """Get the names of currently selected objects at each hierarchy tier."""
+        """Return the name of the currently selected object at each hierarchy tier.
+
+        Same traversal as :attr:`select_values` but returns name strings
+        instead of object references.  Unselected tiers are ``None``.
+
+        When no toolfolder is selected, ``"data"``, ``"dataseries"``,
+        ``"channel"``, and ``"epoch"`` reflect the folder's contents::
+
+            nm.select_keys
+            # {"folder": "folder0", "toolfolder": None,
+            #  "data": "RecordA0", "dataseries": "Record",
+            #  "channel": "A", "epoch": "E0"}
+
+        When a toolfolder is selected, those four tiers reflect the
+        toolfolder's contents instead::
+
+            nm.select_keys
+            # {"folder": "folder0", "toolfolder": "Spike_0",
+            #  "data": "SPK_A0", "dataseries": "SPK",
+            #  "channel": "A", "epoch": "E0"}
+
+        Returns:
+            Dict mapping tier name → selected object name string, or ``None``
+            if nothing is selected at that tier.
+
+        See Also:
+            :attr:`select_values` — same result with ``NMObject`` instances.
+            :meth:`select_value_set` — set selection by object reference.
+        """
         result: dict[str, str | None] = {tier: None for tier in HIERARCHY_SELECT_KEYS}
         for tier, container, value in self._iter_select_hierarchy():
             if isinstance(value, NMObject):
@@ -413,12 +495,18 @@ class NMManager(NMObject):
         if not isinstance(f, NMFolder):
             return
 
-        if "data" in select:
-            f.data._selected_name_set(select["data"])
-        if "dataseries" in select:
-            f.dataseries._selected_name_set(select["dataseries"])
+        if "toolfolder" in select:
+            f.toolfolders._selected_name_set(select["toolfolder"])
 
-        ds = f.dataseries.selected_value
+        tf = f.toolfolders.selected_value
+        ctx = tf if isinstance(tf, NMToolFolder) else f
+
+        if "data" in select:
+            ctx.data._selected_name_set(select["data"])
+        if "dataseries" in select:
+            ctx.dataseries._selected_name_set(select["dataseries"])
+
+        ds = ctx.dataseries.selected_value
         if not isinstance(ds, NMDataSeries):
             return
 
@@ -488,13 +576,19 @@ class NMManager(NMObject):
             # Parent is NMFolder directly (skips container)
             current = current._parent
 
+        if isinstance(current, NMToolFolder):
+            select["toolfolder"] = current.name
+            # Parent is NMFolder directly (skips NMToolFolderContainer)
+            current = current._parent
+
         if isinstance(current, NMFolder):
             select["folder"] = current.name
 
         if not select:
             raise ValueError(
                 f"object type '{type(obj).__name__}' is not a recognized "
-                f"hierarchy type (NMFolder, NMData, NMDataSeries, NMChannel, NMEpoch)"
+                f"hierarchy type "
+                f"(NMFolder, NMToolFolder, NMData, NMDataSeries, NMChannel, NMEpoch)"
             )
 
         # Use existing _select_keys_set to apply the selection
@@ -504,6 +598,50 @@ class NMManager(NMObject):
         self,
         dataseries_priority: bool = True
     ) -> list[dict[str, NMObject]]:
+        """Return the current run targets as a flat list of selection dicts.
+
+        Each dict maps hierarchy tier names to the corresponding ``NMObject``
+        instances.  Four target shapes are possible, depending on which run
+        targets are active:
+
+        - **Toolfolder + dataseries** (``"toolfolder"`` and ``"channel"`` keys):
+          ``{"folder", "toolfolder", "dataseries", "channel", "epoch"}`` —
+          produced when a toolfolder has non-empty dataseries run targets and
+          ``dataseries_priority`` is ``True``.
+        - **Toolfolder + data** (``"toolfolder"`` key, no ``"channel"``):
+          ``{"folder", "toolfolder", "data"}`` — produced when a toolfolder
+          has non-empty data run targets (or dataseries run targets are empty /
+          ``dataseries_priority`` is ``False``).
+        - **Dataseries** (``"channel"`` key, no ``"toolfolder"``):
+          ``{"folder", "dataseries", "channel", "epoch"}`` — produced when the
+          folder has non-empty dataseries run targets and ``dataseries_priority``
+          is ``True``.
+        - **Data** (neither ``"toolfolder"`` nor ``"channel"``):
+          ``{"folder", "data"}`` — produced when dataseries run targets are
+          empty or ``dataseries_priority`` is ``False``.
+
+        Toolfolder targets are listed before folder-level targets.  Within
+        each branch, ordering follows the order of first encounter in the
+        respective containers.
+
+        Run targets at each tier are controlled via :meth:`run_keys_set` or by
+        setting ``run_target`` directly on the container (e.g.
+        ``folder.toolfolders.run_target = "all"``).
+
+        Args:
+            dataseries_priority: When ``True`` (default), prefer the dataseries
+                branch over the data branch within both folder-level and
+                toolfolder-level targets.  When ``False``, always use the data
+                branch.
+
+        Returns:
+            Flat list of selection dicts.  Empty if no folders or no run
+            targets are set.
+
+        See Also:
+            :meth:`run_keys` — same result with object names instead of objects.
+            :meth:`run_keys_set` — configure run targets at all tiers at once.
+        """
         elist: list[dict[str, NMObject]] = []
         folders = self.__folders
         if folders is None:
@@ -512,6 +650,33 @@ class NMManager(NMObject):
         for f in flist:
             if not isinstance(f, NMFolder):
                 continue
+
+            # Toolfolder branches — produced whenever toolfolder run targets
+            # are non-empty (set explicitly via run_keys_set or manually).
+            for tf in f.toolfolders.run_targets:
+                if not isinstance(tf, NMToolFolder):
+                    continue
+                tf_dslist = tf.dataseries.run_targets
+                if dataseries_priority and tf_dslist:
+                    # Toolfolder + dataseries mode
+                    for ds in tf_dslist:
+                        if not isinstance(ds, NMDataSeries):
+                            continue
+                        for c in ds.channels.run_targets:
+                            for e in ds.epochs.run_targets:
+                                elist.append({
+                                    "folder": f,
+                                    "toolfolder": tf,
+                                    "dataseries": ds,
+                                    "channel": c,
+                                    "epoch": e,
+                                })
+                else:
+                    # Toolfolder + data mode
+                    for d in tf.data.run_targets:
+                        elist.append({"folder": f, "toolfolder": tf, "data": d})
+
+            # Existing folder-level branches
             dslist = f.dataseries.run_targets
             if dataseries_priority and dslist:
                 for ds in dslist:
@@ -519,25 +684,49 @@ class NMManager(NMObject):
                         continue
                     for c in ds.channels.run_targets:
                         for e in ds.epochs.run_targets:
-                            x: dict[str, NMObject] = {}
-                            x["folder"] = f
-                            x["dataseries"] = ds
-                            x["channel"] = c
-                            x["epoch"] = e
-                            elist.append(x)
+                            elist.append({
+                                "folder": f,
+                                "dataseries": ds,
+                                "channel": c,
+                                "epoch": e,
+                            })
             else:
                 dlist = f.data.run_targets
                 for d in dlist:
-                    x2: dict[str, NMObject] = {}
-                    x2["folder"] = f
-                    x2["data"] = d
-                    elist.append(x2)
+                    elist.append({"folder": f, "data": d})
         return elist
 
     def run_keys(
         self,
         dataseries_priority: bool = True
     ) -> list[dict[str, str]]:
+        """Return the current run targets as a flat list of name dicts.
+
+        Identical to :meth:`run_values` but replaces each ``NMObject`` value
+        with its ``name`` string.  Useful for logging, display, and
+        serialisation without holding object references.
+
+        Example:
+
+            nm.run_keys_set({"folder": "folder0", "data": "all"})
+            for entry in nm.run_keys():
+                print(entry["folder"], entry["data"])
+
+        Args:
+            dataseries_priority: Passed through to :meth:`run_values`.
+                When ``True`` (default), prefer the dataseries branch over
+                the data branch.
+
+        Returns:
+            Flat list of dicts mapping tier names to object name strings.
+            Keys present in each dict match those produced by
+            :meth:`run_values` for the same configuration.
+
+        See Also:
+            :meth:`run_values` — same result with ``NMObject`` instances.
+            :meth:`run_count` — length of this list without building it.
+            :meth:`run_keys_set` — configure run targets at all tiers at once.
+        """
         elist = []
         elist2 = self.run_values(dataseries_priority)
         for e in elist2:
@@ -568,25 +757,54 @@ class NMManager(NMObject):
         run: dict[str, str],
         max_targets: int | None = 1000
     ) -> list[dict[str, str]]:
-        """
-        Set run targets at each hierarchy tier.
+        """Set run targets at each hierarchy tier.
+
+        Four modes are supported depending on which keys are present:
+
+        **Data mode** — target NMData items directly in a folder::
+
+            {"folder": "folder0", "data": "all"}
+            {"folder": "all",     "data": "RecordA0"}
+            {"folder": "set0",    "data": "selected"}
+
+        **Dataseries mode** — target by dataseries / channel / epoch::
+
+            {"folder": "folder0", "dataseries": "Record",
+             "channel": "A",      "epoch": "all"}
+            {"folder": "all",     "dataseries": "selected",
+             "channel": "ChanSet1", "epoch": "group0"}
+
+        **Toolfolder + data mode** — target NMData items inside a tool subfolder::
+
+            {"folder": "folder0", "toolfolder": "Spike_0", "data": "all"}
+            {"folder": "all",     "toolfolder": "all",     "data": "selected"}
+
+        **Toolfolder + dataseries mode** — target a dataseries inside a tool subfolder::
+
+            {"folder": "folder0", "toolfolder": "Spike_0",
+             "dataseries": "SPK_", "channel": "A", "epoch": "all"}
+
+        Values can be ``"selected"`` (current selection), ``"all"`` (every
+        item), a specific object name, or a named set/group defined on the
+        container.  Keys are case-insensitive.
 
         Args:
-            run: Dictionary mapping tier names to target values.
-                    Values can be: "select"/"selected", "all", a specific name,
-                    or a set name.
-                    Must include "folder" and either "data" or "dataseries".
-                    If "dataseries", must also include "channel" and "epoch".
+            run: Dictionary mapping tier names to target values, as shown
+                above.  Must include ``"folder"`` and either ``"data"`` or
+                ``"dataseries"`` (not both).  Dataseries mode additionally
+                requires ``"channel"`` and ``"epoch"``.
             max_targets: Maximum number of resulting targets allowed.
-                        Set to None for unlimited. Default is 1000.
+                Set to ``None`` for unlimited. Default is 1000.
 
         Returns:
-            List of run target dictionaries (same as run_keys())
+            List of run target dictionaries (same as :meth:`run_keys`).
 
         Raises:
-            TypeError: If run is not a dict or values aren't strings
-            KeyError: If a key is not a valid selection tier
-            ValueError: If target count exceeds max_targets
+            TypeError: If *run* is not a dict or any key/value is not a string.
+            KeyError: If a key is not a valid selection tier, a required key is
+                missing, or mutually exclusive keys are combined.
+            ValueError: If the resolved target count exceeds *max_targets*, or
+                a named target does not exist in its container.
         """
         if not isinstance(run, dict):
             raise TypeError(nmu.type_error_str(run, "run", "dictionary"))
@@ -635,20 +853,57 @@ class NMManager(NMObject):
         # Set folder run target (allows select/all/name/set)
         folders.run_target = run["folder"]
 
-        # Data mode - simpler path
-        if "data" in run:
-            # Set data run target for each folder in run_targets
+        # Toolfolder + data mode
+        if "toolfolder" in run and "data" in run:
             for f in folders.run_targets:
-                if isinstance(f, NMFolder):
-                    f.data.run_target = run["data"]
-
+                if not isinstance(f, NMFolder):
+                    continue
+                f.toolfolders.run_target = run["toolfolder"]
+                for tf in f.toolfolders.run_targets:
+                    if isinstance(tf, NMToolFolder):
+                        tf.data.run_target = run["data"]
             result = self.run_keys(dataseries_priority=False)
             self._run_check_max_targets(result, max_targets)
             self.__run_config = dict(run)
             nmch.add_nm_command("run_keys_set(%r)" % (run,))
             return result
 
-        # Dataseries mode - requires dataseries, channel, epoch
+        # Toolfolder + dataseries mode
+        if "toolfolder" in run and "dataseries" in run:
+            if "channel" not in run:
+                raise KeyError("missing run 'channel' key")
+            if "epoch" not in run:
+                raise KeyError("missing run 'epoch' key")
+            for f in folders.run_targets:
+                if not isinstance(f, NMFolder):
+                    continue
+                f.toolfolders.run_target = run["toolfolder"]
+                for tf in f.toolfolders.run_targets:
+                    if not isinstance(tf, NMToolFolder):
+                        continue
+                    tf.dataseries.run_target = run["dataseries"]
+                    for ds in tf.dataseries.run_targets:
+                        if isinstance(ds, NMDataSeries):
+                            ds.channels.run_target = run["channel"]
+                            ds.epochs.run_target = run["epoch"]
+            result = self.run_keys(dataseries_priority=True)
+            self._run_check_max_targets(result, max_targets)
+            self.__run_config = dict(run)
+            nmch.add_nm_command("run_keys_set(%r)" % (run,))
+            return result
+
+        # Basic data mode
+        if "data" in run:
+            for f in folders.run_targets:
+                if isinstance(f, NMFolder):
+                    f.data.run_target = run["data"]
+            result = self.run_keys(dataseries_priority=False)
+            self._run_check_max_targets(result, max_targets)
+            self.__run_config = dict(run)
+            nmch.add_nm_command("run_keys_set(%r)" % (run,))
+            return result
+
+        # Basic dataseries mode - requires dataseries, channel, epoch
         if "dataseries" not in run:
             raise KeyError("missing run 'dataseries' key")
         if "channel" not in run:
@@ -656,7 +911,6 @@ class NMManager(NMObject):
         if "epoch" not in run:
             raise KeyError("missing run 'epoch' key")
 
-        # Set run targets for each folder and dataseries
         for f in folders.run_targets:
             if not isinstance(f, NMFolder):
                 continue
@@ -701,6 +955,17 @@ class NMManager(NMObject):
                     continue
                 ds.channels.run_target = RUN_SELECTED
                 ds.epochs.run_target = RUN_SELECTED
+            f.toolfolders.run_target = RUN_SELECTED
+            for tf in f.toolfolders.values():
+                if not isinstance(tf, NMToolFolder):
+                    continue
+                tf.data.run_target = RUN_SELECTED
+                tf.dataseries.run_target = RUN_SELECTED
+                for ds in tf.dataseries.values():
+                    if not isinstance(ds, NMDataSeries):
+                        continue
+                    ds.channels.run_target = RUN_SELECTED
+                    ds.epochs.run_target = RUN_SELECTED
         self.__run_config = None
         nmch.add_nm_command("run_reset_all()")
         return None
