@@ -114,6 +114,18 @@ class TestNMToolProperties(unittest.TestCase):
         self.tool._select["epoch"] = self.folder  # Wrong type
         self.assertIsNone(self.tool.epoch)
 
+    def test_toolfolder_property_returns_none_when_empty(self):
+        self.assertIsNone(self.tool.toolfolder)
+
+    def test_toolfolder_property_returns_toolfolder(self):
+        tf = self.folder.toolfolders.new("Spike_0")
+        self.tool._select["toolfolder"] = tf
+        self.assertIs(self.tool.toolfolder, tf)
+
+    def test_toolfolder_property_returns_none_for_wrong_type(self):
+        self.tool._select["toolfolder"] = self.folder  # Wrong type
+        self.assertIsNone(self.tool.toolfolder)
+
 
 class TestNMToolSelectValues(unittest.TestCase):
     """Tests for NMTool select_values property."""
@@ -641,6 +653,27 @@ class TestNMToolRunMeta(unittest.TestCase):
         targets = [self._make_target(self.epoch0)]
         tool.run_all(targets)
         self.assertIn("test_ds", tool.run_meta["dataseries"])
+
+    def test_run_meta_has_toolfolders_key(self):
+        tool = NMTool()
+        tool.run_all([])
+        self.assertIn("toolfolders", tool.run_meta)
+        self.assertIsInstance(tool.run_meta["toolfolders"], list)
+
+    def test_run_meta_toolfolders_accumulates_from_targets(self):
+        tool = NMTool()
+        tf = self.folder.toolfolders.new("Spike_0")
+        target = {**self._make_target(self.epoch0), "toolfolder": tf}
+        tool.run_all([target])
+        self.assertIn("Spike_0", tool.run_meta["toolfolders"])
+
+    def test_run_meta_toolfolders_no_duplicates(self):
+        tool = NMTool()
+        tf = self.folder.toolfolders.new("Spike_0")
+        t0 = {**self._make_target(self.epoch0), "toolfolder": tf}
+        t1 = {**self._make_target(self.epoch1), "toolfolder": tf}
+        tool.run_all([t0, t1])
+        self.assertEqual(tool.run_meta["toolfolders"], ["Spike_0"])
 
     def test_run_meta_accessible_from_run_finish(self):
         captured = {}

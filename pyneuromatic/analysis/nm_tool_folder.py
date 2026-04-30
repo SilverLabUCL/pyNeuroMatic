@@ -243,6 +243,11 @@ class NMToolFolderContainer(NMObjectContainer):
         name = self._newkey(name)
         f = NMToolFolder(parent=self, name=name)
         if super()._add(f, select=select, quiet=quiet):
+            if not select and len(self) == 1:
+                # Base class auto-selects the first entry, but toolfolder
+                # selection switches the data/dataseries/channel/epoch context,
+                # so don't auto-select unless the caller explicitly asked.
+                self._selected_name_set(None)
             return f
         return None
 

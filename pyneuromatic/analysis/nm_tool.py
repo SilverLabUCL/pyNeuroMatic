@@ -102,6 +102,12 @@ class NMTool:
         return v if isinstance(v, NMEpoch) else None
 
     @property
+    def toolfolder(self) -> NMToolFolder | None:
+        """Get the currently selected toolfolder (set when running in toolfolder mode)."""
+        v = self._select.get("toolfolder")
+        return v if isinstance(v, NMToolFolder) else None
+
+    @property
     def select_values(self) -> dict[str, NMObject | None]:
         """Get the current selection as a dictionary of NMObjects."""
         return self._select.copy()
@@ -154,17 +160,18 @@ class NMTool:
     def _update_run_meta(self, target: dict) -> None:
         """Update run_meta lists with unique names from a single target dict.
 
-        Called once per target during run_all(). Tracks folder, dataseries,
-        channel, and epoch names (not data).
+        Called once per target during run_all(). Tracks folder, toolfolder,
+        dataseries, channel, and epoch names (not data).
 
         Args:
             target: Selection dict mapping tier names to NMObjects.
         """
         for tier, meta_key in (
-            ("folder",     "folders"),
-            ("dataseries", "dataseries"),
-            ("channel",    "channels"),
-            ("epoch",      "epochs"),
+            ("folder",      "folders"),
+            ("toolfolder",  "toolfolders"),
+            ("dataseries",  "dataseries"),
+            ("channel",     "channels"),
+            ("epoch",       "epochs"),
         ):
             obj = target.get(tier)
             if isinstance(obj, NMObject) and obj.name not in self._run_meta[meta_key]:
@@ -244,6 +251,7 @@ class NMTool:
             "date": datetime.datetime.now().isoformat(" ", "seconds"),
             "run_keys": dict(run_keys) if run_keys else {},
             "folders": [],
+            "toolfolders": [],
             "dataseries": [],
             "channels": [],
             "epochs": [],

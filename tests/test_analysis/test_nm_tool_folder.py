@@ -20,6 +20,29 @@ def _make_container() -> NMToolFolderContainer:
     return NMToolFolderContainer(parent=NM)
 
 
+class TestNMToolFolderContainerNew(unittest.TestCase):
+    """Tests for NMToolFolderContainer.new()."""
+
+    def test_first_toolfolder_not_auto_selected(self):
+        # Creating the first toolfolder must NOT auto-select it — a selected
+        # toolfolder switches the data/dataseries/channel/epoch context, so
+        # auto-selection would silently redirect normal folder-level workflows.
+        tf = _make_container()
+        tf.new("Spike_0")
+        self.assertIsNone(tf.selected_value)
+
+    def test_new_with_select_true_selects(self):
+        tf = _make_container()
+        f = tf.new("Spike_0", select=True)
+        self.assertIs(tf.selected_value, f)
+
+    def test_second_new_without_select_leaves_selection_unchanged(self):
+        tf = _make_container()
+        tf.new("Spike_0", select=True)
+        tf.new("Spike_1")
+        self.assertEqual(tf.selected_name, "Spike_0")
+
+
 class TestNMToolFolderContainerGetOrCreate(unittest.TestCase):
     """Tests for NMToolFolderContainer.get_or_create()."""
 
