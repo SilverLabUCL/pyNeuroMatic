@@ -37,7 +37,7 @@ def _make_data(n=100, name="recordA0", with_nans=False, units=True):
 
 
 class TestNMToolStats(unittest.TestCase):
-    """Tests for NMToolStats results_to_* flags and _results_to_history()."""
+    """Tests for NMToolStats results_to_* flags and _write_results_to_history()."""
 
     def setUp(self):
         self.tool = nms.NMToolStats()
@@ -53,60 +53,11 @@ class TestNMToolStats(unittest.TestCase):
     def test_results_to_numpy_default(self):
         self.assertFalse(self.tool.results_to_numpy)
 
-    # --- results_to_history ---
-
-    def test_results_to_history_set_true(self):
-        self.tool.results_to_history = True
-        self.assertTrue(self.tool.results_to_history)
-
-    def test_results_to_history_set_false(self):
-        self.tool.results_to_history = True
-        self.tool.results_to_history = False
-        self.assertFalse(self.tool.results_to_history)
-
-    def test_results_to_history_rejects_non_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.results_to_history = 1
-
-    def test_results_to_history_rejects_none(self):
-        with self.assertRaises(TypeError):
-            self.tool.results_to_history = None
-
-    # --- results_to_cache ---
-
-    def test_results_to_cache_set_false(self):
-        self.tool.results_to_cache = False
-        self.assertFalse(self.tool.results_to_cache)
-
-    def test_results_to_cache_set_true(self):
-        self.tool.results_to_cache = False
-        self.tool.results_to_cache = True
-        self.assertTrue(self.tool.results_to_cache)
-
-    def test_results_to_cache_rejects_non_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.results_to_cache = "yes"
-
-    # --- results_to_numpy ---
-
-    def test_results_to_numpy_set_true(self):
-        self.tool.results_to_numpy = True
-        self.assertTrue(self.tool.results_to_numpy)
-
-    def test_results_to_numpy_set_false(self):
-        self.tool.results_to_numpy = True
-        self.tool.results_to_numpy = False
-        self.assertFalse(self.tool.results_to_numpy)
-
-    def test_results_to_numpy_rejects_non_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.results_to_numpy = 0
-
-    # --- _results_to_history ---
+    # --- _write_results_to_history ---
 
     def test_results_to_history_empty_results(self):
         # Should not raise with no results
-        self.tool._results_to_history(quiet=True)
+        self.tool._write_results_to_history(quiet=True)
 
     def test_results_to_history_with_results(self):
         # Populate results via compute then call print
@@ -114,9 +65,9 @@ class TestNMToolStats(unittest.TestCase):
         w = list(self.tool.windows)[0]
         w.func = "mean"
         w.compute(data)
-        self.tool._results_to_history(quiet=True)
+        self.tool._write_results_to_history(quiet=True)
 
-    # --- _results_to_numpy ---
+    # --- _write_results_to_numpy ---
 
     def _setup_folder(self):
         """Create a real NMFolder and wire it into the tool's selection."""
@@ -161,24 +112,24 @@ class TestNMToolStats(unittest.TestCase):
         from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
         self._setup_folder()
         self._run_compute()
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertIsInstance(f, NMToolFolder)
 
     def test_results_to_numpy_folder_named_stats_0_no_dataseries(self):
         # No dataseries selected → fallback name "Stats_0"
         self._setup_folder()
         self._run_compute()
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertEqual(f.name, "Stats_0")
 
     def test_results_to_numpy_second_run_named_stats_1_no_dataseries(self):
         # Second run with no dataseries → "Stats_1"
         self._setup_folder()
         self._run_compute()
-        self.tool._results_to_numpy()
+        self.tool._write_results_to_numpy()
         self.tool._NMToolStats__results.clear()
         self._run_compute()
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertEqual(f.name, "Stats_1")
 
     def test_results_to_numpy_folder_named_with_dataseries(self):
@@ -188,7 +139,7 @@ class TestNMToolStats(unittest.TestCase):
         ds = NMDataSeries(name="Record")
         self.tool._select["dataseries"] = ds
         self._run_compute()
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertEqual(f.name, "Stats_Record_0")
 
     def test_results_to_numpy_folder_named_with_dataseries_and_channel(self):
@@ -199,7 +150,7 @@ class TestNMToolStats(unittest.TestCase):
         self.tool._select["dataseries"] = NMDataSeries(name="Record")
         self.tool._select["channel"] = NMChannel(name="A")
         self._run_compute()
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertEqual(f.name, "Stats_Record_A_0")
 
     def test_results_to_numpy_folder_named_channel_only(self):
@@ -208,32 +159,32 @@ class TestNMToolStats(unittest.TestCase):
         self._setup_folder()
         self.tool._select["channel"] = NMChannel(name="B")
         self._run_compute()
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertEqual(f.name, "Stats_B_0")
 
     def test_results_to_numpy_creates_data_array(self):
         self._setup_folder()
         self._run_compute(n_arrays=3)
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertIn("ST_w0_data", f.data)
 
     def test_results_to_numpy_data_array_length(self):
         self._setup_folder()
         self._run_compute(n_arrays=3)
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         d = f.data.get("ST_w0_data")
         self.assertEqual(len(d.nparray), 3)
 
     def test_results_to_numpy_creates_mean_y_array(self):
         self._setup_folder()
         self._run_compute(func="mean", n_arrays=3)
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertIn("ST_w0_mean_y", f.data)
 
     def test_results_to_numpy_mean_y_array_length(self):
         self._setup_folder()
         self._run_compute(func="mean", n_arrays=3)
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         d = f.data.get("ST_w0_mean_y")
         self.assertEqual(len(d.nparray), 3)
 
@@ -241,7 +192,7 @@ class TestNMToolStats(unittest.TestCase):
         # mean+std → ST_w0_mean_y AND ST_w0_std_y
         self._setup_folder()
         self._run_compute(func="mean+std", n_arrays=3)
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertIn("ST_w0_mean_y", f.data)
         self.assertIn("ST_w0_std_y", f.data)
         self.assertNotIn("ST_w0_mean_std_y", f.data)
@@ -250,7 +201,7 @@ class TestNMToolStats(unittest.TestCase):
         # baseline result → ST_w0_bsln_y
         self._setup_folder()
         self._run_compute_with_bsln()
-        f = self.tool._results_to_numpy()
+        f = self.tool._write_results_to_numpy()
         self.assertIn("ST_w0_bsln_y", f.data)
 
     # --- _sanitize_func_name / _st_array_name ---
@@ -302,13 +253,13 @@ class TestNMToolStats(unittest.TestCase):
         from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
         self.tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
         # folder is None — should return None
-        result = self.tool._results_to_numpy()
+        result = self.tool._write_results_to_numpy()
         self.assertIsNone(result)
 
     def test_results_to_numpy_no_results_raises(self):
         self._setup_folder()
         with self.assertRaises(RuntimeError):
-            self.tool._results_to_numpy()
+            self.tool._write_results_to_numpy()
 
 
 class TestNMToolStats2(unittest.TestCase):
@@ -1038,43 +989,43 @@ class TestNMToolStatsOverwrite(unittest.TestCase):
     def test_overwrite_false_creates_stats_0(self):
         tool, folder = self._setup(overwrite=False)
         self._fill_results(tool)
-        tool._results_to_numpy()
+        tool._write_results_to_numpy()
         self.assertIn("stats_0", folder.toolfolders)
 
     def test_overwrite_false_creates_stats_1_on_second_run(self):
         tool, folder = self._setup(overwrite=False)
         self._fill_results(tool)
-        tool._results_to_numpy()
+        tool._write_results_to_numpy()
         tool._NMToolStats__results.clear()
         self._fill_results(tool)
-        tool._results_to_numpy()
+        tool._write_results_to_numpy()
         self.assertIn("stats_0", folder.toolfolders)
         self.assertIn("stats_1", folder.toolfolders)
 
     def test_overwrite_true_creates_stats_0(self):
         tool, folder = self._setup(overwrite=True)
         self._fill_results(tool)
-        tool._results_to_numpy()
+        tool._write_results_to_numpy()
         self.assertIn("stats_0", folder.toolfolders)
 
     def test_overwrite_true_reuses_stats_0_on_second_run(self):
         tool, folder = self._setup(overwrite=True)
         self._fill_results(tool)
-        tool._results_to_numpy()
+        tool._write_results_to_numpy()
         tool._NMToolStats__results.clear()
         self._fill_results(tool)
-        tool._results_to_numpy()
+        tool._write_results_to_numpy()
         self.assertIn("stats_0", folder.toolfolders)
         self.assertNotIn("stats_1", folder.toolfolders)
 
     def test_overwrite_true_replaces_st_arrays(self):
         tool, folder = self._setup(overwrite=True)
         self._fill_results(tool, n=3)
-        f = tool._results_to_numpy()
+        f = tool._write_results_to_numpy()
         arr_first = f.data.get("ST_w0_mean_y").nparray.copy()
         tool._NMToolStats__results.clear()
         self._fill_results(tool, n=5)
-        f2 = tool._results_to_numpy()
+        f2 = tool._write_results_to_numpy()
         self.assertIs(f, f2)
         arr_second = f2.data.get("ST_w0_mean_y").nparray
         self.assertEqual(len(arr_second), 5)
@@ -1082,7 +1033,7 @@ class TestNMToolStatsOverwrite(unittest.TestCase):
 
 
 class TestNMToolStatsNotes(unittest.TestCase):
-    """Notes are attached to numeric ST_ arrays in _results_to_numpy()."""
+    """Notes are attached to numeric ST_ arrays in _write_results_to_numpy()."""
 
     def setUp(self):
         from pyneuromatic.core.nm_folder import NMFolder
@@ -1105,7 +1056,7 @@ class TestNMToolStatsNotes(unittest.TestCase):
                 self.tool._NMToolStats__results[wname].append(results)
             else:
                 self.tool._NMToolStats__results[wname] = [results]
-        self.f = self.tool._results_to_numpy()
+        self.f = self.tool._write_results_to_numpy()
         self.st_array = self.f.data.get("ST_w0_mean_y")
 
     def _note_text(self):
@@ -1171,7 +1122,7 @@ class TestNMToolStatsNotes(unittest.TestCase):
                 tool._NMToolStats__results[wname].append(results)
             else:
                 tool._NMToolStats__results[wname] = [results]
-        f = tool._results_to_numpy()
+        f = tool._write_results_to_numpy()
         bsln_arr = f.data.get("ST_w0_bsln_y")
         self.assertIsNotNone(bsln_arr)
         notes = getattr(bsln_arr, "notes", None)

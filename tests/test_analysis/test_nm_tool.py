@@ -873,6 +873,113 @@ class TestNMToolMakeToolfolder(unittest.TestCase):
         self.assertEqual(tf_spike.name, "Spike_0")
 
 
+class TestNMToolOutputFlags(unittest.TestCase):
+    """Tests for the 5 shared output flags on NMTool base class."""
+
+    def setUp(self):
+        self.tool = NMTool()
+
+    # --- defaults ---
+
+    def test_ignore_nans_default(self):
+        self.assertTrue(self.tool.ignore_nans)
+
+    def test_overwrite_default(self):
+        self.assertFalse(self.tool.overwrite)
+
+    def test_results_to_history_default(self):
+        self.assertFalse(self.tool.results_to_history)
+
+    def test_results_to_cache_default(self):
+        self.assertTrue(self.tool.results_to_cache)
+
+    def test_results_to_numpy_default(self):
+        self.assertFalse(self.tool.results_to_numpy)
+
+    # --- ignore_nans ---
+
+    def test_ignore_nans_set_false(self):
+        self.tool.ignore_nans = False
+        self.assertFalse(self.tool.ignore_nans)
+
+    def test_ignore_nans_set_true(self):
+        self.tool.ignore_nans = False
+        self.tool.ignore_nans = True
+        self.assertTrue(self.tool.ignore_nans)
+
+    def test_ignore_nans_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.ignore_nans = 1
+
+    def test_ignore_nans_rejects_none(self):
+        with self.assertRaises(TypeError):
+            self.tool.ignore_nans = None
+
+    # --- overwrite ---
+
+    def test_overwrite_set_true(self):
+        self.tool.overwrite = True
+        self.assertTrue(self.tool.overwrite)
+
+    def test_overwrite_set_false(self):
+        self.tool.overwrite = True
+        self.tool.overwrite = False
+        self.assertFalse(self.tool.overwrite)
+
+    def test_overwrite_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.overwrite = 1
+
+    # --- results_to_history ---
+
+    def test_results_to_history_set_true(self):
+        self.tool.results_to_history = True
+        self.assertTrue(self.tool.results_to_history)
+
+    def test_results_to_history_set_false(self):
+        self.tool.results_to_history = True
+        self.tool.results_to_history = False
+        self.assertFalse(self.tool.results_to_history)
+
+    def test_results_to_history_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.results_to_history = 1
+
+    def test_results_to_history_rejects_none(self):
+        with self.assertRaises(TypeError):
+            self.tool.results_to_history = None
+
+    # --- results_to_cache ---
+
+    def test_results_to_cache_set_false(self):
+        self.tool.results_to_cache = False
+        self.assertFalse(self.tool.results_to_cache)
+
+    def test_results_to_cache_set_true(self):
+        self.tool.results_to_cache = False
+        self.tool.results_to_cache = True
+        self.assertTrue(self.tool.results_to_cache)
+
+    def test_results_to_cache_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.results_to_cache = "yes"
+
+    # --- results_to_numpy ---
+
+    def test_results_to_numpy_set_true(self):
+        self.tool.results_to_numpy = True
+        self.assertTrue(self.tool.results_to_numpy)
+
+    def test_results_to_numpy_set_false(self):
+        self.tool.results_to_numpy = True
+        self.tool.results_to_numpy = False
+        self.assertFalse(self.tool.results_to_numpy)
+
+    def test_results_to_numpy_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.results_to_numpy = 0
+
+
 class TestNMToolConfigProperty(unittest.TestCase):
     """NMTool.config property returns None for base class."""
 

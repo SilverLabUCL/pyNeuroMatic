@@ -86,168 +86,22 @@ class NMToolStats(NMTool):
         super().__init__(name="stats")
         self._config = NMToolStatsConfig()
 
+        # Initialize output flags from config defaults
+        self._ignore_nans = self._config.ignore_nans
+        self._overwrite = self._config.overwrite
+        self._results_to_history = self._config.results_to_history
+        self._results_to_cache = self._config.results_to_cache
+        self._results_to_numpy = self._config.results_to_numpy
+
         self.__win_container = NMStatWinContainer(nm_path="%s.windows" % self._name)
         self.__win_container.new()
 
-        self.__ignore_nans = True
-        # NumPy array analysis
-        # for example: if ignore_nans,
-        # then np.nanmean(array) else np.mean(array)
-
         self.__results: dict[str, list[Any]] = {}
-        # {"w0": [ [{}, {}], [{}, {}]... ],  stat win0
-        #  "w1": [ [{}, {}], [{}, {}]... ],  stat win1
-        #  ...}
-        # for each stat window (e.g. "w0") there is a list
-        # containing results [{}, {}] for each data array.
-        # for each data array there is a list [{}, {}] containing
-        # results for each measure {} made for the stat window
-        # e.g. baseline, main, p0, p1, slope, etc.
-
-        self.__overwrite = False
-
-        self.__results_to_history = False
-        self.__results_to_cache = True
-        self.__results_to_numpy = False
 
     @property
     def windows(self) -> NMStatWinContainer:
         """Return the container of NMStatWin objects for this tool."""
         return self.__win_container
-
-    @property
-    def ignore_nans(self) -> bool:
-        """Return True if NaN values are excluded from calculations."""
-        return self.__ignore_nans
-
-    @ignore_nans.setter
-    def ignore_nans(self, ignore_nans: bool) -> None:
-        return self._ignore_nans_set(ignore_nans)
-
-    def _ignore_nans_set(
-        self,
-        ignore_nans: bool,
-        quiet: bool = nmc.QUIET
-    ) -> None:
-        """Set ignore_nans flag.
-
-        Args:
-            ignore_nans: If True, use NaN-ignoring numpy functions such as
-                ``np.nanmean`` instead of ``np.mean``.
-            quiet: If True, suppress history log output.
-        """
-        if isinstance(ignore_nans, bool):
-            self.__ignore_nans = ignore_nans
-        else:
-            e = nmu.type_error_str(ignore_nans, "ignore_nans", "boolean")
-            raise TypeError(e)
-        nmh.history("set ignore_nans=%s" % ignore_nans, quiet=quiet)
-        nmch.add_nm_command("%s.ignore_nans = %r" % (self._name, self.__ignore_nans))
-
-    @property
-    def results_to_history(self) -> bool:
-        """Return True if results are printed to the history log after run."""
-        return self.__results_to_history
-
-    @results_to_history.setter
-    def results_to_history(self, value: bool) -> None:
-        self._results_to_history_set(value)
-
-    def _results_to_history_set(
-        self,
-        value: bool,
-        quiet: bool = nmc.QUIET,
-    ) -> None:
-        """Set results_to_history flag.
-
-        Args:
-            value: If True, print results to history log in run_finish().
-            quiet: If True, suppress history log output.
-        """
-        if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
-        self.__results_to_history = value
-        nmh.history("set results_to_history=%s" % value, quiet=quiet)
-        nmch.add_nm_command("%s.results_to_history = %r" % (self._name, self.__results_to_history))
-
-    @property
-    def results_to_cache(self) -> bool:
-        """Return True if results are saved to the NMFolder tool-results cache after run."""
-        return self.__results_to_cache
-
-    @results_to_cache.setter
-    def results_to_cache(self, value: bool) -> None:
-        self._results_to_cache_set(value)
-
-    def _results_to_cache_set(
-        self,
-        value: bool,
-        quiet: bool = nmc.QUIET,
-    ) -> None:
-        """Set results_to_cache flag.
-
-        Args:
-            value: If True, save results to NMFolder tool-results cache in
-                run_finish().
-            quiet: If True, suppress history log output.
-        """
-        if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
-        self.__results_to_cache = value
-        nmh.history("set results_to_cache=%s" % value, quiet=quiet)
-        nmch.add_nm_command("%s.results_to_cache = %r" % (self._name, self.__results_to_cache))
-
-    @property
-    def results_to_numpy(self) -> bool:
-        """Return True if results are written as ST_ NMData arrays after run."""
-        return self.__results_to_numpy
-
-    @results_to_numpy.setter
-    def results_to_numpy(self, value: bool) -> None:
-        self._results_to_numpy_set(value)
-
-    def _results_to_numpy_set(
-        self,
-        value: bool,
-        quiet: bool = nmc.QUIET,
-    ) -> None:
-        """Set results_to_numpy flag.
-
-        Args:
-            value: If True, write results as ST_ NMData arrays in
-                run_finish().
-            quiet: If True, suppress history log output.
-        """
-        if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
-        self.__results_to_numpy = value
-        nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
-        nmch.add_nm_command("%s.results_to_numpy = %r" % (self._name, self.__results_to_numpy))
-
-    @property
-    def overwrite(self) -> bool:
-        """If True, reuse ``{base}_0`` subfolder (clearing old arrays) on each run.
-
-        If False, each run creates a new numbered subfolder
-        (``{base}_0``, ``{base}_1``, …) preserving previous results.
-        Default False.
-        """
-        return self.__overwrite
-
-    @overwrite.setter
-    def overwrite(self, value: bool) -> None:
-        self._overwrite_set(value)
-
-    def _overwrite_set(
-        self,
-        value: bool,
-        quiet: bool = nmc.QUIET,
-    ) -> None:
-        if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "overwrite", "boolean"))
-        self.__overwrite = value
-        nmh.history("set overwrite=%s" % value, quiet=quiet)
-        nmch.add_nm_command("%s.overwrite = %r" % (self._name, self.__overwrite))
 
     def _add_note(self, data: NMData, text: str) -> None:
         """Append a note to *data*.notes if available."""
@@ -283,7 +137,7 @@ class NMToolStats(NMTool):
             self.windows.selected_name = w.name
             if not w.on:
                 continue
-            w.compute(self.data, ignore_nans=self.__ignore_nans)
+            w.compute(self.data, ignore_nans=self._ignore_nans)
             # results saved to w.results
             if not w.results:
                 continue
@@ -303,15 +157,15 @@ class NMToolStats(NMTool):
         Returns:
             True on success.
         """
-        if self.__results_to_history:
-            self._results_to_history()
-        if self.__results_to_cache:
-            self._results_to_cache()
-        if self.__results_to_numpy:
-            self._results_to_numpy()
+        if self._results_to_history:
+            self._write_results_to_history()
+        if self._results_to_cache:
+            self._write_results_to_cache()
+        if self._results_to_numpy:
+            self._write_results_to_numpy()
         return True  # ok
 
-    def _results_to_history(self, quiet: bool = False) -> None:
+    def _write_results_to_history(self, quiet: bool = False) -> None:
         """Print all results to the history log.
 
         Args:
@@ -333,7 +187,7 @@ class NMToolStats(NMTool):
                     nmh.history(str(rdict), quiet=quiet)
         return None
 
-    def _results_to_cache(self) -> int | None:
+    def _write_results_to_cache(self) -> int | None:
         """Save results to the NMFolder tool-results cache.
 
         Returns:
@@ -459,7 +313,7 @@ class NMToolStats(NMTool):
         )
         return "ST_%s_%s_%s" % (wname, safe, suffix)
 
-    def _results_to_numpy(self) -> NMToolFolder | None:
+    def _write_results_to_numpy(self) -> NMToolFolder | None:
         """Write results as ST_ NMData arrays in a new NMToolFolder.
 
         Creates a subfolder named ``Stats_{dataseries}_{channel}_{epoch_set}_N``
@@ -490,7 +344,7 @@ class NMToolStats(NMTool):
         if not self.__results:
             raise RuntimeError("there are no results to save")
 
-        f = self._make_toolfolder("Stats", overwrite=self.__overwrite)
+        f = self._make_toolfolder("Stats", overwrite=self._overwrite)
 
         for wname, vlist in self.__results.items():
             # vlist: list of lists, one inner list per data array
@@ -569,7 +423,7 @@ class NMToolStats(NMTool):
 class NMToolStats2:
     """Compute summary statistics and histograms of Stats results (ST_ arrays).
 
-    Operates on a NMToolFolder produced by NMToolStats._results_to_numpy().
+    Operates on a NMToolFolder produced by NMToolStats._write_results_to_numpy().
     All options are passed as method parameters rather than stored as instance
     state.
 
