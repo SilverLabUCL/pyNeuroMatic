@@ -22,6 +22,10 @@ from __future__ import annotations
 
 import datetime
 
+import pyneuromatic.core.nm_history as nmh
+import pyneuromatic.core.nm_command_history as nmch
+import pyneuromatic.core.nm_configurations as nmc
+import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_data import NMData
@@ -60,6 +64,13 @@ class NMTool:
         self._run_meta: dict = {}
         self._config: NMToolConfig | None = None
 
+        # Output flags — conservative defaults; subclasses init from config.
+        self._ignore_nans: bool = True
+        self._overwrite: bool = False
+        self._results_to_history: bool = False
+        self._results_to_cache: bool = True
+        self._results_to_numpy: bool = False
+
     @property
     def name(self) -> str:
         """Tool name used in command history (e.g. ``'stats'``, ``'tool_main'``)."""
@@ -69,6 +80,92 @@ class NMTool:
     def config(self) -> NMToolConfig | None:
         """Tool configuration object, or None if the tool has no config."""
         return self._config
+
+    @property
+    def ignore_nans(self) -> bool:
+        """If True, use NaN-ignoring numpy functions (e.g. ``np.nanmean``)."""
+        return self._ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        self._ignore_nans_set(value)
+
+    def _ignore_nans_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self._ignore_nans = value
+        nmh.history("set ignore_nans=%s" % value, quiet=quiet)
+        nmch.add_nm_command("%s.ignore_nans = %r" % (self._name, self._ignore_nans))
+
+    @property
+    def overwrite(self) -> bool:
+        """If True, reuse the existing toolfolder (clearing it); otherwise create a new one."""
+        return self._overwrite
+
+    @overwrite.setter
+    def overwrite(self, value: bool) -> None:
+        self._overwrite_set(value)
+
+    def _overwrite_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "overwrite", "boolean"))
+        self._overwrite = value
+        nmh.history("set overwrite=%s" % value, quiet=quiet)
+        nmch.add_nm_command("%s.overwrite = %r" % (self._name, self._overwrite))
+
+    @property
+    def results_to_history(self) -> bool:
+        """If True, print results to the history log after run."""
+        return self._results_to_history
+
+    @results_to_history.setter
+    def results_to_history(self, value: bool) -> None:
+        self._results_to_history_set(value)
+
+    def _results_to_history_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
+        self._results_to_history = value
+        nmh.history("set results_to_history=%s" % value, quiet=quiet)
+        nmch.add_nm_command(
+            "%s.results_to_history = %r" % (self._name, self._results_to_history)
+        )
+
+    @property
+    def results_to_cache(self) -> bool:
+        """If True, save results to the NMFolder tool-results cache after run."""
+        return self._results_to_cache
+
+    @results_to_cache.setter
+    def results_to_cache(self, value: bool) -> None:
+        self._results_to_cache_set(value)
+
+    def _results_to_cache_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
+        self._results_to_cache = value
+        nmh.history("set results_to_cache=%s" % value, quiet=quiet)
+        nmch.add_nm_command(
+            "%s.results_to_cache = %r" % (self._name, self._results_to_cache)
+        )
+
+    @property
+    def results_to_numpy(self) -> bool:
+        """If True, write results as NMData arrays in a toolfolder after run."""
+        return self._results_to_numpy
+
+    @results_to_numpy.setter
+    def results_to_numpy(self, value: bool) -> None:
+        self._results_to_numpy_set(value)
+
+    def _results_to_numpy_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
+        self._results_to_numpy = value
+        nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
+        nmch.add_nm_command(
+            "%s.results_to_numpy = %r" % (self._name, self._results_to_numpy)
+        )
 
     # Read-only convenience properties for accessing selection
     @property

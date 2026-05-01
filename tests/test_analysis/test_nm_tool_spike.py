@@ -176,39 +176,6 @@ class TestNMToolSpikeProperties(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.tool.x1 = False
 
-    # ignore_nans
-    def test_ignore_nans_set_false(self):
-        self.tool.ignore_nans = False
-        self.assertFalse(self.tool.ignore_nans)
-
-    def test_ignore_nans_rejects_non_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.ignore_nans = 1
-
-    # results_to_* flags
-    def test_results_to_history_set(self):
-        self.tool.results_to_history = True
-        self.assertTrue(self.tool.results_to_history)
-
-    def test_results_to_history_rejects_non_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.results_to_history = 1
-
-    def test_results_to_cache_set(self):
-        self.tool.results_to_cache = False
-        self.assertFalse(self.tool.results_to_cache)
-
-    def test_results_to_cache_rejects_non_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.results_to_cache = "yes"
-
-    def test_results_to_numpy_set(self):
-        self.tool.results_to_numpy = False
-        self.assertFalse(self.tool.results_to_numpy)
-
-    def test_results_to_numpy_rejects_non_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.results_to_numpy = None
 
 
 class TestNMToolSpikeDetection(unittest.TestCase):

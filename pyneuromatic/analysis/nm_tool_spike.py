@@ -106,16 +106,17 @@ class NMToolSpike(NMTool):
         super().__init__(name="spike")
         self._config = NMToolSpikeConfig()
 
+        # Initialize output flags from config defaults
+        self._ignore_nans = self._config.ignore_nans
+        self._overwrite = self._config.overwrite
+        self._results_to_history = self._config.results_to_history
+        self._results_to_cache = self._config.results_to_cache
+        self._results_to_numpy = self._config.results_to_numpy
+
         self.__ylevel: float = 0.0
         self.__func_name: str = "level+"
         self.__x0: float = -math.inf
         self.__x1: float = math.inf
-        self.__ignore_nans: bool = True
-        self.__overwrite: bool = True
-
-        self.__results_to_history: bool = False
-        self.__results_to_cache: bool = True
-        self.__results_to_numpy: bool = True
 
         # Internal run state — reset by run_init()
         self._spike_times: list[np.ndarray] = []
@@ -211,108 +212,6 @@ class NMToolSpike(NMTool):
         nmh.history("set x1=%g" % self.__x1, quiet=quiet)
         nmch.add_nm_command("%s.x1 = %r" % (self._name, self.__x1))
 
-    @property
-    def ignore_nans(self) -> bool:
-        """If True (default), detect crossings across NaN gaps."""
-        return self.__ignore_nans
-
-    @ignore_nans.setter
-    def ignore_nans(self, value: bool) -> None:
-        self._ignore_nans_set(value)
-
-    def _ignore_nans_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
-        if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
-        self.__ignore_nans = value
-        nmh.history("set ignore_nans=%s" % value, quiet=quiet)
-        nmch.add_nm_command("%s.ignore_nans = %r" % (self._name, self.__ignore_nans))
-
-    @property
-    def overwrite(self) -> bool:
-        """If True, reuse ``{base}_0`` subfolder (clearing old arrays) on each run.
-
-        If False, each run creates a new numbered subfolder
-        (``{base}_0``, ``{base}_1``, …) preserving previous results.
-        """
-        return self.__overwrite
-
-    @overwrite.setter
-    def overwrite(self, value: bool) -> None:
-        self._overwrite_set(value)
-
-    def _overwrite_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
-        if not isinstance(value, bool):
-            raise TypeError(nmu.type_error_str(value, "overwrite", "boolean"))
-        self.__overwrite = value
-        nmh.history("set overwrite=%s" % value, quiet=quiet)
-        nmch.add_nm_command("%s.overwrite = %r" % (self._name, self.__overwrite))
-
-    @property
-    def results_to_history(self) -> bool:
-        """If True, print spike counts to the history log after each run."""
-        return self.__results_to_history
-
-    @results_to_history.setter
-    def results_to_history(self, value: bool) -> None:
-        self._results_to_history_set(value)
-
-    def _results_to_history_set(
-        self, value: bool, quiet: bool = nmc.QUIET
-    ) -> None:
-        if not isinstance(value, bool):
-            raise TypeError(
-                nmu.type_error_str(value, "results_to_history", "boolean")
-            )
-        self.__results_to_history = value
-        nmh.history("set results_to_history=%s" % value, quiet=quiet)
-        nmch.add_nm_command(
-            "%s.results_to_history = %r" % (self._name, self.__results_to_history)
-        )
-
-    @property
-    def results_to_cache(self) -> bool:
-        """If True, save spike times dict to folder.toolresults after each run."""
-        return self.__results_to_cache
-
-    @results_to_cache.setter
-    def results_to_cache(self, value: bool) -> None:
-        self._results_to_cache_set(value)
-
-    def _results_to_cache_set(
-        self, value: bool, quiet: bool = nmc.QUIET
-    ) -> None:
-        if not isinstance(value, bool):
-            raise TypeError(
-                nmu.type_error_str(value, "results_to_cache", "boolean")
-            )
-        self.__results_to_cache = value
-        nmh.history("set results_to_cache=%s" % value, quiet=quiet)
-        nmch.add_nm_command(
-            "%s.results_to_cache = %r" % (self._name, self.__results_to_cache)
-        )
-
-    @property
-    def results_to_numpy(self) -> bool:
-        """If True, write SP_ NMData arrays to a Spike subfolder after each run."""
-        return self.__results_to_numpy
-
-    @results_to_numpy.setter
-    def results_to_numpy(self, value: bool) -> None:
-        self._results_to_numpy_set(value)
-
-    def _results_to_numpy_set(
-        self, value: bool, quiet: bool = nmc.QUIET
-    ) -> None:
-        if not isinstance(value, bool):
-            raise TypeError(
-                nmu.type_error_str(value, "results_to_numpy", "boolean")
-            )
-        self.__results_to_numpy = value
-        nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
-        nmch.add_nm_command(
-            "%s.results_to_numpy = %r" % (self._name, self.__results_to_numpy)
-        )
-
     # ------------------------------------------------------------------
     # Lifecycle
 
@@ -347,7 +246,7 @@ class NMToolSpike(NMTool):
             func_name=self.__func_name,
             x0=self.__x0,
             x1=self.__x1,
-            ignore_nans=self.__ignore_nans,
+            ignore_nans=self._ignore_nans,
         )
         self._spike_times.append(x_times)
         self._epoch_names.append(data.name)
@@ -365,12 +264,12 @@ class NMToolSpike(NMTool):
         """
         if not self._epoch_names:
             return True
-        if self.__results_to_history:
-            self._results_to_history()
-        if self.__results_to_cache:
-            self._results_to_cache()
-        if self.__results_to_numpy:
-            self._results_to_numpy()
+        if self._results_to_history:
+            self._write_results_to_history()
+        if self._results_to_cache:
+            self._write_results_to_cache()
+        if self._results_to_numpy:
+            self._write_results_to_numpy()
         return True
 
     # ------------------------------------------------------------------
@@ -382,7 +281,7 @@ class NMToolSpike(NMTool):
         if notes is not None:
             notes.add(text)
 
-    def _results_to_numpy(self) -> NMToolFolder | None:
+    def _write_results_to_numpy(self) -> NMToolFolder | None:
         """Write SP_ NMData arrays to a new Spike subfolder.
 
         Creates a subfolder named ``spike_{dataseries}_{channel}_N``
@@ -397,7 +296,7 @@ class NMToolSpike(NMTool):
         """
         if not isinstance(self.folder, NMFolder):
             return None
-        self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
+        self._toolfolder = self._make_toolfolder("Spike", overwrite=self._overwrite)
         f = self._toolfolder
         for name, times in zip(self._epoch_names, self._spike_times):
             d = f.data.new(
@@ -425,7 +324,7 @@ class NMToolSpike(NMTool):
         )
         return f
 
-    def _results_to_cache(self) -> None:
+    def _write_results_to_cache(self) -> None:
         """Save spike times dict to folder.toolresults."""
         if not isinstance(self.folder, NMFolder):
             return
@@ -435,7 +334,7 @@ class NMToolSpike(NMTool):
         }
         self.folder.toolresults_save("spike", results)
 
-    def _results_to_history(self) -> None:
+    def _write_results_to_history(self) -> None:
         """Print spike counts to the history log."""
         for name, times in zip(self._epoch_names, self._spike_times):
             nmh.history("spike: %s: %d spike(s)" % (name, len(times)))
@@ -870,7 +769,7 @@ class NMToolSpike(NMTool):
                     "units": source.yscale.units,
                 }
                 if out_folder is None:
-                    out_folder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
+                    out_folder = self._make_toolfolder("Spike", overwrite=self._overwrite)
                 array_name = "SPK_%s%d" % (ch_char, spike_counter)
                 d = out_folder.data.new(
                     array_name,
@@ -975,7 +874,7 @@ class NMToolSpike(NMTool):
             spike_times = self._spike_times
             detected_xunits = self._detected_xunits
             if self._toolfolder is None:
-                self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
+                self._toolfolder = self._make_toolfolder("Spike", overwrite=self._overwrite)
             out_folder = self._toolfolder
         all_times = np.concatenate(spike_times)
         if len(all_times) == 0:
@@ -1100,7 +999,7 @@ class NMToolSpike(NMTool):
         else:
             detected_xunits = self._detected_xunits
             if self._toolfolder is None:
-                self._toolfolder = self._make_toolfolder("Spike", overwrite=self.__overwrite)
+                self._toolfolder = self._make_toolfolder("Spike", overwrite=self._overwrite)
             out_folder = self._toolfolder
         lo_isi = float(min_isi) if min_isi is not None else None
         hi_isi = float(max_isi) if max_isi is not None else None
