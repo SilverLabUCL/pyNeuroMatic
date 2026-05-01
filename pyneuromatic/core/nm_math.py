@@ -1384,3 +1384,126 @@ def stability_test(
         "alpha":   float(alpha),
         "mask":    mask,
     }
+
+
+# =========================================================================
+# Template matching
+# =========================================================================
+
+
+def match_template(
+    data: np.ndarray,
+    template: np.ndarray,
+    circular: bool = False,
+) -> np.ndarray:
+    """Sliding template matching (Clements & Bekkers 1997).
+
+    Fits a scaled, offset copy of *template* to each position in *data* using
+    ordinary least-squares and returns a detection-criterion array
+    (scale / SE) of the same length as *data*.  An event is detected when the
+    criterion crosses a threshold (Clements & Bekkers suggest ±4 for synaptic
+    events).
+
+    Ports the core algorithm from the Igor XOP ``MatchTemplate.cpp``
+    (``DoWave`` function).
+
+    Reference:
+        Clements JD, Bekkers JM. Detection of spontaneous synaptic events with
+        an optimally scaled template. Biophys J. 1997 Jul;73(1):220-9.
+        doi: 10.1016/S0006-3495(97)78062-7.
+        PMID: 9199786; PMCID: PMC1180923.
+
+    Note:
+        The criterion (scale / SE) is inversely proportional to the template
+        amplitude: multiplying the template by ``k`` divides the criterion by
+        ``k`` while leaving SE unchanged.  The conventional threshold of ±4
+        therefore assumes a template normalized to unit amplitude.  Use a
+        template built from an average event waveform and normalize its peak
+        to 1, or adjust the threshold to match the template amplitude.
+
+    Args:
+        data: 1-D numpy array of recorded values.
+        template: 1-D numpy array representing a single-event waveform.
+            Must have at least 2 points and be no longer than *data*.
+        circular: If True, windows wrap circularly at the end of *data*
+            (equivalent to the ``/C`` flag in the Igor XOP).  The number of
+            active positions equals ``len(data)``.  If False (default), only
+            positions ``0`` to ``len(data) - len(template)`` are computed;
+            the remaining tail is set to zero.
+
+    Returns:
+        1-D float64 numpy array of length ``len(data)``.  Each value is the
+        detection criterion (scale / SE) at that position, or zero where
+        the standard error is zero or beyond the valid window range.
+
+    Raises:
+        TypeError: If *data* or *template* is not a numpy ndarray.
+        ValueError: If *data* or *template* is not 1-D, if *template* has
+            fewer than 2 points, or if *template* is longer than *data*.
+    """
+    if not isinstance(data, np.ndarray):
+        raise TypeError(nmu.type_error_str(data, "data", "NumPy ndarray"))
+    if not isinstance(template, np.ndarray):
+        raise TypeError(nmu.type_error_str(template, "template", "NumPy ndarray"))
+    if data.ndim != 1:
+        raise ValueError("data must be 1-D, got shape %s" % str(data.shape))
+    if template.ndim != 1:
+        raise ValueError("template must be 1-D, got shape %s" % str(template.shape))
+
+    n = len(data)
+    m = len(template)
+
+    if m < 2:
+        raise ValueError("template must have at least 2 points, got %d" % m)
+    if m > n:
+        raise ValueError(
+            "template length (%d) exceeds data length (%d)" % (m, n)
+        )
+
+    data = data.astype(float, copy=False)
+    template = template.astype(float, copy=False)
+
+    tsum = float(np.sum(template))
+    tsumsqr = float(np.sum(template ** 2))
+    pnts = float(m)
+    denom = tsumsqr - tsum * tsum / pnts
+
+    if denom == 0.0:
+        return np.zeros(n)
+
+    if circular:
+        passes = n
+        ext = np.concatenate([data, data[:m - 1]])
+    else:
+        passes = n - m + 1
+        ext = data
+
+    # Sliding window sums via prefix sums
+    cs = np.concatenate([[0.0], np.cumsum(ext)])
+    dsum = cs[m:m + passes] - cs[:passes]
+
+    cssq = np.concatenate([[0.0], np.cumsum(ext ** 2)])
+    dsumsqr = cssq[m:m + passes] - cssq[:passes]
+
+    # Cross-product sum: dtsum[i] = sum(ext[i:i+m] * template)
+    dtsum = np.correlate(ext, template, mode="valid")[:passes]
+
+    # Optimal scale and offset (Clements & Bekkers 1997, Eq. 3-4)
+    scale = (dtsum - tsum * dsum / pnts) / denom
+    offset = (dsum - scale * tsum) / pnts
+
+    # Sum of squared errors (Eq. 5)
+    sse = (
+        dsumsqr
+        + scale ** 2 * tsumsqr
+        + pnts * offset ** 2
+        - 2.0 * (scale * dtsum + offset * dsum - scale * offset * tsum)
+    )
+
+    se = np.sqrt(np.maximum(sse, 0.0) / (pnts - 1.0))
+    safe_se = np.where(se == 0.0, 1.0, se)
+    detect = np.where(se == 0.0, 0.0, scale / safe_se)
+
+    result = np.zeros(n)
+    result[:passes] = detect
+    return result

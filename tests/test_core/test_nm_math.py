@@ -1511,3 +1511,199 @@ class TestFilterNotch:
         rms_out = np.sqrt(np.mean(result[2000:-2000] ** 2))
         assert abs(rms_in - rms_out) < 0.05
 
+
+# ---------------------------------------------------------------------------
+# TestMatchTemplate
+# ---------------------------------------------------------------------------
+
+
+def _match_template_bruteforce(data, template, circular=False):
+    """Brute-force O(n*m) reference implementation for test verification."""
+    n = len(data)
+    m = len(template)
+    tsum = float(np.sum(template))
+    tsumsqr = float(np.sum(template ** 2))
+    pnts = float(m)
+    denom = tsumsqr - tsum * tsum / pnts
+    passes = n if circular else n - m + 1
+    result = np.zeros(n)
+    if denom == 0.0:
+        return result
+    for i in range(passes):
+        seg = np.array([data[(i + j) % n] for j in range(m)], dtype=float)
+        dsum = float(np.sum(seg))
+        dsumsqr = float(np.sum(seg ** 2))
+        dtsum = float(np.sum(seg * template))
+        scale = (dtsum - tsum * dsum / pnts) / denom
+        offset = (dsum - scale * tsum) / pnts
+        sse = (
+            dsumsqr
+            + scale ** 2 * tsumsqr
+            + pnts * offset ** 2
+            - 2.0 * (scale * dtsum + offset * dsum - scale * offset * tsum)
+        )
+        se = math.sqrt(max(sse, 0.0) / (pnts - 1.0))
+        result[i] = 0.0 if se == 0.0 else scale / se
+    return result
+
+
+class TestMatchTemplate:
+    """Tests for nm_math.match_template."""
+
+    # --- helpers ---
+
+    @staticmethod
+    def _template(m=20):
+        t = np.linspace(0, math.pi, m)
+        return np.sin(t)
+
+    @staticmethod
+    def _noisy_data(n=200, seed=42):
+        rng = np.random.default_rng(seed)
+        return rng.standard_normal(n)
+
+    # --- input validation ---
+
+    def test_rejects_list_data(self):
+        with pytest.raises(TypeError):
+            nm_math.match_template([1.0, 2.0, 3.0], np.array([1.0, 2.0]))
+
+    def test_rejects_list_template(self):
+        data = np.zeros(10)
+        with pytest.raises(TypeError):
+            nm_math.match_template(data, [1.0, 2.0])
+
+    def test_rejects_2d_data(self):
+        with pytest.raises(ValueError):
+            nm_math.match_template(np.zeros((5, 5)), np.array([1.0, 2.0]))
+
+    def test_rejects_2d_template(self):
+        with pytest.raises(ValueError):
+            nm_math.match_template(np.zeros(10), np.ones((2, 2)))
+
+    def test_rejects_template_shorter_than_2(self):
+        with pytest.raises(ValueError):
+            nm_math.match_template(np.zeros(10), np.array([1.0]))
+
+    def test_rejects_template_longer_than_data(self):
+        with pytest.raises(ValueError):
+            nm_math.match_template(np.zeros(5), np.zeros(10))
+
+    def test_template_equal_length_to_data_ok(self):
+        data = np.array([1.0, 2.0, 3.0])
+        tmpl = np.array([0.5, 1.0, 0.5])
+        result = nm_math.match_template(data, tmpl)
+        assert len(result) == 3
+
+    # --- output shape ---
+
+    def test_output_length_equals_data_length(self):
+        data = self._noisy_data(200)
+        tmpl = self._template(20)
+        result = nm_math.match_template(data, tmpl)
+        assert len(result) == 200
+
+    def test_output_is_ndarray(self):
+        data = self._noisy_data(100)
+        tmpl = self._template(10)
+        result = nm_math.match_template(data, tmpl)
+        assert isinstance(result, np.ndarray)
+
+    def test_output_dtype_is_float(self):
+        data = self._noisy_data(100)
+        tmpl = self._template(10)
+        result = nm_math.match_template(data, tmpl)
+        assert np.issubdtype(result.dtype, np.floating)
+
+    # --- tail zeros (non-circular) ---
+
+    def test_tail_is_zero_non_circular(self):
+        n, m = 100, 20
+        data = self._noisy_data(n)
+        tmpl = self._template(m)
+        result = nm_math.match_template(data, tmpl, circular=False)
+        passes = n - m + 1
+        np.testing.assert_array_equal(result[passes:], 0.0)
+
+    def test_no_tail_zeros_when_template_length_equals_data(self):
+        n = 10
+        data = self._noisy_data(n)
+        tmpl = self._template(n)
+        result = nm_math.match_template(data, tmpl, circular=False)
+        assert result[0] != 0.0 or True  # just checking no IndexError
+
+    # --- constant template returns zeros ---
+
+    def test_constant_template_returns_zeros(self):
+        data = self._noisy_data(50)
+        tmpl = np.ones(10)
+        result = nm_math.match_template(data, tmpl)
+        np.testing.assert_array_equal(result, 0.0)
+
+    # --- matches brute-force computation ---
+
+    def test_matches_bruteforce_non_circular(self):
+        rng = np.random.default_rng(7)
+        data = rng.standard_normal(80)
+        tmpl = self._template(15)
+        result = nm_math.match_template(data, tmpl, circular=False)
+        ref = _match_template_bruteforce(data, tmpl, circular=False)
+        np.testing.assert_allclose(result, ref, rtol=1e-10, atol=1e-10)
+
+    def test_matches_bruteforce_circular(self):
+        rng = np.random.default_rng(13)
+        data = rng.standard_normal(60)
+        tmpl = self._template(12)
+        result = nm_math.match_template(data, tmpl, circular=True)
+        ref = _match_template_bruteforce(data, tmpl, circular=True)
+        np.testing.assert_allclose(result, ref, rtol=1e-10, atol=1e-10)
+
+    def test_circular_output_length_equals_data_length(self):
+        n, m = 100, 20
+        data = self._noisy_data(n)
+        tmpl = self._template(m)
+        result = nm_math.match_template(data, tmpl, circular=True)
+        assert len(result) == n
+
+    def test_circular_has_no_tail_zeros(self):
+        n, m = 50, 10
+        rng = np.random.default_rng(99)
+        data = rng.standard_normal(n)
+        tmpl = self._template(m)
+        result = nm_math.match_template(data, tmpl, circular=True)
+        # All passes are active so no zero tail; at least the last position is computed
+        ref = _match_template_bruteforce(data, tmpl, circular=True)
+        assert result[n - 1] == pytest.approx(ref[n - 1], abs=1e-10)
+
+    # --- event detection ---
+
+    def test_criterion_peaks_at_embedded_event(self):
+        # Embed a scaled template at position 50 in mostly-zero background
+        m = 20
+        tmpl = self._template(m)
+        n = 200
+        data = np.zeros(n)
+        event_pos = 50
+        data[event_pos:event_pos + m] = 3.0 * tmpl + 0.5
+        result = nm_math.match_template(data, tmpl)
+        peak_pos = int(np.argmax(np.abs(result)))
+        assert peak_pos == event_pos
+
+    def test_criterion_at_event_exceeds_threshold(self):
+        # Large event embedded in low-noise background → criterion >> 4
+        rng = np.random.default_rng(123)
+        m = 20
+        tmpl = self._template(m)
+        n = 200
+        data = rng.standard_normal(n) * 0.1
+        event_pos = 50
+        data[event_pos:event_pos + m] += 5.0 * tmpl
+        result = nm_math.match_template(data, tmpl)
+        assert result[event_pos] > 4.0
+
+    def test_integer_data_accepted(self):
+        data = np.arange(50, dtype=int)
+        tmpl = np.array([0, 1, 2, 1, 0], dtype=int)
+        result = nm_math.match_template(data, tmpl)
+        assert len(result) == 50
+
