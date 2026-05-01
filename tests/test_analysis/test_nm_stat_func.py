@@ -97,7 +97,7 @@ class TestNMStatFunc(unittest.TestCase):
     def test_compute_raises_not_implemented(self):
         t = nmsf.NMStatFunc("test")
         with self.assertRaises(NotImplementedError):
-            t.compute(None, 0, 1, False, False, None, {})
+            t.compute(None, 0, 1, False, None, {})
 
 
 # =========================================================================

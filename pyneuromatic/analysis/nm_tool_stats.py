@@ -46,8 +46,6 @@ class NMToolStatsConfig(NMToolConfig):
     Parameters:
         ignore_nans: If True, use NaN-ignoring numpy functions (e.g.
             ``np.nanmean``).  Defaults to True.
-        xclip: If True, clip x0/x1 boundaries to the data x-scale limits.
-            Defaults to True.
         results_to_history: If True, print results to history log after run.
             Defaults to False.
         results_to_cache: If True, save results to NMFolder tool-results cache.
@@ -59,7 +57,6 @@ class NMToolStatsConfig(NMToolConfig):
     _TOML_TYPE = "stats_config"
     _schema = {
         "ignore_nans":        {"type": bool, "default": True},
-        "xclip":              {"type": bool, "default": True},
         "overwrite":          {"type": bool, "default": False},
         "results_to_history": {"type": bool, "default": False},
         "results_to_cache":   {"type": bool, "default": True},
@@ -78,7 +75,6 @@ class NMToolStats(NMTool):
 
     Attributes:
         windows: Container of NMStatWin objects (auto-named w0, w1, …).
-        xclip: If True, clip x0/x1 boundaries to the data x-scale limits.
         ignore_nans: If True, use NaN-ignoring numpy functions (e.g.
             ``np.nanmean``).
         results_to_history: If True, print results to history log after run.
@@ -92,11 +88,6 @@ class NMToolStats(NMTool):
 
         self.__win_container = NMStatWinContainer(nm_path="%s.windows" % self._name)
         self.__win_container.new()
-
-        self.__xclip = True
-        # if x0|x1 OOB, clip to data x-scale limits
-        # if x0 = -math.inf, then x0 will be clipped to smallest xvalue
-        # if x1 = math.inf, then x1 will be clipped to largest xvalue
 
         self.__ignore_nans = True
         # NumPy array analysis
@@ -123,35 +114,6 @@ class NMToolStats(NMTool):
     def windows(self) -> NMStatWinContainer:
         """Return the container of NMStatWin objects for this tool."""
         return self.__win_container
-
-    @property
-    def xclip(self) -> bool:
-        """Return True if x0/x1 boundaries are clipped to data x-scale limits."""
-        return self.__xclip
-
-    @xclip.setter
-    def xclip(self, xclip: bool) -> None:
-        return self._xclip_set(xclip)
-
-    def _xclip_set(
-        self,
-        xclip: bool,
-        quiet: bool = nmc.QUIET
-    ) -> None:
-        """Set xclip flag.
-
-        Args:
-            xclip: If True, clip x0/x1 to the data x-scale limits when
-                computing stats windows.
-            quiet: If True, suppress history log output.
-        """
-        if isinstance(xclip, bool):
-            self.__xclip = xclip
-        else:
-            e = nmu.type_error_str(xclip, "xclip", "boolean")
-            raise TypeError(e)
-        nmh.history("set xclip=%s" % xclip, quiet=quiet)
-        nmch.add_nm_command("%s.xclip = %r" % (self._name, self.__xclip))
 
     @property
     def ignore_nans(self) -> bool:
@@ -321,8 +283,7 @@ class NMToolStats(NMTool):
             self.windows.selected_name = w.name
             if not w.on:
                 continue
-            w.compute(self.data, xclip=self.__xclip,
-                      ignore_nans=self.__ignore_nans)
+            w.compute(self.data, ignore_nans=self.__ignore_nans)
             # results saved to w.results
             if not w.results:
                 continue

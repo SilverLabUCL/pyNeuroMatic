@@ -313,7 +313,6 @@ def stat(
     func: dict,
     x0: float = -math.inf,
     x1: float = math.inf,
-    xclip: bool = False,  # if x0|x1 OOB, clip to data x-scale limits
     ignore_nans: bool = False,
     results: dict | None = None
 ) -> dict:
@@ -339,10 +338,10 @@ def stat(
               no extra keys; returns the sample at x0 or x1 index.
             - count / count_nans / count_infs:
               no extra keys; values come from n, nans, infs in results.
-        x0: Left x-axis bound of the analysis window (default: -inf = start).
-        x1: Right x-axis bound of the analysis window (default: +inf = end).
-        xclip: If True, out-of-bounds x0/x1 are clipped to the data x-scale
-            limits. If False, out-of-bounds values cause an error in results.
+        x0: Left x-axis bound of the analysis window (default: -inf = start of data).
+        x1: Right x-axis bound of the analysis window (default: +inf = end of data).
+            Use -inf/+inf to span the full data range. Finite values that fall
+            outside the data x-scale will return None for i0/i1 (error result).
         ignore_nans: If True, NaN values are excluded from calculations.
         results: Optional dict to populate. Created as empty dict if None.
 
@@ -407,8 +406,8 @@ def stat(
     xunits = data.xscale.units
     yunits = data.yscale.units
 
-    i0 = data.get_xindex(x0, clip=xclip)
-    i1 = data.get_xindex(x1, clip=xclip)
+    i0 = data.get_xindex(x0)
+    i1 = data.get_xindex(x1)
 
     results["i0"] = i0
     results["i1"] = i1
