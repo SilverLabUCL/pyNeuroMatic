@@ -459,8 +459,7 @@ class NMStatWin:
         """List of result dicts from the most recent ``compute()`` call."""
         return self.__results
 
-    def _run_stat(self, data, func, id_str, x0, x1, xclip, ignore_nans,
-                  **extra):
+    def _run_stat(self, data, func, id_str, x0, x1, ignore_nans, **extra):
         """Create a result dict, append it to results, and call stat().
 
         Args:
@@ -470,7 +469,6 @@ class NMStatWin:
                 ``"main"``, or a func name for intermediate pipeline steps).
             x0: Left x-boundary for this stat call.
             x1: Right x-boundary for this stat call.
-            xclip: If True, clip data to [x0, x1].
             ignore_nans: If True, exclude NaN values.
             **extra: Additional key-value pairs stored in the result dict
                 (e.g. ``p0``, ``p1``, ``warning``).
@@ -484,14 +482,12 @@ class NMStatWin:
         r["x0"] = x0
         r["x1"] = x1
         self.__results.append(r)
-        stat(data, func, x0=x0, x1=x1, xclip=xclip,
-             ignore_nans=ignore_nans, results=r)
+        stat(data, func, x0=x0, x1=x1, ignore_nans=ignore_nans, results=r)
         return r
 
     def compute(
         self,
         data: NMData,
-        xclip: bool = False,  # if x0|x1 OOB, clip to data x-scale limits
         ignore_nans: bool = False,
         quiet: bool = nmc.QUIET
     ) -> list:
@@ -503,7 +499,6 @@ class NMStatWin:
 
         Args:
             data: NMData object to analyse.
-            xclip: If True, clip data to [x0, x1] before computing stats.
             ignore_nans: If True, exclude NaN values from computations.
             quiet: If True, suppress history logging.
 
@@ -529,9 +524,6 @@ class NMStatWin:
         if data is None or self.__func is None:
             return self.__results
 
-        if not isinstance(xclip, bool):
-            xclip = False
-
         if not isinstance(ignore_nans, bool):
             ignore_nans = True
 
@@ -541,7 +533,7 @@ class NMStatWin:
             self.__func.validate_baseline(self.__bsln_func.get("name"))
             bsln_result = self._run_stat(
                 data, self.__bsln_func.copy(), "bsln",
-                self.__bsln_x0, self.__bsln_x1, xclip, ignore_nans
+                self.__bsln_x0, self.__bsln_x1, ignore_nans
             )
         elif self.__func.needs_baseline:
             raise RuntimeError(
@@ -549,7 +541,7 @@ class NMStatWin:
             )
 
         self.__func.compute(
-            data, self.__x0, self.__x1, xclip, ignore_nans,
+            data, self.__x0, self.__x1, ignore_nans,
             self._run_stat, bsln_result
         )
 

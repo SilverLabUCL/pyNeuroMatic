@@ -50,7 +50,7 @@ class TestNMStatWin(unittest.TestCase):
             "on": True,
             "func": {"name": "mean"},
             "x0": 0,
-            "x1": n + 10,
+            "x1": math.inf,
             "transform": None,
             "bsln_on": True,
             "bsln_func": {"name": "mean"},
@@ -61,7 +61,7 @@ class TestNMStatWin(unittest.TestCase):
             "on": True,
             "func": {"name": "max"},
             "x0": 0,
-            "x1": n + 10,
+            "x1": math.inf,
             "transform": None,
             "bsln_on": True,
             "bsln_func": {"name": "mean"},
@@ -320,7 +320,7 @@ class TestNMStatWin(unittest.TestCase):
                 self.w0.compute(b)
 
     def test_compute_max_result_keys(self):
-        r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.datanan, ignore_nans=True)
         self.assertEqual(len(r), 2)
         self.assertEqual(r[0]["id"], "bsln")
         self.assertEqual(r[1]["id"], "main")
@@ -333,41 +333,43 @@ class TestNMStatWin(unittest.TestCase):
             self.assertIn(k, r[1])
 
     def test_compute_delta_s(self):
-        r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.datanan, ignore_nans=True)
         if r[1]["Δs"]:
             self.assertAlmostEqual(r[1]["Δs"], r[1]["s"] - r[0]["s"])
 
     def test_compute_x1_out_of_bounds(self):
-        r = self.w1.compute(self.datanan, xclip=False, ignore_nans=True)
+        # finite x1 beyond data range → i1=None, error result (no clip)
+        self.w1.x1 = 200
+        r = self.w1.compute(self.datanan, ignore_nans=True)
         self.assertIsNone(r[1]["i1"])
         self.assertIn("error", r[1])
 
     def test_compute_nans_not_ignored(self):
-        r = self.w1.compute(self.datanan, xclip=True, ignore_nans=False)
+        r = self.w1.compute(self.datanan, ignore_nans=False)
         self.assertTrue(np.isnan(r[0]["s"]))
         self.assertTrue(np.isnan(r[1]["s"]))
         self.assertTrue(np.isnan(r[1]["Δs"]))
 
     def test_compute_mean_at_max_warning(self):
         self.w1.func = {"name": "mean@max", "n_mean": 0}
-        r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.datanan, ignore_nans=True)
         self.assertIn("warning", r[1]["func"])
 
     def test_compute_mean_at_max_with_n_mean(self):
         self.w1.func = {"name": "mean@max", "n_mean": 5}
-        r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.datanan, ignore_nans=True)
         self.assertEqual(r[1]["func"]["name"], "mean@max")
         self.assertEqual(r[1]["func"]["n_mean"], 5)
 
     def test_compute_mean_at_min(self):
         self.w1.func = {"name": "mean@min", "n_mean": 5}
-        r = self.w1.compute(self.datanan, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.datanan, ignore_nans=True)
         self.assertEqual(r[1]["func"]["name"], "mean@min")
 
     def test_compute_level_ylevel(self):
         ylevel = 10
         self.w1.func = {"name": "level+", "ylevel": ylevel}
-        r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.data, ignore_nans=True)
         self.assertEqual(len(r), 2)
         self.assertIn("ylevel", r[1]["func"])
         self.assertEqual(r[1]["func"]["ylevel"], ylevel)
@@ -377,14 +379,14 @@ class TestNMStatWin(unittest.TestCase):
         self.w1.bsln_on = True
         with self.assertRaises(RuntimeError):
             self.w1.bsln_func = "mean"  # need mean+std
-            self.w1.compute(self.data, xclip=True, ignore_nans=True)
+            self.w1.compute(self.data, ignore_nans=True)
 
     def test_compute_level_nstd(self):
         n_std = 2
         self.w1.func = {"name": "level+", "n_std": n_std}
         self.w1.bsln_on = True
         self.w1.bsln_func = "mean+std"
-        r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.data, ignore_nans=True)
         self.assertIn("ylevel", r[1]["func"])
         self.assertAlmostEqual(
             round(r[1]["Δs"] * 1000),
@@ -394,7 +396,7 @@ class TestNMStatWin(unittest.TestCase):
         n_std = -2
         self.w1.func = {"name": "level-", "n_std": n_std}
         self.w1.bsln_func = "mean+std"
-        r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.data, ignore_nans=True)
         self.assertAlmostEqual(
             round(r[1]["Δs"] * 1000),
             round(n_std * r[0]["std"] * 1000))
@@ -405,7 +407,7 @@ class TestNMStatWin(unittest.TestCase):
         self.w1.x0 = -math.inf
         self.w1.x1 = math.inf
         self.w1.func = {"name": "decaytime+", "p0": 36}
-        r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
+        r = self.w1.compute(self.data, ignore_nans=True)
         self.assertEqual(r[0]["id"], "bsln")
         self.assertEqual(r[1]["id"], "decaytime+")
         self.assertIn("Δs", r[1])
@@ -431,17 +433,17 @@ class TestNMStatWin(unittest.TestCase):
 
             with self.assertRaises(RuntimeError):
                 self.w1.bsln_on = False
-                self.w1.compute(self.data, xclip=True)
+                self.w1.compute(self.data)
 
             self.w1.bsln_on = True
-            r = self.w1.compute(self.datanan, xclip=True, ignore_nans=False)
+            r = self.w1.compute(self.datanan, ignore_nans=False)
             self.assertEqual(len(r), 2)
             self.assertTrue(math.isnan(r[1]["Δs"]))
             self.assertEqual(r[0]["id"], "bsln")
             peak = "max" if "+" in f else "min"
             self.assertEqual(r[1]["func"]["name"], peak)
 
-            r = self.w1.compute(self.data, xclip=True, ignore_nans=True)
+            r = self.w1.compute(self.data, ignore_nans=True)
             if math.isnan(r[1]["Δs"]):
                 continue
             self.assertAlmostEqual(r[1]["Δs"], r[1]["s"] - r[0]["s"])

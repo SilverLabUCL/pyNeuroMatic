@@ -234,18 +234,19 @@ class TestStat(unittest.TestCase):
             nsmm.stat(self.data, {"name": "unknownfunc"})
 
     def test_i0_out_of_bounds(self):
-        r = nsmm.stat(self.datanan, {"name": "max"}, x0=-100, xclip=False)
+        r = nsmm.stat(self.datanan, {"name": "max"}, x0=-100)
         self.assertIsNone(r["i0"])
         self.assertIn("error", r)
 
     def test_i1_out_of_bounds(self):
-        r = nsmm.stat(self.datanan, {"name": "max"}, x1=200, xclip=False)
+        r = nsmm.stat(self.datanan, {"name": "max"}, x1=200)
         self.assertIsNone(r["i1"])
         self.assertIn("error", r)
 
-    def test_max_xclip_result_keys(self):
+    def test_full_range_via_inf(self):
+        # -inf/+inf snap to data boundaries without requiring xclip
         r = nsmm.stat(self.datanan, {"name": "max"},
-                      x0=-100, x1=200, xclip=True)
+                      x0=-math.inf, x1=math.inf)
         keys = ["data", "i0", "i1", "n", "nans", "infs",
                 "s", "sunits", "i", "x", "xunits"]
         self.assertEqual(list(r.keys()), keys)

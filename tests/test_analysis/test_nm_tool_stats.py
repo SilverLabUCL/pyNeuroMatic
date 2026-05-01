@@ -939,9 +939,6 @@ class TestNMToolStatsConfig(unittest.TestCase):
     def test_ignore_nans_default(self):
         self.assertTrue(self.cfg.ignore_nans)
 
-    def test_xclip_default(self):
-        self.assertTrue(self.cfg.xclip)
-
     def test_results_to_history_default(self):
         self.assertFalse(self.cfg.results_to_history)
 
@@ -983,7 +980,6 @@ class TestNMToolStatsConfig(unittest.TestCase):
     def test_stats_tool_config_defaults(self):
         t = nms.NMToolStats()
         self.assertTrue(t.config.ignore_nans)
-        self.assertTrue(t.config.xclip)
 
     def test_overwrite_default(self):
         self.assertFalse(self.cfg.overwrite)
@@ -998,9 +994,12 @@ class TestNMToolStatsConfig(unittest.TestCase):
 
     def test_to_dict_contains_all_keys(self):
         d = self.cfg.to_dict()
-        for key in ("ignore_nans", "xclip", "overwrite",
+        for key in ("ignore_nans", "overwrite",
                     "results_to_history", "results_to_cache", "results_to_numpy"):
             self.assertIn(key, d)
+
+    def test_to_dict_does_not_contain_xclip(self):
+        self.assertNotIn("xclip", self.cfg.to_dict())
 
 
 class TestNMToolStatsOverwrite(unittest.TestCase):
@@ -1353,13 +1352,6 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
 
     # ------------------------------------------------------------------
     # NMToolStats tool-level flag setters
-
-    def test_xclip_setter_logs(self):
-        self._ch.clear()
-        self.tool.xclip = True
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("stats.xclip", cmd)
-        self.assertIn("True", cmd)
 
     def test_ignore_nans_setter_logs(self):
         self._ch.clear()

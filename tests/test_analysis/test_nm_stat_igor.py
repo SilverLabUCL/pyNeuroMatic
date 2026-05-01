@@ -145,7 +145,7 @@ class TestIgorWaveStats(unittest.TestCase):
 
     def _stat(self, name, **kwargs):
         return nsmm.stat(_DATA, {"name": name}, x0=_X0, x1=_X1,
-                         xclip=True, **kwargs)
+                         **kwargs)
 
     def test_wave_loaded(self):
         self.assertIsNotNone(_DATA)
@@ -217,22 +217,22 @@ class TestIgorWaveStats(unittest.TestCase):
     def test_mean_at_max(self):
         # n_mean=500 determined by matching Igor minAvg/maxAvg to 3 decimal places
         r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1, xclip=True)
+                      x0=_X0, x1=_X1)
         self.assertAlmostEqual(r["s"], _IGOR_R0["maxAvg"], places=3)
 
     def test_mean_at_max_location(self):
         r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1, xclip=True)
+                      x0=_X0, x1=_X1)
         self.assertAlmostEqual(r["x"], _IGOR_R0["maxAvgLoc"], places=1)
 
     def test_mean_at_min(self):
         r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1, xclip=True)
+                      x0=_X0, x1=_X1)
         self.assertAlmostEqual(r["s"], _IGOR_R0["minAvg"], places=3)
 
     def test_mean_at_min_location(self):
         r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1, xclip=True)
+                      x0=_X0, x1=_X1)
         self.assertAlmostEqual(r["x"], _IGOR_R0["minAvgLoc"], places=1)
 
     def test_no_nans(self):
@@ -398,7 +398,7 @@ class TestSineWaveRiseTime(unittest.TestCase):
         w.func = win["func"]
         w.x0 = win["x0"]
         w.x1 = win["x1"]
-        return w.compute(_SINE_DATA, xclip=True)
+        return w.compute(_SINE_DATA)
 
     def test_risetime_delta_x(self):
         # TAU/π * (arcsin(0.9) - arcsin(0.1)) ≈ 6.491 ms
@@ -457,7 +457,7 @@ class TestSineWaveFallTime(unittest.TestCase):
         w.func = win["func"]
         w.x0 = win["x0"]
         w.x1 = win["x1"]
-        return w.compute(_SINE_DATA, xclip=True)
+        return w.compute(_SINE_DATA)
 
     def test_falltime_delta_x(self):
         # Same magnitude as rise time (symmetric half-sine) ≈ 6.491 ms
@@ -518,7 +518,7 @@ class TestSineWaveDecayTime(unittest.TestCase):
         w.func = win["func"]
         w.x0 = win["x0"]
         w.x1 = win["x1"]
-        return w.compute(_SINE_DATA, xclip=True)
+        return w.compute(_SINE_DATA)
 
     def test_decaytime_delta_x(self):
         # Time from peak to 36.79% (≈1/e) level ≈ 7.6015 ms (Igor NM value)
@@ -558,7 +558,7 @@ class TestSineWaveFWHM(unittest.TestCase):
         w.func = win["func"]
         w.x0 = win["x0"]
         w.x1 = win["x1"]
-        return w.compute(_SINE_DATA, xclip=True)
+        return w.compute(_SINE_DATA)
 
     def test_fwhm_value(self):
         # 2 * TAU / 3 = 40/3 ≈ 13.333 ms
