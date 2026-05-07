@@ -58,6 +58,9 @@ class NMToolEventConfig(NMToolConfig):
         baseline_dt: Detection window after t0 (x-units, threshold/nstdv).
             Default 2.0.
         criterion_threshold: Criterion threshold for template matching. Default 4.0.
+        template_baseline: Baseline window (x-units) prepended to the template as
+            zeros before matching. Detected times are shifted forward by this
+            amount to recover the true event onset. Default 0.0.
         onset_search: If True, search backward for event onset. Default True.
         onset_avg: Onset window size (x-units). Default 1.0.
         onset_nstdv: Onset N×stdv. Default 1.0.
@@ -88,7 +91,8 @@ class NMToolEventConfig(NMToolConfig):
         "nstdv":              {"type": float, "default": 4.0,   "min": 0.0},
         "baseline_avg":       {"type": float, "default": 4.0,   "min": 0.0},
         "baseline_dt":        {"type": float, "default": 2.0,   "min": 0.0},
-        "criterion_threshold":     {"type": float, "default": 4.0,   "min": 0.0},
+        "criterion_threshold": {"type": float, "default": 4.0,   "min": 0.0},
+        "template_baseline":  {"type": float, "default": 0.0,   "min": 0.0},
         "onset_search":       {"type": bool,  "default": True},
         "onset_avg":          {"type": float, "default": 1.0,   "min": 0.0},
         "onset_nstdv":        {"type": float, "default": 1.0,   "min": 0.0},
@@ -131,8 +135,13 @@ class NMToolEvent(NMTool):
         baseline_avg: Baseline window size (x-units). Default 4.0.
         baseline_dt: Detection window after t0 (x-units). Default 2.0.
         template: User-supplied 1-D numpy template (algorithm="template").
-            Not TOML-serializable; set directly on the instance.
+            Should contain only the event shape — the baseline is prepended
+            automatically via *template_baseline*. Not TOML-serializable;
+            set directly on the instance.
         criterion_threshold: Criterion threshold for template matching. Default 4.0.
+        template_baseline: Baseline window (x-units) prepended to the template as
+            zeros before matching. Detected times are shifted forward by this
+            amount to recover the true event onset. Default 0.0.
         onset_search: Enable onset refinement. Default True.
         onset_avg: Onset window (x-units). Default 1.0.
         onset_nstdv: Onset N×stdv. Default 1.0.
@@ -163,8 +172,9 @@ class NMToolEvent(NMTool):
         self.__nstdv:         float = 4.0
         self.__baseline_avg:  float = 4.0
         self.__baseline_dt:   float = 2.0
-        self.__template:      np.ndarray | None = None
+        self.__template:          np.ndarray | None = None
         self.__criterion_threshold: float = 4.0
+        self.__template_baseline:   float = 0.0
         self.__onset_search:  bool  = True
         self.__onset_avg:     float = 1.0
         self.__onset_nstdv:   float = 1.0
@@ -359,6 +369,32 @@ class NMToolEvent(NMTool):
         nmh.history("set criterion_threshold=%g" % self.__criterion_threshold, quiet=quiet)
         nmch.add_nm_command(
             "%s.criterion_threshold = %r" % (self._name, self.__criterion_threshold)
+        )
+
+    @property
+    def template_baseline(self) -> float:
+        """Baseline window (x-units) prepended to template as zeros before matching.
+
+        The criterion crossing occurs at the start of this baseline window, so
+        detected times are shifted forward by *template_baseline* to recover the
+        true event onset. Default 0.0 (no baseline prepended).
+        """
+        return self.__template_baseline
+
+    @template_baseline.setter
+    def template_baseline(self, value: float) -> None:
+        self._template_baseline_set(value)
+
+    def _template_baseline_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "template_baseline", "float"))
+        value = float(value)
+        if value < 0:
+            raise ValueError("template_baseline must be >= 0, got %g" % value)
+        self.__template_baseline = value
+        nmh.history("set template_baseline=%g" % self.__template_baseline, quiet=quiet)
+        nmch.add_nm_command(
+            "%s.template_baseline = %r" % (self._name, self.__template_baseline)
         )
 
     @property
@@ -610,14 +646,18 @@ class NMToolEvent(NMTool):
         arr = data.nparray
         if arr is None:
             return None
-        arr_id = id(arr)
-        if arr_id != self._match_criterion_cache_id:
+        cache_key = (id(arr), self.__template_baseline)
+        if cache_key != self._match_criterion_cache_id:
             tpl = self.__template.astype(float, copy=True)
             tpl_min, tpl_max = tpl.min(), tpl.max()
             if tpl_max != tpl_min:
                 tpl = (tpl - tpl_min) / (tpl_max - tpl_min)
+            if self.__template_baseline > 0:
+                xdelta = data.xscale.delta if data.xscale.delta else 1.0
+                n_base = max(1, round(self.__template_baseline / xdelta))
+                tpl = np.concatenate([np.zeros(n_base), tpl])
             self._match_criterion_cache    = nm_math.match_template(arr, tpl)
-            self._match_criterion_cache_id = arr_id
+            self._match_criterion_cache_id = cache_key
         return self._match_criterion_cache
 
     def _detection_value(self) -> float:
@@ -638,7 +678,9 @@ class NMToolEvent(NMTool):
                 self.__nstdv, self.__baseline_avg, self.__baseline_dt,
             )
         else:
-            params = "criterion_threshold=%g" % self.__criterion_threshold
+            params = "criterion_threshold=%g, template_baseline=%g" % (
+                self.__criterion_threshold, self.__template_baseline,
+            )
         return (
             "NMEvent(source=%s, algorithm=%r, polarity=%r, %s, "
             "onset_search=%r, peak_search=%r, refractory=%g, "
@@ -700,6 +742,7 @@ class NMToolEvent(NMTool):
             baseline_dt=self.__baseline_dt,
             template=self.__template,
             criterion_threshold=self.__criterion_threshold,
+            template_baseline=self.__template_baseline,
             refractory=self.__refractory,
             x0=self.__x0,
             x1=self.__x1,
@@ -750,7 +793,7 @@ class NMToolEvent(NMTool):
         f = self._toolfolder
         xunits = self._detected_xunits or ""
 
-        # Store template in toolfolder (normalized to [0, 1]) for reference
+        # Store event-shape template (normalized to [0, 1], baseline not included)
         if self.__algorithm == "template" and self.__template is not None:
             tpl = self.__template.astype(float, copy=True)
             tmin, tmax = tpl.min(), tpl.max()
@@ -900,6 +943,7 @@ class NMToolEvent(NMTool):
             baseline_dt=self.__baseline_dt,
             template=self.__template,
             criterion_threshold=self.__criterion_threshold,
+            template_baseline=self.__template_baseline,
             refractory=self.__refractory,
             x0=start_x,
             x1=self.__x1,

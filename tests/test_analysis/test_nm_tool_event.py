@@ -159,6 +159,9 @@ class TestNMToolEventDefaults(unittest.TestCase):
     def test_max_events_default(self):
         self.assertEqual(self.tool.max_events, 0)
 
+    def test_template_baseline_default(self):
+        self.assertEqual(self.tool.template_baseline, 0.0)
+
     def test_results_to_history_default(self):
         self.assertFalse(self.tool.results_to_history)
 
@@ -334,6 +337,23 @@ class TestNMToolEventProperties(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.tool.x1 = True
 
+    # template_baseline
+    def test_template_baseline_accepts_zero(self):
+        self.tool.template_baseline = 0.0
+        self.assertEqual(self.tool.template_baseline, 0.0)
+
+    def test_template_baseline_accepts_positive(self):
+        self.tool.template_baseline = 5e-3
+        self.assertAlmostEqual(self.tool.template_baseline, 5e-3)
+
+    def test_template_baseline_rejects_negative(self):
+        with self.assertRaises(ValueError):
+            self.tool.template_baseline = -1e-3
+
+    def test_template_baseline_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.template_baseline = True
+
 # ---------------------------------------------------------------------------
 # Detection: threshold algorithm
 # ---------------------------------------------------------------------------
@@ -506,6 +526,49 @@ class TestNMToolEventDetectionTemplate(unittest.TestCase):
         tf = list(folder.toolfolders.values())[0]
         ev = tf.data.get("EV_recordA0")
         self.assertEqual(len(ev.nparray), 2)
+
+    def test_template_baseline_shifts_detected_times(self):
+        # Event at 50 ms. With template_baseline=10 ms, the criterion crossing
+        # occurs ~10 ms early; the shift should recover the true event onset.
+        # Without the shift, detected time ≈ 40 ms; with shift ≈ 50 ms.
+        # Refractory prevents re-detections on the decaying tail.
+        event_ms = 50.0
+        baseline_ms = 10.0
+        self.tool.template_baseline = baseline_ms * _MS
+        self.tool.refractory = 20e-3
+        data = _make_epsc_data(
+            event_times_ms=[event_ms],
+            amplitude=-500.0,
+            decay_ms=5.0,
+            noise_std=5.0,
+        )
+        folder = _run(self.tool, [data])
+        tf = list(folder.toolfolders.values())[0]
+        ev = tf.data.get("EV_recordA0")
+        self.assertEqual(len(ev.nparray), 1)
+        # Detected time should be within 2 ms of the true event onset
+        detected_ms = ev.nparray[0] * 1000.0
+        self.assertAlmostEqual(detected_ms, event_ms, delta=2.0)
+
+    def test_template_baseline_zero_no_shift(self):
+        # With template_baseline=0, detected time is also near the event onset
+        # (criterion peaks at event start when no baseline is prepended).
+        # Refractory prevents re-detections on the decaying tail.
+        event_ms = 50.0
+        self.tool.template_baseline = 0.0
+        self.tool.refractory = 20e-3
+        data = _make_epsc_data(
+            event_times_ms=[event_ms],
+            amplitude=-500.0,
+            decay_ms=5.0,
+            noise_std=5.0,
+        )
+        folder = _run(self.tool, [data])
+        tf = list(folder.toolfolders.values())[0]
+        ev = tf.data.get("EV_recordA0")
+        self.assertEqual(len(ev.nparray), 1)
+        detected_ms = ev.nparray[0] * 1000.0
+        self.assertAlmostEqual(detected_ms, event_ms, delta=2.0)
 
 
 # ---------------------------------------------------------------------------
