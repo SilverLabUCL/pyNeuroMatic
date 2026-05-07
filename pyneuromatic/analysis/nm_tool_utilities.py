@@ -204,6 +204,7 @@ def find_events_nmdata(
     baseline_dt: float = 2.0,
     template: np.ndarray | None = None,
     criterion_threshold: float = 4.0,
+    template_baseline: float = 0.0,
     refractory: float = 0.0,
     x0: float = -math.inf,
     x1: float = math.inf,
@@ -235,8 +236,18 @@ def find_events_nmdata(
         baseline_avg: Baseline averaging window (x-units, threshold/nstdv).
         baseline_dt: Detection window after t0 (x-units, threshold/nstdv).
         template: 1-D numpy array (template algorithm only). Normalized to
-            [0, 1] internally before calling match_template.
+            [0, 1] internally before calling match_template. If a baseline
+            window is desired, it must already be included in this array
+            (e.g. leading zeros prepended by the caller). Used only when
+            *match_criterion* is ``None``.
         criterion_threshold: Criterion threshold for template matching (default 4).
+        template_baseline: Offset (x-units) applied to shift detected times
+            forward after criterion level-crossing detection. Use this to
+            correct for a baseline window included at the start of the
+            template: a baseline of length *B* causes the criterion crossing
+            to occur *B* before the true event onset, and this shift recovers
+            that offset. Default 0.0 (no shift). Note: the baseline prepending
+            itself is the caller's responsibility (see above).
         refractory: Minimum inter-event interval (x-units, all algorithms).
         x0: Search start (x-units). Default ``-inf``.
         x1: Search end (x-units). Default ``+inf``.
@@ -305,6 +316,9 @@ def find_events_nmdata(
             x1=x1,
         )
         candidate_times = list(candidate_times)
+        # Shift times to recover true event onset (baseline offset correction)
+        if template_baseline > 0:
+            candidate_times = [t + template_baseline for t in candidate_times]
         # Apply refractory filter
         if refractory > 0 and len(candidate_times) > 1:
             filtered = [candidate_times[0]]
