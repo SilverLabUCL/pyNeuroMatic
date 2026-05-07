@@ -666,6 +666,329 @@ def find_level_crossings(
 
 
 # =========================================================================
+# Event detection
+# =========================================================================
+
+_VALID_EVENT_POLARITIES: frozenset[str] = frozenset({"negative", "positive"})
+_VALID_SLIDING_MODES: frozenset[str] = frozenset({"threshold", "nstdv"})
+
+
+def find_events_sliding_baseline(
+    yarray: np.ndarray,
+    xstart: float,
+    xdelta: float,
+    polarity: str,
+    mode: str,
+    threshold: float,
+    baseline_avg: float,
+    baseline_dt: float,
+    refractory: float = 0.0,
+    x0: float | None = None,
+    x1: float | None = None,
+    max_events: int = 0,
+) -> list[float]:
+    """Detect events using a sliding baseline (Kudoh & Taguchi 2002).
+
+    Forward sliding-window search. At each baseline midpoint t0, computes
+    the local average (and optionally stdv) within a window of size
+    *baseline_avg*, then checks whether the data at t0 + *baseline_dt*
+    crosses the detection level. After a detection, the search resumes at
+    t_event + *refractory*.
+
+    Args:
+        yarray: 1-D numpy array of y-values.
+        xstart: X-value of the first sample.
+        xdelta: Sample interval (must be > 0).
+        polarity: ``"negative"`` (detect downward deflections) or
+            ``"positive"`` (detect upward deflections).
+        mode: ``"threshold"`` (fixed amplitude) or ``"nstdv"`` (N×stdv of
+            local baseline).
+        threshold: Threshold magnitude (>= 0). For mode="threshold" the
+            detection level is Y_avg ± threshold; for mode="nstdv" it is
+            Y_avg ± threshold × Y_stdv.
+        baseline_avg: Baseline averaging window size (x-units). Set to 0
+            to use the single point at t0 instead of a windowed average.
+        baseline_dt: Time from t0 to the candidate detection point (x-units,
+            > 0). Equivalent to *wi* of Kudoh & Taguchi 2002.
+        refractory: Minimum time between events (x-units, >= 0). After each
+            detection the next search begins at t_event + refractory.
+            Default 0.0 (next t0 = t_event, no enforced gap).
+        x0: Search start (x-units). Default None (start of array).
+        x1: Search end (x-units). Default None (end of array).
+        max_events: Stop after finding this many events. 0 means no limit
+            (default).
+
+    Returns:
+        List of detected event x-times (floats).
+
+    Raises:
+        TypeError: If yarray is not a numpy ndarray or numeric params have
+            wrong types (bool rejected).
+        ValueError: If polarity or mode are invalid, or threshold/baseline_dt
+            violate their bounds.
+    """
+    if not isinstance(yarray, np.ndarray):
+        raise TypeError(nmu.type_error_str(yarray, "yarray", "numpy.ndarray"))
+    if not isinstance(polarity, str) or polarity not in _VALID_EVENT_POLARITIES:
+        raise ValueError(
+            "polarity must be one of %s, got %r"
+            % (sorted(_VALID_EVENT_POLARITIES), polarity)
+        )
+    if not isinstance(mode, str) or mode not in _VALID_SLIDING_MODES:
+        raise ValueError(
+            "mode must be one of %s, got %r"
+            % (sorted(_VALID_SLIDING_MODES), mode)
+        )
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
+        raise TypeError(nmu.type_error_str(threshold, "threshold", "float"))
+    threshold = float(threshold)
+    if threshold < 0:
+        raise ValueError("threshold must be >= 0, got %g" % threshold)
+    if isinstance(xstart, bool) or not isinstance(xstart, (int, float)):
+        raise TypeError(nmu.type_error_str(xstart, "xstart", "float"))
+    xstart = float(xstart)
+    if isinstance(xdelta, bool) or not isinstance(xdelta, (int, float)):
+        raise TypeError(nmu.type_error_str(xdelta, "xdelta", "float"))
+    xdelta = float(xdelta)
+    if xdelta <= 0:
+        raise ValueError("xdelta must be > 0, got %g" % xdelta)
+    if isinstance(baseline_avg, bool) or not isinstance(baseline_avg, (int, float)):
+        raise TypeError(nmu.type_error_str(baseline_avg, "baseline_avg", "float"))
+    baseline_avg = float(baseline_avg)
+    if baseline_avg < 0:
+        raise ValueError("baseline_avg must be >= 0, got %g" % baseline_avg)
+    if mode == "nstdv" and baseline_avg == 0:
+        raise ValueError("baseline_avg must be > 0 when mode='nstdv' (required to compute stdv)")
+    if isinstance(baseline_dt, bool) or not isinstance(baseline_dt, (int, float)):
+        raise TypeError(nmu.type_error_str(baseline_dt, "baseline_dt", "float"))
+    baseline_dt = float(baseline_dt)
+    if baseline_dt <= 0:
+        raise ValueError("baseline_dt must be > 0, got %g" % baseline_dt)
+    if isinstance(refractory, bool) or not isinstance(refractory, (int, float)):
+        raise TypeError(nmu.type_error_str(refractory, "refractory", "float"))
+    refractory = float(refractory)
+    if refractory < 0:
+        raise ValueError("refractory must be >= 0, got %g" % refractory)
+
+    n = len(yarray)
+    if n == 0:
+        return []
+
+    i0 = (0 if x0 is None or (isinstance(x0, float) and math.isinf(x0))
+          else max(0, round((float(x0) - xstart) / xdelta)))
+    i1 = (n - 1 if x1 is None or (isinstance(x1, float) and math.isinf(x1))
+          else min(n - 1, round((float(x1) - xstart) / xdelta)))
+    if i0 > i1:
+        return []
+
+    avg_ihalf = max(0, round(baseline_avg / xdelta / 2)) if baseline_avg > 0 else 0
+    dt_pts   = max(1, round(baseline_dt / xdelta))
+    ref_pts  = max(0, round(refractory / xdelta))
+
+    yf = yarray.astype(float, copy=False)
+    neg      = (polarity == "negative")
+    use_nstdv = (mode == "nstdv")
+
+    events: list[float] = []
+    t0_idx = i0
+
+    while t0_idx <= i1:
+        det_idx = t0_idx + dt_pts
+        if det_idx > i1 or det_idx >= n:
+            break
+
+        if avg_ihalf == 0:
+            y_avg = yf[t0_idx]
+            y_std = 0.0
+        else:
+            ibsl_lo = max(0, t0_idx - avg_ihalf)
+            ibsl_hi = min(n - 1, t0_idx + avg_ihalf)
+            yf_window = yf[ibsl_lo: ibsl_hi + 1]
+            y_avg = float(np.mean(yf_window))
+            y_std = float(np.std(yf_window)) if use_nstdv else 0.0
+
+        nstdv = threshold
+        det_offset = (nstdv * y_std) if use_nstdv else threshold
+        det_level = (y_avg - det_offset) if neg else (y_avg + det_offset)
+        y_det = yf[det_idx]
+        crossed = (y_det < det_level) if neg else (y_det > det_level)
+
+        if crossed:
+            events.append(xstart + det_idx * xdelta)
+            if max_events > 0 and len(events) >= max_events:
+                break
+            t0_idx = det_idx + max(1, ref_pts)
+        else:
+            t0_idx += 1
+
+    return events
+
+
+def find_event_onset(
+    yarray: np.ndarray,
+    xstart: float,
+    xdelta: float,
+    t_event: float,
+    polarity: str,
+    avg: float,
+    nstdv: float,
+    limit: float,
+) -> float | None:
+    """Backward sliding-window search for event onset (Kudoh & Taguchi 2002).
+
+    Slides a window backward from *t_event*. At each position, computes the
+    local mean and standard deviation, then checks whether the rightmost
+    window point crosses the dynamic level ``Y_avg - nstdv × Y_stdv``
+    (negative events) or ``Y_avg + nstdv × Y_stdv`` (positive events).
+    The first qualifying position gives the onset time.
+
+    Args:
+        yarray: 1-D numpy array of y-values.
+        xstart: X-value of the first sample.
+        xdelta: Sample interval (must be > 0).
+        t_event: X-time of the detected event (start of backward search).
+        polarity: ``"negative"`` or ``"positive"``.
+        avg: Sliding window size (x-units, >= 0). 0 uses a 1-sample window.
+        nstdv: Number of standard deviations for the detection level (>= 0).
+        limit: Maximum backward search distance from t_event (x-units, > 0).
+
+    Returns:
+        X-time of onset (float), or None if not found within *limit*.
+
+    Raises:
+        TypeError: If yarray is not a numpy ndarray or params have wrong types.
+        ValueError: If polarity is invalid or limit <= 0.
+    """
+    if not isinstance(yarray, np.ndarray):
+        raise TypeError(nmu.type_error_str(yarray, "yarray", "numpy.ndarray"))
+    if not isinstance(polarity, str) or polarity not in _VALID_EVENT_POLARITIES:
+        raise ValueError(
+            "polarity must be one of %s, got %r"
+            % (sorted(_VALID_EVENT_POLARITIES), polarity)
+        )
+    if isinstance(xdelta, bool) or not isinstance(xdelta, (int, float)):
+        raise TypeError(nmu.type_error_str(xdelta, "xdelta", "float"))
+    xdelta = float(xdelta)
+    if xdelta <= 0:
+        raise ValueError("xdelta must be > 0, got %g" % xdelta)
+    if isinstance(limit, bool) or not isinstance(limit, (int, float)):
+        raise TypeError(nmu.type_error_str(limit, "limit", "float"))
+    limit = float(limit)
+    if limit <= 0:
+        raise ValueError("limit must be > 0, got %g" % limit)
+
+    n = len(yarray)
+    if n == 0:
+        return None
+
+    xstart = float(xstart)
+    event_idx   = min(n - 1, max(0, round((float(t_event) - xstart) / xdelta)))
+    avg_pts     = max(1, round(float(avg) / xdelta)) if avg > 0 else 1
+    limit_pts   = max(1, round(limit / xdelta))
+    istop        = max(0, event_idx - limit_pts)
+
+    yf  = yarray.astype(float, copy=False)
+    neg = (polarity == "negative")
+
+    for r in range(event_idx, istop - 1, -1):
+        ilo     = max(0, r - avg_pts + 1)
+        yf_window = yf[ilo: r + 1]
+        y_avg  = float(np.mean(yf_window))
+        y_std  = float(np.std(yf_window))
+        y_det  = (y_avg - nstdv * y_std) if neg else (y_avg + nstdv * y_std)
+        if neg:
+            if yf[r] > y_det:
+                return xstart + r * xdelta
+        else:
+            if yf[r] < y_det:
+                return xstart + r * xdelta
+
+    return None
+
+
+def find_event_peak(
+    yarray: np.ndarray,
+    xstart: float,
+    xdelta: float,
+    t_event: float,
+    polarity: str,
+    avg: float,
+    nstdv: float,
+    limit: float,
+) -> float | None:
+    """Forward sliding-window search for event peak (Kudoh & Taguchi 2002).
+
+    Slides a window forward from *t_event*. At each position, computes the
+    local mean and standard deviation, then checks whether the leftmost
+    window point crosses the dynamic level ``Y_avg - nstdv × Y_stdv``
+    (negative events) or ``Y_avg + nstdv × Y_stdv`` (positive events).
+    The first qualifying position gives the peak time.
+
+    Args:
+        yarray: 1-D numpy array of y-values.
+        xstart: X-value of the first sample.
+        xdelta: Sample interval (must be > 0).
+        t_event: X-time of the detected event (start of forward search).
+        polarity: ``"negative"`` or ``"positive"``.
+        avg: Sliding window size (x-units, >= 0). 0 uses a 1-sample window.
+        nstdv: Number of standard deviations for the detection level (>= 0).
+        limit: Maximum forward search distance from t_event (x-units, > 0).
+
+    Returns:
+        X-time of peak (float), or None if not found within *limit*.
+
+    Raises:
+        TypeError: If yarray is not a numpy ndarray or params have wrong types.
+        ValueError: If polarity is invalid or limit <= 0.
+    """
+    if not isinstance(yarray, np.ndarray):
+        raise TypeError(nmu.type_error_str(yarray, "yarray", "numpy.ndarray"))
+    if not isinstance(polarity, str) or polarity not in _VALID_EVENT_POLARITIES:
+        raise ValueError(
+            "polarity must be one of %s, got %r"
+            % (sorted(_VALID_EVENT_POLARITIES), polarity)
+        )
+    if isinstance(xdelta, bool) or not isinstance(xdelta, (int, float)):
+        raise TypeError(nmu.type_error_str(xdelta, "xdelta", "float"))
+    xdelta = float(xdelta)
+    if xdelta <= 0:
+        raise ValueError("xdelta must be > 0, got %g" % xdelta)
+    if isinstance(limit, bool) or not isinstance(limit, (int, float)):
+        raise TypeError(nmu.type_error_str(limit, "limit", "float"))
+    limit = float(limit)
+    if limit <= 0:
+        raise ValueError("limit must be > 0, got %g" % limit)
+
+    n = len(yarray)
+    if n == 0:
+        return None
+
+    xstart = float(xstart)
+    event_idx = min(n - 1, max(0, round((float(t_event) - xstart) / xdelta)))
+    avg_pts   = max(1, round(float(avg) / xdelta)) if avg > 0 else 1
+    limit_pts = max(1, round(limit / xdelta))
+    istop      = min(n - 1, event_idx + limit_pts)
+
+    yf  = yarray.astype(float, copy=False)
+    neg = (polarity == "negative")
+
+    for l in range(event_idx, istop + 1):
+        ihi     = min(n - 1, l + avg_pts - 1)
+        yf_window = yf[l: ihi + 1]
+        y_avg  = float(np.mean(yf_window))
+        y_std  = float(np.std(yf_window))
+        y_det  = (y_avg - nstdv * y_std) if neg else (y_avg + nstdv * y_std)
+        if neg:
+            if yf[l] < y_det:
+                return xstart + l * xdelta
+        else:
+            if yf[l] > y_det:
+                return xstart + l * xdelta
+
+    return None
+
+
+# =========================================================================
 # Linear regression
 # =========================================================================
 
