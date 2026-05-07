@@ -195,6 +195,179 @@ def filter_bessel_nmdata(
     return nm_math.filter_bessel(data.nparray, cutoff, sr, order, btype)
 
 
+def find_events_nmdata(
+    data: NMData,
+    algorithm: str,
+    polarity: str,
+    value: float = 20.0,
+    baseline_avg: float = 2.0,
+    baseline_dt: float = 2.0,
+    template: np.ndarray | None = None,
+    criterion_threshold: float = 4.0,
+    refractory: float = 0.0,
+    x0: float = -math.inf,
+    x1: float = math.inf,
+    onset_search: bool = False,
+    onset_avg: float = 1.0,
+    onset_nstdv: float = 1.0,
+    onset_limit: float = 5.0,
+    peak_search: bool = False,
+    peak_avg: float = 1.0,
+    peak_nstdv: float = 1.0,
+    peak_limit: float = 10.0,
+    max_events: int = 0,
+    match_criterion: np.ndarray | None = None,
+) -> dict:
+    """Find spontaneous events in an NMData array.
+
+    Convenience wrapper around the nm_math event-detection functions that
+    unpacks x-scale parameters from *data* automatically. Supports three
+    detection algorithms, optional onset refinement, and optional peak
+    refinement (Kudoh & Taguchi 2002; Clements & Bekkers 1997).
+
+    Args:
+        data: NMData containing the y-values and x-scale.
+        algorithm: Detection algorithm — ``"threshold"``, ``"nstdv"``,
+            or ``"template"``.
+        polarity: ``"negative"`` or ``"positive"``.
+        value: Threshold magnitude (threshold/nstdv algorithms).
+            Ignored for template algorithm.
+        baseline_avg: Baseline averaging window (x-units, threshold/nstdv).
+        baseline_dt: Detection window after t0 (x-units, threshold/nstdv).
+        template: 1-D numpy array (template algorithm only). Normalized to
+            [0, 1] internally before calling match_template.
+        criterion_threshold: Criterion threshold for template matching (default 4).
+        refractory: Minimum inter-event interval (x-units, all algorithms).
+        x0: Search start (x-units). Default ``-inf``.
+        x1: Search end (x-units). Default ``+inf``.
+        onset_search: If True, search backward from each t_event for onset.
+        onset_avg: Onset window size (x-units).
+        onset_nstdv: Onset N×stdv.
+        onset_limit: Max backward search distance (x-units).
+        peak_search: If True, search forward from each t_event for peak.
+        peak_avg: Peak window size (x-units).
+        peak_nstdv: Peak N×stdv.
+        peak_limit: Max forward search distance (x-units).
+        max_events: Stop after this many accepted events. 0 means no limit
+            (default).
+        match_criterion: Pre-computed template criterion array (template algorithm
+            only). When provided, ``match_template()`` is skipped. Pass the
+            cached result of a prior call to avoid recomputing for long
+            recordings.
+
+    Returns:
+        Dict with keys:
+        ``"detect_times"`` — list[float], accepted event x-times.
+        ``"onset_times"``  — list[float | None], onset per accepted event.
+        ``"peak_times"``   — list[float | None], peak per accepted event.
+        ``"reject_times"`` — list[float], t_event for rejected events.
+        ``"match_criterion"`` — np.ndarray | None, criterion wave (template
+            algorithm only, else None).
+        ``"xunits"``       — str, from data.xscale.units.
+    """
+    yarray = data.nparray
+    xstart = data.xscale.start if data.xscale.start is not None else 0.0
+    xdelta = data.xscale.delta if data.xscale.delta is not None else 1.0
+    xunits = data.xscale.units or ""
+
+    result: dict = {
+        "detect_times":    [],
+        "onset_times":     [],
+        "peak_times":      [],
+        "reject_times":    [],
+        "match_criterion": None,
+        "xunits":          xunits,
+    }
+
+    if yarray is None or len(yarray) == 0:
+        return result
+
+    if algorithm == "template":
+        if match_criterion is None:
+            if template is None:
+                raise ValueError("template must be provided when algorithm='template'")
+            tpl = template.astype(float, copy=True)
+            tpl_min = tpl.min()
+            tpl_max = tpl.max()
+            if tpl_max != tpl_min:
+                tpl = (tpl - tpl_min) / (tpl_max - tpl_min)
+            match_criterion = nm_math.match_template(yarray, tpl)
+        result["match_criterion"] = match_criterion
+        func_name = "level-" if polarity == "negative" else "level+"
+        thresh = -criterion_threshold if polarity == "negative" else criterion_threshold
+        _idxs, candidate_times = nm_math.find_level_crossings(
+            match_criterion,
+            thresh,
+            func_name=func_name,
+            xstart=xstart,
+            xdelta=xdelta,
+            x0=x0,
+            x1=x1,
+        )
+        candidate_times = list(candidate_times)
+        # Apply refractory filter
+        if refractory > 0 and len(candidate_times) > 1:
+            filtered = [candidate_times[0]]
+            for t in candidate_times[1:]:
+                if t - filtered[-1] >= refractory:
+                    filtered.append(t)
+            candidate_times = filtered
+    else:
+        mode = "nstdv" if algorithm == "nstdv" else "threshold"
+        candidate_times = nm_math.find_events_sliding_baseline(
+            yarray,
+            xstart=xstart,
+            xdelta=xdelta,
+            polarity=polarity,
+            mode=mode,
+            threshold=value,
+            baseline_avg=baseline_avg,
+            baseline_dt=baseline_dt,
+            refractory=refractory,
+            x0=x0,
+            x1=x1,
+            max_events=max_events,
+        )
+
+    for t_event in candidate_times:
+        t_onset = None
+        t_peak  = None
+        rejected = False
+
+        if onset_search:
+            t_onset = nm_math.find_event_onset(
+                yarray, xstart, xdelta, t_event,
+                polarity=polarity,
+                avg=onset_avg,
+                nstdv=onset_nstdv,
+                limit=onset_limit,
+            )
+            if t_onset is None:
+                rejected = True
+
+        if not rejected and peak_search:
+            t_peak = nm_math.find_event_peak(
+                yarray, xstart, xdelta, t_event,
+                polarity=polarity,
+                avg=peak_avg,
+                nstdv=peak_nstdv,
+                limit=peak_limit,
+            )
+            if t_peak is None:
+                rejected = True
+
+        if rejected:
+            result["reject_times"].append(t_event)
+        else:
+            result["detect_times"].append(t_event)
+            result["onset_times"].append(t_onset)
+            result["peak_times"].append(t_peak)
+            if max_events > 0 and len(result["detect_times"]) >= max_events:
+                break
+
+    return result
+
+
 def filter_notch_nmdata(
     data: NMData,
     freq: float,
