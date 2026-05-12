@@ -188,8 +188,8 @@ class NMToolEvent(NMTool):
         self.__x1:            float = math.inf
         self.__max_events:    int   = 0
 
-        # Match criterion cache — keyed by id(data.nparray), survives run_init()
-        self._match_criterion_cache_id: int | None        = None
+        # Match criterion cache — keyed by (id(data.nparray), template_baseline)
+        self._match_criterion_cache_id: tuple | None      = None
         self._match_criterion_cache:    np.ndarray | None = None
 
         # Internal run state — reset by run_init()
@@ -653,7 +653,11 @@ class NMToolEvent(NMTool):
             if tpl_max != tpl_min:
                 tpl = (tpl - tpl_min) / (tpl_max - tpl_min)
             if self.__template_baseline > 0:
-                xdelta = data.xscale.delta if data.xscale.delta else 1.0
+                xdelta = data.xscale.delta
+                if not xdelta:
+                    raise ValueError(
+                        "cannot prepend template baseline: xscale.delta is zero or unset"
+                    )
                 n_base = max(1, round(self.__template_baseline / xdelta))
                 tpl = np.concatenate([np.zeros(n_base), tpl])
             self._match_criterion_cache    = nm_math.match_template(arr, tpl)
