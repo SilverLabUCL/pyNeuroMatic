@@ -5,6 +5,7 @@ Tests for NMTool base class.
 Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
 """
+import math
 import unittest
 
 from pyneuromatic.core.nm_manager import NMManager, HIERARCHY_SELECT_KEYS
@@ -978,6 +979,73 @@ class TestNMToolOutputFlags(unittest.TestCase):
     def test_results_to_numpy_rejects_non_bool(self):
         with self.assertRaises(TypeError):
             self.tool.results_to_numpy = 0
+
+
+class TestNMToolXWindow(unittest.TestCase):
+    """Tests for xbgn/xend x-axis window properties on NMTool base class."""
+
+    def setUp(self):
+        self.tool = NMTool()
+
+    # --- defaults ---
+
+    def test_xbgn_default(self):
+        self.assertEqual(self.tool.xbgn, -math.inf)
+
+    def test_xend_default(self):
+        self.assertEqual(self.tool.xend, math.inf)
+
+    # --- xbgn ---
+
+    def test_xbgn_accepts_float(self):
+        self.tool.xbgn = 0.01
+        self.assertAlmostEqual(self.tool.xbgn, 0.01)
+
+    def test_xbgn_accepts_int(self):
+        self.tool.xbgn = 5
+        self.assertEqual(self.tool.xbgn, 5.0)
+
+    def test_xbgn_accepts_neg_inf(self):
+        self.tool.xbgn = -math.inf
+        self.assertEqual(self.tool.xbgn, -math.inf)
+
+    def test_xbgn_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            self.tool.xbgn = math.nan
+
+    def test_xbgn_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.xbgn = True
+
+    def test_xbgn_rejects_string(self):
+        with self.assertRaises(TypeError):
+            self.tool.xbgn = "start"
+
+    # --- xend ---
+
+    def test_xend_accepts_float(self):
+        self.tool.xend = 0.05
+        self.assertAlmostEqual(self.tool.xend, 0.05)
+
+    def test_xend_accepts_int(self):
+        self.tool.xend = 100
+        self.assertEqual(self.tool.xend, 100.0)
+
+    def test_xend_accepts_pos_inf(self):
+        self.tool.xend = math.inf
+        self.assertEqual(self.tool.xend, math.inf)
+
+    def test_xend_rejects_nan(self):
+        with self.assertRaises(ValueError):
+            self.tool.xend = math.nan
+
+    def test_xend_rejects_bool(self):
+        with self.assertRaises(TypeError):
+            self.tool.xend = False
+
+    def test_xend_rejects_string(self):
+        with self.assertRaises(TypeError):
+            self.tool.xend = "end"
 
 
 class TestNMToolConfigProperty(unittest.TestCase):

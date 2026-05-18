@@ -150,12 +150,6 @@ class TestNMToolEventDefaults(unittest.TestCase):
     def test_refractory_default(self):
         self.assertEqual(self.tool.refractory, 0.0)
 
-    def test_xbgn_default(self):
-        self.assertEqual(self.tool.xbgn, -math.inf)
-
-    def test_xend_default(self):
-        self.assertEqual(self.tool.xend, math.inf)
-
     def test_max_events_default(self):
         self.assertEqual(self.tool.max_events, 0)
 
@@ -311,31 +305,6 @@ class TestNMToolEventProperties(unittest.TestCase):
     def test_refractory_rejects_negative(self):
         with self.assertRaises(ValueError):
             self.tool.refractory = -1.0
-
-    # xbgn / xend
-    def test_xbgn_accepts_float(self):
-        self.tool.xbgn = 0.01
-        self.assertAlmostEqual(self.tool.xbgn, 0.01)
-
-    def test_xend_accepts_float(self):
-        self.tool.xend = 0.01
-        self.assertAlmostEqual(self.tool.xend, 0.01)
-
-    def test_xbgn_rejects_nan(self):
-        with self.assertRaises(ValueError):
-            self.tool.xbgn = math.nan
-
-    def test_xend_rejects_nan(self):
-        with self.assertRaises(ValueError):
-            self.tool.xend = math.nan
-
-    def test_xbgn_rejects_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.xbgn = True
-
-    def test_xend_rejects_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.xend = True
 
     # template_baseline
     def test_template_baseline_accepts_zero(self):
