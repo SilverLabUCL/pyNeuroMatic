@@ -679,7 +679,7 @@ class TestNMMainOpInsertPoints(unittest.TestCase):
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [0.0, 1.0, 2.0, 3.0])
 
-    def test_insert_ax1(self):
+    def test_insert_at_end(self):
         self.op.index = 3
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 0.0])
@@ -758,7 +758,7 @@ class TestNMMainOpDeletePoints(unittest.TestCase):
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [2.0, 3.0, 4.0, 5.0])
 
-    def test_delete_ax1(self):
+    def test_delete_at_end(self):
         self.op.index = 4
         self._run()
         np.testing.assert_array_equal(self.data.nparray, [1.0, 2.0, 3.0, 4.0])
@@ -1498,10 +1498,10 @@ class TestNMMainOpNormalize(unittest.TestCase):
     # per_array mode — correct values
 
     def test_per_array_min_max(self):
-        # [0,5,10], fxn1=min→0, fxn2=max→10, range=10 → [0.0, 0.5, 1.0]
+        # [0,5,10], min_fxn=min→0, max_fxn=max→10, range=10 → [0.0, 0.5, 1.0]
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=2.0, fxn1="min",
-            xbgn_max=0.0, xend_max=2.0, fxn2="max",
+            min_xbgn=0.0, min_xend=2.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=2.0, max_fxn="max",
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
         op.run_init()
@@ -1509,10 +1509,10 @@ class TestNMMainOpNormalize(unittest.TestCase):
         np.testing.assert_array_almost_equal(data.nparray, [0.0, 0.5, 1.0])
 
     def test_per_array_mean_zero_range(self):
-        # fxn1=mean and fxn2=mean over same window → ref_min==ref_max → norm_min everywhere
+        # min_fxn=mean and max_fxn=mean over same window → ref_min==ref_max → norm_min everywhere
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=4.0, fxn1="mean",
-            xbgn_max=0.0, xend_max=4.0, fxn2="mean",
+            min_xbgn=0.0, min_xend=4.0, min_fxn="mean",
+            max_xbgn=0.0, max_xend=4.0, max_fxn="mean",
             norm_min=-99.0,
         )
         data = _make_data("RecordA0", [0.0, 2.0, 4.0, 6.0, 8.0])
@@ -1523,8 +1523,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_array_uses_windows(self):
         # [0,1,2,3,4] xdelta=1; window1=[0,0]→first point(0), window2=[4,4]→last point(4)
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=0.0, fxn1="mean",
-            xbgn_max=4.0, xend_max=4.0, fxn2="mean",
+            min_xbgn=0.0, min_xend=0.0, min_fxn="mean",
+            max_xbgn=4.0, max_xend=4.0, max_fxn="mean",
         )
         data = _make_data("RecordA0", [0.0, 1.0, 2.0, 3.0, 4.0])
         op.run_init()
@@ -1534,8 +1534,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_array_custom_norm_range(self):
         # norm_min=-1, norm_max=1; [0,5,10]→ref_min=0,ref_max=10 → [-1,0,1]
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=2.0, fxn1="min",
-            xbgn_max=0.0, xend_max=2.0, fxn2="max",
+            min_xbgn=0.0, min_xend=2.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=2.0, max_fxn="max",
             norm_min=-1.0, norm_max=1.0,
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
@@ -1544,11 +1544,11 @@ class TestNMMainOpNormalize(unittest.TestCase):
         np.testing.assert_array_almost_equal(data.nparray, [-1.0, 0.0, 1.0])
 
     def test_per_array_mean_at_min(self):
-        # [3,1,2], fxn1=mean@min, n_mean1=3; min at i=1, mean of [3,1,2]=2.0 → ref_min=2.0
-        # fxn2=max → ref_max=3.0; range=1; normalized: arr-2.0 → [1,-1,0]
+        # [3,1,2], min_fxn=mean@min, min_mean_n=3; min at i=1, mean of [3,1,2]=2.0 → ref_min=2.0
+        # max_fxn=max → ref_max=3.0; range=1; normalized: arr-2.0 → [1,-1,0]
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=2.0, fxn1="mean@min", n_mean1=3,
-            xbgn_max=0.0, xend_max=2.0, fxn2="max",
+            min_xbgn=0.0, min_xend=2.0, min_fxn="mean@min", min_mean_n=3,
+            max_xbgn=0.0, max_xend=2.0, max_fxn="max",
         )
         data = _make_data("RecordA0", [3.0, 1.0, 2.0])
         op.run_init()
@@ -1556,11 +1556,11 @@ class TestNMMainOpNormalize(unittest.TestCase):
         np.testing.assert_array_almost_equal(data.nparray, [1.0, -1.0, 0.0])
 
     def test_per_array_mean_at_max(self):
-        # [1,5,3], fxn2=mean@max, n_mean2=3; max at i=1, mean of [1,5,3]=3.0 → ref_max=3.0
-        # fxn1=min → ref_min=1.0; range=2; normalized: (arr-1)/2 → [0,2,1]
+        # [1,5,3], max_fxn=mean@max, max_mean_n=3; max at i=1, mean of [1,5,3]=3.0 → ref_max=3.0
+        # min_fxn=min → ref_min=1.0; range=2; normalized: (arr-1)/2 → [0,2,1]
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=2.0, fxn1="min",
-            xbgn_max=0.0, xend_max=2.0, fxn2="mean@max", n_mean2=3,
+            min_xbgn=0.0, min_xend=2.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=2.0, max_fxn="mean@max", max_mean_n=3,
         )
         data = _make_data("RecordA0", [1.0, 5.0, 3.0])
         op.run_init()
@@ -1569,8 +1569,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_per_array_preserves_length(self):
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=99.0, fxn1="min",
-            xbgn_max=0.0, xend_max=99.0, fxn2="max",
+            min_xbgn=0.0, min_xend=99.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=99.0, max_fxn="max",
         )
         data = _make_data("RecordA0", list(range(100)))
         op.run_init()
@@ -1583,8 +1583,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_average_mode_shared_refs(self):
         # 2 arrays same channel; ref_mins=[0,2]→avg=1, ref_maxes=[4,6]→avg=5, range=4
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=1.0, fxn1="min",
-            xbgn_max=0.0, xend_max=1.0, fxn2="max",
+            min_xbgn=0.0, min_xend=1.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=1.0, max_fxn="max",
             mode="average",
         )
         d0 = _make_data("RecordA0", [0.0, 4.0])
@@ -1596,8 +1596,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_average_mode_per_channel(self):
         # Channel A ref_max=10, channel B ref_max=5 — independent
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=1.0, fxn1="min",
-            xbgn_max=0.0, xend_max=1.0, fxn2="max",
+            min_xbgn=0.0, min_xend=1.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=1.0, max_fxn="max",
             mode="average",
         )
         dA = _make_data("RecordA0", [0.0, 10.0])
@@ -1614,25 +1614,25 @@ class TestNMMainOpNormalize(unittest.TestCase):
     # ------------------------------------------------------------------
     # validation
 
-    def test_fxn1_rejects_unknown(self):
+    def test_min_fxn_rejects_unknown(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(fxn1="bad")
+            NMMainOpNormalize(min_fxn="bad")
 
-    def test_fxn1_rejects_non_string(self):
+    def test_min_fxn_rejects_non_string(self):
         with self.assertRaises(TypeError):
-            NMMainOpNormalize(fxn1=42)
+            NMMainOpNormalize(min_fxn=42)
 
-    def test_fxn2_rejects_unknown(self):
+    def test_max_fxn_rejects_unknown(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(fxn2="bad")
+            NMMainOpNormalize(max_fxn="bad")
 
-    def test_n_mean1_rejects_bool(self):
+    def test_min_mean_n_rejects_bool(self):
         with self.assertRaises(TypeError):
-            NMMainOpNormalize(n_mean1=True)
+            NMMainOpNormalize(min_mean_n=True)
 
-    def test_n_mean1_rejects_zero(self):
+    def test_min_mean_n_rejects_zero(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(n_mean1=0)
+            NMMainOpNormalize(min_mean_n=0)
 
     def test_norm_min_rejects_bool(self):
         with self.assertRaises(TypeError):
@@ -1646,26 +1646,26 @@ class TestNMMainOpNormalize(unittest.TestCase):
         with self.assertRaises(ValueError):
             NMMainOpNormalize(mode="bad")
 
-    def test_x1_min_before_x0_min_raises(self):
-        op = NMMainOpNormalize(xbgn_min=5.0, xend_min=0.0)
+    def test_min_xend_before_min_xbgn_raises(self):
+        op = NMMainOpNormalize(min_xbgn=5.0, min_xend=0.0)
         with self.assertRaises(ValueError):
             op.run_init()
 
-    def test_x0_min_rejects_nan(self):
+    def test_min_xbgn_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(xbgn_min=float("nan"))
+            NMMainOpNormalize(min_xbgn=float("nan"))
 
-    def test_x1_min_rejects_nan(self):
+    def test_min_xend_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(xend_min=float("nan"))
+            NMMainOpNormalize(min_xend=float("nan"))
 
-    def test_x0_max_rejects_nan(self):
+    def test_max_xbgn_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(xbgn_max=float("nan"))
+            NMMainOpNormalize(max_xbgn=float("nan"))
 
-    def test_x1_max_rejects_nan(self):
+    def test_max_xend_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(xend_max=float("nan"))
+            NMMainOpNormalize(max_xend=float("nan"))
 
     # ------------------------------------------------------------------
     # edge cases / notes
@@ -1679,8 +1679,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_note_per_array(self):
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=2.0, fxn1="min",
-            xbgn_max=0.0, xend_max=2.0, fxn2="max",
+            min_xbgn=0.0, min_xend=2.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=2.0, max_fxn="max",
             mode="per_array",
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
@@ -1695,8 +1695,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_note_average(self):
         op = NMMainOpNormalize(
-            xbgn_min=0.0, xend_min=1.0, fxn1="min",
-            xbgn_max=0.0, xend_max=1.0, fxn2="max",
+            min_xbgn=0.0, min_xend=1.0, min_fxn="min",
+            max_xbgn=0.0, max_xend=1.0, max_fxn="max",
             mode="average",
         )
         data = _make_data("RecordA0", [0.0, 10.0])

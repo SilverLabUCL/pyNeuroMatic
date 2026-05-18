@@ -2015,10 +2015,10 @@ class NMMainOpNormalize(NMMainOp):
 
     Two independent xscale windows are used:
 
-    - Window 1 (``xbgn_min``/``xend_min``) computes the "low" reference via
-      ``fxn1`` (``"mean"``, ``"min"``, or ``"mean@min"``).
-    - Window 2 (``xbgn_max``/``xend_max``) computes the "high" reference via
-      ``fxn2`` (``"mean"``, ``"max"``, or ``"mean@max"``).
+    - Window 1 (``min_xbgn``/``min_xend``) computes the "low" reference via
+      ``min_fxn`` (``"mean"``, ``"min"``, or ``"mean@min"``).
+    - Window 2 (``max_xbgn``/``max_xend``) computes the "high" reference via
+      ``max_fxn`` (``"mean"``, ``"max"``, or ``"mean@max"``).
 
     Two modes (matching NMMainOpBaseline):
 
@@ -2027,16 +2027,16 @@ class NMMainOpNormalize(NMMainOp):
       then applied to every array in that channel.
 
     Parameters:
-        xbgn_min: Window 1 start in xscale units (default 0.0).
-        xend_min: Window 1 end in xscale units (default 0.0).
-        fxn1: Function for the low reference: ``"mean"``, ``"min"``, or
+        min_xbgn: Window 1 start in xscale units (default 0.0).
+        min_xend: Window 1 end in xscale units (default 0.0).
+        min_fxn: Function for the low reference: ``"mean"``, ``"min"``, or
             ``"mean@min"`` (default ``"mean"``).
-        n_mean1: Points around min for ``mean@min`` (default 1).
-        xbgn_max: Window 2 start in xscale units (default 0.0).
-        xend_max: Window 2 end in xscale units (default 0.0).
-        fxn2: Function for the high reference: ``"mean"``, ``"max"``, or
+        min_mean_n: Points around min for ``mean@min`` (default 1).
+        max_xbgn: Window 2 start in xscale units (default 0.0).
+        max_xend: Window 2 end in xscale units (default 0.0).
+        max_fxn: Function for the high reference: ``"mean"``, ``"max"``, or
             ``"mean@max"`` (default ``"mean"``).
-        n_mean2: Points around max for ``mean@max`` (default 1).
+        max_mean_n: Points around max for ``mean@max`` (default 1).
         norm_min: Target normalized minimum (default 0.0).
         norm_max: Target normalized maximum (default 1.0).
         mode: ``"per_array"`` (default) or ``"average"``.
@@ -2050,26 +2050,26 @@ class NMMainOpNormalize(NMMainOp):
 
     def __init__(
         self,
-        xbgn_min: float = 0.0,
-        xend_min: float = 0.0,
-        fxn1: str = "mean",
-        n_mean1: int = 1,
-        xbgn_max: float = 0.0,
-        xend_max: float = 0.0,
-        fxn2: str = "mean",
-        n_mean2: int = 1,
+        min_xbgn: float = 0.0,
+        min_xend: float = 0.0,
+        min_fxn: str = "mean",
+        min_mean_n: int = 1,
+        max_xbgn: float = 0.0,
+        max_xend: float = 0.0,
+        max_fxn: str = "mean",
+        max_mean_n: int = 1,
         norm_min: float = 0.0,
         norm_max: float = 1.0,
         mode: str = "per_array",
     ) -> None:
-        self.xbgn_min = xbgn_min
-        self.xend_min = xend_min
-        self.fxn1 = fxn1
-        self.n_mean1 = n_mean1
-        self.xbgn_max = xbgn_max
-        self.xend_max = xend_max
-        self.fxn2 = fxn2
-        self.n_mean2 = n_mean2
+        self.min_xbgn = min_xbgn
+        self.min_xend = min_xend
+        self.min_fxn = min_fxn
+        self.min_mean_n = min_mean_n
+        self.max_xbgn = max_xbgn
+        self.max_xend = max_xend
+        self.max_fxn = max_fxn
+        self.max_mean_n = max_mean_n
         self.norm_min = norm_min
         self.norm_max = norm_max
         self.mode = mode
@@ -2078,112 +2078,112 @@ class NMMainOpNormalize(NMMainOp):
     # Properties
 
     @property
-    def xbgn_min(self) -> float:
+    def min_xbgn(self) -> float:
         """Window 1 start (xscale units)."""
-        return self._xbgn_min
+        return self._min_xbgn
 
-    @xbgn_min.setter
-    def xbgn_min(self, value: float) -> None:
+    @min_xbgn.setter
+    def min_xbgn(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "xbgn_min", "float"))
+            raise TypeError(nmu.type_error_str(value, "min_xbgn", "float"))
         if math.isnan(float(value)):
-            raise ValueError("xbgn_min must not be NaN")
-        self._xbgn_min = float(value)
+            raise ValueError("min_xbgn must not be NaN")
+        self._min_xbgn = float(value)
 
     @property
-    def xend_min(self) -> float:
+    def min_xend(self) -> float:
         """Window 1 end (xscale units)."""
-        return self._xend_min
+        return self._min_xend
 
-    @xend_min.setter
-    def xend_min(self, value: float) -> None:
+    @min_xend.setter
+    def min_xend(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "xend_min", "float"))
+            raise TypeError(nmu.type_error_str(value, "min_xend", "float"))
         if math.isnan(float(value)):
-            raise ValueError("xend_min must not be NaN")
-        self._xend_min = float(value)
+            raise ValueError("min_xend must not be NaN")
+        self._min_xend = float(value)
 
     @property
-    def fxn1(self) -> str:
+    def min_fxn(self) -> str:
         """Low-reference function: ``'mean'``, ``'min'``, or ``'mean@min'``."""
-        return self._fxn1
+        return self._min_fxn
 
-    @fxn1.setter
-    def fxn1(self, value: str) -> None:
+    @min_fxn.setter
+    def min_fxn(self, value: str) -> None:
         if not isinstance(value, str):
-            raise TypeError(nmu.type_error_str(value, "fxn1", "string"))
+            raise TypeError(nmu.type_error_str(value, "min_fxn", "string"))
         if value not in self._VALID_FXN1:
             raise ValueError(
-                "fxn1 must be one of %s, got %r" % (sorted(self._VALID_FXN1), value)
+                "min_fxn must be one of %s, got %r" % (sorted(self._VALID_FXN1), value)
             )
-        self._fxn1 = value
+        self._min_fxn = value
 
     @property
-    def n_mean1(self) -> int:
+    def min_mean_n(self) -> int:
         """Points around min for ``mean@min`` (default 1)."""
-        return self._n_mean1
+        return self._min_mean_n
 
-    @n_mean1.setter
-    def n_mean1(self, value: int) -> None:
+    @min_mean_n.setter
+    def min_mean_n(self, value: int) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
-            raise TypeError(nmu.type_error_str(value, "n_mean1", "int"))
+            raise TypeError(nmu.type_error_str(value, "min_mean_n", "int"))
         if value < 1:
-            raise ValueError("n_mean1 must be >= 1, got %d" % value)
-        self._n_mean1 = value
+            raise ValueError("min_mean_n must be >= 1, got %d" % value)
+        self._min_mean_n = value
 
     @property
-    def xbgn_max(self) -> float:
+    def max_xbgn(self) -> float:
         """Window 2 start (xscale units)."""
-        return self._xbgn_max
+        return self._max_xbgn
 
-    @xbgn_max.setter
-    def xbgn_max(self, value: float) -> None:
+    @max_xbgn.setter
+    def max_xbgn(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "xbgn_max", "float"))
+            raise TypeError(nmu.type_error_str(value, "max_xbgn", "float"))
         if math.isnan(float(value)):
-            raise ValueError("xbgn_max must not be NaN")
-        self._xbgn_max = float(value)
+            raise ValueError("max_xbgn must not be NaN")
+        self._max_xbgn = float(value)
 
     @property
-    def xend_max(self) -> float:
+    def max_xend(self) -> float:
         """Window 2 end (xscale units)."""
-        return self._xend_max
+        return self._max_xend
 
-    @xend_max.setter
-    def xend_max(self, value: float) -> None:
+    @max_xend.setter
+    def max_xend(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "xend_max", "float"))
+            raise TypeError(nmu.type_error_str(value, "max_xend", "float"))
         if math.isnan(float(value)):
-            raise ValueError("xend_max must not be NaN")
-        self._xend_max = float(value)
+            raise ValueError("max_xend must not be NaN")
+        self._max_xend = float(value)
 
     @property
-    def fxn2(self) -> str:
+    def max_fxn(self) -> str:
         """High-reference function: ``'mean'``, ``'max'``, or ``'mean@max'``."""
-        return self._fxn2
+        return self._max_fxn
 
-    @fxn2.setter
-    def fxn2(self, value: str) -> None:
+    @max_fxn.setter
+    def max_fxn(self, value: str) -> None:
         if not isinstance(value, str):
-            raise TypeError(nmu.type_error_str(value, "fxn2", "string"))
+            raise TypeError(nmu.type_error_str(value, "max_fxn", "string"))
         if value not in self._VALID_FXN2:
             raise ValueError(
-                "fxn2 must be one of %s, got %r" % (sorted(self._VALID_FXN2), value)
+                "max_fxn must be one of %s, got %r" % (sorted(self._VALID_FXN2), value)
             )
-        self._fxn2 = value
+        self._max_fxn = value
 
     @property
-    def n_mean2(self) -> int:
+    def max_mean_n(self) -> int:
         """Points around max for ``mean@max`` (default 1)."""
-        return self._n_mean2
+        return self._max_mean_n
 
-    @n_mean2.setter
-    def n_mean2(self, value: int) -> None:
+    @max_mean_n.setter
+    def max_mean_n(self, value: int) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
-            raise TypeError(nmu.type_error_str(value, "n_mean2", "int"))
+            raise TypeError(nmu.type_error_str(value, "max_mean_n", "int"))
         if value < 1:
-            raise ValueError("n_mean2 must be >= 1, got %d" % value)
-        self._n_mean2 = value
+            raise ValueError("max_mean_n must be >= 1, got %d" % value)
+        self._max_mean_n = value
 
     @property
     def norm_min(self) -> float:
@@ -2226,13 +2226,13 @@ class NMMainOpNormalize(NMMainOp):
     # Validation helper
 
     def _validate_windows(self) -> None:
-        if self._xend_min < self._xbgn_min:
+        if self._min_xend < self._min_xbgn:
             raise ValueError(
-                "xend_min (%g) must be >= xbgn_min (%g)" % (self._xend_min, self._xbgn_min)
+                "min_xend (%g) must be >= min_xbgn (%g)" % (self._min_xend, self._min_xbgn)
             )
-        if self._xend_max < self._xbgn_max:
+        if self._max_xend < self._max_xbgn:
             raise ValueError(
-                "xend_max (%g) must be >= xbgn_max (%g)" % (self._xend_max, self._xbgn_max)
+                "max_xend (%g) must be >= max_xbgn (%g)" % (self._max_xend, self._max_xbgn)
             )
 
     # ------------------------------------------------------------------
@@ -2283,10 +2283,10 @@ class NMMainOpNormalize(NMMainOp):
 
         arr = data.nparray.astype(float)
         xd = data.xscale.to_dict()
-        sl1 = nm_math.xscale_window_to_slice(arr, xd, self._xbgn_min, self._xend_min)
-        sl2 = nm_math.xscale_window_to_slice(arr, xd, self._xbgn_max, self._xend_max)
-        ref_min = nm_math.compute_ref_value(arr[sl1], self._fxn1, self._n_mean1)
-        ref_max = nm_math.compute_ref_value(arr[sl2], self._fxn2, self._n_mean2)
+        sl1 = nm_math.xscale_window_to_slice(arr, xd, self._min_xbgn, self._min_xend)
+        sl2 = nm_math.xscale_window_to_slice(arr, xd, self._max_xbgn, self._max_xend)
+        ref_min = nm_math.compute_ref_value(arr[sl1], self._min_fxn, self._min_mean_n)
+        ref_max = nm_math.compute_ref_value(arr[sl2], self._max_fxn, self._max_mean_n)
 
         if self._mode == "per_array":
             data.nparray = self._apply(arr, ref_min, ref_max)
@@ -2319,12 +2319,12 @@ class NMMainOpNormalize(NMMainOp):
 
     def _op_params_str(self) -> str:
         return (
-            "xbgn_min=%r, xend_min=%r, fxn1=%r, n_mean1=%d, "
-            "xbgn_max=%r, xend_max=%r, fxn2=%r, n_mean2=%d, "
+            "min_xbgn=%r, min_xend=%r, min_fxn=%r, min_mean_n=%d, "
+            "max_xbgn=%r, max_xend=%r, max_fxn=%r, max_mean_n=%d, "
             "norm_min=%r, norm_max=%r, mode=%r"
         ) % (
-            self._xbgn_min, self._xend_min, self._fxn1, self._n_mean1,
-            self._xbgn_max, self._xend_max, self._fxn2, self._n_mean2,
+            self._min_xbgn, self._min_xend, self._min_fxn, self._min_mean_n,
+            self._max_xbgn, self._max_xend, self._max_fxn, self._max_mean_n,
             self._norm_min, self._norm_max, self._mode,
         )
 
