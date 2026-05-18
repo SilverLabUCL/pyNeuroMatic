@@ -225,8 +225,8 @@ class NMToolStats(NMTool):
         "mean+sem":       "mean_sem",
         "mean@max":       "mean_max",
         "mean@min":       "mean_min",
-        "value@x0":       "val_x0",
-        "value@x1":       "val_x1",
+        "value@xbgn":       "val_x0",
+        "value@xend":       "val_x1",
         "level+":         "level_p",
         "level-":         "level_m",
         "risetime+":      "rt_p",
@@ -392,17 +392,17 @@ class NMToolStats(NMTool):
                         d = f.data.new(dname, nparray=arr, yscale=yscale)
                         win = self.windows[wname] if wname in self.windows else None
                         if id_str == "bsln" and win is not None:
-                            x0 = win.bsln_x0
-                            x1 = win.bsln_x1
+                            xbgn = win.bsln_xbgn
+                            xend = win.bsln_xend
                             note_func = win.bsln_func.get("name", func_name)
                         else:
-                            x0 = win.x0 if win is not None else None
-                            x1 = win.x1 if win is not None else None
+                            xbgn = win.xbgn if win is not None else None
+                            xend = win.xend if win is not None else None
                             note_func = func_name
                         self._add_note(
                             d,
-                            "NMStats(win=%s, func=%s, id=%s, x0=%s, x1=%s, n=%d)"
-                            % (wname, note_func, id_str, x0, x1, len(rdicts)),
+                            "NMStats(win=%s, func=%s, id=%s, xbgn=%s, xend=%s, n=%d)"
+                            % (wname, note_func, id_str, xbgn, xend, len(rdicts)),
                         )
 
                 # Save warnings if any occurred

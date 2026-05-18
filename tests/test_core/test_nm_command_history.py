@@ -82,7 +82,7 @@ class TestNMCommandHistoryInit:
 class TestNMCommandHistoryAdd:
     def test_add_records_entry(self):
         h = _fresh()
-        entry = "NMMainOpBaseline(x0=0.0, x1=10.0).run_all()"
+        entry = "NMMainOpBaseline(xbgn=0.0, xend=10.0).run_all()"
         h.add(entry)
         assert len(h) == 1
         assert h.buffer[0]["command"] == entry
@@ -192,7 +192,7 @@ class TestNMCommandHistoryToNotebook:
     def test_to_notebook_creates_file(self):
         pytest.importorskip("nbformat")
         h = _fresh()
-        h.add("NMMainOpBaseline(x0=0.0).run_all(folder='f', prefix='R', channels=['A'], epochs=[0])")
+        h.add("NMMainOpBaseline(xbgn=0.0).run_all(folder='f', prefix='R', channels=['A'], epochs=[0])")
         with tempfile.NamedTemporaryFile(suffix=".ipynb", delete=False) as tmp:
             path = tmp.name
         try:
@@ -237,7 +237,7 @@ class TestNMCommandHistoryToNotebook:
         import nbformat
         h = _fresh()
         # Use a real class name so _build_import_block can locate it
-        h.add("NMMainOpBaseline(x0=0.0, x1=1.0).run_all(folder='f', prefix='R', channels=['A'], epochs=[0])")
+        h.add("NMMainOpBaseline(xbgn=0.0, xend=1.0).run_all(folder='f', prefix='R', channels=['A'], epochs=[0])")
         with tempfile.NamedTemporaryFile(suffix=".ipynb", delete=False) as tmp:
             path = tmp.name
         try:
@@ -313,7 +313,7 @@ class TestNMCommandHistoryToNotebook:
 class TestNMCommandHistoryToScript:
     def test_to_script_creates_file(self):
         h = _fresh()
-        h.add("NMMainOpBaseline(x0=0.0).run_all()")
+        h.add("NMMainOpBaseline(xbgn=0.0).run_all()")
         with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as tmp:
             path = tmp.name
         try:
@@ -339,7 +339,7 @@ class TestNMCommandHistoryToScript:
 
     def test_to_script_has_import(self):
         h = _fresh()
-        h.add("NMMainOpBaseline(x0=0.0, x1=1.0).run_all(folder='f', prefix='R', channels=['A'], epochs=[0])")
+        h.add("NMMainOpBaseline(xbgn=0.0, xend=1.0).run_all(folder='f', prefix='R', channels=['A'], epochs=[0])")
         with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as tmp:
             path = tmp.name
         try:

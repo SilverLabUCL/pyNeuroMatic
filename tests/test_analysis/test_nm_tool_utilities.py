@@ -98,16 +98,16 @@ class TestFindLevelCrossingsNMData:
         y = np.array([0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
         data = _make_data(y, xstart=0.0, xdelta=0.001)
         all_idx, _ = find_level_crossings_nmdata(data, 0.5)
-        win_idx, _ = find_level_crossings_nmdata(data, 0.5, x0=0.0, x1=0.003)
+        win_idx, _ = find_level_crossings_nmdata(data, 0.5, xbgn=0.0, xend=0.003)
         assert len(win_idx) < len(all_idx)
 
     def test_backward_search_passed_through(self):
-        # x0 > x1 → descending order
+        # xbgn > xend → descending order
         y = np.array([0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0])
         data = _make_data(y, xstart=0.0, xdelta=0.001)
         fwd_idx, fwd_x = find_level_crossings_nmdata(data, 0.5)
         bwd_idx, bwd_x = find_level_crossings_nmdata(
-            data, 0.5, x0=0.008, x1=0.0
+            data, 0.5, xbgn=0.008, xend=0.0
         )
         assert len(bwd_x) >= 1
         # x values should be in descending order
@@ -140,7 +140,7 @@ class TestFindLevelCrossingsNMData:
         data = _make_data(y, xstart=0.0, xdelta=0.001)
         data.xarray = xa
         all_idx, _ = find_level_crossings_nmdata(data, 0.5)
-        win_idx, _ = find_level_crossings_nmdata(data, 0.5, x0=0.0, x1=3.0)
+        win_idx, _ = find_level_crossings_nmdata(data, 0.5, xbgn=0.0, xend=3.0)
         assert len(win_idx) < len(all_idx)
 
 

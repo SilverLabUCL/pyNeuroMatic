@@ -203,8 +203,8 @@ def compute_ref_value(arr: np.ndarray, fxn: str, n_mean: int) -> float:
 def xscale_window_to_slice(
     arr: np.ndarray,
     xscale_dict: dict,
-    x0: float,
-    x1: float,
+    xbgn: float,
+    xend: float,
 ) -> slice:
     """Convert a xscale window to an array slice using xscale start/delta.
 
@@ -215,9 +215,9 @@ def xscale_window_to_slice(
     Args:
         arr:         Array whose length defines the valid index range.
         xscale_dict: Dict with ``"start"`` and ``"delta"`` keys (floats).
-        x0:     Start of the xscale window.  ``-inf`` selects from the
+        xbgn:     Start of the xscale window.  ``-inf`` selects from the
                      beginning of the array.
-        x1:       End of the xscale window (inclusive).  ``+inf`` selects
+        xend:       End of the xscale window (inclusive).  ``+inf`` selects
                      to the end of the array.
 
     Returns:
@@ -227,8 +227,8 @@ def xscale_window_to_slice(
     delta = xscale_dict.get("delta", 1.0)
     if delta == 0:
         return slice(0, 0)
-    i0 = 0 if math.isinf(x0) else int(round((x0 - start) / delta))
-    i1 = len(arr) if math.isinf(x1) else int(round((x1 - start) / delta)) + 1
+    i0 = 0 if math.isinf(xbgn) else int(round((xbgn - start) / delta))
+    i1 = len(arr) if math.isinf(xend) else int(round((xend - start) / delta)) + 1
     i0 = max(0, i0)
     i1 = min(len(arr), i1)
     return slice(i0, i1)
@@ -443,8 +443,8 @@ def find_level_crossings(
     xarray: np.ndarray | None = None,
     xstart: float = 0,
     xdelta: float = 1,
-    x0: float = -math.inf,
-    x1: float = math.inf,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
     x_interp: bool = True,
     ignore_nans: bool = True,
 ) -> tuple:
@@ -466,12 +466,12 @@ def find_level_crossings(
                      provided.
         xstart:      X-scale start value; used when *xarray* is None.
         xdelta:      X-scale sample interval; used when *xarray* is None.
-        x0:          X-axis window start. Only crossings at x >= x0 are
+        xbgn:          X-axis window start. Only crossings at x >= xbgn are
                      returned. Default ``-inf`` (no lower bound).
-                     If *x0* > *x1*, a backwards search is performed: the
-                     window is ``[x1, x0]`` and crossings are returned in
+                     If *xbgn* > *xend*, a backwards search is performed: the
+                     window is ``[xend, xbgn]`` and crossings are returned in
                      descending x order.
-        x1:          X-axis window end. Only crossings at x <= x1 are
+        xend:          X-axis window end. Only crossings at x <= xend are
                      returned. Default ``+inf`` (no upper bound).
         x_interp:    If True (default), returns the interpolated xvalue at
                      the exact crossing. If False, returns the xvalue at
@@ -491,14 +491,14 @@ def find_level_crossings(
         *indexes* — sample indices (int) nearest to each crossing.
         *xvalues* — xvalues (float) at each crossing location.
         Both arrays are empty if no crossings are found.
-        If *x0* > *x1* (backwards search), both arrays are in descending
+        If *xbgn* > *xend* (backwards search), both arrays are in descending
         x order.
 
     Raises:
         TypeError:  If *func_name* is not a string, *yarray*/*xarray* is
-                    not a numpy ndarray, or *x0*/*x1* is a bool.
+                    not a numpy ndarray, or *xbgn*/*xend* is a bool.
         ValueError: If *func_name* does not contain ``"level"``, *ylevel*
-                    is inf/nan, *xstart*/*xdelta* is inf/nan, *x0*/*x1*
+                    is inf/nan, *xstart*/*xdelta* is inf/nan, *xbgn*/*xend*
                     is NaN, or *xarray* size differs from *yarray*.
     """
     if not isinstance(func_name, str):
@@ -549,21 +549,21 @@ def find_level_crossings(
     if not isinstance(ignore_nans, bool):
         ignore_nans = True
 
-    # Validate x0 / x1 window parameters
-    if isinstance(x0, bool):
-        raise TypeError(nmu.type_error_str(x0, "x0", "float"))
-    if isinstance(x1, bool):
-        raise TypeError(nmu.type_error_str(x1, "x1", "float"))
-    x0 = float(x0)
-    x1 = float(x1)
-    if math.isnan(x0):
-        raise ValueError("x0: '%s'" % x0)
-    if math.isnan(x1):
-        raise ValueError("x1: '%s'" % x1)
+    # Validate xbgn / xend window parameters
+    if isinstance(xbgn, bool):
+        raise TypeError(nmu.type_error_str(xbgn, "xbgn", "float"))
+    if isinstance(xend, bool):
+        raise TypeError(nmu.type_error_str(xend, "xend", "float"))
+    xbgn = float(xbgn)
+    xend = float(xend)
+    if math.isnan(xbgn):
+        raise ValueError("xbgn: '%s'" % xbgn)
+    if math.isnan(xend):
+        raise ValueError("xend: '%s'" % xend)
 
-    backward = x0 > x1
-    x_low  = min(x0, x1)
-    x_high = max(x0, x1)
+    backward = xbgn > xend
+    x_low  = min(xbgn, xend)
+    x_high = max(xbgn, xend)
 
     # NaN compaction (Igor Pro behaviour): remove NaN samples but keep their
     # x positions so that a crossing between two non-NaN samples separated by
@@ -683,8 +683,8 @@ def find_events_sliding_baseline(
     baseline_avg: float,
     baseline_dt: float,
     refractory: float = 0.0,
-    x0: float | None = None,
-    x1: float | None = None,
+    xbgn: float | None = None,
+    xend: float | None = None,
     max_events: int = 0,
 ) -> list[float]:
     """Detect events using a sliding baseline (Kudoh & Taguchi 2002).
@@ -713,8 +713,8 @@ def find_events_sliding_baseline(
         refractory: Minimum time between events (x-units, >= 0). After each
             detection the next search begins at t_event + refractory.
             Default 0.0 (next t0 = t_event, no enforced gap).
-        x0: Search start (x-units). Default None (start of array).
-        x1: Search end (x-units). Default None (end of array).
+        xbgn: Search start (x-units). Default None (start of array).
+        xend: Search end (x-units). Default None (end of array).
         max_events: Stop after finding this many events. 0 means no limit
             (default).
 
@@ -774,10 +774,10 @@ def find_events_sliding_baseline(
     if n == 0:
         return []
 
-    i0 = (0 if x0 is None or (isinstance(x0, float) and math.isinf(x0))
-          else max(0, round((float(x0) - xstart) / xdelta)))
-    i1 = (n - 1 if x1 is None or (isinstance(x1, float) and math.isinf(x1))
-          else min(n - 1, round((float(x1) - xstart) / xdelta)))
+    i0 = (0 if xbgn is None or (isinstance(xbgn, float) and math.isinf(xbgn))
+          else max(0, round((float(xbgn) - xstart) / xdelta)))
+    i1 = (n - 1 if xend is None or (isinstance(xend, float) and math.isinf(xend))
+          else min(n - 1, round((float(xend) - xstart) / xdelta)))
     if i0 > i1:
         return []
 
@@ -1830,3 +1830,446 @@ def match_template(
     result = np.zeros(n)
     result[:passes] = detect
     return result
+
+
+# ---------------------------------------------------------------------------
+# Curve-fitting functions
+# ---------------------------------------------------------------------------
+
+def _extract_xy_window(
+    yarray: np.ndarray,
+    xstart: float,
+    xdelta: float,
+    xarray: np.ndarray | None,
+    xbgn: float,
+    xend: float,
+    ignore_nans: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extract x and y within [xbgn, xend], optionally removing NaNs."""
+    n = len(yarray)
+    if xarray is not None:
+        xdata = xarray.astype(float, copy=False)
+    else:
+        xdata = xstart + np.arange(n) * xdelta
+
+    mask = (xdata >= xbgn) & (xdata <= xend)
+    x = xdata[mask]
+    y = yarray[mask].astype(float, copy=False)
+
+    if ignore_nans:
+        valid = ~np.isnan(y)
+        x = x[valid]
+        y = y[valid]
+
+    return x, y
+
+
+def _r2(y: np.ndarray, y_fit: np.ndarray) -> float:
+    """Coefficient of determination R²."""
+    ss_res = float(np.sum((y - y_fit) ** 2))
+    ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+    if ss_tot == 0.0:
+        return 1.0 if ss_res == 0.0 else 0.0
+    return 1.0 - ss_res / ss_tot
+
+
+def fit_line(
+    yarray: np.ndarray,
+    xstart: float = 0.0,
+    xdelta: float = 1.0,
+    xarray: np.ndarray | None = None,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
+    sigma: np.ndarray | None = None,
+    ignore_nans: bool = True,
+) -> dict:
+    """Fit a straight line to *yarray*.
+
+    Without *sigma* uses ``scipy.stats.linregress``.  With *sigma* uses
+    ``numpy.polyfit(deg=1, w=1/sigma)`` for weighted least squares.
+
+    Args:
+        yarray:  1-D numpy array of y-values.
+        xstart:  X-axis start value (uniform spacing). Ignored when *xarray*
+                 is provided.
+        xdelta:  X-axis sample interval (uniform spacing). Ignored when
+                 *xarray* is provided.
+        xarray:  Non-uniform x-values array. When provided, *xstart* and
+                 *xdelta* are ignored.
+        xbgn:      Fit window start (x-units). Default ``-inf``.
+        xend:      Fit window end (x-units). Default ``+inf``.
+        sigma:   Per-point standard deviations for weighted fitting. When
+                 provided weights are ``1/sigma`` and chi-squared uses sigma
+                 in the denominator.
+        ignore_nans: If True (default), exclude NaN values before fitting.
+
+    Returns:
+        Dict with keys ``"slope"``, ``"intercept"``, ``"r2"``,
+        ``"chi_sqr"``, ``"n"``.
+
+    Raises:
+        ValueError: If fewer than 2 data points remain after windowing/NaN
+            removal, or if *sigma* has a different length than the windowed
+            y-data.
+    """
+    x, y = _extract_xy_window(yarray, xstart, xdelta, xarray, xbgn, xend, ignore_nans)
+    n = len(x)
+    if n < 2:
+        raise ValueError("fit_line: need at least 2 data points, got %d" % n)
+
+    if sigma is not None:
+        w = 1.0 / np.asarray(sigma, dtype=float)
+        if len(w) != n:
+            raise ValueError(
+                "fit_line: sigma length (%d) != windowed data length (%d)" % (len(w), n)
+            )
+        try:
+            coeffs, cov = np.polyfit(x, y, 1, w=w, cov=True)
+            slope_err     = float(np.sqrt(max(0.0, cov[0, 0])))
+            intercept_err = float(np.sqrt(max(0.0, cov[1, 1])))
+        except np.linalg.LinAlgError:
+            coeffs = np.polyfit(x, y, 1, w=w)
+            slope_err = intercept_err = float("nan")
+        slope = float(coeffs[0])
+        intercept = float(coeffs[1])
+        y_fit = slope * x + intercept
+        r2 = _r2(y, y_fit)
+        residuals = y - y_fit
+        chi_sqr = float(np.sum((residuals / np.asarray(sigma, dtype=float)) ** 2))
+    else:
+        from scipy.stats import linregress  # noqa: PLC0415
+        res = linregress(x, y)
+        slope = float(res.slope)
+        intercept = float(res.intercept)
+        slope_err     = float(res.stderr)
+        intercept_err = float(getattr(res, "intercept_stderr", float("nan")))
+        y_fit = slope * x + intercept
+        r2 = float(res.rvalue ** 2)
+        residuals = y - y_fit
+        chi_sqr = float(np.sum(residuals ** 2)) / n
+
+    return {
+        "slope":         slope,
+        "intercept":     intercept,
+        "slope_err":     slope_err,
+        "intercept_err": intercept_err,
+        "r2":            r2,
+        "chi_sqr":       chi_sqr,
+        "yfit":          y_fit,
+        "residuals":     residuals,
+        "x":             x,
+        "n":             n,
+    }
+
+
+def fit_poly(
+    yarray: np.ndarray,
+    xstart: float = 0.0,
+    xdelta: float = 1.0,
+    xarray: np.ndarray | None = None,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
+    degree: int = 2,
+    sigma: np.ndarray | None = None,
+    ignore_nans: bool = True,
+) -> dict:
+    """Fit a polynomial to *yarray*.
+
+    Uses ``numpy.polyfit``.  Coefficients are stored in ascending order:
+    ``coefficients[0]`` is the constant term (C0), ``coefficients[k]`` is
+    the coefficient of x^k.
+
+    Args:
+        yarray:  1-D numpy array of y-values.
+        xstart:  X-axis start value (uniform spacing).
+        xdelta:  X-axis sample interval (uniform spacing).
+        xarray:  Non-uniform x-values array.
+        xbgn:      Fit window start (x-units). Default ``-inf``.
+        xend:      Fit window end (x-units). Default ``+inf``.
+        degree:  Polynomial degree ≥ 1.
+        sigma:   Per-point standard deviations for weighted fitting.
+        ignore_nans: If True (default), exclude NaN values before fitting.
+
+    Returns:
+        Dict with keys ``"coefficients"`` (list, ascending order),
+        ``"degree"``, ``"r2"``, ``"chi_sqr"``, ``"n"``.
+
+    Raises:
+        ValueError: If *degree* < 1, fewer than ``degree + 1`` points remain,
+            or *sigma* length mismatch.
+    """
+    if degree < 1:
+        raise ValueError("fit_poly: degree must be >= 1, got %d" % degree)
+    x, y = _extract_xy_window(yarray, xstart, xdelta, xarray, xbgn, xend, ignore_nans)
+    n = len(x)
+    if n < degree + 1:
+        raise ValueError(
+            "fit_poly: need at least %d data points for degree %d, got %d"
+            % (degree + 1, degree, n)
+        )
+
+    w: np.ndarray | None = None
+    if sigma is not None:
+        w = 1.0 / np.asarray(sigma, dtype=float)
+        if len(w) != n:
+            raise ValueError(
+                "fit_poly: sigma length (%d) != windowed data length (%d)" % (len(w), n)
+            )
+
+    # polyfit returns coefficients highest-order first — reverse to ascending
+    try:
+        coeffs_desc, cov = np.polyfit(x, y, degree, w=w, cov=True)
+        # cov[0,0] = variance of highest-degree coeff; cov[degree,degree] = constant
+        coef_errors_asc = [
+            float(np.sqrt(max(0.0, cov[degree - k, degree - k])))
+            for k in range(degree + 1)
+        ]
+    except np.linalg.LinAlgError:
+        coeffs_desc = np.polyfit(x, y, degree, w=w)
+        coef_errors_asc = [float("nan")] * (degree + 1)
+
+    coeffs_asc = list(reversed([float(c) for c in coeffs_desc]))
+    y_fit = np.polyval(coeffs_desc, x)
+    r2 = _r2(y, y_fit)
+    residuals = y - y_fit
+
+    if sigma is not None and w is not None:
+        chi_sqr = float(np.sum((residuals / np.asarray(sigma, dtype=float)) ** 2))
+    else:
+        chi_sqr = float(np.sum(residuals ** 2)) / n
+
+    return {
+        "coefficients":  coeffs_asc,
+        "coef_errors":   coef_errors_asc,
+        "degree":        degree,
+        "r2":            r2,
+        "chi_sqr":       chi_sqr,
+        "yfit":          y_fit,
+        "residuals":     residuals,
+        "x":             x,
+        "n":             n,
+    }
+
+
+def fit_exp(
+    yarray: np.ndarray,
+    xstart: float = 0.0,
+    xdelta: float = 1.0,
+    xarray: np.ndarray | None = None,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
+    x_origin: float = 0.0,
+    p0: dict | None = None,
+    sigma: np.ndarray | None = None,
+    maxfev: int = 10000,
+    ignore_nans: bool = True,
+) -> dict:
+    """Fit a single exponential to *yarray*.
+
+    Model: ``f(x) = A * exp(-(x - X0) / B) + Y0``
+
+    *X0* (``x_origin``) is a fixed constant — it shifts the x-origin and is
+    not fitted.  Set it to the start of the recording epoch so the time axis
+    is measured from that point.
+
+    Missing initial-parameter keys in *p0* are auto-estimated from the data:
+    ``A = y[0] - y[-1]``, ``B = (x[-1] - x[0]) / 3``, ``Y0 = y[-1]``.
+
+    Args:
+        yarray:    1-D numpy array of y-values.
+        xstart:    X-axis start value (uniform spacing).
+        xdelta:    X-axis sample interval (uniform spacing).
+        xarray:    Non-uniform x-values array.
+        xbgn:        Fit window start (x-units). Default ``-inf``.
+        xend:        Fit window end (x-units). Default ``+inf``.
+        x_origin:  Fixed x-offset (X0) in the model. Default 0.0.
+        p0:        Initial parameter estimates as a dict with optional keys
+                   ``"A"``, ``"B"``, ``"Y0"``.
+        sigma:     Per-point standard deviations for weighted fitting.
+        maxfev:    Maximum function evaluations. Default 10000.
+        ignore_nans: If True (default), exclude NaN values before fitting.
+
+    Returns:
+        Dict with keys ``"A"``, ``"B"``, ``"X0"``, ``"Y0"``, ``"r2"``,
+        ``"chi_sqr"``, ``"n"``, ``"converged"`` (bool).
+
+    Raises:
+        ValueError: Fewer than 3 data points, or *sigma* length mismatch.
+    """
+    from scipy.optimize import curve_fit  # noqa: PLC0415
+
+    x, y = _extract_xy_window(yarray, xstart, xdelta, xarray, xbgn, xend, ignore_nans)
+    n = len(x)
+    if n < 3:
+        raise ValueError("fit_exp: need at least 3 data points, got %d" % n)
+
+    if sigma is not None and len(sigma) != n:
+        raise ValueError(
+            "fit_exp: sigma length (%d) != windowed data length (%d)" % (len(sigma), n)
+        )
+
+    p0_dict = p0 or {}
+    # Use short-window medians at each end to resist outliers/noise
+    _win = max(1, n // 10)
+    _y_start = float(np.nanmedian(y[:_win]))
+    _y_end   = float(np.nanmedian(y[-_win:]))
+    A0  = p0_dict.get("A",  _y_start - _y_end)
+    x_span = float(x[-1] - x[0])
+    B0  = p0_dict.get("B",  x_span / 3.0 if x_span > 0 else 1.0)
+    Y0_0 = p0_dict.get("Y0", _y_end)
+
+    def _model(xv: np.ndarray, A: float, B: float, Y0: float) -> np.ndarray:
+        return A * np.exp(-(xv - x_origin) / B) + Y0
+
+    converged = True
+    try:
+        popt, pcov = curve_fit(
+            _model, x, y,
+            p0=[A0, B0, Y0_0],
+            sigma=sigma,
+            absolute_sigma=(sigma is not None),
+            maxfev=maxfev,
+        )
+        A_fit, B_fit, Y0_fit = float(popt[0]), float(popt[1]), float(popt[2])
+        perr = np.sqrt(np.maximum(0.0, np.diag(pcov)))
+        A_err, B_err, Y0_err = float(perr[0]), float(perr[1]), float(perr[2])
+    except RuntimeError:
+        A_fit, B_fit, Y0_fit = A0, B0, Y0_0
+        A_err = B_err = Y0_err = float("nan")
+        converged = False
+
+    y_fit = _model(x, A_fit, B_fit, Y0_fit)
+    r2 = _r2(y, y_fit)
+    residuals = y - y_fit
+    if sigma is not None:
+        chi_sqr = float(np.sum((residuals / np.asarray(sigma, dtype=float)) ** 2))
+    else:
+        chi_sqr = float(np.sum(residuals ** 2)) / n
+
+    return {
+        "A":         A_fit,
+        "B":         B_fit,
+        "X0":        float(x_origin),
+        "Y0":        Y0_fit,
+        "A_err":     A_err,
+        "B_err":     B_err,
+        "Y0_err":    Y0_err,
+        "r2":        r2,
+        "chi_sqr":   chi_sqr,
+        "yfit":      y_fit,
+        "residuals": residuals,
+        "x":         x,
+        "n":         n,
+        "converged": converged,
+    }
+
+
+def fit_gauss(
+    yarray: np.ndarray,
+    xstart: float = 0.0,
+    xdelta: float = 1.0,
+    xarray: np.ndarray | None = None,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
+    p0: dict | None = None,
+    sigma: np.ndarray | None = None,
+    maxfev: int = 10000,
+    ignore_nans: bool = True,
+) -> dict:
+    """Fit a Gaussian to *yarray*.
+
+    Model: ``f(x) = A * exp(-0.5 * ((x - mu) / sigma)^2) + Y0``
+
+    Missing initial-parameter keys are auto-estimated:
+    ``A = y at peak (with sign)``, ``mu = x at peak``,
+    ``sigma = (x[-1] - x[0]) / 4``, ``Y0 = mean(y)``.
+
+    Args:
+        yarray:  1-D numpy array of y-values.
+        xstart:  X-axis start value (uniform spacing).
+        xdelta:  X-axis sample interval (uniform spacing).
+        xarray:  Non-uniform x-values array.
+        xbgn:      Fit window start (x-units). Default ``-inf``.
+        xend:      Fit window end (x-units). Default ``+inf``.
+        p0:      Initial parameter estimates with optional keys ``"A"``,
+                 ``"mu"``, ``"sigma"``, ``"Y0"``.
+        sigma:   Per-point standard deviations for weighted fitting.
+        ignore_nans: If True (default), exclude NaN values before fitting.
+
+    Returns:
+        Dict with keys ``"A"``, ``"mu"``, ``"sigma"``, ``"Y0"``, ``"r2"``,
+        ``"chi_sqr"``, ``"n"``, ``"converged"`` (bool).
+
+    Raises:
+        ValueError: Fewer than 4 data points, or *sigma* length mismatch.
+    """
+    from scipy.optimize import curve_fit  # noqa: PLC0415
+
+    x, y = _extract_xy_window(yarray, xstart, xdelta, xarray, xbgn, xend, ignore_nans)
+    n = len(x)
+    if n < 4:
+        raise ValueError("fit_gauss: need at least 4 data points, got %d" % n)
+
+    if sigma is not None and len(sigma) != n:
+        raise ValueError(
+            "fit_gauss: sigma length (%d) != windowed data length (%d)" % (len(sigma), n)
+        )
+
+    p0_dict = p0 or {}
+    i_peak = int(np.argmax(np.abs(y - np.mean(y))))
+    A0     = p0_dict.get("A",     float(y[i_peak]))
+    mu0    = p0_dict.get("mu",    float(x[i_peak]))
+    x_span = float(x[-1] - x[0])
+    sigma0 = p0_dict.get("sigma", x_span / 4.0 if x_span > 0 else 1.0)
+    Y0_0   = p0_dict.get("Y0",   float(np.mean(y)))
+
+    def _model(xv: np.ndarray, A: float, mu: float, sg: float, Y0: float) -> np.ndarray:
+        return A * np.exp(-0.5 * ((xv - mu) / sg) ** 2) + Y0
+
+    converged = True
+    try:
+        popt, pcov = curve_fit(
+            _model, x, y,
+            p0=[A0, mu0, sigma0, Y0_0],
+            sigma=sigma,
+            absolute_sigma=(sigma is not None),
+            maxfev=maxfev,
+        )
+        A_fit   = float(popt[0])
+        mu_fit  = float(popt[1])
+        sg_fit  = float(popt[2])
+        Y0_fit  = float(popt[3])
+        perr = np.sqrt(np.maximum(0.0, np.diag(pcov)))
+        A_err, mu_err, sg_err, Y0_err = (
+            float(perr[0]), float(perr[1]), float(perr[2]), float(perr[3])
+        )
+    except RuntimeError:
+        A_fit, mu_fit, sg_fit, Y0_fit = A0, mu0, sigma0, Y0_0
+        A_err = mu_err = sg_err = Y0_err = float("nan")
+        converged = False
+
+    y_fit = _model(x, A_fit, mu_fit, sg_fit, Y0_fit)
+    r2 = _r2(y, y_fit)
+    residuals = y - y_fit
+    if sigma is not None:
+        chi_sqr = float(np.sum((residuals / np.asarray(sigma, dtype=float)) ** 2))
+    else:
+        chi_sqr = float(np.sum(residuals ** 2)) / n
+
+    return {
+        "A":         A_fit,
+        "mu":        mu_fit,
+        "sigma":     sg_fit,
+        "Y0":        Y0_fit,
+        "A_err":     A_err,
+        "mu_err":    mu_err,
+        "sigma_err": sg_err,
+        "Y0_err":    Y0_err,
+        "r2":        r2,
+        "chi_sqr":   chi_sqr,
+        "yfit":      y_fit,
+        "residuals": residuals,
+        "x":         x,
+        "n":         n,
+        "converged": converged,
+    }

@@ -151,10 +151,10 @@ class TestNMToolEventDefaults(unittest.TestCase):
         self.assertEqual(self.tool.refractory, 0.0)
 
     def test_x0_default(self):
-        self.assertEqual(self.tool.x0, -math.inf)
+        self.assertEqual(self.tool.xbgn, -math.inf)
 
     def test_x1_default(self):
-        self.assertEqual(self.tool.x1, math.inf)
+        self.assertEqual(self.tool.xend, math.inf)
 
     def test_max_events_default(self):
         self.assertEqual(self.tool.max_events, 0)
@@ -312,30 +312,30 @@ class TestNMToolEventProperties(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.tool.refractory = -1.0
 
-    # x0 / x1
+    # xbgn / xend
     def test_x0_accepts_float(self):
-        self.tool.x0 = 0.01
-        self.assertAlmostEqual(self.tool.x0, 0.01)
+        self.tool.xbgn = 0.01
+        self.assertAlmostEqual(self.tool.xbgn, 0.01)
 
     def test_x1_accepts_float(self):
-        self.tool.x1 = 0.01
-        self.assertAlmostEqual(self.tool.x1, 0.01)
+        self.tool.xend = 0.01
+        self.assertAlmostEqual(self.tool.xend, 0.01)
 
     def test_x0_rejects_nan(self):
         with self.assertRaises(ValueError):
-            self.tool.x0 = math.nan
+            self.tool.xbgn = math.nan
 
     def test_x1_rejects_nan(self):
         with self.assertRaises(ValueError):
-            self.tool.x1 = math.nan
+            self.tool.xend = math.nan
 
     def test_x0_rejects_bool(self):
         with self.assertRaises(TypeError):
-            self.tool.x0 = True
+            self.tool.xbgn = True
 
     def test_x1_rejects_bool(self):
         with self.assertRaises(TypeError):
-            self.tool.x1 = True
+            self.tool.xend = True
 
     # template_baseline
     def test_template_baseline_accepts_zero(self):
@@ -882,7 +882,7 @@ class TestNMToolEventPolarity(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Search limits (x0 / x1)
+# Search limits (xbgn / xend)
 # ---------------------------------------------------------------------------
 
 
@@ -905,7 +905,7 @@ class TestNMToolEventSearchLimits(unittest.TestCase):
         )
 
     def test_x0_excludes_early_event(self):
-        self.tool.x0 = 50e-3   # start at 50 ms — misses 20 ms event
+        self.tool.xbgn = 50e-3   # start at 50 ms — misses 20 ms event
         folder = _run(self.tool, [self._data])
         tf = list(folder.toolfolders.values())[0]
         ev = tf.data.get("EV_recordA0")
@@ -914,7 +914,7 @@ class TestNMToolEventSearchLimits(unittest.TestCase):
         self.assertGreater(ev.nparray[0], 50e-3)
 
     def test_x1_excludes_late_event(self):
-        self.tool.x1 = 50e-3   # end at 50 ms — misses 80 ms event
+        self.tool.xend = 50e-3   # end at 50 ms — misses 80 ms event
         folder = _run(self.tool, [self._data])
         tf = list(folder.toolfolders.values())[0]
         ev = tf.data.get("EV_recordA0")

@@ -49,24 +49,24 @@ class TestNMStatWin(unittest.TestCase):
         self.win0 = {
             "on": True,
             "func": {"name": "mean"},
-            "x0": 0,
-            "x1": math.inf,
+            "xbgn": 0,
+            "xend": math.inf,
             "transform": None,
             "bsln_on": True,
             "bsln_func": {"name": "mean"},
-            "bsln_x0": 0,
-            "bsln_x1": 10,
+            "bsln_xbgn": 0,
+            "bsln_xend": 10,
         }
         self.win1 = {
             "on": True,
             "func": {"name": "max"},
-            "x0": 0,
-            "x1": math.inf,
+            "xbgn": 0,
+            "xend": math.inf,
             "transform": None,
             "bsln_on": True,
             "bsln_func": {"name": "mean"},
-            "bsln_x0": 0,
-            "bsln_x1": 10,
+            "bsln_xbgn": 0,
+            "bsln_xend": 10,
         }
         self.w0 = nmsw.NMStatWin("w0", win=self.win0)
         self.w1 = nmsw.NMStatWin("w1", win=self.win1)
@@ -93,7 +93,7 @@ class TestNMStatWin(unittest.TestCase):
         w0._win_set(self.win0)
         w1._win_set(self.win0)
         self.assertTrue(w0 == w1)
-        w1.x0 = -1
+        w1.xbgn = -1
         self.assertFalse(w0 == w1)
 
     def test_name_setter_removed(self):
@@ -102,8 +102,8 @@ class TestNMStatWin(unittest.TestCase):
             w.name = "w1"
 
     def test_to_dict_keys(self):
-        keys = ["name", "on", "func", "x0", "x1", "transform",
-                "bsln_on", "bsln_func", "bsln_x0", "bsln_x1"]
+        keys = ["name", "on", "func", "xbgn", "xend", "transform",
+                "bsln_on", "bsln_func", "bsln_xbgn", "bsln_xend"]
         d = self.w0.to_dict()
         self.assertIsInstance(d, dict)
         self.assertEqual(set(keys), set(d.keys()))
@@ -202,7 +202,7 @@ class TestNMStatWin(unittest.TestCase):
         expected = {
             "basic":     ("median", "mean", "mean+var", "mean+std", "mean+sem",
                           "var", "std", "sem", "rms", "sum", "pathlength",
-                          "area", "slope", "value@x0", "value@x1",
+                          "area", "slope", "value@xbgn", "value@xend",
                           "count", "count_nans", "count_infs"),
             "maxmin":    ("max", "min", "mean@max", "mean@min"),
             "level":     ("level", "level+", "level-"),
@@ -234,31 +234,31 @@ class TestNMStatWin(unittest.TestCase):
     def test_x_set_type_errors(self):
         for b in nmu.badtypes(ok=[3, 3.14, True, "string"]):
             with self.assertRaises(TypeError):
-                self.w0._x_set("x0", b)
+                self.w0._x_set("xbgn", b)
 
     def test_x_set_nan_raises(self):
         with self.assertRaises(ValueError):
-            self.w0._x_set("x0", math.nan)
+            self.w0._x_set("xbgn", math.nan)
 
     def test_x_set_values(self):
-        self.w0._x_set("x0", "0")
-        self.assertEqual(self.w0.x0, 0)
-        self.w0._x_set("x0", -99)
-        self.assertEqual(self.w0.x0, -99)
-        self.w0._x_set("x1", 99)
-        self.assertEqual(self.w0.x1, 99)
-        self.w0._x_set("bsln_x0", -99)
-        self.assertEqual(self.w0.bsln_x0, -99)
-        self.w0._x_set("bsln_x1", 99)
-        self.assertEqual(self.w0.bsln_x1, 99)
+        self.w0._x_set("xbgn", "0")
+        self.assertEqual(self.w0.xbgn, 0)
+        self.w0._x_set("xbgn", -99)
+        self.assertEqual(self.w0.xbgn, -99)
+        self.w0._x_set("xend", 99)
+        self.assertEqual(self.w0.xend, 99)
+        self.w0._x_set("bsln_xbgn", -99)
+        self.assertEqual(self.w0.bsln_xbgn, -99)
+        self.w0._x_set("bsln_xend", 99)
+        self.assertEqual(self.w0.bsln_xend, 99)
 
     def test_x_set_inf_clamps_by_axis(self):
-        self.w0._x_set("x0", "inf")
-        self.assertTrue(math.isinf(self.w0.x0))
-        self.assertLess(self.w0.x0, 0)   # x0 → -inf
-        self.w0._x_set("x1", "inf")
-        self.assertTrue(math.isinf(self.w0.x1))
-        self.assertGreater(self.w0.x1, 0)  # x1 → +inf
+        self.w0._x_set("xbgn", "inf")
+        self.assertTrue(math.isinf(self.w0.xbgn))
+        self.assertLess(self.w0.xbgn, 0)   # xbgn → -inf
+        self.w0._x_set("xend", "inf")
+        self.assertTrue(math.isinf(self.w0.xend))
+        self.assertGreater(self.w0.xend, 0)  # xend → +inf
 
     def test_transform_set_and_roundtrip(self):
         from pyneuromatic.core.nm_transform import (
@@ -324,7 +324,7 @@ class TestNMStatWin(unittest.TestCase):
         self.assertEqual(len(r), 2)
         self.assertEqual(r[0]["id"], "bsln")
         self.assertEqual(r[1]["id"], "main")
-        bsln_keys = ["win", "id", "func", "x0", "x1", "data", "i0", "i1",
+        bsln_keys = ["win", "id", "func", "xbgn", "xend", "data", "i0", "i1",
                      "n", "nans", "infs", "s", "sunits"]
         for k in bsln_keys:
             self.assertIn(k, r[0])
@@ -338,8 +338,8 @@ class TestNMStatWin(unittest.TestCase):
             self.assertAlmostEqual(r[1]["Δs"], r[1]["s"] - r[0]["s"])
 
     def test_compute_x1_out_of_bounds(self):
-        # finite x1 beyond data range → i1=None, error result (no clip)
-        self.w1.x1 = 200
+        # finite xend beyond data range → i1=None, error result (no clip)
+        self.w1.xend = 200
         r = self.w1.compute(self.datanan, ignore_nans=True)
         self.assertIsNone(r[1]["i1"])
         self.assertIn("error", r[1])
@@ -402,10 +402,10 @@ class TestNMStatWin(unittest.TestCase):
             round(n_std * r[0]["std"] * 1000))
 
     def test_compute_decaytime(self):
-        self.w1.bsln_x0 = 0
-        self.w1.bsln_x1 = 10
-        self.w1.x0 = -math.inf
-        self.w1.x1 = math.inf
+        self.w1.bsln_xbgn = 0
+        self.w1.bsln_xend = 10
+        self.w1.xbgn = -math.inf
+        self.w1.xend = math.inf
         self.w1.func = {"name": "decaytime+", "p0": 36}
         r = self.w1.compute(self.data, ignore_nans=True)
         self.assertEqual(r[0]["id"], "bsln")
@@ -565,8 +565,8 @@ class TestNMStatWinContainer(unittest.TestCase):
         c = nmsw.NMStatWinContainer()
         w = c.new()
         w.func = {"name": "mean"}
-        w.x0 = 0.01
-        w.x1 = 0.05
+        w.xbgn = 0.01
+        w.xend = 0.05
         c2 = nmsw.NMStatWinContainer.from_dict(c.to_dict())
         self.assertEqual(c2["w0"], c["w0"])
 
@@ -616,11 +616,11 @@ class TestNMStatWinContainer(unittest.TestCase):
         c = nmsw.NMStatWinContainer()
         w = c.new()
         w.func = {"name": "mean"}
-        w.x0 = 0.01
-        w.x1 = 0.05
+        w.xbgn = 0.01
+        w.xend = 0.05
         w.bsln_on = True
-        w.bsln_x0 = -0.01
-        w.bsln_x1 = 0.0
+        w.bsln_xbgn = -0.01
+        w.bsln_xend = 0.0
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "wins.toml"
             c.save(path)
@@ -629,13 +629,13 @@ class TestNMStatWinContainer(unittest.TestCase):
 
     def test_load_round_trips_inf_x_bounds(self):
         c = nmsw.NMStatWinContainer()
-        c.new()  # default x0=-inf, x1=inf
+        c.new()  # default xbgn=-inf, xend=inf
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "wins.toml"
             c.save(path)
             c2 = nmsw.NMStatWinContainer.load(path)
-        self.assertEqual(c2["w0"].x0, -math.inf)
-        self.assertEqual(c2["w0"].x1, math.inf)
+        self.assertEqual(c2["w0"].xbgn, -math.inf)
+        self.assertEqual(c2["w0"].xend, math.inf)
 
     def test_to_dict_contains_pyneuromatic_header(self):
         c = nmsw.NMStatWinContainer()

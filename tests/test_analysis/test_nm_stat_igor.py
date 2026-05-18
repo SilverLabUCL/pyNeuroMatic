@@ -103,10 +103,10 @@ _S_FWHM_IGOR = 13.333325        # Igor NM result (ms)
 _S_WIN_BASE = {
     "bsln_on":  True,
     "bsln_func": {"name": "mean"},
-    "bsln_x0":  0.0,
-    "bsln_x1":  _S_T0 - _S_DX,   # 9.98 ms — just before pulse starts
-    "x0":       _S_T0,
-    "x1":       _S_T0 + _S_TAU,
+    "bsln_xbgn":  0.0,
+    "bsln_xend":  _S_T0 - _S_DX,   # 9.98 ms — just before pulse starts
+    "xbgn":       _S_T0,
+    "xend":       _S_T0 + _S_TAU,
 }
 
 
@@ -144,7 +144,7 @@ class TestIgorWaveStats(unittest.TestCase):
     """Compare stat() against Igor Pro WaveStats for RecordA0, t=500–1000 ms."""
 
     def _stat(self, name, **kwargs):
-        return nsmm.stat(_DATA, {"name": name}, x0=_X0, x1=_X1,
+        return nsmm.stat(_DATA, {"name": name}, xbgn=_X0, xend=_X1,
                          **kwargs)
 
     def test_wave_loaded(self):
@@ -207,32 +207,32 @@ class TestIgorWaveStats(unittest.TestCase):
         self.assertAlmostEqual(r["s"], _IGOR_R0["slope"], places=6)
 
     def test_value_at_x0(self):
-        r = self._stat("value@x0")
+        r = self._stat("value@xbgn")
         self.assertAlmostEqual(r["s"], _IGOR_R0["value@xbgn"], places=4)
 
     def test_value_at_x1(self):
-        r = self._stat("value@x1")
+        r = self._stat("value@xend")
         self.assertAlmostEqual(r["s"], _IGOR_R0["value@xend"], places=4)
 
     def test_mean_at_max(self):
         # n_mean=500 determined by matching Igor minAvg/maxAvg to 3 decimal places
         r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1)
+                      xbgn=_X0, xend=_X1)
         self.assertAlmostEqual(r["s"], _IGOR_R0["maxAvg"], places=3)
 
     def test_mean_at_max_location(self):
         r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1)
+                      xbgn=_X0, xend=_X1)
         self.assertAlmostEqual(r["x"], _IGOR_R0["maxAvgLoc"], places=1)
 
     def test_mean_at_min(self):
         r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1)
+                      xbgn=_X0, xend=_X1)
         self.assertAlmostEqual(r["s"], _IGOR_R0["minAvg"], places=3)
 
     def test_mean_at_min_location(self):
         r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
-                      x0=_X0, x1=_X1)
+                      xbgn=_X0, xend=_X1)
         self.assertAlmostEqual(r["x"], _IGOR_R0["minAvgLoc"], places=1)
 
     def test_no_nans(self):
@@ -393,11 +393,11 @@ class TestSineWaveRiseTime(unittest.TestCase):
         w = nmsw.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
-        w.bsln_x0 = win["bsln_x0"]
-        w.bsln_x1 = win["bsln_x1"]
+        w.bsln_xbgn = win["bsln_xbgn"]
+        w.bsln_xend = win["bsln_xend"]
         w.func = win["func"]
-        w.x0 = win["x0"]
-        w.x1 = win["x1"]
+        w.xbgn = win["xbgn"]
+        w.xend = win["xend"]
         return w.compute(_SINE_DATA)
 
     def test_risetime_delta_x(self):
@@ -452,11 +452,11 @@ class TestSineWaveFallTime(unittest.TestCase):
         w = nmsw.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
-        w.bsln_x0 = win["bsln_x0"]
-        w.bsln_x1 = win["bsln_x1"]
+        w.bsln_xbgn = win["bsln_xbgn"]
+        w.bsln_xend = win["bsln_xend"]
         w.func = win["func"]
-        w.x0 = win["x0"]
-        w.x1 = win["x1"]
+        w.xbgn = win["xbgn"]
+        w.xend = win["xend"]
         return w.compute(_SINE_DATA)
 
     def test_falltime_delta_x(self):
@@ -513,11 +513,11 @@ class TestSineWaveDecayTime(unittest.TestCase):
         w = nmsw.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
-        w.bsln_x0 = win["bsln_x0"]
-        w.bsln_x1 = win["bsln_x1"]
+        w.bsln_xbgn = win["bsln_xbgn"]
+        w.bsln_xend = win["bsln_xend"]
         w.func = win["func"]
-        w.x0 = win["x0"]
-        w.x1 = win["x1"]
+        w.xbgn = win["xbgn"]
+        w.xend = win["xend"]
         return w.compute(_SINE_DATA)
 
     def test_decaytime_delta_x(self):
@@ -553,11 +553,11 @@ class TestSineWaveFWHM(unittest.TestCase):
         w = nmsw.NMStatWin(name="w")
         w.bsln_on = win["bsln_on"]
         w.bsln_func = win["bsln_func"]
-        w.bsln_x0 = win["bsln_x0"]
-        w.bsln_x1 = win["bsln_x1"]
+        w.bsln_xbgn = win["bsln_xbgn"]
+        w.bsln_xend = win["bsln_xend"]
         w.func = win["func"]
-        w.x0 = win["x0"]
-        w.x1 = win["x1"]
+        w.xbgn = win["xbgn"]
+        w.xend = win["xend"]
         return w.compute(_SINE_DATA)
 
     def test_fwhm_value(self):

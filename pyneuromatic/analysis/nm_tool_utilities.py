@@ -64,8 +64,8 @@ def find_level_crossings_nmdata(
     data: NMData,
     ylevel: float,
     func_name: str = "level",
-    x0: float = -math.inf,
-    x1: float = math.inf,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
     x_interp: bool = True,
     ignore_nans: bool = True,
 ) -> tuple:
@@ -81,10 +81,10 @@ def find_level_crossings_nmdata(
         ylevel:      Y-axis threshold.
         func_name:   Crossing direction: ``"level"`` (all), ``"level+"``
                      (rising), or ``"level-"`` (falling).
-        x0:          Window start. Default ``-inf`` (no lower bound).
-                     If *x0* > *x1*, crossings are returned in descending
+        xbgn:          Window start. Default ``-inf`` (no lower bound).
+                     If *xbgn* > *xend*, crossings are returned in descending
                      x order (backwards search).
-        x1:          Window end. Default ``+inf`` (no upper bound).
+        xend:          Window end. Default ``+inf`` (no upper bound).
         x_interp:    If True (default), return interpolated x at crossing.
         ignore_nans: If True (default), ignore NaN values.
 
@@ -97,8 +97,8 @@ def find_level_crossings_nmdata(
             ylevel,
             func_name=func_name,
             xarray=data.xarray,
-            x0=x0,
-            x1=x1,
+            xbgn=xbgn,
+            xend=xend,
             x_interp=x_interp,
             ignore_nans=ignore_nans,
         )
@@ -108,8 +108,8 @@ def find_level_crossings_nmdata(
         func_name=func_name,
         xstart=data.xscale.start,
         xdelta=data.xscale.delta,
-        x0=x0,
-        x1=x1,
+        xbgn=xbgn,
+        xend=xend,
         x_interp=x_interp,
         ignore_nans=ignore_nans,
     )
@@ -206,8 +206,8 @@ def find_events_nmdata(
     criterion_threshold: float = 4.0,
     template_baseline: float = 0.0,
     refractory: float = 0.0,
-    x0: float = -math.inf,
-    x1: float = math.inf,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
     onset_search: bool = False,
     onset_avg: float = 1.0,
     onset_nstdv: float = 1.0,
@@ -249,8 +249,8 @@ def find_events_nmdata(
             that offset. Default 0.0 (no shift). Note: the baseline prepending
             itself is the caller's responsibility (see above).
         refractory: Minimum inter-event interval (x-units, all algorithms).
-        x0: Search start (x-units). Default ``-inf``.
-        x1: Search end (x-units). Default ``+inf``.
+        xbgn: Search start (x-units). Default ``-inf``.
+        xend: Search end (x-units). Default ``+inf``.
         onset_search: If True, search backward from each t_event for onset.
         onset_avg: Onset window size (x-units).
         onset_nstdv: Onset N×stdv.
@@ -312,8 +312,8 @@ def find_events_nmdata(
             func_name=func_name,
             xstart=xstart,
             xdelta=xdelta,
-            x0=x0,
-            x1=x1,
+            xbgn=xbgn,
+            xend=xend,
         )
         candidate_times = list(candidate_times)
         # Shift times to recover true event onset (baseline offset correction)
@@ -338,8 +338,8 @@ def find_events_nmdata(
             baseline_avg=baseline_avg,
             baseline_dt=baseline_dt,
             refractory=refractory,
-            x0=x0,
-            x1=x1,
+            xbgn=xbgn,
+            xend=xend,
             max_events=max_events,
         )
 
@@ -380,6 +380,70 @@ def find_events_nmdata(
                 break
 
     return result
+
+
+def fit_nmdata(
+    data: NMData,
+    func_name: str,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
+    degree: int = 2,
+    x_origin: float = 0.0,
+    p0: dict | None = None,
+    sigma: np.ndarray | None = None,
+    maxfev: int = 10000,
+    ignore_nans: bool = True,
+) -> dict:
+    """Fit a curve to an NMData array.
+
+    Convenience wrapper around :func:`~pyneuromatic.core.nm_math.fit_line`,
+    :func:`~pyneuromatic.core.nm_math.fit_poly`,
+    :func:`~pyneuromatic.core.nm_math.fit_exp`, and
+    :func:`~pyneuromatic.core.nm_math.fit_gauss` that unpacks x-scale
+    parameters from *data* automatically.
+
+    Args:
+        data:        NMData containing the y-values and x-scale.
+        func_name:   Fitting function — ``"line"``, ``"poly"``, ``"exp"``,
+                     or ``"gauss"``.
+        xbgn:          Fit window start (x-units). Default ``-inf``.
+        xend:          Fit window end (x-units). Default ``+inf``.
+        degree:      Polynomial degree (``func_name="poly"`` only). Default 2.
+        p0:          Initial parameter estimates for nonlinear fits
+                     (``func_name="exp"`` or ``"gauss"`` only). Dict with
+                     optional keys specific to each model.
+        sigma:       Per-point standard deviations for weighted fitting.
+        ignore_nans: If True (default), exclude NaN values before fitting.
+
+    Returns:
+        Result dict from the underlying ``nm_math.fit_*`` function.
+
+    Raises:
+        ValueError: If *func_name* is not one of the supported values.
+    """
+    xstart = data.xscale.start if data.xscale.start is not None else 0.0
+    xdelta = data.xscale.delta if data.xscale.delta is not None else 1.0
+    xarray = data.xarray
+
+    common = dict(xbgn=xbgn, xend=xend, ignore_nans=ignore_nans)
+    if xarray is not None:
+        common["xarray"] = xarray
+    else:
+        common["xstart"] = xstart
+        common["xdelta"] = xdelta
+
+    if func_name == "line":
+        return nm_math.fit_line(data.nparray, sigma=sigma, **common)
+    if func_name.startswith("poly"):
+        return nm_math.fit_poly(data.nparray, degree=degree, sigma=sigma, **common)
+    if func_name == "exp":
+        return nm_math.fit_exp(data.nparray, x_origin=x_origin, p0=p0, sigma=sigma, maxfev=maxfev, **common)
+    if func_name == "gauss":
+        return nm_math.fit_gauss(data.nparray, p0=p0, sigma=sigma, maxfev=maxfev, **common)
+    raise ValueError(
+        "fit_nmdata: func_name must be 'line', 'poly2'–'poly9', 'exp', or 'gauss', got %r"
+        % func_name
+    )
 
 
 def filter_notch_nmdata(
