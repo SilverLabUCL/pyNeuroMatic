@@ -63,9 +63,9 @@ def _make_exp2_data(A1, Tau1, A2, Tau2, C, n=_N, xstart=_XSTART, xdelta=_XDELTA,
                   xscale={"start": xstart, "delta": xdelta})
 
 
-def _make_boltzmann_data(A, V50, k, C, n=_N, xstart=_XSTART, xdelta=_XDELTA, name="recordA0"):
+def _make_boltzmann_data(A, X50, k, C, n=_N, xstart=_XSTART, xdelta=_XDELTA, name="recordA0"):
     x = xstart + np.arange(n) * xdelta
-    y = A / (1.0 + np.exp(-(x - V50) / k)) + C
+    y = A / (1.0 + np.exp(-(x - X50) / k)) + C
     return NMData(NM, name=name, nparray=y,
                   xscale={"start": xstart, "delta": xdelta})
 
@@ -1196,18 +1196,18 @@ class TestNMToolFitBoltzmann(unittest.TestCase):
         tool.func_name = "boltzmann"
         folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Boltzmann_0")
-        for name in ("FT_A", "FT_V50", "FT_K", "FT_Y0",
+        for name in ("FT_A", "FT_X50", "FT_K", "FT_Y0",
                      "FT_R2", "FT_ChiSqr", "FT_Converged"):
             self.assertIn(name, tf.data, msg="%s missing" % name)
 
     def test_params_match_known_values(self):
-        A, V50, K, C = 1.0, 50.0, 10.0, 0.0
+        A, X50, K, C = 1.0, 50.0, 10.0, 0.0
         tool = NMToolFit()
         tool.func_name = "boltzmann"
-        folder = _run(tool, [_make_boltzmann_data(A, V50, K, C)])
+        folder = _run(tool, [_make_boltzmann_data(A, X50, K, C)])
         tf = folder.toolfolders.get("Fit_Boltzmann_0")
         self.assertAlmostEqual(float(tf.data["FT_A"].nparray[0]),   A,   places=4)
-        self.assertAlmostEqual(float(tf.data["FT_V50"].nparray[0]), V50, places=3)
+        self.assertAlmostEqual(float(tf.data["FT_X50"].nparray[0]), X50, places=3)
         self.assertAlmostEqual(float(tf.data["FT_K"].nparray[0]),   K,   places=3)
         self.assertAlmostEqual(float(tf.data["FT_Y0"].nparray[0]),  C,   places=4)
 
@@ -1234,7 +1234,7 @@ class TestNMToolFitBoltzmann(unittest.TestCase):
         tool.results_errors = True
         folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Boltzmann_0")
-        for name in ("FT_err_A", "FT_err_V50", "FT_err_K", "FT_err_Y0"):
+        for name in ("FT_err_A", "FT_err_X50", "FT_err_K", "FT_err_Y0"):
             self.assertIn(name, tf.data, msg="%s missing" % name)
 
     def test_converged_is_one_for_exact_data(self):
@@ -1256,7 +1256,7 @@ class TestNMToolFitBoltzmann(unittest.TestCase):
     def test_p0_override_used(self):
         tool = NMToolFit()
         tool.func_name = "boltzmann"
-        tool.p0 = {"V50": 50.0, "K": 10.0}
+        tool.p0 = {"X50": 50.0, "K": 10.0}
         folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Boltzmann_0")
         self.assertGreater(float(tf.data["FT_R2"].nparray[0]), 0.999)

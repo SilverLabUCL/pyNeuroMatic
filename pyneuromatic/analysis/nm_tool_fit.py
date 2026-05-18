@@ -70,8 +70,8 @@ def _eval_model(func_name: str, result: dict, x: np.ndarray) -> np.ndarray:
         A, mu, sg, Y0 = result["A"], result["Mu"], result["Sigma"], result["Y0"]
         return A * np.exp(-0.5 * ((x - mu) / sg) ** 2) + Y0
     if fn == "boltzmann":
-        A, V50, K, Y0 = result["A"], result["V50"], result["K"], result["Y0"]
-        return A / (1.0 + np.exp(-(x - V50) / K)) + Y0
+        A, X50, K, Y0 = result["A"], result["X50"], result["K"], result["Y0"]
+        return A / (1.0 + np.exp(-(x - X50) / K)) + Y0
     return np.full_like(x, float("nan"), dtype=float)
 
 
@@ -132,8 +132,8 @@ class NMToolFit(NMTool):
       (Tau1 ≤ Tau2 after fitting; X0 = fixed x-origin)
     * ``"gauss"``             — ``y = A * exp(-0.5 * ((x - mu) / sigma)^2) + Y0``
       (A = amplitude, mu = mean, sigma = std dev, Y0 = y-offset)
-    * ``"boltzmann"``         — ``y = A / (1 + exp(-(x - V50) / K)) + Y0``
-      (A = amplitude, V50 = midpoint, K = slope factor, Y0 = y-offset)
+    * ``"boltzmann"``         — ``y = A / (1 + exp(-(x - X50) / K)) + Y0``
+      (A = amplitude, X50 = midpoint, K = slope factor, Y0 = y-offset)
 
     Initial parameters for nonlinear fits (``exp``, ``gauss``) are
     auto-estimated from the data; supply *p0* to override.  ``X0`` in the
@@ -563,7 +563,7 @@ class NMToolFit(NMTool):
 
         elif self.__func_name == "boltzmann":
             _write(p("A"),   [r["A"]   for r in self._fit_results])
-            _write(p("V50"), [r["V50"] for r in self._fit_results])
+            _write(p("X50"), [r["X50"] for r in self._fit_results])
             _write(p("K"),   [r["K"]   for r in self._fit_results])
             _write(p("Y0"),  [r["Y0"]  for r in self._fit_results])
             _write("R2",        [r["r2"]        for r in self._fit_results])
@@ -571,7 +571,7 @@ class NMToolFit(NMTool):
             _write("Converged", [float(r["converged"]) for r in self._fit_results])
             if self.__results_errors:
                 _write("err_" + p("A"),   [r["A_err"]   for r in self._fit_results])
-                _write("err_" + p("V50"), [r["V50_err"] for r in self._fit_results])
+                _write("err_" + p("X50"), [r["X50_err"] for r in self._fit_results])
                 _write("err_" + p("K"),   [r["K_err"]   for r in self._fit_results])
                 _write("err_" + p("Y0"),  [r["Y0_err"]  for r in self._fit_results])
 

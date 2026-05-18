@@ -2445,18 +2445,18 @@ def fit_boltzmann(
 ) -> dict:
     """Fit a Boltzmann sigmoid to *yarray*.
 
-    Model: ``f(x) = A / (1 + exp(-(x - V50) / K)) + Y0``
+    Model: ``f(x) = A / (1 + exp(-(x - X50) / K)) + Y0``
 
     where:
 
     * **A** — amplitude (range of the sigmoid)
-    * **V50** — midpoint (x at half-maximum)
+    * **X50** — midpoint (x at half-maximum)
     * **K** — slope factor (positive = rising, negative = falling)
     * **Y0** — y-offset (baseline)
 
     Missing initial-parameter keys in *p0* are auto-estimated:
     ``Y0 = min(y)``, ``A = max(y) - min(y)``,
-    ``V50 = x at y closest to Y0 + A/2``, ``K = (x[-1] - x[0]) / 10``.
+    ``X50 = x at y closest to Y0 + A/2``, ``K = (x[-1] - x[0]) / 10``.
 
     Args:
         yarray:    1-D numpy array of y-values.
@@ -2466,7 +2466,7 @@ def fit_boltzmann(
         xbgn:      Fit window start (x-units). Default ``-inf``.
         xend:      Fit window end (x-units). Default ``+inf``.
         p0:        Initial parameter estimates as a dict with optional keys
-                   ``"A"``, ``"V50"``, ``"K"``, ``"Y0"``.
+                   ``"A"``, ``"X50"``, ``"K"``, ``"Y0"``.
                    Missing keys are auto-estimated.
         sigma:     Per-point standard deviations for weighted fitting.
         maxfev:    Maximum function evaluations for the optimizer. Default 10000.
@@ -2475,8 +2475,8 @@ def fit_boltzmann(
     Returns:
         Dict with keys:
 
-        * ``"A"``, ``"V50"``, ``"K"``, ``"Y0"`` — fitted parameters
-        * ``"A_err"``, ``"V50_err"``, ``"K_err"``, ``"Y0_err"``
+        * ``"A"``, ``"X50"``, ``"K"``, ``"Y0"`` — fitted parameters
+        * ``"A_err"``, ``"X50_err"``, ``"K_err"``, ``"Y0_err"``
           — one-standard-deviation parameter uncertainties
         * ``"r2"``, ``"chi_sqr"``, ``"yfit"``, ``"residuals"``, ``"x"``,
           ``"n"``, ``"converged"``
@@ -2505,33 +2505,33 @@ def fit_boltzmann(
     A0    = p0_dict.get("A",   y_max - y_min)
     # x closest to half-maximum
     half  = Y0_0 + A0 / 2.0
-    V50_0 = p0_dict.get("V50", float(x[int(np.argmin(np.abs(y - half)))]))
+    X50_0 = p0_dict.get("X50", float(x[int(np.argmin(np.abs(y - half)))]))
     # Sign of K: positive for rising, negative for falling sigmoid
     _K_mag = x_span / 10.0 if x_span > 0 else 1.0
     _rising = float(np.nanmean(y[n // 2:])) >= float(np.nanmean(y[:n // 2]))
     K0    = p0_dict.get("K",   _K_mag if _rising else -_K_mag)
 
-    def _model(xv, A, V50, K, Y0):
-        return A / (1.0 + np.exp(-(xv - V50) / K)) + Y0
+    def _model(xv, A, X50, K, Y0):
+        return A / (1.0 + np.exp(-(xv - X50) / K)) + Y0
 
     converged = True
     try:
         popt, pcov = curve_fit(
             _model, x, y,
-            p0=[A0, V50_0, K0, Y0_0],
+            p0=[A0, X50_0, K0, Y0_0],
             sigma=sigma,
             absolute_sigma=(sigma is not None),
             maxfev=maxfev,
         )
-        A_f, V50_f, K_f, Y0_f = [float(v) for v in popt]
+        A_f, X50_f, K_f, Y0_f = [float(v) for v in popt]
         perr = np.sqrt(np.maximum(0.0, np.diag(pcov)))
-        A_e, V50_e, K_e, Y0_e = [float(v) for v in perr]
+        A_e, X50_e, K_e, Y0_e = [float(v) for v in perr]
     except RuntimeError:
-        A_f, V50_f, K_f, Y0_f = A0, V50_0, K0, Y0_0
-        A_e = V50_e = K_e = Y0_e = float("nan")
+        A_f, X50_f, K_f, Y0_f = A0, X50_0, K0, Y0_0
+        A_e = X50_e = K_e = Y0_e = float("nan")
         converged = False
 
-    y_fit = _model(x, A_f, V50_f, K_f, Y0_f)
+    y_fit = _model(x, A_f, X50_f, K_f, Y0_f)
     r2 = _r2(y, y_fit)
     residuals = y - y_fit
     if sigma is not None:
@@ -2541,11 +2541,11 @@ def fit_boltzmann(
 
     return {
         "A":       A_f,
-        "V50":     V50_f,
+        "X50":     X50_f,
         "K":       K_f,
         "Y0":      Y0_f,
         "A_err":   A_e,
-        "V50_err": V50_e,
+        "X50_err": X50_e,
         "K_err":   K_e,
         "Y0_err":  Y0_e,
         "r2":        r2,
