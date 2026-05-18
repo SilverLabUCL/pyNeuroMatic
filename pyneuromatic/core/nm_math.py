@@ -1057,9 +1057,9 @@ def linear_regression(
         else:
             raise TypeError(nmu.type_error_str(xdelta, "xdelta", "float"))
 
-        x0 = xstart
-        x1 = xstart + (yarray.size - 1) * xdelta
-        xarray = np.linspace(x0, x1, yarray.size)
+        xbgn = xstart
+        xend = xstart + (yarray.size - 1) * xdelta
+        xarray = np.linspace(xbgn, xend, yarray.size)
 
     if ignore_nans:
         mask = ~np.isnan(yarray)
@@ -1896,8 +1896,8 @@ def fit_line(
                  *xarray* is provided.
         xarray:  Non-uniform x-values array. When provided, *xstart* and
                  *xdelta* are ignored.
-        xbgn:      Fit window start (x-units). Default ``-inf``.
-        xend:      Fit window end (x-units). Default ``+inf``.
+        xbgn:    Fit window start (x-units). Default ``-inf``.
+        xend:    Fit window end (x-units). Default ``+inf``.
         sigma:   Per-point standard deviations for weighted fitting. When
                  provided weights are ``1/sigma`` and chi-squared uses sigma
                  in the denominator.
@@ -1984,8 +1984,8 @@ def fit_poly(
         xstart:  X-axis start value (uniform spacing).
         xdelta:  X-axis sample interval (uniform spacing).
         xarray:  Non-uniform x-values array.
-        xbgn:      Fit window start (x-units). Default ``-inf``.
-        xend:      Fit window end (x-units). Default ``+inf``.
+        xbgn:    Fit window start (x-units). Default ``-inf``.
+        xend:    Fit window end (x-units). Default ``+inf``.
         degree:  Polynomial degree ≥ 1.
         sigma:   Per-point standard deviations for weighted fitting.
         ignore_nans: If True (default), exclude NaN values before fitting.
@@ -2066,32 +2066,53 @@ def fit_exp(
 ) -> dict:
     """Fit a single exponential to *yarray*.
 
-    Model: ``f(x) = A * exp(-(x - X0) / B) + Y0``
+    Model: ``f(x) = A * exp(-(x - X0) / Tau) + Y0``
 
-    *X0* (``x_origin``) is a fixed constant — it shifts the x-origin and is
-    not fitted.  Set it to the start of the recording epoch so the time axis
-    is measured from that point.
+    where:
+
+    * **A** — amplitude (y-scale units)
+    * **Tau** — decay time constant (x-scale units; use ``Tau > 0`` for decay,
+      ``Tau < 0`` for growth)
+    * **X0** — fixed x-origin (``x_origin``); not fitted
+    * **Y0** — y-offset
+
+    *X0* (``x_origin``) shifts the x-origin and is not fitted.  Set it to
+    the start of the recording window so that ``Tau`` is measured from that
+    point rather than from x = 0.
 
     Missing initial-parameter keys in *p0* are auto-estimated from the data:
-    ``A = y[0] - y[-1]``, ``B = (x[-1] - x[0]) / 3``, ``Y0 = y[-1]``.
+    ``A = y[0] - y[-1]``, ``Tau = (x[-1] - x[0]) / 3``, ``Y0 = y[-1]``.
 
     Args:
         yarray:    1-D numpy array of y-values.
         xstart:    X-axis start value (uniform spacing).
         xdelta:    X-axis sample interval (uniform spacing).
-        xarray:    Non-uniform x-values array.
-        xbgn:        Fit window start (x-units). Default ``-inf``.
-        xend:        Fit window end (x-units). Default ``+inf``.
+        xarray:    Non-uniform x-values array; overrides *xstart*/*xdelta*.
+        xbgn:      Fit window start (x-units). Default ``-inf``.
+        xend:      Fit window end (x-units). Default ``+inf``.
         x_origin:  Fixed x-offset (X0) in the model. Default 0.0.
         p0:        Initial parameter estimates as a dict with optional keys
-                   ``"A"``, ``"B"``, ``"Y0"``.
+                   ``"A"``, ``"Tau"``, ``"Y0"``.  Missing keys are
+                   auto-estimated.
         sigma:     Per-point standard deviations for weighted fitting.
-        maxfev:    Maximum function evaluations. Default 10000.
+        maxfev:    Maximum function evaluations for the optimizer. Default 10000.
         ignore_nans: If True (default), exclude NaN values before fitting.
 
     Returns:
-        Dict with keys ``"A"``, ``"B"``, ``"X0"``, ``"Y0"``, ``"r2"``,
-        ``"chi_sqr"``, ``"n"``, ``"converged"`` (bool).
+        Dict with keys:
+
+        * ``"A"``, ``"Tau"``, ``"X0"``, ``"Y0"`` — fitted parameters
+          (``"X0"`` echoes the fixed ``x_origin`` value)
+        * ``"A_err"``, ``"Tau_err"``, ``"Y0_err"`` — one-standard-deviation
+          parameter uncertainties from the covariance matrix
+        * ``"r2"`` — coefficient of determination
+        * ``"chi_sqr"`` — weighted sum of squared residuals (if *sigma*
+          supplied) or mean sum of squared residuals
+        * ``"yfit"`` — model evaluated at the fit x-points
+        * ``"residuals"`` — ``y - yfit`` at the fit x-points
+        * ``"x"`` — x-values used for the fit (after windowing / NaN removal)
+        * ``"n"`` — number of data points used
+        * ``"converged"`` — ``True`` if the optimizer converged
 
     Raises:
         ValueError: Fewer than 3 data points, or *sigma* length mismatch.
@@ -2115,7 +2136,7 @@ def fit_exp(
     _y_end   = float(np.nanmedian(y[-_win:]))
     A0  = p0_dict.get("A",  _y_start - _y_end)
     x_span = float(x[-1] - x[0])
-    B0  = p0_dict.get("B",  x_span / 3.0 if x_span > 0 else 1.0)
+    B0  = p0_dict.get("Tau",  x_span / 3.0 if x_span > 0 else 1.0)
     Y0_0 = p0_dict.get("Y0", _y_end)
 
     def _model(xv: np.ndarray, A: float, B: float, Y0: float) -> np.ndarray:
@@ -2148,11 +2169,11 @@ def fit_exp(
 
     return {
         "A":         A_fit,
-        "B":         B_fit,
+        "Tau":       B_fit,
         "X0":        float(x_origin),
         "Y0":        Y0_fit,
         "A_err":     A_err,
-        "B_err":     B_err,
+        "Tau_err":   B_err,
         "Y0_err":    Y0_err,
         "r2":        r2,
         "chi_sqr":   chi_sqr,
@@ -2189,15 +2210,15 @@ def fit_gauss(
         xstart:  X-axis start value (uniform spacing).
         xdelta:  X-axis sample interval (uniform spacing).
         xarray:  Non-uniform x-values array.
-        xbgn:      Fit window start (x-units). Default ``-inf``.
-        xend:      Fit window end (x-units). Default ``+inf``.
+        xbgn:    Fit window start (x-units). Default ``-inf``.
+        xend:    Fit window end (x-units). Default ``+inf``.
         p0:      Initial parameter estimates with optional keys ``"A"``,
-                 ``"mu"``, ``"sigma"``, ``"Y0"``.
+                 ``"Mu"``, ``"Sigma"``, ``"Y0"``.
         sigma:   Per-point standard deviations for weighted fitting.
         ignore_nans: If True (default), exclude NaN values before fitting.
 
     Returns:
-        Dict with keys ``"A"``, ``"mu"``, ``"sigma"``, ``"Y0"``, ``"r2"``,
+        Dict with keys ``"A"``, ``"Mu"``, ``"Sigma"``, ``"Y0"``, ``"r2"``,
         ``"chi_sqr"``, ``"n"``, ``"converged"`` (bool).
 
     Raises:
@@ -2218,9 +2239,9 @@ def fit_gauss(
     p0_dict = p0 or {}
     i_peak = int(np.argmax(np.abs(y - np.mean(y))))
     A0     = p0_dict.get("A",     float(y[i_peak]))
-    mu0    = p0_dict.get("mu",    float(x[i_peak]))
+    mu0    = p0_dict.get("Mu",    float(x[i_peak]))
     x_span = float(x[-1] - x[0])
-    sigma0 = p0_dict.get("sigma", x_span / 4.0 if x_span > 0 else 1.0)
+    sigma0 = p0_dict.get("Sigma", x_span / 4.0 if x_span > 0 else 1.0)
     Y0_0   = p0_dict.get("Y0",   float(np.mean(y)))
 
     def _model(xv: np.ndarray, A: float, mu: float, sg: float, Y0: float) -> np.ndarray:
@@ -2258,12 +2279,12 @@ def fit_gauss(
 
     return {
         "A":         A_fit,
-        "mu":        mu_fit,
-        "sigma":     sg_fit,
+        "Mu":        mu_fit,
+        "Sigma":     sg_fit,
         "Y0":        Y0_fit,
         "A_err":     A_err,
-        "mu_err":    mu_err,
-        "sigma_err": sg_err,
+        "Mu_err":    mu_err,
+        "Sigma_err": sg_err,
         "Y0_err":    Y0_err,
         "r2":        r2,
         "chi_sqr":   chi_sqr,

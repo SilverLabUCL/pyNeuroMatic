@@ -150,10 +150,10 @@ class TestNMToolEventDefaults(unittest.TestCase):
     def test_refractory_default(self):
         self.assertEqual(self.tool.refractory, 0.0)
 
-    def test_x0_default(self):
+    def test_xbgn_default(self):
         self.assertEqual(self.tool.xbgn, -math.inf)
 
-    def test_x1_default(self):
+    def test_xend_default(self):
         self.assertEqual(self.tool.xend, math.inf)
 
     def test_max_events_default(self):
@@ -313,27 +313,27 @@ class TestNMToolEventProperties(unittest.TestCase):
             self.tool.refractory = -1.0
 
     # xbgn / xend
-    def test_x0_accepts_float(self):
+    def test_xbgn_accepts_float(self):
         self.tool.xbgn = 0.01
         self.assertAlmostEqual(self.tool.xbgn, 0.01)
 
-    def test_x1_accepts_float(self):
+    def test_xend_accepts_float(self):
         self.tool.xend = 0.01
         self.assertAlmostEqual(self.tool.xend, 0.01)
 
-    def test_x0_rejects_nan(self):
+    def test_xbgn_rejects_nan(self):
         with self.assertRaises(ValueError):
             self.tool.xbgn = math.nan
 
-    def test_x1_rejects_nan(self):
+    def test_xend_rejects_nan(self):
         with self.assertRaises(ValueError):
             self.tool.xend = math.nan
 
-    def test_x0_rejects_bool(self):
+    def test_xbgn_rejects_bool(self):
         with self.assertRaises(TypeError):
             self.tool.xbgn = True
 
-    def test_x1_rejects_bool(self):
+    def test_xend_rejects_bool(self):
         with self.assertRaises(TypeError):
             self.tool.xend = True
 
@@ -904,7 +904,7 @@ class TestNMToolEventSearchLimits(unittest.TestCase):
             decay_ms=3.0,
         )
 
-    def test_x0_excludes_early_event(self):
+    def test_xbgn_excludes_early_event(self):
         self.tool.xbgn = 50e-3   # start at 50 ms — misses 20 ms event
         folder = _run(self.tool, [self._data])
         tf = list(folder.toolfolders.values())[0]
@@ -913,7 +913,7 @@ class TestNMToolEventSearchLimits(unittest.TestCase):
         self.assertEqual(len(ev.nparray), 1)
         self.assertGreater(ev.nparray[0], 50e-3)
 
-    def test_x1_excludes_late_event(self):
+    def test_xend_excludes_late_event(self):
         self.tool.xend = 50e-3   # end at 50 ms — misses 80 ms event
         folder = _run(self.tool, [self._data])
         tf = list(folder.toolfolders.values())[0]
@@ -1059,7 +1059,7 @@ class TestNMToolEventFindNext(unittest.TestCase):
         result = self.tool.find_next_event(data, start_x=0.0)
         self.assertIsNone(result)
 
-    def test_find_next_returns_none_past_x1(self):
+    def test_find_next_returns_none_past_xend(self):
         data = _make_epsc_data(event_times_ms=[80.0], amplitude=-100.0)
         result = self.tool.find_next_event(data, start_x=0.0)
         self.assertIsNotNone(result)

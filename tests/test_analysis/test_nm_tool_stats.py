@@ -1079,10 +1079,10 @@ class TestNMToolStatsNotes(unittest.TestCase):
     def test_note_contains_id(self):
         self.assertIn("id=main", self._note_text())
 
-    def test_note_contains_x0(self):
+    def test_note_contains_xbgn(self):
         self.assertIn("xbgn=10.0", self._note_text())
 
-    def test_note_contains_x1(self):
+    def test_note_contains_xend(self):
         self.assertIn("xend=50.0", self._note_text())
 
     def test_note_contains_n(self):
@@ -1235,7 +1235,7 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
     # ------------------------------------------------------------------
     # NMStatWin scalar setters
 
-    def test_x0_setter_logs(self):
+    def test_xbgn_setter_logs(self):
         self._ch.clear()
         self.w0.xbgn = 100.0
         self.assertEqual(len(self._ch.buffer), 1)
@@ -1243,7 +1243,7 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
         self.assertIn("stats.windows['w0'].xbgn", cmd)
         self.assertIn("100.0", cmd)
 
-    def test_x1_setter_logs(self):
+    def test_xend_setter_logs(self):
         self._ch.clear()
         self.w0.xend = 200.0
         cmd = self._ch.buffer[0]['command']
@@ -1264,14 +1264,14 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
         self.assertIn("stats.windows['w0'].bsln_on", cmd)
         self.assertIn("True", cmd)
 
-    def test_bsln_x0_setter_logs(self):
+    def test_bsln_xbgn_setter_logs(self):
         self._ch.clear()
         self.w0.bsln_xbgn = -10.0
         cmd = self._ch.buffer[0]['command']
         self.assertIn("stats.windows['w0'].bsln_xbgn", cmd)
         self.assertIn("-10.0", cmd)
 
-    def test_bsln_x1_setter_logs(self):
+    def test_bsln_xend_setter_logs(self):
         self._ch.clear()
         self.w0.bsln_xend = 0.0
         cmd = self._ch.buffer[0]['command']

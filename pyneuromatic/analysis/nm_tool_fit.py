@@ -60,10 +60,10 @@ def _eval_model(func_name: str, result: dict, x: np.ndarray) -> np.ndarray:
         coeffs_desc = list(reversed(result["coefficients"]))
         return np.polyval(coeffs_desc, x)
     if fn == "exp":
-        A, B, X0, Y0 = result["A"], result["B"], result["X0"], result["Y0"]
+        A, B, X0, Y0 = result["A"], result["Tau"], result["X0"], result["Y0"]
         return A * np.exp(-(x - X0) / B) + Y0
     if fn == "gauss":
-        A, mu, sg, Y0 = result["A"], result["mu"], result["sigma"], result["Y0"]
+        A, mu, sg, Y0 = result["A"], result["Mu"], result["Sigma"], result["Y0"]
         return A * np.exp(-0.5 * ((x - mu) / sg) ** 2) + Y0
     return np.full_like(x, float("nan"), dtype=float)
 
@@ -115,12 +115,12 @@ class NMToolFit(NMTool):
 
     Supported functions (``func_name``):
 
-    * ``"line"``              — ``y = A * x + B``
-      (A = slope, B = intercept)
+    * ``"line"``              — ``y = M * x + B``
+      (M = slope, B = intercept)
     * ``"poly2"``–``"poly9"`` — ``y = C0 + C1*x + … + Cn*x^n``
       (Ck = coefficient of x^k)
-    * ``"exp"``               — ``y = A * exp(-(x - X0) / B) + Y0``
-      (A = amplitude, B = decay tau, X0 = fixed x-origin, Y0 = y-offset)
+    * ``"exp"``               — ``y = A * exp(-(x - X0) / Tau) + Y0``
+      (A = amplitude, Tau = decay time constant, X0 = fixed x-origin, Y0 = y-offset)
     * ``"gauss"``             — ``y = A * exp(-0.5 * ((x - mu) / sigma)^2) + Y0``
       (A = amplitude, mu = mean, sigma = std dev, Y0 = y-offset)
 
@@ -148,11 +148,11 @@ class NMToolFit(NMTool):
         results_fit_npts: Number of points for the fit array. 0 (default)
             uses the same x-points as the original data. Any positive integer
             generates a uniformly-spaced grid from x[0] to x[-1].
-        x_origin: Fixed x-offset (X0) for the ``exp`` model: ``A*exp(-(x-X0)/B)+Y0``.
+        x_origin: Fixed x-offset (X0) for the ``exp`` model: ``A*exp(-(x-X0)/Tau)+Y0``.
             Default 0.0. Has no effect on other fit functions.
         param_names: Optional dict remapping default parameter names to
             user-defined names for output arrays.  Keys are default names
-            (e.g. ``"A"``, ``"B"``, ``"Y0"``, ``"mu"``, ``"sigma"``);
+            (e.g. ``"A"``, ``"B"``, ``"Tau"``, ``"Y0"``, ``"Mu"``, ``"Sigma"``);
             values are replacement names.  Partial overrides are supported.
             Not TOML-serializable.
     """
@@ -168,8 +168,8 @@ class NMToolFit(NMTool):
         self._results_to_numpy = self._config.results_to_numpy
 
         self.__func_name: str = "line"
-        self.__x0: float = -math.inf
-        self.__x1: float = math.inf
+        self.__xbgn: float = -math.inf
+        self.__xend: float = math.inf
         self.__maxfev: int = self._config.maxfev
         self.__x_origin: float = self._config.x_origin
 
@@ -215,38 +215,38 @@ class NMToolFit(NMTool):
     @property
     def xbgn(self) -> float:
         """Fit window start (x-units). Default ``-inf``."""
-        return self.__x0
+        return self.__xbgn
 
     @xbgn.setter
     def xbgn(self, value: float) -> None:
-        self._x0_set(value)
+        self._xbgn_set(value)
 
-    def _x0_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xbgn_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
         if math.isnan(value):
             raise ValueError("xbgn cannot be NaN")
-        self.__x0 = float(value)
-        nmh.history("set xbgn=%g" % self.__x0, quiet=quiet)
-        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self.__x0))
+        self.__xbgn = float(value)
+        nmh.history("set xbgn=%g" % self.__xbgn, quiet=quiet)
+        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self.__xbgn))
 
     @property
     def xend(self) -> float:
         """Fit window end (x-units). Default ``+inf``."""
-        return self.__x1
+        return self.__xend
 
     @xend.setter
     def xend(self, value: float) -> None:
-        self._x1_set(value)
+        self._xend_set(value)
 
-    def _x1_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xend_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xend", "float"))
         if math.isnan(value):
             raise ValueError("xend cannot be NaN")
-        self.__x1 = float(value)
-        nmh.history("set xend=%g" % self.__x1, quiet=quiet)
-        nmch.add_nm_command("%s.xend = %r" % (self._name, self.__x1))
+        self.__xend = float(value)
+        nmh.history("set xend=%g" % self.__xend, quiet=quiet)
+        nmch.add_nm_command("%s.xend = %r" % (self._name, self.__xend))
 
     @property
     def maxfev(self) -> int:
@@ -416,8 +416,8 @@ class NMToolFit(NMTool):
         result = fit_nmdata(
             data,
             func_name=self.__func_name,
-            xbgn=self.__x0,
-            xend=self.__x1,
+            xbgn=self.__xbgn,
+            xend=self.__xend,
             degree=degree,
             x_origin=self.__x_origin,
             p0=self.__p0,
@@ -452,9 +452,14 @@ class NMToolFit(NMTool):
         """Build the notes annotation string for output arrays."""
         parts = [
             "NMFit(func_name=%r" % self.__func_name,
-            "xbgn=%s" % self.__x0,
-            "xend=%s" % self.__x1,
+            "xbgn=%s" % self.__xbgn,
+            "xend=%s" % self.__xend,
+            "n_epochs=%d" % len(self._epoch_names),
         ]
+        if self.__func_name == "exp" and self.__x_origin != 0.0:
+            parts.append("x_origin=%s" % self.__x_origin)
+        if not self._ignore_nans:
+            parts.append("ignore_nans=False")
         if self.__p0 is not None:
             parts.append("p0=%r" % self.__p0)
         return ", ".join(parts) + ")"
@@ -475,12 +480,12 @@ class NMToolFit(NMTool):
 
         Output arrays depend on ``func_name``:
 
-        * **line**: ``FT_A`` (slope), ``FT_B`` (intercept), ``FT_R2``,
+        * **line**: ``FT_M`` (slope), ``FT_B`` (intercept), ``FT_R2``,
           ``FT_ChiSqr``
         * **poly2–poly9**: ``FT_C0`` … ``FT_Cn``, ``FT_R2``, ``FT_ChiSqr``
         * **exp**: ``FT_A``, ``FT_B``, ``FT_X0``, ``FT_Y0``, ``FT_R2``,
           ``FT_ChiSqr``, ``FT_Converged``
-        * **gauss**: ``FT_A``, ``FT_mu``, ``FT_sigma``, ``FT_Y0``,
+        * **gauss**: ``FT_A``, ``FT_Mu``, ``FT_Sigma``, ``FT_Y0``,
           ``FT_R2``, ``FT_ChiSqr``, ``FT_Converged``
 
         All parameter array names pass through ``param_names`` so they can be
@@ -517,12 +522,12 @@ class NMToolFit(NMTool):
             return d
 
         if self.__func_name == "line":
-            _write(p("A"),      [r["slope"]     for r in self._fit_results])
+            _write(p("M"),      [r["slope"]     for r in self._fit_results])
             _write(p("B"),      [r["intercept"] for r in self._fit_results])
             _write("R2",        [r["r2"]        for r in self._fit_results])
             _write("ChiSqr",    [r["chi_sqr"]   for r in self._fit_results])
             if self.__results_errors:
-                _write("err_" + p("A"), [r["slope_err"]     for r in self._fit_results])
+                _write("err_" + p("M"), [r["slope_err"]     for r in self._fit_results])
                 _write("err_" + p("B"), [r["intercept_err"] for r in self._fit_results])
 
         elif self.__func_name.startswith("poly"):
@@ -538,29 +543,29 @@ class NMToolFit(NMTool):
 
         elif self.__func_name == "exp":
             _write(p("A"),      [r["A"]   for r in self._fit_results])
-            _write(p("B"),      [r["B"]   for r in self._fit_results])
+            _write(p("Tau"),    [r["Tau"] for r in self._fit_results])
             _write(p("X0"),     [r["X0"]  for r in self._fit_results])
             _write(p("Y0"),     [r["Y0"]  for r in self._fit_results])
             _write("R2",        [r["r2"]        for r in self._fit_results])
             _write("ChiSqr",    [r["chi_sqr"]   for r in self._fit_results])
             _write("Converged", [float(r["converged"]) for r in self._fit_results])
             if self.__results_errors:
-                _write("err_" + p("A"),  [r["A_err"]  for r in self._fit_results])
-                _write("err_" + p("B"),  [r["B_err"]  for r in self._fit_results])
-                _write("err_" + p("Y0"), [r["Y0_err"] for r in self._fit_results])
+                _write("err_" + p("A"),   [r["A_err"]   for r in self._fit_results])
+                _write("err_" + p("Tau"), [r["Tau_err"] for r in self._fit_results])
+                _write("err_" + p("Y0"),  [r["Y0_err"]  for r in self._fit_results])
 
         elif self.__func_name == "gauss":
             _write(p("A"),      [r["A"]     for r in self._fit_results])
-            _write(p("mu"),     [r["mu"]    for r in self._fit_results])
-            _write(p("sigma"),  [r["sigma"] for r in self._fit_results])
+            _write(p("Mu"),     [r["Mu"]    for r in self._fit_results])
+            _write(p("Sigma"),  [r["Sigma"] for r in self._fit_results])
             _write(p("Y0"),     [r["Y0"]    for r in self._fit_results])
             _write("R2",        [r["r2"]        for r in self._fit_results])
             _write("ChiSqr",    [r["chi_sqr"]   for r in self._fit_results])
             _write("Converged", [float(r["converged"]) for r in self._fit_results])
             if self.__results_errors:
                 _write("err_" + p("A"),     [r["A_err"]     for r in self._fit_results])
-                _write("err_" + p("mu"),    [r["mu_err"]    for r in self._fit_results])
-                _write("err_" + p("sigma"), [r["sigma_err"] for r in self._fit_results])
+                _write("err_" + p("Mu"),    [r["Mu_err"]    for r in self._fit_results])
+                _write("err_" + p("Sigma"), [r["Sigma_err"] for r in self._fit_results])
                 _write("err_" + p("Y0"),    [r["Y0_err"]    for r in self._fit_results])
 
         if self.__results_residuals:

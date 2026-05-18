@@ -86,10 +86,10 @@ class TestNMToolFitDefaults(unittest.TestCase):
     def test_no_degree_property(self):
         self.assertFalse(hasattr(self.tool, "degree"))
 
-    def test_x0_default(self):
+    def test_xbgn_default(self):
         self.assertEqual(self.tool.xbgn, -math.inf)
 
-    def test_x1_default(self):
+    def test_xend_default(self):
         self.assertEqual(self.tool.xend, math.inf)
 
     def test_p0_default(self):
@@ -161,29 +161,29 @@ class TestNMToolFitProperties(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.tool.func_name = 3
 
-    def test_x0_valid(self):
+    def test_xbgn_valid(self):
         self.tool.xbgn = 5.0
         self.assertEqual(self.tool.xbgn, 5.0)
 
-    def test_x0_nan_raises(self):
+    def test_xbgn_nan_raises(self):
         with self.assertRaises(ValueError):
             self.tool.xbgn = float("nan")
 
-    def test_x0_type_error(self):
+    def test_xbgn_type_error(self):
         with self.assertRaises(TypeError):
             self.tool.xbgn = "start"
 
-    def test_x1_valid(self):
+    def test_xend_valid(self):
         self.tool.xend = 100.0
         self.assertEqual(self.tool.xend, 100.0)
 
-    def test_x1_nan_raises(self):
+    def test_xend_nan_raises(self):
         with self.assertRaises(ValueError):
             self.tool.xend = float("nan")
 
     def test_p0_dict_accepted(self):
-        self.tool.p0 = {"A": 1.0, "B": 5.0}
-        self.assertEqual(self.tool.p0, {"A": 1.0, "B": 5.0})
+        self.tool.p0 = {"A": 1.0, "Tau": 5.0}
+        self.assertEqual(self.tool.p0, {"A": 1.0, "Tau": 5.0})
 
     def test_p0_none_accepted(self):
         self.tool.p0 = {"A": 1.0}
@@ -283,8 +283,8 @@ class TestNMToolFitProperties(unittest.TestCase):
             self.tool.x_origin = "t0"
 
     def test_param_names_dict_accepted(self):
-        self.tool.param_names = {"A": "amplitude", "B": "tau"}
-        self.assertEqual(self.tool.param_names, {"A": "amplitude", "B": "tau"})
+        self.tool.param_names = {"A": "amplitude", "Tau": "decay"}
+        self.assertEqual(self.tool.param_names, {"A": "amplitude", "Tau": "decay"})
 
     def test_param_names_none_accepted(self):
         self.tool.param_names = {"A": "amp"}
@@ -312,11 +312,11 @@ class TestNMToolFitLine(unittest.TestCase):
         folder = _run(self.tool, [data])
         tf = folder.toolfolders.get("Fit_Line_0")
         self.assertIsNotNone(tf)
-        a = tf.data.get("FT_A")
+        m = tf.data.get("FT_M")
         b = tf.data.get("FT_B")
-        self.assertIsNotNone(a)
+        self.assertIsNotNone(m)
         self.assertIsNotNone(b)
-        self.assertAlmostEqual(float(a.nparray[0]), slope, places=5)
+        self.assertAlmostEqual(float(m.nparray[0]), slope, places=5)
         self.assertAlmostEqual(float(b.nparray[0]), intercept, places=5)
 
     def test_line_r2_near_one(self):
@@ -330,7 +330,7 @@ class TestNMToolFitLine(unittest.TestCase):
         data = _make_linear_data(1.0, 0.0)
         folder = _run(self.tool, [data])
         tf = folder.toolfolders.get("Fit_Line_0")
-        for name in ("FT_A", "FT_B", "FT_R2", "FT_ChiSqr"):
+        for name in ("FT_M", "FT_B", "FT_R2", "FT_ChiSqr"):
             self.assertIn(name, tf.data, msg="missing %s" % name)
 
 
@@ -396,7 +396,7 @@ class TestNMToolFitExp(unittest.TestCase):
         tf = folder.toolfolders.get("Fit_Exp_0")
         self.assertIsNotNone(tf)
         self.assertAlmostEqual(float(tf.data["FT_A"].nparray[0]), A, delta=0.5)
-        self.assertAlmostEqual(float(tf.data["FT_B"].nparray[0]), B, delta=0.5)
+        self.assertAlmostEqual(float(tf.data["FT_Tau"].nparray[0]), B, delta=0.5)
         self.assertAlmostEqual(float(tf.data["FT_Y0"].nparray[0]), C, delta=0.5)
 
     def test_exp_r2_near_one(self):
@@ -416,7 +416,7 @@ class TestNMToolFitExp(unittest.TestCase):
         data = _make_exp_data(50.0, 20.0, 5.0)
         folder = _run(self.tool, [data])
         tf = folder.toolfolders.get("Fit_Exp_0")
-        for name in ("FT_A", "FT_B", "FT_X0", "FT_Y0", "FT_R2", "FT_ChiSqr", "FT_Converged"):
+        for name in ("FT_A", "FT_Tau", "FT_X0", "FT_Y0", "FT_R2", "FT_ChiSqr", "FT_Converged"):
             self.assertIn(name, tf.data, msg="missing %s" % name)
 
 
@@ -437,8 +437,8 @@ class TestNMToolFitGauss(unittest.TestCase):
         tf = folder.toolfolders.get("Fit_Gauss_0")
         self.assertIsNotNone(tf)
         self.assertAlmostEqual(float(tf.data["FT_A"].nparray[0]),     A,       delta=1.0)
-        self.assertAlmostEqual(float(tf.data["FT_mu"].nparray[0]),    mu,      delta=0.5)
-        self.assertAlmostEqual(float(tf.data["FT_sigma"].nparray[0]), sigma_g, delta=0.5)
+        self.assertAlmostEqual(float(tf.data["FT_Mu"].nparray[0]),    mu,      delta=0.5)
+        self.assertAlmostEqual(float(tf.data["FT_Sigma"].nparray[0]), sigma_g, delta=0.5)
         self.assertAlmostEqual(float(tf.data["FT_Y0"].nparray[0]),     C,       delta=0.5)
 
     def test_gauss_r2_near_one(self):
@@ -457,7 +457,7 @@ class TestNMToolFitGauss(unittest.TestCase):
         data = _make_gauss_data(100.0, 50.0, 10.0, 0.0)
         folder = _run(self.tool, [data])
         tf = folder.toolfolders.get("Fit_Gauss_0")
-        for name in ("FT_A", "FT_mu", "FT_sigma", "FT_Y0", "FT_R2", "FT_ChiSqr", "FT_Converged"):
+        for name in ("FT_A", "FT_Mu", "FT_Sigma", "FT_Y0", "FT_R2", "FT_ChiSqr", "FT_Converged"):
             self.assertIn(name, tf.data, msg="missing %s" % name)
 
 
@@ -472,7 +472,7 @@ class TestNMToolFitP0Override(unittest.TestCase):
         data = _make_exp_data(A, B, C)
         tool = NMToolFit()
         tool.func_name = "exp"
-        tool.p0 = {"A": 45.0, "B": 18.0, "Y0": 4.0}
+        tool.p0 = {"A": 45.0, "Tau": 18.0, "Y0": 4.0}
         folder = _run(tool, [data])
         tf = folder.toolfolders.get("Fit_Exp_0")
         self.assertEqual(float(tf.data["FT_Converged"].nparray[0]), 1.0)
@@ -483,11 +483,11 @@ class TestNMToolFitP0Override(unittest.TestCase):
         data = _make_gauss_data(A, mu, sigma_g, C)
         tool = NMToolFit()
         tool.func_name = "gauss"
-        tool.p0 = {"A": 95.0, "mu": 48.0, "sigma": 9.0, "Y0": 1.0}
+        tool.p0 = {"A": 95.0, "Mu": 48.0, "Sigma": 9.0, "Y0": 1.0}
         folder = _run(tool, [data])
         tf = folder.toolfolders.get("Fit_Gauss_0")
         self.assertEqual(float(tf.data["FT_Converged"].nparray[0]), 1.0)
-        self.assertAlmostEqual(float(tf.data["FT_mu"].nparray[0]), mu, delta=0.5)
+        self.assertAlmostEqual(float(tf.data["FT_Mu"].nparray[0]), mu, delta=0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +510,7 @@ class TestNMToolFitXRange(unittest.TestCase):
         tool.xend = 50.0
         folder = _run(tool, [data])
         tf = folder.toolfolders.get("Fit_Line_0")
-        self.assertAlmostEqual(float(tf.data["FT_A"].nparray[0]), 2.0, delta=0.01)
+        self.assertAlmostEqual(float(tf.data["FT_M"].nparray[0]), 2.0, delta=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -557,7 +557,7 @@ class TestNMToolFitOutputArrays(unittest.TestCase):
         tool.func_name = "line"
         folder = _run(tool, [_make_linear_data(1.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
-        d = tf.data.get("FT_A")
+        d = tf.data.get("FT_M")
         notes_text = " ".join(str(n) for n in d.notes)
         self.assertIn("line", notes_text)
 
@@ -566,7 +566,7 @@ class TestNMToolFitOutputArrays(unittest.TestCase):
         tool.func_name = "line"
         folder = _run(tool, [_make_linear_data(1.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
-        d = tf.data.get("FT_A")
+        d = tf.data.get("FT_M")
         self.assertEqual(d.xscale.units, "epoch")
 
 
@@ -583,10 +583,10 @@ class TestNMToolFitMultiEpoch(unittest.TestCase):
         d1 = _make_linear_data(2.0, 5.0, name="recordA1")
         folder = _run(tool, [d0, d1])
         tf = folder.toolfolders.get("Fit_Line_0")
-        a = tf.data.get("FT_A")
-        self.assertEqual(len(a.nparray), 2)
-        self.assertAlmostEqual(float(a.nparray[0]), 1.0, places=5)
-        self.assertAlmostEqual(float(a.nparray[1]), 2.0, places=5)
+        m = tf.data.get("FT_M")
+        self.assertEqual(len(m.nparray), 2)
+        self.assertAlmostEqual(float(m.nparray[0]), 1.0, places=5)
+        self.assertAlmostEqual(float(m.nparray[1]), 2.0, places=5)
 
     def test_multi_epoch_b_values(self):
         tool = NMToolFit()
@@ -712,7 +712,7 @@ class TestNMToolFitResultsErrors(unittest.TestCase):
         tool.results_errors = True
         folder = _run(tool, [_make_linear_data(2.0, 1.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
-        self.assertIn("FT_err_A", tf.data)
+        self.assertIn("FT_err_M", tf.data)
         self.assertIn("FT_err_B", tf.data)
 
     def test_line_errors_near_zero_for_exact_data(self):
@@ -721,7 +721,7 @@ class TestNMToolFitResultsErrors(unittest.TestCase):
         tool.results_errors = True
         folder = _run(tool, [_make_linear_data(2.0, 1.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
-        err_a = float(tf.data["FT_err_A"].nparray[0])
+        err_a = float(tf.data["FT_err_M"].nparray[0])
         err_b = float(tf.data["FT_err_B"].nparray[0])
         self.assertLess(err_a, 1e-6)
         self.assertLess(err_b, 1e-6)
@@ -748,7 +748,7 @@ class TestNMToolFitResultsErrors(unittest.TestCase):
         tool.results_errors = True
         folder = _run(tool, [_make_exp_data(50.0, 20.0, 5.0)])
         tf = folder.toolfolders.get("Fit_Exp_0")
-        for name in ("FT_err_A", "FT_err_B", "FT_err_Y0"):
+        for name in ("FT_err_A", "FT_err_Tau", "FT_err_Y0"):
             self.assertIn(name, tf.data, msg="%s missing" % name)
 
     def test_gauss_errors_written_when_enabled(self):
@@ -757,7 +757,7 @@ class TestNMToolFitResultsErrors(unittest.TestCase):
         tool.results_errors = True
         folder = _run(tool, [_make_gauss_data(100.0, 50.0, 10.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Gauss_0")
-        for name in ("FT_err_A", "FT_err_mu", "FT_err_sigma", "FT_err_Y0"):
+        for name in ("FT_err_A", "FT_err_Mu", "FT_err_Sigma", "FT_err_Y0"):
             self.assertIn(name, tf.data, msg="%s missing" % name)
 
     def test_gauss_errors_near_zero_for_exact_data(self):
@@ -766,7 +766,7 @@ class TestNMToolFitResultsErrors(unittest.TestCase):
         tool.results_errors = True
         folder = _run(tool, [_make_gauss_data(100.0, 50.0, 10.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Gauss_0")
-        for name in ("FT_err_A", "FT_err_mu", "FT_err_sigma", "FT_err_Y0"):
+        for name in ("FT_err_A", "FT_err_Mu", "FT_err_Sigma", "FT_err_Y0"):
             err = float(tf.data[name].nparray[0])
             self.assertLess(err, 1e-3, msg="%s=%g unexpectedly large" % (name, err))
 
@@ -1016,7 +1016,7 @@ class TestNMToolFitXOrigin(unittest.TestCase):
         folder = _run(tool, [data])
         tf = folder.toolfolders.get("Fit_Exp_0")
         self.assertAlmostEqual(float(tf.data["FT_A"].nparray[0]),  A,  delta=0.5)
-        self.assertAlmostEqual(float(tf.data["FT_B"].nparray[0]),  B,  delta=0.5)
+        self.assertAlmostEqual(float(tf.data["FT_Tau"].nparray[0]),  B,  delta=0.5)
         self.assertAlmostEqual(float(tf.data["FT_Y0"].nparray[0]), Y0, delta=0.5)
 
 
@@ -1029,18 +1029,18 @@ class TestNMToolFitParamNames(unittest.TestCase):
     def test_param_names_renames_line_output(self):
         tool = NMToolFit()
         tool.func_name = "line"
-        tool.param_names = {"A": "slope", "B": "intercept"}
+        tool.param_names = {"M": "slope", "B": "intercept"}
         folder = _run(tool, [_make_linear_data(2.0, 1.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
         self.assertIn("FT_slope",     tf.data)
         self.assertIn("FT_intercept", tf.data)
-        self.assertNotIn("FT_A", tf.data)
+        self.assertNotIn("FT_M", tf.data)
         self.assertNotIn("FT_B", tf.data)
 
     def test_param_names_partial_override(self):
         tool = NMToolFit()
         tool.func_name = "line"
-        tool.param_names = {"A": "slope"}   # only rename A
+        tool.param_names = {"M": "slope"}   # only rename M
         folder = _run(tool, [_make_linear_data(2.0, 1.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
         self.assertIn("FT_slope", tf.data)   # renamed
@@ -1049,20 +1049,20 @@ class TestNMToolFitParamNames(unittest.TestCase):
     def test_param_names_renames_exp_output(self):
         tool = NMToolFit()
         tool.func_name = "exp"
-        tool.param_names = {"A": "amplitude", "B": "tau", "Y0": "baseline"}
+        tool.param_names = {"A": "amplitude", "Tau": "decay", "Y0": "baseline"}
         folder = _run(tool, [_make_exp_data(50.0, 20.0, 5.0)])
         tf = folder.toolfolders.get("Fit_Exp_0")
         self.assertIn("FT_amplitude", tf.data)
-        self.assertIn("FT_tau",       tf.data)
+        self.assertIn("FT_decay",     tf.data)
         self.assertIn("FT_baseline",  tf.data)
-        self.assertNotIn("FT_A",  tf.data)
-        self.assertNotIn("FT_B",  tf.data)
-        self.assertNotIn("FT_Y0", tf.data)
+        self.assertNotIn("FT_A",   tf.data)
+        self.assertNotIn("FT_Tau", tf.data)
+        self.assertNotIn("FT_Y0",  tf.data)
 
     def test_param_names_renames_gauss_output(self):
         tool = NMToolFit()
         tool.func_name = "gauss"
-        tool.param_names = {"A": "amp", "mu": "mean", "sigma": "std", "Y0": "offset"}
+        tool.param_names = {"A": "amp", "Mu": "mean", "Sigma": "std", "Y0": "offset"}
         folder = _run(tool, [_make_gauss_data(100.0, 50.0, 10.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Gauss_0")
         for expected in ("FT_amp", "FT_mean", "FT_std", "FT_offset"):
@@ -1072,21 +1072,21 @@ class TestNMToolFitParamNames(unittest.TestCase):
         tool = NMToolFit()
         tool.func_name = "line"
         tool.results_errors = True
-        tool.param_names = {"A": "slope", "B": "intercept"}
+        tool.param_names = {"M": "slope", "B": "intercept"}
         folder = _run(tool, [_make_linear_data(2.0, 1.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
         self.assertIn("FT_err_slope",     tf.data)
         self.assertIn("FT_err_intercept", tf.data)
-        self.assertNotIn("FT_err_A", tf.data)
+        self.assertNotIn("FT_err_M", tf.data)
 
     def test_param_names_none_uses_defaults(self):
         tool = NMToolFit()
         tool.func_name = "line"
-        tool.param_names = {"A": "slope"}
+        tool.param_names = {"M": "slope"}
         tool.param_names = None
         folder = _run(tool, [_make_linear_data(1.0, 0.0)])
         tf = folder.toolfolders.get("Fit_Line_0")
-        self.assertIn("FT_A", tf.data)
+        self.assertIn("FT_M", tf.data)
         self.assertIn("FT_B", tf.data)
 
 

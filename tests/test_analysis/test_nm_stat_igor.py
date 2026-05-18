@@ -50,7 +50,7 @@ _IGOR_R0 = {
     "value@xend":  -82.906258,
 }
 
-_X0, _X1 = 500.0, 1000.0  # ms
+_XBGN, _XEND = 500.0, 1000.0  # ms
 _N_MEAN = 500  # n_mean for mean@max and mean@min (10 ms window at 0.02 ms sampling)
 
 # ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ class TestIgorWaveStats(unittest.TestCase):
     """Compare stat() against Igor Pro WaveStats for RecordA0, t=500–1000 ms."""
 
     def _stat(self, name, **kwargs):
-        return nsmm.stat(_DATA, {"name": name}, xbgn=_X0, xend=_X1,
+        return nsmm.stat(_DATA, {"name": name}, xbgn=_XBGN, xend=_XEND,
                          **kwargs)
 
     def test_wave_loaded(self):
@@ -206,33 +206,33 @@ class TestIgorWaveStats(unittest.TestCase):
         r = self._stat("slope")
         self.assertAlmostEqual(r["s"], _IGOR_R0["slope"], places=6)
 
-    def test_value_at_x0(self):
+    def test_value_at_xbgn(self):
         r = self._stat("value@xbgn")
         self.assertAlmostEqual(r["s"], _IGOR_R0["value@xbgn"], places=4)
 
-    def test_value_at_x1(self):
+    def test_value_at_xend(self):
         r = self._stat("value@xend")
         self.assertAlmostEqual(r["s"], _IGOR_R0["value@xend"], places=4)
 
     def test_mean_at_max(self):
         # n_mean=500 determined by matching Igor minAvg/maxAvg to 3 decimal places
         r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
-                      xbgn=_X0, xend=_X1)
+                      xbgn=_XBGN, xend=_XEND)
         self.assertAlmostEqual(r["s"], _IGOR_R0["maxAvg"], places=3)
 
     def test_mean_at_max_location(self):
         r = nsmm.stat(_DATA, {"name": "mean@max", "n_mean": _N_MEAN},
-                      xbgn=_X0, xend=_X1)
+                      xbgn=_XBGN, xend=_XEND)
         self.assertAlmostEqual(r["x"], _IGOR_R0["maxAvgLoc"], places=1)
 
     def test_mean_at_min(self):
         r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
-                      xbgn=_X0, xend=_X1)
+                      xbgn=_XBGN, xend=_XEND)
         self.assertAlmostEqual(r["s"], _IGOR_R0["minAvg"], places=3)
 
     def test_mean_at_min_location(self):
         r = nsmm.stat(_DATA, {"name": "mean@min", "n_mean": _N_MEAN},
-                      xbgn=_X0, xend=_X1)
+                      xbgn=_XBGN, xend=_XEND)
         self.assertAlmostEqual(r["x"], _IGOR_R0["minAvgLoc"], places=1)
 
     def test_no_nans(self):
@@ -258,31 +258,31 @@ class TestIgorLevelCrossings(unittest.TestCase):
     """
 
     def _crossings(self, func_name):
-        # Slice to X0–X1 before calling find_level_crossings
-        i0 = round((_X0 - _DATA.xscale.start) / _DATA.xscale.delta)
-        i1 = round((_X1 - _DATA.xscale.start) / _DATA.xscale.delta)
+        # Slice to XBGN–XEND before calling find_level_crossings
+        i0 = round((_XBGN - _DATA.xscale.start) / _DATA.xscale.delta)
+        i1 = round((_XEND - _DATA.xscale.start) / _DATA.xscale.delta)
         yslice = _DATA.nparray[i0:i1 + 1]
         return nsmm.find_level_crossings(
             yslice, ylevel=_IGOR_R0["ylevel"],
             func_name=func_name,
-            xstart=_X0,
+            xstart=_XBGN,
             xdelta=_DATA.xscale.delta,
         )
 
     def test_level_crossings_in_range(self):
         _, xvalues = self._crossings("level")
         self.assertGreater(len(xvalues), 0)
-        self.assertTrue(all(_X0 <= x <= _X1 for x in xvalues))
+        self.assertTrue(all(_XBGN <= x <= _XEND for x in xvalues))
 
     def test_level_plus_crossings_in_range(self):
         _, xvalues = self._crossings("level+")
         self.assertGreater(len(xvalues), 0)
-        self.assertTrue(all(_X0 <= x <= _X1 for x in xvalues))
+        self.assertTrue(all(_XBGN <= x <= _XEND for x in xvalues))
 
     def test_level_minus_crossings_in_range(self):
         _, xvalues = self._crossings("level-")
         self.assertGreater(len(xvalues), 0)
-        self.assertTrue(all(_X0 <= x <= _X1 for x in xvalues))
+        self.assertTrue(all(_XBGN <= x <= _XEND for x in xvalues))
 
     def test_level_plus_before_level_minus(self):
         _, xp = self._crossings("level+")

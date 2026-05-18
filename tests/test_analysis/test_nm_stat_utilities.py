@@ -255,12 +255,12 @@ class TestStat(unittest.TestCase):
         self.assertEqual(r["sunits"], self.datanan.yscale.units)
         self.assertEqual(r["xunits"], self.datanan.xscale.units)
 
-    def test_value_at_x0(self):
+    def test_value_at_xbgn(self):
         r = nsmm.stat(self.datanan, {"name": "value@xbgn"}, xbgn=10)
         self.assertEqual(r["i0"], 10)
         self.assertEqual(r["s"], self.datanan.nparray[10])
 
-    def test_value_at_x1(self):
+    def test_value_at_xend(self):
         r = nsmm.stat(self.datanan, {"name": "value@xend"}, xend=10)
         self.assertEqual(r["i1"], 10)
         self.assertEqual(r["s"], self.datanan.nparray[10])

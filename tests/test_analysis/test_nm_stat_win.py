@@ -337,7 +337,7 @@ class TestNMStatWin(unittest.TestCase):
         if r[1]["Δs"]:
             self.assertAlmostEqual(r[1]["Δs"], r[1]["s"] - r[0]["s"])
 
-    def test_compute_x1_out_of_bounds(self):
+    def test_compute_xend_out_of_bounds(self):
         # finite xend beyond data range → i1=None, error result (no clip)
         self.w1.xend = 200
         r = self.w1.compute(self.datanan, ignore_nans=True)

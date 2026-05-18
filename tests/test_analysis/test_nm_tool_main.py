@@ -1031,24 +1031,24 @@ class TestNMMainOpBaseline(unittest.TestCase):
         with self.assertRaises(TypeError):
             NMMainOpBaseline(mode=1)
 
-    def test_x1_before_x0_raises(self):
+    def test_xend_before_xbgn_raises(self):
         op = NMMainOpBaseline(xbgn=5.0, xend=2.0)
         with self.assertRaises(ValueError):
             op.run_init()  # calls _validate_window → raises
 
-    def test_x0_rejects_bool(self):
+    def test_xbgn_rejects_bool(self):
         with self.assertRaises(TypeError):
             NMMainOpBaseline(xbgn=True)
 
-    def test_x1_rejects_bool(self):
+    def test_xend_rejects_bool(self):
         with self.assertRaises(TypeError):
             NMMainOpBaseline(xend=True)
 
-    def test_x0_rejects_nan(self):
+    def test_xbgn_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpBaseline(xbgn=float("nan"))
 
-    def test_x1_rejects_nan(self):
+    def test_xend_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpBaseline(xend=float("nan"))
 
@@ -1500,8 +1500,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_array_min_max(self):
         # [0,5,10], fxn1=min→0, fxn2=max→10, range=10 → [0.0, 0.5, 1.0]
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=2.0, fxn1="min",
-            x0_max=0.0, x1_max=2.0, fxn2="max",
+            xbgn_min=0.0, xend_min=2.0, fxn1="min",
+            xbgn_max=0.0, xend_max=2.0, fxn2="max",
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
         op.run_init()
@@ -1511,8 +1511,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_array_mean_zero_range(self):
         # fxn1=mean and fxn2=mean over same window → ref_min==ref_max → norm_min everywhere
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=4.0, fxn1="mean",
-            x0_max=0.0, x1_max=4.0, fxn2="mean",
+            xbgn_min=0.0, xend_min=4.0, fxn1="mean",
+            xbgn_max=0.0, xend_max=4.0, fxn2="mean",
             norm_min=-99.0,
         )
         data = _make_data("RecordA0", [0.0, 2.0, 4.0, 6.0, 8.0])
@@ -1523,8 +1523,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_array_uses_windows(self):
         # [0,1,2,3,4] xdelta=1; window1=[0,0]→first point(0), window2=[4,4]→last point(4)
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=0.0, fxn1="mean",
-            x0_max=4.0, x1_max=4.0, fxn2="mean",
+            xbgn_min=0.0, xend_min=0.0, fxn1="mean",
+            xbgn_max=4.0, xend_max=4.0, fxn2="mean",
         )
         data = _make_data("RecordA0", [0.0, 1.0, 2.0, 3.0, 4.0])
         op.run_init()
@@ -1534,8 +1534,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_per_array_custom_norm_range(self):
         # norm_min=-1, norm_max=1; [0,5,10]→ref_min=0,ref_max=10 → [-1,0,1]
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=2.0, fxn1="min",
-            x0_max=0.0, x1_max=2.0, fxn2="max",
+            xbgn_min=0.0, xend_min=2.0, fxn1="min",
+            xbgn_max=0.0, xend_max=2.0, fxn2="max",
             norm_min=-1.0, norm_max=1.0,
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
@@ -1547,8 +1547,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
         # [3,1,2], fxn1=mean@min, n_mean1=3; min at i=1, mean of [3,1,2]=2.0 → ref_min=2.0
         # fxn2=max → ref_max=3.0; range=1; normalized: arr-2.0 → [1,-1,0]
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=2.0, fxn1="mean@min", n_mean1=3,
-            x0_max=0.0, x1_max=2.0, fxn2="max",
+            xbgn_min=0.0, xend_min=2.0, fxn1="mean@min", n_mean1=3,
+            xbgn_max=0.0, xend_max=2.0, fxn2="max",
         )
         data = _make_data("RecordA0", [3.0, 1.0, 2.0])
         op.run_init()
@@ -1559,8 +1559,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
         # [1,5,3], fxn2=mean@max, n_mean2=3; max at i=1, mean of [1,5,3]=3.0 → ref_max=3.0
         # fxn1=min → ref_min=1.0; range=2; normalized: (arr-1)/2 → [0,2,1]
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=2.0, fxn1="min",
-            x0_max=0.0, x1_max=2.0, fxn2="mean@max", n_mean2=3,
+            xbgn_min=0.0, xend_min=2.0, fxn1="min",
+            xbgn_max=0.0, xend_max=2.0, fxn2="mean@max", n_mean2=3,
         )
         data = _make_data("RecordA0", [1.0, 5.0, 3.0])
         op.run_init()
@@ -1569,8 +1569,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_per_array_preserves_length(self):
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=99.0, fxn1="min",
-            x0_max=0.0, x1_max=99.0, fxn2="max",
+            xbgn_min=0.0, xend_min=99.0, fxn1="min",
+            xbgn_max=0.0, xend_max=99.0, fxn2="max",
         )
         data = _make_data("RecordA0", list(range(100)))
         op.run_init()
@@ -1583,8 +1583,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_average_mode_shared_refs(self):
         # 2 arrays same channel; ref_mins=[0,2]→avg=1, ref_maxes=[4,6]→avg=5, range=4
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=1.0, fxn1="min",
-            x0_max=0.0, x1_max=1.0, fxn2="max",
+            xbgn_min=0.0, xend_min=1.0, fxn1="min",
+            xbgn_max=0.0, xend_max=1.0, fxn2="max",
             mode="average",
         )
         d0 = _make_data("RecordA0", [0.0, 4.0])
@@ -1596,8 +1596,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
     def test_average_mode_per_channel(self):
         # Channel A ref_max=10, channel B ref_max=5 — independent
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=1.0, fxn1="min",
-            x0_max=0.0, x1_max=1.0, fxn2="max",
+            xbgn_min=0.0, xend_min=1.0, fxn1="min",
+            xbgn_max=0.0, xend_max=1.0, fxn2="max",
             mode="average",
         )
         dA = _make_data("RecordA0", [0.0, 10.0])
@@ -1647,25 +1647,25 @@ class TestNMMainOpNormalize(unittest.TestCase):
             NMMainOpNormalize(mode="bad")
 
     def test_x1_min_before_x0_min_raises(self):
-        op = NMMainOpNormalize(x0_min=5.0, x1_min=0.0)
+        op = NMMainOpNormalize(xbgn_min=5.0, xend_min=0.0)
         with self.assertRaises(ValueError):
             op.run_init()
 
     def test_x0_min_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(x0_min=float("nan"))
+            NMMainOpNormalize(xbgn_min=float("nan"))
 
     def test_x1_min_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(x1_min=float("nan"))
+            NMMainOpNormalize(xend_min=float("nan"))
 
     def test_x0_max_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(x0_max=float("nan"))
+            NMMainOpNormalize(xbgn_max=float("nan"))
 
     def test_x1_max_rejects_nan(self):
         with self.assertRaises(ValueError):
-            NMMainOpNormalize(x1_max=float("nan"))
+            NMMainOpNormalize(xend_max=float("nan"))
 
     # ------------------------------------------------------------------
     # edge cases / notes
@@ -1679,8 +1679,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_note_per_array(self):
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=2.0, fxn1="min",
-            x0_max=0.0, x1_max=2.0, fxn2="max",
+            xbgn_min=0.0, xend_min=2.0, fxn1="min",
+            xbgn_max=0.0, xend_max=2.0, fxn2="max",
             mode="per_array",
         )
         data = _make_data("RecordA0", [0.0, 5.0, 10.0])
@@ -1695,8 +1695,8 @@ class TestNMMainOpNormalize(unittest.TestCase):
 
     def test_note_average(self):
         op = NMMainOpNormalize(
-            x0_min=0.0, x1_min=1.0, fxn1="min",
-            x0_max=0.0, x1_max=1.0, fxn2="max",
+            xbgn_min=0.0, xend_min=1.0, fxn1="min",
+            xbgn_max=0.0, xend_max=1.0, fxn2="max",
             mode="average",
         )
         data = _make_data("RecordA0", [0.0, 10.0])
@@ -2357,15 +2357,15 @@ class TestNMMainOpHistogram(unittest.TestCase):
 
     # --- time window (xbgn / xend) ---
 
-    def test_default_x0_is_neg_inf(self):
+    def test_default_xbgn_is_neg_inf(self):
         self.assertTrue(math.isinf(NMMainOpHistogram().xbgn))
         self.assertLess(NMMainOpHistogram().xbgn, 0)
 
-    def test_default_x1_is_pos_inf(self):
+    def test_default_xend_is_pos_inf(self):
         self.assertTrue(math.isinf(NMMainOpHistogram().xend))
         self.assertGreater(NMMainOpHistogram().xend, 0)
 
-    def test_x0_x1_window(self):
+    def test_xbgn_xend_window(self):
         # 10 samples at x=0..9; window xbgn=2, xend=4 → 3 samples (indices 2,3,4)
         op = NMMainOpHistogram(bins=3, xbgn=2.0, xend=4.0)
         folder = NMFolder(name="folder0")
@@ -2378,7 +2378,7 @@ class TestNMMainOpHistogram(unittest.TestCase):
         out = folder.data.get("H_RecordA0")
         self.assertEqual(int(out.nparray.sum()), 3)
 
-    def test_x1_only(self):
+    def test_xend_only(self):
         # window = -inf..4 → samples at x=0..4 = 5 samples
         op = NMMainOpHistogram(bins=5, xend=4.0)
         folder = NMFolder(name="folder0")
@@ -2391,7 +2391,7 @@ class TestNMMainOpHistogram(unittest.TestCase):
         out = folder.data.get("H_RecordA0")
         self.assertEqual(int(out.nparray.sum()), 5)
 
-    def test_x0_only(self):
+    def test_xbgn_only(self):
         # window = 7.0..+inf → samples at x=7,8,9 = 3 samples
         op = NMMainOpHistogram(bins=3, xbgn=7.0)
         folder = NMFolder(name="folder0")
@@ -2404,23 +2404,23 @@ class TestNMMainOpHistogram(unittest.TestCase):
         out = folder.data.get("H_RecordA0")
         self.assertEqual(int(out.nparray.sum()), 3)
 
-    def test_x0_rejects_bool(self):
+    def test_xbgn_rejects_bool(self):
         with self.assertRaises(TypeError):
             NMMainOpHistogram(xbgn=True)
 
-    def test_x1_rejects_bool(self):
+    def test_xend_rejects_bool(self):
         with self.assertRaises(TypeError):
             NMMainOpHistogram(xend=True)
 
-    def test_x0_rejects_nan(self):
+    def test_xbgn_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpHistogram(xbgn=float("nan"))
 
-    def test_x1_rejects_nan(self):
+    def test_xend_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpHistogram(xend=float("nan"))
 
-    def test_x1_before_x0_raises(self):
+    def test_xend_before_xbgn_raises(self):
         op = NMMainOpHistogram(xbgn=5.0, xend=2.0)
         with self.assertRaises(ValueError):
             op.run_init()
@@ -2638,7 +2638,7 @@ class TestNMMainOpDFOF(unittest.TestCase):
             d.nparray, [(1-f0)/f0, (2-f0)/f0, (3-f0)/f0, (4-f0)/f0, (5-f0)/f0]
         )
 
-    def test_x0_x1_window(self):
+    def test_xbgn_xend_window(self):
         # window [2,3] → indices 2,3 → values [3,4] → F0 = 3.5
         op = NMMainOpDFOF(xbgn=2.0, xend=3.0)
         d = _make_data("RecordA0", [1.0, 2.0, 3.0, 4.0, 5.0], xstart=0.0, xdelta=1.0)
@@ -2795,23 +2795,23 @@ class TestNMMainOpDFOF(unittest.TestCase):
     # ------------------------------------------------------------------
     # Validation
 
-    def test_x0_rejects_bool(self):
+    def test_xbgn_rejects_bool(self):
         with self.assertRaises(TypeError):
             NMMainOpDFOF(xbgn=True)
 
-    def test_x1_rejects_bool(self):
+    def test_xend_rejects_bool(self):
         with self.assertRaises(TypeError):
             NMMainOpDFOF(xend=True)
 
-    def test_x0_rejects_nan(self):
+    def test_xbgn_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpDFOF(xbgn=float("nan"))
 
-    def test_x1_rejects_nan(self):
+    def test_xend_rejects_nan(self):
         with self.assertRaises(ValueError):
             NMMainOpDFOF(xend=float("nan"))
 
-    def test_x1_before_x0_raises(self):
+    def test_xend_before_xbgn_raises(self):
         op = NMMainOpDFOF(xbgn=5.0, xend=2.0)
         with self.assertRaises(ValueError):
             op.run_init()

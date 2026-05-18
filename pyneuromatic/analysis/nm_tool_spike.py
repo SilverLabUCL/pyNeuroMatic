@@ -115,8 +115,8 @@ class NMToolSpike(NMTool):
 
         self.__ylevel: float = 0.0
         self.__func_name: str = "level+"
-        self.__x0: float = -math.inf
-        self.__x1: float = math.inf
+        self.__xbgn: float = -math.inf
+        self.__xend: float = math.inf
 
         # Internal run state — reset by run_init()
         self._spike_times: list[np.ndarray] = []
@@ -179,38 +179,38 @@ class NMToolSpike(NMTool):
     @property
     def xbgn(self) -> float:
         """X-axis window start for detection. Default ``-inf`` (no lower bound)."""
-        return self.__x0
+        return self.__xbgn
 
     @xbgn.setter
     def xbgn(self, value: float) -> None:
-        self._x0_set(value)
+        self._xbgn_set(value)
 
-    def _x0_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xbgn_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
         if math.isnan(value):
             raise ValueError("xbgn cannot be NaN")
-        self.__x0 = float(value)
-        nmh.history("set xbgn=%g" % self.__x0, quiet=quiet)
-        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self.__x0))
+        self.__xbgn = float(value)
+        nmh.history("set xbgn=%g" % self.__xbgn, quiet=quiet)
+        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self.__xbgn))
 
     @property
     def xend(self) -> float:
         """X-axis window end for detection. Default ``+inf`` (no upper bound)."""
-        return self.__x1
+        return self.__xend
 
     @xend.setter
     def xend(self, value: float) -> None:
-        self._x1_set(value)
+        self._xend_set(value)
 
-    def _x1_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xend_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xend", "float"))
         if math.isnan(value):
             raise ValueError("xend cannot be NaN")
-        self.__x1 = float(value)
-        nmh.history("set xend=%g" % self.__x1, quiet=quiet)
-        nmch.add_nm_command("%s.xend = %r" % (self._name, self.__x1))
+        self.__xend = float(value)
+        nmh.history("set xend=%g" % self.__xend, quiet=quiet)
+        nmch.add_nm_command("%s.xend = %r" % (self._name, self.__xend))
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -244,8 +244,8 @@ class NMToolSpike(NMTool):
         _indexes, x_times = find_level_crossings_nmdata(
             data, self.__ylevel,
             func_name=self.__func_name,
-            xbgn=self.__x0,
-            xend=self.__x1,
+            xbgn=self.__xbgn,
+            xend=self.__xend,
             ignore_nans=self._ignore_nans,
         )
         self._spike_times.append(x_times)
@@ -308,7 +308,7 @@ class NMToolSpike(NMTool):
                 d,
                 "NMSpike(source=%s, ylevel=%g, func_name=%r, xbgn=%s, xend=%s, n=%d)"
                 % (name, self.__ylevel, self.__func_name,
-                   self.__x0, self.__x1, len(times)),
+                   self.__xbgn, self.__xend, len(times)),
             )
         counts = np.array([len(t) for t in self._spike_times], dtype=float)
         d_count = f.data.new("SP_count", nparray=counts)
@@ -316,7 +316,7 @@ class NMToolSpike(NMTool):
             d_count,
             "NMSpike(ylevel=%g, func_name=%r, xbgn=%s, xend=%s, n_epochs=%d)"
             % (self.__ylevel, self.__func_name,
-               self.__x0, self.__x1, len(self._epoch_names)),
+               self.__xbgn, self.__xend, len(self._epoch_names)),
         )
         f.data.new(
             "SP_epoch_names",
@@ -714,14 +714,14 @@ class NMToolSpike(NMTool):
                         x_snippet[dst_start:dst_end] = source.xarray[src_start:src_end]
                         # fill left pad by stepping backwards from first valid x
                         if dst_start > 0:
-                            x0_valid = source.xarray[src_start]
+                            xbgn_valid = source.xarray[src_start]
                             for k in range(dst_start - 1, -1, -1):
-                                x_snippet[k] = x0_valid - (dst_start - k) * delta_for_samples
+                                x_snippet[k] = xbgn_valid - (dst_start - k) * delta_for_samples
                         # fill right pad by stepping forwards from last valid x
                         if dst_end < len(x_snippet):
-                            x1_valid = source.xarray[src_end - 1]
+                            xend_valid = source.xarray[src_end - 1]
                             for k in range(dst_end, len(x_snippet)):
-                                x_snippet[k] = x1_valid + (k - dst_end + 1) * delta_for_samples
+                                x_snippet[k] = xend_valid + (k - dst_end + 1) * delta_for_samples
                 else:
                     snippet = ydata[i0:i1].copy()
                     n_padded = 0

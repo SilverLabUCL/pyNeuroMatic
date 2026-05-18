@@ -83,11 +83,11 @@ class TestNMToolSpikeDefaults(unittest.TestCase):
     def test_func_name_default(self):
         self.assertEqual(self.tool.func_name, "level+")
 
-    def test_x0_default(self):
+    def test_xbgn_default(self):
         import math
         self.assertEqual(self.tool.xbgn, -math.inf)
 
-    def test_x1_default(self):
+    def test_xend_default(self):
         import math
         self.assertEqual(self.tool.xend, math.inf)
 
@@ -145,34 +145,34 @@ class TestNMToolSpikeProperties(unittest.TestCase):
             self.tool.func_name = 1
 
     # xbgn / xend
-    def test_x0_accepts_float(self):
+    def test_xbgn_accepts_float(self):
         self.tool.xbgn = 0.01
         self.assertAlmostEqual(self.tool.xbgn, 0.01)
 
-    def test_x0_accepts_inf(self):
+    def test_xbgn_accepts_inf(self):
         import math
         self.tool.xbgn = -math.inf
         self.assertEqual(self.tool.xbgn, -math.inf)
 
-    def test_x0_rejects_nan(self):
+    def test_xbgn_rejects_nan(self):
         import math
         with self.assertRaises(ValueError):
             self.tool.xbgn = math.nan
 
-    def test_x0_rejects_bool(self):
+    def test_xbgn_rejects_bool(self):
         with self.assertRaises(TypeError):
             self.tool.xbgn = True
 
-    def test_x1_accepts_float(self):
+    def test_xend_accepts_float(self):
         self.tool.xend = 0.05
         self.assertAlmostEqual(self.tool.xend, 0.05)
 
-    def test_x1_rejects_nan(self):
+    def test_xend_rejects_nan(self):
         import math
         with self.assertRaises(ValueError):
             self.tool.xend = math.nan
 
-    def test_x1_rejects_bool(self):
+    def test_xend_rejects_bool(self):
         with self.assertRaises(TypeError):
             self.tool.xend = False
 
@@ -209,7 +209,7 @@ class TestNMToolSpikeDetection(unittest.TestCase):
         count_arr = f.data.get("SP_count")
         self.assertEqual(int(count_arr.nparray[0]), 2*_CYCLES)
 
-    def test_x0_x1_window_restricts_detection(self):
+    def test_xbgn_xend_window_restricts_detection(self):
         # 200 Hz sine → 20 rising crossings over 0.1 s (1000 samples at 10 kHz).
         # Window [0.002, 0.048] avoids boundary ambiguity (crossings fall exactly
         # at multiples of 0.005 s): captures t=0.005, 0.010, …, 0.045 → 9 crossings.
@@ -370,7 +370,7 @@ class TestNMToolSpikePST(unittest.TestCase):
         expected_delta = (all_times.max() - all_times.min()) / bins
         self.assertAlmostEqual(result.xscale.delta, expected_delta, places=10)
 
-    def test_pst_x0_x1_restricts_spike_count(self):
+    def test_pst_xbgn_xend_restricts_spike_count(self):
         # Full recording has _CYCLES spikes; window [0.002, 0.048] captures 9.
         result_full = self.tool.pst(bins=50, overwrite=False)
         result_win  = self.tool.pst(bins=50, xbgn=0.002, xend=0.048, overwrite=False)
@@ -511,7 +511,7 @@ class TestNMToolSpikeISI(unittest.TestCase):
         )
         self.assertEqual(int(result.nparray.sum()), total_intervals)
 
-    def test_isi_x0_x1_filters_spike_times(self):
+    def test_isi_xbgn_xend_filters_spike_times(self):
         # Restrict to first half of recording; fewer intervals than full range.
         data = [_sine_data(name="recA%d" % i, freq=100.0) for i in range(3)]
         tool_full = NMToolSpike()
@@ -612,12 +612,12 @@ class TestNMToolSpikeIntervals(unittest.TestCase):
         for iv, spike_times in zip(ivs, self.tool._spike_times):
             np.testing.assert_array_equal(iv, np.diff(spike_times))
 
-    def test_x1_filters_spike_times_before_diff(self):
+    def test_xend_filters_spike_times_before_diff(self):
         ivs_full, _ = self.tool.intervals()
         ivs_half, _ = self.tool.intervals(xend=0.05)
         self.assertLess(len(ivs_half[0]), len(ivs_full[0]))
 
-    def test_x0_x1_window(self):
+    def test_xbgn_xend_window(self):
         # 100 Hz sine: crossings at 0, 0.01, 0.02, … Window [0.005, 0.075]
         # captures t=0.01, …, 0.07 → 7 spikes → 6 intervals of 0.01 s each.
         ivs, _ = self.tool.intervals(xbgn=0.005, xend=0.075)
@@ -1094,7 +1094,7 @@ class TestNMToolSpikeExtractSpikeWaveforms(unittest.TestCase):
 
     # --- xbgn / xend window filtering ---
 
-    def test_x1_limits_spike_count(self):
+    def test_xend_limits_spike_count(self):
         # 100 Hz sine, 10 spikes in 0.1 s; restrict to first half
         all_snippets = self.tool.extract_spike_waveforms(self._PRE, self._POST)
         tool2 = NMToolSpike()
@@ -1102,14 +1102,14 @@ class TestNMToolSpikeExtractSpikeWaveforms(unittest.TestCase):
         half_snippets = tool2.extract_spike_waveforms(self._PRE, self._POST, xend=0.05)
         self.assertLess(len(half_snippets), len(all_snippets))
 
-    def test_x0_limits_spike_count(self):
+    def test_xbgn_limits_spike_count(self):
         tool2 = NMToolSpike()
         _run(tool2, [self.data])
         all_snippets = self.tool.extract_spike_waveforms(self._PRE, self._POST)
         late_snippets = tool2.extract_spike_waveforms(self._PRE, self._POST, xbgn=0.05)
         self.assertLess(len(late_snippets), len(all_snippets))
 
-    def test_x0_x1_window_returns_subset(self):
+    def test_xbgn_xend_window_returns_subset(self):
         tool2 = NMToolSpike()
         _run(tool2, [self.data])
         all_snippets = self.tool.extract_spike_waveforms(self._PRE, self._POST)
@@ -1119,7 +1119,7 @@ class TestNMToolSpikeExtractSpikeWaveforms(unittest.TestCase):
         self.assertGreater(len(mid_snippets), 0)
         self.assertLess(len(mid_snippets), len(all_snippets))
 
-    def test_x0_x1_empty_window_returns_empty_list(self):
+    def test_xbgn_xend_empty_window_returns_empty_list(self):
         tool2 = NMToolSpike()
         _run(tool2, [self.data])
         snippets = tool2.extract_spike_waveforms(
@@ -1242,12 +1242,12 @@ class TestNMToolSpikeNotes(unittest.TestCase):
         note = self.f.data.get("SP_recA0").notes.note
         self.assertIn("n=", note)
 
-    def test_sp_epoch_note_contains_x0_x1(self):
+    def test_sp_epoch_note_contains_xbgn_xend(self):
         note = self.f.data.get("SP_recA0").notes.note
         self.assertIn("xbgn=", note)
         self.assertIn("xend=", note)
 
-    def test_sp_count_note_contains_x0_x1(self):
+    def test_sp_count_note_contains_xbgn_xend(self):
         note = self.f.data.get("SP_count").notes.note
         self.assertIn("xbgn=", note)
         self.assertIn("xend=", note)
@@ -1277,7 +1277,7 @@ class TestNMToolSpikeNotes(unittest.TestCase):
         self.assertIn("output_mode=", note)
         self.assertIn("rate", note)
 
-    def test_pst_note_contains_x0_x1(self):
+    def test_pst_note_contains_xbgn_xend(self):
         self.tool.pst(bins=50, xbgn=0.0, xend=0.05)
         note = self.f.data.get("SP_PST_0").notes.note
         self.assertIn("xbgn=", note)
@@ -1298,7 +1298,7 @@ class TestNMToolSpikeNotes(unittest.TestCase):
         note = self.f.data.get("SP_ISI_0").notes.note
         self.assertIn("n_intervals=", note)
 
-    def test_isi_note_contains_x0_x1(self):
+    def test_isi_note_contains_xbgn_xend(self):
         self.tool.isi(bins=50, xbgn=0.0, xend=0.05)
         note = self.f.data.get("SP_ISI_0").notes.note
         self.assertIn("xbgn=", note)
@@ -1345,22 +1345,22 @@ class TestNMToolSpikeRaster(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             tool2.raster()
 
-    def test_x1_limits_spike_count(self):
+    def test_xend_limits_spike_count(self):
         times_full, _ = self.tool.raster()
         times_half, _ = self.tool.raster(xend=0.05)
         self.assertLess(len(times_half[0]), len(times_full[0]))
 
-    def test_x0_limits_spike_count(self):
+    def test_xbgn_limits_spike_count(self):
         times_full, _ = self.tool.raster()
         times_late, _ = self.tool.raster(xbgn=0.05)
         self.assertLess(len(times_late[0]), len(times_full[0]))
 
-    def test_x0_x1_window_returns_subset(self):
+    def test_xbgn_xend_window_returns_subset(self):
         times_mid, labels = self.tool.raster(xbgn=0.02, xend=0.07)
         self.assertEqual(len(labels), 3)
         self.assertGreater(len(times_mid[0]), 0)
 
-    def test_x0_x1_empty_window_returns_empty_arrays(self):
+    def test_xbgn_xend_empty_window_returns_empty_arrays(self):
         times_list, labels = self.tool.raster(xbgn=0.5, xend=0.5)
         self.assertEqual(len(labels), 3)
         for times in times_list:

@@ -94,16 +94,16 @@ class NMStatWin:
 
         self.__on = True
         self.__func: NMStatFunc | None = None
-        self.__x0 = -math.inf
-        self.__x1 = math.inf
+        self.__xbgn = -math.inf
+        self.__xend = math.inf
         self.__transform: list[NMTransform] | None = None
         self.__results: list[dict[str, Any]] = []  # [ {}, {} ...] list of dictionaries
 
         # baseline
         self.__bsln_on = False
         self.__bsln_func: dict[str, Any] = {}
-        self.__bsln_x0 = -math.inf
-        self.__bsln_x1 = math.inf
+        self.__bsln_xbgn = -math.inf
+        self.__bsln_xend = math.inf
 
         if win is None:
             pass  # ok
@@ -134,13 +134,13 @@ class NMStatWin:
             "name": self._name,
             "on": self.__on,
             "func": self.__func.to_dict() if self.__func else {},
-            "xbgn": self.__x0,
-            "xend": self.__x1,
+            "xbgn": self.__xbgn,
+            "xend": self.__xend,
             "transform": transform_dicts,
             "bsln_on": self.__bsln_on,
             "bsln_func": self.__bsln_func,
-            "bsln_xbgn": self.__bsln_x0,
-            "bsln_xend": self.__bsln_x1
+            "bsln_xbgn": self.__bsln_xbgn,
+            "bsln_xend": self.__bsln_xend
         }
 
     def _win_set(
@@ -255,12 +255,12 @@ class NMStatWin:
     @property
     def xbgn(self) -> float:
         """Left x-boundary of the main stat window (default ``-inf``)."""
-        return self.__x0
+        return self.__xbgn
 
     @xbgn.setter
     def xbgn(self, xbgn: float) -> None:
         self._x_set("xbgn", xbgn)
-        add_nm_command("%s[%r].xbgn = %r" % (self._nm_path, self._name, self.__x0))
+        add_nm_command("%s[%r].xbgn = %r" % (self._nm_path, self._name, self.__xbgn))
         return None
 
     def _x_set(
@@ -285,25 +285,25 @@ class NMStatWin:
         if math.isinf(x):
             x = -math.inf if n.endswith("xbgn") else math.inf
         if n == "xbgn":
-            self.__x0 = x
+            self.__xbgn = x
         elif n == "xend":
-            self.__x1 = x
+            self.__xend = x
         elif n == "bsln_xbgn":
-            self.__bsln_x0 = x
+            self.__bsln_xbgn = x
         elif n == "bsln_xend":
-            self.__bsln_x1 = x
+            self.__bsln_xend = x
         nmh.history("set %s=%s" % (n, x), path=self._name, quiet=quiet)
         return None
 
     @property
     def xend(self) -> float:
         """Right x-boundary of the main stat window (default ``+inf``)."""
-        return self.__x1
+        return self.__xend
 
     @xend.setter
     def xend(self, xend: float) -> None:
         self._x_set("xend", xend)
-        add_nm_command("%s[%r].xend = %r" % (self._nm_path, self._name, self.__x1))
+        add_nm_command("%s[%r].xend = %r" % (self._nm_path, self._name, self.__xend))
         return None
 
     @property
@@ -435,23 +435,23 @@ class NMStatWin:
     @property
     def bsln_xbgn(self) -> float:
         """Left x-boundary of the baseline window (default ``-inf``)."""
-        return self.__bsln_x0
+        return self.__bsln_xbgn
 
     @bsln_xbgn.setter
     def bsln_xbgn(self, xbgn: float) -> None:
         self._x_set("bsln_xbgn", xbgn)
-        add_nm_command("%s[%r].bsln_xbgn = %r" % (self._nm_path, self._name, self.__bsln_x0))
+        add_nm_command("%s[%r].bsln_xbgn = %r" % (self._nm_path, self._name, self.__bsln_xbgn))
         return None
 
     @property
     def bsln_xend(self) -> float:
         """Right x-boundary of the baseline window (default ``+inf``)."""
-        return self.__bsln_x1
+        return self.__bsln_xend
 
     @bsln_xend.setter
     def bsln_xend(self, xend: float) -> None:
         self._x_set("bsln_xend", xend)
-        add_nm_command("%s[%r].bsln_xend = %r" % (self._nm_path, self._name, self.__bsln_x1))
+        add_nm_command("%s[%r].bsln_xend = %r" % (self._nm_path, self._name, self.__bsln_xend))
         return None
 
     @property
@@ -533,7 +533,7 @@ class NMStatWin:
             self.__func.validate_baseline(self.__bsln_func.get("name"))
             bsln_result = self._run_stat(
                 data, self.__bsln_func.copy(), "bsln",
-                self.__bsln_x0, self.__bsln_x1, ignore_nans
+                self.__bsln_xbgn, self.__bsln_xend, ignore_nans
             )
         elif self.__func.needs_baseline:
             raise RuntimeError(
@@ -541,13 +541,13 @@ class NMStatWin:
             )
 
         self.__func.compute(
-            data, self.__x0, self.__x1, ignore_nans,
+            data, self.__xbgn, self.__xend, ignore_nans,
             self._run_stat, bsln_result
         )
 
         nmh.history(
             "compute func=%s, xbgn=%s, xend=%s, n=%d"
-            % (self.__func.name, self.__x0, self.__x1, len(self.__results)),
+            % (self.__func.name, self.__xbgn, self.__xend, len(self.__results)),
             path=self._name,
             quiet=quiet,
         )
