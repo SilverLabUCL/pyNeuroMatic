@@ -46,9 +46,9 @@ class NMToolSpikeConfig(NMToolConfig):
         ylevel: Y-axis detection threshold. Default 0.0.
         func_name: Crossing direction — ``"level+"`` (rising, default),
             ``"level-"`` (falling), or ``"level"`` (both).
-        x0: X-axis window start for detection. Default ``-inf`` (no lower
-            bound). If *x0* > *x1*, a backwards search is performed.
-        x1: X-axis window end for detection. Default ``+inf`` (no upper
+        xbgn: X-axis window start for detection. Default ``-inf`` (no lower
+            bound). If *xbgn* > *xend*, a backwards search is performed.
+        xend: X-axis window end for detection. Default ``+inf`` (no upper
             bound).
         ignore_nans: If True (default), detect crossings across NaN gaps
             via linear interpolation.
@@ -65,8 +65,8 @@ class NMToolSpikeConfig(NMToolConfig):
         "ylevel":             {"type": float, "default": 0.0},
         "func_name":          {"type": str,   "default": "level+",
                                "choices": ["level", "level+", "level-"]},
-        "x0":                 {"type": float, "default": -math.inf},
-        "x1":                 {"type": float, "default":  math.inf},
+        "xbgn":                 {"type": float, "default": -math.inf},
+        "xend":                 {"type": float, "default":  math.inf},
         "ignore_nans":        {"type": bool,  "default": True},
         "overwrite":          {"type": bool,  "default": True},
         "results_to_history": {"type": bool,  "default": False},
@@ -90,8 +90,8 @@ class NMToolSpike(NMTool):
         ylevel: Y-axis detection threshold. Default 0.0.
         func_name: Crossing direction — ``"level+"`` (rising, default),
             ``"level-"`` (falling), or ``"level"`` (both).
-        x0: X-axis window start. Default ``-inf`` (no lower bound).
-        x1: X-axis window end. Default ``+inf`` (no upper bound).
+        xbgn: X-axis window start. Default ``-inf`` (no lower bound).
+        xend: X-axis window end. Default ``+inf`` (no upper bound).
         ignore_nans: If True (default), detect crossings across NaN gaps
             via linear interpolation.
         results_to_history: If True, print spike counts to the history log
@@ -115,8 +115,8 @@ class NMToolSpike(NMTool):
 
         self.__ylevel: float = 0.0
         self.__func_name: str = "level+"
-        self.__x0: float = -math.inf
-        self.__x1: float = math.inf
+        self.__xbgn: float = -math.inf
+        self.__xend: float = math.inf
 
         # Internal run state — reset by run_init()
         self._spike_times: list[np.ndarray] = []
@@ -177,40 +177,40 @@ class NMToolSpike(NMTool):
         nmch.add_nm_command("%s.func_name = %r" % (self._name, self.__func_name))
 
     @property
-    def x0(self) -> float:
+    def xbgn(self) -> float:
         """X-axis window start for detection. Default ``-inf`` (no lower bound)."""
-        return self.__x0
+        return self.__xbgn
 
-    @x0.setter
-    def x0(self, value: float) -> None:
-        self._x0_set(value)
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
+        self._xbgn_set(value)
 
-    def _x0_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xbgn_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
         if math.isnan(value):
-            raise ValueError("x0 cannot be NaN")
-        self.__x0 = float(value)
-        nmh.history("set x0=%g" % self.__x0, quiet=quiet)
-        nmch.add_nm_command("%s.x0 = %r" % (self._name, self.__x0))
+            raise ValueError("xbgn cannot be NaN")
+        self.__xbgn = float(value)
+        nmh.history("set xbgn=%g" % self.__xbgn, quiet=quiet)
+        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self.__xbgn))
 
     @property
-    def x1(self) -> float:
+    def xend(self) -> float:
         """X-axis window end for detection. Default ``+inf`` (no upper bound)."""
-        return self.__x1
+        return self.__xend
 
-    @x1.setter
-    def x1(self, value: float) -> None:
-        self._x1_set(value)
+    @xend.setter
+    def xend(self, value: float) -> None:
+        self._xend_set(value)
 
-    def _x1_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xend_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
         if math.isnan(value):
-            raise ValueError("x1 cannot be NaN")
-        self.__x1 = float(value)
-        nmh.history("set x1=%g" % self.__x1, quiet=quiet)
-        nmch.add_nm_command("%s.x1 = %r" % (self._name, self.__x1))
+            raise ValueError("xend cannot be NaN")
+        self.__xend = float(value)
+        nmh.history("set xend=%g" % self.__xend, quiet=quiet)
+        nmch.add_nm_command("%s.xend = %r" % (self._name, self.__xend))
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -244,8 +244,8 @@ class NMToolSpike(NMTool):
         _indexes, x_times = find_level_crossings_nmdata(
             data, self.__ylevel,
             func_name=self.__func_name,
-            x0=self.__x0,
-            x1=self.__x1,
+            xbgn=self.__xbgn,
+            xend=self.__xend,
             ignore_nans=self._ignore_nans,
         )
         self._spike_times.append(x_times)
@@ -306,17 +306,17 @@ class NMToolSpike(NMTool):
             )
             self._add_note(
                 d,
-                "NMSpike(source=%s, ylevel=%g, func_name=%r, x0=%s, x1=%s, n=%d)"
+                "NMSpike(source=%s, ylevel=%g, func_name=%r, xbgn=%s, xend=%s, n=%d)"
                 % (name, self.__ylevel, self.__func_name,
-                   self.__x0, self.__x1, len(times)),
+                   self.__xbgn, self.__xend, len(times)),
             )
         counts = np.array([len(t) for t in self._spike_times], dtype=float)
         d_count = f.data.new("SP_count", nparray=counts)
         self._add_note(
             d_count,
-            "NMSpike(ylevel=%g, func_name=%r, x0=%s, x1=%s, n_epochs=%d)"
+            "NMSpike(ylevel=%g, func_name=%r, xbgn=%s, xend=%s, n_epochs=%d)"
             % (self.__ylevel, self.__func_name,
-               self.__x0, self.__x1, len(self._epoch_names)),
+               self.__xbgn, self.__xend, len(self._epoch_names)),
         )
         f.data.new(
             "SP_epoch_names",
@@ -393,8 +393,8 @@ class NMToolSpike(NMTool):
 
     def raster(
         self,
-        x0: float | None = None,
-        x1: float | None = None,
+        xbgn: float | None = None,
+        xend: float | None = None,
         toolfolder: NMToolFolder | None = None,
     ) -> tuple[list[np.ndarray], list[str]]:
         """Return spike times and epoch labels ready for raster plotting.
@@ -412,9 +412,9 @@ class NMToolSpike(NMTool):
             ax.set_yticklabels(labels)
 
         Args:
-            x0: Lower bound for filtering spike times. Default None (no lower
+            xbgn: Lower bound for filtering spike times. Default None (no lower
                 bound).
-            x1: Upper bound for filtering spike times. Default None (no upper
+            xend: Upper bound for filtering spike times. Default None (no upper
                 bound).
             toolfolder: Optional Spike toolfolder from a previous run.  When
                 provided, spike times are read from its ``SP_*`` arrays rather
@@ -442,9 +442,9 @@ class NMToolSpike(NMTool):
                 )
             spike_times = list(self._spike_times)
             epoch_names = list(self._epoch_names)
-        if x0 is not None or x1 is not None:
-            lo = float(x0) if x0 is not None else -math.inf
-            hi = float(x1) if x1 is not None else math.inf
+        if xbgn is not None or xend is not None:
+            lo = float(xbgn) if xbgn is not None else -math.inf
+            hi = float(xend) if xend is not None else math.inf
             spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
         return spike_times, list(epoch_names)
 
@@ -465,8 +465,8 @@ class NMToolSpike(NMTool):
 
     def intervals(
         self,
-        x0: float | None = None,
-        x1: float | None = None,
+        xbgn: float | None = None,
+        xend: float | None = None,
         toolfolder: NMToolFolder | None = None,
     ) -> tuple[list[np.ndarray], list[str]]:
         """Return per-epoch interspike intervals ready for analysis or plotting.
@@ -484,9 +484,9 @@ class NMToolSpike(NMTool):
                 print(label, ivs_epoch.mean())
 
         Args:
-            x0: Lower bound for filtering spike times before computing
+            xbgn: Lower bound for filtering spike times before computing
                 intervals. Default None (no lower bound).
-            x1: Upper bound for filtering spike times before computing
+            xend: Upper bound for filtering spike times before computing
                 intervals. Default None (no upper bound).
             toolfolder: Optional Spike toolfolder from a previous run.  When
                 provided, spike times are read from its ``SP_*`` arrays.
@@ -513,9 +513,9 @@ class NMToolSpike(NMTool):
                 )
             spike_times = list(self._spike_times)
             epoch_names = list(self._epoch_names)
-        if x0 is not None or x1 is not None:
-            lo = float(x0) if x0 is not None else -math.inf
-            hi = float(x1) if x1 is not None else math.inf
+        if xbgn is not None or xend is not None:
+            lo = float(xbgn) if xbgn is not None else -math.inf
+            hi = float(xend) if xend is not None else math.inf
             spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
         return [np.diff(t) for t in spike_times], list(epoch_names)
 
@@ -523,8 +523,8 @@ class NMToolSpike(NMTool):
         self,
         pre: float,
         post: float,
-        x0: float | None = None,
-        x1: float | None = None,
+        xbgn: float | None = None,
+        xend: float | None = None,
         clip_to_next_spike: bool = False,
         edge: str = "skip",
         align: str = "zero",
@@ -545,12 +545,12 @@ class NMToolSpike(NMTool):
         Args:
             pre:               Time before spike in source x-units. Must be > 0.
             post:              Time after spike in source x-units. Must be > 0.
-            x0:                Lower bound for filtering spike times before
+            xbgn:                Lower bound for filtering spike times before
                 extracting waveforms. Default None (no lower bound). Spikes
-                with times < *x0* are skipped.
-            x1:                Upper bound for filtering spike times before
+                with times < *xbgn* are skipped.
+            xend:                Upper bound for filtering spike times before
                 extracting waveforms. Default None (no upper bound). Spikes
-                with times > *x1* are skipped.
+                with times > *xend* are skipped.
             clip_to_next_spike: If True, samples in the post window that fall
                 beyond the next spike time are replaced with ``NaN``, so the
                 snippet does not contain data from the next spike's waveform.
@@ -675,9 +675,9 @@ class NMToolSpike(NMTool):
             else:
                 delta_for_samples = float(source.xscale.delta)
 
-            if x0 is not None or x1 is not None:
-                lo = float(x0) if x0 is not None else -math.inf
-                hi = float(x1) if x1 is not None else math.inf
+            if xbgn is not None or xend is not None:
+                lo = float(xbgn) if xbgn is not None else -math.inf
+                hi = float(xend) if xend is not None else math.inf
                 spike_times_arr = spike_times_arr[
                     (spike_times_arr >= lo) & (spike_times_arr <= hi)
                 ]
@@ -714,14 +714,14 @@ class NMToolSpike(NMTool):
                         x_snippet[dst_start:dst_end] = source.xarray[src_start:src_end]
                         # fill left pad by stepping backwards from first valid x
                         if dst_start > 0:
-                            x0_valid = source.xarray[src_start]
+                            xbgn_valid = source.xarray[src_start]
                             for k in range(dst_start - 1, -1, -1):
-                                x_snippet[k] = x0_valid - (dst_start - k) * delta_for_samples
+                                x_snippet[k] = xbgn_valid - (dst_start - k) * delta_for_samples
                         # fill right pad by stepping forwards from last valid x
                         if dst_end < len(x_snippet):
-                            x1_valid = source.xarray[src_end - 1]
+                            xend_valid = source.xarray[src_end - 1]
                             for k in range(dst_end, len(x_snippet)):
-                                x_snippet[k] = x1_valid + (k - dst_end + 1) * delta_for_samples
+                                x_snippet[k] = xend_valid + (k - dst_end + 1) * delta_for_samples
                 else:
                     snippet = ydata[i0:i1].copy()
                     n_padded = 0
@@ -804,8 +804,8 @@ class NMToolSpike(NMTool):
     def pst(
         self,
         bins: int = 100,
-        x0: float | None = None,
-        x1: float | None = None,
+        xbgn: float | None = None,
+        xend: float | None = None,
         output_mode: str = "count",
         overwrite: bool = True,
         toolfolder: NMToolFolder | None = None,
@@ -823,9 +823,9 @@ class NMToolSpike(NMTool):
 
         Args:
             bins: Number of histogram bins. Default 100.
-            x0: Lower edge of the first bin (inclusive). Default None
+            xbgn: Lower edge of the first bin (inclusive). Default None
                 (use minimum spike time).
-            x1: Upper edge of the last bin (exclusive). Default None
+            xend: Upper edge of the last bin (exclusive). Default None
                 (use maximum spike time).
             output_mode: Controls the y-axis values:
 
@@ -880,9 +880,9 @@ class NMToolSpike(NMTool):
         if len(all_times) == 0:
             return None
         xrange: tuple[float, float] | None = None
-        if x0 is not None or x1 is not None:
-            lo = float(x0) if x0 is not None else float(all_times.min())
-            hi = float(x1) if x1 is not None else float(all_times.max())
+        if xbgn is not None or xend is not None:
+            lo = float(xbgn) if xbgn is not None else float(all_times.min())
+            hi = float(xend) if xend is not None else float(all_times.max())
             xrange = (lo, hi)
         result = nm_math.histogram(all_times, bins=bins, xrange=xrange)
         counts, edges = result["counts"], result["edges"]
@@ -913,16 +913,16 @@ class NMToolSpike(NMTool):
         )
         self._add_note(
             d,
-            "NMSpike.pst(bins=%d, x0=%s, x1=%s, output_mode=%r, n_epochs=%d, n_spikes=%d)"
-            % (bins, x0, x1, output_mode, n_epochs, int(counts.sum())),
+            "NMSpike.pst(bins=%d, xbgn=%s, xend=%s, output_mode=%r, n_epochs=%d, n_spikes=%d)"
+            % (bins, xbgn, xend, output_mode, n_epochs, int(counts.sum())),
         )
         return d
 
     def isi(
         self,
         bins: int = 100,
-        x0: float | None = None,
-        x1: float | None = None,
+        xbgn: float | None = None,
+        xend: float | None = None,
         min_isi: float | None = None,
         max_isi: float | None = None,
         output_mode: str = "count",
@@ -931,7 +931,7 @@ class NMToolSpike(NMTool):
     ) -> NMData | None:
         """Compute an interspike interval (ISI) histogram from spike times.
 
-        Optionally filters spike times to a window [*x0*, *x1*] before
+        Optionally filters spike times to a window [*xbgn*, *xend*] before
         computing intervals. Computes ``numpy.diff`` of each epoch's
         (filtered) spike times, pools the intervals across all epochs, and
         writes the histogram as ``SP_ISI`` in the Spike subfolder.
@@ -945,9 +945,9 @@ class NMToolSpike(NMTool):
 
         Args:
             bins:        Number of histogram bins. Default 100.
-            x0:          Lower bound for filtering spike times before
+            xbgn:          Lower bound for filtering spike times before
                          computing intervals. Default None (no lower bound).
-            x1:          Upper bound for filtering spike times before
+            xend:          Upper bound for filtering spike times before
                          computing intervals. Default None (no upper bound).
             min_isi:     Lower edge of the histogram x-axis. Default None
                          (use the minimum interval). Useful for excluding
@@ -971,7 +971,7 @@ class NMToolSpike(NMTool):
 
         Returns:
             The new ``SP_ISI_N`` NMData, or None if fewer than 2 spikes total
-            (after x0/x1 filtering).
+            (after xbgn/xend filtering).
 
         Raises:
             RuntimeError: If called before :meth:`run_all` (no toolfolder)
@@ -986,8 +986,8 @@ class NMToolSpike(NMTool):
                 "output_mode must be one of %s, got %r"
                 % (list(_VALID_MODES), output_mode)
             )
-        # intervals() validates spike data and applies x0/x1 filtering
-        interval_arrays, _ = self.intervals(x0=x0, x1=x1, toolfolder=toolfolder)
+        # intervals() validates spike data and applies xbgn/xend filtering
+        interval_arrays, _ = self.intervals(xbgn=xbgn, xend=xend, toolfolder=toolfolder)
         valid = [iv for iv in interval_arrays if len(iv) > 0]
         if not valid:
             return None
@@ -1037,8 +1037,8 @@ class NMToolSpike(NMTool):
         )
         self._add_note(
             d,
-            "NMSpike.isi(bins=%d, x0=%s, x1=%s, min_isi=%s, max_isi=%s, "
+            "NMSpike.isi(bins=%d, xbgn=%s, xend=%s, min_isi=%s, max_isi=%s, "
             "output_mode=%r, n_intervals=%d)"
-            % (bins, x0, x1, min_isi, max_isi, output_mode, n_intervals),
+            % (bins, xbgn, xend, min_isi, max_isi, output_mode, n_intervals),
         )
         return d

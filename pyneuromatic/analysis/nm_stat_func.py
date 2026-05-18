@@ -39,8 +39,8 @@ FUNC_NAMES_BASIC = (
     "pathlength",
     "area",
     "slope",
-    "value@x0",
-    "value@x1",
+    "value@xbgn",
+    "value@xend",
     "count",        # np.size (Igor: "numpnts")
     "count_nans",
     "count_infs",
@@ -179,13 +179,13 @@ class NMStatFunc:
         """
         return "%r" % self._name
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Execute the stat computation, appending results via run_stat.
 
         Args:
             data: Input data object with x/y arrays.
-            x0: Left x-boundary of the main stat window.
-            x1: Right x-boundary of the main stat window.
+            xbgn: Left x-boundary of the main stat window.
+            xend: Right x-boundary of the main stat window.
             ignore_nans: If True, exclude NaN values from computation.
             run_stat: Callable (``NMStatWin._run_stat``) that executes a
                 single stat dict and appends the result to the results list.
@@ -201,7 +201,7 @@ class NMStatFuncBasic(NMStatFunc):
     """Stat functions that take no extra parameters.
 
     Accepted names: median, mean, mean+var, mean+std, mean+sem, var, std,
-    sem, rms, sum, pathlength, area, slope, value@x0, value@x1, count,
+    sem, rms, sum, pathlength, area, slope, value@xbgn, value@xend, count,
     count_nans, count_infs.
 
     Args:
@@ -213,10 +213,10 @@ class NMStatFuncBasic(NMStatFunc):
             raise ValueError("func name: '%s'" % name)
         super().__init__(name.lower())
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Run a single stat call and optionally record the baseline delta."""
         r = run_stat(data, {"name": self._name}, "main",
-                     x0, x1, ignore_nans)
+                     xbgn, xend, ignore_nans)
         self._add_ds(r, bsln_result)
 
 
@@ -272,7 +272,7 @@ class NMStatFuncMaxMin(NMStatFunc):
             s += ", n_mean=%r" % self._n_mean
         return s
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Run the max/min stat; warn if n_mean <= 1 for mean@ variants."""
         func: dict[str, Any] = {"name": self._name}
         if self._n_mean is not None:
@@ -281,7 +281,7 @@ class NMStatFuncMaxMin(NMStatFunc):
             n_mean = self._n_mean if self._n_mean is not None else 0
             if n_mean <= 1:
                 func["warning"] = "not enough data points to compute a mean"
-        r = run_stat(data, func, "main", x0, x1, ignore_nans)
+        r = run_stat(data, func, "main", xbgn, xend, ignore_nans)
         self._add_ds(r, bsln_result)
 
 
@@ -320,10 +320,10 @@ class NMStatFuncLevel(NMStatFunc):
     def _params_str(self) -> str:
         return "%r, ylevel=%r" % (self._name, self._ylevel)
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Find the level crossing at ylevel and optionally add baseline delta."""
         func: dict[str, Any] = {"name": self._name, "ylevel": self._ylevel}
-        r = run_stat(data, func, "main", x0, x1, ignore_nans)
+        r = run_stat(data, func, "main", xbgn, xend, ignore_nans)
         self._add_ds(r, bsln_result)
 
 
@@ -375,7 +375,7 @@ class NMStatFuncLevelNstd(NMStatFunc):
                 "level n_std requires baseline 'mean+std' computation"
             )
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Derive ylevel from the baseline, then find the level crossing."""
         ylevel = math.nan
         if "s" in bsln_result and "std" in bsln_result:
@@ -384,7 +384,7 @@ class NMStatFuncLevelNstd(NMStatFunc):
             if not badvalue(s) and not badvalue(std):
                 ylevel = s + self._n_std * std
         func: dict[str, Any] = {"name": self._name, "ylevel": ylevel}
-        r = run_stat(data, func, "main", x0, x1, ignore_nans)
+        r = run_stat(data, func, "main", xbgn, xend, ignore_nans)
         self._add_ds(r, bsln_result)
 
 
@@ -460,7 +460,7 @@ class NMStatFuncRiseTime(NMStatFunc):
                 "peak func '%s' requires baseline 'mean' computation"
                 % self._name)
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Compute rise time: peak → level at p0% → level at p1%.
 
         Records ``dx = x(p1) - x(p0)`` and optionally the slope between them.
@@ -476,7 +476,7 @@ class NMStatFuncRiseTime(NMStatFunc):
             peak_func = {"name": "min"}
             flevel = {"name": "level-"}
 
-        r = run_stat(data, peak_func, f, x0, x1, ignore_nans)
+        r = run_stat(data, peak_func, f, xbgn, xend, ignore_nans)
         ds = self._add_ds(r, bsln_result)
 
         if badvalue(ds):
@@ -486,12 +486,12 @@ class NMStatFuncRiseTime(NMStatFunc):
         peak_x = r["x"]
 
         flevel["ylevel"] = 0.01 * self._p0 * ds
-        r0 = run_stat(data, flevel, f, x0, peak_x, ignore_nans,
+        r0 = run_stat(data, flevel, f, xbgn, peak_x, ignore_nans,
                       p0=self._p0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
 
         flevel["ylevel"] = 0.01 * self._p1 * ds
-        r1 = run_stat(data, flevel, f, x0, peak_x, ignore_nans,
+        r1 = run_stat(data, flevel, f, xbgn, peak_x, ignore_nans,
                       p1=self._p1)
         r1_error = "x" not in r1 or badvalue(r1["x"])
 
@@ -583,7 +583,7 @@ class NMStatFuncFallTime(NMStatFunc):
                 "peak func '%s' requires baseline 'mean' computation"
                 % self._name)
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Compute fall time: peak → level at p0% → level at p1% after peak.
 
         Records ``dx = x(p1) - x(p0)`` and optionally the slope between them.
@@ -599,7 +599,7 @@ class NMStatFuncFallTime(NMStatFunc):
             peak_func = {"name": "min"}
             flevel = {"name": "level+"}  # opposite sign
 
-        r = run_stat(data, peak_func, f, x0, x1, ignore_nans)
+        r = run_stat(data, peak_func, f, xbgn, xend, ignore_nans)
         ds = self._add_ds(r, bsln_result)
 
         if badvalue(ds):
@@ -609,14 +609,14 @@ class NMStatFuncFallTime(NMStatFunc):
         peak_x = r["x"]
 
         flevel["ylevel"] = 0.01 * self._p0 * ds
-        r0 = run_stat(data, flevel, f, peak_x, x1, ignore_nans,
+        r0 = run_stat(data, flevel, f, peak_x, xend, ignore_nans,
                       p0=self._p0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
         if r0_error:
             r0["error"] = "unable to locate p0 level"
 
         flevel["ylevel"] = 0.01 * self._p1 * ds
-        r1 = run_stat(data, flevel, f, peak_x, x1, ignore_nans,
+        r1 = run_stat(data, flevel, f, peak_x, xend, ignore_nans,
                       p1=self._p1)
         r1_error = "x" not in r1 or badvalue(r1["x"])
 
@@ -684,7 +684,7 @@ class NMStatFuncDecayTime(NMStatFunc):
                 "peak func '%s' requires baseline 'mean' computation"
                 % self._name)
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Compute decay time: peak → level at p0% after peak.
 
         Records ``dx = x(p0) - peak_x``.
@@ -699,7 +699,7 @@ class NMStatFuncDecayTime(NMStatFunc):
             peak_func = {"name": "min"}
             flevel = {"name": "level+"}  # opposite sign
 
-        r = run_stat(data, peak_func, f, x0, x1, ignore_nans)
+        r = run_stat(data, peak_func, f, xbgn, xend, ignore_nans)
         ds = self._add_ds(r, bsln_result)
 
         if badvalue(ds):
@@ -709,7 +709,7 @@ class NMStatFuncDecayTime(NMStatFunc):
         peak_x = r["x"]
 
         flevel["ylevel"] = 0.01 * self._p0 * ds
-        r0 = run_stat(data, flevel, f, peak_x, x1, ignore_nans,
+        r0 = run_stat(data, flevel, f, peak_x, xend, ignore_nans,
                       p0=self._p0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
         if r0_error:
@@ -784,7 +784,7 @@ class NMStatFuncFWHM(NMStatFunc):
                 "peak func '%s' requires baseline 'mean' computation"
                 % self._name)
 
-    def compute(self, data, x0, x1, ignore_nans, run_stat, bsln_result):
+    def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
         """Compute FWHM: peak → level at p0% before peak, level at p1% after.
 
         Records ``dx = x(p1) - x(p0)``.
@@ -797,7 +797,7 @@ class NMStatFuncFWHM(NMStatFunc):
         else:
             peak_func = {"name": "min"}
 
-        r = run_stat(data, peak_func, f, x0, x1, ignore_nans)
+        r = run_stat(data, peak_func, f, xbgn, xend, ignore_nans)
 
         # Compute Δs from baseline
         ds = self._add_ds(r, bsln_result)
@@ -822,7 +822,7 @@ class NMStatFuncFWHM(NMStatFunc):
         extra0: dict[str, Any] = {"p0": self._p0}
         if w:
             extra0["warning"] = w
-        r0 = run_stat(data, flevel1, f, x0, peak_x, ignore_nans,
+        r0 = run_stat(data, flevel1, f, xbgn, peak_x, ignore_nans,
                       **extra0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
         if r0_error:
@@ -832,7 +832,7 @@ class NMStatFuncFWHM(NMStatFunc):
         extra1: dict[str, Any] = {"p1": self._p1}
         if w:
             extra1["warning"] = w
-        r1 = run_stat(data, flevel2, f, peak_x, x1, ignore_nans,
+        r1 = run_stat(data, flevel2, f, peak_x, xend, ignore_nans,
                       **extra1)
         r1_error = "x" not in r1 or badvalue(r1["x"])
 

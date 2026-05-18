@@ -70,8 +70,8 @@ class NMToolEventConfig(NMToolConfig):
         peak_nstdv: Peak N×stdv. Default 1.0.
         peak_limit: Max forward peak search (x-units). Default 4.0.
         refractory: Minimum inter-event interval (x-units). Default 0.0.
-        x0: Search start (x-units). Default ``-inf``.
-        x1: Search end (x-units). Default ``+inf``.
+        xbgn: Search start (x-units). Default ``-inf``.
+        xend: Search end (x-units). Default ``+inf``.
         max_events: Stop after this many accepted events per epoch. 0 means
             no limit (default). Useful for debugging and GUI use.
         overwrite: Reuse existing toolfolder instead of creating a new one.
@@ -102,8 +102,8 @@ class NMToolEventConfig(NMToolConfig):
         "peak_nstdv":         {"type": float, "default": 1.0,   "min": 0.0},
         "peak_limit":         {"type": float, "default": 4.0,   "min": 0.0},
         "refractory":         {"type": float, "default": 0.0,   "min": 0.0},
-        "x0":                 {"type": float, "default": -math.inf},
-        "x1":                 {"type": float, "default":  math.inf},
+        "xbgn":                 {"type": float, "default": -math.inf},
+        "xend":                 {"type": float, "default":  math.inf},
         "max_events":         {"type": int,   "default": 0,        "min": 0},
         "overwrite":          {"type": bool,  "default": True},
         "results_to_history": {"type": bool,  "default": False},
@@ -151,8 +151,8 @@ class NMToolEvent(NMTool):
         peak_nstdv: Peak N×stdv. Default 1.0.
         peak_limit: Max forward peak search (x-units). Default 4.0.
         refractory: Minimum inter-event interval (x-units). Default 0.0.
-        x0: Search start (x-units). Default ``-inf``.
-        x1: Search end (x-units). Default ``+inf``.
+        xbgn: Search start (x-units). Default ``-inf``.
+        xend: Search end (x-units). Default ``+inf``.
         max_events: Stop after this many accepted events per epoch. 0 means
             no limit (default). Useful for debugging and GUI use.
     """
@@ -184,8 +184,8 @@ class NMToolEvent(NMTool):
         self.__peak_nstdv:    float = 1.0
         self.__peak_limit:    float = 4.0
         self.__refractory:    float = 0.0
-        self.__x0:            float = -math.inf
-        self.__x1:            float = math.inf
+        self.__xbgn:          float = -math.inf
+        self.__xend:          float = math.inf
         self.__max_events:    int   = 0
 
         # Match criterion cache — keyed by (id(data.nparray), template_baseline)
@@ -577,40 +577,40 @@ class NMToolEvent(NMTool):
         )
 
     @property
-    def x0(self) -> float:
+    def xbgn(self) -> float:
         """X-axis search start. Default ``-inf``."""
-        return self.__x0
+        return self.__xbgn
 
-    @x0.setter
-    def x0(self, value: float) -> None:
-        self._x0_set(value)
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
+        self._xbgn_set(value)
 
-    def _x0_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xbgn_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
         if math.isnan(value):
-            raise ValueError("x0 cannot be NaN")
-        self.__x0 = float(value)
-        nmh.history("set x0=%g" % self.__x0, quiet=quiet)
-        nmch.add_nm_command("%s.x0 = %r" % (self._name, self.__x0))
+            raise ValueError("xbgn cannot be NaN")
+        self.__xbgn = float(value)
+        nmh.history("set xbgn=%g" % self.__xbgn, quiet=quiet)
+        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self.__xbgn))
 
     @property
-    def x1(self) -> float:
+    def xend(self) -> float:
         """X-axis search end. Default ``+inf``."""
-        return self.__x1
+        return self.__xend
 
-    @x1.setter
-    def x1(self, value: float) -> None:
-        self._x1_set(value)
+    @xend.setter
+    def xend(self, value: float) -> None:
+        self._xend_set(value)
 
-    def _x1_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+    def _xend_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
         if math.isnan(value):
-            raise ValueError("x1 cannot be NaN")
-        self.__x1 = float(value)
-        nmh.history("set x1=%g" % self.__x1, quiet=quiet)
-        nmch.add_nm_command("%s.x1 = %r" % (self._name, self.__x1))
+            raise ValueError("xend cannot be NaN")
+        self.__xend = float(value)
+        nmh.history("set xend=%g" % self.__xend, quiet=quiet)
+        nmch.add_nm_command("%s.xend = %r" % (self._name, self.__xend))
 
     @property
     def max_events(self) -> int:
@@ -688,11 +688,11 @@ class NMToolEvent(NMTool):
         return (
             "NMEvent(source=%s, algorithm=%r, polarity=%r, %s, "
             "onset_search=%r, peak_search=%r, refractory=%g, "
-            "x0=%s, x1=%s, n_accept=%d, n_reject=%d)"
+            "xbgn=%s, xend=%s, n_accept=%d, n_reject=%d)"
             % (
                 epoch_name, alg, pol, params,
                 self.__onset_search, self.__peak_search, self.__refractory,
-                self.__x0, self.__x1, n_accept, n_reject,
+                self.__xbgn, self.__xend, n_accept, n_reject,
             )
         )
 
@@ -723,7 +723,7 @@ class NMToolEvent(NMTool):
     def run(self) -> bool:
         """Find events in the current NMData array.
 
-        Calls :func:`find_events_nmdata` for the full x0→x1 range and
+        Calls :func:`find_events_nmdata` for the full xbgn→xend range and
         appends per-epoch results to the internal accumulator lists.
 
         Returns:
@@ -748,8 +748,8 @@ class NMToolEvent(NMTool):
             criterion_threshold=self.__criterion_threshold,
             template_baseline=self.__template_baseline,
             refractory=self.__refractory,
-            x0=self.__x0,
-            x1=self.__x1,
+            xbgn=self.__xbgn,
+            xend=self.__xend,
             onset_search=self.__onset_search,
             onset_avg=self.__onset_avg,
             onset_nstdv=self.__onset_nstdv,
@@ -949,8 +949,8 @@ class NMToolEvent(NMTool):
             criterion_threshold=self.__criterion_threshold,
             template_baseline=self.__template_baseline,
             refractory=self.__refractory,
-            x0=start_x,
-            x1=self.__x1,
+            xbgn=start_x,
+            xend=self.__xend,
             onset_search=self.__onset_search,
             onset_avg=self.__onset_avg,
             onset_nstdv=self.__onset_nstdv,

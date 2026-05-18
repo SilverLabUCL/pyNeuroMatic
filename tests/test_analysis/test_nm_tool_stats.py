@@ -1044,8 +1044,8 @@ class TestNMToolStatsNotes(unittest.TestCase):
         self.tool._select["folder"] = folder
         w = list(self.tool.windows)[0]
         w.func = "mean"
-        w.x0 = 10.0
-        w.x1 = 50.0
+        w.xbgn = 10.0
+        w.xend = 50.0
         self.n_arrays = 4
         for k in range(self.n_arrays):
             data = _make_data(name="recordA%d" % k)
@@ -1079,11 +1079,11 @@ class TestNMToolStatsNotes(unittest.TestCase):
     def test_note_contains_id(self):
         self.assertIn("id=main", self._note_text())
 
-    def test_note_contains_x0(self):
-        self.assertIn("x0=10.0", self._note_text())
+    def test_note_contains_xbgn(self):
+        self.assertIn("xbgn=10.0", self._note_text())
 
-    def test_note_contains_x1(self):
-        self.assertIn("x1=50.0", self._note_text())
+    def test_note_contains_xend(self):
+        self.assertIn("xend=50.0", self._note_text())
 
     def test_note_contains_n(self):
         self.assertIn("n=%d" % self.n_arrays, self._note_text())
@@ -1098,7 +1098,7 @@ class TestNMToolStatsNotes(unittest.TestCase):
 
     def test_bsln_array_note_uses_bsln_x_range(self):
         # Set up a run with baseline enabled; ST_w0_bsln_y note should
-        # record the baseline x-range (bsln_x0/bsln_x1), not the main x0/x1.
+        # record the baseline x-range (bsln_xbgn/bsln_xend), not the main xbgn/xend.
         from pyneuromatic.core.nm_folder import NMFolder
         from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
         tool = nms.NMToolStats()
@@ -1107,12 +1107,12 @@ class TestNMToolStatsNotes(unittest.TestCase):
         tool._select["folder"] = folder
         w = list(tool.windows)[0]
         w.func = "mean"
-        w.x0 = 10.0
-        w.x1 = 50.0
+        w.xbgn = 10.0
+        w.xend = 50.0
         w._bsln_on_set(True, quiet=True)
         w._bsln_func_set({"name": "mean"}, quiet=True)
-        w._x_set("bsln_x0", 0.0, quiet=True)
-        w._x_set("bsln_x1", 20.0, quiet=True)
+        w._x_set("bsln_xbgn", 0.0, quiet=True)
+        w._x_set("bsln_xend", 20.0, quiet=True)
         for k in range(3):
             data = _make_data(name="recordA%d" % k)
             w.compute(data)
@@ -1129,10 +1129,10 @@ class TestNMToolStatsNotes(unittest.TestCase):
         self.assertIsNotNone(notes)
         note_text = " ".join(str(n) for n in notes)
         self.assertIn("id=bsln", note_text)
-        self.assertIn("x0=0.0", note_text)
-        self.assertIn("x1=20.0", note_text)
-        # Main x0/x1 should NOT appear in the bsln note
-        self.assertNotIn("x0=10.0", note_text)
+        self.assertIn("xbgn=0.0", note_text)
+        self.assertIn("xend=20.0", note_text)
+        # Main xbgn/xend should NOT appear in the bsln note
+        self.assertNotIn("xbgn=10.0", note_text)
 
 
 class TestNMToolStatsCommandHistory(unittest.TestCase):
@@ -1235,19 +1235,19 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
     # ------------------------------------------------------------------
     # NMStatWin scalar setters
 
-    def test_x0_setter_logs(self):
+    def test_xbgn_setter_logs(self):
         self._ch.clear()
-        self.w0.x0 = 100.0
+        self.w0.xbgn = 100.0
         self.assertEqual(len(self._ch.buffer), 1)
         cmd = self._ch.buffer[0]['command']
-        self.assertIn("stats.windows['w0'].x0", cmd)
+        self.assertIn("stats.windows['w0'].xbgn", cmd)
         self.assertIn("100.0", cmd)
 
-    def test_x1_setter_logs(self):
+    def test_xend_setter_logs(self):
         self._ch.clear()
-        self.w0.x1 = 200.0
+        self.w0.xend = 200.0
         cmd = self._ch.buffer[0]['command']
-        self.assertIn("stats.windows['w0'].x1", cmd)
+        self.assertIn("stats.windows['w0'].xend", cmd)
         self.assertIn("200.0", cmd)
 
     def test_on_setter_logs_false(self):
@@ -1264,18 +1264,18 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
         self.assertIn("stats.windows['w0'].bsln_on", cmd)
         self.assertIn("True", cmd)
 
-    def test_bsln_x0_setter_logs(self):
+    def test_bsln_xbgn_setter_logs(self):
         self._ch.clear()
-        self.w0.bsln_x0 = -10.0
+        self.w0.bsln_xbgn = -10.0
         cmd = self._ch.buffer[0]['command']
-        self.assertIn("stats.windows['w0'].bsln_x0", cmd)
+        self.assertIn("stats.windows['w0'].bsln_xbgn", cmd)
         self.assertIn("-10.0", cmd)
 
-    def test_bsln_x1_setter_logs(self):
+    def test_bsln_xend_setter_logs(self):
         self._ch.clear()
-        self.w0.bsln_x1 = 0.0
+        self.w0.bsln_xend = 0.0
         cmd = self._ch.buffer[0]['command']
-        self.assertIn("stats.windows['w0'].bsln_x1", cmd)
+        self.assertIn("stats.windows['w0'].bsln_xend", cmd)
         self.assertIn("0.0", cmd)
 
     def test_bsln_func_setter_logs(self):

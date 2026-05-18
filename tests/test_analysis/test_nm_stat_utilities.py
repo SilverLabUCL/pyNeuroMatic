@@ -212,9 +212,9 @@ class TestStat(unittest.TestCase):
         func = {"name": "mean"}
         for b in nmu.badtypes(ok=[3, 3.14]):
             with self.assertRaises(TypeError):
-                nsmm.stat(self.data, func, x0=b)
+                nsmm.stat(self.data, func, xbgn=b)
             with self.assertRaises(TypeError):
-                nsmm.stat(self.data, func, x1=b)
+                nsmm.stat(self.data, func, xend=b)
 
     def test_results_type_error(self):
         func = {"name": "mean"}
@@ -234,19 +234,19 @@ class TestStat(unittest.TestCase):
             nsmm.stat(self.data, {"name": "unknownfunc"})
 
     def test_i0_out_of_bounds(self):
-        r = nsmm.stat(self.datanan, {"name": "max"}, x0=-100)
+        r = nsmm.stat(self.datanan, {"name": "max"}, xbgn=-100)
         self.assertIsNone(r["i0"])
         self.assertIn("error", r)
 
     def test_i1_out_of_bounds(self):
-        r = nsmm.stat(self.datanan, {"name": "max"}, x1=200)
+        r = nsmm.stat(self.datanan, {"name": "max"}, xend=200)
         self.assertIsNone(r["i1"])
         self.assertIn("error", r)
 
     def test_full_range_via_inf(self):
         # -inf/+inf snap to data boundaries without requiring xclip
         r = nsmm.stat(self.datanan, {"name": "max"},
-                      x0=-math.inf, x1=math.inf)
+                      xbgn=-math.inf, xend=math.inf)
         keys = ["data", "i0", "i1", "n", "nans", "infs",
                 "s", "sunits", "i", "x", "xunits"]
         self.assertEqual(list(r.keys()), keys)
@@ -255,22 +255,22 @@ class TestStat(unittest.TestCase):
         self.assertEqual(r["sunits"], self.datanan.yscale.units)
         self.assertEqual(r["xunits"], self.datanan.xscale.units)
 
-    def test_value_at_x0(self):
-        r = nsmm.stat(self.datanan, {"name": "value@x0"}, x0=10)
+    def test_value_at_xbgn(self):
+        r = nsmm.stat(self.datanan, {"name": "value@xbgn"}, xbgn=10)
         self.assertEqual(r["i0"], 10)
         self.assertEqual(r["s"], self.datanan.nparray[10])
 
-    def test_value_at_x1(self):
-        r = nsmm.stat(self.datanan, {"name": "value@x1"}, x1=10)
+    def test_value_at_xend(self):
+        r = nsmm.stat(self.datanan, {"name": "value@xend"}, xend=10)
         self.assertEqual(r["i1"], 10)
         self.assertEqual(r["s"], self.datanan.nparray[10])
 
     def test_max_single_point(self):
-        r = nsmm.stat(self.datanan, {"name": "max"}, x0=10, x1=10)
+        r = nsmm.stat(self.datanan, {"name": "max"}, xbgn=10, xend=10)
         self.assertEqual(r["s"], self.datanan.nparray[10])
 
     def test_min_single_point(self):
-        r = nsmm.stat(self.datanan, {"name": "min"}, x0=10, x1=10)
+        r = nsmm.stat(self.datanan, {"name": "min"}, xbgn=10, xend=10)
         self.assertEqual(r["s"], self.datanan.nparray[10])
 
     def test_mean(self):

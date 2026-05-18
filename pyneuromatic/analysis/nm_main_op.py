@@ -1103,9 +1103,9 @@ class NMMainOpBaseline(NMMainOp):
       array in that channel.
 
     Parameters:
-        x0: Baseline window start in xscale units (default 0.0).
-        x1: Baseline window end in xscale units (default 0.0).  Must be >=
-            ``x0``.
+        xbgn: Baseline window start in xscale units (default 0.0).
+        xend: Baseline window end in xscale units (default 0.0).  Must be >=
+            ``xbgn``.
         mode: ``"per_array"`` (default) or ``"average"``.
         ignore_nans: If True (default) use ``np.nanmean``; otherwise ``np.mean``
             (NaN propagates to the result).
@@ -1117,13 +1117,13 @@ class NMMainOpBaseline(NMMainOp):
 
     def __init__(
         self,
-        x0: float = 0.0,
-        x1: float = 0.0,
+        xbgn: float = 0.0,
+        xend: float = 0.0,
         mode: str = "per_array",
         ignore_nans: bool = True,
     ) -> None:
-        self.x0 = x0
-        self.x1 = x1
+        self.xbgn = xbgn
+        self.xend = xend
         self.mode = mode
         self.ignore_nans = ignore_nans
 
@@ -1131,30 +1131,30 @@ class NMMainOpBaseline(NMMainOp):
     # Properties
 
     @property
-    def x0(self) -> float:
+    def xbgn(self) -> float:
         """Baseline window start (xscale units)."""
-        return self._x0
+        return self._xbgn
 
-    @x0.setter
-    def x0(self, value: float) -> None:
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x0 must not be NaN")
-        self._x0 = float(value)
+            raise ValueError("xbgn must not be NaN")
+        self._xbgn = float(value)
 
     @property
-    def x1(self) -> float:
+    def xend(self) -> float:
         """Baseline window end (xscale units)."""
-        return self._x1
+        return self._xend
 
-    @x1.setter
-    def x1(self, value: float) -> None:
+    @xend.setter
+    def xend(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x1 must not be NaN")
-        self._x1 = float(value)
+            raise ValueError("xend must not be NaN")
+        self._xend = float(value)
 
     @property
     def mode(self) -> str:
@@ -1186,9 +1186,9 @@ class NMMainOpBaseline(NMMainOp):
     # Validation helper
 
     def _validate_window(self) -> None:
-        if self._x1 < self._x0:
+        if self._xend < self._xbgn:
             raise ValueError(
-                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
+                "xend (%g) must be >= xbgn (%g)" % (self._xend, self._xbgn)
             )
 
     # ------------------------------------------------------------------
@@ -1220,7 +1220,7 @@ class NMMainOpBaseline(NMMainOp):
             channel_name = parsed[1] if parsed is not None else "A"
 
         sl = nm_math.xscale_window_to_slice(
-            data.nparray, data.xscale.to_dict(), self._x0, self._x1
+            data.nparray, data.xscale.to_dict(), self._xbgn, self._xend
         )
         segment = data.nparray[sl].astype(float)
         if len(segment) == 0:
@@ -1262,8 +1262,8 @@ class NMMainOpBaseline(NMMainOp):
                 )
 
     def _op_params_str(self) -> str:
-        return "x0=%r, x1=%r, mode=%r, ignore_nans=%r" % (
-            self._x0, self._x1, self._mode, self._ignore_nans)
+        return "xbgn=%r, xend=%r, mode=%r, ignore_nans=%r" % (
+            self._xbgn, self._xend, self._mode, self._ignore_nans)
 
 
 # =========================================================================
@@ -2015,9 +2015,9 @@ class NMMainOpNormalize(NMMainOp):
 
     Two independent xscale windows are used:
 
-    - Window 1 (``x0_min``/``x1_min``) computes the "low" reference via
+    - Window 1 (``xbgn_min``/``xend_min``) computes the "low" reference via
       ``fxn1`` (``"mean"``, ``"min"``, or ``"mean@min"``).
-    - Window 2 (``x0_max``/``x1_max``) computes the "high" reference via
+    - Window 2 (``xbgn_max``/``xend_max``) computes the "high" reference via
       ``fxn2`` (``"mean"``, ``"max"``, or ``"mean@max"``).
 
     Two modes (matching NMMainOpBaseline):
@@ -2027,13 +2027,13 @@ class NMMainOpNormalize(NMMainOp):
       then applied to every array in that channel.
 
     Parameters:
-        x0_min: Window 1 start in xscale units (default 0.0).
-        x1_min: Window 1 end in xscale units (default 0.0).
+        xbgn_min: Window 1 start in xscale units (default 0.0).
+        xend_min: Window 1 end in xscale units (default 0.0).
         fxn1: Function for the low reference: ``"mean"``, ``"min"``, or
             ``"mean@min"`` (default ``"mean"``).
         n_mean1: Points around min for ``mean@min`` (default 1).
-        x0_max: Window 2 start in xscale units (default 0.0).
-        x1_max: Window 2 end in xscale units (default 0.0).
+        xbgn_max: Window 2 start in xscale units (default 0.0).
+        xend_max: Window 2 end in xscale units (default 0.0).
         fxn2: Function for the high reference: ``"mean"``, ``"max"``, or
             ``"mean@max"`` (default ``"mean"``).
         n_mean2: Points around max for ``mean@max`` (default 1).
@@ -2050,24 +2050,24 @@ class NMMainOpNormalize(NMMainOp):
 
     def __init__(
         self,
-        x0_min: float = 0.0,
-        x1_min: float = 0.0,
+        xbgn_min: float = 0.0,
+        xend_min: float = 0.0,
         fxn1: str = "mean",
         n_mean1: int = 1,
-        x0_max: float = 0.0,
-        x1_max: float = 0.0,
+        xbgn_max: float = 0.0,
+        xend_max: float = 0.0,
         fxn2: str = "mean",
         n_mean2: int = 1,
         norm_min: float = 0.0,
         norm_max: float = 1.0,
         mode: str = "per_array",
     ) -> None:
-        self.x0_min = x0_min
-        self.x1_min = x1_min
+        self.xbgn_min = xbgn_min
+        self.xend_min = xend_min
         self.fxn1 = fxn1
         self.n_mean1 = n_mean1
-        self.x0_max = x0_max
-        self.x1_max = x1_max
+        self.xbgn_max = xbgn_max
+        self.xend_max = xend_max
         self.fxn2 = fxn2
         self.n_mean2 = n_mean2
         self.norm_min = norm_min
@@ -2078,30 +2078,30 @@ class NMMainOpNormalize(NMMainOp):
     # Properties
 
     @property
-    def x0_min(self) -> float:
+    def xbgn_min(self) -> float:
         """Window 1 start (xscale units)."""
-        return self._x0_min
+        return self._xbgn_min
 
-    @x0_min.setter
-    def x0_min(self, value: float) -> None:
+    @xbgn_min.setter
+    def xbgn_min(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0_min", "float"))
+            raise TypeError(nmu.type_error_str(value, "xbgn_min", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x0_min must not be NaN")
-        self._x0_min = float(value)
+            raise ValueError("xbgn_min must not be NaN")
+        self._xbgn_min = float(value)
 
     @property
-    def x1_min(self) -> float:
+    def xend_min(self) -> float:
         """Window 1 end (xscale units)."""
-        return self._x1_min
+        return self._xend_min
 
-    @x1_min.setter
-    def x1_min(self, value: float) -> None:
+    @xend_min.setter
+    def xend_min(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1_min", "float"))
+            raise TypeError(nmu.type_error_str(value, "xend_min", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x1_min must not be NaN")
-        self._x1_min = float(value)
+            raise ValueError("xend_min must not be NaN")
+        self._xend_min = float(value)
 
     @property
     def fxn1(self) -> str:
@@ -2132,30 +2132,30 @@ class NMMainOpNormalize(NMMainOp):
         self._n_mean1 = value
 
     @property
-    def x0_max(self) -> float:
+    def xbgn_max(self) -> float:
         """Window 2 start (xscale units)."""
-        return self._x0_max
+        return self._xbgn_max
 
-    @x0_max.setter
-    def x0_max(self, value: float) -> None:
+    @xbgn_max.setter
+    def xbgn_max(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0_max", "float"))
+            raise TypeError(nmu.type_error_str(value, "xbgn_max", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x0_max must not be NaN")
-        self._x0_max = float(value)
+            raise ValueError("xbgn_max must not be NaN")
+        self._xbgn_max = float(value)
 
     @property
-    def x1_max(self) -> float:
+    def xend_max(self) -> float:
         """Window 2 end (xscale units)."""
-        return self._x1_max
+        return self._xend_max
 
-    @x1_max.setter
-    def x1_max(self, value: float) -> None:
+    @xend_max.setter
+    def xend_max(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1_max", "float"))
+            raise TypeError(nmu.type_error_str(value, "xend_max", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x1_max must not be NaN")
-        self._x1_max = float(value)
+            raise ValueError("xend_max must not be NaN")
+        self._xend_max = float(value)
 
     @property
     def fxn2(self) -> str:
@@ -2226,13 +2226,13 @@ class NMMainOpNormalize(NMMainOp):
     # Validation helper
 
     def _validate_windows(self) -> None:
-        if self._x1_min < self._x0_min:
+        if self._xend_min < self._xbgn_min:
             raise ValueError(
-                "x1_min (%g) must be >= x0_min (%g)" % (self._x1_min, self._x0_min)
+                "xend_min (%g) must be >= xbgn_min (%g)" % (self._xend_min, self._xbgn_min)
             )
-        if self._x1_max < self._x0_max:
+        if self._xend_max < self._xbgn_max:
             raise ValueError(
-                "x1_max (%g) must be >= x0_max (%g)" % (self._x1_max, self._x0_max)
+                "xend_max (%g) must be >= xbgn_max (%g)" % (self._xend_max, self._xbgn_max)
             )
 
     # ------------------------------------------------------------------
@@ -2283,8 +2283,8 @@ class NMMainOpNormalize(NMMainOp):
 
         arr = data.nparray.astype(float)
         xd = data.xscale.to_dict()
-        sl1 = nm_math.xscale_window_to_slice(arr, xd, self._x0_min, self._x1_min)
-        sl2 = nm_math.xscale_window_to_slice(arr, xd, self._x0_max, self._x1_max)
+        sl1 = nm_math.xscale_window_to_slice(arr, xd, self._xbgn_min, self._xend_min)
+        sl2 = nm_math.xscale_window_to_slice(arr, xd, self._xbgn_max, self._xend_max)
         ref_min = nm_math.compute_ref_value(arr[sl1], self._fxn1, self._n_mean1)
         ref_max = nm_math.compute_ref_value(arr[sl2], self._fxn2, self._n_mean2)
 
@@ -2319,12 +2319,12 @@ class NMMainOpNormalize(NMMainOp):
 
     def _op_params_str(self) -> str:
         return (
-            "x0_min=%r, x1_min=%r, fxn1=%r, n_mean1=%d, "
-            "x0_max=%r, x1_max=%r, fxn2=%r, n_mean2=%d, "
+            "xbgn_min=%r, xend_min=%r, fxn1=%r, n_mean1=%d, "
+            "xbgn_max=%r, xend_max=%r, fxn2=%r, n_mean2=%d, "
             "norm_min=%r, norm_max=%r, mode=%r"
         ) % (
-            self._x0_min, self._x1_min, self._fxn1, self._n_mean1,
-            self._x0_max, self._x1_max, self._fxn2, self._n_mean2,
+            self._xbgn_min, self._xend_min, self._fxn1, self._n_mean1,
+            self._xbgn_max, self._xend_max, self._fxn2, self._n_mean2,
             self._norm_min, self._norm_max, self._mode,
         )
 
@@ -2337,7 +2337,7 @@ class NMMainOpNormalize(NMMainOp):
 class NMMainOpDFOF(NMMainOp):
     """Compute dF/F₀ = (F − F₀) / F₀ in-place for each data array.
 
-    F₀ is the mean fluorescence over the baseline xscale window [x0, x1].
+    F₀ is the mean fluorescence over the baseline xscale window [xbgn, xend].
     The array name is unchanged; a note records the transformation and F₀.
     After transformation, ``yscale.label`` is set to ``"dF/F"`` and
     ``yscale.units`` to ``""`` (dimensionless).
@@ -2351,9 +2351,9 @@ class NMMainOpDFOF(NMMainOp):
       array in that channel.
 
     Parameters:
-        x0:          Baseline window start in x-axis units.  Default ``-inf``
+        xbgn:          Baseline window start in x-axis units.  Default ``-inf``
                      (start of array).
-        x1:          Baseline window end in x-axis units.  Default ``+inf``
+        xend:          Baseline window end in x-axis units.  Default ``+inf``
                      (end of array).
         mode:        ``"per_array"`` (default) or ``"average"``.
         ignore_nans: If True (default) use ``np.nanmean``; otherwise
@@ -2366,13 +2366,13 @@ class NMMainOpDFOF(NMMainOp):
 
     def __init__(
         self,
-        x0: float = -math.inf,
-        x1: float = math.inf,
+        xbgn: float = -math.inf,
+        xend: float = math.inf,
         mode: str = "per_array",
         ignore_nans: bool = True,
     ) -> None:
-        self.x0 = x0
-        self.x1 = x1
+        self.xbgn = xbgn
+        self.xend = xend
         self.mode = mode
         self.ignore_nans = ignore_nans
 
@@ -2380,30 +2380,30 @@ class NMMainOpDFOF(NMMainOp):
     # Properties
 
     @property
-    def x0(self) -> float:
+    def xbgn(self) -> float:
         """Baseline window start (x-axis units)."""
-        return self._x0
+        return self._xbgn
 
-    @x0.setter
-    def x0(self, value: float) -> None:
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x0 must not be NaN")
-        self._x0 = float(value)
+            raise ValueError("xbgn must not be NaN")
+        self._xbgn = float(value)
 
     @property
-    def x1(self) -> float:
+    def xend(self) -> float:
         """Baseline window end (x-axis units)."""
-        return self._x1
+        return self._xend
 
-    @x1.setter
-    def x1(self, value: float) -> None:
+    @xend.setter
+    def xend(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x1 must not be NaN")
-        self._x1 = float(value)
+            raise ValueError("xend must not be NaN")
+        self._xend = float(value)
 
     @property
     def mode(self) -> str:
@@ -2435,9 +2435,9 @@ class NMMainOpDFOF(NMMainOp):
     # Validation helper
 
     def _validate_window(self) -> None:
-        if self._x1 < self._x0:
+        if self._xend < self._xbgn:
             raise ValueError(
-                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
+                "xend (%g) must be >= xbgn (%g)" % (self._xend, self._xbgn)
             )
 
     # ------------------------------------------------------------------
@@ -2470,7 +2470,7 @@ class NMMainOpDFOF(NMMainOp):
 
         arr = data.nparray.astype(float)
         sl = nm_math.xscale_window_to_slice(
-            arr, data.xscale.to_dict(), self._x0, self._x1
+            arr, data.xscale.to_dict(), self._xbgn, self._xend
         )
         segment = arr[sl]
         if len(segment) == 0:
@@ -2525,8 +2525,8 @@ class NMMainOpDFOF(NMMainOp):
             self._add_op_note(data, "%s, F0=%.6g" % (self._op_params_str(), f0))
 
     def _op_params_str(self) -> str:
-        return "x0=%r, x1=%r, mode=%r, ignore_nans=%r" % (
-            self._x0, self._x1, self._mode, self._ignore_nans)
+        return "xbgn=%r, xend=%r, mode=%r, ignore_nans=%r" % (
+            self._xbgn, self._xend, self._mode, self._ignore_nans)
 
 
 # =========================================================================
@@ -3382,9 +3382,9 @@ class NMMainOpHistogram(NMMainOp):
     Args:
         bins:    Number of equal-width bins (int) or explicit bin-edge
                  list.  Defaults to 10.
-        x0:      Start of the xscale window (default ``-inf`` = beginning
+        xbgn:      Start of the xscale window (default ``-inf`` = beginning
                  of array).
-        x1:      End of the xscale window (default ``+inf`` = end of array).
+        xend:      End of the xscale window (default ``+inf`` = end of array).
         xrange:  ``(min, max)`` tuple to restrict the amplitude range.
                  Defaults to None (full range of each array).
         density: If True, return probability density instead of counts.
@@ -3396,14 +3396,14 @@ class NMMainOpHistogram(NMMainOp):
     def __init__(
         self,
         bins: int | list = 10,
-        x0: float = -math.inf,
-        x1: float = math.inf,
+        xbgn: float = -math.inf,
+        xend: float = math.inf,
         xrange: tuple | None = None,
         density: bool = False,
     ) -> None:
         self.bins = bins
-        self.x0 = x0
-        self.x1 = x1
+        self.xbgn = xbgn
+        self.xend = xend
         self.xrange = xrange
         self.density = density
         self._out_prefix: str = "H_"
@@ -3442,30 +3442,30 @@ class NMMainOpHistogram(NMMainOp):
         self._bins = value
 
     @property
-    def x0(self) -> float:
+    def xbgn(self) -> float:
         """Start of the xscale window (default ``-inf``)."""
-        return self._x0
+        return self._xbgn
 
-    @x0.setter
-    def x0(self, value: float) -> None:
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x0", "float"))
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x0 must not be NaN")
-        self._x0 = float(value)
+            raise ValueError("xbgn must not be NaN")
+        self._xbgn = float(value)
 
     @property
-    def x1(self) -> float:
+    def xend(self) -> float:
         """End of the xscale window (default ``+inf``)."""
-        return self._x1
+        return self._xend
 
-    @x1.setter
-    def x1(self, value: float) -> None:
+    @xend.setter
+    def xend(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "x1", "float"))
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
         if math.isnan(float(value)):
-            raise ValueError("x1 must not be NaN")
-        self._x1 = float(value)
+            raise ValueError("xend must not be NaN")
+        self._xend = float(value)
 
     @property
     def xrange(self) -> tuple | None:
@@ -3499,9 +3499,9 @@ class NMMainOpHistogram(NMMainOp):
     # Validation helper
 
     def _validate_window(self) -> None:
-        if self._x1 < self._x0:
+        if self._xend < self._xbgn:
             raise ValueError(
-                "x1 (%g) must be >= x0 (%g)" % (self._x1, self._x0)
+                "xend (%g) must be >= xbgn (%g)" % (self._xend, self._xbgn)
             )
 
     # ------------------------------------------------------------------
@@ -3518,9 +3518,9 @@ class NMMainOpHistogram(NMMainOp):
         arr = data.nparray.astype(float)
 
         # Apply xscale window if either bound is finite
-        if not (self._x0 == -math.inf and self._x1 == math.inf):
+        if not (self._xbgn == -math.inf and self._xend == math.inf):
             sl = nm_math.xscale_window_to_slice(
-                arr, data.xscale.to_dict(), self._x0, self._x1
+                arr, data.xscale.to_dict(), self._xbgn, self._xend
             )
             arr = arr[sl]
 
@@ -3557,8 +3557,8 @@ class NMMainOpHistogram(NMMainOp):
         }
 
     def _op_params_str(self) -> str:
-        return "bins=%r, x0=%r, x1=%r, xrange=%r, density=%r" % (
-            self._bins, self._x0, self._x1, self._xrange, self._density)
+        return "bins=%r, xbgn=%r, xend=%r, xrange=%r, density=%r" % (
+            self._bins, self._xbgn, self._xend, self._xrange, self._density)
 
 
 # =========================================================================

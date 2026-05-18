@@ -311,8 +311,8 @@ _STAT_DISPATCH = {
 def stat(
     data: NMData,
     func: dict,
-    x0: float = -math.inf,
-    x1: float = math.inf,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
     ignore_nans: bool = False,
     results: dict | None = None
 ) -> dict:
@@ -334,12 +334,12 @@ def stat(
               "ylevel" (float) required; the y-axis threshold to search for.
             - slope:
               no extra keys; fits linear regression over the window.
-            - value@x0 / value@x1:
-              no extra keys; returns the sample at x0 or x1 index.
+            - value@xbgn / value@xend:
+              no extra keys; returns the sample at xbgn or xend index.
             - count / count_nans / count_infs:
               no extra keys; values come from n, nans, infs in results.
-        x0: Left x-axis bound of the analysis window (default: -inf = start of data).
-        x1: Right x-axis bound of the analysis window (default: +inf = end of data).
+        xbgn: Left x-axis bound of the analysis window (default: -inf = start of data).
+        xend: Right x-axis bound of the analysis window (default: +inf = end of data).
             Use -inf/+inf to span the full data range. Finite values that fall
             outside the data x-scale will return None for i0/i1 (error result).
         ignore_nans: If True, NaN values are excluded from calculations.
@@ -406,26 +406,26 @@ def stat(
     xunits = data.xscale.units
     yunits = data.yscale.units
 
-    i0 = data.get_xindex(x0)
-    i1 = data.get_xindex(x1)
+    i0 = data.get_xindex(xbgn)
+    i1 = data.get_xindex(xend)
 
     results["i0"] = i0
     results["i1"] = i1
 
     if i0 is None:
-        e = "failed to compute i0 from x0"
+        e = "failed to compute i0 from xbgn"
         results["error"] = e
         return results
     if i1 is None:
-        e = "failed to compute i1 from x1"
+        e = "failed to compute i1 from xend"
         results["error"] = e
         return results
 
-    if f == "value@x0":
+    if f == "value@xbgn":
         results["s"] = data.nparray[i0]
         results["sunits"] = yunits
         return results
-    if f == "value@x1":
+    if f == "value@xend":
         results["s"] = data.nparray[i1]
         results["sunits"] = yunits
         return results
