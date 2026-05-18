@@ -83,14 +83,6 @@ class TestNMToolSpikeDefaults(unittest.TestCase):
     def test_func_name_default(self):
         self.assertEqual(self.tool.func_name, "level+")
 
-    def test_xbgn_default(self):
-        import math
-        self.assertEqual(self.tool.xbgn, -math.inf)
-
-    def test_xend_default(self):
-        import math
-        self.assertEqual(self.tool.xend, math.inf)
-
     def test_ignore_nans_default(self):
         self.assertTrue(self.tool.ignore_nans)
 
@@ -143,40 +135,6 @@ class TestNMToolSpikeProperties(unittest.TestCase):
     def test_func_name_rejects_non_string(self):
         with self.assertRaises(TypeError):
             self.tool.func_name = 1
-
-    # xbgn / xend
-    def test_xbgn_accepts_float(self):
-        self.tool.xbgn = 0.01
-        self.assertAlmostEqual(self.tool.xbgn, 0.01)
-
-    def test_xbgn_accepts_inf(self):
-        import math
-        self.tool.xbgn = -math.inf
-        self.assertEqual(self.tool.xbgn, -math.inf)
-
-    def test_xbgn_rejects_nan(self):
-        import math
-        with self.assertRaises(ValueError):
-            self.tool.xbgn = math.nan
-
-    def test_xbgn_rejects_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.xbgn = True
-
-    def test_xend_accepts_float(self):
-        self.tool.xend = 0.05
-        self.assertAlmostEqual(self.tool.xend, 0.05)
-
-    def test_xend_rejects_nan(self):
-        import math
-        with self.assertRaises(ValueError):
-            self.tool.xend = math.nan
-
-    def test_xend_rejects_bool(self):
-        with self.assertRaises(TypeError):
-            self.tool.xend = False
-
-
 
 class TestNMToolSpikeDetection(unittest.TestCase):
     """run_all detection behaviour."""

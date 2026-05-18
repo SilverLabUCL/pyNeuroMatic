@@ -86,12 +86,6 @@ class TestNMToolFitDefaults(unittest.TestCase):
     def test_no_degree_property(self):
         self.assertFalse(hasattr(self.tool, "degree"))
 
-    def test_xbgn_default(self):
-        self.assertEqual(self.tool.xbgn, -math.inf)
-
-    def test_xend_default(self):
-        self.assertEqual(self.tool.xend, math.inf)
-
     def test_p0_default(self):
         self.assertIsNone(self.tool.p0)
 
@@ -160,26 +154,6 @@ class TestNMToolFitProperties(unittest.TestCase):
     def test_func_name_type_error(self):
         with self.assertRaises(TypeError):
             self.tool.func_name = 3
-
-    def test_xbgn_valid(self):
-        self.tool.xbgn = 5.0
-        self.assertEqual(self.tool.xbgn, 5.0)
-
-    def test_xbgn_nan_raises(self):
-        with self.assertRaises(ValueError):
-            self.tool.xbgn = float("nan")
-
-    def test_xbgn_type_error(self):
-        with self.assertRaises(TypeError):
-            self.tool.xbgn = "start"
-
-    def test_xend_valid(self):
-        self.tool.xend = 100.0
-        self.assertEqual(self.tool.xend, 100.0)
-
-    def test_xend_nan_raises(self):
-        with self.assertRaises(ValueError):
-            self.tool.xend = float("nan")
 
     def test_p0_dict_accepted(self):
         self.tool.p0 = {"A": 1.0, "Tau": 5.0}

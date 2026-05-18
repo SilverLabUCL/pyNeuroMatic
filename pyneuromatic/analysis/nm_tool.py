@@ -21,6 +21,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 from __future__ import annotations
 
 import datetime
+import math
 
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_command_history as nmch
@@ -70,6 +71,10 @@ class NMTool:
         self._results_to_history: bool = False
         self._results_to_cache: bool = True
         self._results_to_numpy: bool = False
+
+        # X-axis window — subclasses init from config.
+        self._xbgn: float = -math.inf
+        self._xend: float = math.inf
 
     @property
     def name(self) -> str:
@@ -166,6 +171,42 @@ class NMTool:
         nmch.add_nm_command(
             "%s.results_to_numpy = %r" % (self._name, self._results_to_numpy)
         )
+
+    @property
+    def xbgn(self) -> float:
+        """X-axis window start. Default ``-inf`` (no lower bound)."""
+        return self._xbgn
+
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
+        self._xbgn_set(value)
+
+    def _xbgn_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
+        if math.isnan(value):
+            raise ValueError("xbgn cannot be NaN")
+        self._xbgn = float(value)
+        nmh.history("set xbgn=%g" % self._xbgn, quiet=quiet)
+        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self._xbgn))
+
+    @property
+    def xend(self) -> float:
+        """X-axis window end. Default ``+inf`` (no upper bound)."""
+        return self._xend
+
+    @xend.setter
+    def xend(self, value: float) -> None:
+        self._xend_set(value)
+
+    def _xend_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
+        if math.isnan(value):
+            raise ValueError("xend cannot be NaN")
+        self._xend = float(value)
+        nmh.history("set xend=%g" % self._xend, quiet=quiet)
+        nmch.add_nm_command("%s.xend = %r" % (self._name, self._xend))
 
     # Read-only convenience properties for accessing selection
     @property

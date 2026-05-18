@@ -167,9 +167,10 @@ class NMToolFit(NMTool):
         self._results_to_cache = self._config.results_to_cache
         self._results_to_numpy = self._config.results_to_numpy
 
+        self._xbgn = self._config.xbgn
+        self._xend = self._config.xend
+
         self.__func_name: str = "line"
-        self.__xbgn: float = -math.inf
-        self.__xend: float = math.inf
         self.__maxfev: int = self._config.maxfev
         self.__x_origin: float = self._config.x_origin
 
@@ -211,42 +212,6 @@ class NMToolFit(NMTool):
         self.__func_name = value
         nmh.history("set func_name=%r" % self.__func_name, quiet=quiet)
         nmch.add_nm_command("%s.func_name = %r" % (self._name, self.__func_name))
-
-    @property
-    def xbgn(self) -> float:
-        """Fit window start (x-units). Default ``-inf``."""
-        return self.__xbgn
-
-    @xbgn.setter
-    def xbgn(self, value: float) -> None:
-        self._xbgn_set(value)
-
-    def _xbgn_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
-        if math.isnan(value):
-            raise ValueError("xbgn cannot be NaN")
-        self.__xbgn = float(value)
-        nmh.history("set xbgn=%g" % self.__xbgn, quiet=quiet)
-        nmch.add_nm_command("%s.xbgn = %r" % (self._name, self.__xbgn))
-
-    @property
-    def xend(self) -> float:
-        """Fit window end (x-units). Default ``+inf``."""
-        return self.__xend
-
-    @xend.setter
-    def xend(self, value: float) -> None:
-        self._xend_set(value)
-
-    def _xend_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(nmu.type_error_str(value, "xend", "float"))
-        if math.isnan(value):
-            raise ValueError("xend cannot be NaN")
-        self.__xend = float(value)
-        nmh.history("set xend=%g" % self.__xend, quiet=quiet)
-        nmch.add_nm_command("%s.xend = %r" % (self._name, self.__xend))
 
     @property
     def maxfev(self) -> int:
@@ -416,8 +381,8 @@ class NMToolFit(NMTool):
         result = fit_nmdata(
             data,
             func_name=self.__func_name,
-            xbgn=self.__xbgn,
-            xend=self.__xend,
+            xbgn=self._xbgn,
+            xend=self._xend,
             degree=degree,
             x_origin=self.__x_origin,
             p0=self.__p0,
@@ -452,8 +417,8 @@ class NMToolFit(NMTool):
         """Build the notes annotation string for output arrays."""
         parts = [
             "NMFit(func_name=%r" % self.__func_name,
-            "xbgn=%s" % self.__xbgn,
-            "xend=%s" % self.__xend,
+            "xbgn=%s" % self._xbgn,
+            "xend=%s" % self._xend,
             "n_epochs=%d" % len(self._epoch_names),
         ]
         if self.__func_name == "exp" and self.__x_origin != 0.0:
