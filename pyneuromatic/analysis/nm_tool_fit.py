@@ -37,7 +37,7 @@ from pyneuromatic.analysis.nm_tool_utilities import fit_nmdata
 
 _POLY_FUNC_NAMES: list[str] = ["poly%d" % d for d in range(2, 10)]
 _VALID_FUNC_NAMES: frozenset[str] = frozenset(
-    {"line", "exp", "gauss"} | set(_POLY_FUNC_NAMES)
+    {"line", "exp", "exp2", "gauss", "boltzmann"} | set(_POLY_FUNC_NAMES)
 )
 
 
@@ -62,9 +62,16 @@ def _eval_model(func_name: str, result: dict, x: np.ndarray) -> np.ndarray:
     if fn == "exp":
         A, B, X0, Y0 = result["A"], result["Tau"], result["X0"], result["Y0"]
         return A * np.exp(-(x - X0) / B) + Y0
+    if fn == "exp2":
+        A1, B1, A2, B2 = result["A1"], result["Tau1"], result["A2"], result["Tau2"]
+        X0, Y0 = result["X0"], result["Y0"]
+        return A1 * np.exp(-(x - X0) / B1) + A2 * np.exp(-(x - X0) / B2) + Y0
     if fn == "gauss":
         A, mu, sg, Y0 = result["A"], result["Mu"], result["Sigma"], result["Y0"]
         return A * np.exp(-0.5 * ((x - mu) / sg) ** 2) + Y0
+    if fn == "boltzmann":
+        A, X50, K, Y0 = result["A"], result["X50"], result["K"], result["Y0"]
+        return A / (1.0 + np.exp(-(x - X50) / K)) + Y0
     return np.full_like(x, float("nan"), dtype=float)
 
 
@@ -89,7 +96,7 @@ class NMToolFitConfig(NMToolConfig):
     _TOML_TYPE = "fit_config"
     _schema = {
         "func_name":          {"type": str,   "default": "line",
-                               "choices": ["line"] + _POLY_FUNC_NAMES + ["exp", "gauss"]},
+                               "choices": ["line"] + _POLY_FUNC_NAMES + ["exp", "exp2", "gauss", "boltzmann"]},
         "xbgn":                 {"type": float, "default": -math.inf},
         "xend":                 {"type": float, "default":  math.inf},
         "maxfev":             {"type": int,   "default": 10000, "min": 1},
@@ -121,8 +128,12 @@ class NMToolFit(NMTool):
       (Ck = coefficient of x^k)
     * ``"exp"``               — ``y = A * exp(-(x - X0) / Tau) + Y0``
       (A = amplitude, Tau = decay time constant, X0 = fixed x-origin, Y0 = y-offset)
+    * ``"exp2"``              — ``y = A1 * exp(-(x - X0) / Tau1) + A2 * exp(-(x - X0) / Tau2) + Y0``
+      (Tau1 ≤ Tau2 after fitting; X0 = fixed x-origin)
     * ``"gauss"``             — ``y = A * exp(-0.5 * ((x - mu) / sigma)^2) + Y0``
       (A = amplitude, mu = mean, sigma = std dev, Y0 = y-offset)
+    * ``"boltzmann"``         — ``y = A / (1 + exp(-(x - X50) / K)) + Y0``
+      (A = amplitude, X50 = midpoint, K = slope factor, Y0 = y-offset)
 
     Initial parameters for nonlinear fits (``exp``, ``gauss``) are
     auto-estimated from the data; supply *p0* to override.  ``X0`` in the
@@ -421,7 +432,7 @@ class NMToolFit(NMTool):
             "xend=%s" % self._xend,
             "n_epochs=%d" % len(self._epoch_names),
         ]
-        if self.__func_name == "exp" and self.__x_origin != 0.0:
+        if self.__func_name in ("exp", "exp2") and self.__x_origin != 0.0:
             parts.append("x_origin=%s" % self.__x_origin)
         if not self._ignore_nans:
             parts.append("ignore_nans=False")
@@ -519,6 +530,23 @@ class NMToolFit(NMTool):
                 _write("err_" + p("Tau"), [r["Tau_err"] for r in self._fit_results])
                 _write("err_" + p("Y0"),  [r["Y0_err"]  for r in self._fit_results])
 
+        elif self.__func_name == "exp2":
+            _write(p("A1"),     [r["A1"]   for r in self._fit_results])
+            _write(p("Tau1"),   [r["Tau1"] for r in self._fit_results])
+            _write(p("A2"),     [r["A2"]   for r in self._fit_results])
+            _write(p("Tau2"),   [r["Tau2"] for r in self._fit_results])
+            _write(p("X0"),     [r["X0"]   for r in self._fit_results])
+            _write(p("Y0"),     [r["Y0"]   for r in self._fit_results])
+            _write("R2",        [r["r2"]        for r in self._fit_results])
+            _write("ChiSqr",    [r["chi_sqr"]   for r in self._fit_results])
+            _write("Converged", [float(r["converged"]) for r in self._fit_results])
+            if self.__results_errors:
+                _write("err_" + p("A1"),   [r["A1_err"]   for r in self._fit_results])
+                _write("err_" + p("Tau1"), [r["Tau1_err"] for r in self._fit_results])
+                _write("err_" + p("A2"),   [r["A2_err"]   for r in self._fit_results])
+                _write("err_" + p("Tau2"), [r["Tau2_err"] for r in self._fit_results])
+                _write("err_" + p("Y0"),   [r["Y0_err"]   for r in self._fit_results])
+
         elif self.__func_name == "gauss":
             _write(p("A"),      [r["A"]     for r in self._fit_results])
             _write(p("Mu"),     [r["Mu"]    for r in self._fit_results])
@@ -532,6 +560,20 @@ class NMToolFit(NMTool):
                 _write("err_" + p("Mu"),    [r["Mu_err"]    for r in self._fit_results])
                 _write("err_" + p("Sigma"), [r["Sigma_err"] for r in self._fit_results])
                 _write("err_" + p("Y0"),    [r["Y0_err"]    for r in self._fit_results])
+
+        elif self.__func_name == "boltzmann":
+            _write(p("A"),   [r["A"]   for r in self._fit_results])
+            _write(p("X50"), [r["X50"] for r in self._fit_results])
+            _write(p("K"),   [r["K"]   for r in self._fit_results])
+            _write(p("Y0"),  [r["Y0"]  for r in self._fit_results])
+            _write("R2",        [r["r2"]        for r in self._fit_results])
+            _write("ChiSqr",    [r["chi_sqr"]   for r in self._fit_results])
+            _write("Converged", [float(r["converged"]) for r in self._fit_results])
+            if self.__results_errors:
+                _write("err_" + p("A"),   [r["A_err"]   for r in self._fit_results])
+                _write("err_" + p("X50"), [r["X50_err"] for r in self._fit_results])
+                _write("err_" + p("K"),   [r["K_err"]   for r in self._fit_results])
+                _write("err_" + p("Y0"),  [r["Y0_err"]  for r in self._fit_results])
 
         if self.__results_residuals:
             for name, result in zip(self._epoch_names, self._fit_results):
