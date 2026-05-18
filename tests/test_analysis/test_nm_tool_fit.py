@@ -56,6 +56,20 @@ def _make_gauss_data(A, mu, sigma_g, C, n=_N, xstart=_XSTART, xdelta=_XDELTA, na
                   xscale={"start": xstart, "delta": xdelta})
 
 
+def _make_exp2_data(A1, Tau1, A2, Tau2, C, n=_N, xstart=_XSTART, xdelta=_XDELTA, name="recordA0"):
+    x = xstart + np.arange(n) * xdelta
+    y = A1 * np.exp(-x / Tau1) + A2 * np.exp(-x / Tau2) + C
+    return NMData(NM, name=name, nparray=y,
+                  xscale={"start": xstart, "delta": xdelta})
+
+
+def _make_boltzmann_data(A, V50, k, C, n=_N, xstart=_XSTART, xdelta=_XDELTA, name="recordA0"):
+    x = xstart + np.arange(n) * xdelta
+    y = A / (1.0 + np.exp(-(x - V50) / k)) + C
+    return NMData(NM, name=name, nparray=y,
+                  xscale={"start": xstart, "delta": xdelta})
+
+
 def _make_targets(data_list, folder=None):
     if folder is None:
         folder = NMFolder(NM, name="TestFolder")
@@ -1062,6 +1076,195 @@ class TestNMToolFitParamNames(unittest.TestCase):
         tf = folder.toolfolders.get("Fit_Line_0")
         self.assertIn("FT_M", tf.data)
         self.assertIn("FT_B", tf.data)
+
+
+# ---------------------------------------------------------------------------
+# Double exponential
+# ---------------------------------------------------------------------------
+
+class TestNMToolFitExp2(unittest.TestCase):
+
+    def test_func_name_exp2_accepted(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        self.assertEqual(tool.func_name, "exp2")
+
+    def test_toolfolder_name_exp2(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        folder = _run(tool, [_make_exp2_data(30.0, 5.0, 20.0, 20.0, 2.0)])
+        self.assertIn("Fit_Exp2_0", folder.toolfolders)
+
+    def test_output_arrays_present(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        folder = _run(tool, [_make_exp2_data(30.0, 5.0, 20.0, 20.0, 2.0)])
+        tf = folder.toolfolders.get("Fit_Exp2_0")
+        for name in ("FT_A1", "FT_Tau1", "FT_A2", "FT_Tau2", "FT_X0", "FT_Y0",
+                     "FT_R2", "FT_ChiSqr", "FT_Converged"):
+            self.assertIn(name, tf.data, msg="%s missing" % name)
+
+    def test_params_match_known_values(self):
+        A1, Tau1, A2, Tau2, C = 30.0, 5.0, 20.0, 20.0, 2.0
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        folder = _run(tool, [_make_exp2_data(A1, Tau1, A2, Tau2, C)])
+        tf = folder.toolfolders.get("Fit_Exp2_0")
+        fit_a1   = float(tf.data["FT_A1"].nparray[0])
+        fit_tau1 = float(tf.data["FT_Tau1"].nparray[0])
+        fit_a2   = float(tf.data["FT_A2"].nparray[0])
+        fit_tau2 = float(tf.data["FT_Tau2"].nparray[0])
+        fit_y0   = float(tf.data["FT_Y0"].nparray[0])
+        # Tau1 <= Tau2 after sorting
+        self.assertLessEqual(fit_tau1, fit_tau2)
+        self.assertAlmostEqual(fit_tau1, Tau1, places=3)
+        self.assertAlmostEqual(fit_tau2, Tau2, places=3)
+        self.assertAlmostEqual(fit_y0,   C,    places=3)
+        # A1 corresponds to smaller Tau1, A2 to larger Tau2
+        self.assertAlmostEqual(fit_a1, A1, places=2)
+        self.assertAlmostEqual(fit_a2, A2, places=2)
+
+    def test_r2_near_one_for_exact_data(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        folder = _run(tool, [_make_exp2_data(30.0, 5.0, 20.0, 20.0, 2.0)])
+        tf = folder.toolfolders.get("Fit_Exp2_0")
+        r2 = float(tf.data["FT_R2"].nparray[0])
+        self.assertGreater(r2, 0.9999)
+
+    def test_tau_sorted_tau1_le_tau2(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        # Deliberately give larger Tau first in p0 to ensure sort works
+        tool.p0 = {"Tau1": 20.0, "Tau2": 5.0}
+        folder = _run(tool, [_make_exp2_data(30.0, 5.0, 20.0, 20.0, 0.0)])
+        tf = folder.toolfolders.get("Fit_Exp2_0")
+        tau1 = float(tf.data["FT_Tau1"].nparray[0])
+        tau2 = float(tf.data["FT_Tau2"].nparray[0])
+        self.assertLessEqual(tau1, tau2)
+
+    def test_errors_written_when_enabled(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        tool.results_errors = True
+        folder = _run(tool, [_make_exp2_data(30.0, 5.0, 20.0, 20.0, 2.0)])
+        tf = folder.toolfolders.get("Fit_Exp2_0")
+        for name in ("FT_err_A1", "FT_err_Tau1", "FT_err_A2", "FT_err_Tau2", "FT_err_Y0"):
+            self.assertIn(name, tf.data, msg="%s missing" % name)
+
+    def test_converged_is_one_for_exact_data(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        folder = _run(tool, [_make_exp2_data(30.0, 5.0, 20.0, 20.0, 2.0)])
+        tf = folder.toolfolders.get("Fit_Exp2_0")
+        self.assertEqual(float(tf.data["FT_Converged"].nparray[0]), 1.0)
+
+    def test_multi_epoch_array_length(self):
+        tool = NMToolFit()
+        tool.func_name = "exp2"
+        d0 = _make_exp2_data(30.0, 5.0, 20.0, 20.0, 2.0, name="recordA0")
+        d1 = _make_exp2_data(15.0, 5.0, 10.0, 20.0, 1.0, name="recordA1")
+        folder = _run(tool, [d0, d1])
+        tf = folder.toolfolders.get("Fit_Exp2_0")
+        self.assertEqual(len(tf.data["FT_A1"].nparray), 2)
+
+    def test_config_accepts_exp2(self):
+        cfg = NMToolFitConfig()
+        cfg.func_name = "exp2"
+        self.assertEqual(cfg.func_name, "exp2")
+
+
+# ---------------------------------------------------------------------------
+# Boltzmann (sigmoid)
+# ---------------------------------------------------------------------------
+
+class TestNMToolFitBoltzmann(unittest.TestCase):
+
+    def test_func_name_boltzmann_accepted(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        self.assertEqual(tool.func_name, "boltzmann")
+
+    def test_toolfolder_name_boltzmann(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
+        self.assertIn("Fit_Boltzmann_0", folder.toolfolders)
+
+    def test_output_arrays_present(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        for name in ("FT_A", "FT_V50", "FT_K", "FT_Y0",
+                     "FT_R2", "FT_ChiSqr", "FT_Converged"):
+            self.assertIn(name, tf.data, msg="%s missing" % name)
+
+    def test_params_match_known_values(self):
+        A, V50, K, C = 1.0, 50.0, 10.0, 0.0
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        folder = _run(tool, [_make_boltzmann_data(A, V50, K, C)])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        self.assertAlmostEqual(float(tf.data["FT_A"].nparray[0]),   A,   places=4)
+        self.assertAlmostEqual(float(tf.data["FT_V50"].nparray[0]), V50, places=3)
+        self.assertAlmostEqual(float(tf.data["FT_K"].nparray[0]),   K,   places=3)
+        self.assertAlmostEqual(float(tf.data["FT_Y0"].nparray[0]),  C,   places=4)
+
+    def test_r2_near_one_for_exact_data(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        r2 = float(tf.data["FT_R2"].nparray[0])
+        self.assertGreater(r2, 0.9999)
+
+    def test_falling_sigmoid_negative_k(self):
+        # Negative k → falling sigmoid
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, -10.0, 0.0)])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        K_fit = float(tf.data["FT_K"].nparray[0])
+        self.assertLess(K_fit, 0.0)
+
+    def test_errors_written_when_enabled(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        tool.results_errors = True
+        folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        for name in ("FT_err_A", "FT_err_V50", "FT_err_K", "FT_err_Y0"):
+            self.assertIn(name, tf.data, msg="%s missing" % name)
+
+    def test_converged_is_one_for_exact_data(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        self.assertEqual(float(tf.data["FT_Converged"].nparray[0]), 1.0)
+
+    def test_multi_epoch_array_length(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        d0 = _make_boltzmann_data(1.0, 50.0, 10.0, 0.0, name="recordA0")
+        d1 = _make_boltzmann_data(2.0, 40.0,  8.0, 0.5, name="recordA1")
+        folder = _run(tool, [d0, d1])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        self.assertEqual(len(tf.data["FT_A"].nparray), 2)
+
+    def test_p0_override_used(self):
+        tool = NMToolFit()
+        tool.func_name = "boltzmann"
+        tool.p0 = {"V50": 50.0, "K": 10.0}
+        folder = _run(tool, [_make_boltzmann_data(1.0, 50.0, 10.0, 0.0)])
+        tf = folder.toolfolders.get("Fit_Boltzmann_0")
+        self.assertGreater(float(tf.data["FT_R2"].nparray[0]), 0.999)
+
+    def test_config_accepts_boltzmann(self):
+        cfg = NMToolFitConfig()
+        cfg.func_name = "boltzmann"
+        self.assertEqual(cfg.func_name, "boltzmann")
 
 
 if __name__ == "__main__":

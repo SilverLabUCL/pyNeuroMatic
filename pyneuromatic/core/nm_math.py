@@ -2294,3 +2294,265 @@ def fit_gauss(
         "n":         n,
         "converged": converged,
     }
+
+
+def fit_exp2(
+    yarray: np.ndarray,
+    xstart: float = 0.0,
+    xdelta: float = 1.0,
+    xarray: np.ndarray | None = None,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
+    x_origin: float = 0.0,
+    p0: dict | None = None,
+    sigma: np.ndarray | None = None,
+    maxfev: int = 10000,
+    ignore_nans: bool = True,
+) -> dict:
+    """Fit a double exponential to *yarray*.
+
+    Model: ``f(x) = A1 * exp(-(x - X0) / Tau1) + A2 * exp(-(x - X0) / Tau2) + Y0``
+
+    where:
+
+    * **A1**, **A2** — amplitudes
+    * **Tau1**, **Tau2** — time constants (sorted so Tau1 ≤ Tau2 after fitting)
+    * **X0** — fixed x-origin (``x_origin``); not fitted
+    * **Y0** — y-offset
+
+    Missing initial-parameter keys in *p0* are auto-estimated:
+    ``A1 = A2 = (y[0] - y[-1]) / 2``, ``Tau1 = range/5``,
+    ``Tau2 = range/2``, ``Y0 = y[-1]``.
+
+    Args:
+        yarray:    1-D numpy array of y-values.
+        xstart:    X-axis start value (uniform spacing).
+        xdelta:    X-axis sample interval (uniform spacing).
+        xarray:    Non-uniform x-values array; overrides *xstart*/*xdelta*.
+        xbgn:      Fit window start (x-units). Default ``-inf``.
+        xend:      Fit window end (x-units). Default ``+inf``.
+        x_origin:  Fixed x-offset (X0) in the model. Default 0.0.
+        p0:        Initial parameter estimates as a dict with optional keys
+                   ``"A1"``, ``"Tau1"``, ``"A2"``, ``"Tau2"``, ``"Y0"``.
+                   Missing keys are auto-estimated.
+        sigma:     Per-point standard deviations for weighted fitting.
+        maxfev:    Maximum function evaluations for the optimizer. Default 10000.
+        ignore_nans: If True (default), exclude NaN values before fitting.
+
+    Returns:
+        Dict with keys:
+
+        * ``"A1"``, ``"Tau1"``, ``"A2"``, ``"Tau2"``, ``"X0"``, ``"Y0"``
+          — fitted parameters (Tau1 ≤ Tau2; ``"X0"`` echoes ``x_origin``)
+        * ``"A1_err"``, ``"Tau1_err"``, ``"A2_err"``, ``"Tau2_err"``,
+          ``"Y0_err"`` — one-standard-deviation parameter uncertainties
+        * ``"r2"``, ``"chi_sqr"``, ``"yfit"``, ``"residuals"``, ``"x"``,
+          ``"n"``, ``"converged"``
+
+    Raises:
+        ValueError: Fewer than 5 data points, or *sigma* length mismatch.
+    """
+    from scipy.optimize import curve_fit  # noqa: PLC0415
+
+    x, y = _extract_xy_window(yarray, xstart, xdelta, xarray, xbgn, xend, ignore_nans)
+    n = len(x)
+    if n < 5:
+        raise ValueError("fit_exp2: need at least 5 data points, got %d" % n)
+
+    if sigma is not None and len(sigma) != n:
+        raise ValueError(
+            "fit_exp2: sigma length (%d) != windowed data length (%d)" % (len(sigma), n)
+        )
+
+    p0_dict = p0 or {}
+    _win = max(1, n // 10)
+    _y_start = float(np.nanmedian(y[:_win]))
+    _y_end   = float(np.nanmedian(y[-_win:]))
+    _half_amp = (_y_start - _y_end) / 2.0
+    x_span = float(x[-1] - x[0])
+    A1_0   = p0_dict.get("A1",   _half_amp)
+    Tau1_0 = p0_dict.get("Tau1", x_span / 5.0 if x_span > 0 else 1.0)
+    A2_0   = p0_dict.get("A2",   _half_amp)
+    Tau2_0 = p0_dict.get("Tau2", x_span / 2.0 if x_span > 0 else 2.0)
+    Y0_0   = p0_dict.get("Y0",   _y_end)
+
+    def _model(xv, A1, B1, A2, B2, Y0):
+        return A1 * np.exp(-(xv - x_origin) / B1) + A2 * np.exp(-(xv - x_origin) / B2) + Y0
+
+    converged = True
+    try:
+        popt, pcov = curve_fit(
+            _model, x, y,
+            p0=[A1_0, Tau1_0, A2_0, Tau2_0, Y0_0],
+            sigma=sigma,
+            absolute_sigma=(sigma is not None),
+            maxfev=maxfev,
+        )
+        A1_f, B1_f, A2_f, B2_f, Y0_f = [float(v) for v in popt]
+        perr = np.sqrt(np.maximum(0.0, np.diag(pcov)))
+        A1_e, B1_e, A2_e, B2_e, Y0_e = [float(v) for v in perr]
+        # Sort so Tau1 <= Tau2
+        if B1_f > B2_f:
+            A1_f, B1_f, A1_e, B1_e, A2_f, B2_f, A2_e, B2_e = (
+                A2_f, B2_f, A2_e, B2_e, A1_f, B1_f, A1_e, B1_e
+            )
+    except RuntimeError:
+        A1_f, B1_f, A2_f, B2_f, Y0_f = A1_0, Tau1_0, A2_0, Tau2_0, Y0_0
+        A1_e = B1_e = A2_e = B2_e = Y0_e = float("nan")
+        converged = False
+
+    y_fit = _model(x, A1_f, B1_f, A2_f, B2_f, Y0_f)
+    r2 = _r2(y, y_fit)
+    residuals = y - y_fit
+    if sigma is not None:
+        chi_sqr = float(np.sum((residuals / np.asarray(sigma, dtype=float)) ** 2))
+    else:
+        chi_sqr = float(np.sum(residuals ** 2)) / n
+
+    return {
+        "A1":      A1_f,
+        "Tau1":    B1_f,
+        "A2":      A2_f,
+        "Tau2":    B2_f,
+        "X0":      float(x_origin),
+        "Y0":      Y0_f,
+        "A1_err":  A1_e,
+        "Tau1_err": B1_e,
+        "A2_err":  A2_e,
+        "Tau2_err": B2_e,
+        "Y0_err":  Y0_e,
+        "r2":        r2,
+        "chi_sqr":   chi_sqr,
+        "yfit":      y_fit,
+        "residuals": residuals,
+        "x":         x,
+        "n":         n,
+        "converged": converged,
+    }
+
+
+def fit_boltzmann(
+    yarray: np.ndarray,
+    xstart: float = 0.0,
+    xdelta: float = 1.0,
+    xarray: np.ndarray | None = None,
+    xbgn: float = -math.inf,
+    xend: float = math.inf,
+    p0: dict | None = None,
+    sigma: np.ndarray | None = None,
+    maxfev: int = 10000,
+    ignore_nans: bool = True,
+) -> dict:
+    """Fit a Boltzmann sigmoid to *yarray*.
+
+    Model: ``f(x) = A / (1 + exp(-(x - V50) / K)) + Y0``
+
+    where:
+
+    * **A** — amplitude (range of the sigmoid)
+    * **V50** — midpoint (x at half-maximum)
+    * **K** — slope factor (positive = rising, negative = falling)
+    * **Y0** — y-offset (baseline)
+
+    Missing initial-parameter keys in *p0* are auto-estimated:
+    ``Y0 = min(y)``, ``A = max(y) - min(y)``,
+    ``V50 = x at y closest to Y0 + A/2``, ``K = (x[-1] - x[0]) / 10``.
+
+    Args:
+        yarray:    1-D numpy array of y-values.
+        xstart:    X-axis start value (uniform spacing).
+        xdelta:    X-axis sample interval (uniform spacing).
+        xarray:    Non-uniform x-values array; overrides *xstart*/*xdelta*.
+        xbgn:      Fit window start (x-units). Default ``-inf``.
+        xend:      Fit window end (x-units). Default ``+inf``.
+        p0:        Initial parameter estimates as a dict with optional keys
+                   ``"A"``, ``"V50"``, ``"K"``, ``"Y0"``.
+                   Missing keys are auto-estimated.
+        sigma:     Per-point standard deviations for weighted fitting.
+        maxfev:    Maximum function evaluations for the optimizer. Default 10000.
+        ignore_nans: If True (default), exclude NaN values before fitting.
+
+    Returns:
+        Dict with keys:
+
+        * ``"A"``, ``"V50"``, ``"K"``, ``"Y0"`` — fitted parameters
+        * ``"A_err"``, ``"V50_err"``, ``"K_err"``, ``"Y0_err"``
+          — one-standard-deviation parameter uncertainties
+        * ``"r2"``, ``"chi_sqr"``, ``"yfit"``, ``"residuals"``, ``"x"``,
+          ``"n"``, ``"converged"``
+
+    Raises:
+        ValueError: Fewer than 4 data points, or *sigma* length mismatch.
+    """
+    from scipy.optimize import curve_fit  # noqa: PLC0415
+
+    x, y = _extract_xy_window(yarray, xstart, xdelta, xarray, xbgn, xend, ignore_nans)
+    n = len(x)
+    if n < 4:
+        raise ValueError("fit_boltzmann: need at least 4 data points, got %d" % n)
+
+    if sigma is not None and len(sigma) != n:
+        raise ValueError(
+            "fit_boltzmann: sigma length (%d) != windowed data length (%d)"
+            % (len(sigma), n)
+        )
+
+    p0_dict = p0 or {}
+    y_min = float(np.nanmin(y))
+    y_max = float(np.nanmax(y))
+    x_span = float(x[-1] - x[0])
+    Y0_0  = p0_dict.get("Y0",  y_min)
+    A0    = p0_dict.get("A",   y_max - y_min)
+    # x closest to half-maximum
+    half  = Y0_0 + A0 / 2.0
+    V50_0 = p0_dict.get("V50", float(x[int(np.argmin(np.abs(y - half)))]))
+    # Sign of K: positive for rising, negative for falling sigmoid
+    _K_mag = x_span / 10.0 if x_span > 0 else 1.0
+    _rising = float(np.nanmean(y[n // 2:])) >= float(np.nanmean(y[:n // 2]))
+    K0    = p0_dict.get("K",   _K_mag if _rising else -_K_mag)
+
+    def _model(xv, A, V50, K, Y0):
+        return A / (1.0 + np.exp(-(xv - V50) / K)) + Y0
+
+    converged = True
+    try:
+        popt, pcov = curve_fit(
+            _model, x, y,
+            p0=[A0, V50_0, K0, Y0_0],
+            sigma=sigma,
+            absolute_sigma=(sigma is not None),
+            maxfev=maxfev,
+        )
+        A_f, V50_f, K_f, Y0_f = [float(v) for v in popt]
+        perr = np.sqrt(np.maximum(0.0, np.diag(pcov)))
+        A_e, V50_e, K_e, Y0_e = [float(v) for v in perr]
+    except RuntimeError:
+        A_f, V50_f, K_f, Y0_f = A0, V50_0, K0, Y0_0
+        A_e = V50_e = K_e = Y0_e = float("nan")
+        converged = False
+
+    y_fit = _model(x, A_f, V50_f, K_f, Y0_f)
+    r2 = _r2(y, y_fit)
+    residuals = y - y_fit
+    if sigma is not None:
+        chi_sqr = float(np.sum((residuals / np.asarray(sigma, dtype=float)) ** 2))
+    else:
+        chi_sqr = float(np.sum(residuals ** 2)) / n
+
+    return {
+        "A":       A_f,
+        "V50":     V50_f,
+        "K":       K_f,
+        "Y0":      Y0_f,
+        "A_err":   A_e,
+        "V50_err": V50_e,
+        "K_err":   K_e,
+        "Y0_err":  Y0_e,
+        "r2":        r2,
+        "chi_sqr":   chi_sqr,
+        "yfit":      y_fit,
+        "residuals": residuals,
+        "x":         x,
+        "n":         n,
+        "converged": converged,
+    }

@@ -438,11 +438,15 @@ def fit_nmdata(
         return nm_math.fit_poly(data.nparray, degree=degree, sigma=sigma, **common)
     if func_name == "exp":
         return nm_math.fit_exp(data.nparray, x_origin=x_origin, p0=p0, sigma=sigma, maxfev=maxfev, **common)
+    if func_name == "exp2":
+        return nm_math.fit_exp2(data.nparray, x_origin=x_origin, p0=p0, sigma=sigma, maxfev=maxfev, **common)
     if func_name == "gauss":
         return nm_math.fit_gauss(data.nparray, p0=p0, sigma=sigma, maxfev=maxfev, **common)
+    if func_name == "boltzmann":
+        return nm_math.fit_boltzmann(data.nparray, p0=p0, sigma=sigma, maxfev=maxfev, **common)
     raise ValueError(
-        "fit_nmdata: func_name must be 'line', 'poly2'–'poly9', 'exp', or 'gauss', got %r"
-        % func_name
+        "fit_nmdata: func_name must be 'line', 'poly2'–'poly9', 'exp', 'exp2', "
+        "'gauss', or 'boltzmann', got %r" % func_name
     )
 
 
