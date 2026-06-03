@@ -2556,3 +2556,4 @@ def fit_boltzmann(
         "n":         n,
         "converged": converged,
     }
+
