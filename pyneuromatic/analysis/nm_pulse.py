@@ -111,6 +111,8 @@ class NMPulse:
         self._interval_type: str = "fixed"
         self._seed: int | None = None
         self._train_duration: float = math.inf
+        self._binomial_n: int = 0
+        self._binomial_p: float = 1.0
 
         if config is not None:
             self._config_set(config, quiet=True)
@@ -430,6 +432,37 @@ class NMPulse:
             "%s[%r].train_duration = %r" % (self._nm_path, self._name, self._train_duration)
         )
 
+    @property
+    def binomial_n(self) -> int:
+        """Number of release sites for binomial quantal release. 0 = disabled."""
+        return self._binomial_n
+
+    @binomial_n.setter
+    def binomial_n(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "binomial_n", "int"))
+        if value < 0:
+            raise ValueError("binomial_n must be >= 0, got %d" % value)
+        self._binomial_n = value
+        nmh.history("set binomial_n=%d" % value, path=self._name)
+        add_nm_command("%s[%r].binomial_n = %d" % (self._nm_path, self._name, self._binomial_n))
+
+    @property
+    def binomial_p(self) -> float:
+        """Probability of release per site (0 < p <= 1). Used when binomial_n > 0."""
+        return self._binomial_p
+
+    @binomial_p.setter
+    def binomial_p(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "binomial_p", "float"))
+        value = float(value)
+        if value <= 0 or value > 1:
+            raise ValueError("binomial_p must be in (0, 1], got %g" % value)
+        self._binomial_p = value
+        nmh.history("set binomial_p=%g" % value, path=self._name)
+        add_nm_command("%s[%r].binomial_p = %g" % (self._nm_path, self._name, self._binomial_p))
+
     def _interval_type_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "interval_type", "string"))
@@ -494,23 +527,39 @@ class NMPulse:
         duration = self._duration + self._duration_delta * occ + (
             _rng.normal(0.0, self._duration_stdv) if self._duration_stdv > 0 else 0.0)
 
+        rng = np.random.default_rng(self._seed) if self._seed is not None else _rng
+
         if self._n_pulses == 1:
             self._last_onset_times: list[float] = [onset]
+            if self._binomial_n > 0:
+                k = int(rng.binomial(self._binomial_n, self._binomial_p))
+                self._last_quantal_content: list[int] = [k]
+                if k == 0:
+                    return np.zeros(n_points, dtype=float)
+                return k * self._func.waveform(n_points, xstart, xdelta, amp, onset, duration)
+            self._last_quantal_content = [1]
             return self._func.waveform(n_points, xstart, xdelta, amp, onset, duration)
 
-        rng = np.random.default_rng(self._seed) if self._seed is not None else _rng
         y = np.zeros(n_points, dtype=float)
         onset_i = onset
         count = 0
         train_end = onset + self._train_duration
         onset_times: list[float] = []
+        quantal_content: list[int] = []
         while True:
             if self._n_pulses > 0 and count >= self._n_pulses:
                 break
             if not math.isinf(self._train_duration) and onset_i >= train_end:
                 break
             onset_times.append(onset_i)
-            y += self._func.waveform(n_points, xstart, xdelta, amp, onset_i, duration)
+            if self._binomial_n > 0:
+                k = int(rng.binomial(self._binomial_n, self._binomial_p))
+                quantal_content.append(k)
+                if k > 0:
+                    y += k * self._func.waveform(n_points, xstart, xdelta, amp, onset_i, duration)
+            else:
+                quantal_content.append(1)
+                y += self._func.waveform(n_points, xstart, xdelta, amp, onset_i, duration)
             count += 1
             if self._interval_type == "poisson":
                 iv = rng.exponential(scale=self._interval)
@@ -522,6 +571,7 @@ class NMPulse:
             iv = min(iv, self._interval_max)
             onset_i += iv
         self._last_onset_times = onset_times
+        self._last_quantal_content = quantal_content
         return y
 
     # ------------------------------------------------------------------
@@ -552,7 +602,8 @@ class NMPulse:
                 pulse_name = v
             elif kl in _FUNC_ONLY_KEYS:
                 func_kwargs[kl] = v
-            elif kl in ("epoch", "epoch_delta", "n_pulses", "interval_type", "enabled", "seed") \
+            elif kl in ("epoch", "epoch_delta", "n_pulses", "interval_type", "enabled", "seed",
+                        "binomial_n", "binomial_p") \
                     or kl in _FLOAT_ATTRS:  # includes interval, interval_stdv, train_duration
                 nm_attrs[kl] = v
             else:
@@ -577,6 +628,10 @@ class NMPulse:
                 self.enabled = v
             elif kl == "seed":
                 self.seed = v
+            elif kl == "binomial_n":
+                self.binomial_n = v
+            elif kl == "binomial_p":
+                self.binomial_p = v
             else:
                 self._float_set(kl, v, quiet=True)
 
@@ -613,6 +668,8 @@ class NMPulse:
             "interval_max":   self._interval_max,
             "interval_type":  self._interval_type,
             "train_duration":    self._train_duration,
+            "binomial_n":        self._binomial_n,
+            "binomial_p":        self._binomial_p,
         }
         # Merge func-specific entries (pulse name + shape params like tau/freq/phase).
         d.update(self._func.to_dict())

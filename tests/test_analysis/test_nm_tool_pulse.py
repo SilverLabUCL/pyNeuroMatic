@@ -1429,6 +1429,169 @@ class TestNMToolPulsePoisson(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# NMPulse — binomial release
+# ---------------------------------------------------------------------------
+
+class TestNMPulseBinomial(unittest.TestCase):
+
+    def test_defaults(self):
+        p = NMPulse()
+        self.assertEqual(p.binomial_n, 0)
+        self.assertAlmostEqual(p.binomial_p, 1.0)
+
+    def test_binomial_n_setter(self):
+        p = NMPulse()
+        p.binomial_n = 5
+        self.assertEqual(p.binomial_n, 5)
+
+    def test_binomial_n_negative_raises(self):
+        p = NMPulse()
+        with self.assertRaises(ValueError):
+            p.binomial_n = -1
+
+    def test_binomial_n_bool_raises(self):
+        p = NMPulse()
+        with self.assertRaises(TypeError):
+            p.binomial_n = True
+
+    def test_binomial_p_setter(self):
+        p = NMPulse()
+        p.binomial_p = 0.3
+        self.assertAlmostEqual(p.binomial_p, 0.3)
+
+    def test_binomial_p_zero_raises(self):
+        p = NMPulse()
+        with self.assertRaises(ValueError):
+            p.binomial_p = 0.0
+
+    def test_binomial_p_above_one_raises(self):
+        p = NMPulse()
+        with self.assertRaises(ValueError):
+            p.binomial_p = 1.1
+
+    def test_binomial_p_bool_raises(self):
+        p = NMPulse()
+        with self.assertRaises(TypeError):
+            p.binomial_p = True
+
+    def test_config_set(self):
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "binomial_n": 10, "binomial_p": 0.5})
+        self.assertEqual(p.binomial_n, 10)
+        self.assertAlmostEqual(p.binomial_p, 0.5)
+
+    def test_to_dict_round_trip(self):
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "binomial_n": 8, "binomial_p": 0.4, "seed": 7})
+        p2 = NMPulse.from_dict(p.to_dict())
+        self.assertEqual(p, p2)
+
+    def test_disabled_when_n_zero(self):
+        # binomial_n=0 → quantal content always 1
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "seed": 1})
+        p.waveform(50, 0.0, 1.0, 0)
+        self.assertEqual(p._last_quantal_content, [1])
+
+    def test_failure_produces_zeros(self):
+        # binomial_p so low that with seed all trials fail
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "binomial_n": 1, "binomial_p": 0.01,
+                             "seed": 99})
+        # run many epochs until a failure occurs
+        failed = False
+        for epoch in range(20):
+            y = p.waveform(50, 0.0, 1.0, epoch)
+            if p._last_quantal_content[0] == 0:
+                np.testing.assert_array_equal(y, 0.0)
+                failed = True
+                break
+        self.assertTrue(failed, "expected at least one failure in 20 trials")
+
+    def test_quantal_content_bounded(self):
+        # k must be in [0, binomial_n]
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 3.0, "binomial_n": 5, "binomial_p": 0.5,
+                             "seed": 42})
+        for epoch in range(20):
+            p.waveform(50, 0.0, 1.0, epoch)
+            k = p._last_quantal_content[0]
+            self.assertGreaterEqual(k, 0)
+            self.assertLessEqual(k, 5)
+
+    def test_amplitude_scales_with_k(self):
+        # k=2 → peak amplitude = 2 * amp
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "binomial_n": 5, "binomial_p": 1.0})
+        # p=1.0 → k always equals binomial_n=5
+        y = p.waveform(50, 0.0, 1.0, 0)
+        self.assertAlmostEqual(np.max(y), 5.0)
+        self.assertEqual(p._last_quantal_content[0], 5)
+
+    def test_train_quantal_content_length(self):
+        # one quantal content value per pulse in the train
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 3.0, "n_pulses": 6, "interval": 10.0,
+                             "binomial_n": 4, "binomial_p": 0.5, "seed": 1})
+        p.waveform(100, 0.0, 1.0, 0)
+        self.assertEqual(len(p._last_quantal_content), 6)
+
+    def test_train_quantal_content_bounded(self):
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 3.0, "n_pulses": 10, "interval": 10.0,
+                             "binomial_n": 3, "binomial_p": 0.6, "seed": 5})
+        p.waveform(200, 0.0, 1.0, 0)
+        for k in p._last_quantal_content:
+            self.assertGreaterEqual(k, 0)
+            self.assertLessEqual(k, 3)
+
+
+# ---------------------------------------------------------------------------
+# NMToolPulse — binomial toolfolder output
+# ---------------------------------------------------------------------------
+
+class TestNMToolPulseBinomialOutput(unittest.TestCase):
+
+    def _run_binomial(self, binomial_n, binomial_p, seed=42):
+        t = NMToolPulse()
+        t.n_points = 200
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+                      "n_pulses": 5, "interval": 20.0,
+                      "binomial_n": binomial_n, "binomial_p": binomial_p, "seed": seed})
+        folder = _run_tool(t, [_make_empty_data("w0", n=200)])
+        return folder.toolfolders["Pulse_0"]
+
+    def test_pgq_array_created(self):
+        tf = self._run_binomial(4, 0.5)
+        self.assertIn("PGQ_0", tf.data)
+
+    def test_pgt_and_pgq_same_length(self):
+        tf = self._run_binomial(4, 0.5)
+        times   = tf.data["PGT_0"].nparray
+        quantal = tf.data["PGQ_0"].nparray
+        self.assertEqual(len(times), len(quantal))
+
+    def test_quantal_content_bounded(self):
+        tf = self._run_binomial(binomial_n=3, binomial_p=0.7)
+        quantal = tf.data["PGQ_0"].nparray
+        self.assertTrue(np.all(quantal >= 0))
+        self.assertTrue(np.all(quantal <= 3))
+
+    def test_p_one_always_full_release(self):
+        tf = self._run_binomial(binomial_n=4, binomial_p=1.0)
+        quantal = tf.data["PGQ_0"].nparray
+        np.testing.assert_array_equal(quantal, 4)
+
+    def test_note_contains_binomial_params(self):
+        tf = self._run_binomial(5, 0.3)
+        note_text = tf.data["PGT_0"].notes.note
+        self.assertIn("binomial_n=5", note_text)
+        self.assertIn("binomial_p=0.3", note_text)
+
+
+# ---------------------------------------------------------------------------
 # NMPulseContainer — train via n_pulses
 # ---------------------------------------------------------------------------
 
