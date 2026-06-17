@@ -73,7 +73,7 @@ class NMToolPulse(NMTool):
     Examples::
 
         t = NMToolPulse()
-        t.pulses.new({"pulse": "square", "amp": 1, "onset": 5, "width": 10})
+        t.pulses.new({"pulse": "square", "amp": 1, "onset": 5, "duration": 10})
         t.pulses.new({"pulse": "exp", "amp": 0.5, "onset": 5, "tau": 20})
         # drive directly (no NMManager)
         t.run_all([{}])
@@ -87,15 +87,16 @@ class NMToolPulse(NMTool):
         self.__xstart:   float = self._config.xstart
         self.__xdelta:   float = self._config.xdelta
         self.__prefix:   str   = self._config.prefix
-        self.__chan:  str   = self._config.chan
+        self.__chan:     str   = self._config.chan
         self._overwrite        = self._config.overwrite
         self._results_to_numpy = True
 
         self.__pulses: NMPulseContainer = NMPulseContainer(
             nm_path=self._name + ".pulses"
         )
-        self._waveforms:   list[np.ndarray] = []
-        self._epoch_names: list[str]        = []
+        self._waveforms:   list[np.ndarray]   = []
+        self._epoch_names: list[str]          = []
+        self._pulse_times: list[list[float]]  = []
 
     # ------------------------------------------------------------------
     # Properties
@@ -204,6 +205,7 @@ class NMToolPulse(NMTool):
             raise ValueError("prefix must be non-empty")
         self._waveforms = []
         self._epoch_names = []
+        self._pulse_times = []
         return True
 
     def run(self) -> bool:
@@ -220,14 +222,17 @@ class NMToolPulse(NMTool):
         epoch_name = self.data.name if self.data else "wave_%d" % epoch_idx
 
         y = np.zeros(self.__n_points, dtype=float)
+        epoch_times: list[float] = []
         for p in self.__pulses:
-            if p.targets_epoch(epoch_idx):
+            if p.enabled and p.targets_epoch(epoch_idx):
                 y += p.waveform(
                     self.__n_points, self.__xstart, self.__xdelta, epoch_idx
                 )
+                epoch_times.extend(getattr(p, "_last_onset_times", []))
 
         self._waveforms.append(y)
         self._epoch_names.append(epoch_name)
+        self._pulse_times.append(sorted(epoch_times))
         return True
 
     def run_finish(self) -> bool:
@@ -252,11 +257,22 @@ class NMToolPulse(NMTool):
             parts = [d["pulse"]]
             parts.append("amp=%g" % p.amp)
             parts.append("onset=%g" % p.onset)
-            if not math.isinf(p.width):
-                parts.append("width=%g" % p.width)
+            if not math.isinf(p.duration):
+                parts.append("duration=%g" % p.duration)
             for key in ("tau", "freq", "phase", "f0", "f1"):
                 if key in d:
                     parts.append("%s=%g" % (key, d[key]))
+            if p.n_pulses != 1 or not math.isinf(p.train_duration):
+                parts.append("n_pulses=%d" % p.n_pulses)
+                parts.append("interval=%g" % p.interval)
+                if not math.isinf(p.train_duration):
+                    parts.append("train_duration=%g" % p.train_duration)
+                if p.interval_type != "fixed":
+                    parts.append("interval_type=%r" % p.interval_type)
+                if p.interval_stdv > 0:
+                    parts.append("interval_stdv=%g" % p.interval_stdv)
+                if p.seed is not None:
+                    parts.append("seed=%d" % p.seed)
             if p.epoch != 0 or p.epoch_delta != 0:
                 parts.append("epoch=%d" % p.epoch)
                 parts.append("epoch_delta=%d" % p.epoch_delta)
@@ -314,4 +330,17 @@ class NMToolPulse(NMTool):
             nparray=np.array(self._epoch_names, dtype=object),
         )
 
+        self._write_times_to_toolfolder(note)
         return f
+
+    def _write_times_to_toolfolder(self, note: str) -> None:
+        """Write per-epoch onset times to a ``Pulse`` toolfolder with ``PGT_`` prefix."""
+        tf = self._make_toolfolder("Pulse", overwrite=self._overwrite)
+        times_stem = "PGT_" + self.__chan
+        for idx, times in enumerate(self._pulse_times):
+            name = times_stem + str(idx)
+            d = tf.data.new(
+                name,
+                nparray=np.array(times, dtype=float),
+            )
+            self._add_note(d, note)

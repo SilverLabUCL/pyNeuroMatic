@@ -525,7 +525,7 @@ class NMFolder(NMObject):
             folder.new_dataseries("Record", n_channels=2, n_epochs=3, ep_start=5)
 
         Args:
-            prefix: Wave prefix (e.g. ``"Record"``). Must satisfy
+            prefix: Data array name prefix (e.g. ``"Record"``). Must satisfy
                 ``nmu.name_ok()``.
             n_channels: Number of channels to generate.
             n_epochs: Number of epochs to generate.

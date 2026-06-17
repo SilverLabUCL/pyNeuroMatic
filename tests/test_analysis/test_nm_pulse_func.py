@@ -23,8 +23,8 @@ from pyneuromatic.analysis.nm_pulse_func import (
 # helpers
 # ---------------------------------------------------------------------------
 
-def _wave(func, n=100, xstart=0.0, xdelta=1.0, amp=1.0, onset=0.0, width=math.inf):
-    return func.waveform(n, xstart, xdelta, amp, onset, width)
+def _wave(func, n=100, xstart=0.0, xdelta=1.0, amp=1.0, onset=0.0, duration=math.inf):
+    return func.waveform(n, xstart, xdelta, amp, onset, duration)
 
 
 # ---------------------------------------------------------------------------
@@ -43,16 +43,16 @@ class TestNMPulseFuncSquare(unittest.TestCase):
         self.assertEqual(self.f.to_dict(), {"pulse": "square"})
 
     def test_waveform_inside_window(self):
-        y = _wave(self.f, amp=2.0, onset=10.0, width=5.0)
+        y = _wave(self.f, amp=2.0, onset=10.0, duration=5.0)
         self.assertAlmostEqual(y[10], 2.0)
         self.assertAlmostEqual(y[14], 2.0)
 
     def test_waveform_outside_window(self):
-        y = _wave(self.f, amp=2.0, onset=10.0, width=5.0)
+        y = _wave(self.f, amp=2.0, onset=10.0, duration=5.0)
         self.assertAlmostEqual(y[9], 0.0)
         self.assertAlmostEqual(y[15], 0.0)
 
-    def test_inf_width_step(self):
+    def test_inf_duration_step(self):
         y = _wave(self.f, amp=1.0, onset=10.0)
         self.assertAlmostEqual(y[9], 0.0)
         self.assertAlmostEqual(y[10], 1.0)
@@ -78,19 +78,19 @@ class TestNMPulseFuncRamp(unittest.TestCase):
 
     def test_ramp_plus_rises(self):
         f = NMPulseFuncRamp("ramp+")
-        y = _wave(f, n=11, amp=1.0, onset=0.0, width=10.0)
+        y = _wave(f, n=11, amp=1.0, onset=0.0, duration=10.0)
         self.assertAlmostEqual(y[0], 0.0, places=5)
         self.assertAlmostEqual(y[9], 0.9, places=5)
         self.assertAlmostEqual(y[10], 0.0)
 
     def test_ramp_minus_falls(self):
         f = NMPulseFuncRamp("ramp-")
-        y = _wave(f, n=11, amp=1.0, onset=0.0, width=10.0)
+        y = _wave(f, n=11, amp=1.0, onset=0.0, duration=10.0)
         self.assertAlmostEqual(y[0], 1.0, places=5)
         self.assertAlmostEqual(y[9], 0.1, places=5)
         self.assertAlmostEqual(y[10], 0.0)
 
-    def test_inf_width_reaches_amp_at_end(self):
+    def test_inf_duration_reaches_amp_at_end(self):
         f = NMPulseFuncRamp("ramp+")
         y = _wave(f, n=11, xdelta=1.0, amp=1.0, onset=0.0)
         self.assertAlmostEqual(y[0], 0.0, places=5)
@@ -194,8 +194,8 @@ class TestNMPulseFuncSin(unittest.TestCase):
         y = _wave(self.f, amp=1.0, onset=10.0)
         self.assertAlmostEqual(y[9], 0.0)
 
-    def test_truncated_by_width(self):
-        y = _wave(self.f, amp=1.0, onset=0.0, width=5.0)
+    def test_truncated_by_duration(self):
+        y = _wave(self.f, amp=1.0, onset=0.0, duration=5.0)
         self.assertAlmostEqual(y[5], 0.0)
 
     def test_to_dict(self):
@@ -272,10 +272,10 @@ class TestNMPulseFuncSinZap(unittest.TestCase):
 class TestNMPulseFuncUser(unittest.TestCase):
 
     def setUp(self):
-        # one full sine cycle, 50 samples, xdelta_data=1.0
+        # one full sine cycle, 50 samples, data_xdelta=1.0
         t = np.linspace(0, 2 * math.pi, 50, endpoint=False)
         self.raw = np.sin(t)
-        self.f = NMPulseFuncUser(data=self.raw, xdelta_data=1.0)
+        self.f = NMPulseFuncUser(data=self.raw, data_xdelta=1.0)
 
     def test_name(self):
         self.assertEqual(self.f.name, "user")
@@ -289,8 +289,8 @@ class TestNMPulseFuncUser(unittest.TestCase):
         for i in range(20):
             self.assertAlmostEqual(y[i], 0.0)
 
-    def test_truncated_by_width(self):
-        y = _wave(self.f, n=200, xdelta=1.0, amp=1.0, onset=0.0, width=10.0)
+    def test_truncated_by_duration(self):
+        y = _wave(self.f, n=200, xdelta=1.0, amp=1.0, onset=0.0, duration=10.0)
         self.assertAlmostEqual(y[10], 0.0)
         self.assertAlmostEqual(y[50], 0.0)
 
@@ -302,7 +302,7 @@ class TestNMPulseFuncUser(unittest.TestCase):
     def test_to_dict_no_data(self):
         d = self.f.to_dict()
         self.assertEqual(d["pulse"], "user")
-        self.assertAlmostEqual(d["xdelta_data"], 1.0)
+        self.assertAlmostEqual(d["data_xdelta"], 1.0)
         self.assertEqual(d["n_data"], 50)
         self.assertNotIn("data", d)
 
@@ -315,9 +315,9 @@ class TestNMPulseFuncUser(unittest.TestCase):
         y = _wave(f, n=50, amp=2.0, onset=0.0)
         np.testing.assert_array_equal(y, 0.0)
 
-    def test_bad_xdelta_data(self):
+    def test_bad_data_xdelta(self):
         with self.assertRaises(ValueError):
-            NMPulseFuncUser(data=self.raw, xdelta_data=0.0)
+            NMPulseFuncUser(data=self.raw, data_xdelta=0.0)
 
     def test_factory_requires_data(self):
         with self.assertRaises(KeyError):
