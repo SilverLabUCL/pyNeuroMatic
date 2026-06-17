@@ -94,9 +94,10 @@ class NMToolPulse(NMTool):
         self.__pulses: NMPulseContainer = NMPulseContainer(
             nm_path=self._name + ".pulses"
         )
-        self._waveforms:   list[np.ndarray]   = []
-        self._epoch_names: list[str]          = []
-        self._pulse_times: list[list[float]]  = []
+        self._waveforms:       list[np.ndarray]  = []
+        self._epoch_names:     list[str]         = []
+        self._pulse_times:     list[list[float]] = []
+        self._quantal_content: list[list[int]]   = []
 
     # ------------------------------------------------------------------
     # Properties
@@ -206,6 +207,7 @@ class NMToolPulse(NMTool):
         self._waveforms = []
         self._epoch_names = []
         self._pulse_times = []
+        self._quantal_content = []
         return True
 
     def run(self) -> bool:
@@ -223,16 +225,24 @@ class NMToolPulse(NMTool):
 
         y = np.zeros(self.__n_points, dtype=float)
         epoch_times: list[float] = []
+        epoch_quantal: list[int] = []
         for p in self.__pulses:
             if p.enabled and p.targets_epoch(epoch_idx):
                 y += p.waveform(
                     self.__n_points, self.__xstart, self.__xdelta, epoch_idx
                 )
                 epoch_times.extend(getattr(p, "_last_onset_times", []))
+                epoch_quantal.extend(getattr(p, "_last_quantal_content", []))
+
+        # sort times and quantal content together by onset time
+        if epoch_times:
+            paired = sorted(zip(epoch_times, epoch_quantal))
+            epoch_times, epoch_quantal = [list(x) for x in zip(*paired)]
 
         self._waveforms.append(y)
         self._epoch_names.append(epoch_name)
-        self._pulse_times.append(sorted(epoch_times))
+        self._pulse_times.append(epoch_times)
+        self._quantal_content.append(epoch_quantal)
         return True
 
     def run_finish(self) -> bool:
@@ -273,6 +283,9 @@ class NMToolPulse(NMTool):
                     parts.append("interval_stdv=%g" % p.interval_stdv)
                 if p.seed is not None:
                     parts.append("seed=%d" % p.seed)
+            if p.binomial_n > 0:
+                parts.append("binomial_n=%d" % p.binomial_n)
+                parts.append("binomial_p=%g" % p.binomial_p)
             if p.epoch != 0 or p.epoch_delta != 0:
                 parts.append("epoch=%d" % p.epoch)
                 parts.append("epoch_delta=%d" % p.epoch_delta)
@@ -334,13 +347,20 @@ class NMToolPulse(NMTool):
         return f
 
     def _write_times_to_toolfolder(self, note: str) -> None:
-        """Write per-epoch onset times to a ``Pulse`` toolfolder with ``PGT_`` prefix."""
+        """Write per-epoch onset times (PGT_) and quantal content (PGQ_) to a Pulse toolfolder."""
         tf = self._make_toolfolder("Pulse", overwrite=self._overwrite)
-        times_stem = "PGT_" + self.__chan
-        for idx, times in enumerate(self._pulse_times):
-            name = times_stem + str(idx)
+        times_stem   = "PGT_" + self.__chan
+        quantal_stem = "PGQ_" + self.__chan
+        for idx, (times, quantal) in enumerate(
+            zip(self._pulse_times, self._quantal_content)
+        ):
             d = tf.data.new(
-                name,
+                times_stem + str(idx),
                 nparray=np.array(times, dtype=float),
+            )
+            self._add_note(d, note)
+            d = tf.data.new(
+                quantal_stem + str(idx),
+                nparray=np.array(quantal, dtype=int),
             )
             self._add_note(d, note)
