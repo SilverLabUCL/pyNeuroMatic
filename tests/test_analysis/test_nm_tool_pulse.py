@@ -835,10 +835,9 @@ class TestNMToolPulseOverwrite(unittest.TestCase):
         folder = NMFolder(NM, name="TestFolder")
         data = [_make_empty_data("w0", n=500)]
         targets, _ = _make_targets(data, folder=folder)
-        np.random.seed(1)
         t.run_all(targets)
         times_first = list(folder.toolfolders["Pulse_0"].data["PGT_0"].nparray)
-        np.random.seed(2)
+        t.pulses["p0"].seed = 2
         t.run_all(targets)
         times_second = list(folder.toolfolders["Pulse_0"].data["PGT_0"].nparray)
         self.assertNotEqual(times_first, times_second)
@@ -1320,9 +1319,9 @@ class TestNMPulseTrainWaveform(unittest.TestCase):
     def test_gaussian_interval_differs_from_fixed(self):
         cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
                "n_pulses": 5, "interval": 20.0}
-        np.random.seed(42)
         p1 = NMPulse(config={**cfg, "interval_type": "fixed"})
-        p2 = NMPulse(config={**cfg, "interval_type": "gaussian", "interval_stdv": 5.0})
+        p2 = NMPulse(config={**cfg, "interval_type": "gaussian",
+                              "interval_stdv": 5.0, "seed": 42})
         y_fixed    = p1.waveform(200, 0.0, 1.0, 0)
         y_gaussian = p2.waveform(200, 0.0, 1.0, 0)
         self.assertFalse(np.array_equal(y_fixed, y_gaussian))
@@ -1330,25 +1329,23 @@ class TestNMPulseTrainWaveform(unittest.TestCase):
     def test_interval_min_enforced(self):
         # interval_min=15 on a gaussian train with mean=10, large stdv
         # all intervals should be >= 15
-        np.random.seed(42)
         p = NMPulse(config={
             "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
             "n_pulses": 10, "interval": 10.0, "interval_stdv": 8.0,
-            "interval_type": "gaussian", "interval_min": 15.0,
+            "interval_type": "gaussian", "interval_min": 15.0, "seed": 42,
         })
         p.waveform(200, 0.0, 1.0, 0)
         times = p._last_onset_times
         for i in range(1, len(times)):
-            self.assertGreaterEqual(times[i] - times[i - 1], 15.0)
+            self.assertGreaterEqual(times[i] - times[i - 1], 15.0 - 1e-10)
 
     def test_interval_max_enforced(self):
         # interval_max=25 on a poisson train with mean=100 (very long gaps)
         # all intervals should be <= 25
-        np.random.seed(42)
         p = NMPulse(config={
             "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
             "n_pulses": 5, "interval": 100.0,
-            "interval_type": "poisson", "interval_max": 25.0,
+            "interval_type": "poisson", "interval_max": 25.0, "seed": 42,
         })
         p.waveform(200, 0.0, 1.0, 0)
         times = p._last_onset_times
@@ -1401,14 +1398,13 @@ class TestNMPulseTrainWaveform(unittest.TestCase):
 class TestNMToolPulsePoisson(unittest.TestCase):
 
     def _run_poisson(self, n_pulses, mean_interval, seed=0):
-        np.random.seed(seed)
         t = NMToolPulse()
         t.n_points = 5000
         t.xstart = 0.0
         t.xdelta = 1.0
         t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
                       "n_pulses": n_pulses, "interval": mean_interval,
-                      "interval_type": "poisson"})
+                      "interval_type": "poisson", "seed": seed})
         folder = _run_tool(t, [_make_empty_data("w0", n=5000)])
         return folder.toolfolders["Pulse_0"].data["PGT_0"].nparray
 
@@ -1423,7 +1419,6 @@ class TestNMToolPulsePoisson(unittest.TestCase):
 
     def test_intervals_differ_from_fixed(self):
         # Poisson intervals should not all equal the mean interval
-        np.random.seed(42)
         times = self._run_poisson(n_pulses=10, mean_interval=50.0, seed=42)
         intervals = [times[i] - times[i - 1] for i in range(1, len(times))]
         self.assertFalse(all(abs(iv - 50.0) < 1e-10 for iv in intervals))
