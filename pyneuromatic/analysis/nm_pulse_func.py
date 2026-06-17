@@ -42,9 +42,9 @@ class NMPulseFunc:
 
     Lightweight class (following NMStatFunc pattern) that represents a pulse
     shape with its shape-specific parameters.  Universal parameters
-    (``amp``, ``onset``, ``width``) are passed as arguments to
+    (``amp``, ``onset``, ``duration``) are passed as arguments to
     :meth:`waveform` by the caller (:class:`~pyneuromatic.analysis.nm_pulse.NMPulse`)
-    so that per-epoch variation (``delta_*``/``stdv_*``) can be applied
+    so that per-epoch variation (``*_delta``/``*_stdv``) can be applied
     before dispatch.
 
     Each subclass stores only its own shape-specific parameters and
@@ -86,27 +86,27 @@ class NMPulseFunc:
         xstart: float,
         xdelta: float,
         onset: float,
-        width: float,
+        duration: float,
     ) -> tuple:
         """Validate args and build the x-axis, zero output array, and window mask.
 
         Returns:
             ``(x, y, mask)`` — x-axis array, zero-filled output array, and
-            boolean mask selecting samples in ``[onset, onset + width)``.
-            When ``width`` is ``inf`` the mask selects ``x >= onset``.
+            boolean mask selecting samples in ``[onset, onset + duration)``.
+            When ``duration`` is ``inf`` the mask selects ``x >= onset``.
         """
         if n_points < 1:
             raise ValueError("n_points must be >= 1, got %d" % n_points)
         if xdelta <= 0:
             raise ValueError("xdelta must be > 0, got %s" % xdelta)
-        if width <= 0:
-            raise ValueError("width must be > 0, got %s" % width)
+        if duration <= 0:
+            raise ValueError("duration must be > 0, got %s" % duration)
         x = xstart + np.arange(n_points) * xdelta
         y = np.zeros(n_points, dtype=float)
-        if math.isinf(width):
+        if math.isinf(duration):
             mask = x >= onset
         else:
-            mask = (x >= onset) & (x < onset + width)
+            mask = (x >= onset) & (x < onset + duration)
         return x, y, mask
 
     def waveform(
@@ -116,7 +116,7 @@ class NMPulseFunc:
         xdelta: float,
         amp: float,
         onset: float,
-        width: float,
+        duration: float,
         **kwargs,
     ) -> np.ndarray:
         """Generate the waveform for this pulse shape.
@@ -127,7 +127,7 @@ class NMPulseFunc:
             xdelta: Sample interval.
             amp: Pulse amplitude (already varied by caller).
             onset: Pulse start x-value (already varied by caller).
-            width: Pulse duration (already varied by caller).
+            duration: Pulse duration (already varied by caller).
             **kwargs: Shape-specific overrides (e.g. ``tau=`` for exp/alpha).
 
         Returns:
@@ -155,8 +155,8 @@ class NMPulseFuncSquare(NMPulseFunc):
             raise ValueError("name must be 'square', got %r" % name)
         super().__init__(name)
 
-    def waveform(self, n_points, xstart, xdelta, amp, onset, width, **_):
-        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, width)
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
         y[mask] = amp
         return y
 
@@ -174,16 +174,16 @@ class NMPulseFuncRamp(NMPulseFunc):
         super().__init__(name)
         self._direction: str = name[-1]
 
-    def waveform(self, n_points, xstart, xdelta, amp, onset, width, **_):
-        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, width)
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
         if not np.any(mask):
             return y
-        if math.isinf(width):
+        if math.isinf(duration):
             ew = xstart + (n_points - 1) * xdelta - onset
             if ew <= 0:
                 return y
         else:
-            ew = width
+            ew = duration
         t = (x[mask] - onset) / ew
         y[mask] = amp * t if self._direction == "+" else amp * (1.0 - t)
         return y
@@ -218,8 +218,8 @@ class NMPulseFuncExp(NMPulseFunc):
     def to_dict(self) -> dict:
         return {"pulse": self._name, "tau": self._tau}
 
-    def waveform(self, n_points, xstart, xdelta, amp, onset, width, **_):
-        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, width)
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
         y[mask] = amp * np.exp(-(x[mask] - onset) / self._tau)
         return y
 
@@ -253,8 +253,8 @@ class NMPulseFuncAlpha(NMPulseFunc):
     def to_dict(self) -> dict:
         return {"pulse": self._name, "tau": self._tau}
 
-    def waveform(self, n_points, xstart, xdelta, amp, onset, width, **_):
-        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, width)
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
         t = (x[mask] - onset) / self._tau
         y[mask] = amp * t * np.exp(1.0 - t)
         return y
@@ -302,8 +302,8 @@ class NMPulseFuncSin(NMPulseFunc):
     def to_dict(self) -> dict:
         return {"pulse": self._name, "freq": self._freq, "phase": self._phase}
 
-    def waveform(self, n_points, xstart, xdelta, amp, onset, width, **_):
-        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, width)
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
         y[mask] = amp * np.sin(2.0 * math.pi * self._freq * (x[mask] - onset) + self._phase)
         return y
 
@@ -353,16 +353,16 @@ class NMPulseFuncSinZap(NMPulseFunc):
     def to_dict(self) -> dict:
         return {"pulse": self._name, "f0": self._f0, "f1": self._f1}
 
-    def waveform(self, n_points, xstart, xdelta, amp, onset, width, **_):
-        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, width)
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
         if not np.any(mask):
             return y
-        if math.isinf(width):
+        if math.isinf(duration):
             ew = xstart + (n_points - 1) * xdelta - onset
             if ew <= 0:
                 return y
         else:
-            ew = width
+            ew = duration
         t = x[mask] - onset
         phi = 2.0 * math.pi * (self._f0 * t + (self._f1 - self._f0) / (2.0 * ew) * t ** 2)
         y[mask] = amp * np.sin(phi)
@@ -375,7 +375,7 @@ class NMPulseFuncUser(NMPulseFunc):
     The stored numpy array is treated as a template: at ``waveform()`` time it
     is normalised so its absolute peak maps to *amp*, shifted to start at
     *onset*, resampled to the target x-scale via ``np.interp``, and truncated
-    at ``onset + width``.
+    at ``onset + duration``.
 
     .. note::
         The data array is **not** included in :meth:`to_dict` output (JSON /
@@ -386,17 +386,17 @@ class NMPulseFuncUser(NMPulseFunc):
         name: Must be ``"user"``.
         data: 1-D numpy array representing the waveform template (any
             sampling rate).
-        xdelta_data: Sample interval of *data* in the same x-units as the
+        data_xdelta: Sample interval of *data* in the same x-units as the
             target waveform. Default 1.0.
     """
 
-    _VALID_KEYS: frozenset[str] = frozenset({"data", "xdelta_data"})
+    _VALID_KEYS: frozenset[str] = frozenset({"data", "data_xdelta"})
 
     def __init__(
         self,
         name: str = "user",
         data: np.ndarray | None = None,
-        xdelta_data: float = 1.0,
+        data_xdelta: float = 1.0,
     ) -> None:
         if name != "user":
             raise ValueError("name must be 'user', got %r" % name)
@@ -405,14 +405,14 @@ class NMPulseFuncUser(NMPulseFunc):
         data = np.asarray(data, dtype=float)
         if data.ndim != 1 or len(data) == 0:
             raise ValueError("data must be a non-empty 1-D array")
-        if isinstance(xdelta_data, bool) or not isinstance(xdelta_data, (int, float)):
-            raise TypeError(nmu.type_error_str(xdelta_data, "xdelta_data", "float"))
-        xdelta_data = float(xdelta_data)
-        if xdelta_data <= 0:
-            raise ValueError("xdelta_data must be > 0, got %s" % xdelta_data)
+        if isinstance(data_xdelta, bool) or not isinstance(data_xdelta, (int, float)):
+            raise TypeError(nmu.type_error_str(data_xdelta, "data_xdelta", "float"))
+        data_xdelta = float(data_xdelta)
+        if data_xdelta <= 0:
+            raise ValueError("data_xdelta must be > 0, got %s" % data_xdelta)
         super().__init__(name)
         self._data: np.ndarray = data
-        self._xdelta_data: float = xdelta_data
+        self._data_xdelta: float = data_xdelta
 
     @property
     def data(self) -> np.ndarray:
@@ -420,19 +420,19 @@ class NMPulseFuncUser(NMPulseFunc):
         return self._data
 
     @property
-    def xdelta_data(self) -> float:
+    def data_xdelta(self) -> float:
         """Sample interval of the template array."""
-        return self._xdelta_data
+        return self._data_xdelta
 
     def to_dict(self) -> dict:
         return {
             "pulse": self._name,
-            "xdelta_data": self._xdelta_data,
+            "data_xdelta": self._data_xdelta,
             "n_data": len(self._data),
         }
 
-    def waveform(self, n_points, xstart, xdelta, amp, onset, width, **_):
-        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, width)
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
         if not np.any(mask):
             return y
 
@@ -441,7 +441,7 @@ class NMPulseFuncUser(NMPulseFunc):
             return y
         data_norm = self._data / peak
 
-        x_src = np.arange(len(self._data)) * self._xdelta_data
+        x_src = np.arange(len(self._data)) * self._data_xdelta
         x_tgt = x[mask] - onset
         y_interp = np.interp(x_tgt, x_src, data_norm, left=0.0, right=0.0)
         y[mask] = amp * y_interp

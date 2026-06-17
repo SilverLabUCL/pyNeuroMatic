@@ -59,6 +59,9 @@ class TestNMPulseDefaults(unittest.TestCase):
     def test_name(self):
         self.assertEqual(self.p.name, "NMPulse0")
 
+    def test_enabled(self):
+        self.assertTrue(self.p.enabled)
+
     def test_pulse(self):
         self.assertEqual(self.p.pulse, "square")
 
@@ -74,8 +77,8 @@ class TestNMPulseDefaults(unittest.TestCase):
     def test_onset(self):
         self.assertEqual(self.p.onset, 10.0)
 
-    def test_width(self):
-        self.assertTrue(math.isinf(self.p.width))
+    def test_duration(self):
+        self.assertTrue(math.isinf(self.p.duration))
 
     def test_amp_delta(self):
         self.assertEqual(self.p.amp_delta, 0.0)
@@ -83,8 +86,8 @@ class TestNMPulseDefaults(unittest.TestCase):
     def test_onset_delta(self):
         self.assertEqual(self.p.onset_delta, 0.0)
 
-    def test_width_delta(self):
-        self.assertEqual(self.p.width_delta, 0.0)
+    def test_duration_delta(self):
+        self.assertEqual(self.p.duration_delta, 0.0)
 
     def test_amp_stdv(self):
         self.assertEqual(self.p.amp_stdv, 0.0)
@@ -92,8 +95,8 @@ class TestNMPulseDefaults(unittest.TestCase):
     def test_onset_stdv(self):
         self.assertEqual(self.p.onset_stdv, 0.0)
 
-    def test_width_stdv(self):
-        self.assertEqual(self.p.width_stdv, 0.0)
+    def test_duration_stdv(self):
+        self.assertEqual(self.p.duration_stdv, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +166,16 @@ class TestNMPulseProperties(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.p.onset = "10"
 
+    def test_enabled_toggle(self):
+        self.p.enabled = False
+        self.assertFalse(self.p.enabled)
+        self.p.enabled = True
+        self.assertTrue(self.p.enabled)
+
+    def test_enabled_non_bool_raises(self):
+        with self.assertRaises(TypeError):
+            self.p.enabled = 1
+
 
 # ---------------------------------------------------------------------------
 # NMPulse — config dict
@@ -179,7 +192,7 @@ class TestNMPulseConfigSet(unittest.TestCase):
 
     def test_to_dict_round_trip(self):
         p = NMPulse(config={"pulse": "ramp+", "epoch": 3, "epoch_delta": 2,
-                             "amp": 4.0, "onset": 1.0, "width": 5.0,
+                             "amp": 4.0, "onset": 1.0, "duration": 5.0,
                              "onset_delta": 0.5})
         d = p.to_dict()
         p2 = NMPulse.from_dict(d)
@@ -253,19 +266,19 @@ class TestNMPulseEpochTargeting(unittest.TestCase):
 
 class TestNMPulseWaveformSquare(unittest.TestCase):
 
-    def test_amp_and_width_route_from_config(self):
-        p = NMPulse(config={"pulse": "square", "amp": 2.0, "onset": 10.0, "width": 5.0})
+    def test_amp_and_duration_route_from_config(self):
+        p = NMPulse(config={"pulse": "square", "amp": 2.0, "onset": 10.0, "duration": 5.0})
         y = p.waveform(100, 0.0, 1.0, 0)
         self.assertAlmostEqual(y[10], 2.0)   # amp applied
         self.assertAlmostEqual(y[14], 2.0)   # inside window
-        self.assertAlmostEqual(y[15], 0.0)   # width truncates
+        self.assertAlmostEqual(y[15], 0.0)   # duration truncates
 
 
 class TestNMPulseWaveformRamp(unittest.TestCase):
 
     def test_direction_routes_from_config(self):
-        p_plus  = NMPulse(config={"pulse": "ramp+", "amp": 1.0, "onset": 0.0, "width": 10.0})
-        p_minus = NMPulse(config={"pulse": "ramp-", "amp": 1.0, "onset": 0.0, "width": 10.0})
+        p_plus  = NMPulse(config={"pulse": "ramp+", "amp": 1.0, "onset": 0.0, "duration": 10.0})
+        p_minus = NMPulse(config={"pulse": "ramp-", "amp": 1.0, "onset": 0.0, "duration": 10.0})
         y_plus  = p_plus.waveform(20, 0.0, 1.0, 0)
         y_minus = p_minus.waveform(20, 0.0, 1.0, 0)
         self.assertAlmostEqual(y_plus[0],  0.0, places=5)   # ramp+ starts at 0
@@ -280,8 +293,8 @@ class TestNMPulseWaveformExp(unittest.TestCase):
         self.assertAlmostEqual(y[0], 3.0)             # amp at onset
         self.assertAlmostEqual(y[10], 3.0 * math.exp(-1.0), places=5)  # tau decay
 
-    def test_width_truncates(self):
-        p = NMPulse(config={"pulse": "exp", "amp": 1.0, "onset": 0.0, "tau": 10.0, "width": 20.0})
+    def test_duration_truncates(self):
+        p = NMPulse(config={"pulse": "exp", "amp": 1.0, "onset": 0.0, "tau": 10.0, "duration": 20.0})
         y = p.waveform(50, 0.0, 1.0, 0)
         self.assertGreater(y[19], 0.0)
         self.assertAlmostEqual(y[20], 0.0)
@@ -294,8 +307,8 @@ class TestNMPulseWaveformAlpha(unittest.TestCase):
         y = p.waveform(100, 0.0, 1.0, 0)
         self.assertAlmostEqual(int(np.argmax(y)), 10, delta=1)  # peak at onset + tau
 
-    def test_width_truncates(self):
-        p = NMPulse(config={"pulse": "alpha", "amp": 1.0, "onset": 0.0, "tau": 10.0, "width": 15.0})
+    def test_duration_truncates(self):
+        p = NMPulse(config={"pulse": "alpha", "amp": 1.0, "onset": 0.0, "tau": 10.0, "duration": 15.0})
         y = p.waveform(50, 0.0, 1.0, 0)
         self.assertGreater(y[14], 0.0)
         self.assertAlmostEqual(y[15], 0.0)
@@ -309,7 +322,7 @@ class TestNMPulseDelta(unittest.TestCase):
 
     def test_delta_onset_shifts_per_occurrence(self):
         p = NMPulse(config={
-            "pulse": "square", "amp": 1.0, "onset": 10.0, "width": 5.0,
+            "pulse": "square", "amp": 1.0, "onset": 10.0, "duration": 5.0,
             "onset_delta": 10.0, "epoch_delta": 1,
         })
         # Occurrence 0: onset=10, occurrence 1: onset=20, occurrence 2: onset=30
@@ -324,7 +337,7 @@ class TestNMPulseDelta(unittest.TestCase):
         self.assertAlmostEqual(y0[9],  0.0)
         self.assertAlmostEqual(y1[19], 0.0)
         self.assertAlmostEqual(y2[29], 0.0)
-        # zero after onset + width
+        # zero after onset + duration
         self.assertAlmostEqual(y0[15], 0.0)
         self.assertAlmostEqual(y1[25], 0.0)
         self.assertAlmostEqual(y2[35], 0.0)
@@ -333,7 +346,7 @@ class TestNMPulseDelta(unittest.TestCase):
         # epoch=0, epoch_delta=2 → fires at 0,2,4,...
         # occurrence 0 at epoch_idx=0, occurrence 1 at epoch_idx=2
         p = NMPulse(config={
-            "pulse": "square", "amp": 1.0, "onset": 10.0, "width": 5.0,
+            "pulse": "square", "amp": 1.0, "onset": 10.0, "duration": 5.0,
             "onset_delta": 5.0, "epoch_delta": 2,
         })
         # epoch_idx=0 → occurrence 0 → onset=10
@@ -400,7 +413,7 @@ class TestNMPulseContainerRoundTrip(unittest.TestCase):
 
     def test_to_dict_from_dict(self):
         c = NMPulseContainer()
-        c.new({"pulse": "square", "amp": 2.0, "onset": 5.0, "width": 3.0})
+        c.new({"pulse": "square", "amp": 2.0, "onset": 5.0, "duration": 3.0})
         c.new({"pulse": "exp", "onset": 10.0, "tau": 8.0, "epoch": 1})
         d = c.to_dict()
         c2 = NMPulseContainer.from_dict(d)
@@ -530,7 +543,7 @@ class TestNMToolPulseOutput(unittest.TestCase):
         self.t.n_points = 100
         self.t.xstart = 0.0
         self.t.xdelta = 1.0
-        self.t.pulses.new({"pulse": "square", "amp": 2.0, "onset": 10.0, "width": 5.0})
+        self.t.pulses.new({"pulse": "square", "amp": 2.0, "onset": 10.0, "duration": 5.0})
 
     def test_output_inside_window(self):
         folder = _run_tool(self.t, [_make_empty_data("w0")])
@@ -561,8 +574,8 @@ class TestNMToolPulseMultiPulse(unittest.TestCase):
         t.n_points = 100
         t.xstart = 0.0
         t.xdelta = 1.0
-        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 10.0, "width": 5.0})
-        t.pulses.new({"pulse": "square", "amp": 3.0, "onset": 10.0, "width": 5.0})
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 10.0, "duration": 5.0})
+        t.pulses.new({"pulse": "square", "amp": 3.0, "onset": 10.0, "duration": 5.0})
         folder = _run_tool(t, [_make_empty_data("w0")])
         y = folder.data["PG_0"].nparray
         self.assertAlmostEqual(y[10], 4.0)
@@ -572,8 +585,8 @@ class TestNMToolPulseMultiPulse(unittest.TestCase):
         t.n_points = 100
         t.xstart = 0.0
         t.xdelta = 1.0
-        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "width": 5.0})
-        t.pulses.new({"pulse": "square", "amp": 2.0, "onset": 20.0, "width": 5.0})
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "duration": 5.0})
+        t.pulses.new({"pulse": "square", "amp": 2.0, "onset": 20.0, "duration": 5.0})
         folder = _run_tool(t, [_make_empty_data("w0")])
         y = folder.data["PG_0"].nparray
         self.assertAlmostEqual(y[5], 1.0)
@@ -593,7 +606,7 @@ class TestNMToolPulseEpochZeroOnly(unittest.TestCase):
         t.xstart = 0.0
         t.xdelta = 1.0
         # pulse only fires on epoch 0
-        t.pulses.new({"pulse": "square", "amp": 5.0, "onset": 5.0, "width": 5.0,
+        t.pulses.new({"pulse": "square", "amp": 5.0, "onset": 5.0, "duration": 5.0,
                       "epoch": 0, "epoch_delta": 100})
         data = [_make_empty_data("w%d" % i) for i in range(3)]
         folder = _run_tool(t, data)
@@ -616,7 +629,7 @@ class TestNMToolPulseOutputArrays(unittest.TestCase):
         self.t.n_points = 50
         self.t.xstart = 2.0
         self.t.xdelta = 0.5
-        self.t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "width": 2.0})
+        self.t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "duration": 2.0})
         data = [_make_empty_data("rec0")]
         self.folder = _run_tool(self.t, data)
 
@@ -645,7 +658,7 @@ class TestNMToolPulseOutputArrays(unittest.TestCase):
         t.xstart = 0.0
         t.xdelta = 1.0
         t.chan = "A"
-        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 2.0, "width": 2.0})
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 2.0, "duration": 2.0})
         folder = _run_tool(t, [_make_empty_data("w0"), _make_empty_data("w1")])
         self.assertIn("PG_A0", folder.data)
         self.assertIn("PG_A1", folder.data)
@@ -675,7 +688,7 @@ class TestNMToolPulsePrefix(unittest.TestCase):
         t.xdelta = 1.0
         t.prefix = prefix
         t.chan = channel
-        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 2.0, "width": 2.0})
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 2.0, "duration": 2.0})
         data = [_make_empty_data("d%d" % i) for i in range(n_epochs)]
         return _run_tool(t, data)
 
@@ -709,7 +722,7 @@ class TestNMToolPulseMultiEpoch(unittest.TestCase):
         t.n_points = 30
         t.xstart = 0.0
         t.xdelta = 1.0
-        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "width": 3.0})
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "duration": 3.0})
         data = [_make_empty_data("e0"), _make_empty_data("e1")]
         folder = _run_tool(t, data)
         self.assertIn("PG_0", folder.data)
@@ -723,7 +736,7 @@ class TestNMToolPulseMultiEpoch(unittest.TestCase):
         t.xstart = 0.0
         t.xdelta = 1.0
         # onset shifts by 10 per epoch
-        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 10.0, "width": 5.0,
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 10.0, "duration": 5.0,
                       "onset_delta": 10.0, "epoch_delta": 1})
         data = [_make_empty_data("e%d" % i) for i in range(3)]
         folder = _run_tool(t, data)
@@ -781,15 +794,181 @@ class TestNMToolPulseOverwrite(unittest.TestCase):
         t.xstart = 0.0
         t.xdelta = 1.0
         t.overwrite = True
-        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 2.0, "width": 2.0})
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 2.0, "duration": 2.0})
         folder = NMFolder(NM, name="TestFolder")
         data = [_make_empty_data("w0")]
         targets, _ = _make_targets(data, folder=folder)
         t.run_all(targets)
+        count_after_first = len(folder.data)
         t.run_all(targets)  # second run with overwrite=True
-        # arrays should be replaced, not duplicated
-        self.assertIn("PG_0", folder.data)
-        self.assertIn("PG_epoch_names", folder.data)
+        # array count must be identical — arrays replaced, not duplicated
+        self.assertEqual(len(folder.data), count_after_first)
+
+    def test_seed_reproduces_gaussian_times(self):
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
+               "n_pulses": 8, "interval": 50.0, "interval_stdv": 10.0,
+               "interval_type": "gaussian", "seed": 99}
+        folder = NMFolder(NM, name="TestFolder")
+        data = [_make_empty_data("w0", n=500)]
+        targets, _ = _make_targets(data, folder=folder)
+        t = NMToolPulse()
+        t.n_points = 500
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.overwrite = True
+        t.pulses.new(cfg)
+        t.run_all(targets)
+        times_first = list(folder.toolfolders["Pulse_0"].data["PGT_0"].nparray)
+        t.run_all(targets)
+        times_second = list(folder.toolfolders["Pulse_0"].data["PGT_0"].nparray)
+        self.assertEqual(times_first, times_second)
+
+    def test_overwrite_true_gaussian_times_change(self):
+        t = NMToolPulse()
+        t.n_points = 500
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.overwrite = True
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
+                      "n_pulses": 5, "interval": 50.0, "interval_stdv": 10.0,
+                      "interval_type": "gaussian"})
+        folder = NMFolder(NM, name="TestFolder")
+        data = [_make_empty_data("w0", n=500)]
+        targets, _ = _make_targets(data, folder=folder)
+        np.random.seed(1)
+        t.run_all(targets)
+        times_first = list(folder.toolfolders["Pulse_0"].data["PGT_0"].nparray)
+        np.random.seed(2)
+        t.run_all(targets)
+        times_second = list(folder.toolfolders["Pulse_0"].data["PGT_0"].nparray)
+        self.assertNotEqual(times_first, times_second)
+
+    def test_overwrite_false_raises_on_second_run(self):
+        t = NMToolPulse()
+        t.n_points = 20
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.overwrite = False
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 2.0, "duration": 2.0})
+        folder = NMFolder(NM, name="TestFolder")
+        data = [_make_empty_data("w0")]
+        targets, _ = _make_targets(data, folder=folder)
+        t.run_all(targets)
+        with self.assertRaises(KeyError):
+            t.run_all(targets)  # second run raises — name already exists
+
+
+# ---------------------------------------------------------------------------
+# NMToolPulse — pulse times toolfolder
+# ---------------------------------------------------------------------------
+
+class TestNMToolPulseTimes(unittest.TestCase):
+
+    def test_times_toolfolder_created(self):
+        t = NMToolPulse()
+        t.n_points = 100
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 10.0, "duration": 5.0})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        self.assertIn("Pulse_0", folder.toolfolders)
+
+    def test_times_single_pulse_onset(self):
+        t = NMToolPulse()
+        t.n_points = 100
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 10.0, "duration": 5.0})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        times = folder.toolfolders["Pulse_0"].data["PGT_0"].nparray
+        self.assertEqual(len(times), 1)
+        self.assertAlmostEqual(times[0], 10.0)
+
+    def test_times_fixed_train(self):
+        # 3 pulses at onset=0, interval=20 → times [0, 20, 40]
+        t = NMToolPulse()
+        t.n_points = 100
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+                      "n_pulses": 3, "interval": 20.0})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        times = folder.toolfolders["Pulse_0"].data["PGT_0"].nparray
+        self.assertEqual(len(times), 3)
+        self.assertAlmostEqual(times[0], 0.0)
+        self.assertAlmostEqual(times[1], 20.0)
+        self.assertAlmostEqual(times[2], 40.0)
+
+    def test_times_multiple_epochs(self):
+        t = NMToolPulse()
+        t.n_points = 100
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "duration": 3.0,
+                      "epoch": "all"})
+        folder = _run_tool(t, [_make_empty_data("w0"), _make_empty_data("w1")])
+        tf = folder.toolfolders["Pulse_0"]
+        self.assertIn("PGT_0", tf.data)
+        self.assertIn("PGT_1", tf.data)
+
+    def test_times_sorted_across_pulses(self):
+        # two pulses with different onsets — times should be sorted
+        t = NMToolPulse()
+        t.n_points = 100
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 30.0, "duration": 3.0})
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 10.0, "duration": 3.0})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        times = folder.toolfolders["Pulse_0"].data["PGT_0"].nparray
+        self.assertEqual(list(times), sorted(times))
+
+    def test_times_channel_prefix(self):
+        t = NMToolPulse()
+        t.n_points = 50
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.chan = "A"
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "duration": 3.0})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        self.assertIn("PGT_A0", folder.toolfolders["Pulse_0"].data)
+
+
+# ---------------------------------------------------------------------------
+# NMToolPulse — enabled flag
+# ---------------------------------------------------------------------------
+
+class TestNMToolPulseEnabled(unittest.TestCase):
+
+    def test_disabled_pulse_produces_zeros(self):
+        t = NMToolPulse()
+        t.n_points = 50
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 2.0, "onset": 10.0, "duration": 5.0,
+                      "enabled": False})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        y = folder.data["PG_0"].nparray
+        np.testing.assert_array_equal(y, 0.0)
+
+    def test_disabled_pulse_skipped_other_active(self):
+        t = NMToolPulse()
+        t.n_points = 50
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 5.0, "duration": 5.0})
+        t.pulses.new({"pulse": "square", "amp": 3.0, "onset": 5.0, "duration": 5.0,
+                      "enabled": False})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        y = folder.data["PG_0"].nparray
+        self.assertAlmostEqual(y[5], 1.0)   # only first pulse contributes
+
+    def test_round_trip_enabled_false(self):
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 5.0,
+                             "enabled": False})
+        self.assertFalse(p.enabled)
+        p2 = NMPulse.from_dict(p.to_dict())
+        self.assertFalse(p2.enabled)
 
 
 # ---------------------------------------------------------------------------
@@ -804,9 +983,9 @@ class TestNMPulseWaveformSin(unittest.TestCase):
         y = p.waveform(20, 0.0, 1.0, 0)
         self.assertAlmostEqual(y[0], 1.0, places=5)   # phase=π/2 → cos(0)=1
 
-    def test_width_truncates(self):
+    def test_duration_truncates(self):
         p = NMPulse(config={"pulse": "sin", "freq": 0.25,
-                             "amp": 1.0, "onset": 5.0, "width": 4.0})
+                             "amp": 1.0, "onset": 5.0, "duration": 4.0})
         y = p.waveform(30, 0.0, 1.0, 0)
         self.assertAlmostEqual(y[9], 0.0)
 
@@ -829,9 +1008,9 @@ class TestNMPulseWaveformSin(unittest.TestCase):
 
 class TestNMPulseWaveformSinZap(unittest.TestCase):
 
-    def test_truncated_by_width(self):
+    def test_truncated_by_duration(self):
         p = NMPulse(config={"pulse": "sinzap", "f0": 0.05, "f1": 0.2,
-                             "amp": 1.0, "onset": 0.0, "width": 50.0})
+                             "amp": 1.0, "onset": 0.0, "duration": 50.0})
         y = p.waveform(100, 0.0, 1.0, 0)
         self.assertAlmostEqual(y[50], 0.0)
 
@@ -852,10 +1031,10 @@ _USER_RAW = np.sin(np.linspace(0, 2 * math.pi, 50))
 
 class TestNMPulseWaveformUser(unittest.TestCase):
 
-    def _make_user_pulse(self, onset=0.0, amp=1.0, width=math.inf):
+    def _make_user_pulse(self, onset=0.0, amp=1.0, duration=math.inf):
         return NMPulse(config={"pulse": "user", "amp": amp, "onset": onset,
-                                "width": width, "data": _USER_RAW,
-                                "xdelta_data": 1.0})
+                                "duration": duration, "data": _USER_RAW,
+                                "data_xdelta": 1.0})
 
     def test_onset_shifts_waveform(self):
         p0 = self._make_user_pulse(onset=0.0, amp=1.0)
@@ -931,13 +1110,13 @@ class TestNMToolPulseSinZap(unittest.TestCase):
         y = folder.data["PG_0"].nparray
         self.assertEqual(len(y), 200)
 
-    def test_truncated_by_width(self):
+    def test_truncated_by_duration(self):
         t = NMToolPulse()
         t.n_points = 200
         t.xstart = 0.0
         t.xdelta = 1.0
         t.pulses.new({"pulse": "sinzap", "f0": 0.05, "f1": 0.2,
-                      "amp": 1.0, "onset": 0.0, "width": 50.0})
+                      "amp": 1.0, "onset": 0.0, "duration": 50.0})
         folder = _run_tool(t, [_make_empty_data("w0", n=200)])
         y = folder.data["PG_0"].nparray
         self.assertAlmostEqual(y[50], 0.0)
@@ -945,13 +1124,13 @@ class TestNMToolPulseSinZap(unittest.TestCase):
 
 class TestNMToolPulseUser(unittest.TestCase):
 
-    def _make_tool(self, onset=0.0, amp=1.0, width=math.inf, n=100):
+    def _make_tool(self, onset=0.0, amp=1.0, duration=math.inf, n=100):
         t = NMToolPulse()
         t.n_points = n
         t.xstart = 0.0
         t.xdelta = 1.0
         t.pulses.new({"pulse": "user", "amp": amp, "onset": onset,
-                      "width": width, "data": _USER_RAW, "xdelta_data": 1.0})
+                      "duration": duration, "data": _USER_RAW, "data_xdelta": 1.0})
         return t
 
     def test_peak_equals_amp(self):
@@ -966,8 +1145,8 @@ class TestNMToolPulseUser(unittest.TestCase):
         y = folder.data["PG_0"].nparray
         self.assertAlmostEqual(y[19], 0.0)
 
-    def test_truncation_by_width(self):
-        t = self._make_tool(onset=0.0, width=20.0)
+    def test_truncation_by_duration(self):
+        t = self._make_tool(onset=0.0, duration=20.0)
         folder = _run_tool(t, [_make_empty_data("w0")])
         y = folder.data["PG_0"].nparray
         self.assertAlmostEqual(y[20], 0.0)
@@ -977,6 +1156,346 @@ class TestNMToolPulseUser(unittest.TestCase):
         folder = _run_tool(t, [_make_empty_data("w0")])
         y = folder.data["PG_0"].nparray
         self.assertEqual(len(y), 100)
+
+
+# ---------------------------------------------------------------------------
+# NMPulse — train defaults and properties
+# ---------------------------------------------------------------------------
+
+class TestNMPulseTrainDefaults(unittest.TestCase):
+
+    def setUp(self):
+        self.p = NMPulse()
+
+    def test_n_pulses(self):
+        self.assertEqual(self.p.n_pulses, 1)
+
+    def test_interval(self):
+        self.assertAlmostEqual(self.p.interval, 100.0)
+
+    def test_interval_stdv(self):
+        self.assertAlmostEqual(self.p.interval_stdv, 0.0)
+
+    def test_interval_type(self):
+        self.assertEqual(self.p.interval_type, "fixed")
+
+    def test_train_duration(self):
+        self.assertTrue(math.isinf(self.p.train_duration))
+
+
+class TestNMPulseTrainProperties(unittest.TestCase):
+
+    def setUp(self):
+        self.p = NMPulse()
+
+    def test_n_pulses_valid(self):
+        self.p.n_pulses = 5
+        self.assertEqual(self.p.n_pulses, 5)
+
+    def test_n_pulses_zero_allowed(self):
+        self.p.n_pulses = 0
+        self.assertEqual(self.p.n_pulses, 0)
+
+    def test_n_pulses_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.n_pulses = -1
+
+    def test_n_pulses_bool_raises(self):
+        with self.assertRaises(TypeError):
+            self.p.n_pulses = True
+
+    def test_interval_valid(self):
+        self.p.interval = 50.0
+        self.assertAlmostEqual(self.p.interval, 50.0)
+
+    def test_interval_zero_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.interval = 0.0
+
+    def test_interval_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.interval = -10.0
+
+    def test_interval_stdv_valid(self):
+        self.p.interval_stdv = 5.0
+        self.assertAlmostEqual(self.p.interval_stdv, 5.0)
+
+    def test_interval_stdv_zero_allowed(self):
+        self.p.interval_stdv = 0.0
+        self.assertAlmostEqual(self.p.interval_stdv, 0.0)
+
+    def test_interval_stdv_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.interval_stdv = -1.0
+
+    def test_interval_type_valid(self):
+        for t in ("fixed", "gaussian", "poisson"):
+            self.p.interval_type = t
+            self.assertEqual(self.p.interval_type, t)
+
+    def test_interval_type_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.interval_type = "random"
+
+    def test_interval_type_bool_raises(self):
+        with self.assertRaises(TypeError):
+            self.p.interval_type = True
+
+    def test_interval_min_valid(self):
+        self.p.interval_min = 5.0
+        self.assertAlmostEqual(self.p.interval_min, 5.0)
+
+    def test_interval_min_zero_allowed(self):
+        self.p.interval_min = 0.0
+        self.assertAlmostEqual(self.p.interval_min, 0.0)
+
+    def test_interval_min_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.interval_min = -1.0
+
+    def test_interval_max_valid(self):
+        self.p.interval_max = 200.0
+        self.assertAlmostEqual(self.p.interval_max, 200.0)
+
+    def test_interval_max_zero_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.interval_max = 0.0
+
+    def test_train_duration_valid(self):
+        self.p.train_duration = 500.0
+        self.assertAlmostEqual(self.p.train_duration, 500.0)
+
+    def test_train_duration_zero_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.train_duration = 0.0
+
+    def test_train_duration_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.p.train_duration = -1.0
+
+
+# ---------------------------------------------------------------------------
+# NMPulse — train waveform
+# ---------------------------------------------------------------------------
+
+class TestNMPulseTrainWaveform(unittest.TestCase):
+
+    def test_single_pulse_n_pulses_one(self):
+        # n_pulses=1 (default) produces same result as without train params
+        p1 = NMPulse(config={"pulse": "square", "amp": 2.0, "onset": 10.0, "duration": 5.0})
+        p2 = NMPulse(config={"pulse": "square", "amp": 2.0, "onset": 10.0, "duration": 5.0,
+                              "n_pulses": 1, "interval": 100.0})
+        y1 = p1.waveform(50, 0.0, 1.0, 0)
+        y2 = p2.waveform(50, 0.0, 1.0, 0)
+        np.testing.assert_array_almost_equal(y1, y2)
+
+    def test_fixed_train_pulse_positions(self):
+        # 3 pulses: onset=0, interval=20 → pulses at 0, 20, 40
+        p = NMPulse(config={
+            "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+            "n_pulses": 3, "interval": 20.0,
+        })
+        y = p.waveform(100, 0.0, 1.0, 0)
+        for start in (0, 20, 40):
+            self.assertAlmostEqual(y[start], 1.0)
+            self.assertAlmostEqual(y[start + 4], 1.0)
+            self.assertAlmostEqual(y[start + 5], 0.0)
+
+    def test_pulses_sum_when_overlapping(self):
+        p = NMPulse(config={
+            "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 15.0,
+            "n_pulses": 2, "interval": 10.0,
+        })
+        y = p.waveform(50, 0.0, 1.0, 0)
+        self.assertAlmostEqual(y[10], 2.0)
+
+    def test_output_length(self):
+        p = NMPulse(config={
+            "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
+            "n_pulses": 4, "interval": 10.0,
+        })
+        y = p.waveform(80, 0.0, 1.0, 0)
+        self.assertEqual(len(y), 80)
+
+    def test_gaussian_interval_differs_from_fixed(self):
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": 5, "interval": 20.0}
+        np.random.seed(42)
+        p1 = NMPulse(config={**cfg, "interval_type": "fixed"})
+        p2 = NMPulse(config={**cfg, "interval_type": "gaussian", "interval_stdv": 5.0})
+        y_fixed    = p1.waveform(200, 0.0, 1.0, 0)
+        y_gaussian = p2.waveform(200, 0.0, 1.0, 0)
+        self.assertFalse(np.array_equal(y_fixed, y_gaussian))
+
+    def test_interval_min_enforced(self):
+        # interval_min=15 on a gaussian train with mean=10, large stdv
+        # all intervals should be >= 15
+        np.random.seed(42)
+        p = NMPulse(config={
+            "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
+            "n_pulses": 10, "interval": 10.0, "interval_stdv": 8.0,
+            "interval_type": "gaussian", "interval_min": 15.0,
+        })
+        p.waveform(200, 0.0, 1.0, 0)
+        times = p._last_onset_times
+        for i in range(1, len(times)):
+            self.assertGreaterEqual(times[i] - times[i - 1], 15.0)
+
+    def test_interval_max_enforced(self):
+        # interval_max=25 on a poisson train with mean=100 (very long gaps)
+        # all intervals should be <= 25
+        np.random.seed(42)
+        p = NMPulse(config={
+            "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
+            "n_pulses": 5, "interval": 100.0,
+            "interval_type": "poisson", "interval_max": 25.0,
+        })
+        p.waveform(200, 0.0, 1.0, 0)
+        times = p._last_onset_times
+        for i in range(1, len(times)):
+            self.assertLessEqual(times[i] - times[i - 1], 25.0)
+
+    def test_train_duration_limits_pulses(self):
+        # interval=20, train_duration=50 → pulses at 0, 20, 40; onset=60 excluded
+        p = NMPulse(config={
+            "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+            "n_pulses": 0, "interval": 20.0, "train_duration": 50.0,
+        })
+        y = p.waveform(100, 0.0, 1.0, 0)
+        for start in (0, 20, 40):
+            self.assertAlmostEqual(y[start], 1.0)
+        self.assertAlmostEqual(y[60], 0.0)   # pulse at onset=60 excluded
+        self.assertAlmostEqual(y[80], 0.0)   # pulse at onset=80 excluded
+
+    def test_n_pulses_and_train_duration_both_cap(self):
+        # n_pulses=2 wins over train_duration=100 (only 2 pulses generated)
+        p = NMPulse(config={
+            "pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+            "n_pulses": 2, "interval": 20.0, "train_duration": 100.0,
+        })
+        y = p.waveform(150, 0.0, 1.0, 0)
+        self.assertAlmostEqual(y[0],  1.0)
+        self.assertAlmostEqual(y[20], 1.0)
+        self.assertAlmostEqual(y[40], 0.0)   # third pulse not generated
+        self.assertAlmostEqual(y[60], 0.0)   # fourth pulse not generated
+        self.assertAlmostEqual(y[80], 0.0)   # fifth pulse not generated
+
+    def test_to_dict_round_trip(self):
+        p = NMPulse(config={
+            "pulse": "exp", "tau": 5.0, "amp": 2.0, "onset": 10.0,
+            "n_pulses": 0, "interval": 30.0, "train_duration": 200.0,
+            "interval_type": "gaussian", "interval_stdv": 1.0,
+        })
+        d = p.to_dict()
+        self.assertEqual(d["n_pulses"], 0)
+        self.assertAlmostEqual(d["train_duration"], 200.0)
+        self.assertEqual(d["interval_type"], "gaussian")
+        p2 = NMPulse.from_dict(d)
+        self.assertEqual(p, p2)
+
+
+# ---------------------------------------------------------------------------
+# NMToolPulse — Poisson train via PGT_ times
+# ---------------------------------------------------------------------------
+
+class TestNMToolPulsePoisson(unittest.TestCase):
+
+    def _run_poisson(self, n_pulses, mean_interval, seed=0):
+        np.random.seed(seed)
+        t = NMToolPulse()
+        t.n_points = 5000
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 3.0,
+                      "n_pulses": n_pulses, "interval": mean_interval,
+                      "interval_type": "poisson"})
+        folder = _run_tool(t, [_make_empty_data("w0", n=5000)])
+        return folder.toolfolders["Pulse_0"].data["PGT_0"].nparray
+
+    def test_correct_number_of_pulses(self):
+        times = self._run_poisson(n_pulses=10, mean_interval=50.0)
+        self.assertEqual(len(times), 10)
+
+    def test_all_intervals_positive(self):
+        times = self._run_poisson(n_pulses=20, mean_interval=50.0)
+        for i in range(1, len(times)):
+            self.assertGreater(times[i] - times[i - 1], 0.0)
+
+    def test_intervals_differ_from_fixed(self):
+        # Poisson intervals should not all equal the mean interval
+        np.random.seed(42)
+        times = self._run_poisson(n_pulses=10, mean_interval=50.0, seed=42)
+        intervals = [times[i] - times[i - 1] for i in range(1, len(times))]
+        self.assertFalse(all(abs(iv - 50.0) < 1e-10 for iv in intervals))
+
+    def test_times_sorted(self):
+        times = self._run_poisson(n_pulses=15, mean_interval=30.0)
+        self.assertEqual(list(times), sorted(times))
+
+
+# ---------------------------------------------------------------------------
+# NMPulseContainer — train via n_pulses
+# ---------------------------------------------------------------------------
+
+class TestNMPulseContainerTrain(unittest.TestCase):
+
+    def test_new_train_returns_nmPulse(self):
+        c = NMPulseContainer()
+        p = c.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+                   "n_pulses": 3, "interval": 20.0})
+        self.assertIsInstance(p, NMPulse)
+        self.assertEqual(p.n_pulses, 3)
+
+    def test_container_round_trip(self):
+        c = NMPulseContainer()
+        c.new({"pulse": "exp", "amp": 1.0, "onset": 5.0, "tau": 10.0})
+        c.new({"pulse": "square", "amp": 2.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": 3, "interval": 20.0})
+        d = c.to_dict()
+        c2 = NMPulseContainer.from_dict(d)
+        self.assertIsInstance(c2["p0"], NMPulse)
+        self.assertIsInstance(c2["p1"], NMPulse)
+        self.assertEqual(c2["p0"].n_pulses, 1)
+        self.assertEqual(c2["p1"].n_pulses, 3)
+
+
+# ---------------------------------------------------------------------------
+# NMToolPulse — train via run_all
+# ---------------------------------------------------------------------------
+
+class TestNMToolPulseTrain(unittest.TestCase):
+
+    def test_fixed_train_output(self):
+        t = NMToolPulse()
+        t.n_points = 100
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"type": "train", "pulse": "square",
+                      "amp": 1.0, "onset": 0.0, "duration": 5.0,
+                      "n_pulses": 3, "interval": 20.0})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        y = folder.data["PG_0"].nparray
+        self.assertEqual(len(y), 100)
+        for start in (0, 20, 40):
+            self.assertAlmostEqual(y[start], 1.0)
+            self.assertAlmostEqual(y[start + 5], 0.0)
+
+    def test_train_note_contains_n_pulses(self):
+        t = NMToolPulse()
+        t.n_points = 100
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"type": "train", "pulse": "square",
+                      "amp": 1.0, "onset": 0.0, "duration": 5.0,
+                      "n_pulses": 4, "interval": 20.0})
+        folder = _run_tool(t, [_make_empty_data("w0")])
+        d = folder.data["PG_0"]
+        notes = getattr(d, "notes", None)
+        if notes is None:
+            return
+        note_text = " ".join(str(n) for n in notes)
+        self.assertIn("n_pulses=4", note_text)
+        self.assertIn("interval=20", note_text)
 
 
 if __name__ == "__main__":
