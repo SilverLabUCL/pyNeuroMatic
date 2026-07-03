@@ -24,9 +24,9 @@ import math
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_tool import NMTool
-from pyneuromatic.analysis.nm_tool_config import NMToolConfig
-from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+from pyneuromatic.tools.nm_tool import NMTool
+from pyneuromatic.tools.nm_tool_config import NMToolConfig
+from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_command_history as nmch
@@ -34,7 +34,7 @@ import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
-from pyneuromatic.analysis.nm_tool_utilities import find_level_crossings_nmdata
+from pyneuromatic.tools.nm_tool_utilities import find_level_crossings_nmdata
 
 _VALID_FUNC_NAMES: frozenset[str] = frozenset({"level", "level+", "level-"})
 

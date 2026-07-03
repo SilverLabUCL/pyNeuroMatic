@@ -1015,7 +1015,7 @@ class TestSplitTargetsByChannel(unittest.TestCase):
                 "channel": ch, "epoch": ep}
 
     def test_toolfolder_data_targets_grouped_per_toolfolder(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         tf0 = self.folder.toolfolders.new("tf0")
         tf1 = self.folder.toolfolders.new("tf1")
         targets = [self._tf_data(tf0, "a0"), self._tf_data(tf0, "a1"),
@@ -1026,7 +1026,7 @@ class TestSplitTargetsByChannel(unittest.TestCase):
         self.assertEqual(len(splits[1]), 1)
 
     def test_toolfolder_dataseries_targets_grouped_per_channel(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         tf = self.folder.toolfolders.new("tf0")
         ds = tf.dataseries.new("SPK_")
         ch_a = ds.channels.new("A")

@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_pulse_func import (
+from pyneuromatic.tools.nm_pulse_func import (
     NMPulseFunc,
     NMPulseFuncSquare,
     NMPulseFuncRamp,

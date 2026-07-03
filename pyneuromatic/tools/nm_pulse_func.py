@@ -43,7 +43,7 @@ class NMPulseFunc:
     Lightweight class (following NMStatFunc pattern) that represents a pulse
     shape with its shape-specific parameters.  Universal parameters
     (``amp``, ``onset``, ``duration``) are passed as arguments to
-    :meth:`waveform` by the caller (:class:`~pyneuromatic.analysis.nm_pulse.NMPulse`)
+    :meth:`waveform` by the caller (:class:`~pyneuromatic.tools.nm_pulse.NMPulse`)
     so that per-epoch variation (``*_delta``/``*_stdv``) can be applied
     before dispatch.
 
@@ -387,7 +387,7 @@ class NMPulseFuncSynExp(NMPulseFunc):
 
     Multiple ``synexp`` components with the same ``tau_rise`` and ``power``
     but different ``amp``/``tau`` values can be combined via
-    :class:`~pyneuromatic.analysis.nm_pulse.NMPulseContainer` to produce
+    :class:`~pyneuromatic.tools.nm_pulse.NMPulseContainer` to produce
     bi- or tri-exponential synaptic waveforms.
 
     Args:

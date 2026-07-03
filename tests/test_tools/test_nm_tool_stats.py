@@ -15,9 +15,9 @@ import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
-import pyneuromatic.analysis.nm_tool_stats as nms
-import pyneuromatic.analysis.nm_stat_win as nmsw
-from pyneuromatic.analysis.nm_tool_stats import NMToolStatsConfig
+import pyneuromatic.tools.nm_tool_stats as nms
+import pyneuromatic.tools.nm_stat_win as nmsw
+from pyneuromatic.tools.nm_tool_stats import NMToolStatsConfig
 
 NM = NMManager(quiet=True)
 
@@ -72,7 +72,7 @@ class TestNMToolStats(unittest.TestCase):
     def _setup_folder(self):
         """Create a real NMFolder and wire it into the tool's selection."""
         from pyneuromatic.core.nm_folder import NMFolder
-        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        from pyneuromatic.tools.nm_tool import HIERARCHY_SELECT_KEYS
         folder = NMFolder(name="TestFolder")
         self.tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
         self.tool._select["folder"] = folder
@@ -109,7 +109,7 @@ class TestNMToolStats(unittest.TestCase):
                 self.tool._NMToolStats__results[wname] = [results]
 
     def test_results_to_numpy_returns_toolfolder(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         self._setup_folder()
         self._run_compute()
         f = self.tool._write_results_to_numpy()
@@ -250,7 +250,7 @@ class TestNMToolStats(unittest.TestCase):
         self.assertEqual(n, "ST_w0_rt_p_dx")
 
     def test_results_to_numpy_no_folder_returns_none(self):
-        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        from pyneuromatic.tools.nm_tool import HIERARCHY_SELECT_KEYS
         self.tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
         # folder is None — should return None
         result = self.tool._write_results_to_numpy()
@@ -267,7 +267,7 @@ class TestNMToolStats2(unittest.TestCase):
 
     def setUp(self):
         # Build a NMToolFolder with some ST_ arrays
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         self.tf = NMToolFolder(name="stats0")
         arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         self.tf.data.new("ST_w0_mean_y", nparray=arr.copy())
@@ -359,7 +359,7 @@ class TestNMToolStats2Histogram(unittest.TestCase):
     """
 
     def setUp(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         self.tf = NMToolFolder(name="stats0")
         arr = np.array([1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0])
         self.tf.data.new("ST_w0_mean_y", nparray=arr)
@@ -408,7 +408,7 @@ class TestNMToolStats2Inequality(unittest.TestCase):
     """Tests for NMToolStats2.inequality()."""
 
     def setUp(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         from pyneuromatic.core.nm_dataseries import NMDataSeries
 
         self.tf = NMToolFolder(name="stats0")
@@ -666,7 +666,7 @@ class TestNMToolStats2KSTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
         rng = np.random.default_rng(42)
         self.tf = NMToolFolder(name="stats0")
@@ -727,7 +727,7 @@ class TestNMToolStats2StabilityTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
         self.tf = NMToolFolder(name="stats0")
         self.flat = np.full(20, 3.0)
@@ -796,7 +796,7 @@ class TestNMToolStats2AddEpochSetsFromMask(unittest.TestCase):
     """Direct tests for NMToolStats2._add_epoch_sets_from_mask()."""
 
     def setUp(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
         self.tf = NMToolFolder(name="stats0")
         # mask: [T, T, F, F, T] → true indices 0,1,4; false indices 2,3
@@ -958,7 +958,7 @@ class TestNMToolStatsOverwrite(unittest.TestCase):
 
     def _setup(self, overwrite=False):
         from pyneuromatic.core.nm_folder import NMFolder
-        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        from pyneuromatic.tools.nm_tool import HIERARCHY_SELECT_KEYS
         tool = nms.NMToolStats()
         tool.overwrite = overwrite
         folder = NMFolder(name="F")
@@ -1037,7 +1037,7 @@ class TestNMToolStatsNotes(unittest.TestCase):
 
     def setUp(self):
         from pyneuromatic.core.nm_folder import NMFolder
-        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        from pyneuromatic.tools.nm_tool import HIERARCHY_SELECT_KEYS
         self.tool = nms.NMToolStats()
         folder = NMFolder(name="F")
         self.tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}
@@ -1100,7 +1100,7 @@ class TestNMToolStatsNotes(unittest.TestCase):
         # Set up a run with baseline enabled; ST_w0_bsln_y note should
         # record the baseline x-range (bsln_xbgn/bsln_xend), not the main xbgn/xend.
         from pyneuromatic.core.nm_folder import NMFolder
-        from pyneuromatic.analysis.nm_tool import HIERARCHY_SELECT_KEYS
+        from pyneuromatic.tools.nm_tool import HIERARCHY_SELECT_KEYS
         tool = nms.NMToolStats()
         folder = NMFolder(name="F")
         tool._select = {tier: None for tier in HIERARCHY_SELECT_KEYS}

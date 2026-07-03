@@ -19,8 +19,8 @@ import numpy as np
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.io.pxp import read_pxp
-import pyneuromatic.analysis.nm_stat_utilities as nsmm
-import pyneuromatic.analysis.nm_stat_win as nmsw
+import pyneuromatic.tools.nm_stat_utilities as nsmm
+import pyneuromatic.tools.nm_stat_win as nmsw
 
 
 _PXP = Path(__file__).parent.parent / "test_io" / "fixtures" / "nm02Jul04c0_002.pxp"

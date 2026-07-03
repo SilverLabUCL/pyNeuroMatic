@@ -25,7 +25,7 @@ class TestNMToolRegistry(unittest.TestCase):
     def test_register_tool(self):
         self.registry.register(
             "test",
-            "pyneuromatic.analysis.nm_tool_stats",
+            "pyneuromatic.tools.nm_tool_stats",
             "NMToolStats"
         )
         self.assertIn("test", self.registry)
@@ -50,17 +50,17 @@ class TestNMToolRegistry(unittest.TestCase):
     def test_load_tool(self):
         self.registry.register(
             "stats",
-            "pyneuromatic.analysis.nm_tool_stats",
+            "pyneuromatic.tools.nm_tool_stats",
             "NMToolStats"
         )
         tool = self.registry.load("stats")
-        from pyneuromatic.analysis.nm_tool_stats import NMToolStats
+        from pyneuromatic.tools.nm_tool_stats import NMToolStats
         self.assertIsInstance(tool, NMToolStats)
 
     def test_load_creates_new_instance(self):
         self.registry.register(
             "stats",
-            "pyneuromatic.analysis.nm_tool_stats",
+            "pyneuromatic.tools.nm_tool_stats",
             "NMToolStats"
         )
         tool1 = self.registry.load("stats")
@@ -79,7 +79,7 @@ class TestNMToolRegistry(unittest.TestCase):
     def test_load_invalid_class(self):
         self.registry.register(
             "bad",
-            "pyneuromatic.analysis.nm_tool_stats",
+            "pyneuromatic.tools.nm_tool_stats",
             "NonexistentClass"
         )
         with self.assertRaises(AttributeError):
@@ -112,7 +112,7 @@ class TestNMToolRegistry(unittest.TestCase):
     def test_is_loaded(self):
         self.registry.register(
             "stats",
-            "pyneuromatic.analysis.nm_tool_stats",
+            "pyneuromatic.tools.nm_tool_stats",
             "NMToolStats"
         )
         self.assertFalse(self.registry.is_loaded("stats"))
@@ -122,22 +122,22 @@ class TestNMToolRegistry(unittest.TestCase):
     def test_get_class(self):
         self.registry.register(
             "stats",
-            "pyneuromatic.analysis.nm_tool_stats",
+            "pyneuromatic.tools.nm_tool_stats",
             "NMToolStats"
         )
-        from pyneuromatic.analysis.nm_tool_stats import NMToolStats
+        from pyneuromatic.tools.nm_tool_stats import NMToolStats
         cls = self.registry.get_class("stats")
         self.assertIs(cls, NMToolStats)
 
     def test_get_info(self):
         self.registry.register(
             "stats",
-            "pyneuromatic.analysis.nm_tool_stats",
+            "pyneuromatic.tools.nm_tool_stats",
             "NMToolStats"
         )
         info = self.registry.get_info("stats")
         self.assertEqual(info["name"], "stats")
-        self.assertEqual(info["module"], "pyneuromatic.analysis.nm_tool_stats")
+        self.assertEqual(info["module"], "pyneuromatic.tools.nm_tool_stats")
         self.assertEqual(info["class"], "NMToolStats")
 
     def test_get_info_nonexistent(self):

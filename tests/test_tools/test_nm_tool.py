@@ -15,9 +15,9 @@ from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import NMEpoch
-from pyneuromatic.analysis.nm_tool import NMTool
-from pyneuromatic.analysis.nm_tool_config import NMToolConfig
-from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+from pyneuromatic.tools.nm_tool import NMTool
+from pyneuromatic.tools.nm_tool_config import NMToolConfig
+from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 QUIET = True
 

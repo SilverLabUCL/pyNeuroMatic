@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Tests for pyneuromatic.analysis.nm_tool_utilities."""
+"""Tests for pyneuromatic.tools.nm_tool_utilities."""
 import math
 
 import numpy as np
@@ -7,7 +7,7 @@ import pytest
 
 from pyneuromatic.core.nm_data import NMData
 import pyneuromatic.core.nm_math as nm_math
-from pyneuromatic.analysis.nm_tool_utilities import (
+from pyneuromatic.tools.nm_tool_utilities import (
     _sample_rate_from_xscale,
     find_level_crossings_nmdata,
     filter_bessel_nmdata,

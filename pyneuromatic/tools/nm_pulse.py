@@ -29,7 +29,7 @@ import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_command_history import add_nm_command
 import pyneuromatic.core.nm_utilities as nmu
-from pyneuromatic.analysis.nm_pulse_func import (
+from pyneuromatic.tools.nm_pulse_func import (
     NMPulseFunc,
     NMPulseFuncSquare,
     _VALID_SHAPES,
