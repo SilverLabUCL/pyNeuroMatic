@@ -42,6 +42,7 @@ _FLOAT_ATTRS: tuple[str, ...] = (
     "amp_stdv", "onset_stdv", "duration_stdv",
     "interval", "interval_stdv", "interval_min", "interval_max", "train_duration",
     "rp_taur", "rp_rinf", "rp_rmin", "rp_taup", "rp_pinf", "rp_pmax", "rp_pscale",
+    "df_taud", "df_dinf", "df_dmin", "df_dscale", "df_tauf", "df_finf", "df_fmax", "df_fscale",
 )
 
 # Keys that belong to the NMPulseFunc subclass, not to NMPulse directly.
@@ -125,6 +126,16 @@ class NMPulse:
         self._rp_pmax:   float = math.inf  # ceiling on P
         self._rp_taup:   float = 0.0     # recovery tau for P (>0 enables P dynamics)
         self._rp_pscale: float = 0.0     # post-pulse P increment scale (>0 enables facilitation)
+        # D*F short-term plasticity model (multiplicative depression and facilitation).
+        # df_taud > 0 enables the model.
+        self._df_taud:  float = 0.0      # recovery tau for D (>0 enables model)
+        self._df_dinf:  float = 1.0      # steady-state D
+        self._df_dmin:  float = 0.0      # minimum D after depletion
+        self._df_dscale: float = 1.0     # post-pulse D multiplier (<1 causes depression)
+        self._df_tauf:  float = 0.0      # recovery tau for F (>0 enables F dynamics)
+        self._df_finf:  float = 1.0      # steady-state F
+        self._df_fmax:  float = math.inf # ceiling on F
+        self._df_fscale: float = 1.0     # post-pulse F multiplier (>1 causes facilitation)
 
         if config is not None:
             self._config_set(config, quiet=True)
@@ -548,6 +559,86 @@ class NMPulse:
         self._float_set("rp_pscale", value)
         add_nm_command("%s[%r].rp_pscale = %g" % (self._nm_path, self._name, self._rp_pscale))
 
+    @property
+    def df_taud(self) -> float:
+        """Recovery time constant for D. >0 enables the D*F model; 0 = disabled."""
+        return self._df_taud
+
+    @df_taud.setter
+    def df_taud(self, value: float) -> None:
+        self._float_set("df_taud", value)
+        add_nm_command("%s[%r].df_taud = %g" % (self._nm_path, self._name, self._df_taud))
+
+    @property
+    def df_dinf(self) -> float:
+        """Steady-state value of D. Default 1.0."""
+        return self._df_dinf
+
+    @df_dinf.setter
+    def df_dinf(self, value: float) -> None:
+        self._float_set("df_dinf", value)
+        add_nm_command("%s[%r].df_dinf = %g" % (self._nm_path, self._name, self._df_dinf))
+
+    @property
+    def df_dmin(self) -> float:
+        """Minimum D after depletion. Default 0.0."""
+        return self._df_dmin
+
+    @df_dmin.setter
+    def df_dmin(self, value: float) -> None:
+        self._float_set("df_dmin", value)
+        add_nm_command("%s[%r].df_dmin = %g" % (self._nm_path, self._name, self._df_dmin))
+
+    @property
+    def df_dscale(self) -> float:
+        """Post-pulse D multiplier. <1 causes depression; 1 = no change. Default 1.0."""
+        return self._df_dscale
+
+    @df_dscale.setter
+    def df_dscale(self, value: float) -> None:
+        self._float_set("df_dscale", value)
+        add_nm_command("%s[%r].df_dscale = %g" % (self._nm_path, self._name, self._df_dscale))
+
+    @property
+    def df_tauf(self) -> float:
+        """Recovery time constant for F. >0 enables F dynamics; 0 = F fixed at df_finf."""
+        return self._df_tauf
+
+    @df_tauf.setter
+    def df_tauf(self, value: float) -> None:
+        self._float_set("df_tauf", value)
+        add_nm_command("%s[%r].df_tauf = %g" % (self._nm_path, self._name, self._df_tauf))
+
+    @property
+    def df_finf(self) -> float:
+        """Steady-state value of F. Default 1.0."""
+        return self._df_finf
+
+    @df_finf.setter
+    def df_finf(self, value: float) -> None:
+        self._float_set("df_finf", value)
+        add_nm_command("%s[%r].df_finf = %g" % (self._nm_path, self._name, self._df_finf))
+
+    @property
+    def df_fmax(self) -> float:
+        """Ceiling on F (prevents F exceeding this after facilitation). Default inf."""
+        return self._df_fmax
+
+    @df_fmax.setter
+    def df_fmax(self, value: float) -> None:
+        self._float_set("df_fmax", value)
+        add_nm_command("%s[%r].df_fmax = %g" % (self._nm_path, self._name, self._df_fmax))
+
+    @property
+    def df_fscale(self) -> float:
+        """Post-pulse F multiplier. >1 causes facilitation; 1 = no change. Default 1.0."""
+        return self._df_fscale
+
+    @df_fscale.setter
+    def df_fscale(self, value: float) -> None:
+        self._float_set("df_fscale", value)
+        add_nm_command("%s[%r].df_fscale = %g" % (self._nm_path, self._name, self._df_fscale))
+
     def _interval_type_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "interval_type", "string"))
@@ -628,9 +719,19 @@ class NMPulse:
         # train of pulses...
 
         rp_active = self._rp_taur > 0
+        df_active = self._df_taud > 0
+        if rp_active and df_active:
+            raise ValueError(
+                "rp_taur and df_taud cannot both be > 0: "
+                "R*P and D*F are alternative plasticity models, not combinable"
+            )
         R = self._rp_rinf
         P = self._rp_pinf
-        intvl = self._interval  # dummy interval for pulse 0: R=R_inf so exp term is 0, recovery formula gives R_inf unchanged
+        D = self._df_dinf
+        F = self._df_finf
+        # dummy interval for pulse 0: all state vars start at steady-state so
+        # the exp recovery terms evaluate to zero — same result as skipping recovery.
+        intvl = self._interval
 
         y = np.zeros(n_points, dtype=float)
         onset_i = onset
@@ -640,23 +741,31 @@ class NMPulse:
         quantal_content: list[int] = []
         rp_R: list[float] = []
         rp_P: list[float] = []
+        df_D: list[float] = []
+        df_F: list[float] = []
         while True:
             if self._n_pulses > 0 and count >= self._n_pulses:
                 break
             if not math.isinf(self._train_duration) and onset_i >= train_end:
                 break
 
+            effective_amp = amp
             if rp_active:
                 R = self._rp_rinf + (R - self._rp_rinf) * math.exp(-intvl / self._rp_taur)
                 if self._rp_taup > 0:
                     P = self._rp_pinf + (P - self._rp_pinf) * math.exp(-intvl / self._rp_taup)
-                effective_amp = amp * R * P
-            else:
-                effective_amp = amp
+                effective_amp *= R * P
+            if df_active:
+                D = self._df_dinf + (D - self._df_dinf) * math.exp(-intvl / self._df_taud)
+                if self._df_tauf > 0:
+                    F = self._df_finf + (F - self._df_finf) * math.exp(-intvl / self._df_tauf)
+                effective_amp *= D * F
 
             onset_times.append(onset_i)
             rp_R.append(R)
             rp_P.append(P)
+            df_D.append(D)
+            df_F.append(F)
 
             if self._binomial_n > 0:
                 k = int(rng.binomial(self._binomial_n, self._binomial_p))
@@ -669,11 +778,12 @@ class NMPulse:
             count += 1
 
             if rp_active:
-                R = R * (1.0 - P)
-                R = max(self._rp_rmin, R)
+                R = max(self._rp_rmin, R * (1.0 - P))
                 if self._rp_pscale > 0:
-                    P = P + self._rp_pscale * (1.0 - P)
-                    P = min(self._rp_pmax, P)
+                    P = min(self._rp_pmax, P + self._rp_pscale * (1.0 - P))
+            if df_active:
+                D = max(self._df_dmin, D * self._df_dscale)
+                F = min(self._df_fmax, F * self._df_fscale)
 
             if self._interval_type == "poisson":
                 intvl = rng.exponential(scale=self._interval)
@@ -689,6 +799,8 @@ class NMPulse:
         self._last_quantal_content = quantal_content
         self._last_rp_R: list[float] = rp_R
         self._last_rp_P: list[float] = rp_P
+        self._last_df_D: list[float] = df_D
+        self._last_df_F: list[float] = df_F
         return y
 
     # ------------------------------------------------------------------
@@ -794,6 +906,14 @@ class NMPulse:
             "rp_pinf":           self._rp_pinf,
             "rp_pmax":           self._rp_pmax,
             "rp_pscale":         self._rp_pscale,
+            "df_taud":           self._df_taud,
+            "df_dinf":           self._df_dinf,
+            "df_dmin":           self._df_dmin,
+            "df_dscale":         self._df_dscale,
+            "df_tauf":           self._df_tauf,
+            "df_finf":           self._df_finf,
+            "df_fmax":           self._df_fmax,
+            "df_fscale":         self._df_fscale,
         }
         # Merge func-specific entries (pulse name + shape params like tau/freq/phase).
         d.update(self._func.to_dict())
