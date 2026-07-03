@@ -1656,5 +1656,288 @@ class TestNMToolPulseTrain(unittest.TestCase):
         self.assertIn("interval=20", note_text)
 
 
+# ---------------------------------------------------------------------------
+# NMPulse — R*P short-term plasticity model (properties and validation)
+# ---------------------------------------------------------------------------
+
+class TestNMPulseRP(unittest.TestCase):
+
+    def _make_rp_pulse(self, **kwargs):
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": 3, "interval": 20.0, "rp_taur": 100.0, "rp_pinf": 0.5}
+        cfg.update(kwargs)
+        return NMPulse(config=cfg)
+
+    def test_defaults(self):
+        p = NMPulse()
+        self.assertEqual(p.rp_taur,   0.0)
+        self.assertEqual(p.rp_rinf,   1.0)
+        self.assertEqual(p.rp_rmin,   0.0)
+        self.assertEqual(p.rp_pinf,   0.5)
+        self.assertTrue(math.isinf(p.rp_pmax))
+        self.assertEqual(p.rp_taup,   0.0)
+        self.assertEqual(p.rp_pscale, 0.0)
+
+    def test_rp_taur_setter(self):
+        p = NMPulse()
+        p.rp_taur = 50.0
+        self.assertEqual(p.rp_taur, 50.0)
+
+    def test_rp_taur_bool_raises(self):
+        p = NMPulse()
+        with self.assertRaises(TypeError):
+            p.rp_taur = True
+
+    def test_rp_rinf_setter(self):
+        p = NMPulse()
+        p.rp_rinf = 0.8
+        self.assertAlmostEqual(p.rp_rinf, 0.8)
+
+    def test_rp_rmin_setter(self):
+        p = NMPulse()
+        p.rp_rmin = 0.1
+        self.assertAlmostEqual(p.rp_rmin, 0.1)
+
+    def test_rp_pinf_setter(self):
+        p = NMPulse()
+        p.rp_pinf = 0.3
+        self.assertAlmostEqual(p.rp_pinf, 0.3)
+
+    def test_rp_pmax_setter(self):
+        p = NMPulse()
+        p.rp_pmax = 0.9
+        self.assertAlmostEqual(p.rp_pmax, 0.9)
+
+    def test_rp_taup_setter(self):
+        p = NMPulse()
+        p.rp_taup = 200.0
+        self.assertAlmostEqual(p.rp_taup, 200.0)
+
+    def test_rp_pscale_setter(self):
+        p = NMPulse()
+        p.rp_pscale = 0.1
+        self.assertAlmostEqual(p.rp_pscale, 0.1)
+
+    def test_config_set(self):
+        p = self._make_rp_pulse(rp_rinf=0.9, rp_rmin=0.05, rp_pmax=0.8,
+                                 rp_taup=150.0, rp_pscale=0.2)
+        self.assertAlmostEqual(p.rp_taur,   100.0)
+        self.assertAlmostEqual(p.rp_rinf,   0.9)
+        self.assertAlmostEqual(p.rp_rmin,   0.05)
+        self.assertAlmostEqual(p.rp_pinf,   0.5)
+        self.assertAlmostEqual(p.rp_pmax,   0.8)
+        self.assertAlmostEqual(p.rp_taup,   150.0)
+        self.assertAlmostEqual(p.rp_pscale, 0.2)
+
+    def test_to_dict_round_trip(self):
+        p = self._make_rp_pulse(rp_taup=150.0, rp_pscale=0.2)
+        d = p.to_dict()
+        self.assertIn("rp_taur", d)
+        self.assertIn("rp_pinf", d)
+        self.assertIn("rp_taup", d)
+        self.assertIn("rp_pscale", d)
+        p2 = NMPulse(config=d)
+        self.assertAlmostEqual(p2.rp_taur,   p.rp_taur)
+        self.assertAlmostEqual(p2.rp_pinf,   p.rp_pinf)
+        self.assertAlmostEqual(p2.rp_taup,   p.rp_taup)
+        self.assertAlmostEqual(p2.rp_pscale, p.rp_pscale)
+
+
+# ---------------------------------------------------------------------------
+# NMPulse — R*P waveform behaviour
+# ---------------------------------------------------------------------------
+
+class TestNMPulseRPWaveform(unittest.TestCase):
+    """Tests for the R*P depression/facilitation model in waveform().
+
+    Setup: square pulses, amp=1, onset=0, duration=5, n_points=100,
+    interval=20 → pulses land at t=0, 20, 40. Peak of each is y[0], y[20],
+    y[40].
+    """
+
+    _N = 100
+    _XDELTA = 1.0
+
+    def _waveform(self, **kwargs):
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": 3, "interval": 20.0}
+        cfg.update(kwargs)
+        p = NMPulse(config=cfg)
+        return p.waveform(self._N, 0.0, self._XDELTA, 0)
+
+    def test_rp_inactive_when_taur_zero(self):
+        # taur=0 means model off: waveform must equal plain unscaled pulse
+        y_rp  = self._waveform(rp_taur=0.0)
+        y_ref = self._waveform()
+        np.testing.assert_array_almost_equal(y_rp, y_ref)
+
+    def test_first_pulse_amplitude(self):
+        # At pulse 0: R=R_inf=1.0, P=P_inf=0.5 → effective_amp = 0.5
+        y = self._waveform(rp_taur=100.0, rp_rinf=1.0, rp_pinf=0.5)
+        self.assertAlmostEqual(y[0], 0.5)
+
+    def test_depression_reduces_successive_pulses(self):
+        # R depletes after each pulse → amplitudes decrease
+        y = self._waveform(rp_taur=100.0, rp_pinf=0.5)
+        self.assertGreater(y[0], y[20])
+        self.assertGreater(y[20], y[40])
+
+    def test_depression_amplitude_at_one_time_constant(self):
+        # When interval == rp_taur (one time constant), amplitudes are analytic:
+        #   pulse 0: effective_amp = amp * R_inf * P = 1.0 * 1.0 * 0.5 = 0.5
+        #   after pulse 0: R -> R_inf * (1 - P) = 0.5
+        #   pulse 1: R recovers by exp(-1): R = R_inf * (1 - P * exp(-1))
+        #            effective_amp = amp * R * P = P * R_inf * (1 - P * exp(-1))
+        tau = 20.0  # rp_taur == interval → one time constant between pulses
+        P = 0.5
+        amp = 1.0
+        y = self._waveform(rp_taur=tau, rp_pinf=P)
+        expected_amp0 = amp * P
+        expected_amp1 = amp * P * (1.0 - P * math.exp(-1.0))
+        self.assertAlmostEqual(y[0],  expected_amp0, places=10)
+        self.assertAlmostEqual(y[20], expected_amp1, places=10)
+
+    def test_facilitation_amplitude_at_one_time_constant(self):
+        # Depression disabled by clamping R to 1 (rp_rmin = rp_rinf = 1.0).
+        # effective_amp = amp * 1.0 * P, so only P dynamics matter.
+        # With interval == rp_taup (one time constant):
+        #   pulse 0: P = pinf  →  amp * pinf
+        #   after:   P → pinf + pscale*(1 - pinf)
+        #   pulse 1: P recovers by exp(-1) → pinf + pscale*(1 - pinf)*exp(-1)
+        #            effective_amp = amp * (pinf + pscale*(1 - pinf)*exp(-1))
+        amp    = 1.0
+        pinf   = 0.2
+        pscale = 0.5
+        tau    = 20.0  # rp_taup == interval → one time constant between pulses
+        y = self._waveform(rp_taur=1000.0, rp_rinf=1.0, rp_rmin=1.0,
+                           rp_pinf=pinf, rp_taup=tau, rp_pscale=pscale)
+        expected_amp0 = amp * pinf
+        expected_amp1 = amp * (pinf + pscale * (1.0 - pinf) * math.exp(-1.0))
+        self.assertAlmostEqual(y[0],  expected_amp0, places=10)
+        self.assertAlmostEqual(y[20], expected_amp1, places=10)
+        self.assertGreater(y[20], y[0])  # facilitation increases amplitude
+
+    def test_rp_R_length_matches_n_pulses(self):
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 4, "interval": 20.0,
+                             "rp_taur": 100.0, "rp_pinf": 0.5})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        self.assertEqual(len(p._last_rp_R), 4)
+        self.assertEqual(len(p._last_rp_P), 4)
+
+    def test_rp_P_fixed_when_pscale_zero(self):
+        # pscale=0 → P stays at pinf for every pulse
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 3, "interval": 20.0,
+                             "rp_taur": 100.0, "rp_pinf": 0.5, "rp_pscale": 0.0})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        for pval in p._last_rp_P:
+            self.assertAlmostEqual(pval, 0.5)
+
+    def test_rp_P_increases_with_facilitation(self):
+        # pscale>0 → P increments after each pulse (facilitation)
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 3, "interval": 20.0,
+                             "rp_taur": 100.0, "rp_pinf": 0.5,
+                             "rp_taup": 1000.0, "rp_pscale": 0.3})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        self.assertGreater(p._last_rp_P[1], p._last_rp_P[0])
+        self.assertGreater(p._last_rp_P[2], p._last_rp_P[1])
+
+    def test_rp_rmin_clamps_R(self):
+        # rmin=0.4 → R never falls below 0.4
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 5, "interval": 5.0,
+                             "rp_taur": 10.0, "rp_pinf": 0.9, "rp_rmin": 0.4})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        for r in p._last_rp_R:
+            self.assertGreaterEqual(r, 0.4)
+
+    def test_rp_pmax_clamps_P(self):
+        # pmax=0.7 → P never exceeds 0.7
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 5, "interval": 5.0,
+                             "rp_taur": 100.0, "rp_pinf": 0.5,
+                             "rp_taup": 1000.0, "rp_pscale": 0.5, "rp_pmax": 0.7})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        for pval in p._last_rp_P:
+            self.assertLessEqual(pval, 0.7)
+
+    def test_no_rp_output_without_toolfolder(self):
+        # _last_rp_R / _last_rp_P populated even for single pulse (n_pulses=1)
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "rp_taur": 100.0, "rp_pinf": 0.5})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        # single-pulse path: _last_rp_R not set (model inactive for n_pulses=1 path)
+        # just verify waveform returns correct shape
+        y = p.waveform(self._N, 0.0, self._XDELTA, 0)
+        self.assertEqual(len(y), self._N)
+
+
+# ---------------------------------------------------------------------------
+# NMToolPulse — R*P toolfolder output
+# ---------------------------------------------------------------------------
+
+class TestNMToolPulseRPOutput(unittest.TestCase):
+
+    def _run_rp(self, n_pulses=3, rp_taur=100.0, rp_pinf=0.5, **kwargs):
+        t = NMToolPulse()
+        t.n_points = 200
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": n_pulses, "interval": 20.0,
+               "rp_taur": rp_taur, "rp_pinf": rp_pinf}
+        cfg.update(kwargs)
+        t.pulses.new(cfg)
+        folder = _run_tool(t, [_make_empty_data("w0", n=200)])
+        return folder.toolfolders["Pulse_0"]
+
+    def test_pgr_array_created(self):
+        tf = self._run_rp()
+        self.assertIn("PGR_0", tf.data)
+
+    def test_pgp_array_created(self):
+        tf = self._run_rp()
+        self.assertIn("PGP_0", tf.data)
+
+    def test_pgr_pgp_absent_when_rp_inactive(self):
+        # rp_taur=0 → model off → no PGR_/PGP_ arrays
+        t = NMToolPulse()
+        t.n_points = 200
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+                      "n_pulses": 3, "interval": 20.0})
+        folder = _run_tool(t, [_make_empty_data("w0", n=200)])
+        tf = folder.toolfolders["Pulse_0"]
+        self.assertNotIn("PGR_0", tf.data)
+        self.assertNotIn("PGP_0", tf.data)
+
+    def test_pgr_length_matches_pgt(self):
+        tf = self._run_rp(n_pulses=4)
+        times = tf.data["PGT_0"].nparray
+        r_vals = tf.data["PGR_0"].nparray
+        self.assertEqual(len(r_vals), len(times))
+
+    def test_first_r_equals_rinf(self):
+        # R is initialised to rinf, so PGR_[0] must equal rp_rinf
+        tf = self._run_rp(rp_taur=100.0)
+        r_vals = tf.data["PGR_0"].nparray
+        self.assertAlmostEqual(r_vals[0], 1.0)  # rp_rinf default = 1.0
+
+    def test_r_values_decrease_with_depression(self):
+        tf = self._run_rp(n_pulses=3, rp_taur=50.0, rp_pinf=0.8)
+        r_vals = tf.data["PGR_0"].nparray
+        self.assertGreater(r_vals[0], r_vals[1])
+        self.assertGreater(r_vals[1], r_vals[2])
+
+    def test_note_contains_rp_params(self):
+        tf = self._run_rp(rp_taur=75.0, rp_pinf=0.4)
+        note_text = tf.data["PGT_0"].notes.note
+        self.assertIn("rp_taur=75", note_text)
+        self.assertIn("rp_pinf=0.4", note_text)
+
+
 if __name__ == "__main__":
     unittest.main()

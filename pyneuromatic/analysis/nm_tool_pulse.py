@@ -98,6 +98,8 @@ class NMToolPulse(NMTool):
         self._epoch_names:     list[str]         = []
         self._pulse_times:     list[list[float]] = []
         self._quantal_content: list[list[int]]   = []
+        self._rp_R:            list[list[float]] = []
+        self._rp_P:            list[list[float]] = []
 
     # ------------------------------------------------------------------
     # Properties
@@ -208,6 +210,8 @@ class NMToolPulse(NMTool):
         self._epoch_names = []
         self._pulse_times = []
         self._quantal_content = []
+        self._rp_R = []
+        self._rp_P = []
         return True
 
     def run(self) -> bool:
@@ -224,8 +228,10 @@ class NMToolPulse(NMTool):
         epoch_name = self.data.name if self.data else "wave_%d" % epoch_idx
 
         y = np.zeros(self.__n_points, dtype=float)
-        epoch_times: list[float] = []
-        epoch_quantal: list[int] = []
+        epoch_times:   list[float] = []
+        epoch_quantal: list[int]   = []
+        epoch_rp_R:    list[float] = []
+        epoch_rp_P:    list[float] = []
         for p in self.__pulses:
             if p.enabled and p.targets_epoch(epoch_idx):
                 y += p.waveform(
@@ -233,16 +239,26 @@ class NMToolPulse(NMTool):
                 )
                 epoch_times.extend(getattr(p, "_last_onset_times", []))
                 epoch_quantal.extend(getattr(p, "_last_quantal_content", []))
+                epoch_rp_R.extend(getattr(p, "_last_rp_R", []))
+                epoch_rp_P.extend(getattr(p, "_last_rp_P", []))
 
-        # sort times and quantal content together by onset time
+        # sort all per-pulse arrays together by onset time
         if epoch_times:
-            paired = sorted(zip(epoch_times, epoch_quantal))
-            epoch_times, epoch_quantal = [list(x) for x in zip(*paired)]
+            if epoch_rp_R:
+                paired = sorted(zip(epoch_times, epoch_quantal, epoch_rp_R, epoch_rp_P))
+                epoch_times, epoch_quantal, epoch_rp_R, epoch_rp_P = [
+                    list(x) for x in zip(*paired)
+                ]
+            else:
+                paired2 = sorted(zip(epoch_times, epoch_quantal))
+                epoch_times, epoch_quantal = [list(x) for x in zip(*paired2)]
 
         self._waveforms.append(y)
         self._epoch_names.append(epoch_name)
         self._pulse_times.append(epoch_times)
         self._quantal_content.append(epoch_quantal)
+        self._rp_R.append(epoch_rp_R)
+        self._rp_P.append(epoch_rp_P)
         return True
 
     def run_finish(self) -> bool:
@@ -286,6 +302,19 @@ class NMToolPulse(NMTool):
             if p.binomial_n > 0:
                 parts.append("binomial_n=%d" % p.binomial_n)
                 parts.append("binomial_p=%g" % p.binomial_p)
+            if p.rp_taur > 0:
+                parts.append("rp_taur=%g" % p.rp_taur)
+                parts.append("rp_pinf=%g" % p.rp_pinf)
+                if p.rp_rinf != 1.0:
+                    parts.append("rp_rinf=%g" % p.rp_rinf)
+                if p.rp_rmin != 0.0:
+                    parts.append("rp_rmin=%g" % p.rp_rmin)
+                if p.rp_taup > 0:
+                    parts.append("rp_taup=%g" % p.rp_taup)
+                if p.rp_pscale > 0:
+                    parts.append("rp_pscale=%g" % p.rp_pscale)
+                if not math.isinf(p.rp_pmax):
+                    parts.append("rp_pmax=%g" % p.rp_pmax)
             if p.epoch != 0 or p.epoch_delta != 0:
                 parts.append("epoch=%d" % p.epoch)
                 parts.append("epoch_delta=%d" % p.epoch_delta)
@@ -347,20 +376,23 @@ class NMToolPulse(NMTool):
         return f
 
     def _write_times_to_toolfolder(self, note: str) -> None:
-        """Write per-epoch onset times (PGT_) and quantal content (PGQ_) to a Pulse toolfolder."""
+        """Write PGT_, PGQ_, PGR_, PGP_ per-epoch arrays to a Pulse toolfolder."""
         tf = self._make_toolfolder("Pulse", overwrite=self._overwrite)
-        times_stem   = "PGT_" + self.__chan
-        quantal_stem = "PGQ_" + self.__chan
-        for idx, (times, quantal) in enumerate(
-            zip(self._pulse_times, self._quantal_content)
+        chan = self.__chan
+        rp_active = any(p.rp_taur > 0 for p in self.__pulses)
+        for idx, (times, quantal, rp_R, rp_P) in enumerate(
+            zip(self._pulse_times, self._quantal_content, self._rp_R, self._rp_P)
         ):
-            d = tf.data.new(
-                times_stem + str(idx),
-                nparray=np.array(times, dtype=float),
-            )
-            self._add_note(d, note)
-            d = tf.data.new(
-                quantal_stem + str(idx),
-                nparray=np.array(quantal, dtype=int),
-            )
-            self._add_note(d, note)
+            for stem, arr, dtype in (
+                ("PGT_" + chan, times,   float),
+                ("PGQ_" + chan, quantal, int),
+            ):
+                d = tf.data.new(stem + str(idx), nparray=np.array(arr, dtype=dtype))
+                self._add_note(d, note)
+            if rp_active:
+                for stem, arr in (
+                    ("PGR_" + chan, rp_R),
+                    ("PGP_" + chan, rp_P),
+                ):
+                    d = tf.data.new(stem + str(idx), nparray=np.array(arr, dtype=float))
+                    self._add_note(d, note)

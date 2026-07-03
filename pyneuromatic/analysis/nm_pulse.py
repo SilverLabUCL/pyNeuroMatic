@@ -41,6 +41,7 @@ _FLOAT_ATTRS: tuple[str, ...] = (
     "amp_delta", "onset_delta", "duration_delta",
     "amp_stdv", "onset_stdv", "duration_stdv",
     "interval", "interval_stdv", "interval_min", "interval_max", "train_duration",
+    "rp_taur", "rp_rinf", "rp_rmin", "rp_taup", "rp_pinf", "rp_pmax", "rp_pscale",
 )
 
 # Keys that belong to the NMPulseFunc subclass, not to NMPulse directly.
@@ -113,6 +114,17 @@ class NMPulse:
         self._train_duration: float = math.inf
         self._binomial_n: int = 0
         self._binomial_p: float = 1.0
+        # R*P short-term plasticity model.
+        # Depression only (rp_pscale=0): Tsodyks & Markram 1997.
+        # Depression + facilitation (rp_pscale>0, rp_taup>0): Tsodyks, Pawelzik & Markram 1998.
+        # rp_taur > 0 enables the model.
+        self._rp_taur:   float = 0.0     # recovery tau for R (>0 enables model)
+        self._rp_rinf:   float = 1.0     # steady-state R
+        self._rp_rmin:   float = 0.0     # minimum R after depletion
+        self._rp_pinf:   float = 0.5     # steady-state P (release probability)
+        self._rp_pmax:   float = math.inf  # ceiling on P
+        self._rp_taup:   float = 0.0     # recovery tau for P (>0 enables P dynamics)
+        self._rp_pscale: float = 0.0     # post-pulse P increment scale (>0 enables facilitation)
 
         if config is not None:
             self._config_set(config, quiet=True)
@@ -463,6 +475,79 @@ class NMPulse:
         nmh.history("set binomial_p=%g" % value, path=self._name)
         add_nm_command("%s[%r].binomial_p = %g" % (self._nm_path, self._name, self._binomial_p))
 
+    # ------------------------------------------------------------------
+    # R*P short-term plasticity model
+
+    @property
+    def rp_taur(self) -> float:
+        """Recovery time constant for R. >0 enables the R*P model; 0 = disabled."""
+        return self._rp_taur
+
+    @rp_taur.setter
+    def rp_taur(self, value: float) -> None:
+        self._float_set("rp_taur", value)
+        add_nm_command("%s[%r].rp_taur = %g" % (self._nm_path, self._name, self._rp_taur))
+
+    @property
+    def rp_rinf(self) -> float:
+        """Steady-state value of R (vesicle pool fraction). Default 1.0."""
+        return self._rp_rinf
+
+    @rp_rinf.setter
+    def rp_rinf(self, value: float) -> None:
+        self._float_set("rp_rinf", value)
+        add_nm_command("%s[%r].rp_rinf = %g" % (self._nm_path, self._name, self._rp_rinf))
+
+    @property
+    def rp_rmin(self) -> float:
+        """Minimum R after depletion. Default 0.0."""
+        return self._rp_rmin
+
+    @rp_rmin.setter
+    def rp_rmin(self, value: float) -> None:
+        self._float_set("rp_rmin", value)
+        add_nm_command("%s[%r].rp_rmin = %g" % (self._nm_path, self._name, self._rp_rmin))
+
+    @property
+    def rp_pinf(self) -> float:
+        """Steady-state release probability P. Default 0.5."""
+        return self._rp_pinf
+
+    @rp_pinf.setter
+    def rp_pinf(self, value: float) -> None:
+        self._float_set("rp_pinf", value)
+        add_nm_command("%s[%r].rp_pinf = %g" % (self._nm_path, self._name, self._rp_pinf))
+
+    @property
+    def rp_pmax(self) -> float:
+        """Ceiling on P (prevents P exceeding this after facilitation). Default inf."""
+        return self._rp_pmax
+
+    @rp_pmax.setter
+    def rp_pmax(self, value: float) -> None:
+        self._float_set("rp_pmax", value)
+        add_nm_command("%s[%r].rp_pmax = %g" % (self._nm_path, self._name, self._rp_pmax))
+
+    @property
+    def rp_taup(self) -> float:
+        """Recovery time constant for P. >0 enables P dynamics; 0 = P fixed at rp_pinf."""
+        return self._rp_taup
+
+    @rp_taup.setter
+    def rp_taup(self, value: float) -> None:
+        self._float_set("rp_taup", value)
+        add_nm_command("%s[%r].rp_taup = %g" % (self._nm_path, self._name, self._rp_taup))
+
+    @property
+    def rp_pscale(self) -> float:
+        """Post-pulse P facilitation scale. >0 enables facilitation via P += rp_pscale*(1-P)."""
+        return self._rp_pscale
+
+    @rp_pscale.setter
+    def rp_pscale(self, value: float) -> None:
+        self._float_set("rp_pscale", value)
+        add_nm_command("%s[%r].rp_pscale = %g" % (self._nm_path, self._name, self._rp_pscale))
+
     def _interval_type_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "interval_type", "string"))
@@ -540,38 +625,70 @@ class NMPulse:
             self._last_quantal_content = [1]
             return self._func.waveform(n_points, xstart, xdelta, amp, onset, duration)
 
+        # train of pulses...
+
+        rp_active = self._rp_taur > 0
+        R = self._rp_rinf
+        P = self._rp_pinf
+        intvl = self._interval  # dummy interval for pulse 0: R=R_inf so exp term is 0, recovery formula gives R_inf unchanged
+
         y = np.zeros(n_points, dtype=float)
         onset_i = onset
         count = 0
         train_end = onset + self._train_duration
         onset_times: list[float] = []
         quantal_content: list[int] = []
+        rp_R: list[float] = []
+        rp_P: list[float] = []
         while True:
             if self._n_pulses > 0 and count >= self._n_pulses:
                 break
             if not math.isinf(self._train_duration) and onset_i >= train_end:
                 break
+
+            if rp_active:
+                R = self._rp_rinf + (R - self._rp_rinf) * math.exp(-intvl / self._rp_taur)
+                if self._rp_taup > 0:
+                    P = self._rp_pinf + (P - self._rp_pinf) * math.exp(-intvl / self._rp_taup)
+                effective_amp = amp * R * P
+            else:
+                effective_amp = amp
+
             onset_times.append(onset_i)
+            rp_R.append(R)
+            rp_P.append(P)
+
             if self._binomial_n > 0:
                 k = int(rng.binomial(self._binomial_n, self._binomial_p))
                 quantal_content.append(k)
                 if k > 0:
-                    y += k * self._func.waveform(n_points, xstart, xdelta, amp, onset_i, duration)
+                    y += k * self._func.waveform(n_points, xstart, xdelta, effective_amp, onset_i, duration)
             else:
                 quantal_content.append(1)
-                y += self._func.waveform(n_points, xstart, xdelta, amp, onset_i, duration)
+                y += self._func.waveform(n_points, xstart, xdelta, effective_amp, onset_i, duration)
             count += 1
+
+            if rp_active:
+                R = R * (1.0 - P)
+                R = max(self._rp_rmin, R)
+                if self._rp_pscale > 0:
+                    P = P + self._rp_pscale * (1.0 - P)
+                    P = min(self._rp_pmax, P)
+
             if self._interval_type == "poisson":
-                iv = rng.exponential(scale=self._interval)
+                intvl = rng.exponential(scale=self._interval)
             elif self._interval_type == "gaussian":
-                iv = rng.normal(self._interval, self._interval_stdv)
+                intvl = rng.normal(self._interval, self._interval_stdv)
             else:
-                iv = self._interval
-            iv = max(iv, self._interval_min)
-            iv = min(iv, self._interval_max)
-            onset_i += iv
+                intvl = self._interval
+            intvl = max(intvl, self._interval_min)
+            intvl = min(intvl, self._interval_max)
+            onset_i += intvl
+
         self._last_onset_times = onset_times
         self._last_quantal_content = quantal_content
+        self._last_rp_R: list[float] = rp_R
+        self._last_rp_P: list[float] = rp_P
         return y
 
     # ------------------------------------------------------------------
@@ -670,6 +787,13 @@ class NMPulse:
             "train_duration":    self._train_duration,
             "binomial_n":        self._binomial_n,
             "binomial_p":        self._binomial_p,
+            "rp_taur":           self._rp_taur,
+            "rp_rinf":           self._rp_rinf,
+            "rp_rmin":           self._rp_rmin,
+            "rp_taup":           self._rp_taup,
+            "rp_pinf":           self._rp_pinf,
+            "rp_pmax":           self._rp_pmax,
+            "rp_pscale":         self._rp_pscale,
         }
         # Merge func-specific entries (pulse name + shape params like tau/freq/phase).
         d.update(self._func.to_dict())
