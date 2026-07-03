@@ -1765,6 +1765,15 @@ class TestNMPulseRPWaveform(unittest.TestCase):
         p = NMPulse(config=cfg)
         return p.waveform(self._N, 0.0, self._XDELTA, 0)
 
+    def test_rp_and_df_both_active_raises(self):
+        # R*P and D*F are alternative models — enabling both is an error
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 3, "interval": 20.0,
+                             "rp_taur": 100.0, "rp_pinf": 0.5,
+                             "df_taud": 100.0, "df_dscale": 0.5})
+        with self.assertRaises(ValueError):
+            p.waveform(self._N, 0.0, self._XDELTA, 0)
+
     def test_rp_inactive_when_taur_zero(self):
         # taur=0 means model off: waveform must equal plain unscaled pulse
         y_rp  = self._waveform(rp_taur=0.0)
@@ -1937,6 +1946,275 @@ class TestNMToolPulseRPOutput(unittest.TestCase):
         note_text = tf.data["PGT_0"].notes.note
         self.assertIn("rp_taur=75", note_text)
         self.assertIn("rp_pinf=0.4", note_text)
+
+
+# ---------------------------------------------------------------------------
+# NMPulse — D*F short-term plasticity model (properties and validation)
+# ---------------------------------------------------------------------------
+
+class TestNMPulseDF(unittest.TestCase):
+
+    def _make_df_pulse(self, **kwargs):
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": 3, "interval": 20.0,
+               "df_taud": 100.0, "df_dscale": 0.5}
+        cfg.update(kwargs)
+        return NMPulse(config=cfg)
+
+    def test_defaults(self):
+        p = NMPulse()
+        self.assertEqual(p.df_taud,   0.0)
+        self.assertEqual(p.df_dinf,   1.0)
+        self.assertEqual(p.df_dmin,   0.0)
+        self.assertEqual(p.df_dscale, 1.0)
+        self.assertEqual(p.df_tauf,   0.0)
+        self.assertEqual(p.df_finf,   1.0)
+        self.assertTrue(math.isinf(p.df_fmax))
+        self.assertEqual(p.df_fscale, 1.0)
+
+    def test_df_taud_setter(self):
+        p = NMPulse()
+        p.df_taud = 50.0
+        self.assertEqual(p.df_taud, 50.0)
+
+    def test_df_taud_bool_raises(self):
+        p = NMPulse()
+        with self.assertRaises(TypeError):
+            p.df_taud = True
+
+    def test_df_dinf_setter(self):
+        p = NMPulse()
+        p.df_dinf = 0.8
+        self.assertAlmostEqual(p.df_dinf, 0.8)
+
+    def test_df_dmin_setter(self):
+        p = NMPulse()
+        p.df_dmin = 0.1
+        self.assertAlmostEqual(p.df_dmin, 0.1)
+
+    def test_df_dscale_setter(self):
+        p = NMPulse()
+        p.df_dscale = 0.6
+        self.assertAlmostEqual(p.df_dscale, 0.6)
+
+    def test_df_tauf_setter(self):
+        p = NMPulse()
+        p.df_tauf = 200.0
+        self.assertAlmostEqual(p.df_tauf, 200.0)
+
+    def test_df_finf_setter(self):
+        p = NMPulse()
+        p.df_finf = 0.5
+        self.assertAlmostEqual(p.df_finf, 0.5)
+
+    def test_df_fmax_setter(self):
+        p = NMPulse()
+        p.df_fmax = 2.0
+        self.assertAlmostEqual(p.df_fmax, 2.0)
+
+    def test_df_fscale_setter(self):
+        p = NMPulse()
+        p.df_fscale = 1.5
+        self.assertAlmostEqual(p.df_fscale, 1.5)
+
+    def test_config_set(self):
+        p = self._make_df_pulse(df_dinf=0.9, df_dmin=0.05,
+                                 df_tauf=150.0, df_fscale=1.3, df_fmax=2.0)
+        self.assertAlmostEqual(p.df_taud,   100.0)
+        self.assertAlmostEqual(p.df_dscale, 0.5)
+        self.assertAlmostEqual(p.df_dinf,   0.9)
+        self.assertAlmostEqual(p.df_dmin,   0.05)
+        self.assertAlmostEqual(p.df_tauf,   150.0)
+        self.assertAlmostEqual(p.df_fscale, 1.3)
+        self.assertAlmostEqual(p.df_fmax,   2.0)
+
+    def test_to_dict_round_trip(self):
+        p = self._make_df_pulse(df_tauf=150.0, df_fscale=1.3)
+        d = p.to_dict()
+        self.assertIn("df_taud",  d)
+        self.assertIn("df_dscale", d)
+        self.assertIn("df_tauf",  d)
+        self.assertIn("df_fscale", d)
+        p2 = NMPulse(config=d)
+        self.assertAlmostEqual(p2.df_taud,   p.df_taud)
+        self.assertAlmostEqual(p2.df_dscale, p.df_dscale)
+        self.assertAlmostEqual(p2.df_tauf,   p.df_tauf)
+        self.assertAlmostEqual(p2.df_fscale, p.df_fscale)
+
+
+# ---------------------------------------------------------------------------
+# NMPulse — D*F waveform behaviour
+# ---------------------------------------------------------------------------
+
+class TestNMPulseDFWaveform(unittest.TestCase):
+    """Tests for the D*F depression/facilitation model in waveform().
+
+    Setup: square pulses, amp=1, onset=0, duration=5, n_points=100,
+    interval=20 → pulses land at t=0, 20, 40.  Peak of each is y[0], y[20],
+    y[40].
+    """
+
+    _N = 100
+    _XDELTA = 1.0
+
+    def _waveform(self, **kwargs):
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": 3, "interval": 20.0}
+        cfg.update(kwargs)
+        p = NMPulse(config=cfg)
+        return p.waveform(self._N, 0.0, self._XDELTA, 0)
+
+    def test_df_inactive_when_taud_zero(self):
+        # taud=0 means model off: waveform must equal plain unscaled pulse
+        y_df  = self._waveform(df_taud=0.0)
+        y_ref = self._waveform()
+        np.testing.assert_array_almost_equal(y_df, y_ref)
+
+    def test_first_pulse_amplitude(self):
+        # Pulse 0: D=Dinf=1, F=Finf=1 → effective_amp = amp * 1 * 1 = 1.0
+        y = self._waveform(df_taud=100.0, df_dscale=0.5)
+        self.assertAlmostEqual(y[0], 1.0)
+
+    def test_depression_reduces_successive_pulses(self):
+        # D decreases multiplicatively after each pulse → amplitudes decrease
+        y = self._waveform(df_taud=100.0, df_dscale=0.5)
+        self.assertGreater(y[0], y[20])
+        self.assertGreater(y[20], y[40])
+
+    def test_depression_amplitude_at_one_time_constant(self):
+        # With interval == df_taud (one time constant) and F=1 (no facilitation):
+        #   pulse 0: D=Dinf=1 → effective_amp = amp * 1 = 1.0
+        #   after:   D = max(Dmin, Dinf * Dscale) = Dscale
+        #   pulse 1: D = Dinf + (Dscale - Dinf)*exp(-1) = 1 + (Dscale-1)*exp(-1)
+        #            effective_amp = amp * D
+        amp    = 1.0
+        dscale = 0.5
+        tau    = 20.0  # df_taud == interval → one time constant between pulses
+        y = self._waveform(df_taud=tau, df_dscale=dscale)
+        expected_amp0 = amp * 1.0  # D starts at Dinf=1
+        expected_amp1 = amp * (1.0 + (dscale - 1.0) * math.exp(-1.0))
+        self.assertAlmostEqual(y[0],  expected_amp0, places=10)
+        self.assertAlmostEqual(y[20], expected_amp1, places=10)
+
+    def test_facilitation_amplitude_at_one_time_constant(self):
+        # D clamped to 1 (df_dscale=1, df_dmin=1 or just df_dscale=1 keeps D=1).
+        # With df_dscale=1 → D stays at Dinf=1 every pulse; only F changes.
+        # interval == df_tauf → one time constant between pulses:
+        #   pulse 0: F=Finf=1 → effective_amp = amp * 1 * 1 = 1.0
+        #   after:   F = min(Fmax, Finf * Fscale) = Fscale
+        #   pulse 1: F = Finf + (Fscale - Finf)*exp(-1) = 1 + (Fscale-1)*exp(-1)
+        #            effective_amp = amp * 1 * F
+        amp    = 1.0
+        fscale = 1.5
+        tau    = 20.0  # df_tauf == interval → one time constant
+        y = self._waveform(df_taud=1000.0, df_dscale=1.0,
+                           df_tauf=tau, df_fscale=fscale)
+        expected_amp0 = amp * 1.0  # F starts at Finf=1
+        expected_amp1 = amp * (1.0 + (fscale - 1.0) * math.exp(-1.0))
+        self.assertAlmostEqual(y[0],  expected_amp0, places=10)
+        self.assertAlmostEqual(y[20], expected_amp1, places=10)
+        self.assertGreater(y[20], y[0])  # facilitation increases amplitude
+
+    def test_df_D_length_matches_n_pulses(self):
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 4, "interval": 20.0,
+                             "df_taud": 100.0, "df_dscale": 0.5})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        self.assertEqual(len(p._last_df_D), 4)
+        self.assertEqual(len(p._last_df_F), 4)
+
+    def test_df_F_fixed_when_fscale_one(self):
+        # fscale=1 → F stays at Finf=1 for every pulse
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 3, "interval": 20.0,
+                             "df_taud": 100.0, "df_dscale": 0.5,
+                             "df_tauf": 50.0,  "df_fscale": 1.0})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        for fval in p._last_df_F:
+            self.assertAlmostEqual(fval, 1.0)
+
+    def test_df_dmin_clamps_D(self):
+        # dmin=0.3 → D never falls below 0.3
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 5, "interval": 5.0,
+                             "df_taud": 10.0, "df_dscale": 0.1, "df_dmin": 0.3})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        for d in p._last_df_D:
+            self.assertGreaterEqual(d, 0.3)
+
+    def test_df_fmax_clamps_F(self):
+        # fmax=1.8 → F never exceeds 1.8
+        p = NMPulse(config={"pulse": "square", "amp": 1.0, "onset": 0.0,
+                             "duration": 5.0, "n_pulses": 5, "interval": 5.0,
+                             "df_taud": 100.0, "df_dscale": 1.0,
+                             "df_tauf": 1000.0, "df_fscale": 1.5, "df_fmax": 1.8})
+        p.waveform(self._N, 0.0, self._XDELTA, 0)
+        for fval in p._last_df_F:
+            self.assertLessEqual(fval, 1.8)
+
+
+# ---------------------------------------------------------------------------
+# NMToolPulse — D*F toolfolder output
+# ---------------------------------------------------------------------------
+
+class TestNMToolPulseDFOutput(unittest.TestCase):
+
+    def _run_df(self, n_pulses=3, df_taud=100.0, df_dscale=0.5, **kwargs):
+        t = NMToolPulse()
+        t.n_points = 200
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        cfg = {"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+               "n_pulses": n_pulses, "interval": 20.0,
+               "df_taud": df_taud, "df_dscale": df_dscale}
+        cfg.update(kwargs)
+        t.pulses.new(cfg)
+        folder = _run_tool(t, [_make_empty_data("w0", n=200)])
+        return folder.toolfolders["Pulse_0"]
+
+    def test_pgd_array_created(self):
+        tf = self._run_df()
+        self.assertIn("PGD_0", tf.data)
+
+    def test_pgf_array_created(self):
+        tf = self._run_df()
+        self.assertIn("PGF_0", tf.data)
+
+    def test_pgd_pgf_absent_when_df_inactive(self):
+        t = NMToolPulse()
+        t.n_points = 200
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "onset": 0.0, "duration": 5.0,
+                      "n_pulses": 3, "interval": 20.0})
+        folder = _run_tool(t, [_make_empty_data("w0", n=200)])
+        tf = folder.toolfolders["Pulse_0"]
+        self.assertNotIn("PGD_0", tf.data)
+        self.assertNotIn("PGF_0", tf.data)
+
+    def test_pgd_length_matches_pgt(self):
+        tf = self._run_df(n_pulses=4)
+        times  = tf.data["PGT_0"].nparray
+        d_vals = tf.data["PGD_0"].nparray
+        self.assertEqual(len(d_vals), len(times))
+
+    def test_first_d_equals_dinf(self):
+        # D initialised to Dinf=1.0, so PGD_[0] must equal df_dinf
+        tf = self._run_df()
+        d_vals = tf.data["PGD_0"].nparray
+        self.assertAlmostEqual(d_vals[0], 1.0)  # df_dinf default = 1.0
+
+    def test_d_values_decrease_with_depression(self):
+        tf = self._run_df(n_pulses=3, df_taud=50.0, df_dscale=0.3)
+        d_vals = tf.data["PGD_0"].nparray
+        self.assertGreater(d_vals[0], d_vals[1])
+        self.assertGreater(d_vals[1], d_vals[2])
+
+    def test_note_contains_df_params(self):
+        tf = self._run_df(df_taud=75.0, df_dscale=0.4)
+        note_text = tf.data["PGT_0"].notes.note
+        self.assertIn("df_taud=75", note_text)
+        self.assertIn("df_dscale=0.4", note_text)
 
 
 if __name__ == "__main__":
