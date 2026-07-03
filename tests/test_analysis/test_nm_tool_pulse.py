@@ -2700,6 +2700,182 @@ class TestNMPulseUserIntervals(unittest.TestCase):
         self.assertIn("intervals=<len=3>", note_text)
 
 
+class TestNMPulseFuncSynExp(unittest.TestCase):
+    """Tests for NMPulseFuncSynExp waveform shape."""
+
+    # ------------------------------------------------------------------
+    # Construction and parameter validation
+
+    def test_default_params(self):
+        p = NMPulse(config={"pulse": "synexp"})
+        self.assertEqual(p.func.name, "synexp")
+        self.assertAlmostEqual(p.func.tau_rise, 1.0)
+        self.assertAlmostEqual(p.func.tau_decay, 10.0)
+        self.assertAlmostEqual(p.func.power, 1.0)
+
+    def test_custom_params(self):
+        p = NMPulse(config={"pulse": "synexp", "tau_rise": 2.0, "tau_decay": 20.0, "power": 2.0})
+        self.assertAlmostEqual(p.func.tau_rise, 2.0)
+        self.assertAlmostEqual(p.func.tau_decay, 20.0)
+        self.assertAlmostEqual(p.func.power, 2.0)
+
+    def test_tau_rise_zero_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse(config={"pulse": "synexp", "tau_rise": 0.0})
+
+    def test_tau_decay_zero_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse(config={"pulse": "synexp", "tau_decay": 0.0})
+
+    def test_power_zero_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse(config={"pulse": "synexp", "power": 0.0})
+
+    def test_tau_rise_bool_raises(self):
+        with self.assertRaises(TypeError):
+            NMPulse(config={"pulse": "synexp", "tau_rise": True})
+
+    def test_to_dict_round_trip(self):
+        p = NMPulse(config={"pulse": "synexp", "tau_rise": 2.0, "tau_decay": 15.0, "power": 3.0})
+        d = p.to_dict()
+        self.assertEqual(d["pulse"], "synexp")
+        self.assertAlmostEqual(d["tau_rise"], 2.0)
+        self.assertAlmostEqual(d["tau_decay"], 15.0)
+        self.assertAlmostEqual(d["power"], 3.0)
+        p2 = NMPulse.from_dict(d)
+        self.assertAlmostEqual(p2.func.tau_rise, 2.0)
+        self.assertAlmostEqual(p2.func.tau_decay, 15.0)
+        self.assertAlmostEqual(p2.func.power, 3.0)
+
+    # ------------------------------------------------------------------
+    # Waveform properties
+
+    def test_waveform_zero_before_onset(self):
+        p = NMPulse(config={"pulse": "synexp", "onset": 10.0, "tau_rise": 1.0, "tau_decay": 10.0})
+        y = p.waveform(100, 0.0, 1.0, 0)
+        self.assertTrue(np.all(y[:10] == 0.0))
+
+    def test_waveform_zero_at_onset(self):
+        # synexp starts at 0 at t=onset (rise term = 0 there)
+        p = NMPulse(config={"pulse": "synexp", "onset": 10.0, "tau_rise": 1.0, "tau_decay": 10.0})
+        y = p.waveform(100, 0.0, 1.0, 0)
+        self.assertAlmostEqual(y[10], 0.0, places=10)
+
+    def test_peak_equals_amp(self):
+        # Normalization makes amp the actual peak
+        amp = 5.0
+        p = NMPulse(config={
+            "pulse": "synexp", "amp": amp, "onset": 0.0,
+            "tau_rise": 1.0, "tau_decay": 10.0, "power": 1.0,
+        })
+        y = p.waveform(1000, 0.0, 0.1, 0)
+        self.assertAlmostEqual(float(np.max(y)), amp, delta=amp * 0.01)
+
+    def test_peak_equals_amp_power2(self):
+        amp = 3.0
+        p = NMPulse(config={
+            "pulse": "synexp", "amp": amp, "onset": 0.0,
+            "tau_rise": 2.0, "tau_decay": 20.0, "power": 2.0,
+        })
+        y = p.waveform(2000, 0.0, 0.1, 0)
+        self.assertAlmostEqual(float(np.max(y)), amp, delta=amp * 0.01)
+
+    def test_peak_time(self):
+        # Analytic peak time: t_peak = tau_rise * ln(1 + power*tau_decay/tau_rise)
+        tau_rise, tau_decay, power = 1.0, 10.0, 1.0
+        t_peak_expected = tau_rise * math.log(1.0 + power * tau_decay / tau_rise)
+        p = NMPulse(config={
+            "pulse": "synexp", "amp": 1.0, "onset": 0.0,
+            "tau_rise": tau_rise, "tau_decay": tau_decay, "power": power,
+
+        })
+        y = p.waveform(1000, 0.0, 0.1, 0)
+        t_peak_measured = float(np.argmax(y)) * 0.1
+        self.assertAlmostEqual(t_peak_measured, t_peak_expected, delta=0.15)
+
+    def test_waveform_decays_after_peak(self):
+        p = NMPulse(config={"pulse": "synexp", "onset": 0.0, "tau_rise": 1.0, "tau_decay": 10.0})
+        y = p.waveform(500, 0.0, 0.1, 0)
+        peak_idx = int(np.argmax(y))
+        # Waveform should be declining after the peak
+        self.assertGreater(y[peak_idx], y[peak_idx + 20])
+
+    def test_duration_clips_waveform(self):
+        p = NMPulse(config={
+            "pulse": "synexp", "onset": 5.0, "duration": 10.0,
+            "tau_rise": 1.0, "tau_decay": 50.0,
+        })
+        y = p.waveform(200, 0.0, 1.0, 0)
+        # Beyond onset + duration the waveform should be zero
+        self.assertAlmostEqual(y[16], 0.0)
+        self.assertAlmostEqual(y[100], 0.0)
+
+    def test_inf_duration_does_not_clip(self):
+        p = NMPulse(config={
+            "pulse": "synexp", "onset": 5.0,
+            "tau_rise": 1.0, "tau_decay": 50.0,
+        })
+        y = p.waveform(200, 0.0, 1.0, 0)
+        # Well past the peak there should still be residual signal
+        self.assertGreater(y[100], 0.0)
+
+    def test_faster_rise_shifts_peak_earlier(self):
+        # Smaller tau_rise → earlier peak
+        p_slow = NMPulse(config={"pulse": "synexp", "onset": 0.0, "tau_rise": 5.0, "tau_decay": 20.0})
+        p_fast = NMPulse(config={"pulse": "synexp", "onset": 0.0, "tau_rise": 1.0, "tau_decay": 20.0})
+        y_slow = p_slow.waveform(1000, 0.0, 0.1, 0)
+        y_fast = p_fast.waveform(1000, 0.0, 0.1, 0)
+        self.assertLess(np.argmax(y_fast), np.argmax(y_slow))
+
+    def test_higher_power_shifts_peak_later(self):
+        # Higher power → later, sharper rise → peak shifts later
+        p1 = NMPulse(config={"pulse": "synexp", "onset": 0.0, "tau_rise": 1.0, "tau_decay": 20.0, "power": 1.0})
+        p2 = NMPulse(config={"pulse": "synexp", "onset": 0.0, "tau_rise": 1.0, "tau_decay": 20.0, "power": 4.0})
+        y1 = p1.waveform(1000, 0.0, 0.1, 0)
+        y2 = p2.waveform(1000, 0.0, 0.1, 0)
+        self.assertLess(np.argmax(y1), np.argmax(y2))
+
+    # ------------------------------------------------------------------
+    # NMToolPulse integration
+
+    def test_tool_note_contains_synexp_params(self):
+        t = NMToolPulse()
+        t.n_points = 500
+        t.xstart = 0.0
+        t.xdelta = 0.1
+        t.pulses.new({"pulse": "synexp", "amp": 1.0, "onset": 5.0,
+                      "tau_rise": 2.0, "tau_decay": 20.0, "power": 2.0})
+        folder = _run_tool(t, [_make_empty_data("w0", n=500)])
+        note_text = folder.data["PG_0"].notes.note
+        self.assertIn("synexp", note_text)
+        self.assertIn("tau_rise=2", note_text)
+        self.assertIn("tau_decay=20", note_text)
+        self.assertIn("power=2", note_text)
+
+    def test_biexponential_via_two_pulses(self):
+        # Two synexp components with different tau_decay give a bi-exponential EPSC
+        t = NMToolPulse()
+        t.n_points = 1000
+        t.xstart = 0.0
+        t.xdelta = 0.1
+        t.pulses.new({"pulse": "synexp", "amp": 1.0, "onset": 5.0,
+                      "tau_rise": 0.5, "tau_decay": 5.0})
+        t.pulses.new({"pulse": "synexp", "amp": 0.5, "onset": 5.0,
+                      "tau_rise": 0.5, "tau_decay": 50.0})
+        folder = _run_tool(t, [_make_empty_data("w0", n=1000)])
+        y = folder.data["PG_0"].nparray
+        # Sum of two synexp should peak above the larger component alone
+        t2 = NMToolPulse()
+        t2.n_points = 1000
+        t2.xstart = 0.0
+        t2.xdelta = 0.1
+        t2.pulses.new({"pulse": "synexp", "amp": 1.0, "onset": 5.0,
+                       "tau_rise": 0.5, "tau_decay": 5.0})
+        folder2 = _run_tool(t2, [_make_empty_data("w0", n=1000)])
+        y2 = folder2.data["PG_0"].nparray
+        self.assertGreater(float(np.max(y)), float(np.max(y2)))
+
+
 class TestOnsetTimesToIntervals(unittest.TestCase):
 
     def test_basic(self):
