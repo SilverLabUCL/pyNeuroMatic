@@ -37,10 +37,11 @@ from pyneuromatic.analysis.nm_pulse_func import (
 )
 
 _FLOAT_ATTRS: tuple[str, ...] = (
-    "amp", "onset", "duration",
-    "amp_delta", "onset_delta", "duration_delta",
-    "amp_stdv", "onset_stdv", "duration_stdv",
-    "interval", "interval_stdv", "interval_min", "interval_max", "train_duration",
+    "amp", "amp_delta", "amp_stdv",
+    "onset","onset_delta", "onset_stdv",
+    "duration", "duration_delta", "duration_stdv",
+    "interval", "interval_stdv", "interval_min", "interval_max",
+    "train_duration",
     "rp_taur", "rp_rinf", "rp_rmin", "rp_taup", "rp_pinf", "rp_pmax", "rp_pscale",
     "df_taud", "df_dinf", "df_dmin", "df_dscale", "df_tauf", "df_finf", "df_fmax", "df_fscale",
 )
@@ -51,14 +52,15 @@ _FUNC_ONLY_KEYS: frozenset[str] = frozenset({
 })
 
 _VALID_INTERVAL_TYPES: frozenset[str] = frozenset({"fixed", "gaussian", "poisson"})
-_VALID_AMP_DISTS:     frozenset[str] = frozenset({"gaussian", "gamma"})
+_VALID_DISTS: frozenset[str] = frozenset({"gaussian", "gamma"})
 
 
 def gamma_params_from_moments(mean: float, stdv: float) -> tuple[float, float]:
     """Return (shape k, scale θ) for a Gamma with the given mean and stdv.
 
-    Inverse of :func:`gamma_moments_from_params`. Use to convert ``amp`` and
-    ``amp_stdv`` values into Gamma distribution parameters.
+    Inverse of :func:`gamma_moments_from_params`. Use to convert a parameter
+    mean and stdv (e.g. ``amp`` / ``amp_stdv``) into Gamma distribution
+    parameters.
     """
     k = (mean / stdv) ** 2
     theta = stdv ** 2 / mean
@@ -68,8 +70,8 @@ def gamma_params_from_moments(mean: float, stdv: float) -> tuple[float, float]:
 def gamma_moments_from_params(k: float, theta: float) -> tuple[float, float]:
     """Return (mean, stdv) for a Gamma with shape k and scale θ.
 
-    Inverse of :func:`gamma_params_from_moments`. Use to find the ``amp`` and
-    ``amp_stdv`` values that correspond to known Gamma parameters.
+    Inverse of :func:`gamma_params_from_moments`. Use to find the mean and
+    stdv values that correspond to known Gamma parameters.
     """
     return k * theta, math.sqrt(k) * theta
 
@@ -120,13 +122,15 @@ class NMPulse:
         self._amp: float = 1.0
         self._amp_delta: float = 0.0
         self._amp_stdv: float = 0.0
-        self._amp_dist: str = "gaussian"
+        self._amp_dist:      str = "gaussian"
         self._onset: float = 10.0
         self._onset_delta: float = 0.0
         self._onset_stdv: float = 0.0
+        self._onset_dist:    str = "gaussian"
         self._duration: float = math.inf
         self._duration_delta: float = 0.0
         self._duration_stdv: float = 0.0
+        self._duration_dist: str = "gaussian"
         self._n_pulses: int = 1
         self._interval: float = 100.0
         self._interval_stdv: float = 0.0
@@ -676,18 +680,51 @@ class NMPulse:
 
     @amp_dist.setter
     def amp_dist(self, value: str) -> None:
-        self._amp_dist_set(value)
+        self._dist_set("amp_dist", value)
         add_nm_command("%s[%r].amp_dist = %r" % (self._nm_path, self._name, self._amp_dist))
 
-    def _amp_dist_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
+    @property
+    def onset_dist(self) -> str:
+        """Onset noise distribution: ``"gaussian"`` (default) or ``"gamma"``.
+
+        When ``onset_stdv > 0`` and ``onset_dist="gamma"``, onset is drawn from
+        a Gamma distribution with mean ``onset`` and stdv ``onset_stdv``.
+        Requires ``onset > 0`` at waveform generation time.
+        """
+        return self._onset_dist
+
+    @onset_dist.setter
+    def onset_dist(self, value: str) -> None:
+        self._dist_set("onset_dist", value)
+        add_nm_command("%s[%r].onset_dist = %r" % (self._nm_path, self._name, self._onset_dist))
+
+    @property
+    def duration_dist(self) -> str:
+        """Duration noise distribution: ``"gaussian"`` (default) or ``"gamma"``.
+
+        When ``duration_stdv > 0`` and ``duration_dist="gamma"``, duration is
+        drawn from a Gamma distribution with mean ``duration`` and stdv
+        ``duration_stdv``. Requires ``duration > 0`` (and finite) at waveform
+        generation time.
+        """
+        return self._duration_dist
+
+    @duration_dist.setter
+    def duration_dist(self, value: str) -> None:
+        self._dist_set("duration_dist", value)
+        add_nm_command(
+            "%s[%r].duration_dist = %r" % (self._nm_path, self._name, self._duration_dist)
+        )
+
+    def _dist_set(self, attr: str, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
-            raise TypeError(nmu.type_error_str(value, "amp_dist", "string"))
-        if value not in _VALID_AMP_DISTS:
+            raise TypeError(nmu.type_error_str(value, attr, "string"))
+        if value not in _VALID_DISTS:
             raise ValueError(
-                "amp_dist must be one of %s, got %r" % (sorted(_VALID_AMP_DISTS), value)
+                "%s must be one of %s, got %r" % (attr, sorted(_VALID_DISTS), value)
             )
-        self._amp_dist = value
-        nmh.history("set amp_dist=%r" % value, path=self._name, quiet=quiet)
+        setattr(self, "_" + attr, value)
+        nmh.history("set %s=%r" % (attr, value), path=self._name, quiet=quiet)
 
     def _interval_type_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
@@ -761,10 +798,33 @@ class NMPulse:
                 amp = amp_mean + float(_rng.normal(0.0, self._amp_stdv))
         else:
             amp = amp_mean
-        onset = self._onset + self._onset_delta * occ + (
-            _rng.normal(0.0, self._onset_stdv) if self._onset_stdv > 0 else 0.0)
-        duration = self._duration + self._duration_delta * occ + (
-            _rng.normal(0.0, self._duration_stdv) if self._duration_stdv > 0 else 0.0)
+        onset_mean = self._onset + self._onset_delta * occ
+        if self._onset_stdv > 0:
+            if self._onset_dist == "gamma":
+                if onset_mean <= 0:
+                    raise ValueError(
+                        "onset must be > 0 for gamma distribution, got %g" % onset_mean
+                    )
+                shape, scale = gamma_params_from_moments(onset_mean, self._onset_stdv)
+                onset = float(rng.gamma(shape, scale))
+            else:
+                onset = onset_mean + float(_rng.normal(0.0, self._onset_stdv))
+        else:
+            onset = onset_mean
+        duration_mean = self._duration + self._duration_delta * occ
+        if self._duration_stdv > 0:
+            if self._duration_dist == "gamma":
+                if duration_mean <= 0 or math.isinf(duration_mean):
+                    raise ValueError(
+                        "duration must be finite and > 0 for gamma distribution, got %g"
+                        % duration_mean
+                    )
+                shape, scale = gamma_params_from_moments(duration_mean, self._duration_stdv)
+                duration = float(rng.gamma(shape, scale))
+            else:
+                duration = duration_mean + float(_rng.normal(0.0, self._duration_stdv))
+        else:
+            duration = duration_mean
 
         if self._n_pulses == 1:
             self._last_onset_times: list[float] = [onset]
@@ -892,7 +952,8 @@ class NMPulse:
                 pulse_name = v
             elif kl in _FUNC_ONLY_KEYS:
                 func_kwargs[kl] = v
-            elif kl in ("epoch", "epoch_delta", "n_pulses", "interval_type", "amp_dist",
+            elif kl in ("epoch", "epoch_delta", "n_pulses", "interval_type",
+                        "amp_dist", "onset_dist", "duration_dist",
                         "enabled", "seed", "binomial_n", "binomial_p") \
                     or kl in _FLOAT_ATTRS:  # includes interval, interval_stdv, train_duration
                 nm_attrs[kl] = v
@@ -914,8 +975,8 @@ class NMPulse:
                 self.n_pulses = v
             elif kl == "interval_type":
                 self._interval_type_set(v, quiet=True)
-            elif kl == "amp_dist":
-                self._amp_dist_set(v, quiet=True)
+            elif kl in ("amp_dist", "onset_dist", "duration_dist"):
+                self._dist_set(kl, v, quiet=True)
             elif kl == "enabled":
                 self.enabled = v
             elif kl == "seed":
@@ -951,9 +1012,11 @@ class NMPulse:
             "onset":          self._onset,
             "onset_delta":    self._onset_delta,
             "onset_stdv":     self._onset_stdv,
+            "onset_dist":     self._onset_dist,
             "duration":       self._duration,
             "duration_delta": self._duration_delta,
             "duration_stdv":  self._duration_stdv,
+            "duration_dist":  self._duration_dist,
             "n_pulses":       self._n_pulses,
             "interval":       self._interval,
             "interval_stdv":  self._interval_stdv,

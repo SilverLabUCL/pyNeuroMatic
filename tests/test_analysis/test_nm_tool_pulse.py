@@ -2383,5 +2383,121 @@ class TestNMPulseAmpDistGamma(unittest.TestCase):
         self.assertIn("amp_dist='gamma'", note_text)
 
 
+# ---------------------------------------------------------------------------
+# NMPulse — onset_dist and duration_dist
+# ---------------------------------------------------------------------------
+
+class TestNMPulseOnsetDurationDist(unittest.TestCase):
+
+    def test_onset_dist_default(self):
+        self.assertEqual(NMPulse().onset_dist, "gaussian")
+
+    def test_onset_dist_setter_gamma(self):
+        p = NMPulse()
+        p.onset_dist = "gamma"
+        self.assertEqual(p.onset_dist, "gamma")
+
+    def test_onset_dist_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse().onset_dist = "poisson"
+
+    def test_onset_dist_bool_raises(self):
+        with self.assertRaises(TypeError):
+            NMPulse().onset_dist = True
+
+    def test_duration_dist_default(self):
+        self.assertEqual(NMPulse().duration_dist, "gaussian")
+
+    def test_duration_dist_setter_gamma(self):
+        p = NMPulse()
+        p.duration_dist = "gamma"
+        self.assertEqual(p.duration_dist, "gamma")
+
+    def test_duration_dist_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse().duration_dist = "poisson"
+
+    def test_config_set_both(self):
+        p = NMPulse(config={"onset_dist": "gamma", "duration_dist": "gamma"})
+        self.assertEqual(p.onset_dist, "gamma")
+        self.assertEqual(p.duration_dist, "gamma")
+
+    def test_to_dict_round_trip(self):
+        p = NMPulse(config={"onset_dist": "gamma", "duration_dist": "gamma"})
+        d = p.to_dict()
+        self.assertEqual(d["onset_dist"],    "gamma")
+        self.assertEqual(d["duration_dist"], "gamma")
+        p2 = NMPulse(config=d)
+        self.assertEqual(p2.onset_dist,    "gamma")
+        self.assertEqual(p2.duration_dist, "gamma")
+
+    def test_onset_gamma_requires_positive_onset(self):
+        p = NMPulse(config={"onset": -5.0, "onset_stdv": 1.0, "onset_dist": "gamma",
+                             "duration": 2.0})
+        with self.assertRaises(ValueError):
+            p.waveform(20, 0.0, 1.0, 0)
+
+    def test_duration_gamma_requires_positive_finite_duration(self):
+        # inf duration raises with gamma
+        p = NMPulse(config={"onset": 0.0, "duration_stdv": 1.0, "duration_dist": "gamma"})
+        with self.assertRaises(ValueError):
+            p.waveform(20, 0.0, 1.0, 0)
+
+    def test_onset_gamma_all_positive(self):
+        # Gamma onset samples always > 0
+        onsets = []
+        for i in range(500):
+            p = NMPulse(config={"pulse": "square", "onset": 5.0, "onset_stdv": 3.0,
+                                 "onset_dist": "gamma", "duration": 1.0, "seed": i})
+            p.waveform(20, 0.0, 1.0, 0)
+            onsets.append(p._last_onset_times[0])
+        self.assertTrue(all(o > 0 for o in onsets))
+
+    def test_onset_gamma_mean_close_to_onset(self):
+        onsets = []
+        for i in range(1000):
+            p = NMPulse(config={"pulse": "square", "onset": 5.0, "onset_stdv": 1.0,
+                                 "onset_dist": "gamma", "duration": 1.0, "seed": i})
+            p.waveform(20, 0.0, 1.0, 0)
+            onsets.append(p._last_onset_times[0])
+        self.assertAlmostEqual(float(np.mean(onsets)), 5.0, delta=0.2)
+
+    def test_duration_gamma_all_positive(self):
+        # Gamma duration samples always > 0
+        durations = []
+        rng = np.random.default_rng(0)
+        for i in range(500):
+            p = NMPulse(config={"pulse": "square", "onset": 0.0, "duration": 5.0,
+                                 "duration_stdv": 2.0, "duration_dist": "gamma", "seed": i})
+            y = p.waveform(30, 0.0, 1.0, 0)
+            # square pulse is zero after duration: find where it first drops to 0
+            active = np.where(y > 0)[0]
+            if len(active):
+                durations.append(int(active[-1]) + 1)
+        self.assertTrue(all(d > 0 for d in durations))
+
+    def test_onset_note_contains_onset_dist(self):
+        t = NMToolPulse()
+        t.n_points = 20
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "onset": 5.0, "onset_stdv": 1.0,
+                      "onset_dist": "gamma", "duration": 1.0})
+        folder = _run_tool(t, [_make_empty_data("w0", n=20)])
+        note_text = folder.data["PG_0"].notes.note
+        self.assertIn("onset_dist='gamma'", note_text)
+
+    def test_duration_note_contains_duration_dist(self):
+        t = NMToolPulse()
+        t.n_points = 30
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "onset": 0.0, "duration": 5.0,
+                      "duration_stdv": 1.0, "duration_dist": "gamma"})
+        folder = _run_tool(t, [_make_empty_data("w0", n=30)])
+        note_text = folder.data["PG_0"].notes.note
+        self.assertIn("duration_dist='gamma'", note_text)
+
+
 if __name__ == "__main__":
     unittest.main()
