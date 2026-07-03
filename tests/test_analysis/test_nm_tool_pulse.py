@@ -12,6 +12,7 @@ import numpy as np
 from pyneuromatic.analysis.nm_pulse import (
     NMPulse, NMPulseContainer,
     gamma_params_from_moments, gamma_moments_from_params,
+    onset_times_to_intervals,
 )
 from pyneuromatic.analysis.nm_tool_pulse import NMToolPulse, NMToolPulseConfig
 from pyneuromatic.core.nm_data import NMData
@@ -2497,6 +2498,251 @@ class TestNMPulseOnsetDurationDist(unittest.TestCase):
         folder = _run_tool(t, [_make_empty_data("w0", n=30)])
         note_text = folder.data["PG_0"].notes.note
         self.assertIn("duration_dist='gamma'", note_text)
+
+
+class TestNMPulseUserIntervals(unittest.TestCase):
+    """Tests for interval_type='user' with user-supplied intervals array."""
+
+    # ------------------------------------------------------------------
+    # Property validation
+
+    def test_intervals_default_none(self):
+        self.assertIsNone(NMPulse().intervals)
+
+    def test_intervals_setter_list(self):
+        p = NMPulse()
+        p.intervals = [20.0, 30.0, 40.0]
+        self.assertIsInstance(p.intervals, np.ndarray)
+        np.testing.assert_array_equal(p.intervals, [20.0, 30.0, 40.0])
+
+    def test_intervals_setter_ndarray(self):
+        p = NMPulse()
+        arr = np.array([10.0, 20.0])
+        p.intervals = arr
+        np.testing.assert_array_equal(p.intervals, arr)
+
+    def test_intervals_setter_none_clears(self):
+        p = NMPulse()
+        p.intervals = [10.0]
+        p.intervals = None
+        self.assertIsNone(p.intervals)
+
+    def test_intervals_wrong_type_raises(self):
+        with self.assertRaises(TypeError):
+            NMPulse().intervals = "bad"
+
+    def test_intervals_2d_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse().intervals = np.array([[10.0, 20.0]])
+
+    def test_intervals_empty_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse().intervals = []
+
+    def test_intervals_zero_value_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse().intervals = [10.0, 0.0, 20.0]
+
+    def test_intervals_negative_value_raises(self):
+        with self.assertRaises(ValueError):
+            NMPulse().intervals = [10.0, -5.0]
+
+    def test_interval_type_user_valid(self):
+        p = NMPulse()
+        p.interval_type = "user"
+        self.assertEqual(p.interval_type, "user")
+
+    def test_user_mode_without_intervals_raises(self):
+        p = NMPulse(config={"n_pulses": 3, "interval_type": "user"})
+        with self.assertRaises(ValueError):
+            p.waveform(200, 0.0, 1.0, 0)
+
+    # ------------------------------------------------------------------
+    # Waveform: pulse count and timing
+
+    def test_user_intervals_pulse_count_is_n_plus_one(self):
+        # N intervals → N+1 pulses
+        p = NMPulse(config={
+            "pulse": "square", "onset": 10.0, "duration": 1.0,
+            "n_pulses": 0, "interval_type": "user", "intervals": [20.0, 20.0, 20.0],
+        })
+        p.waveform(200, 0.0, 1.0, 0)
+        self.assertEqual(len(p._last_onset_times), 4)
+
+    def test_user_intervals_onset_times_correct(self):
+        # 3 intervals [20, 30, 40] → N+1=4 pulses at [10, 30, 60, 100]
+        p = NMPulse(config={
+            "pulse": "square", "onset": 10.0, "duration": 1.0,
+            "n_pulses": 0, "interval_type": "user", "intervals": [20.0, 30.0, 40.0],
+        })
+        p.waveform(200, 0.0, 1.0, 0)
+        expected = [10.0, 30.0, 60.0, 100.0]
+        for got, exp in zip(p._last_onset_times, expected):
+            self.assertAlmostEqual(got, exp)
+
+    def test_user_intervals_n_pulses_caps_count(self):
+        # 5 intervals but n_pulses=3 → only 3 pulses
+        p = NMPulse(config={
+            "pulse": "square", "onset": 10.0, "duration": 1.0,
+            "n_pulses": 3, "interval_type": "user",
+            "intervals": [20.0, 20.0, 20.0, 20.0, 20.0],
+        })
+        p.waveform(300, 0.0, 1.0, 0)
+        self.assertEqual(len(p._last_onset_times), 3)
+
+    def test_user_intervals_train_duration_caps_count(self):
+        # 5 intervals of 20 ms each → onsets at 10, 30, 50, 70, 90
+        # train_duration=45 → onset < 10+45=55, so pulses at 10, 30, 50 only
+        p = NMPulse(config={
+            "pulse": "square", "onset": 10.0, "duration": 1.0,
+            "n_pulses": 0, "interval_type": "user",
+            "intervals": [20.0, 20.0, 20.0, 20.0, 20.0],
+            "train_duration": 45.0,
+        })
+        p.waveform(200, 0.0, 1.0, 0)
+        self.assertEqual(len(p._last_onset_times), 3)
+
+    def test_user_single_interval_two_pulses(self):
+        # 1 interval → N+1=2 pulses
+        p = NMPulse(config={
+            "pulse": "square", "onset": 5.0, "duration": 2.0,
+            "n_pulses": 0, "interval_type": "user", "intervals": [50.0],
+        })
+        p.waveform(100, 0.0, 1.0, 0)
+        self.assertEqual(len(p._last_onset_times), 2)
+
+    def test_user_irregular_intervals_waveform_nonzero_at_correct_bins(self):
+        # 3 intervals → N+1=4 pulses at [5, 30, 45, 80]
+        intervals = [25.0, 15.0, 35.0]
+        onset = 5.0
+        p = NMPulse(config={
+            "pulse": "square", "onset": onset, "duration": 1.0,
+            "n_pulses": 0, "interval_type": "user", "intervals": intervals,
+        })
+        y = p.waveform(200, 0.0, 1.0, 0)
+        expected_onsets = [5.0, 30.0, 45.0, 80.0]
+        for onset_t in expected_onsets:
+            self.assertGreater(y[int(onset_t)], 0.0)
+
+    def test_user_interval_ignored_params_have_no_effect(self):
+        # interval, interval_stdv, interval_min, interval_max are all ignored
+        # 3 intervals → N+1=4 pulses at [10, 30, 50, 70]
+        p1 = NMPulse(config={
+            "pulse": "square", "onset": 10.0, "duration": 1.0,
+            "n_pulses": 0, "interval_type": "user", "intervals": [20.0, 20.0, 20.0],
+            "interval": 999.0, "interval_stdv": 999.0,
+            "interval_min": 1.0, "interval_max": 2.0,
+        })
+        p1.waveform(200, 0.0, 1.0, 0)
+        self.assertAlmostEqual(p1._last_onset_times[0], 10.0)
+        self.assertAlmostEqual(p1._last_onset_times[1], 30.0)
+        self.assertAlmostEqual(p1._last_onset_times[2], 50.0)
+        self.assertAlmostEqual(p1._last_onset_times[3], 70.0)
+
+    # ------------------------------------------------------------------
+    # config / to_dict round-trip
+
+    def test_config_set_intervals(self):
+        p = NMPulse(config={"interval_type": "user", "intervals": [10.0, 20.0]})
+        self.assertEqual(p.interval_type, "user")
+        np.testing.assert_array_equal(p.intervals, [10.0, 20.0])
+
+    def test_to_dict_stores_intervals_as_list(self):
+        p = NMPulse(config={"interval_type": "user", "intervals": [10.0, 20.0]})
+        d = p.to_dict()
+        self.assertEqual(d["interval_type"], "user")
+        self.assertEqual(d["intervals"], [10.0, 20.0])
+
+    def test_to_dict_intervals_none_when_not_set(self):
+        d = NMPulse().to_dict()
+        self.assertIsNone(d["intervals"])
+
+    def test_from_dict_round_trip(self):
+        p = NMPulse(config={"interval_type": "user", "intervals": [15.0, 25.0, 35.0]})
+        d = p.to_dict()
+        p2 = NMPulse.from_dict(d)
+        self.assertEqual(p2.interval_type, "user")
+        np.testing.assert_array_equal(p2.intervals, [15.0, 25.0, 35.0])
+
+    # ------------------------------------------------------------------
+    # NMToolPulse output
+
+    def test_tool_pulse_user_intervals_output_count(self):
+        # 3 intervals → N+1=4 pulses
+        t = NMToolPulse()
+        t.n_points = 200
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({
+            "pulse": "square", "onset": 10.0, "duration": 2.0,
+            "n_pulses": 0, "interval_type": "user",
+            "intervals": [20.0, 20.0, 20.0],
+        })
+        folder = _run_tool(t, [_make_empty_data("w0", n=200)])
+        tf = folder.toolfolders["Pulse_0"]
+        times = list(tf.data["PGT_0"].nparray)
+        self.assertEqual(len(times), 4)
+
+    def test_tool_pulse_user_note_contains_interval_count(self):
+        t = NMToolPulse()
+        t.n_points = 200
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({
+            "pulse": "square", "onset": 10.0, "duration": 2.0,
+            "n_pulses": 0, "interval_type": "user",
+            "intervals": [20.0, 30.0, 40.0],
+        })
+        folder = _run_tool(t, [_make_empty_data("w0", n=200)])
+        tf = folder.toolfolders["Pulse_0"]
+        note_text = tf.data["PGT_0"].notes.note
+        self.assertIn("interval_type='user'", note_text)
+        self.assertIn("intervals=<len=3>", note_text)
+
+
+class TestOnsetTimesToIntervals(unittest.TestCase):
+
+    def test_basic(self):
+        result = onset_times_to_intervals([10.0, 30.0, 60.0, 100.0])
+        np.testing.assert_array_almost_equal(result, [20.0, 30.0, 40.0])
+
+    def test_returns_ndarray(self):
+        self.assertIsInstance(onset_times_to_intervals([0.0, 10.0]), np.ndarray)
+
+    def test_two_times_one_interval(self):
+        result = onset_times_to_intervals([5.0, 25.0])
+        np.testing.assert_array_almost_equal(result, [20.0])
+
+    def test_accepts_ndarray(self):
+        arr = np.array([0.0, 10.0, 30.0])
+        result = onset_times_to_intervals(arr)
+        np.testing.assert_array_almost_equal(result, [10.0, 20.0])
+
+    def test_fewer_than_two_raises(self):
+        with self.assertRaises(ValueError):
+            onset_times_to_intervals([5.0])
+
+    def test_not_strictly_increasing_raises(self):
+        with self.assertRaises(ValueError):
+            onset_times_to_intervals([10.0, 30.0, 20.0])
+
+    def test_equal_times_raises(self):
+        with self.assertRaises(ValueError):
+            onset_times_to_intervals([10.0, 10.0, 30.0])
+
+    def test_round_trip_with_waveform(self):
+        # onset_times_to_intervals + NMPulse fires pulses at the original times
+        onset_times = [10.0, 35.0, 55.0, 90.0]
+        p = NMPulse(config={
+            "pulse": "square", "duration": 1.0, "n_pulses": 0,
+            "interval_type": "user",
+            "onset": onset_times[0],
+            "intervals": onset_times_to_intervals(onset_times),
+        })
+        p.waveform(200, 0.0, 1.0, 0)
+        for got, exp in zip(p._last_onset_times, onset_times):
+            self.assertAlmostEqual(got, exp)
+        self.assertEqual(len(p._last_onset_times), len(onset_times))
 
 
 if __name__ == "__main__":
