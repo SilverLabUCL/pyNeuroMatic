@@ -310,6 +310,8 @@ class NMToolPulse(NMTool):
                     parts.append("interval_stdv=%g" % p.interval_stdv)
                 if p.seed is not None:
                     parts.append("seed=%d" % p.seed)
+            if p.amp_dist != "gaussian":
+                parts.append("amp_dist=%r" % p.amp_dist)
             if p.binomial_n > 0:
                 parts.append("binomial_n=%d" % p.binomial_n)
                 parts.append("binomial_p=%g" % p.binomial_p)

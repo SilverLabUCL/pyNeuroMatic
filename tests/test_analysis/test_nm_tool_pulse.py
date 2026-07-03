@@ -9,7 +9,10 @@ import unittest
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_pulse import NMPulse, NMPulseContainer
+from pyneuromatic.analysis.nm_pulse import (
+    NMPulse, NMPulseContainer,
+    gamma_params_from_moments, gamma_moments_from_params,
+)
 from pyneuromatic.analysis.nm_tool_pulse import NMToolPulse, NMToolPulseConfig
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
@@ -2215,6 +2218,169 @@ class TestNMToolPulseDFOutput(unittest.TestCase):
         note_text = tf.data["PGT_0"].notes.note
         self.assertIn("df_taud=75", note_text)
         self.assertIn("df_dscale=0.4", note_text)
+
+
+# ---------------------------------------------------------------------------
+# Gamma helper functions
+# ---------------------------------------------------------------------------
+
+class TestGammaHelpers(unittest.TestCase):
+
+    def test_params_from_moments_round_trip(self):
+        mean, stdv = 2.0, 0.5
+        k, theta = gamma_params_from_moments(mean, stdv)
+        mean2, stdv2 = gamma_moments_from_params(k, theta)
+        self.assertAlmostEqual(mean2, mean, places=12)
+        self.assertAlmostEqual(stdv2, stdv, places=12)
+
+    def test_params_from_moments_values(self):
+        # mean=2, stdv=0.5 → k=(2/0.5)²=16, theta=0.5²/2=0.125
+        k, theta = gamma_params_from_moments(2.0, 0.5)
+        self.assertAlmostEqual(k,     16.0,   places=12)
+        self.assertAlmostEqual(theta,  0.125, places=12)
+
+    def test_moments_from_params_values(self):
+        # k=4, theta=0.5 → mean=2, stdv=sqrt(4)*0.5=1.0
+        mean, stdv = gamma_moments_from_params(4.0, 0.5)
+        self.assertAlmostEqual(mean, 2.0, places=12)
+        self.assertAlmostEqual(stdv, 1.0, places=12)
+
+
+# ---------------------------------------------------------------------------
+# NMPulse — amp_dist property and validation
+# ---------------------------------------------------------------------------
+
+class TestNMPulseAmpDist(unittest.TestCase):
+
+    def test_default_is_gaussian(self):
+        p = NMPulse()
+        self.assertEqual(p.amp_dist, "gaussian")
+
+    def test_setter_gaussian(self):
+        p = NMPulse()
+        p.amp_dist = "gaussian"
+        self.assertEqual(p.amp_dist, "gaussian")
+
+    def test_setter_gamma(self):
+        p = NMPulse()
+        p.amp_dist = "gamma"
+        self.assertEqual(p.amp_dist, "gamma")
+
+    def test_invalid_raises(self):
+        p = NMPulse()
+        with self.assertRaises(ValueError):
+            p.amp_dist = "poisson"
+
+    def test_bool_raises(self):
+        p = NMPulse()
+        with self.assertRaises(TypeError):
+            p.amp_dist = True
+
+    def test_config_set(self):
+        p = NMPulse(config={"amp_dist": "gamma"})
+        self.assertEqual(p.amp_dist, "gamma")
+
+    def test_to_dict_round_trip(self):
+        p = NMPulse(config={"amp_dist": "gamma"})
+        d = p.to_dict()
+        self.assertIn("amp_dist", d)
+        self.assertEqual(d["amp_dist"], "gamma")
+        p2 = NMPulse(config=d)
+        self.assertEqual(p2.amp_dist, "gamma")
+
+    def test_gamma_requires_positive_amp(self):
+        # amp <= 0 raises ValueError at waveform time
+        p = NMPulse(config={"amp": -1.0, "amp_stdv": 0.1, "amp_dist": "gamma"})
+        with self.assertRaises(ValueError):
+            p.waveform(100, 0.0, 1.0, 0)
+
+
+# ---------------------------------------------------------------------------
+# NMPulse — amp_dist="gamma" waveform behaviour
+# ---------------------------------------------------------------------------
+
+class TestNMPulseAmpDistGamma(unittest.TestCase):
+
+    _N = 1000  # epochs for statistical tests
+    _N_POINTS = 10
+
+    def _sample_amps(self, amp, amp_stdv, seed=0):
+        """Run _N single-pulse epochs and collect peak amplitude of each."""
+        amps = []
+        rng = np.random.default_rng(seed)
+        for _ in range(self._N):
+            p = NMPulse(config={
+                "pulse": "square", "amp": amp, "amp_stdv": amp_stdv,
+                "amp_dist": "gamma", "onset": 0.0, "duration": 5.0, "seed": int(rng.integers(0, 2**31)),
+            })
+            y = p.waveform(self._N_POINTS, 0.0, 1.0, 0)
+            amps.append(y[0])
+        return np.array(amps)
+
+    def test_gamma_all_positive(self):
+        # Gamma samples are always > 0 even with large stdv
+        amps = self._sample_amps(amp=1.0, amp_stdv=0.5)
+        self.assertTrue(np.all(amps > 0))
+
+    def test_gamma_mean_close_to_amp(self):
+        amps = self._sample_amps(amp=2.0, amp_stdv=0.3)
+        self.assertAlmostEqual(float(np.mean(amps)), 2.0, delta=0.1)
+
+    def test_gamma_stdv_close_to_amp_stdv(self):
+        amps = self._sample_amps(amp=2.0, amp_stdv=0.3)
+        self.assertAlmostEqual(float(np.std(amps)), 0.3, delta=0.05)
+
+    def test_gaussian_can_go_negative_gamma_cannot(self):
+        # With amp=0.5 and amp_stdv=0.6, Gaussian regularly goes negative;
+        # Gamma never does.
+        rng = np.random.default_rng(0)
+        gaussian_amps = [0.5 + float(rng.normal(0, 0.6)) for _ in range(self._N)]
+        self.assertTrue(any(a < 0 for a in gaussian_amps))
+
+        gamma_amps = self._sample_amps(amp=0.5, amp_stdv=0.6)
+        self.assertTrue(np.all(gamma_amps > 0))
+
+    def test_gamma_right_skewed_gaussian_symmetric(self):
+        # With the same mean and stdv, Gamma is right-skewed: most values cluster
+        # below the mean with a long right tail (rare large events).
+        # Consequence: Gamma median < mean; Gaussian median ≈ mean.
+        # amp=1, stdv=0.7 → k≈2.0, theoretical skewness≈1.4, median≈0.85.
+        amp, stdv = 1.0, 0.7
+
+        gamma_amps = self._sample_amps(amp=amp, amp_stdv=stdv)
+
+        rng = np.random.default_rng(1)
+        gaussian_amps = amp + rng.normal(0.0, stdv, self._N)
+
+        # Both distributions have the same mean
+        self.assertAlmostEqual(float(np.mean(gamma_amps)),    amp, delta=0.08)
+        self.assertAlmostEqual(float(np.mean(gaussian_amps)), amp, delta=0.08)
+
+        # Gaussian is symmetric: median ≈ mean
+        self.assertAlmostEqual(float(np.median(gaussian_amps)), amp, delta=0.06)
+
+        # Gamma is right-skewed: median clearly below mean
+        self.assertLess(float(np.median(gamma_amps)), amp - 0.05)
+
+    def test_no_noise_when_amp_stdv_zero(self):
+        # amp_stdv=0 → gamma branch skipped → constant amplitude regardless of amp_dist
+        p = NMPulse(config={"pulse": "square", "amp": 1.5, "amp_stdv": 0.0,
+                             "amp_dist": "gamma", "onset": 0.0, "duration": 5.0})
+        for _ in range(10):
+            y = p.waveform(self._N_POINTS, 0.0, 1.0, 0)
+            self.assertAlmostEqual(y[0], 1.5)
+
+    def test_note_contains_amp_dist(self):
+        t = NMToolPulse()
+        t.n_points = 20
+        t.xstart = 0.0
+        t.xdelta = 1.0
+        t.pulses.new({"pulse": "square", "amp": 1.0, "amp_stdv": 0.2,
+                      "amp_dist": "gamma", "onset": 0.0, "duration": 5.0})
+        folder = _run_tool(t, [_make_empty_data("w0", n=20)])
+        d = folder.data["PG_0"]
+        note_text = d.notes.note
+        self.assertIn("amp_dist='gamma'", note_text)
 
 
 if __name__ == "__main__":
