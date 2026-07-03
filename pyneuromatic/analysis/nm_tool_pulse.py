@@ -301,12 +301,16 @@ class NMToolPulse(NMTool):
                     parts.append("%s=%g" % (key, d[key]))
             if p.n_pulses != 1 or not math.isinf(p.train_duration):
                 parts.append("n_pulses=%d" % p.n_pulses)
-                parts.append("interval=%g" % p.interval)
+                if p.interval_type == "user":
+                    n_itvl = len(p.intervals) if p.intervals is not None else 0
+                    parts.append("intervals=<len=%d>" % n_itvl)
+                else:
+                    parts.append("interval=%g" % p.interval)
                 if not math.isinf(p.train_duration):
                     parts.append("train_duration=%g" % p.train_duration)
                 if p.interval_type != "fixed":
                     parts.append("interval_type=%r" % p.interval_type)
-                if p.interval_stdv > 0:
+                if p.interval_type == "gaussian" and p.interval_stdv > 0:
                     parts.append("interval_stdv=%g" % p.interval_stdv)
                 if p.seed is not None:
                     parts.append("seed=%d" % p.seed)

@@ -51,7 +51,7 @@ _FUNC_ONLY_KEYS: frozenset[str] = frozenset({
     "tau", "freq", "phase", "f0", "f1", "data", "data_xdelta",
 })
 
-_VALID_INTERVAL_TYPES: frozenset[str] = frozenset({"fixed", "gaussian", "poisson"})
+_VALID_INTERVAL_TYPES: frozenset[str] = frozenset({"fixed", "gaussian", "poisson", "user"})
 _VALID_DISTS: frozenset[str] = frozenset({"gaussian", "gamma"})
 
 
@@ -74,6 +74,38 @@ def gamma_moments_from_params(k: float, theta: float) -> tuple[float, float]:
     stdv values that correspond to known Gamma parameters.
     """
     return k * theta, math.sqrt(k) * theta
+
+
+def onset_times_to_intervals(onset_times: np.ndarray | list) -> np.ndarray:
+    """Convert absolute onset times to an intervals array for ``interval_type='user'``.
+
+    Returns ``np.diff(onset_times)``.  The first onset should be set as the
+    ``NMPulse.onset`` parameter; the returned intervals drive subsequent
+    pulses (N intervals → N+1 pulses total).
+
+    Example::
+
+        p.onset = times[0]
+        p.intervals = onset_times_to_intervals(times)
+        # fires len(times) pulses at the given times
+
+    Args:
+        onset_times: 1-D strictly-increasing sequence of pulse onset times.
+
+    Returns:
+        1-D float64 array of N-1 inter-pulse intervals.
+
+    Raises:
+        ValueError: If fewer than 2 times are supplied or times are not
+            strictly increasing.
+    """
+    times = np.asarray(onset_times, dtype=float)
+    if times.ndim != 1 or len(times) < 2:
+        raise ValueError("onset_times must be a 1-D sequence with at least 2 elements")
+    intervals = np.diff(times)
+    if np.any(intervals <= 0):
+        raise ValueError("onset_times must be strictly increasing")
+    return intervals
 
 
 class NMPulse:
@@ -137,6 +169,7 @@ class NMPulse:
         self._interval_min: float = 0.0
         self._interval_max: float = math.inf
         self._interval_type: str = "fixed"
+        self._intervals: np.ndarray | None = None
         self._seed: int | None = None
         self._train_duration: float = math.inf
         self._binomial_n: int = 0
@@ -442,7 +475,7 @@ class NMPulse:
 
     @property
     def interval_type(self) -> str:
-        """Interval distribution: ``'fixed'``, ``'gaussian'``, or ``'poisson'``."""
+        """Interval distribution: ``'fixed'``, ``'gaussian'``, ``'poisson'``, or ``'user'``."""
         return self._interval_type
 
     @interval_type.setter
@@ -737,6 +770,49 @@ class NMPulse:
         self._interval_type = value
         nmh.history("set interval_type=%r" % value, path=self._name, quiet=quiet)
 
+    @property
+    def intervals(self) -> np.ndarray | None:
+        """User-supplied inter-pulse intervals for ``interval_type='user'``.
+
+        N elements → N+1 pulses: pulse 0 fires at ``onset``, each subsequent
+        pulse fires ``intervals[i]`` after the previous one.  Use
+        :func:`onset_times_to_intervals` to convert absolute onset times to
+        this format.  ``n_pulses`` (if > 0) and ``train_duration`` still cap
+        the count.  ``interval``, ``interval_stdv``, ``interval_min``, and
+        ``interval_max`` are ignored in this mode.
+        """
+        return self._intervals
+
+    @intervals.setter
+    def intervals(self, value: np.ndarray | list | None) -> None:
+        self._intervals_set(value)
+        n = len(self._intervals) if self._intervals is not None else 0
+        add_nm_command(
+            "%s[%r].intervals = <array len=%d>" % (self._nm_path, self._name, n)
+        )
+
+    def _intervals_set(
+        self, value: np.ndarray | list | None, quiet: bool = nmc.QUIET
+    ) -> None:
+        if value is None:
+            self._intervals = None
+            nmh.history("set intervals=None", path=self._name, quiet=quiet)
+            return
+        if isinstance(value, list):
+            value = np.array(value, dtype=float)
+        if not isinstance(value, np.ndarray):
+            raise TypeError(nmu.type_error_str(value, "intervals", "numpy array or list"))
+        if value.ndim != 1:
+            raise ValueError("intervals must be a 1-D array, got shape %s" % str(value.shape))
+        if len(value) == 0:
+            raise ValueError("intervals must have at least one element")
+        if np.any(value <= 0):
+            raise ValueError("all intervals must be > 0")
+        self._intervals = value.astype(float)
+        nmh.history(
+            "set intervals=<array len=%d>" % len(self._intervals), path=self._name, quiet=quiet
+        )
+
     # ------------------------------------------------------------------
     # Epoch targeting
 
@@ -839,6 +915,9 @@ class NMPulse:
 
         # train of pulses...
 
+        if self._interval_type == "user" and self._intervals is None:
+            raise ValueError("intervals must be set when interval_type='user'")
+
         rp_active = self._rp_taur > 0
         df_active = self._df_taud > 0
         if rp_active and df_active:
@@ -866,6 +945,8 @@ class NMPulse:
         df_F: list[float] = []
         while True:
             if self._n_pulses > 0 and count >= self._n_pulses:
+                break
+            if self._interval_type == "user" and count > len(self._intervals):
                 break
             if not math.isinf(self._train_duration) and onset_i >= train_end:
                 break
@@ -908,12 +989,19 @@ class NMPulse:
 
             if self._interval_type == "poisson":
                 intvl = rng.exponential(scale=self._interval)
+                intvl = max(intvl, self._interval_min)
+                intvl = min(intvl, self._interval_max)
             elif self._interval_type == "gaussian":
                 intvl = rng.normal(self._interval, self._interval_stdv)
+                intvl = max(intvl, self._interval_min)
+                intvl = min(intvl, self._interval_max)
+            elif self._interval_type == "user":
+                if count <= len(self._intervals):
+                    intvl = self._intervals[count - 1]
             else:
                 intvl = self._interval
-            intvl = max(intvl, self._interval_min)
-            intvl = min(intvl, self._interval_max)
+                intvl = max(intvl, self._interval_min)
+                intvl = min(intvl, self._interval_max)
             onset_i += intvl
 
         self._last_onset_times = onset_times
@@ -952,7 +1040,7 @@ class NMPulse:
                 pulse_name = v
             elif kl in _FUNC_ONLY_KEYS:
                 func_kwargs[kl] = v
-            elif kl in ("epoch", "epoch_delta", "n_pulses", "interval_type",
+            elif kl in ("epoch", "epoch_delta", "n_pulses", "interval_type", "intervals",
                         "amp_dist", "onset_dist", "duration_dist",
                         "enabled", "seed", "binomial_n", "binomial_p") \
                     or kl in _FLOAT_ATTRS:  # includes interval, interval_stdv, train_duration
@@ -975,6 +1063,8 @@ class NMPulse:
                 self.n_pulses = v
             elif kl == "interval_type":
                 self._interval_type_set(v, quiet=True)
+            elif kl == "intervals":
+                self._intervals_set(v, quiet=True)
             elif kl in ("amp_dist", "onset_dist", "duration_dist"):
                 self._dist_set(kl, v, quiet=True)
             elif kl == "enabled":
@@ -1023,6 +1113,7 @@ class NMPulse:
             "interval_min":   self._interval_min,
             "interval_max":   self._interval_max,
             "interval_type":  self._interval_type,
+            "intervals":      self._intervals.tolist() if self._intervals is not None else None,
             "train_duration":    self._train_duration,
             "binomial_n":        self._binomial_n,
             "binomial_p":        self._binomial_p,
