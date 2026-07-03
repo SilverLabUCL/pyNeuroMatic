@@ -48,7 +48,7 @@ _FLOAT_ATTRS: tuple[str, ...] = (
 
 # Keys that belong to the NMPulseFunc subclass, not to NMPulse directly.
 _FUNC_ONLY_KEYS: frozenset[str] = frozenset({
-    "tau", "freq", "phase", "f0", "f1", "data", "data_xdelta",
+    "tau", "tau_rise", "tau_decay", "power", "freq", "phase", "f0", "f1", "data", "data_xdelta",
 })
 
 _VALID_INTERVAL_TYPES: frozenset[str] = frozenset({"fixed", "gaussian", "poisson", "user"})

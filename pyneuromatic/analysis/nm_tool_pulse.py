@@ -296,7 +296,7 @@ class NMToolPulse(NMTool):
             parts.append("onset=%g" % p.onset)
             if not math.isinf(p.duration):
                 parts.append("duration=%g" % p.duration)
-            for key in ("tau", "freq", "phase", "f0", "f1"):
+            for key in ("tau", "tau_rise", "tau_decay", "power", "freq", "phase", "f0", "f1"):
                 if key in d:
                     parts.append("%s=%g" % (key, d[key]))
             if p.n_pulses != 1 or not math.isinf(p.train_duration):

@@ -28,7 +28,7 @@ import pyneuromatic.core.nm_utilities as nmu
 
 _VALID_SHAPES: frozenset[str] = frozenset({
     "square", "ramp+", "ramp-", "exp", "alpha",
-    "sin", "sinzap", "user",
+    "sin", "sinzap", "synexp", "user",
 })
 
 
@@ -369,6 +369,93 @@ class NMPulseFuncSinZap(NMPulseFunc):
         return y
 
 
+class NMPulseFuncSynExp(NMPulseFunc):
+    """Synaptic exponential pulse with sigmoidal rise and exponential decay.
+
+    Models a synaptic conductance or current waveform:
+
+        y = amp * (1 - exp(-(x-onset)/tau_rise))^power * exp(-(x-onset)/tau)
+                / peak_scale
+
+    The waveform is normalised so that ``amp`` is the actual peak amplitude.
+    The peak occurs at:
+
+        t_peak = tau_rise * ln(1 + power * tau / tau_rise)
+
+    With ``duration=inf`` (default) the waveform decays naturally to zero.
+    Set ``duration`` to hard-clip at ``onset + duration``.
+
+    Multiple ``synexp`` components with the same ``tau_rise`` and ``power``
+    but different ``amp``/``tau`` values can be combined via
+    :class:`~pyneuromatic.analysis.nm_pulse.NMPulseContainer` to produce
+    bi- or tri-exponential synaptic waveforms.
+
+    Args:
+        name: Must be ``"synexp"``.
+        tau_rise: Rise time constant (> 0). Default 1.0.
+        tau: Decay time constant (> 0). Default 10.0.
+        power: Rise exponent (> 0). Default 1.0.
+    """
+
+    _VALID_KEYS: frozenset[str] = frozenset({"tau_rise", "tau_decay", "power"})
+
+    def __init__(
+        self,
+        name: str = "synexp",
+        tau_rise: float = 1.0,
+        tau_decay: float = 10.0,
+        power: float = 1.0,
+    ) -> None:
+        if name != "synexp":
+            raise ValueError("name must be 'synexp', got %r" % name)
+        tau_rise, tau_decay, power = _validate_tau_rise_tau_power(tau_rise, tau_decay, power)
+        super().__init__(name)
+        self._tau_rise: float = tau_rise
+        self._tau_decay: float = tau_decay
+        self._power: float = power
+
+    @property
+    def tau_rise(self) -> float:
+        """Rise time constant."""
+        return self._tau_rise
+
+    @property
+    def tau_decay(self) -> float:
+        """Decay time constant."""
+        return self._tau_decay
+
+    @property
+    def power(self) -> float:
+        """Rise exponent."""
+        return self._power
+
+    def to_dict(self) -> dict:
+        return {
+            "pulse": self._name,
+            "tau_rise": self._tau_rise,
+            "tau_decay": self._tau_decay,
+            "power": self._power,
+        }
+
+    def waveform(self, n_points, xstart, xdelta, amp, onset, duration, **_):
+        x, y, mask = self._build_masked_x(n_points, xstart, xdelta, onset, duration)
+        if not np.any(mask):
+            return y
+        # Normalise so that amp equals the actual peak amplitude.
+        # At the peak: u = exp(-t_peak/tau_rise) = tau_rise / (tau_rise + power*tau_decay)
+        u = self._tau_rise / (self._tau_rise + self._power * self._tau_decay)
+        peak_scale = (1.0 - u) ** self._power * u ** (self._tau_rise / self._tau_decay)
+        if peak_scale == 0.0:
+            return y
+        t = x[mask] - onset
+        y[mask] = (
+            (amp / peak_scale)
+            * (1.0 - np.exp(-t / self._tau_rise)) ** self._power
+            * np.exp(-t / self._tau_decay)
+        )
+        return y
+
+
 class NMPulseFuncUser(NMPulseFunc):
     """User-supplied waveform pulse.
 
@@ -453,6 +540,22 @@ class NMPulseFuncUser(NMPulseFunc):
 # =========================================================================
 
 
+def _validate_tau_rise_tau_power(
+    tau_rise: float, tau_decay: float, power: float
+) -> tuple[float, float, float]:
+    for attr, val in (("tau_rise", tau_rise), ("tau_decay", tau_decay), ("power", power)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            raise TypeError(nmu.type_error_str(val, attr, "float"))
+    tau_rise, tau_decay, power = float(tau_rise), float(tau_decay), float(power)
+    if tau_rise <= 0:
+        raise ValueError("tau_rise must be > 0, got %s" % tau_rise)
+    if tau_decay <= 0:
+        raise ValueError("tau_decay must be > 0, got %s" % tau_decay)
+    if power <= 0:
+        raise ValueError("power must be > 0, got %s" % power)
+    return tau_rise, tau_decay, power
+
+
 def _validate_freq_phase(freq: float, phase: float) -> tuple[float, float]:
     if isinstance(freq, bool) or not isinstance(freq, (int, float)):
         raise TypeError(nmu.type_error_str(freq, "freq", "float"))
@@ -483,14 +586,15 @@ def _validate_f0_f1(f0: float, f1: float) -> tuple[float, float]:
 # =========================================================================
 
 _PULSE_FUNC_REGISTRY: dict[str, type[NMPulseFunc]] = {
-    "square": NMPulseFuncSquare,
-    "ramp+":  NMPulseFuncRamp,
-    "ramp-":  NMPulseFuncRamp,
-    "exp":    NMPulseFuncExp,
-    "alpha":  NMPulseFuncAlpha,
-    "sin":    NMPulseFuncSin,
-    "sinzap": NMPulseFuncSinZap,
-    "user":   NMPulseFuncUser,
+    "square":  NMPulseFuncSquare,
+    "ramp+":   NMPulseFuncRamp,
+    "ramp-":   NMPulseFuncRamp,
+    "exp":     NMPulseFuncExp,
+    "alpha":   NMPulseFuncAlpha,
+    "sin":     NMPulseFuncSin,
+    "sinzap":  NMPulseFuncSinZap,
+    "synexp":  NMPulseFuncSynExp,
+    "user":    NMPulseFuncUser,
 }
 
 
