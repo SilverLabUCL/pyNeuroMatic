@@ -14,7 +14,7 @@ import numpy as np
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.analysis.nm_main_op import (
+from pyneuromatic.tools.nm_main_op import (
     NMMainOp,
     NMMainOpAccumulate,
     _epochs_repr,
@@ -49,7 +49,7 @@ from pyneuromatic.analysis.nm_main_op import (
     NMMainOpSumSqr,
     op_from_name,
 )
-from pyneuromatic.analysis.nm_tool_main import NMToolMain
+from pyneuromatic.tools.nm_tool_main import NMToolMain
 import pyneuromatic.core.nm_history as nmh
 
 NM = NMManager(quiet=True)

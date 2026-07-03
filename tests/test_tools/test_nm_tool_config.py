@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pyneuromatic.analysis.nm_tool_config import NMToolConfig
+from pyneuromatic.tools.nm_tool_config import NMToolConfig
 
 
 # ---------------------------------------------------------------------------

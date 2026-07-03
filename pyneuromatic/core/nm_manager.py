@@ -39,10 +39,10 @@ from pyneuromatic.core.nm_tool_registry import get_global_registry, NMToolRegist
 from pyneuromatic.core.nm_workspace import NMWorkspace, NMWorkspaceManager
 import pyneuromatic.core.nm_utilities as nmu
 
-from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 if TYPE_CHECKING:
-    from pyneuromatic.analysis.nm_tool import NMTool
+    from pyneuromatic.tools.nm_tool import NMTool
 
 nm = None  # holds Manager, accessed via console
 
@@ -242,7 +242,7 @@ class NMManager(NMObject):
             TypeError: If toolname is not a string or tool is wrong type
             KeyError: If tool not found in registry (when tool is None)
         """
-        from pyneuromatic.analysis.nm_tool import NMTool
+        from pyneuromatic.tools.nm_tool import NMTool
 
         if not isinstance(toolname, str):
             e = nmu.type_error_str(toolname, "toolname", "string")
@@ -997,7 +997,7 @@ class NMManager(NMObject):
             ValueError: If no tool is selected.
             KeyError: If the named tool is not in the toolkit.
         """
-        from pyneuromatic.analysis.nm_tool import NMTool
+        from pyneuromatic.tools.nm_tool import NMTool
 
         tname: str | None = toolname
         if isinstance(tname, str):

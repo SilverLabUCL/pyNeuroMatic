@@ -13,7 +13,7 @@ import unittest
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_tool_event import NMToolEvent, NMToolEventConfig
+from pyneuromatic.tools.nm_tool_event import NMToolEvent, NMToolEventConfig
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager, HIERARCHY_SELECT_KEYS

@@ -10,7 +10,7 @@ import unittest
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_tool_spike import NMToolSpike, NMToolSpikeConfig
+from pyneuromatic.tools.nm_tool_spike import NMToolSpike, NMToolSpikeConfig
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
@@ -588,7 +588,7 @@ class TestNMToolSpikeIntervals(unittest.TestCase):
             tool2.intervals()
 
     def test_raises_if_toolfolder_has_no_sp_arrays(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         empty_tf = NMToolFolder(NM, name="empty")
         with self.assertRaises(RuntimeError):
             self.tool.intervals(toolfolder=empty_tf)
@@ -1361,7 +1361,7 @@ class TestNMToolSpikeRasterFromToolfolder(unittest.TestCase):
         self.assertEqual(labels, ["recB0", "recB1"])
 
     def test_raises_if_toolfolder_has_no_sp_arrays(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         empty_tf = NMToolFolder(NM, name="empty")
         with self.assertRaises(RuntimeError):
             self.tool.raster(toolfolder=empty_tf)
@@ -1398,7 +1398,7 @@ class TestNMToolSpikePSTFromToolfolder(unittest.TestCase):
         self.assertGreater(d_default.nparray.sum(), d_tf.nparray.sum() / 3 * 2)
 
     def test_pst_raises_if_toolfolder_has_no_sp_arrays(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         empty_tf = NMToolFolder(NM, name="empty")
         with self.assertRaises(RuntimeError):
             self.tool.pst(toolfolder=empty_tf)
@@ -1427,7 +1427,7 @@ class TestNMToolSpikeISIFromToolfolder(unittest.TestCase):
         self.assertIn("SP_ISI_0", self.tf1.data)
 
     def test_isi_raises_if_toolfolder_has_no_sp_arrays(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         empty_tf = NMToolFolder(NM, name="empty")
         with self.assertRaises(RuntimeError):
             self.tool.isi(toolfolder=empty_tf)
@@ -1471,14 +1471,14 @@ class TestNMToolSpikeExtractWaveformsFromToolfolder(unittest.TestCase):
         self.assertGreater(len(spk_names), 0)
 
     def test_raises_if_toolfolder_has_no_sp_arrays(self):
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         empty_tf = NMToolFolder(NM, name="empty")
         with self.assertRaises(RuntimeError):
             self.tool.extract_spike_waveforms(pre=0.002, post=0.002, toolfolder=empty_tf)
 
     def test_skips_epoch_if_source_not_in_folder(self):
         # Create a toolfolder with SP_ arrays but no matching source in folder
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         tf = NMToolFolder(NM, name="orphan")
         tf.data.new("SP_ghost0", nparray=np.array([0.005, 0.015]))
         # tool.folder is self.folder which has recA0, recA1 but not ghost0
@@ -1520,7 +1520,7 @@ class TestNMToolSpikeEpochNamesArray(unittest.TestCase):
 
     def test_fallback_when_no_epoch_names_array(self):
         # Manually remove SP_epoch_names to exercise the fallback path
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         tf = NMToolFolder(NM, name="legacy")
         tf.data.new("SP_recX0", nparray=np.array([0.01, 0.02]))
         tf.data.new("SP_recX1", nparray=np.array([0.03]))
@@ -1534,7 +1534,7 @@ class TestNMToolSpikeEpochNamesArray(unittest.TestCase):
         # silently dropped because SP_count is in _SP_SKIP.  SP_epoch_names
         # fixes the read side: _spike_times_from_toolfolder uses the explicit
         # names array, so "count" is correctly returned.
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         tf = NMToolFolder(NM, name="clash")
         tf.data.new("SP_count", nparray=np.array([0.005, 0.015]))   # epoch "count"
         tf.data.new("SP_PST", nparray=np.array([0.003]))             # epoch "PST"
@@ -1550,7 +1550,7 @@ class TestNMToolSpikeEpochNamesArray(unittest.TestCase):
     def test_fallback_skips_numbered_pst_isi_arrays(self):
         # SP_PST_0, SP_PST_1, SP_ISI_0 should be skipped in the fallback path
         # just like SP_PST and SP_ISI (prefix-based matching).
-        from pyneuromatic.analysis.nm_tool_folder import NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
         tf = NMToolFolder(NM, name="numbered")
         tf.data.new("SP_recY0", nparray=np.array([0.01, 0.02]))
         tf.data.new("SP_PST_0", nparray=np.array([1.0, 2.0, 3.0]))

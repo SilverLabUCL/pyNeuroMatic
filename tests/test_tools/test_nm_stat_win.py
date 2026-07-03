@@ -15,9 +15,9 @@ import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
-import pyneuromatic.analysis.nm_stat_win as nmsw
-import pyneuromatic.analysis.nm_stat_func as nmsf
-from pyneuromatic.analysis.nm_stat_func import FUNC_NAMES_BSLN
+import pyneuromatic.tools.nm_stat_win as nmsw
+import pyneuromatic.tools.nm_stat_func as nmsf
+from pyneuromatic.tools.nm_stat_func import FUNC_NAMES_BSLN
 import pyneuromatic.core.nm_utilities as nmu
 
 NM = NMManager(quiet=True)

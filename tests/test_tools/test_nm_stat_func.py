@@ -11,7 +11,7 @@ import math
 import unittest
 
 from pyneuromatic.core.nm_manager import NMManager
-import pyneuromatic.analysis.nm_stat_func as nmsf
+import pyneuromatic.tools.nm_stat_func as nmsf
 import pyneuromatic.core.nm_utilities as nmu
 
 NM = NMManager(quiet=True)

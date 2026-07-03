@@ -26,21 +26,21 @@ from typing import TYPE_CHECKING
 import pyneuromatic.core.nm_utilities as nmu
 
 if TYPE_CHECKING:
-    from pyneuromatic.analysis.nm_tool import NMTool
+    from pyneuromatic.tools.nm_tool import NMTool
 
 
 # Default registry: maps tool names to (module_path, class_name)
 DEFAULT_TOOL_REGISTRY: dict[str, tuple[str, str]] = {
-    "main": ("pyneuromatic.analysis.nm_tool_main", "NMToolMain"),
-    "stats": ("pyneuromatic.analysis.nm_tool_stats", "NMToolStats"),
-    "spike": ("pyneuromatic.analysis.nm_tool_spike", "NMToolSpike"),
+    "main": ("pyneuromatic.tools.nm_tool_main", "NMToolMain"),
+    "stats": ("pyneuromatic.tools.nm_tool_stats", "NMToolStats"),
+    "spike": ("pyneuromatic.tools.nm_tool_spike", "NMToolSpike"),
     # Future tools (uncomment when implemented):
-    # "event": ("pyneuromatic.analysis.nm_tool_event", "NMToolEvent"),
-    # "fit": ("pyneuromatic.analysis.nm_tool_fit", "NMToolFit"),
-    # "art": ("pyneuromatic.analysis.nm_tool_fit", "NMToolArt"),
-    # "roi": ("pyneuromatic.analysis.nm_tool_fit", "NMToolROI"),
-    # "pulse": ("pyneuromatic.analysis.nm_tool_pulse", "NMToolPulse"),
-    # "model": ("pyneuromatic.analysis.nm_tool_model", "NMToolModel"),
+    # "event": ("pyneuromatic.tools.nm_tool_event", "NMToolEvent"),
+    # "fit": ("pyneuromatic.tools.nm_tool_fit", "NMToolFit"),
+    # "art": ("pyneuromatic.tools.nm_tool_fit", "NMToolArt"),
+    # "roi": ("pyneuromatic.tools.nm_tool_fit", "NMToolROI"),
+    # "pulse": ("pyneuromatic.tools.nm_tool_pulse", "NMToolPulse"),
+    # "model": ("pyneuromatic.tools.nm_tool_model", "NMToolModel"),
     # "clamp": ("pyneuromatic.acquisition.nm_tool_clamp", "NMToolClamp"),
 }
 
@@ -55,7 +55,7 @@ class NMToolRegistry:
 
     Example:
         registry = NMToolRegistry()
-        registry.register("stats", "pyneuromatic.analysis.nm_tool_stats", "NMToolStats")
+        registry.register("stats", "pyneuromatic.tools.nm_tool_stats", "NMToolStats")
         tool = registry.load("stats")  # Import happens here
     """
 
@@ -74,7 +74,7 @@ class NMToolRegistry:
 
         Args:
             name: Tool name (case-insensitive key, e.g., "stats")
-            module_path: Full module path (e.g., "pyneuromatic.analysis.nm_tool_stats")
+            module_path: Full module path (e.g., "pyneuromatic.tools.nm_tool_stats")
             class_name: Class name within module (e.g., "NMToolStats")
 
         Raises:

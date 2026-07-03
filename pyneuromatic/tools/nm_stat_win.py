@@ -38,13 +38,13 @@ try:
 except ImportError:
     tomli_w = None  # type: ignore
 
-from pyneuromatic.analysis.nm_stat_func import (
+from pyneuromatic.tools.nm_stat_func import (
     NMStatFunc,
     FUNC_NAMES_BSLN,
     _stat_func_from_dict,
 )
 from pyneuromatic.core.nm_command_history import add_nm_command
-from pyneuromatic.analysis.nm_stat_utilities import stat
+from pyneuromatic.tools.nm_stat_utilities import stat
 from pyneuromatic.core.nm_data import NMData
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc

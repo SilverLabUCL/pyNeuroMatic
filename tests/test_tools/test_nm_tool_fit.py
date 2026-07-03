@@ -11,7 +11,7 @@ import unittest
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_tool_fit import NMToolFit, NMToolFitConfig
+from pyneuromatic.tools.nm_tool_fit import NMToolFit, NMToolFitConfig
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager, HIERARCHY_SELECT_KEYS

@@ -9,12 +9,12 @@ import unittest
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_pulse import (
+from pyneuromatic.tools.nm_pulse import (
     NMPulse, NMPulseContainer,
     gamma_params_from_moments, gamma_moments_from_params,
     onset_times_to_intervals,
 )
-from pyneuromatic.analysis.nm_tool_pulse import NMToolPulse, NMToolPulseConfig
+from pyneuromatic.tools.nm_tool_pulse import NMToolPulse, NMToolPulseConfig
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager, HIERARCHY_SELECT_KEYS
@@ -994,7 +994,7 @@ class TestNMPulseWaveformSin(unittest.TestCase):
 
     def test_func_property_accessible(self):
         p = NMPulse(config={"pulse": "sin"})
-        from pyneuromatic.analysis.nm_pulse_func import NMPulseFuncSin
+        from pyneuromatic.tools.nm_pulse_func import NMPulseFuncSin
         self.assertIsInstance(p.func, NMPulseFuncSin)
 
     def test_round_trip_dict(self):
@@ -1049,7 +1049,7 @@ class TestNMPulseWaveformUser(unittest.TestCase):
 
     def test_func_property_accessible(self):
         p = self._make_user_pulse()
-        from pyneuromatic.analysis.nm_pulse_func import NMPulseFuncUser
+        from pyneuromatic.tools.nm_pulse_func import NMPulseFuncUser
         self.assertIsInstance(p.func, NMPulseFuncUser)
 
 

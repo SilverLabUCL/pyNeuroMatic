@@ -13,7 +13,7 @@ import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_manager import NMManager
-import pyneuromatic.analysis.nm_stat_utilities as nsmm
+import pyneuromatic.tools.nm_stat_utilities as nsmm
 import pyneuromatic.core.nm_utilities as nmu
 
 NM = NMManager(quiet=True)

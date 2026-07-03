@@ -33,7 +33,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 
 _IMPORT_SEARCH_MODULES: list[str] = [
-    "pyneuromatic.analysis.nm_main_op",
+    "pyneuromatic.tools.nm_main_op",
 ]
 
 

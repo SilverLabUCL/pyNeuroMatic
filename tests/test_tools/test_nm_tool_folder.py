@@ -10,7 +10,7 @@ import unittest
 
 import numpy as np
 
-from pyneuromatic.analysis.nm_tool_folder import NMToolFolder, NMToolFolderContainer
+from pyneuromatic.tools.nm_tool_folder import NMToolFolder, NMToolFolderContainer
 from pyneuromatic.core.nm_manager import NMManager
 
 NM = NMManager(quiet=True)

@@ -30,7 +30,7 @@ from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
-from pyneuromatic.analysis.nm_tool_folder import NMToolFolderContainer
+from pyneuromatic.tools.nm_tool_folder import NMToolFolderContainer
 import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc

@@ -23,9 +23,9 @@ from __future__ import annotations
 import math
 import numpy as np
 
-from pyneuromatic.analysis.nm_tool import NMTool
-from pyneuromatic.analysis.nm_tool_config import NMToolConfig
-from pyneuromatic.analysis.nm_pulse import NMPulse, NMPulseContainer
+from pyneuromatic.tools.nm_tool import NMTool
+from pyneuromatic.tools.nm_tool_config import NMToolConfig
+from pyneuromatic.tools.nm_pulse import NMPulse, NMPulseContainer
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_command_history as nmch
@@ -62,7 +62,7 @@ class NMToolPulseConfig(NMToolConfig):
 class NMToolPulse(NMTool):
     """Synthetic waveform generator tool.
 
-    Manages a container of :class:`~pyneuromatic.analysis.nm_pulse.NMPulse`
+    Manages a container of :class:`~pyneuromatic.tools.nm_pulse.NMPulse`
     objects. On each ``run()`` call all pulses that target the current epoch
     are summed to produce a 1-D output array written directly to
     ``NMFolder.data`` (not a subfolder). The prefix acts as a namespace to
