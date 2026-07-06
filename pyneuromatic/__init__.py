@@ -20,7 +20,7 @@ try:
     
     # Make submodules accessible
     from . import core
-    from . import analysis
+    from . import tools
     
     __all__ = [
         '__version__',
@@ -32,7 +32,7 @@ try:
         'NMData',
         # Submodules
         'core',
-        'analysis',
+        'tools',
     ]
 
 except ImportError as e:
