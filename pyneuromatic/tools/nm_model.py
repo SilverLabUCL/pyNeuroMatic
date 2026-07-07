@@ -383,11 +383,295 @@ class NMModelHH(NMModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Integrate-and-Fire model
+# ──────────────────────────────────────────────────────────────────────────────
+
+class NMModelIAF(NMModel):
+    """Integrate-and-fire point-neuron model.
+
+    Integrates the subthreshold ODE using forward Euler.  When the membrane
+    potential reaches ``ap_threshold``, a spike is inserted (the crossing point
+    is set to ``ap_peak``) and the neuron is held at ``ap_reset`` for
+    ``ap_refrac`` ms before integration resumes.
+
+    The leak conductance lives in a :class:`NMConductanceContainer` so that
+    synaptic conductances (GABA, AMPA, NMDA) can be added later without
+    changing the core integration loop.
+
+    Parameters:
+        v0:           Resting / initial potential (mV).    Default −80.0.
+        temperature:  Simulation temperature (°C).          Default 37.0.
+                      Not currently used (no Q10-dependent kinetics).
+        cm_density:   Specific membrane capacitance
+                      (pF/µm²; 0.01 pF/µm² = 1 µF/cm²).   Default 0.01.
+        diameter:     Cell diameter (µm).                   Default 10.0.
+        ap_threshold: Spike threshold (mV).                 Default −40.0.
+        ap_peak:      Spike peak inserted at threshold (mV).Default  32.0.
+        ap_reset:     Post-spike reset potential (mV).       Default −61.0.
+        ap_refrac:    Absolute refractory period (ms; > 0). Default 2.0.
+
+    Default conductance matches the Igor NeuroMatic IAF reference cell:
+        Leak  g = 0.9 nS total / SA ≈ 0.002865 nS/µm²,  E = −80 mV
+        (0.9 nS absorbs the tonic-GABA contribution; split out when GABA is added.)
+
+    Units summary:
+        time:        ms
+        voltage:     mV
+        current:     pA
+        capacitance: pF  → dV/dt in mV/ms  (pA/pF = mV/ms)
+    """
+
+    _DEFAULT_DIAMETER:       float = 10.0
+    # 0.9 nS total / (π × 10²) µm²
+    _DEFAULT_LEAK_G_DENSITY: float = 0.9 / (math.pi * 10.0 ** 2)
+    _DEFAULT_LEAK_E_REV:     float = -80.0
+
+    def __init__(
+        self,
+        name: str = "iaf",
+        config: dict | None = None,
+        nm_path: str = "model",
+    ) -> None:
+        super().__init__(name=name, nm_path=nm_path)
+        self._v0:           float = -80.0
+        self._temperature:  float = 37.0
+        self._cm_density:   float = 0.01
+        self._diameter:     float = self._DEFAULT_DIAMETER
+        self._ap_threshold: float = -40.0
+        self._ap_peak:      float =  32.0
+        self._ap_reset:     float = -61.0
+        self._ap_refrac:    float =   2.0
+
+        self._conductances = NMConductanceContainer(
+            nm_path=nm_path + ".conductances"
+        )
+        self._conductances.add(
+            "Leak",
+            NMConductanceLeak(
+                g_density=self._DEFAULT_LEAK_G_DENSITY,
+                e_rev=self._DEFAULT_LEAK_E_REV,
+            ),
+        )
+
+        if config is not None:
+            self._config_set(config, quiet=True)
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def cm_density(self) -> float:
+        """Specific membrane capacitance (pF/µm²)."""
+        return self._cm_density
+
+    @cm_density.setter
+    def cm_density(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("cm_density must be a float")
+        if value <= 0:
+            raise ValueError("cm_density must be > 0, got %g" % value)
+        self._cm_density = float(value)
+
+    @property
+    def diameter(self) -> float:
+        """Cell diameter (µm)."""
+        return self._diameter
+
+    @diameter.setter
+    def diameter(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("diameter must be a float")
+        if value <= 0:
+            raise ValueError("diameter must be > 0, got %g" % value)
+        self._diameter = float(value)
+
+    @property
+    def ap_threshold(self) -> float:
+        """Spike threshold (mV)."""
+        return self._ap_threshold
+
+    @ap_threshold.setter
+    def ap_threshold(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("ap_threshold must be a float")
+        self._ap_threshold = float(value)
+
+    @property
+    def ap_peak(self) -> float:
+        """Spike peak potential inserted at threshold crossing (mV)."""
+        return self._ap_peak
+
+    @ap_peak.setter
+    def ap_peak(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("ap_peak must be a float")
+        self._ap_peak = float(value)
+
+    @property
+    def ap_reset(self) -> float:
+        """Post-spike reset potential (mV)."""
+        return self._ap_reset
+
+    @ap_reset.setter
+    def ap_reset(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("ap_reset must be a float")
+        self._ap_reset = float(value)
+
+    @property
+    def ap_refrac(self) -> float:
+        """Absolute refractory period (ms)."""
+        return self._ap_refrac
+
+    @ap_refrac.setter
+    def ap_refrac(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("ap_refrac must be a float")
+        if value <= 0:
+            raise ValueError("ap_refrac must be > 0, got %g" % value)
+        self._ap_refrac = float(value)
+
+    @property
+    def conductances(self) -> NMConductanceContainer:
+        """The conductance container (Leak by default)."""
+        return self._conductances
+
+    # ------------------------------------------------------------------
+    # Derived quantities
+
+    def _surface_area(self) -> float:
+        """Sphere surface area in µm²: π × diameter²."""
+        return math.pi * self._diameter ** 2
+
+    def _capacitance(self) -> float:
+        """Total membrane capacitance in pF."""
+        return self._cm_density * self._surface_area()
+
+    # ------------------------------------------------------------------
+    # Simulation
+
+    def simulate(
+        self,
+        n_points: int,
+        xstart: float,
+        xdelta: float,
+        i_ext: np.ndarray,
+    ) -> dict[str, np.ndarray]:
+        """Integrate the IAF ODE with forward Euler and threshold detection.
+
+        Args:
+            n_points: Number of time samples.
+            xstart:   First time point (ms).  Not used in integration but
+                      stored for API consistency with NMModelHH.
+            xdelta:   Time step (ms; also determines refractory step count).
+            i_ext:    External current (pA), 1-D array of length ``n_points``.
+
+        Returns:
+            Dict with key ``"V"`` (mV), a 1-D array of length ``n_points``.
+            Spike peaks are recorded at the threshold-crossing sample;
+            refractory samples are held at ``ap_reset``.
+        """
+        if n_points < 1:
+            raise ValueError("n_points must be >= 1")
+        if xdelta <= 0:
+            raise ValueError("xdelta must be > 0")
+        i_ext = np.asarray(i_ext, dtype=float)
+        if i_ext.shape != (n_points,):
+            raise ValueError("i_ext must have length n_points (%d)" % n_points)
+
+        SA = self._surface_area()
+        Cm = self._capacitance()
+        refrac_steps = max(1, round(self._ap_refrac / xdelta))
+
+        V = np.zeros(n_points)
+        V[0] = self._v0
+        refrac_remaining = 0
+
+        for i in range(n_points - 1):
+            if refrac_remaining > 0:
+                V[i + 1] = self._ap_reset
+                refrac_remaining -= 1
+                continue
+            v = V[i]
+            i_ionic = sum(
+                cond.current(v, []) * SA for _, cond in self._conductances
+            )
+            v_next = v + (i_ext[i] - i_ionic) / Cm * xdelta
+            if v_next >= self._ap_threshold:
+                V[i] = self._ap_peak
+                V[i + 1] = self._ap_reset
+                refrac_remaining = refrac_steps - 1
+            else:
+                V[i + 1] = v_next
+
+        return {"V": V}
+
+    # ------------------------------------------------------------------
+    # Config / serialisation
+
+    _SCALAR_KEYS = frozenset({
+        "v0", "temperature", "cm_density", "diameter",
+        "ap_threshold", "ap_peak", "ap_reset", "ap_refrac",
+    })
+
+    def _config_set(self, config: dict, quiet: bool = True) -> None:
+        for key, value in config.items():
+            if key == "model":
+                continue
+            if key == "conductances":
+                self._conductances = NMConductanceContainer.from_dict(
+                    {"conductances": value},
+                    nm_path=self._nm_path + ".conductances",
+                )
+            elif key in self._SCALAR_KEYS:
+                setattr(self, key, value)
+            else:
+                raise KeyError("unknown NMModelIAF config key %r" % key)
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "model":        "iaf",
+            "v0":           self._v0,
+            "temperature":  self._temperature,
+            "cm_density":   self._cm_density,
+            "diameter":     self._diameter,
+            "ap_threshold": self._ap_threshold,
+            "ap_peak":      self._ap_peak,
+            "ap_reset":     self._ap_reset,
+            "ap_refrac":    self._ap_refrac,
+        }
+        d["conductances"] = self._conductances.to_dict()["conductances"]
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict, nm_path: str = "model") -> "NMModelIAF":
+        obj = cls(name=d.get("model", "iaf"), nm_path=nm_path)
+        obj._config_set(d, quiet=True)
+        return obj
+
+    def __repr__(self) -> str:
+        return (
+            "NMModelIAF(v0=%g, cm_density=%g, diameter=%g, "
+            "ap_threshold=%g, ap_peak=%g, ap_reset=%g, ap_refrac=%g)"
+            % (
+                self._v0,
+                self._cm_density,
+                self._diameter,
+                self._ap_threshold,
+                self._ap_peak,
+                self._ap_reset,
+                self._ap_refrac,
+            )
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Registry and factory
 # ──────────────────────────────────────────────────────────────────────────────
 
 _MODEL_REGISTRY: dict[str, type[NMModel]] = {
-    "hh": NMModelHH,
+    "hh":  NMModelHH,
+    "iaf": NMModelIAF,
 }
 
 

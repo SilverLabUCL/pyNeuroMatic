@@ -4,7 +4,7 @@ import math
 import numpy as np
 import pytest
 
-from pyneuromatic.tools.nm_model import NMModel, NMModelHH, _model_from_dict
+from pyneuromatic.tools.nm_model import NMModel, NMModelHH, NMModelIAF, _model_from_dict
 from pyneuromatic.tools.nm_conductance import (
     NMConductanceLeak,
     NMConductanceHHNa,
@@ -412,6 +412,12 @@ class TestModelFactory:
         assert isinstance(m2, NMModelHH)
         assert m == m2
 
+    def test_dispatch_iaf(self):
+        m = NMModelIAF()
+        m2 = _model_from_dict(m.to_dict())
+        assert isinstance(m2, NMModelIAF)
+        assert m == m2
+
     def test_unknown_model_raises(self):
         with pytest.raises(KeyError):
             _model_from_dict({"model": "mystery"})
@@ -419,3 +425,310 @@ class TestModelFactory:
     def test_none_model_raises(self):
         with pytest.raises(KeyError):
             _model_from_dict({})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NMModelIAF — helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _sim_default_iaf(i_amp=200.0):
+    """Suprathreshold IAF simulation: 25 ms onset, 100 ms step, 150 ms total."""
+    n_pts = round(150.0 / XDELTA)
+    m = NMModelIAF()
+    i_ext = _make_i_ext(n_pts, round(25.0 / XDELTA), i_amp,
+                        duration_idx=round(100.0 / XDELTA))
+    return m.simulate(n_pts, 0.0, XDELTA, i_ext)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NMModelIAF construction
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMModelIAFConstruct:
+    def test_default_params(self):
+        import math
+        m = NMModelIAF()
+        assert m.v0           == pytest.approx(-80.0)
+        assert m.temperature  == pytest.approx(37.0)
+        assert m.cm_density   == pytest.approx(0.01)
+        assert m.diameter     == pytest.approx(10.0)
+        assert m.ap_threshold == pytest.approx(-40.0)
+        assert m.ap_peak      == pytest.approx(32.0)
+        assert m.ap_reset     == pytest.approx(-61.0)
+        assert m.ap_refrac    == pytest.approx(2.0)
+
+    def test_default_conductances(self):
+        m = NMModelIAF()
+        assert "Leak" in m.conductances
+        assert len(m.conductances) == 1
+
+    def test_default_leak_params(self):
+        import math
+        m = NMModelIAF()
+        leak = m.conductances["Leak"]
+        expected_g = 0.9 / (math.pi * 10.0 ** 2)
+        assert leak.g_density == pytest.approx(expected_g)
+        assert leak.e_rev     == pytest.approx(-80.0)
+
+    def test_name(self):
+        m = NMModelIAF(name="test_iaf")
+        assert m.name == "test_iaf"
+
+    def test_v0_setter(self):
+        m = NMModelIAF()
+        m.v0 = -70.0
+        assert m.v0 == pytest.approx(-70.0)
+
+    def test_cm_density_setter_zero_raises(self):
+        m = NMModelIAF()
+        with pytest.raises(ValueError):
+            m.cm_density = 0.0
+
+    def test_diameter_setter_zero_raises(self):
+        m = NMModelIAF()
+        with pytest.raises(ValueError):
+            m.diameter = 0.0
+
+    def test_ap_refrac_setter_zero_raises(self):
+        m = NMModelIAF()
+        with pytest.raises(ValueError):
+            m.ap_refrac = 0.0
+
+    def test_ap_threshold_setter_bool_raises(self):
+        m = NMModelIAF()
+        with pytest.raises(TypeError):
+            m.ap_threshold = True
+
+    def test_ap_peak_setter(self):
+        m = NMModelIAF()
+        m.ap_peak = 40.0
+        assert m.ap_peak == pytest.approx(40.0)
+
+    def test_ap_reset_setter(self):
+        m = NMModelIAF()
+        m.ap_reset = -70.0
+        assert m.ap_reset == pytest.approx(-70.0)
+
+    def test_config_kwarg(self):
+        m = NMModelIAF(config={"v0": -75.0, "ap_threshold": -35.0})
+        assert m.v0           == pytest.approx(-75.0)
+        assert m.ap_threshold == pytest.approx(-35.0)
+
+    def test_config_unknown_key_raises(self):
+        m = NMModelIAF()
+        with pytest.raises(KeyError):
+            m._config_set({"nonexistent_key": 1.0})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# simulate() return shape and keys
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMModelIAFSimulateShape:
+    def test_returns_dict(self):
+        assert isinstance(_sim_default_iaf(), dict)
+
+    def test_has_V_key(self):
+        assert "V" in _sim_default_iaf()
+
+    def test_array_length(self):
+        n_pts = round(150.0 / XDELTA)
+        result = _sim_default_iaf()
+        assert len(result["V"]) == n_pts
+
+    def test_invalid_n_points(self):
+        m = NMModelIAF()
+        with pytest.raises(ValueError):
+            m.simulate(0, 0.0, XDELTA, np.zeros(0))
+
+    def test_invalid_xdelta(self):
+        m = NMModelIAF()
+        with pytest.raises(ValueError):
+            m.simulate(100, 0.0, 0.0, np.zeros(100))
+
+    def test_wrong_i_ext_length(self):
+        m = NMModelIAF()
+        with pytest.raises(ValueError):
+            m.simulate(100, 0.0, XDELTA, np.zeros(50))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resting state stability
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMModelIAFRest:
+    def test_resting_potential_stable(self):
+        """Zero input: Vm should stay within 1 mV of V0 (= E_leak)."""
+        m = NMModelIAF()
+        n_pts = round(100.0 / XDELTA)
+        result = m.simulate(n_pts, 0.0, XDELTA, np.zeros(n_pts))
+        assert np.all(np.abs(result["V"] - m.v0) < 1.0), (
+            "Vm drifted > 1 mV from rest with no input"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Spike generation
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMModelIAFSpikes:
+    def test_spike_peak_equals_ap_peak(self):
+        """Peak of output voltage trace should equal ap_peak exactly."""
+        m = NMModelIAF()
+        result = _sim_default_iaf()
+        assert result["V"].max() == pytest.approx(m.ap_peak)
+
+    def test_subthreshold_no_spike(self):
+        """30 pA (< threshold ≈ 36 pA) should produce no spike."""
+        n_pts = round(150.0 / XDELTA)
+        i_ext = _make_i_ext(n_pts, round(25.0 / XDELTA), amp=30.0,
+                            duration_idx=round(100.0 / XDELTA))
+        result = NMModelIAF().simulate(n_pts, 0.0, XDELTA, i_ext)
+        assert result["V"].max() < 0.0, "Unexpected spike with subthreshold input"
+
+    def test_refractory_enforces_minimum_isi(self):
+        """All inter-spike intervals should be >= ap_refrac."""
+        from scipy.signal import find_peaks
+        n_pts = round(150.0 / XDELTA)
+        i_ext = _make_i_ext(n_pts, round(25.0 / XDELTA), amp=500.0,
+                            duration_idx=round(100.0 / XDELTA))
+        m = NMModelIAF()
+        result = m.simulate(n_pts, 0.0, XDELTA, i_ext)
+        peaks, _ = find_peaks(result["V"], height=0.0, distance=round(1.5 / XDELTA))
+        assert len(peaks) >= 2
+        for p1, p2 in zip(peaks[:-1], peaks[1:]):
+            isi_ms = (p2 - p1) * XDELTA
+            assert isi_ms >= m.ap_refrac, (
+                "ISI = %g ms < ap_refrac = %g ms" % (isi_ms, m.ap_refrac)
+            )
+
+    def test_mean_isi(self):
+        """At 50 pA the mean ISI should match the analytical prediction.
+
+        Analytical: ISI = refrac + tau_m * ln((V_ss - V_reset)/(V_ss - V_thresh))
+        With g_leak=0.9 nS, Cm=pi*10^2*0.01 pF, V_ss=-24.4 mV:  ISI ≈ 5.0 ms.
+        Forward Euler introduces a small bias; we allow ±0.1 ms tolerance.
+        """
+        from scipy.signal import find_peaks
+        n_pts = round(200.0 / XDELTA)
+        i_ext = _make_i_ext(n_pts, round(25.0 / XDELTA), amp=50.0,
+                            duration_idx=round(150.0 / XDELTA))
+        result = NMModelIAF().simulate(n_pts, 0.0, XDELTA, i_ext)
+        peaks, _ = find_peaks(result["V"], height=0.0, distance=round(1.5 / XDELTA))
+        assert len(peaks) >= 5, "Too few APs to measure ISI"
+        isis = [(peaks[k + 1] - peaks[k]) * XDELTA for k in range(1, len(peaks) - 1)]
+        mean_isi = sum(isis) / len(isis)
+        assert mean_isi == pytest.approx(5.0, abs=0.15), (
+            "Mean ISI = %g ms, expected ≈ 5.0 ms" % mean_isi
+        )
+
+    @pytest.mark.parametrize("i_amp_lo,i_amp_hi", [
+        (50, 100),
+        (100, 200),
+    ])
+    def test_higher_current_shorter_isi(self, i_amp_lo, i_amp_hi):
+        """More current should give a shorter (faster) mean ISI."""
+        from scipy.signal import find_peaks
+        n_pts = round(200.0 / XDELTA)
+        dur_idx = round(150.0 / XDELTA)
+        onset = round(25.0 / XDELTA)
+        min_dist = round(1.5 / XDELTA)
+
+        def mean_isi(amp):
+            i_ext = _make_i_ext(n_pts, onset, amp=float(amp), duration_idx=dur_idx)
+            result = NMModelIAF().simulate(n_pts, 0.0, XDELTA, i_ext)
+            peaks, _ = find_peaks(result["V"], height=0.0, distance=min_dist)
+            isis = [(peaks[k + 1] - peaks[k]) * XDELTA for k in range(1, len(peaks) - 1)]
+            return sum(isis) / len(isis)
+
+        assert mean_isi(i_amp_lo) > mean_isi(i_amp_hi), (
+            "%d pA should have longer ISI than %d pA" % (i_amp_lo, i_amp_hi)
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Derived quantities
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMModelIAFTimeConstant:
+    def test_membrane_time_constant(self):
+        """τ_m = Cm / g_leak measured from subthreshold exponential charging.
+
+        Apply a step current, find the time at which V reaches 63.2% of the
+        way from V0 to V_ss — that time equals τ_m.  Tolerance is ±2 × xdelta
+        (one grid step either side of the true crossing).
+        """
+        xdelta = 0.025
+        onset_idx = round(5.0 / xdelta)
+        n_pts = round(50.0 / xdelta)   # 50 ms — much longer than τ_m ≈ 3.5 ms
+        i_amp = 20.0                    # pA — subthreshold (threshold ≈ 36 pA)
+
+        m = NMModelIAF()
+        i_ext = np.zeros(n_pts)
+        i_ext[onset_idx:] = i_amp
+        V = m.simulate(n_pts, 0.0, xdelta, i_ext)["V"]
+
+        # Expected: τ_m = Cm / g_leak  (SA cancels, so = cm_density / g_leak_density)
+        g_leak = m.conductances["Leak"].g_density * m._surface_area()  # nS
+        tau_expected = m._capacitance() / g_leak                        # ms
+
+        # V_ss = E_leak + I/g_leak;  target = V0 + (V_ss - V0)*(1 - 1/e)
+        import math
+        V_ss = m.conductances["Leak"].e_rev + i_amp / g_leak
+        V_target = m.v0 + (V_ss - m.v0) * (1.0 - 1.0 / math.e)
+
+        crossing = np.argmax(V[onset_idx:] >= V_target)
+        tau_measured = crossing * xdelta   # ms after onset
+
+        assert tau_measured == pytest.approx(tau_expected, abs=2 * xdelta), (
+            "τ_m measured=%g ms, expected=%g ms" % (tau_measured, tau_expected)
+        )
+
+
+class TestNMModelIAFDerived:
+    def test_surface_area(self):
+        import math
+        m = NMModelIAF()
+        assert m._surface_area() == pytest.approx(math.pi * 10.0 ** 2)
+
+    def test_capacitance(self):
+        import math
+        m = NMModelIAF()
+        assert m._capacitance() == pytest.approx(0.01 * math.pi * 10.0 ** 2)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Serialisation
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMModelIAFSerialisation:
+    def test_to_dict_keys(self):
+        m = NMModelIAF()
+        d = m.to_dict()
+        assert d["model"] == "iaf"
+        for key in ("v0", "temperature", "cm_density", "diameter",
+                    "ap_threshold", "ap_peak", "ap_reset", "ap_refrac"):
+            assert key in d
+        assert "conductances" in d
+
+    def test_to_dict_conductances_list(self):
+        m = NMModelIAF()
+        d = m.to_dict()
+        assert isinstance(d["conductances"], list)
+        assert len(d["conductances"]) == 1
+
+    def test_from_dict_round_trip(self):
+        m = NMModelIAF()
+        m.ap_refrac = 3.0
+        m.diameter  = 15.0
+        m2 = NMModelIAF.from_dict(m.to_dict())
+        assert m == m2
+
+    def test_eq_symmetric(self):
+        assert NMModelIAF() == NMModelIAF()
+
+    def test_eq_different_param(self):
+        m1 = NMModelIAF()
+        m2 = NMModelIAF()
+        m2.ap_threshold = -35.0
+        assert m1 != m2
