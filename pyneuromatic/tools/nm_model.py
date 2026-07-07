@@ -389,10 +389,9 @@ class NMModelHH(NMModel):
 class NMModelIAF(NMModel):
     """Integrate-and-fire point-neuron model.
 
-    Integrates the subthreshold ODE using forward Euler.  When the membrane
-    potential reaches ``ap_threshold``, a spike is inserted (the crossing point
-    is set to ``ap_peak``) and the neuron is held at ``ap_reset`` for
-    ``ap_refrac`` ms before integration resumes.
+    When the membrane potential reaches ``ap_threshold``, a spike is inserted
+    (the crossing point is set to ``ap_peak``) and the neuron is held at
+    ``ap_reset`` for ``ap_refrac`` ms before integration resumes.
 
     The leak conductance lives in a :class:`NMConductanceContainer` so that
     synaptic conductances (GABA, AMPA, NMDA) can be added later without
@@ -409,6 +408,23 @@ class NMModelIAF(NMModel):
         ap_peak:      Spike peak inserted at threshold (mV).Default  32.0.
         ap_reset:     Post-spike reset potential (mV).       Default −61.0.
         ap_refrac:    Absolute refractory period (ms; > 0). Default 2.0.
+        method:       Integration method: ``"exact"`` (default) or
+                      ``"euler"``.
+
+    Integration methods:
+
+    ``"exact"`` — closed-form update between spikes:
+
+        V(t+dt) = V_ss + (V(t) − V_ss) × exp(−dt / τ_m)
+
+    where V_ss = (I_ext + Σ gᵢ·SAᵢ·Eᵢ) / G_total and τ_m = Cm / G_total.
+    ``exp(−dt/τ_m)`` is precomputed once per simulation.  Correct at any
+    step size; allows larger ``xdelta`` for faster runs at equal accuracy.
+    Assumes all conductances are ohmic (no time-varying gating) — use
+    ``"euler"`` once synaptic conductances with kinetics are added.
+
+    ``"euler"`` — forward Euler: V(t+dt) = V(t) + dV/dt · dt.  Simple but
+    accumulates O(dt) error per step (ISI error ≈ 0.1 ms at dt = 0.025 ms).
 
     Default conductance matches the Igor NeuroMatic IAF reference cell:
         Leak  g = 0.9 nS total / SA ≈ 0.002865 nS/µm²,  E = −80 mV
@@ -425,6 +441,7 @@ class NMModelIAF(NMModel):
     # 0.9 nS total / (π × 10²) µm²
     _DEFAULT_LEAK_G_DENSITY: float = 0.9 / (math.pi * 10.0 ** 2)
     _DEFAULT_LEAK_E_REV:     float = -80.0
+    _VALID_METHODS = frozenset({"euler", "exact"})
 
     def __init__(
         self,
@@ -441,6 +458,7 @@ class NMModelIAF(NMModel):
         self._ap_peak:      float =  32.0
         self._ap_reset:     float = -61.0
         self._ap_refrac:    float =   2.0
+        self._method:       str   = "exact"
 
         self._conductances = NMConductanceContainer(
             nm_path=nm_path + ".conductances"
@@ -532,6 +550,22 @@ class NMModelIAF(NMModel):
         self._ap_refrac = float(value)
 
     @property
+    def method(self) -> str:
+        """Integration method: ``"exact"`` (default) or ``"euler"``."""
+        return self._method
+
+    @method.setter
+    def method(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError("method must be a string")
+        if value not in self._VALID_METHODS:
+            raise ValueError(
+                "method must be one of %s, got %r"
+                % (sorted(self._VALID_METHODS), value)
+            )
+        self._method = value
+
+    @property
     def conductances(self) -> NMConductanceContainer:
         """The conductance container (Leak by default)."""
         return self._conductances
@@ -557,7 +591,7 @@ class NMModelIAF(NMModel):
         xdelta: float,
         i_ext: np.ndarray,
     ) -> dict[str, np.ndarray]:
-        """Integrate the IAF ODE with forward Euler and threshold detection.
+        """Integrate the IAF ODE with threshold detection.
 
         Args:
             n_points: Number of time samples.
@@ -587,22 +621,51 @@ class NMModelIAF(NMModel):
         V[0] = self._v0
         refrac_remaining = 0
 
-        for i in range(n_points - 1):
-            if refrac_remaining > 0:
-                V[i + 1] = self._ap_reset
-                refrac_remaining -= 1
-                continue
-            v = V[i]
-            i_ionic = sum(
-                cond.current(v, []) * SA for _, cond in self._conductances
+        if self._method == "exact":
+            # Precompute constants for the closed-form update:
+            #   V(t+dt) = V_ss(t) + (V(t) - V_ss(t)) * exp(-dt/tau_m)
+            # V_ss = (I_ext + sum(g_i*SA*E_i)) / G_total  (depends on i_ext each step)
+            # tau_m = Cm / G_total  (constant — all conductances are ohmic)
+            G_total = sum(
+                cond.g_density * SA for _, cond in self._conductances
             )
-            v_next = v + (i_ext[i] - i_ionic) / Cm * xdelta
-            if v_next >= self._ap_threshold:
-                V[i] = self._ap_peak
-                V[i + 1] = self._ap_reset
-                refrac_remaining = refrac_steps - 1
-            else:
-                V[i + 1] = v_next
+            sum_gE = sum(
+                cond.g_density * SA * cond.e_rev for _, cond in self._conductances
+            )
+            tau_m = Cm / G_total
+            exp_factor = math.exp(-xdelta / tau_m)
+
+            for i in range(n_points - 1):
+                if refrac_remaining > 0:
+                    V[i + 1] = self._ap_reset
+                    refrac_remaining -= 1
+                    continue
+                v = V[i]
+                V_ss = (i_ext[i] + sum_gE) / G_total
+                v_next = V_ss + (v - V_ss) * exp_factor
+                if v_next >= self._ap_threshold:
+                    V[i] = self._ap_peak
+                    V[i + 1] = self._ap_reset
+                    refrac_remaining = refrac_steps - 1
+                else:
+                    V[i + 1] = v_next
+        else:
+            for i in range(n_points - 1):
+                if refrac_remaining > 0:
+                    V[i + 1] = self._ap_reset
+                    refrac_remaining -= 1
+                    continue
+                v = V[i]
+                i_ionic = sum(
+                    cond.current(v, []) * SA for _, cond in self._conductances
+                )
+                v_next = v + (i_ext[i] - i_ionic) / Cm * xdelta
+                if v_next >= self._ap_threshold:
+                    V[i] = self._ap_peak
+                    V[i + 1] = self._ap_reset
+                    refrac_remaining = refrac_steps - 1
+                else:
+                    V[i + 1] = v_next
 
         return {"V": V}
 
@@ -623,6 +686,8 @@ class NMModelIAF(NMModel):
                     {"conductances": value},
                     nm_path=self._nm_path + ".conductances",
                 )
+            elif key == "method":
+                self.method = value
             elif key in self._SCALAR_KEYS:
                 setattr(self, key, value)
             else:
@@ -639,6 +704,7 @@ class NMModelIAF(NMModel):
             "ap_peak":      self._ap_peak,
             "ap_reset":     self._ap_reset,
             "ap_refrac":    self._ap_refrac,
+            "method":       self._method,
         }
         d["conductances"] = self._conductances.to_dict()["conductances"]
         return d
@@ -652,7 +718,7 @@ class NMModelIAF(NMModel):
     def __repr__(self) -> str:
         return (
             "NMModelIAF(v0=%g, cm_density=%g, diameter=%g, "
-            "ap_threshold=%g, ap_peak=%g, ap_reset=%g, ap_refrac=%g)"
+            "ap_threshold=%g, ap_peak=%g, ap_reset=%g, ap_refrac=%g, method=%r)"
             % (
                 self._v0,
                 self._cm_density,
@@ -661,6 +727,7 @@ class NMModelIAF(NMModel):
                 self._ap_peak,
                 self._ap_reset,
                 self._ap_refrac,
+                self._method,
             )
         )
 

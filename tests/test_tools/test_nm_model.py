@@ -519,6 +519,33 @@ class TestNMModelIAFConstruct:
         with pytest.raises(KeyError):
             m._config_set({"nonexistent_key": 1.0})
 
+    def test_default_method_is_exact(self):
+        assert NMModelIAF().method == "exact"
+
+    def test_method_euler_accepted(self):
+        m = NMModelIAF()
+        m.method = "euler"
+        assert m.method == "euler"
+
+    def test_method_exact_accepted(self):
+        m = NMModelIAF()
+        m.method = "exact"
+        assert m.method == "exact"
+
+    def test_method_invalid_string_raises(self):
+        m = NMModelIAF()
+        with pytest.raises(ValueError):
+            m.method = "rk45"
+
+    def test_method_non_string_raises(self):
+        m = NMModelIAF()
+        with pytest.raises(TypeError):
+            m.method = 1
+
+    def test_config_kwarg_method(self):
+        m = NMModelIAF(config={"method": "euler"})
+        assert m.method == "euler"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # simulate() return shape and keys
@@ -602,12 +629,35 @@ class TestNMModelIAFSpikes:
                 "ISI = %g ms < ap_refrac = %g ms" % (isi_ms, m.ap_refrac)
             )
 
+    @pytest.mark.parametrize("i_amp,expected_aps", [
+        (50,  20),
+        (100, 34),
+        (200, 42),
+    ])
+    def test_ap_count(self, i_amp, expected_aps):
+        """Exact integration gives the analytically correct AP count.
+
+        Onset=25 ms, duration=100 ms step.  Counts are determined by the
+        closed-form ISI = τ_refrac + τ_m·ln((V_ss−V_reset)/(V_ss−V_thresh))
+        and are stable at any step size with the exact method.
+        """
+        from scipy.signal import find_peaks
+        n_pts = round(150.0 / XDELTA)
+        i_ext = _make_i_ext(n_pts, round(25.0 / XDELTA), float(i_amp),
+                            duration_idx=round(100.0 / XDELTA))
+        m = NMModelIAF()
+        m.method = "exact"
+        result = m.simulate(n_pts, 0.0, XDELTA, i_ext)
+        peaks, _ = find_peaks(result["V"], height=0.0, distance=round(1.5 / XDELTA))
+        assert len(peaks) == expected_aps, (
+            "%d pA: expected %d APs, got %d" % (i_amp, expected_aps, len(peaks))
+        )
+
     def test_mean_isi(self):
         """At 50 pA the mean ISI should match the analytical prediction.
 
         Analytical: ISI = refrac + tau_m * ln((V_ss - V_reset)/(V_ss - V_thresh))
         With g_leak=0.9 nS, Cm=pi*10^2*0.01 pF, V_ss=-24.4 mV:  ISI ≈ 5.0 ms.
-        Forward Euler introduces a small bias; we allow ±0.1 ms tolerance.
         """
         from scipy.signal import find_peaks
         n_pts = round(200.0 / XDELTA)
@@ -643,6 +693,57 @@ class TestNMModelIAFSpikes:
 
         assert mean_isi(i_amp_lo) > mean_isi(i_amp_hi), (
             "%d pA should have longer ISI than %d pA" % (i_amp_lo, i_amp_hi)
+        )
+
+    def test_exact_and_euler_agree_at_small_dt(self):
+        """At dt=0.025 ms, exact and Euler give nearly identical subthreshold traces.
+
+        Uses a strictly subthreshold current (< threshold I) so there are no
+        spikes and no spike-timing offset artefacts between the two methods.
+        """
+        n_pts = round(150.0 / XDELTA)
+        # 20 pA is well below threshold (I_thresh = g_leak * (V_thresh - E_leak) ≈ 36 pA)
+        i_ext = _make_i_ext(n_pts, round(25.0 / XDELTA), amp=20.0,
+                            duration_idx=round(100.0 / XDELTA))
+        m_exact = NMModelIAF()
+        m_exact.method = "exact"
+        m_euler = NMModelIAF()
+        m_euler.method = "euler"
+        V_exact = m_exact.simulate(n_pts, 0.0, XDELTA, i_ext)["V"]
+        V_euler = m_euler.simulate(n_pts, 0.0, XDELTA, i_ext)["V"]
+        assert np.max(np.abs(V_exact - V_euler)) < 0.05, (
+            "Exact and Euler disagree by more than 0.05 mV at dt=%g ms" % XDELTA
+        )
+
+    def test_exact_correct_at_large_dt(self):
+        """Exact integration recovers the correct τ_m even at dt=0.5 ms where Euler errors."""
+        import math
+        xdelta_large = 0.5  # 20× default step — Euler accumulates large error
+        n_pts = round(50.0 / xdelta_large)
+        onset = round(5.0 / xdelta_large)
+        i_amp = 10.0  # subthreshold
+
+        m = NMModelIAF()
+        SA = math.pi * m.diameter ** 2
+        g_total = m.conductances["Leak"].g_density * SA
+        Cm = m.cm_density * SA
+        tau_m = Cm / g_total
+        e_rev = m.conductances["Leak"].e_rev
+        V_ss = e_rev + i_amp / g_total
+
+        i_ext = _make_i_ext(n_pts, onset, amp=i_amp,
+                            duration_idx=n_pts - onset)
+        m.method = "exact"
+        V_exact = m.simulate(n_pts, 0.0, xdelta_large, i_ext)["V"]
+
+        # Compare against the analytical solution at each sample
+        V_ana = np.array([
+            V_ss + (m.v0 - V_ss) * math.exp(-(i - onset) * xdelta_large / tau_m)
+            if i >= onset else m.v0
+            for i in range(n_pts)
+        ])
+        assert np.max(np.abs(V_exact[onset:] - V_ana[onset:])) < 0.01, (
+            "Exact integration deviates from analytical solution by more than 0.01 mV"
         )
 
 
@@ -707,9 +808,18 @@ class TestNMModelIAFSerialisation:
         d = m.to_dict()
         assert d["model"] == "iaf"
         for key in ("v0", "temperature", "cm_density", "diameter",
-                    "ap_threshold", "ap_peak", "ap_reset", "ap_refrac"):
+                    "ap_threshold", "ap_peak", "ap_reset", "ap_refrac", "method"):
             assert key in d
         assert "conductances" in d
+
+    def test_to_dict_method_default(self):
+        assert NMModelIAF().to_dict()["method"] == "exact"
+
+    def test_method_round_trips_euler(self):
+        m = NMModelIAF()
+        m.method = "euler"
+        m2 = NMModelIAF.from_dict(m.to_dict())
+        assert m2.method == "euler"
 
     def test_to_dict_conductances_list(self):
         m = NMModelIAF()
