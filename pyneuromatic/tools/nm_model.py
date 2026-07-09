@@ -44,6 +44,9 @@ class NMModel:
     Common parameters:
         v0:          Resting membrane potential (mV).  Default −65.0.
         temperature: Simulation temperature (°C).     Default 6.3.
+        cm_density:  Specific membrane capacitance
+                     (pF/µm²; 0.01 = 1 µF/cm²).      Default 0.01.
+        diameter:    Cell diameter (µm).               Default 10.0.
     """
 
     def __init__(
@@ -56,6 +59,11 @@ class NMModel:
         self._nm_path = nm_path
         self._v0: float = -65.0
         self._temperature: float = 6.3   # HH reference temperature (Hodgkin & Huxley 1952)
+        self._cm_density: float = 0.01   # pF/µm²
+        self._diameter: float = 10.0     # µm
+        self._conductances: NMConductanceContainer = NMConductanceContainer(
+            nm_path=nm_path + ".conductances"
+        )
 
     @property
     def name(self) -> str:
@@ -82,6 +90,45 @@ class NMModel:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError("temperature must be a float")
         self._temperature = float(value)
+
+    @property
+    def cm_density(self) -> float:
+        """Specific membrane capacitance (pF/µm²)."""
+        return self._cm_density
+
+    @cm_density.setter
+    def cm_density(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("cm_density must be a float")
+        if value <= 0:
+            raise ValueError("cm_density must be > 0, got %g" % value)
+        self._cm_density = float(value)
+
+    @property
+    def diameter(self) -> float:
+        """Cell diameter (µm)."""
+        return self._diameter
+
+    @diameter.setter
+    def diameter(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("diameter must be a float")
+        if value <= 0:
+            raise ValueError("diameter must be > 0, got %g" % value)
+        self._diameter = float(value)
+
+    @property
+    def conductances(self) -> NMConductanceContainer:
+        """The conductance container."""
+        return self._conductances
+
+    def _surface_area(self) -> float:
+        """Sphere surface area in µm²: π × diameter²."""
+        return math.pi * self._diameter ** 2
+
+    def _capacitance(self) -> float:
+        """Total membrane capacitance in pF."""
+        return self._cm_density * self._surface_area()
 
     def simulate(
         self,
@@ -110,9 +157,6 @@ class NMModel:
         """
         raise NotImplementedError
 
-    def to_dict(self) -> dict:
-        raise NotImplementedError
-
     def _prepare_g_ext(
         self,
         g_ext: dict[str, np.ndarray] | None,
@@ -137,7 +181,50 @@ class NMModel:
 
     @classmethod
     def from_dict(cls, d: dict, nm_path: str = "model") -> "NMModel":
-        return _model_from_dict(d, nm_path=nm_path)
+        if cls is NMModel:
+            return _model_from_dict(d, nm_path=nm_path)
+        obj = cls(name=d.get("model", "model"), nm_path=nm_path)
+        obj._config_set(d, quiet=True)
+        return obj
+ 
+    def to_dict(self) -> dict:
+        d: dict = {
+            "model":       self._name,
+            "v0":          self._v0,
+            "temperature": self._temperature,
+            "cm_density":  self._cm_density,
+            "diameter":    self._diameter,
+        }
+        d["conductances"] = self._conductances.to_dict()["conductances"]
+        return d
+
+    def _config_set(self, config: dict, quiet: bool = True) -> None:
+        valid_keys = set(self.to_dict()) - {"model", "conductances"}
+        for key, value in config.items():
+            if key == "model":
+                continue
+            if key == "conductances":
+                self._conductances = NMConductanceContainer.from_dict(
+                    {"conductances": value},
+                    nm_path=self._nm_path + ".conductances",
+                )
+            elif key in valid_keys:
+                setattr(self, key, value)
+            else:
+                raise KeyError(
+                    "unknown %s config key %r" % (self.__class__.__name__, key)
+                )
+
+    def __repr__(self) -> str:
+        d = self.to_dict()
+        d.pop("model")
+        d.pop("conductances")
+        d["n_conductances"] = len(self._conductances)
+        params = ", ".join(
+            "%s=%g" % (k, v) if isinstance(v, float) else "%s=%r" % (k, v)
+            for k, v in d.items()
+        )
+        return "%s(%s)" % (self.__class__.__name__, params)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NMModel):
@@ -193,12 +280,6 @@ class NMModelRC(NMModel):
         nm_path: str = "model",
     ) -> None:
         super().__init__(name=name, nm_path=nm_path)
-        self._cm_density: float = 0.01
-        self._diameter:   float = self._DEFAULT_DIAMETER
-
-        self._conductances = NMConductanceContainer(
-            nm_path=nm_path + ".conductances"
-        )
         self._conductances.add(
             "Leak",
             NMConductanceLeak(
@@ -209,51 +290,6 @@ class NMModelRC(NMModel):
 
         if config is not None:
             self._config_set(config, quiet=True)
-
-    # ------------------------------------------------------------------
-    # Properties
-
-    @property
-    def cm_density(self) -> float:
-        """Specific membrane capacitance (pF/µm²)."""
-        return self._cm_density
-
-    @cm_density.setter
-    def cm_density(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("cm_density must be a float")
-        if value <= 0:
-            raise ValueError("cm_density must be > 0, got %g" % value)
-        self._cm_density = float(value)
-
-    @property
-    def diameter(self) -> float:
-        """Cell diameter (µm)."""
-        return self._diameter
-
-    @diameter.setter
-    def diameter(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("diameter must be a float")
-        if value <= 0:
-            raise ValueError("diameter must be > 0, got %g" % value)
-        self._diameter = float(value)
-
-    @property
-    def conductances(self) -> NMConductanceContainer:
-        """The conductance container (Leak by default)."""
-        return self._conductances
-
-    # ------------------------------------------------------------------
-    # Derived quantities
-
-    def _surface_area(self) -> float:
-        """Sphere surface area in µm²: π × diameter²."""
-        return math.pi * self._diameter ** 2
-
-    def _capacitance(self) -> float:
-        """Total membrane capacitance in pF."""
-        return self._cm_density * self._surface_area()
 
     # ------------------------------------------------------------------
     # Simulation
@@ -314,48 +350,6 @@ class NMModelRC(NMModel):
 
         return {"V": V}
 
-    # ------------------------------------------------------------------
-    # Config / serialisation
-
-    _SCALAR_KEYS = frozenset({"v0", "temperature", "cm_density", "diameter"})
-
-    def _config_set(self, config: dict, quiet: bool = True) -> None:
-        for key, value in config.items():
-            if key == "model":
-                continue
-            if key == "conductances":
-                self._conductances = NMConductanceContainer.from_dict(
-                    {"conductances": value},
-                    nm_path=self._nm_path + ".conductances",
-                )
-            elif key in self._SCALAR_KEYS:
-                setattr(self, key, value)
-            else:
-                raise KeyError("unknown NMModelRC config key %r" % key)
-
-    def to_dict(self) -> dict:
-        d: dict = {
-            "model":       "rc",
-            "v0":          self._v0,
-            "temperature": self._temperature,
-            "cm_density":  self._cm_density,
-            "diameter":    self._diameter,
-        }
-        d["conductances"] = self._conductances.to_dict()["conductances"]
-        return d
-
-    @classmethod
-    def from_dict(cls, d: dict, nm_path: str = "model") -> "NMModelRC":
-        obj = cls(name=d.get("model", "rc"), nm_path=nm_path)
-        obj._config_set(d, quiet=True)
-        return obj
-
-    def __repr__(self) -> str:
-        return (
-            "NMModelRC(v0=%g, cm_density=%g, diameter=%g, n_conductances=%d)"
-            % (self._v0, self._cm_density, self._diameter, len(self._conductances))
-        )
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Hodgkin–Huxley model
@@ -404,13 +398,8 @@ class NMModelHH(NMModel):
         nm_path: str = "model",
     ) -> None:
         super().__init__(name=name, nm_path=nm_path)
-        self._cm_density: float = 0.01                    # pF/µm²
-        self._diameter: float = self._DEFAULT_DIAMETER    # µm
+        self._diameter = self._DEFAULT_DIAMETER    # µm; overrides NMModel default
         self._tau_q10: float = 3.0
-
-        self._conductances = NMConductanceContainer(
-            nm_path=nm_path + ".conductances"
-        )
         self._conductances.add("Leak", NMConductanceLeak())
         self._conductances.add("Na",   NMConductanceHHNa())
         self._conductances.add("K",    NMConductanceHHK())
@@ -420,32 +409,6 @@ class NMModelHH(NMModel):
 
     # ------------------------------------------------------------------
     # Properties
-
-    @property
-    def cm_density(self) -> float:
-        """Specific membrane capacitance (pF/µm²)."""
-        return self._cm_density
-
-    @cm_density.setter
-    def cm_density(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("cm_density must be a float")
-        if value <= 0:
-            raise ValueError("cm_density must be > 0, got %g" % value)
-        self._cm_density = float(value)
-
-    @property
-    def diameter(self) -> float:
-        """Cell diameter (µm)."""
-        return self._diameter
-
-    @diameter.setter
-    def diameter(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("diameter must be a float")
-        if value <= 0:
-            raise ValueError("diameter must be > 0, got %g" % value)
-        self._diameter = float(value)
 
     @property
     def tau_q10(self) -> float:
@@ -460,21 +423,8 @@ class NMModelHH(NMModel):
             raise ValueError("tau_q10 must be > 0, got %g" % value)
         self._tau_q10 = float(value)
 
-    @property
-    def conductances(self) -> NMConductanceContainer:
-        """The conductance container (Leak, Na, K by default)."""
-        return self._conductances
-
     # ------------------------------------------------------------------
     # Derived quantities
-
-    def _surface_area(self) -> float:
-        """Sphere surface area in µm²: π × diameter²."""
-        return math.pi * self._diameter ** 2
-
-    def _capacitance(self) -> float:
-        """Total membrane capacitance in pF."""
-        return self._cm_density * self._surface_area()
 
     def _q10_factor(self) -> float:
         """Temperature scaling factor for HH rate constants."""
@@ -584,54 +534,10 @@ class NMModelHH(NMModel):
     # ------------------------------------------------------------------
     # Config / serialisation
 
-    _SCALAR_KEYS = frozenset({"v0", "temperature", "cm_density", "diameter", "tau_q10"})
-
-    def _config_set(self, config: dict, quiet: bool = True) -> None:
-        """Apply a configuration dictionary (from ``to_dict()``)."""
-        for key, value in config.items():
-            if key == "model":
-                continue
-            if key == "conductances":
-                self._conductances = NMConductanceContainer.from_dict(
-                    {"conductances": value},
-                    nm_path=self._nm_path + ".conductances",
-                )
-            elif key in self._SCALAR_KEYS:
-                setattr(self, key, value)
-            else:
-                raise KeyError("unknown NMModelHH config key %r" % key)
-
     def to_dict(self) -> dict:
-        d: dict = {
-            "model": "hh",
-            "v0": self._v0,
-            "temperature": self._temperature,
-            "cm_density": self._cm_density,
-            "diameter": self._diameter,
-            "tau_q10": self._tau_q10,
-        }
-        d["conductances"] = self._conductances.to_dict()["conductances"]
+        d = super().to_dict()
+        d["tau_q10"] = self._tau_q10
         return d
-
-    @classmethod
-    def from_dict(cls, d: dict, nm_path: str = "model") -> "NMModelHH":
-        obj = cls(name=d.get("model", "hh"), nm_path=nm_path)
-        obj._config_set(d, quiet=True)
-        return obj
-
-    def __repr__(self) -> str:
-        return (
-            "NMModelHH(v0=%g, cm_density=%g, diameter=%g, "
-            "temperature=%g, tau_q10=%g, n_conductances=%d)"
-            % (
-                self._v0,
-                self._cm_density,
-                self._diameter,
-                self._temperature,
-                self._tau_q10,
-                len(self._conductances),
-            )
-        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -704,17 +610,12 @@ class NMModelIAF(NMModel):
         super().__init__(name=name, nm_path=nm_path)
         self._v0:           float = -80.0
         self._temperature:  float = 37.0
-        self._cm_density:   float = 0.01
-        self._diameter:     float = self._DEFAULT_DIAMETER
         self._ap_threshold: float = -40.0
         self._ap_peak:      float =  32.0
         self._ap_reset:     float = -61.0
         self._ap_refrac:    float =   2.0
         self._method:       str   = "exact"
 
-        self._conductances = NMConductanceContainer(
-            nm_path=nm_path + ".conductances"
-        )
         self._conductances.add(
             "Leak",
             NMConductanceLeak(
@@ -728,32 +629,6 @@ class NMModelIAF(NMModel):
 
     # ------------------------------------------------------------------
     # Properties
-
-    @property
-    def cm_density(self) -> float:
-        """Specific membrane capacitance (pF/µm²)."""
-        return self._cm_density
-
-    @cm_density.setter
-    def cm_density(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("cm_density must be a float")
-        if value <= 0:
-            raise ValueError("cm_density must be > 0, got %g" % value)
-        self._cm_density = float(value)
-
-    @property
-    def diameter(self) -> float:
-        """Cell diameter (µm)."""
-        return self._diameter
-
-    @diameter.setter
-    def diameter(self, value: float) -> None:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("diameter must be a float")
-        if value <= 0:
-            raise ValueError("diameter must be > 0, got %g" % value)
-        self._diameter = float(value)
 
     @property
     def ap_threshold(self) -> float:
@@ -816,22 +691,6 @@ class NMModelIAF(NMModel):
                 % (sorted(self._VALID_METHODS), value)
             )
         self._method = value
-
-    @property
-    def conductances(self) -> NMConductanceContainer:
-        """The conductance container (Leak by default)."""
-        return self._conductances
-
-    # ------------------------------------------------------------------
-    # Derived quantities
-
-    def _surface_area(self) -> float:
-        """Sphere surface area in µm²: π × diameter²."""
-        return math.pi * self._diameter ** 2
-
-    def _capacitance(self) -> float:
-        """Total membrane capacitance in pF."""
-        return self._cm_density * self._surface_area()
 
     # ------------------------------------------------------------------
     # Simulation
@@ -943,64 +802,14 @@ class NMModelIAF(NMModel):
     # ------------------------------------------------------------------
     # Config / serialisation
 
-    _SCALAR_KEYS = frozenset({
-        "v0", "temperature", "cm_density", "diameter",
-        "ap_threshold", "ap_peak", "ap_reset", "ap_refrac",
-    })
-
-    def _config_set(self, config: dict, quiet: bool = True) -> None:
-        for key, value in config.items():
-            if key == "model":
-                continue
-            if key == "conductances":
-                self._conductances = NMConductanceContainer.from_dict(
-                    {"conductances": value},
-                    nm_path=self._nm_path + ".conductances",
-                )
-            elif key == "method":
-                self.method = value
-            elif key in self._SCALAR_KEYS:
-                setattr(self, key, value)
-            else:
-                raise KeyError("unknown NMModelIAF config key %r" % key)
-
     def to_dict(self) -> dict:
-        d: dict = {
-            "model":        "iaf",
-            "v0":           self._v0,
-            "temperature":  self._temperature,
-            "cm_density":   self._cm_density,
-            "diameter":     self._diameter,
-            "ap_threshold": self._ap_threshold,
-            "ap_peak":      self._ap_peak,
-            "ap_reset":     self._ap_reset,
-            "ap_refrac":    self._ap_refrac,
-            "method":       self._method,
-        }
-        d["conductances"] = self._conductances.to_dict()["conductances"]
+        d = super().to_dict()
+        d["ap_threshold"] = self._ap_threshold
+        d["ap_peak"]      = self._ap_peak
+        d["ap_reset"]     = self._ap_reset
+        d["ap_refrac"]    = self._ap_refrac
+        d["method"]       = self._method
         return d
-
-    @classmethod
-    def from_dict(cls, d: dict, nm_path: str = "model") -> "NMModelIAF":
-        obj = cls(name=d.get("model", "iaf"), nm_path=nm_path)
-        obj._config_set(d, quiet=True)
-        return obj
-
-    def __repr__(self) -> str:
-        return (
-            "NMModelIAF(v0=%g, cm_density=%g, diameter=%g, "
-            "ap_threshold=%g, ap_peak=%g, ap_reset=%g, ap_refrac=%g, method=%r)"
-            % (
-                self._v0,
-                self._cm_density,
-                self._diameter,
-                self._ap_threshold,
-                self._ap_peak,
-                self._ap_reset,
-                self._ap_refrac,
-                self._method,
-            )
-        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
