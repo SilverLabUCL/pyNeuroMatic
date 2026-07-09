@@ -8,6 +8,9 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceLeak,
     NMConductanceHHNa,
     NMConductanceHHK,
+    NMConductanceGABA,
+    NMConductanceAMPA,
+    NMConductanceNMDA,
     NMConductanceContainer,
     _conductance_from_dict,
 )
@@ -364,6 +367,62 @@ class TestNMConductanceContainer:
 # Factory
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Synaptic conductances
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMConductanceGABA:
+    def test_name(self):
+        assert NMConductanceGABA().name == "gaba"
+
+    def test_default_e_rev(self):
+        assert NMConductanceGABA().e_rev == pytest.approx(-70.0)
+
+    def test_default_g_density(self):
+        assert NMConductanceGABA().g_density == pytest.approx(0.0)
+
+    def test_current_is_zero(self):
+        c = NMConductanceGABA()
+        assert c.current(-70.0, []) == pytest.approx(0.0)
+        assert c.current(-40.0, []) == pytest.approx(0.0)
+
+    def test_e_rev_setter(self):
+        c = NMConductanceGABA()
+        c.e_rev = -75.0
+        assert c.e_rev == pytest.approx(-75.0)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceGABA(e_rev=-72.0)
+        c2 = _conductance_from_dict(c.to_dict())
+        assert c == c2
+
+
+class TestNMConductanceAMPA:
+    def test_name(self):
+        assert NMConductanceAMPA().name == "ampa"
+
+    def test_default_e_rev(self):
+        assert NMConductanceAMPA().e_rev == pytest.approx(0.0)
+
+    def test_default_g_density(self):
+        assert NMConductanceAMPA().g_density == pytest.approx(0.0)
+
+    def test_current_is_zero(self):
+        c = NMConductanceAMPA()
+        assert c.current(0.0, []) == pytest.approx(0.0)
+        assert c.current(-60.0, []) == pytest.approx(0.0)
+
+    def test_e_rev_setter(self):
+        c = NMConductanceAMPA()
+        c.e_rev = 5.0
+        assert c.e_rev == pytest.approx(5.0)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceAMPA(e_rev=2.0)
+        c2 = _conductance_from_dict(c.to_dict())
+        assert c == c2
+
+
 class TestConductanceFactory:
     def test_dispatch_leak(self):
         d = {"conductance": "leak", "g_density": 0.003, "e_rev": -54.4}
@@ -380,6 +439,18 @@ class TestConductanceFactory:
         c = _conductance_from_dict(d)
         assert isinstance(c, NMConductanceHHK)
 
+    def test_dispatch_gaba(self):
+        c = _conductance_from_dict({"conductance": "gaba", "e_rev": -70.0})
+        assert isinstance(c, NMConductanceGABA)
+
+    def test_dispatch_ampa(self):
+        c = _conductance_from_dict({"conductance": "ampa", "e_rev": 0.0})
+        assert isinstance(c, NMConductanceAMPA)
+
+    def test_dispatch_nmda(self):
+        c = _conductance_from_dict({"conductance": "nmda", "e_rev": 0.0})
+        assert isinstance(c, NMConductanceNMDA)
+
     def test_unknown_type_raises(self):
         with pytest.raises(KeyError):
             _conductance_from_dict({"conductance": "mystery"})
@@ -393,3 +464,94 @@ class TestConductanceFactory:
         c = _conductance_from_dict(d)
         assert c.g_density == pytest.approx(0.005)
         assert c.e_rev == pytest.approx(-60.0)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NMConductanceNMDA
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMConductanceNMDA:
+    def test_name(self):
+        assert NMConductanceNMDA().name == "nmda"
+
+    def test_default_e_rev(self):
+        assert NMConductanceNMDA().e_rev == pytest.approx(0.0)
+
+    def test_default_g_density(self):
+        assert NMConductanceNMDA().g_density == pytest.approx(0.0)
+
+    def test_default_mg_block(self):
+        assert NMConductanceNMDA().mg_block == "boltzmann"
+
+    def test_current_is_zero(self):
+        c = NMConductanceNMDA()
+        assert c.current(0.0, []) == pytest.approx(0.0)
+        assert c.current(-60.0, []) == pytest.approx(0.0)
+
+    def test_mg_block_setter_all_valid(self):
+        c = NMConductanceNMDA()
+        for model in ("boltzmann", "jahr_stevens_1990", "gc_schwartz_2012"):
+            c.mg_block = model
+            assert c.mg_block == model
+
+    def test_mg_block_invalid_raises_value_error(self):
+        with pytest.raises(ValueError):
+            NMConductanceNMDA(mg_block="unknown")
+
+    def test_mg_block_non_str_raises_type_error(self):
+        c = NMConductanceNMDA()
+        with pytest.raises(TypeError):
+            c.mg_block = 42
+
+    def test_v_slope_zero_raises(self):
+        with pytest.raises(ValueError):
+            NMConductanceNMDA(v_slope=0.0)
+
+    def test_mg_conc_zero_raises(self):
+        with pytest.raises(ValueError):
+            NMConductanceNMDA(mg_conc=0.0)
+
+    def test_mg_conc_negative_raises(self):
+        with pytest.raises(ValueError):
+            NMConductanceNMDA(mg_conc=-1.0)
+
+    def test_voltage_factor_boltzmann_at_v_half(self):
+        """B(V_half) must be exactly 0.5 for Boltzmann model."""
+        c = NMConductanceNMDA(mg_block="boltzmann", v_half=-12.8, v_slope=22.4)
+        assert c.voltage_factor(-12.8) == pytest.approx(0.5)
+
+    def test_voltage_factor_boltzmann_range(self):
+        c = NMConductanceNMDA(mg_block="boltzmann")
+        assert c.voltage_factor(-100.0) < 0.1   # deeply blocked at hyperpolarised
+        assert c.voltage_factor(50.0) > 0.9     # nearly unblocked at depolarised
+
+    def test_voltage_factor_jahr_stevens_range(self):
+        c = NMConductanceNMDA(mg_block="jahr_stevens_1990", mg_conc=1.0)
+        for v in (-80.0, -40.0, 0.0, 50.0):
+            b = c.voltage_factor(v)
+            assert 0.0 < b <= 1.0
+
+    def test_voltage_factor_gc_schwartz_range(self):
+        c = NMConductanceNMDA(mg_block="gc_schwartz_2012")
+        for v in (-80.0, -40.0, 0.0, 50.0):
+            b = c.voltage_factor(v)
+            assert 0.0 < b <= 1.0
+
+    def test_voltage_factor_base_class_returns_one(self):
+        """NMConductanceLeak (base default) must return 1.0 at any voltage."""
+        leak = NMConductanceLeak()
+        for v in (-80.0, -40.0, 0.0, 50.0):
+            assert leak.voltage_factor(v) == pytest.approx(1.0)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceNMDA(e_rev=5.0, mg_block="jahr_stevens_1990", mg_conc=2.0)
+        c2 = _conductance_from_dict(c.to_dict())
+        assert c == c2
+
+    def test_to_dict_contains_block_params(self):
+        c = NMConductanceNMDA(v_half=-10.0, v_slope=20.0, mg_conc=1.5)
+        d = c.to_dict()
+        assert d["mg_block"] == "boltzmann"
+        assert d["v_half"] == pytest.approx(-10.0)
+        assert d["v_slope"] == pytest.approx(20.0)
+        assert d["mg_conc"] == pytest.approx(1.5)

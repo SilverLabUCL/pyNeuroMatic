@@ -103,6 +103,15 @@ class NMConductance:
         """
         return self._g_density * (V - self._e_rev)
 
+    def voltage_factor(self, V: float) -> float:
+        """Voltage-dependent scaling factor in [0, 1] (1.0 = no block).
+
+        Override in subclasses with voltage-dependent gating (e.g. NMDA Mg²⁺
+        block).  NMModelIAF.simulate() applies this to scale g_ext currents:
+        I = g(t) × voltage_factor(V) × (V − e_rev).
+        """
+        return 1.0
+
     def dydt(self, V: float, states: list[float]) -> list[float]:
         """Gate variable derivatives at the HH reference temperature (6.3°C)."""
         return []
@@ -154,6 +163,158 @@ class NMConductanceLeak(NMConductance):
 
     def __init__(self, g_density: float = 0.003, e_rev: float = -54.387) -> None:
         super().__init__("leak", g_density, e_rev)
+
+
+class NMConductanceGABA(NMConductance):
+    """GABAergic (Cl⁻) synaptic conductance — reversal potential register only.
+
+    ``g_density=0.0``: the static (ohmic) contribution is zero.  The actual
+    time-varying conductance ``g(t)`` is supplied externally as a pre-computed
+    array (nS) via ``NMModel.simulate(g_ext=...)``.  This object exists
+    solely to register ``e_rev`` in the conductance container so that
+    ``simulate()`` can look up the reversal potential by name.
+
+    Default ``e_rev = −70.0 mV`` (Cl⁻ reversal, GABAₐ).
+    """
+
+    def __init__(self, e_rev: float = -70.0, g_density: float = 0.0) -> None:
+        super().__init__("gaba", g_density=0.0, e_rev=e_rev)
+
+
+class NMConductanceAMPA(NMConductance):
+    """AMPA-receptor synaptic conductance — reversal potential register only.
+
+    Same design as :class:`NMConductanceGABA` (``g_density=0.0``; ``g(t)``
+    supplied externally via ``NMModel.simulate(g_ext=...)``).
+
+    Default ``e_rev = 0.0 mV`` (cation reversal, AMPA).
+    """
+
+    def __init__(self, e_rev: float = 0.0, g_density: float = 0.0) -> None:
+        super().__init__("ampa", g_density=0.0, e_rev=e_rev)
+
+
+class NMConductanceNMDA(NMConductance):
+    """NMDA-receptor synaptic conductance with voltage-dependent Mg²⁺ block.
+
+    ``g_density=0.0``: the static (ohmic) contribution is zero.  ``g(t)`` is
+    supplied externally via ``NMModel.simulate(g_ext=...)``.
+
+    :meth:`voltage_factor` returns the Mg²⁺ block factor B(V) for the
+    selected model (``mg_block`` property).  NMModel scales each g_ext
+    step as ``I = g(t) × B(V) × (V − e_rev)``.
+
+    Block models:
+
+    ``"boltzmann"`` (default)
+        ``1 / (1 + exp(−(V − v_half) / v_slope))``
+        Defaults: ``v_half=−12.8 mV``, ``v_slope=22.4 mV`` (Rothman 2009).
+    ``"jahr_stevens_1990"``
+        ``1 / (1 + mg_conc × exp(−0.062 V) / 3.57)``
+        Default: ``mg_conc=1.0 mM``.
+    ``"gc_schwartz_2012"``
+        Multi-exponential fit (fixed constants from Igor NeuroMatic source).
+
+    Default ``e_rev = 0.0 mV``.
+    """
+
+    _VALID_BLOCK_MODELS = frozenset({
+        "boltzmann", "jahr_stevens_1990", "gc_schwartz_2012"
+    })
+
+    def __init__(
+        self,
+        e_rev: float = 0.0,
+        g_density: float = 0.0,
+        mg_block: str = "boltzmann",
+        v_half: float = -12.8,
+        v_slope: float = 22.4,
+        mg_conc: float = 1.0,
+    ) -> None:
+        super().__init__("nmda", g_density=0.0, e_rev=e_rev)
+        self.mg_block = mg_block
+        self._v_half = float(v_half)
+        self.v_slope = v_slope
+        self.mg_conc = mg_conc
+
+    @property
+    def mg_block(self) -> str:
+        """Mg²⁺ block model name."""
+        return self._mg_block
+
+    @mg_block.setter
+    def mg_block(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError("mg_block must be a string")
+        if value not in self._VALID_BLOCK_MODELS:
+            raise ValueError(
+                "mg_block %r is not valid; choose one of %s"
+                % (value, sorted(self._VALID_BLOCK_MODELS))
+            )
+        self._mg_block = value
+
+    @property
+    def v_half(self) -> float:
+        """Boltzmann half-activation voltage (mV)."""
+        return self._v_half
+
+    @v_half.setter
+    def v_half(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("v_half must be a float")
+        self._v_half = float(value)
+
+    @property
+    def v_slope(self) -> float:
+        """Boltzmann slope factor (mV); must be non-zero."""
+        return self._v_slope
+
+    @v_slope.setter
+    def v_slope(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("v_slope must be a float")
+        if value == 0:
+            raise ValueError("v_slope must be non-zero")
+        self._v_slope = float(value)
+
+    @property
+    def mg_conc(self) -> float:
+        """Extracellular Mg²⁺ concentration (mM) for Jahr–Stevens model."""
+        return self._mg_conc
+
+    @mg_conc.setter
+    def mg_conc(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("mg_conc must be a float")
+        if value <= 0:
+            raise ValueError("mg_conc must be > 0, got %g" % value)
+        self._mg_conc = float(value)
+
+    def voltage_factor(self, V: float) -> float:
+        """Mg²⁺ block factor B(V) in [0, 1] for the selected block model."""
+        if self._mg_block == "boltzmann":
+            return 1.0 / (1.0 + math.exp(-(V - self._v_half) / self._v_slope))
+        elif self._mg_block == "jahr_stevens_1990":
+            return 1.0 / (1.0 + self._mg_conc * math.exp(-0.062 * V) / 3.57)
+        else:  # gc_schwartz_2012
+            e1 = math.exp((V - (-119.51)) / 38.427) + math.exp(-(V - (-45.895)) / 28.357)
+            e2 = e1 + math.exp(-(V - 84.784) / 38.427)
+            return e1 / e2
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            "mg_block": self._mg_block,
+            "v_half": self._v_half,
+            "v_slope": self._v_slope,
+            "mg_conc": self._mg_conc,
+        })
+        return d
+
+    def __repr__(self) -> str:
+        return "%s(e_rev=%g, mg_block=%r)" % (
+            self.__class__.__name__, self._e_rev, self._mg_block
+        )
 
 
 class NMConductanceHHNa(NMConductance):
@@ -342,6 +503,9 @@ _CONDUCTANCE_REGISTRY: dict[str, type[NMConductance]] = {
     "leak": NMConductanceLeak,
     "hhna": NMConductanceHHNa,
     "hhk":  NMConductanceHHK,
+    "gaba": NMConductanceGABA,
+    "ampa": NMConductanceAMPA,
+    "nmda": NMConductanceNMDA,
 }
 
 
@@ -355,9 +519,4 @@ def _conductance_from_dict(d: dict) -> NMConductance:
             % (ctype, sorted(_CONDUCTANCE_REGISTRY))
         )
     cls = _CONDUCTANCE_REGISTRY[ctype]
-    kwargs: dict = {}
-    if "g_density" in d:
-        kwargs["g_density"] = d["g_density"]
-    if "e_rev" in d:
-        kwargs["e_rev"] = d["e_rev"]
-    return cls(**kwargs)
+    return cls(**d)
