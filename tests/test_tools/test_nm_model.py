@@ -9,6 +9,8 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceLeak,
     NMConductanceHHNa,
     NMConductanceHHK,
+    NMConductanceGABA,
+    NMConductanceAMPA,
 )
 from pyneuromatic.tools.nm_pulse import NMPulseContainer
 
@@ -842,3 +844,177 @@ class TestNMModelIAFSerialisation:
         m2 = NMModelIAF()
         m2.ap_threshold = -35.0
         assert m1 != m2
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Synaptic conductances via g_ext
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _iaf_with_syn():
+    """Return an NMModelIAF with GABA and AMPA registered (method='exact')."""
+    m = NMModelIAF()
+    m.conductances.add("GABA", NMConductanceGABA())
+    m.conductances.add("AMPA", NMConductanceAMPA())
+    return m
+
+
+class TestNMModelIAFSynaptic:
+    def test_g_ext_none_unchanged(self):
+        """simulate(g_ext=None) must give the same result as simulate() without g_ext."""
+        n_pts = round(150.0 / XDELTA)
+        i_ext = _make_i_ext(n_pts, round(25.0 / XDELTA), amp=200.0,
+                            duration_idx=round(100.0 / XDELTA))
+        m = _iaf_with_syn()
+        V_base = m.simulate(n_pts, 0.0, XDELTA, i_ext)["V"]
+        V_none = m.simulate(n_pts, 0.0, XDELTA, i_ext, g_ext=None)["V"]
+        assert np.array_equal(V_base, V_none)
+
+    def test_gaba_inhibits_firing(self):
+        """Strong GABA conductance should reduce AP count vs no-GABA baseline."""
+        from scipy.signal import find_peaks
+        n_pts = round(150.0 / XDELTA)
+        onset = round(25.0 / XDELTA)
+        dur   = round(100.0 / XDELTA)
+        i_ext = _make_i_ext(n_pts, onset, amp=200.0, duration_idx=dur)
+
+        # Baseline: no GABA
+        m_base = NMModelIAF()
+        V_base = m_base.simulate(n_pts, 0.0, XDELTA, i_ext)["V"]
+        peaks_base, _ = find_peaks(V_base, height=0.0, distance=round(1.5 / XDELTA))
+
+        # With large GABA conductance step (1.0 nS, E_GABA=-70 mV pulls Vm down)
+        m_gaba = _iaf_with_syn()
+        g_gaba = _make_i_ext(n_pts, onset, amp=1.0, duration_idx=dur)
+        V_gaba = m_gaba.simulate(n_pts, 0.0, XDELTA, i_ext, g_ext={"GABA": g_gaba})["V"]
+        peaks_gaba, _ = find_peaks(V_gaba, height=0.0, distance=round(1.5 / XDELTA))
+
+        assert len(peaks_gaba) < len(peaks_base), (
+            "GABA should reduce AP count: baseline=%d, with GABA=%d"
+            % (len(peaks_base), len(peaks_gaba))
+        )
+
+    def test_ampa_drives_subthreshold_to_fire(self):
+        """Subthreshold i_ext alone gives no spikes; adding AMPA step produces spikes."""
+        from scipy.signal import find_peaks
+        n_pts = round(150.0 / XDELTA)
+        onset = round(25.0 / XDELTA)
+        dur   = round(100.0 / XDELTA)
+        # 20 pA is subthreshold (threshold ≈ 36 pA)
+        i_ext = _make_i_ext(n_pts, onset, amp=20.0, duration_idx=dur)
+
+        # No AMPA: no spikes
+        m = NMModelIAF()
+        V_sub = m.simulate(n_pts, 0.0, XDELTA, i_ext)["V"]
+        assert V_sub.max() < 0.0, "Expected no spike with 20 pA"
+
+        # With AMPA conductance (0.5 nS, E_AMPA=0 mV pushes Vm up)
+        m_syn = _iaf_with_syn()
+        g_ampa = _make_i_ext(n_pts, onset, amp=0.5, duration_idx=dur)
+        V_syn = m_syn.simulate(n_pts, 0.0, XDELTA, i_ext, g_ext={"AMPA": g_ampa})["V"]
+        peaks, _ = find_peaks(V_syn, height=0.0, distance=round(1.5 / XDELTA))
+        assert len(peaks) > 0, "Expected spikes with AMPA conductance"
+
+    def test_g_ext_wrong_length_raises(self):
+        m = _iaf_with_syn()
+        n_pts = round(100.0 / XDELTA)
+        i_ext = np.zeros(n_pts)
+        with pytest.raises(ValueError):
+            m.simulate(n_pts, 0.0, XDELTA, i_ext, g_ext={"GABA": np.zeros(n_pts + 10)})
+
+    def test_g_ext_unknown_key_raises(self):
+        m = NMModelIAF()  # no GABA/AMPA registered
+        n_pts = round(100.0 / XDELTA)
+        i_ext = np.zeros(n_pts)
+        with pytest.raises(KeyError):
+            m.simulate(n_pts, 0.0, XDELTA, i_ext, g_ext={"GABA": np.zeros(n_pts)})
+
+    @pytest.mark.parametrize("g_gaba_nS,e_gaba", [
+        (0.45, -70.0),   # half leak conductance — V_ss closer to E_leak
+        (0.9,  -70.0),   # equal to leak — V_ss midway between E_leak and E_GABA
+        (1.8,  -70.0),   # double leak — V_ss closer to E_GABA
+        (0.9,  -65.0),   # different E_GABA (more depolarised)
+    ])
+    def test_gaba_steady_state_voltage(self, g_gaba_nS, e_gaba):
+        """Constant GABA conductance drives Vm to a weighted mean of E_leak and E_GABA.
+
+        Analytical steady state:
+            V_ss = (G_leak * E_leak + G_GABA * E_GABA) / (G_leak + G_GABA)
+
+        Run for 100 ms with no i_ext; that is >> any τ_m so the transient has
+        decayed to < 0.001 mV.  Final Vm must equal V_ss within 0.01 mV.
+        """
+        n_pts = round(100.0 / XDELTA)
+        m = NMModelIAF()
+        m.conductances.add("GABA", NMConductanceGABA(e_rev=e_gaba))
+
+        SA = math.pi * m.diameter ** 2
+        G_leak = m.conductances["Leak"].g_density * SA
+        E_leak = m.conductances["Leak"].e_rev
+        V_ss_expected = (G_leak * E_leak + g_gaba_nS * e_gaba) / (G_leak + g_gaba_nS)
+
+        g_gaba = np.full(n_pts, g_gaba_nS)
+        V = m.simulate(n_pts, 0.0, XDELTA, np.zeros(n_pts),
+                       g_ext={"GABA": g_gaba})["V"]
+
+        # V_ss must lie strictly between the two reversal potentials
+        assert min(E_leak, e_gaba) < V_ss_expected < max(E_leak, e_gaba)
+        # Final Vm must match the analytical prediction
+        assert V[-1] == pytest.approx(V_ss_expected, abs=0.01), (
+            "g_GABA=%g nS, E_GABA=%g mV: expected V_ss=%g mV, got %g mV"
+            % (g_gaba_nS, e_gaba, V_ss_expected, V[-1])
+        )
+
+    @pytest.mark.parametrize("g_ampa_nS,e_ampa", [
+        (0.45, 0.0),    # half leak conductance — V_ss closer to E_leak
+        (0.9,  0.0),    # equal to leak — V_ss midway between E_leak and E_AMPA
+        (1.8,  0.0),    # double leak — V_ss closer to E_AMPA
+        (0.9,  5.0),    # slightly different E_AMPA
+    ])
+    def test_ampa_steady_state_voltage(self, g_ampa_nS, e_ampa):
+        """Constant AMPA conductance drives Vm to a weighted mean of E_leak and E_AMPA.
+
+        AP threshold is raised to 200 mV so the neuron never fires and the
+        membrane charges to the analytical steady state:
+            V_ss = (G_leak * E_leak + G_AMPA * E_AMPA) / (G_leak + G_AMPA)
+        """
+        n_pts = round(100.0 / XDELTA)
+        m = NMModelIAF()
+        m.ap_threshold = 200.0   # prevent spiking — AMPA pushes Vm above default threshold
+        m.conductances.add("AMPA", NMConductanceAMPA(e_rev=e_ampa))
+
+        SA = math.pi * m.diameter ** 2
+        G_leak = m.conductances["Leak"].g_density * SA
+        E_leak = m.conductances["Leak"].e_rev
+        V_ss_expected = (G_leak * E_leak + g_ampa_nS * e_ampa) / (G_leak + g_ampa_nS)
+
+        g_ampa = np.full(n_pts, g_ampa_nS)
+        V = m.simulate(n_pts, 0.0, XDELTA, np.zeros(n_pts),
+                       g_ext={"AMPA": g_ampa})["V"]
+
+        # V_ss must lie strictly between the two reversal potentials
+        assert min(E_leak, e_ampa) < V_ss_expected < max(E_leak, e_ampa)
+        # Final Vm must match the analytical prediction
+        assert V[-1] == pytest.approx(V_ss_expected, abs=0.01), (
+            "g_AMPA=%g nS, E_AMPA=%g mV: expected V_ss=%g mV, got %g mV"
+            % (g_ampa_nS, e_ampa, V_ss_expected, V[-1])
+        )
+
+    def test_euler_and_exact_agree_with_g_ext(self):
+        """Exact and Euler give nearly identical Vm at dt=0.025 ms with g_ext present."""
+        n_pts = round(150.0 / XDELTA)
+        onset = round(25.0 / XDELTA)
+        dur   = round(100.0 / XDELTA)
+        # Subthreshold to avoid spike-timing jitter between methods
+        i_ext = _make_i_ext(n_pts, onset, amp=20.0, duration_idx=dur)
+        g_ampa = _make_i_ext(n_pts, onset, amp=0.1, duration_idx=dur)
+
+        m_exact = _iaf_with_syn()
+        m_exact.method = "exact"
+        m_euler = _iaf_with_syn()
+        m_euler.method = "euler"
+
+        V_exact = m_exact.simulate(n_pts, 0.0, XDELTA, i_ext, g_ext={"AMPA": g_ampa})["V"]
+        V_euler = m_euler.simulate(n_pts, 0.0, XDELTA, i_ext, g_ext={"AMPA": g_ampa})["V"]
+        assert np.max(np.abs(V_exact - V_euler)) < 0.05, (
+            "Exact and Euler with g_ext disagree by > 0.05 mV at dt=%g ms" % XDELTA
+        )

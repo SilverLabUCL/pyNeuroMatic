@@ -156,6 +156,35 @@ class NMConductanceLeak(NMConductance):
         super().__init__("leak", g_density, e_rev)
 
 
+class NMConductanceGABA(NMConductance):
+    """GABAergic (Cl⁻) synaptic conductance — reversal potential register only.
+
+    ``g_density=0.0``: the static (ohmic) contribution is zero.  The actual
+    time-varying conductance ``g(t)`` is supplied externally as a pre-computed
+    array (nS) via ``NMModelIAF.simulate(g_ext=...)``.  This object exists
+    solely to register ``e_rev`` in the conductance container so that
+    ``simulate()`` can look up the reversal potential by name.
+
+    Default ``e_rev = −70.0 mV`` (Cl⁻ reversal, GABAₐ).
+    """
+
+    def __init__(self, e_rev: float = -70.0, g_density: float = 0.0) -> None:
+        super().__init__("gaba", g_density=0.0, e_rev=e_rev)
+
+
+class NMConductanceAMPA(NMConductance):
+    """AMPA-receptor synaptic conductance — reversal potential register only.
+
+    Same design as :class:`NMConductanceGABA` (``g_density=0.0``; ``g(t)``
+    supplied externally via ``NMModelIAF.simulate(g_ext=...)``).
+
+    Default ``e_rev = 0.0 mV`` (cation reversal, AMPA).
+    """
+
+    def __init__(self, e_rev: float = 0.0, g_density: float = 0.0) -> None:
+        super().__init__("ampa", g_density=0.0, e_rev=e_rev)
+
+
 class NMConductanceHHNa(NMConductance):
     """Hodgkin–Huxley sodium channel (m³h gating).
 
@@ -342,6 +371,8 @@ _CONDUCTANCE_REGISTRY: dict[str, type[NMConductance]] = {
     "leak": NMConductanceLeak,
     "hhna": NMConductanceHHNa,
     "hhk":  NMConductanceHHK,
+    "gaba": NMConductanceGABA,
+    "ampa": NMConductanceAMPA,
 }
 
 

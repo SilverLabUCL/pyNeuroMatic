@@ -8,6 +8,8 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceLeak,
     NMConductanceHHNa,
     NMConductanceHHK,
+    NMConductanceGABA,
+    NMConductanceAMPA,
     NMConductanceContainer,
     _conductance_from_dict,
 )
@@ -364,6 +366,62 @@ class TestNMConductanceContainer:
 # Factory
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Synaptic conductances
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMConductanceGABA:
+    def test_name(self):
+        assert NMConductanceGABA().name == "gaba"
+
+    def test_default_e_rev(self):
+        assert NMConductanceGABA().e_rev == pytest.approx(-70.0)
+
+    def test_default_g_density(self):
+        assert NMConductanceGABA().g_density == pytest.approx(0.0)
+
+    def test_current_is_zero(self):
+        c = NMConductanceGABA()
+        assert c.current(-70.0, []) == pytest.approx(0.0)
+        assert c.current(-40.0, []) == pytest.approx(0.0)
+
+    def test_e_rev_setter(self):
+        c = NMConductanceGABA()
+        c.e_rev = -75.0
+        assert c.e_rev == pytest.approx(-75.0)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceGABA(e_rev=-72.0)
+        c2 = _conductance_from_dict(c.to_dict())
+        assert c == c2
+
+
+class TestNMConductanceAMPA:
+    def test_name(self):
+        assert NMConductanceAMPA().name == "ampa"
+
+    def test_default_e_rev(self):
+        assert NMConductanceAMPA().e_rev == pytest.approx(0.0)
+
+    def test_default_g_density(self):
+        assert NMConductanceAMPA().g_density == pytest.approx(0.0)
+
+    def test_current_is_zero(self):
+        c = NMConductanceAMPA()
+        assert c.current(0.0, []) == pytest.approx(0.0)
+        assert c.current(-60.0, []) == pytest.approx(0.0)
+
+    def test_e_rev_setter(self):
+        c = NMConductanceAMPA()
+        c.e_rev = 5.0
+        assert c.e_rev == pytest.approx(5.0)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceAMPA(e_rev=2.0)
+        c2 = _conductance_from_dict(c.to_dict())
+        assert c == c2
+
+
 class TestConductanceFactory:
     def test_dispatch_leak(self):
         d = {"conductance": "leak", "g_density": 0.003, "e_rev": -54.4}
@@ -379,6 +437,14 @@ class TestConductanceFactory:
         d = {"conductance": "hhk", "g_density": 0.36, "e_rev": -77.0}
         c = _conductance_from_dict(d)
         assert isinstance(c, NMConductanceHHK)
+
+    def test_dispatch_gaba(self):
+        c = _conductance_from_dict({"conductance": "gaba", "e_rev": -70.0})
+        assert isinstance(c, NMConductanceGABA)
+
+    def test_dispatch_ampa(self):
+        c = _conductance_from_dict({"conductance": "ampa", "e_rev": 0.0})
+        assert isinstance(c, NMConductanceAMPA)
 
     def test_unknown_type_raises(self):
         with pytest.raises(KeyError):

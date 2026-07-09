@@ -27,6 +27,8 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceLeak,
     NMConductanceHHNa,
     NMConductanceHHK,
+    NMConductanceGABA,
+    NMConductanceAMPA,
     NMConductanceContainer,
     _conductance_from_dict,
 )
@@ -86,6 +88,7 @@ class NMModel:
         xstart: float,
         xdelta: float,
         i_ext: np.ndarray,
+        g_ext: dict[str, np.ndarray] | None = None,
     ) -> dict[str, np.ndarray]:
         """Run a simulation and return state variable trajectories.
 
@@ -94,6 +97,11 @@ class NMModel:
             xstart:   Start time (ms).
             xdelta:   Time step (ms).
             i_ext:    External current waveform (pA), length ``n_points``.
+            g_ext:    Optional synaptic conductance waveforms (nS), keyed by
+                      conductance name (e.g. ``{"GABA": g_arr, "AMPA": g_arr}``).
+                      Each array must have length ``n_points``.  The named
+                      conductances must be registered in the model's conductance
+                      container so that ``e_rev`` can be looked up.
 
         Returns:
             Dictionary mapping variable names to 1-D arrays of length
@@ -246,6 +254,7 @@ class NMModelHH(NMModel):
         xstart: float,
         xdelta: float,
         i_ext: np.ndarray,
+        g_ext: dict[str, np.ndarray] | None = None,
     ) -> dict[str, np.ndarray]:
         """Integrate the HH ODE system.
 
@@ -590,6 +599,7 @@ class NMModelIAF(NMModel):
         xstart: float,
         xdelta: float,
         i_ext: np.ndarray,
+        g_ext: dict[str, np.ndarray] | None = None,
     ) -> dict[str, np.ndarray]:
         """Integrate the IAF ODE with threshold detection.
 
@@ -599,6 +609,12 @@ class NMModelIAF(NMModel):
                       stored for API consistency with NMModelHH.
             xdelta:   Time step (ms; also determines refractory step count).
             i_ext:    External current (pA), 1-D array of length ``n_points``.
+            g_ext:    Optional synaptic conductance waveforms (nS), keyed by
+                      the conductance name as registered in
+                      :attr:`conductances` (e.g. ``{"GABA": g_arr}``).
+                      Each array must have length ``n_points``.  The named
+                      conductances must already be in the container so that
+                      ``e_rev`` can be looked up.
 
         Returns:
             Dict with key ``"V"`` (mV), a 1-D array of length ``n_points``.
@@ -612,28 +628,37 @@ class NMModelIAF(NMModel):
         i_ext = np.asarray(i_ext, dtype=float)
         if i_ext.shape != (n_points,):
             raise ValueError("i_ext must have length n_points (%d)" % n_points)
+        if g_ext:
+            g_ext = {name: np.asarray(arr, dtype=float) for name, arr in g_ext.items()}
+            for name, g_arr in g_ext.items():
+                if name not in self._conductances:
+                    raise KeyError("g_ext key %r not found in conductances" % name)
+                if g_arr.shape != (n_points,):
+                    raise ValueError(
+                        "g_ext[%r] must have length %d" % (name, n_points)
+                    )
 
         SA = self._surface_area()
         Cm = self._capacitance()
         refrac_steps = max(1, round(self._ap_refrac / xdelta))
+
+        # Synaptic e_rev lookup — avoid repeated dict access inside the loop
+        syn_e_revs = (
+            {name: self._conductances[name].e_rev for name in g_ext}
+            if g_ext else {}
+        )
 
         V = np.zeros(n_points)
         V[0] = self._v0
         refrac_remaining = 0
 
         if self._method == "exact":
-            # Precompute constants for the closed-form update:
-            #   V(t+dt) = V_ss(t) + (V(t) - V_ss(t)) * exp(-dt/tau_m)
-            # V_ss = (I_ext + sum(g_i*SA*E_i)) / G_total  (depends on i_ext each step)
-            # tau_m = Cm / G_total  (constant — all conductances are ohmic)
-            G_total = sum(
-                cond.g_density * SA for _, cond in self._conductances
-            )
-            sum_gE = sum(
+            # Static (ohmic) conductances precomputed once.
+            # g_density=0 for GABA/AMPA, so they contribute nothing here.
+            G_static      = sum(cond.g_density * SA for _, cond in self._conductances)
+            sum_gE_static = sum(
                 cond.g_density * SA * cond.e_rev for _, cond in self._conductances
             )
-            tau_m = Cm / G_total
-            exp_factor = math.exp(-xdelta / tau_m)
 
             for i in range(n_points - 1):
                 if refrac_remaining > 0:
@@ -641,8 +666,18 @@ class NMModelIAF(NMModel):
                     refrac_remaining -= 1
                     continue
                 v = V[i]
-                V_ss = (i_ext[i] + sum_gE) / G_total
-                v_next = V_ss + (v - V_ss) * exp_factor
+                # Per-step: fold in time-varying synaptic conductances
+                G_total = G_static
+                sum_gE  = sum_gE_static
+                if g_ext:
+                    for name, g_arr in g_ext.items():
+                        g_i      = g_arr[i]
+                        G_total += g_i
+                        sum_gE  += g_i * syn_e_revs[name]
+                tau_m      = Cm / G_total
+                exp_factor = math.exp(-xdelta / tau_m)
+                V_ss       = (i_ext[i] + sum_gE) / G_total
+                v_next     = V_ss + (v - V_ss) * exp_factor
                 if v_next >= self._ap_threshold:
                     V[i] = self._ap_peak
                     V[i + 1] = self._ap_reset
@@ -659,6 +694,9 @@ class NMModelIAF(NMModel):
                 i_ionic = sum(
                     cond.current(v, []) * SA for _, cond in self._conductances
                 )
+                if g_ext:
+                    for name, g_arr in g_ext.items():
+                        i_ionic += g_arr[i] * (v - syn_e_revs[name])
                 v_next = v + (i_ext[i] - i_ionic) / Cm * xdelta
                 if v_next >= self._ap_threshold:
                     V[i] = self._ap_peak
