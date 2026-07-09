@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Tests for NMModel and NMModelHH."""
+"""Tests for NMModel, NMModelHH, NMModelRC and NMModelIAF."""
 import math
 import numpy as np
 import pytest
@@ -12,6 +12,7 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceGABA,
     NMConductanceAMPA,
     NMConductanceNMDA,
+    NMConductanceContainer,
 )
 from pyneuromatic.tools.nm_pulse import NMPulseContainer
 
@@ -36,6 +37,99 @@ def _sim_default(i_amp=I_AMP_SUPRA):
     m = NMModelHH()
     i_ext = _make_i_ext(N_POINTS, I_ONSET_IDX, i_amp)
     return m.simulate(N_POINTS, XSTART, XDELTA, i_ext)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NMModel — shared base-class properties
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMModel:
+    """Tests for properties and helpers defined on the NMModel base class.
+
+    NMModel can be instantiated directly (simulate/to_dict raise
+    NotImplementedError) so these tests exercise the shared behaviour
+    once, rather than repeating it in every subclass test suite.
+    """
+
+    def test_v0_default(self):
+        assert NMModel().v0 == pytest.approx(-65.0)
+
+    def test_v0_setter(self):
+        m = NMModel()
+        m.v0 = -70.0
+        assert m.v0 == pytest.approx(-70.0)
+
+    def test_v0_setter_bool_raises(self):
+        with pytest.raises(TypeError):
+            NMModel().v0 = True
+
+    def test_temperature_default(self):
+        assert NMModel().temperature == pytest.approx(6.3)
+
+    def test_temperature_setter(self):
+        m = NMModel()
+        m.temperature = 37.0
+        assert m.temperature == pytest.approx(37.0)
+
+    def test_temperature_setter_bool_raises(self):
+        with pytest.raises(TypeError):
+            NMModel().temperature = True
+
+    def test_cm_density_default(self):
+        assert NMModel().cm_density == pytest.approx(0.01)
+
+    def test_cm_density_setter(self):
+        m = NMModel()
+        m.cm_density = 0.02
+        assert m.cm_density == pytest.approx(0.02)
+
+    def test_cm_density_setter_zero_raises(self):
+        with pytest.raises(ValueError):
+            NMModel().cm_density = 0.0
+
+    def test_cm_density_setter_bool_raises(self):
+        with pytest.raises(TypeError):
+            NMModel().cm_density = True
+
+    def test_diameter_default(self):
+        assert NMModel().diameter == pytest.approx(10.0)
+
+    def test_diameter_setter(self):
+        m = NMModel()
+        m.diameter = 20.0
+        assert m.diameter == pytest.approx(20.0)
+
+    def test_diameter_setter_zero_raises(self):
+        with pytest.raises(ValueError):
+            NMModel().diameter = 0.0
+
+    def test_diameter_setter_bool_raises(self):
+        with pytest.raises(TypeError):
+            NMModel().diameter = True
+
+    def test_conductances_is_container(self):
+        assert isinstance(NMModel().conductances, NMConductanceContainer)
+
+    def test_conductances_empty_by_default(self):
+        assert len(NMModel().conductances) == 0
+
+    def test_surface_area(self):
+        m = NMModel()
+        assert m._surface_area() == pytest.approx(math.pi * 10.0 ** 2)
+
+    def test_capacitance(self):
+        m = NMModel()
+        assert m._capacitance() == pytest.approx(0.01 * math.pi * 10.0 ** 2)
+
+    def test_surface_area_updates_with_diameter(self):
+        m = NMModel()
+        m.diameter = 20.0
+        assert m._surface_area() == pytest.approx(math.pi * 20.0 ** 2)
+
+    def test_capacitance_updates_with_cm_density(self):
+        m = NMModel()
+        m.cm_density = 0.02
+        assert m._capacitance() == pytest.approx(0.02 * math.pi * 10.0 ** 2)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -67,26 +161,6 @@ class TestNMModelHHConstruct:
     def test_name(self):
         m = NMModelHH(name="test_hh")
         assert m.name == "test_hh"
-
-    def test_v0_setter(self):
-        m = NMModelHH()
-        m.v0 = -70.0
-        assert m.v0 == pytest.approx(-70.0)
-
-    def test_v0_setter_bool_raises(self):
-        m = NMModelHH()
-        with pytest.raises(TypeError):
-            m.v0 = True
-
-    def test_cm_density_setter_zero_raises(self):
-        m = NMModelHH()
-        with pytest.raises(ValueError):
-            m.cm_density = 0.0
-
-    def test_diameter_setter_zero_raises(self):
-        m = NMModelHH()
-        with pytest.raises(ValueError):
-            m.diameter = 0.0
 
     def test_tau_q10_setter_zero_raises(self):
         m = NMModelHH()
@@ -339,14 +413,6 @@ class TestNMModelHHTemperature:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestNMModelHHDerived:
-    def test_surface_area(self):
-        m = NMModelHH()
-        assert m._surface_area() == pytest.approx(1200.0)
-
-    def test_capacitance(self):
-        m = NMModelHH()
-        assert m._capacitance() == pytest.approx(12.0)
-
     def test_q10_factor_at_ref_temp(self):
         m = NMModelHH()
         m.temperature = 6.3   # at reference → factor = 1.0
@@ -476,21 +542,6 @@ class TestNMModelIAFConstruct:
     def test_name(self):
         m = NMModelIAF(name="test_iaf")
         assert m.name == "test_iaf"
-
-    def test_v0_setter(self):
-        m = NMModelIAF()
-        m.v0 = -70.0
-        assert m.v0 == pytest.approx(-70.0)
-
-    def test_cm_density_setter_zero_raises(self):
-        m = NMModelIAF()
-        with pytest.raises(ValueError):
-            m.cm_density = 0.0
-
-    def test_diameter_setter_zero_raises(self):
-        m = NMModelIAF()
-        with pytest.raises(ValueError):
-            m.diameter = 0.0
 
     def test_ap_refrac_setter_zero_raises(self):
         m = NMModelIAF()
@@ -789,18 +840,6 @@ class TestNMModelIAFTimeConstant:
         )
 
 
-class TestNMModelIAFDerived:
-    def test_surface_area(self):
-        import math
-        m = NMModelIAF()
-        assert m._surface_area() == pytest.approx(math.pi * 10.0 ** 2)
-
-    def test_capacitance(self):
-        import math
-        m = NMModelIAF()
-        assert m._capacitance() == pytest.approx(0.01 * math.pi * 10.0 ** 2)
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Serialisation
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1003,16 +1042,6 @@ class TestNMModelRC:
 
     def test_name(self):
         assert NMModelRC(name="test_rc").name == "test_rc"
-
-    def test_cm_density_setter_zero_raises(self):
-        m = NMModelRC()
-        with pytest.raises(ValueError):
-            m.cm_density = 0.0
-
-    def test_diameter_setter_zero_raises(self):
-        m = NMModelRC()
-        with pytest.raises(ValueError):
-            m.diameter = 0.0
 
     def test_simulate_returns_dict_with_V(self):
         m = NMModelRC()
