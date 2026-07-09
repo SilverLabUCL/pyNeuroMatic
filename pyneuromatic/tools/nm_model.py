@@ -113,6 +113,28 @@ class NMModel:
     def to_dict(self) -> dict:
         raise NotImplementedError
 
+    def _prepare_g_ext(
+        self,
+        g_ext: dict[str, np.ndarray] | None,
+        n_points: int,
+    ) -> tuple[dict, dict]:
+        """Validate g_ext; return (g_ext_arrays, syn_e_revs).
+
+        Returns ({}, {}) when g_ext is None or empty.  Raises KeyError if a
+        name is absent from self._conductances; ValueError if an array has the
+        wrong length.  Casts all arrays to float64 in the returned dict.
+        """
+        if not g_ext:
+            return {}, {}
+        out = {name: np.asarray(arr, dtype=float) for name, arr in g_ext.items()}
+        for name, g_arr in out.items():
+            if name not in self._conductances:
+                raise KeyError("g_ext key %r not found in conductances" % name)
+            if g_arr.shape != (n_points,):
+                raise ValueError("g_ext[%r] must have length %d" % (name, n_points))
+        syn_e_revs = {name: self._conductances[name].e_rev for name in out}
+        return out, syn_e_revs
+
     @classmethod
     def from_dict(cls, d: dict, nm_path: str = "model") -> "NMModel":
         return _model_from_dict(d, nm_path=nm_path)
@@ -121,6 +143,218 @@ class NMModel:
         if not isinstance(other, NMModel):
             return NotImplemented
         return self.to_dict() == other.to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Passive RC model
+# ──────────────────────────────────────────────────────────────────────────────
+
+class NMModelRC(NMModel):
+    """Passive RC (leak) point-neuron model — no spike generation.
+
+    Integrates the membrane potential using the closed-form exact update:
+
+        V(t+dt) = V_ss + (V(t) − V_ss) × exp(−dt / τ_m)
+
+    where V_ss = (I_ext + Σ gᵢ·Eᵢ) / G_total and τ_m = Cm / G_total.
+    Correct at any step size when conductances are piecewise-constant.
+
+    Synaptic conductance waveforms (nS) can be passed via ``g_ext`` in the
+    same way as :class:`NMModelIAF`.  :meth:`NMConductance.voltage_factor`
+    is applied, so NMDA Mg²⁺ block is respected.
+
+    Parameters:
+        v0:          Initial / resting potential (mV).    Default −65.0.
+        temperature: Simulation temperature (°C).          Default 6.3.
+                     Not currently used (no Q10 kinetics).
+        cm_density:  Specific membrane capacitance
+                     (pF/µm²; 0.01 = 1 µF/cm²).           Default 0.01.
+        diameter:    Cell diameter (µm).                   Default 10.0.
+
+    Default leak conductance: ``g_density = 0.003 nS/µm²``, ``e_rev = −65.0 mV``
+    (= v0, so the membrane is exactly at rest with zero input).
+    This gives τ_m = Cm / G_leak ≈ 3.3 ms for the default geometry.
+
+    Units summary:
+        time:        ms
+        voltage:     mV
+        current:     pA
+        capacitance: pF  → dV/dt in mV/ms  (pA/pF = mV/ms)
+    """
+
+    _DEFAULT_DIAMETER:        float = 10.0
+    _DEFAULT_LEAK_G_DENSITY:  float = 0.003
+    _DEFAULT_LEAK_E_REV:      float = -65.0
+
+    def __init__(
+        self,
+        name: str = "rc",
+        config: dict | None = None,
+        nm_path: str = "model",
+    ) -> None:
+        super().__init__(name=name, nm_path=nm_path)
+        self._cm_density: float = 0.01
+        self._diameter:   float = self._DEFAULT_DIAMETER
+
+        self._conductances = NMConductanceContainer(
+            nm_path=nm_path + ".conductances"
+        )
+        self._conductances.add(
+            "Leak",
+            NMConductanceLeak(
+                g_density=self._DEFAULT_LEAK_G_DENSITY,
+                e_rev=self._DEFAULT_LEAK_E_REV,
+            ),
+        )
+
+        if config is not None:
+            self._config_set(config, quiet=True)
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def cm_density(self) -> float:
+        """Specific membrane capacitance (pF/µm²)."""
+        return self._cm_density
+
+    @cm_density.setter
+    def cm_density(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("cm_density must be a float")
+        if value <= 0:
+            raise ValueError("cm_density must be > 0, got %g" % value)
+        self._cm_density = float(value)
+
+    @property
+    def diameter(self) -> float:
+        """Cell diameter (µm)."""
+        return self._diameter
+
+    @diameter.setter
+    def diameter(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("diameter must be a float")
+        if value <= 0:
+            raise ValueError("diameter must be > 0, got %g" % value)
+        self._diameter = float(value)
+
+    @property
+    def conductances(self) -> NMConductanceContainer:
+        """The conductance container (Leak by default)."""
+        return self._conductances
+
+    # ------------------------------------------------------------------
+    # Derived quantities
+
+    def _surface_area(self) -> float:
+        """Sphere surface area in µm²: π × diameter²."""
+        return math.pi * self._diameter ** 2
+
+    def _capacitance(self) -> float:
+        """Total membrane capacitance in pF."""
+        return self._cm_density * self._surface_area()
+
+    # ------------------------------------------------------------------
+    # Simulation
+
+    def simulate(
+        self,
+        n_points: int,
+        xstart: float,
+        xdelta: float,
+        i_ext: np.ndarray,
+        g_ext: dict[str, np.ndarray] | None = None,
+    ) -> dict[str, np.ndarray]:
+        """Integrate the passive RC membrane equation.
+
+        Args:
+            n_points: Number of time samples.
+            xstart:   First time point (ms).
+            xdelta:   Time step (ms).
+            i_ext:    External current (pA), 1-D array of length ``n_points``.
+            g_ext:    Optional synaptic conductance waveforms (nS), keyed by
+                      conductance name.  Each array must have length ``n_points``.
+
+        Returns:
+            Dict with key ``"V"`` (mV), a 1-D array of length ``n_points``.
+        """
+        if n_points < 1:
+            raise ValueError("n_points must be >= 1")
+        if xdelta <= 0:
+            raise ValueError("xdelta must be > 0")
+        i_ext = np.asarray(i_ext, dtype=float)
+        if i_ext.shape != (n_points,):
+            raise ValueError("i_ext must have length n_points (%d)" % n_points)
+        g_ext, syn_e_revs = self._prepare_g_ext(g_ext, n_points)
+
+        SA = self._surface_area()
+        Cm = self._capacitance()
+
+        G_static      = sum(cond.g_density * SA for _, cond in self._conductances)
+        sum_gE_static = sum(
+            cond.g_density * SA * cond.e_rev for _, cond in self._conductances
+        )
+
+        V = np.zeros(n_points)
+        V[0] = self._v0
+
+        for i in range(n_points - 1):
+            v = V[i]
+            G_total = G_static
+            sum_gE  = sum_gE_static
+            if g_ext:
+                for name, g_arr in g_ext.items():
+                    g_i      = g_arr[i] * self._conductances[name].voltage_factor(v)
+                    G_total += g_i
+                    sum_gE  += g_i * syn_e_revs[name]
+            tau_m  = Cm / G_total
+            V_ss   = (i_ext[i] + sum_gE) / G_total
+            V[i + 1] = V_ss + (v - V_ss) * math.exp(-xdelta / tau_m)
+
+        return {"V": V}
+
+    # ------------------------------------------------------------------
+    # Config / serialisation
+
+    _SCALAR_KEYS = frozenset({"v0", "temperature", "cm_density", "diameter"})
+
+    def _config_set(self, config: dict, quiet: bool = True) -> None:
+        for key, value in config.items():
+            if key == "model":
+                continue
+            if key == "conductances":
+                self._conductances = NMConductanceContainer.from_dict(
+                    {"conductances": value},
+                    nm_path=self._nm_path + ".conductances",
+                )
+            elif key in self._SCALAR_KEYS:
+                setattr(self, key, value)
+            else:
+                raise KeyError("unknown NMModelRC config key %r" % key)
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "model":       "rc",
+            "v0":          self._v0,
+            "temperature": self._temperature,
+            "cm_density":  self._cm_density,
+            "diameter":    self._diameter,
+        }
+        d["conductances"] = self._conductances.to_dict()["conductances"]
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict, nm_path: str = "model") -> "NMModelRC":
+        obj = cls(name=d.get("model", "rc"), nm_path=nm_path)
+        obj._config_set(d, quiet=True)
+        return obj
+
+    def __repr__(self) -> str:
+        return (
+            "NMModelRC(v0=%g, cm_density=%g, diameter=%g, n_conductances=%d)"
+            % (self._v0, self._cm_density, self._diameter, len(self._conductances))
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -279,6 +513,7 @@ class NMModelHH(NMModel):
         i_ext = np.asarray(i_ext, dtype=float)
         if i_ext.shape != (n_points,):
             raise ValueError("i_ext must have length n_points (%d)" % n_points)
+        g_ext, syn_e_revs = self._prepare_g_ext(g_ext, n_points)
 
         SA = self._surface_area()
         Cm = self._capacitance()
@@ -318,6 +553,13 @@ class NMModelHH(NMModel):
                     dydt[sl] = scaled
             t_idx = int((t_val - xstart) / xdelta)
             t_idx = max(0, min(t_idx, n_points - 1))
+            if g_ext:
+                for name, g_arr in g_ext.items():
+                    i_ionic += (
+                        g_arr[t_idx]
+                        * self._conductances[name].voltage_factor(V)
+                        * (V - syn_e_revs[name])
+                    )
             dydt[0] = (i_ext[t_idx] - i_ionic) / Cm
             return dydt
 
@@ -629,25 +871,11 @@ class NMModelIAF(NMModel):
         i_ext = np.asarray(i_ext, dtype=float)
         if i_ext.shape != (n_points,):
             raise ValueError("i_ext must have length n_points (%d)" % n_points)
-        if g_ext:
-            g_ext = {name: np.asarray(arr, dtype=float) for name, arr in g_ext.items()}
-            for name, g_arr in g_ext.items():
-                if name not in self._conductances:
-                    raise KeyError("g_ext key %r not found in conductances" % name)
-                if g_arr.shape != (n_points,):
-                    raise ValueError(
-                        "g_ext[%r] must have length %d" % (name, n_points)
-                    )
+        g_ext, syn_e_revs = self._prepare_g_ext(g_ext, n_points)
 
         SA = self._surface_area()
         Cm = self._capacitance()
         refrac_steps = max(1, round(self._ap_refrac / xdelta))
-
-        # Synaptic e_rev lookup — avoid repeated dict access inside the loop
-        syn_e_revs = (
-            {name: self._conductances[name].e_rev for name in g_ext}
-            if g_ext else {}
-        )
 
         V = np.zeros(n_points)
         V[0] = self._v0
@@ -781,6 +1009,7 @@ class NMModelIAF(NMModel):
 
 _MODEL_REGISTRY: dict[str, type[NMModel]] = {
     "hh":  NMModelHH,
+    "rc":  NMModelRC,
     "iaf": NMModelIAF,
 }
 
