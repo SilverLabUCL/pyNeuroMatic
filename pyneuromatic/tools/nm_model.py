@@ -29,6 +29,7 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceHHK,
     NMConductanceGABA,
     NMConductanceAMPA,
+    NMConductanceNMDA,
     NMConductanceContainer,
     _conductance_from_dict,
 )
@@ -671,7 +672,7 @@ class NMModelIAF(NMModel):
                 sum_gE  = sum_gE_static
                 if g_ext:
                     for name, g_arr in g_ext.items():
-                        g_i      = g_arr[i]
+                        g_i   = g_arr[i] * self._conductances[name].voltage_factor(v)
                         G_total += g_i
                         sum_gE  += g_i * syn_e_revs[name]
                 tau_m      = Cm / G_total
@@ -696,7 +697,11 @@ class NMModelIAF(NMModel):
                 )
                 if g_ext:
                     for name, g_arr in g_ext.items():
-                        i_ionic += g_arr[i] * (v - syn_e_revs[name])
+                        i_ionic += (
+                            g_arr[i]
+                            * self._conductances[name].voltage_factor(v)
+                            * (v - syn_e_revs[name])
+                        )
                 v_next = v + (i_ext[i] - i_ionic) / Cm * xdelta
                 if v_next >= self._ap_threshold:
                     V[i] = self._ap_peak

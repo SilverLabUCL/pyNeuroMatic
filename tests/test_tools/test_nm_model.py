@@ -11,6 +11,7 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceHHK,
     NMConductanceGABA,
     NMConductanceAMPA,
+    NMConductanceNMDA,
 )
 from pyneuromatic.tools.nm_pulse import NMPulseContainer
 
@@ -1018,3 +1019,71 @@ class TestNMModelIAFSynaptic:
         assert np.max(np.abs(V_exact - V_euler)) < 0.05, (
             "Exact and Euler with g_ext disagree by > 0.05 mV at dt=%g ms" % XDELTA
         )
+
+    def test_nmda_blocked_at_rest(self):
+        """NMDA at resting Vm (−80 mV) should be strongly blocked: far less current than AMPA.
+
+        The Boltzmann factor at −80 mV (v_half=−12.8, v_slope=22.4) is ≈ 0.03,
+        so 1 nS NMDA produces only ~3% of the current a 1 nS AMPA step would.
+        """
+        n_pts = round(100.0 / XDELTA)
+        g_1nS = np.ones(n_pts)  # constant 1 nS
+
+        # AMPA (no block): 1 nS at E_AMPA=0 mV drives Vm well above rest
+        m_ampa = NMModelIAF()
+        m_ampa.ap_threshold = 200.0
+        m_ampa.conductances.add("AMPA", NMConductanceAMPA())
+        V_ampa = m_ampa.simulate(n_pts, 0.0, XDELTA, np.zeros(n_pts),
+                                 g_ext={"AMPA": g_1nS})["V"]
+
+        # NMDA (default Boltzmann block): 1 nS at E_NMDA=0 mV, same e_rev as AMPA
+        m_nmda = NMModelIAF()
+        m_nmda.ap_threshold = 200.0
+        m_nmda.conductances.add("NMDA", NMConductanceNMDA())  # default boltzmann, v_half=-12.8
+        V_nmda = m_nmda.simulate(n_pts, 0.0, XDELTA, np.zeros(n_pts),
+                                 g_ext={"NMDA": g_1nS})["V"]
+
+        # NMDA-driven depolarisation must be much smaller than AMPA-driven
+        delta_ampa = V_ampa[-1] - m_ampa.v0
+        delta_nmda = V_nmda[-1] - m_nmda.v0
+        assert delta_nmda < delta_ampa * 0.2, (
+            "NMDA at rest should be >80%% blocked: ΔAMPA=%g mV, ΔNMDA=%g mV"
+            % (delta_ampa, delta_nmda)
+        )
+
+    def test_nmda_steady_state_with_full_unblock(self):
+        """NMDA with v_half=-200 (B≈1 everywhere) matches the AMPA steady-state formula.
+
+        V_ss = (G_leak * E_leak + G_NMDA * E_NMDA) / (G_leak + G_NMDA), within 0.01 mV.
+        """
+        g_nmda_nS = 0.9
+        n_pts = round(100.0 / XDELTA)
+
+        m = NMModelIAF()
+        m.ap_threshold = 200.0
+        m.conductances.add("NMDA", NMConductanceNMDA(
+            mg_block="boltzmann", v_half=-500.0, v_slope=22.4  # B≈1 to < 1 ppb at physiological V
+        ))
+
+        SA = math.pi * m.diameter ** 2
+        G_leak = m.conductances["Leak"].g_density * SA
+        E_leak = m.conductances["Leak"].e_rev
+        E_nmda = m.conductances["NMDA"].e_rev
+        V_ss_expected = (G_leak * E_leak + g_nmda_nS * E_nmda) / (G_leak + g_nmda_nS)
+
+        g_arr = np.full(n_pts, g_nmda_nS)
+        V = m.simulate(n_pts, 0.0, XDELTA, np.zeros(n_pts), g_ext={"NMDA": g_arr})["V"]
+
+        assert V[-1] == pytest.approx(V_ss_expected, abs=0.01), (
+            "NMDA full-unblock V_ss: expected %g mV, got %g mV" % (V_ss_expected, V[-1])
+        )
+
+    def test_nmda_all_block_models_in_range(self):
+        """voltage_factor(v) must be in (0, 1] for all block models at typical voltages."""
+        for model in ("boltzmann", "jahr_stevens_1990", "gc_schwartz_2012"):
+            c = NMConductanceNMDA(mg_block=model)
+            for v in (-80.0, -40.0, 0.0, 50.0):
+                b = c.voltage_factor(v)
+                assert 0.0 < b <= 1.0, (
+                    "model=%r, V=%g mV: voltage_factor=%g not in (0, 1]" % (model, v, b)
+                )
