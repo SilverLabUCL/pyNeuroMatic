@@ -6,6 +6,7 @@ import pytest
 
 from pyneuromatic.tools.nm_tool_model import NMToolModel, NMToolModelConfig
 from pyneuromatic.tools.nm_model import NMModelHH
+from pyneuromatic.tools.nm_conductance import NMConductanceAMPA, NMConductanceGABA
 from pyneuromatic.tools.nm_pulse import NMPulseContainer
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
@@ -385,3 +386,159 @@ class TestNMToolModelEmpty:
         count_before = len(folder.data)
         t.run_all([])
         assert len(folder.data) == count_before
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# gsyn_sources — folder-based synaptic conductance wiring
+# ──────────────────────────────────────────────────────────────────────────────
+
+N_POINTS_SYN = 4000    # 100 ms at 0.025 ms/step
+XDELTA_SYN   = 0.025
+ONSET_IDX    = round(5.0 / XDELTA_SYN)    # 5 ms onset
+DUR_IDX      = round(50.0 / XDELTA_SYN)   # 50 ms duration
+
+
+def _add_cond_arrays(folder, prefix, n_epochs, n_points, amp_nS, chan=""):
+    """Pre-populate folder.data with constant conductance arrays."""
+    for i in range(n_epochs):
+        arr = np.full(n_points, amp_nS)
+        folder.data.new(prefix + chan + str(i), nparray=arr)
+
+
+def _syn_tool(gsyn_sources, chan=""):
+    """NMToolModel with AMPA conductance added and subthreshold i_ext."""
+    t = NMToolModel()
+    t.n_points = N_POINTS_SYN
+    t.xdelta = XDELTA_SYN
+    if chan:
+        t.chan = chan
+    t.model.conductances.add("AMPA", NMConductanceAMPA())
+    t.model.conductances.add("GABA", NMConductanceGABA())
+    # subthreshold current pulse — not enough to fire on its own
+    t.pulses.new({"pulse": "square", "amp": 50.0, "onset": 5.0,
+                  "duration": 50.0, "epoch": "all"})
+    t.gsyn_sources = gsyn_sources
+    return t
+
+
+class TestNMToolModelGSynSources:
+    def test_gsyn_sources_default_empty(self):
+        t = NMToolModel()
+        assert t.gsyn_sources == {}
+
+    def test_gsyn_sources_setter(self):
+        t = NMToolModel()
+        t.gsyn_sources = {"AMPA": "AMPA_"}
+        assert t.gsyn_sources == {"AMPA": "AMPA_"}
+
+    def test_gsyn_sources_returns_copy(self):
+        t = NMToolModel()
+        t.gsyn_sources = {"AMPA": "AMPA_"}
+        t.gsyn_sources["X"] = "Y"  # mutating returned dict should have no effect
+        assert "X" not in t.gsyn_sources
+
+    def test_gsyn_sources_non_dict_raises(self):
+        t = NMToolModel()
+        with pytest.raises(TypeError):
+            t.gsyn_sources = "AMPA_"
+
+    def test_gsyn_sources_non_string_value_raises(self):
+        t = NMToolModel()
+        with pytest.raises(TypeError):
+            t.gsyn_sources = {"AMPA": 42}
+
+    def test_ampa_depolarizes_vm(self):
+        """Constant AMPA conductance should push Vm above baseline."""
+        folder = _make_folder()
+        _add_cond_arrays(folder, "AMPA_", n_epochs=1,
+                         n_points=N_POINTS_SYN, amp_nS=5.0)
+        t_base = _syn_tool({})
+        _run_tool(t_base, n_epochs=1, folder=folder)
+        vm_base_max = folder.data["VM_0"].nparray.max()
+
+        folder2 = _make_folder()
+        _add_cond_arrays(folder2, "AMPA_", n_epochs=1,
+                         n_points=N_POINTS_SYN, amp_nS=5.0)
+        t_syn = _syn_tool({"AMPA": "AMPA_"})
+        _run_tool(t_syn, n_epochs=1, folder=folder2)
+        vm_syn_max = folder2.data["VM_0"].nparray.max()
+
+        assert vm_syn_max > vm_base_max
+
+    def test_two_conductances_two_epochs(self):
+        """Both AMPA and GABA wiring across 2 epochs produces correctly shaped output."""
+        folder = _make_folder()
+        _add_cond_arrays(folder, "AMPA_", n_epochs=2,
+                         n_points=N_POINTS_SYN, amp_nS=3.0)
+        _add_cond_arrays(folder, "GABA_", n_epochs=2,
+                         n_points=N_POINTS_SYN, amp_nS=1.0)
+        t = _syn_tool({"AMPA": "AMPA_", "GABA": "GABA_"})
+        _run_tool(t, n_epochs=2, folder=folder)
+        for i in range(2):
+            vm = folder.data["VM_%d" % i].nparray
+            assert vm.shape == (N_POINTS_SYN,)
+
+    def test_chan_used_in_array_lookup(self):
+        """gsyn_sources lookup uses {prefix}{chan}{epoch_idx}."""
+        folder = _make_folder()
+        _add_cond_arrays(folder, "AMPA_", n_epochs=1,
+                         n_points=N_POINTS_SYN, amp_nS=5.0, chan="A")
+        t = _syn_tool({"AMPA": "AMPA_"}, chan="A")
+        _run_tool(t, n_epochs=1, folder=folder)
+        assert "VM_A0" in folder.data
+
+    def test_gsyn_sources_empty_no_change(self):
+        """gsyn_sources={} leaves run() behaviour unchanged."""
+        folder = _make_folder()
+        t = _syn_tool({})
+        _run_tool(t, n_epochs=1, folder=folder)
+        assert "VM_0" in folder.data
+
+    def test_gsyn_sources_no_folder_raises(self):
+        """Setting gsyn_sources but providing no folder raises ValueError."""
+        t = _syn_tool({"AMPA": "AMPA_"})
+        with pytest.raises(ValueError, match="no folder"):
+            t.run_all([{}])  # no "folder" key in target
+
+    def test_gsyn_sources_missing_array_raises(self):
+        """Missing conductance array in folder.data raises KeyError."""
+        folder = _make_folder()
+        # intentionally do NOT add AMPA_ arrays
+        t = _syn_tool({"AMPA": "AMPA_"})
+        with pytest.raises(KeyError, match="AMPA_0"):
+            _run_tool(t, n_epochs=1, folder=folder)
+
+    def test_gsyn_sources_none_nparray_raises(self):
+        """NMData with nparray=None raises ValueError."""
+        folder = _make_folder()
+        folder.data.new("AMPA_0", nparray=None)
+        t = _syn_tool({"AMPA": "AMPA_"})
+        with pytest.raises(ValueError, match="nparray is None"):
+            _run_tool(t, n_epochs=1, folder=folder)
+
+    def test_gsyn_sources_wrong_length_raises(self):
+        """Array length != n_points raises ValueError (via model._prepare_g_ext)."""
+        folder = _make_folder()
+        folder.data.new("AMPA_0", nparray=np.ones(10))  # wrong length
+        t = _syn_tool({"AMPA": "AMPA_"})
+        with pytest.raises(ValueError):
+            _run_tool(t, n_epochs=1, folder=folder)
+
+    def test_gsyn_sources_unknown_conductance_raises(self):
+        """Conductance name not in model.conductances raises KeyError."""
+        folder = _make_folder()
+        _add_cond_arrays(folder, "NMDA_", n_epochs=1,
+                         n_points=N_POINTS_SYN, amp_nS=1.0)
+        t = _syn_tool({"NMDA": "NMDA_"})  # NMDA not added to model conductances
+        with pytest.raises(KeyError):
+            _run_tool(t, n_epochs=1, folder=folder)
+
+    def test_note_str_includes_gsyn_sources(self):
+        """Note string includes gsyn_sources when set."""
+        folder = _make_folder()
+        _add_cond_arrays(folder, "AMPA_", n_epochs=1,
+                         n_points=N_POINTS_SYN, amp_nS=5.0)
+        t = _syn_tool({"AMPA": "AMPA_"})
+        _run_tool(t, n_epochs=1, folder=folder)
+        note = " ".join(str(n) for n in folder.data["VM_0"].notes)
+        assert "gsyn_sources" in note
