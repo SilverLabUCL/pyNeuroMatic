@@ -106,6 +106,7 @@ class NMToolModel(NMTool):
         self.__pulses: NMPulseContainer = NMPulseContainer(
             nm_path=self._name + ".pulses"
         )
+        self.__gsyn_sources: dict[str, str] = {}
 
         self._waveforms:     list[np.ndarray]            = []
         self._epoch_names:   list[str]                   = []
@@ -228,6 +229,35 @@ class NMToolModel(NMTool):
         """Container of NMPulse objects summed to form the injected current."""
         return self.__pulses
 
+    @property
+    def gsyn_sources(self) -> dict[str, str]:
+        """Mapping from conductance name to array prefix in folder.data.
+
+        For each entry, run() reads ``{prefix}{chan}{epoch_idx}`` from
+        folder.data and passes the array (nS) as ``g_ext`` to
+        model.simulate().  The conductance name must match a key in
+        model.conductances.
+
+        Example::
+
+            t.gsyn_sources = {"AMPA": "AMPA_", "NMDA": "NMDA_"}
+            # reads AMPA_0, NMDA_0 for epoch 0; AMPA_1, NMDA_1 for epoch 1; …
+        """
+        return dict(self.__gsyn_sources)
+
+    @gsyn_sources.setter
+    def gsyn_sources(self, value: dict[str, str]) -> None:
+        if not isinstance(value, dict):
+            raise TypeError(nmu.type_error_str(value, "gsyn_sources", "dict"))
+        for k, v in value.items():
+            if not isinstance(k, str) or not isinstance(v, str):
+                raise TypeError("gsyn_sources keys and values must be strings")
+        self.__gsyn_sources = dict(value)
+        nmh.history("set gsyn_sources=%r" % self.__gsyn_sources, quiet=True)
+        nmch.add_nm_command(
+            "%s.gsyn_sources = %r" % (self._name, self.__gsyn_sources)
+        )
+
     # ------------------------------------------------------------------
     # Lifecycle
 
@@ -264,8 +294,31 @@ class NMToolModel(NMTool):
                     self.__n_points, self.__xstart, self.__xdelta, epoch_idx
                 )
 
+        g_ext: dict[str, np.ndarray] | None = None
+        if self.__gsyn_sources:
+            if not isinstance(self.folder, NMFolder):
+                raise ValueError(
+                    "gsyn_sources is set but no folder is available for epoch %d"
+                    % epoch_idx
+                )
+            g_ext = {}
+            for cond_name, arr_prefix in self.__gsyn_sources.items():
+                arr_name = arr_prefix + self.__chan + str(epoch_idx)
+                nmdata = self.folder.data.get(arr_name)
+                if nmdata is None:
+                    raise KeyError(
+                        "gsyn_sources: %r not found in folder.data (epoch %d)"
+                        % (arr_name, epoch_idx)
+                    )
+                arr = nmdata.nparray
+                if arr is None:
+                    raise ValueError(
+                        "gsyn_sources: %r has no data (nparray is None)" % arr_name
+                    )
+                g_ext[cond_name] = arr
+
         result = self.__model.simulate(
-            self.__n_points, self.__xstart, self.__xdelta, i_ext
+            self.__n_points, self.__xstart, self.__xdelta, i_ext, g_ext=g_ext
         )
 
         self._waveforms.append(result["V"])
@@ -317,6 +370,8 @@ class NMToolModel(NMTool):
                 pulse_parts.append("amp_delta=%g" % p.amp_delta)
             pulse_strs.append("(%s)" % ", ".join(pulse_parts))
         parts.append("pulses=[%s]" % ", ".join(pulse_strs))
+        if self.__gsyn_sources:
+            parts.append("gsyn_sources=%r" % self.__gsyn_sources)
         parts.append("n_points=%d" % self.__n_points)
         parts.append("xstart=%g" % self.__xstart)
         parts.append("xdelta=%g" % self.__xdelta)
