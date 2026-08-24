@@ -406,7 +406,7 @@ def _add_cond_arrays(folder, prefix, n_epochs, n_points, amp_nS, chan=""):
 
 
 def _syn_tool(gsyn_sources, chan=""):
-    """NMToolModel with AMPA conductance added and subthreshold i_ext."""
+    """NMToolModel with AMPA and GABA conductance added and subthreshold i_ext."""
     t = NMToolModel()
     t.n_points = N_POINTS_SYN
     t.xdelta = XDELTA_SYN
@@ -452,7 +452,7 @@ class TestNMToolModelGSynSources:
         folder = _make_folder()
         _add_cond_arrays(folder, "AMPA_", n_epochs=1,
                          n_points=N_POINTS_SYN, amp_nS=5.0)
-        t_base = _syn_tool({})
+        t_base = _syn_tool({}) # no gsyn_sources → no AMPA conductance
         _run_tool(t_base, n_epochs=1, folder=folder)
         vm_base_max = folder.data["VM_0"].nparray.max()
 

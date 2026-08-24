@@ -30,6 +30,11 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceGABA,
     NMConductanceAMPA,
     NMConductanceNMDA,
+    NMConductanceVCNNa,
+    NMConductanceVCNKHT,
+    NMConductanceVCNKLT,
+    NMConductanceVCNKA,
+    NMConductanceVCNH,
     NMConductanceContainer,
     _conductance_from_dict,
 )
@@ -813,6 +818,289 @@ class NMModelIAF(NMModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Rothman & Manis (2003) Ventral Cochlear Nucleus model
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Total conductances (nS) and resting potentials per cell type.
+# All types share Cm=12 pF, CmDensity=0.9e-2 pF/µm², gLeak=2 nS, gNa=1000 nS.
+# Source: Rothman & Manis (2003), J Neurophysiol 89: 3097-3113, Table 1.
+_VCN_CELL_PRESETS: dict[str, dict] = {
+    "I-c":  {"g_kht": 150.0, "g_klt":   0.0, "g_ka":  0.0, "g_h":  0.5, "v0": -63.9311},
+    "I-t":  {"g_kht":  80.0, "g_klt":   0.0, "g_ka": 65.0, "g_h":  0.5, "v0": -64.1973},
+    "I-II": {"g_kht": 150.0, "g_klt":  20.0, "g_ka":  0.0, "g_h":  2.0, "v0": -64.0523},
+    "II-I": {"g_kht": 150.0, "g_klt":  35.0, "g_ka":  0.0, "g_h":  3.5, "v0": -63.8959},
+    "II":   {"g_kht": 150.0, "g_klt": 200.0, "g_ka":  0.0, "g_h": 20.0, "v0": -63.6284},
+}
+
+
+class NMModelVCN(NMModel):
+    """Rothman & Manis (2003) Ventral Cochlear Nucleus point-neuron model.
+
+    Integrates a Hodgkin–Huxley-style ODE system using
+    :func:`scipy.integrate.solve_ivp` (RK45).  Five cell types are supported,
+    differing in their K-channel conductance densities.
+
+    Reference:
+        Rothman JS & Manis PB (2003). "The roles potassium currents play in
+        regulating the electrical activity of ventral cochlear nucleus neurons."
+        J Neurophysiol 89: 3097–3113.
+
+    Parameters:
+        cell_type:   One of ``"I-c"``, ``"I-t"``, ``"I-II"``, ``"II-I"``, ``"II"``.
+                     Sets conductance densities and resting potential.
+                     Default ``"I-c"``.
+        v0:          Resting potential (mV).     Preset per cell type.
+        temperature: Simulation temperature (°C). Default 22.0 (paper reference).
+        cm_density:  Specific membrane capacitance (pF/µm²). Default 0.009.
+        diameter:    Cell diameter (µm). Default ≈ 20.6 (gives Cm = 12 pF).
+        g_q10:       Q10 for conductance amplitudes. Default 2.0.
+        tau_q10:     Q10 for gating time constants.  Default 3.0.
+
+    Conductance set (all present for every cell type; g=0 when absent):
+        Leak  — ohmic, gLeak = 2 nS total
+        Na    — fast Na (m³h), gNa = 1000 nS total
+        KHT   — high-threshold K (0.85 n² + 0.15 p)
+        KLT   — low-threshold K D-type (w⁴z)
+        KA    — transient A-type K (a⁴bc)
+        H     — hyperpolarisation-activated (r)
+
+    Units:  time ms · voltage mV · current pA · capacitance pF.
+    """
+
+    _T_REF: float = 22.0
+    _CM_DENSITY_DEFAULT: float = 0.9e-2   # pF/µm²
+    # SA = Cm / CmDensity = 12 / 0.009 = 1333.3 µm²  →  d = √(SA/π) ≈ 20.6 µm
+    _DIAMETER_DEFAULT: float = math.sqrt((12.0 / _CM_DENSITY_DEFAULT) / math.pi)
+    _G_LEAK_NS: float = 2.0     # nS total
+    _G_NA_NS: float = 1000.0    # nS total
+    _E_LEAK: float = -65.0
+    _E_NA: float = 55.0
+    _E_K: float = -70.0
+    _E_H: float = -43.0
+    _VALID_CELL_TYPES = frozenset(_VCN_CELL_PRESETS)
+
+    def __init__(
+        self,
+        name: str = "vcn",
+        cell_type: str = "I-c",
+        config: dict | None = None,
+        nm_path: str = "model",
+    ) -> None:
+        super().__init__(name=name, nm_path=nm_path)
+        self._temperature = self._T_REF
+        self._cm_density = self._CM_DENSITY_DEFAULT
+        self._diameter = self._DIAMETER_DEFAULT
+        self._g_q10: float = 2.0
+        self._tau_q10: float = 3.0
+        self._cell_type: str = "I-c"    # placeholder; _apply_cell_type sets real value
+
+        SA = self._surface_area()
+        self._conductances.add("Leak", NMConductanceLeak(
+            g_density=self._G_LEAK_NS / SA, e_rev=self._E_LEAK,
+        ))
+        self._conductances.add("Na",  NMConductanceVCNNa(
+            g_density=self._G_NA_NS / SA, e_rev=self._E_NA,
+        ))
+        self._conductances.add("KHT", NMConductanceVCNKHT(g_density=0.0, e_rev=self._E_K))
+        self._conductances.add("KLT", NMConductanceVCNKLT(g_density=0.0, e_rev=self._E_K))
+        self._conductances.add("KA",  NMConductanceVCNKA(g_density=0.0, e_rev=self._E_K))
+        self._conductances.add("H",   NMConductanceVCNH(g_density=0.0, e_rev=self._E_H))
+
+        self.cell_type = cell_type      # calls setter → _apply_cell_type
+
+        if config is not None:
+            self._config_set(config, quiet=True)
+
+    # ------------------------------------------------------------------
+    # Properties
+
+    @property
+    def cell_type(self) -> str:
+        """VCN cell type (``"I-c"`` … ``"II"``).
+
+        Setting this property resets conductance densities and ``v0`` to the
+        published values for that cell type.
+        """
+        return self._cell_type
+
+    @cell_type.setter
+    def cell_type(self, value: str) -> None:
+        if value not in self._VALID_CELL_TYPES:
+            raise ValueError(
+                "cell_type must be one of %s, got %r"
+                % (sorted(self._VALID_CELL_TYPES), value)
+            )
+        self._cell_type = value
+        self._apply_cell_type(value)
+
+    @property
+    def g_q10(self) -> float:
+        """Q10 factor for conductance amplitudes (applied to all intrinsic channels)."""
+        return self._g_q10
+
+    @g_q10.setter
+    def g_q10(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("g_q10 must be a float")
+        if value <= 0:
+            raise ValueError("g_q10 must be > 0, got %g" % value)
+        self._g_q10 = float(value)
+
+    @property
+    def tau_q10(self) -> float:
+        """Q10 factor for gating time constants."""
+        return self._tau_q10
+
+    @tau_q10.setter
+    def tau_q10(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("tau_q10 must be a float")
+        if value <= 0:
+            raise ValueError("tau_q10 must be > 0, got %g" % value)
+        self._tau_q10 = float(value)
+
+    # ------------------------------------------------------------------
+    # Derived quantities
+
+    def _g_q10_factor(self) -> float:
+        """Conductance amplitude scaling: g_q10^((T − 22) / 10)."""
+        return self._g_q10 ** ((self._temperature - self._T_REF) / 10.0)
+
+    def _tau_q10_factor(self) -> float:
+        """Time-constant scaling: tau_q10^((T − 22) / 10)."""
+        return self._tau_q10 ** ((self._temperature - self._T_REF) / 10.0)
+
+    def _apply_cell_type(self, cell_type: str) -> None:
+        """Set conductance densities and v0 from the published preset."""
+        preset = _VCN_CELL_PRESETS[cell_type]
+        SA = self._surface_area()
+        self._v0 = preset["v0"]
+        self._conductances["KHT"].g_density = preset["g_kht"] / SA
+        self._conductances["KLT"].g_density = preset["g_klt"] / SA
+        self._conductances["KA"].g_density  = preset["g_ka"]  / SA
+        self._conductances["H"].g_density   = preset["g_h"]   / SA
+
+    # ------------------------------------------------------------------
+    # Simulation
+
+    def simulate(
+        self,
+        n_points: int,
+        xstart: float,
+        xdelta: float,
+        i_ext: np.ndarray,
+        g_ext: dict[str, np.ndarray] | None = None,
+    ) -> dict[str, np.ndarray]:
+        """Integrate the VCN ODE system.
+
+        Args:
+            n_points: Number of time samples.
+            xstart:   First time point (ms).
+            xdelta:   Time step (ms; also used as ``max_step`` for solve_ivp).
+            i_ext:    External current (pA), 1-D array of length ``n_points``.
+            g_ext:    Optional synaptic conductance waveforms (nS) keyed by
+                      conductance name.  Each array must have length ``n_points``.
+                      Synaptic currents are NOT scaled by g_q10.
+
+        Returns:
+            Dict with ``"V"`` (mV) and one key per gate variable
+            (``"Na_m"``, ``"Na_h"``, ``"K_n"``, ``"K_p"``, ``"KD_w"``,
+            ``"KD_z"``, ``"KA_a"``, ``"KA_b"``, ``"KA_c"``, ``"H_r"``),
+            each a 1-D array of length ``n_points``.
+        """
+        from scipy.integrate import solve_ivp
+
+        if n_points < 1:
+            raise ValueError("n_points must be >= 1")
+        if xdelta <= 0:
+            raise ValueError("xdelta must be > 0")
+        i_ext = np.asarray(i_ext, dtype=float)
+        if i_ext.shape != (n_points,):
+            raise ValueError("i_ext must have length n_points (%d)" % n_points)
+        g_ext, syn_e_revs = self._prepare_g_ext(g_ext, n_points)
+
+        SA = self._surface_area()
+        Cm = self._capacitance()
+        g_q10 = self._g_q10_factor()
+        tau_q10 = self._tau_q10_factor()
+
+        t = np.linspace(xstart, xstart + (n_points - 1) * xdelta, n_points)
+
+        offsets: dict[str, slice] = {}
+        offset = 1
+        for cname, cond in self._conductances:
+            ns = cond.n_states()
+            offsets[cname] = slice(offset, offset + ns)
+            offset += ns
+        n_y = offset
+
+        y0 = np.zeros(n_y)
+        y0[0] = self._v0
+        for cname, cond in self._conductances:
+            sl = offsets[cname]
+            init = cond.state_init(self._v0)
+            if init:
+                y0[sl] = init
+
+        def ode(t_val: float, y: np.ndarray) -> np.ndarray:
+            V = y[0]
+            dydt = np.zeros(n_y)
+            i_ionic = 0.0
+            for cname, cond in self._conductances:
+                sl = offsets[cname]
+                states = list(y[sl])
+                i_ionic += cond.current(V, states) * SA
+                scaled = cond.dydt_scaled(V, states, tau_q10)
+                if scaled:
+                    dydt[sl] = scaled
+            i_ionic *= g_q10
+            t_idx = max(0, min(int((t_val - xstart) / xdelta), n_points - 1))
+            if g_ext:
+                for name, g_arr in g_ext.items():
+                    i_ionic += (
+                        g_arr[t_idx]
+                        * self._conductances[name].voltage_factor(V)
+                        * (V - syn_e_revs[name])
+                    )
+            dydt[0] = (i_ext[t_idx] - i_ionic) / Cm
+            return dydt
+
+        sol = solve_ivp(
+            fun=ode,
+            t_span=(t[0], t[-1]),
+            y0=y0,
+            method="RK45",
+            t_eval=t,
+            max_step=xdelta,
+            dense_output=False,
+        )
+
+        result: dict[str, np.ndarray] = {"V": sol.y[0]}
+        for cname, cond in self._conductances:
+            sl = offsets[cname]
+            for gate_idx, gate_name in enumerate(cond.gate_names()):
+                result[gate_name] = sol.y[sl.start + gate_idx]
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Config / serialisation
+
+    def to_dict(self) -> dict:
+        return {
+            "model":        "vcn",
+            "cell_type":    self._cell_type,
+            "v0":           self._v0,
+            "temperature":  self._temperature,
+            "cm_density":   self._cm_density,
+            "diameter":     self._diameter,
+            "g_q10":        self._g_q10,
+            "tau_q10":      self._tau_q10,
+            "conductances": self._conductances.to_dict()["conductances"],
+        }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Registry and factory
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -820,6 +1108,7 @@ _MODEL_REGISTRY: dict[str, type[NMModel]] = {
     "hh":  NMModelHH,
     "rc":  NMModelRC,
     "iaf": NMModelIAF,
+    "vcn": NMModelVCN,
 }
 
 
