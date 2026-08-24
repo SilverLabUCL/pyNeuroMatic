@@ -1422,3 +1422,331 @@ class TestNMModelHHSynaptic:
         with pytest.raises(KeyError):
             m.simulate(n_pts, 0.0, XDELTA, np.zeros(n_pts),
                        g_ext={"GABA": np.zeros(n_pts)})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NMModelVCN — Rothman & Manis (2003)
+# ──────────────────────────────────────────────────────────────────────────────
+
+from pyneuromatic.tools.nm_model import NMModelVCN
+from pyneuromatic.tools.nm_conductance import (
+    NMConductanceVCNNa,
+    NMConductanceVCNKHT,
+    NMConductanceVCNKLT,
+    NMConductanceVCNKA,
+    NMConductanceVCNH,
+)
+
+# Simulation parameters for VCN tests — 200 ms at 0.025 ms/step
+_VCN_N = 8000 # 200 ms / 0.025 ms
+_VCN_XDELTA = 0.025
+_VCN_ONSET = 2000   # sample index = 50 ms
+
+_VCN_GATE_KEYS = frozenset({
+    "Na_m", "Na_h", "K_n", "K_p", "KD_w", "KD_z", "KA_a", "KA_b", "KA_c", "H_r",
+})
+_VCN_ALL_KEYS = {"V"} | _VCN_GATE_KEYS
+
+_SA_DEFAULT = math.pi * NMModelVCN._DIAMETER_DEFAULT ** 2
+
+
+def _vcn_i_ext(amp_pA, onset=_VCN_ONSET, duration=4000, n=_VCN_N):
+    i = np.zeros(n)
+    i[onset : onset + duration] = amp_pA
+    return i
+
+
+def _vcn_alpha_train(freq_hz, g_peak_nS, tau_ms, dur_ms, onset=_VCN_ONSET, n=_VCN_N, xdelta=_VCN_XDELTA):
+    """Sum of alpha-function conductance waveforms at a fixed inter-event interval.
+
+    Each event contributes ``g_peak * (t/tau) * exp(1 - t/tau)`` starting at
+    the event sample; events are clipped to zero for negative time.
+    """
+    interval = round(1000.0 / (freq_hz * xdelta))   # samples between events
+    step_samples = round(dur_ms / xdelta)
+    g = np.zeros(n)
+    event = onset
+    while event < onset + step_samples:
+        for k in range(n - event):
+            t_k = k * xdelta
+            g[event + k] += max(g_peak_nS * (t_k / tau_ms) * np.exp(1.0 - t_k / tau_ms), 0.0)
+        event += interval
+    return g
+
+
+class TestNMModelVCNConstruct:
+    def test_default_cell_type(self):
+        assert NMModelVCN().cell_type == "I-c"
+
+    def test_default_temperature(self):
+        assert NMModelVCN().temperature == pytest.approx(22.0)
+
+    def test_default_g_q10(self):
+        assert NMModelVCN().g_q10 == pytest.approx(2.0)
+
+    def test_default_tau_q10(self):
+        assert NMModelVCN().tau_q10 == pytest.approx(3.0)
+
+    def test_conductance_count(self):
+        assert len(NMModelVCN().conductances) == 6
+
+    def test_conductance_types(self):
+        m = NMModelVCN()
+        assert isinstance(m.conductances["Leak"], NMConductanceLeak)
+        assert isinstance(m.conductances["Na"],  NMConductanceVCNNa)
+        assert isinstance(m.conductances["KHT"], NMConductanceVCNKHT)
+        assert isinstance(m.conductances["KLT"], NMConductanceVCNKLT)
+        assert isinstance(m.conductances["KA"],  NMConductanceVCNKA)
+        assert isinstance(m.conductances["H"],   NMConductanceVCNH)
+
+    @pytest.mark.parametrize("cell_type", ["I-c", "I-t", "I-II", "II-I", "II"])
+    def test_cell_type_construction(self, cell_type):
+        m = NMModelVCN(cell_type=cell_type)
+        assert m.cell_type == cell_type
+
+    def test_ic_kht_nonzero(self):
+        m = NMModelVCN(cell_type="I-c")
+        assert m.conductances["KHT"].g_density > 0.0
+
+    def test_ic_klt_zero(self):
+        m = NMModelVCN(cell_type="I-c")
+        assert m.conductances["KLT"].g_density == pytest.approx(0.0)
+
+    def test_ic_ka_zero(self):
+        m = NMModelVCN(cell_type="I-c")
+        assert m.conductances["KA"].g_density == pytest.approx(0.0)
+
+    def test_ii_klt_nonzero(self):
+        m = NMModelVCN(cell_type="II")
+        assert m.conductances["KLT"].g_density > 0.0
+
+    def test_it_ka_nonzero(self):
+        m = NMModelVCN(cell_type="I-t")
+        assert m.conductances["KA"].g_density > 0.0
+
+    def test_cell_type_setter_resets_conductances(self):
+        m = NMModelVCN(cell_type="I-c")
+        klt_ic = m.conductances["KLT"].g_density
+        m.cell_type = "II"
+        assert m.conductances["KLT"].g_density > klt_ic
+
+    def test_invalid_cell_type_raises(self):
+        with pytest.raises(ValueError):
+            NMModelVCN(cell_type="III")
+
+    def test_g_q10_setter_zero_raises(self):
+        with pytest.raises(ValueError):
+            NMModelVCN().g_q10 = 0.0
+
+    def test_tau_q10_setter_zero_raises(self):
+        with pytest.raises(ValueError):
+            NMModelVCN().tau_q10 = 0.0
+
+    def test_v0_preset_ic(self):
+        assert NMModelVCN(cell_type="I-c").v0 == pytest.approx(-63.9311)
+
+    def test_v0_preset_ii(self):
+        assert NMModelVCN(cell_type="II").v0 == pytest.approx(-63.6284)
+
+    def test_config_kwarg(self):
+        m = NMModelVCN(config={"cell_type": "II", "temperature": 25.0})
+        assert m.cell_type == "II"
+        assert m.temperature == pytest.approx(25.0)
+
+    def test_q10_factors_unity_at_ref_temp(self):
+        m = NMModelVCN()   # temperature = 22°C = T_REF
+        assert m._g_q10_factor() == pytest.approx(1.0)
+        assert m._tau_q10_factor() == pytest.approx(1.0)
+
+    def test_q10_factors_above_ref_temp(self):
+        m = NMModelVCN()
+        m.temperature = 32.0    # +10°C above ref
+        assert m._g_q10_factor() == pytest.approx(m.g_q10)
+        assert m._tau_q10_factor() == pytest.approx(m.tau_q10)
+
+
+class TestNMModelVCNSimulate:
+    def test_returns_dict(self):
+        m = NMModelVCN()
+        r = m.simulate(_VCN_N, 0.0, _VCN_XDELTA, np.zeros(_VCN_N))
+        assert isinstance(r, dict)
+
+    def test_all_keys_present(self):
+        m = NMModelVCN()
+        r = m.simulate(_VCN_N, 0.0, _VCN_XDELTA, np.zeros(_VCN_N))
+        assert set(r) == _VCN_ALL_KEYS
+
+    def test_array_length(self):
+        m = NMModelVCN()
+        r = m.simulate(_VCN_N, 0.0, _VCN_XDELTA, np.zeros(_VCN_N))
+        for arr in r.values():
+            assert len(arr) == _VCN_N
+
+    def test_invalid_n_points(self):
+        with pytest.raises(ValueError):
+            NMModelVCN().simulate(0, 0.0, _VCN_XDELTA, np.zeros(0))
+
+    def test_invalid_xdelta(self):
+        with pytest.raises(ValueError):
+            NMModelVCN().simulate(_VCN_N, 0.0, 0.0, np.zeros(_VCN_N))
+
+    def test_wrong_i_ext_length(self):
+        with pytest.raises(ValueError):
+            NMModelVCN().simulate(_VCN_N, 0.0, _VCN_XDELTA, np.zeros(_VCN_N + 1))
+
+    def test_resting_potential_stable(self):
+        """Zero input: V should stay within 1 mV of v0 for 50 ms."""
+        m = NMModelVCN(cell_type="I-c")
+        n = round(50.0 / _VCN_XDELTA)
+        r = m.simulate(n, 0.0, _VCN_XDELTA, np.zeros(n))
+        assert r["V"][-1] == pytest.approx(m.v0, abs=1.0)
+
+    @pytest.mark.parametrize("cell_type,i_amp_pA,step_ms,expected_aps", [
+        ("I-c",  50.0,  110.0, 6),
+        ("I-t",  50.0,  110.0, 7),
+        ("I-II", 150.0, 100.0, 8),
+        ("II-I", 300.0, 100.0, 2),
+        ("II",   300.0, 100.0, 1),
+    ])
+    def test_ap_count(self, cell_type, i_amp_pA, step_ms, expected_aps):
+        """Each VCN cell type fires a characteristic number of APs on a step.
+
+        I-c and I-t: a 110 ms step is used so the I-t 7th AP (which fires
+        just after 100 ms) falls within the counting window.
+        """
+        m = NMModelVCN(cell_type=cell_type)
+        step_samples = round(step_ms / _VCN_XDELTA)
+        n_total = _VCN_ONSET + step_samples + _VCN_ONSET
+        i_ext = np.zeros(n_total)
+        i_ext[_VCN_ONSET : _VCN_ONSET + step_samples] = i_amp_pA
+        r = m.simulate(n_total, 0.0, _VCN_XDELTA, i_ext)
+        V_step = r["V"][_VCN_ONSET : _VCN_ONSET + step_samples]
+        n_aps = int(np.sum((V_step[:-1] < 0) & (V_step[1:] >= 0)))
+        assert n_aps == expected_aps, (
+            "%s: expected %d APs, got %d (%.0f pA, %.0f ms step)"
+            % (cell_type, expected_aps, n_aps, i_amp_pA, step_ms)
+        )
+
+    def test_ii_i_partial_third_ap(self):
+        """II-I fires 2 full APs (crossing 0 mV) and a third partial AP whose
+        peak stays below 0 mV — progressive KLT activation reduces the Na
+        driving force with each successive spike."""
+        m = NMModelVCN(cell_type="II-I")
+        step_samples = round(100.0 / _VCN_XDELTA)
+        n_total = _VCN_ONSET + step_samples + _VCN_ONSET
+        i_ext = np.zeros(n_total)
+        i_ext[_VCN_ONSET : _VCN_ONSET + step_samples] = 300.0
+        r = m.simulate(n_total, 0.0, _VCN_XDELTA, i_ext)
+        V_step = r["V"][_VCN_ONSET : _VCN_ONSET + step_samples]
+        peaks = [
+            V_step[i]
+            for i in range(1, len(V_step) - 1)
+            if V_step[i] > V_step[i - 1] and V_step[i] > V_step[i + 1] and V_step[i] > -40.0
+        ]
+        assert len(peaks) == 3, "expected 3 AP peaks, got %d" % len(peaks)
+        assert peaks[2] < 0.0, "3rd peak should not cross 0 mV (got %.1f mV)" % peaks[2]
+        assert peaks[2] > -20.0, "3rd peak should be above -20 mV (got %.1f mV)" % peaks[2]
+
+    def test_klt_reduces_ap_peak_in_type_ii(self):
+        """Type II AP peak is lower than I-c because the large gKLT activates
+        during the upstroke and shunts the Na current."""
+        m_ic = NMModelVCN(cell_type="I-c")
+        m_ii = NMModelVCN(cell_type="II")
+        i_ext = _vcn_i_ext(amp_pA=300.0)
+        vmax_ic = m_ic.simulate(_VCN_N, 0.0, _VCN_XDELTA, i_ext)["V"].max()
+        vmax_ii = m_ii.simulate(_VCN_N, 0.0, _VCN_XDELTA, i_ext)["V"].max()
+        assert vmax_ic > vmax_ii, (
+            "I-c Vmax=%g mV should exceed II Vmax=%g mV (KLT shunting)"
+            % (vmax_ic, vmax_ii)
+        )
+
+    def test_h_channel_activates_on_hyperpolarisation(self):
+        """H_r gate at start of a hyperpolarising step should increase over time."""
+        m = NMModelVCN(cell_type="I-II")    # has significant gH
+        n = round(500.0 / _VCN_XDELTA)
+        i_ext = np.full(n, -200.0)
+        r = m.simulate(n, 0.0, _VCN_XDELTA, i_ext)
+        # r gate increases toward r_inf at hyperpolarised voltage
+        assert r["H_r"][-1] > r["H_r"][0]
+
+    def test_kht_gate_near_rest(self):
+        """K_n and K_p should start near their steady-state values."""
+        m = NMModelVCN(cell_type="I-c")
+        n = round(10.0 / _VCN_XDELTA)
+        r = m.simulate(n, 0.0, _VCN_XDELTA, np.zeros(n))
+        c = m.conductances["KHT"]
+        n_inf = c._n_inf(m.v0)
+        p_inf = c._p_inf(m.v0)
+        assert r["K_n"][0] == pytest.approx(n_inf, abs=0.05)
+        assert r["K_p"][0] == pytest.approx(p_inf, abs=0.05)
+
+    def test_subthreshold_no_ap(self):
+        """Very weak step should not produce an action potential."""
+        m = NMModelVCN(cell_type="I-c")
+        i_ext = _vcn_i_ext(amp_pA=5.0)
+        r = m.simulate(_VCN_N, 0.0, _VCN_XDELTA, i_ext)
+        assert r["V"].max() < -20.0
+
+    @pytest.mark.parametrize("cell_type,g_peak_nS,expected_aps", [
+        ("I-c", 6.0,  7),
+        ("II",  25.8, 14),
+    ])
+    def test_ampa_train_ap_count(self, cell_type, g_peak_nS, expected_aps):
+        """VCN cells driven by a 140 Hz AMPA alpha-conductance train (τ=0.4 ms,
+        100 ms) fire a characteristic number of APs.
+
+        I-c fires 7 APs at 6 nS (≈1 AP per 2 inputs).  Type II requires a
+        much larger drive (25.8 nS) because the large gKLT raises the firing
+        threshold, but then phase-locks 1:1 with each input event (14 APs for
+        14 events).
+        """
+        m = NMModelVCN(cell_type=cell_type)
+        m.conductances.add("AMPA", NMConductanceAMPA())
+        step_samples = round(100.0 / _VCN_XDELTA)
+        n_total = _VCN_ONSET + step_samples + _VCN_ONSET
+        g_ampa = _vcn_alpha_train(
+            freq_hz=140.0, g_peak_nS=g_peak_nS, tau_ms=0.4,
+            dur_ms=100.0, onset=_VCN_ONSET, n=n_total,
+        )
+        r = m.simulate(n_total, 0.0, _VCN_XDELTA, np.zeros(n_total),
+                       g_ext={"AMPA": g_ampa})
+        V_step = r["V"][_VCN_ONSET : _VCN_ONSET + step_samples]
+        n_aps = int(np.sum((V_step[:-1] < 0) & (V_step[1:] >= 0)))
+        assert n_aps == expected_aps, (
+            "%s: expected %d APs from AMPA train, got %d" % (cell_type, expected_aps, n_aps)
+        )
+
+
+class TestNMModelVCNSerialisation:
+    @pytest.mark.parametrize("cell_type", ["I-c", "I-t", "I-II", "II-I", "II"])
+    def test_from_dict_round_trip(self, cell_type):
+        m1 = NMModelVCN(cell_type=cell_type)
+        m2 = NMModelVCN.from_dict(m1.to_dict())
+        assert m1 == m2
+
+    def test_to_dict_keys(self):
+        d = NMModelVCN().to_dict()
+        expected = {"model", "cell_type", "v0", "temperature", "cm_density",
+                    "diameter", "g_q10", "tau_q10", "conductances"}
+        assert set(d) == expected
+
+    def test_to_dict_model_value(self):
+        assert NMModelVCN().to_dict()["model"] == "vcn"
+
+    def test_to_dict_cell_type(self):
+        assert NMModelVCN(cell_type="II").to_dict()["cell_type"] == "II"
+
+    def test_to_dict_conductances_count(self):
+        assert len(NMModelVCN().to_dict()["conductances"]) == 6
+
+    def test_registry_dispatch(self):
+        m = NMModelVCN(cell_type="I-t")
+        m2 = _model_from_dict(m.to_dict())
+        assert isinstance(m2, NMModelVCN)
+        assert m2.cell_type == "I-t"
+
+    def test_modified_conductance_round_trip(self):
+        m1 = NMModelVCN(cell_type="I-c")
+        m1.conductances["Na"].g_density = 0.5
+        m2 = NMModelVCN.from_dict(m1.to_dict())
+        assert m2.conductances["Na"].g_density == pytest.approx(0.5)

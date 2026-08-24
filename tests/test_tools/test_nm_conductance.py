@@ -11,6 +11,11 @@ from pyneuromatic.tools.nm_conductance import (
     NMConductanceGABA,
     NMConductanceAMPA,
     NMConductanceNMDA,
+    NMConductanceVCNNa,
+    NMConductanceVCNKHT,
+    NMConductanceVCNKLT,
+    NMConductanceVCNKA,
+    NMConductanceVCNH,
     NMConductanceContainer,
     _conductance_from_dict,
 )
@@ -137,7 +142,7 @@ class TestNMConductanceHHNa:
         c = NMConductanceHHNa()
         assert c.g_density == pytest.approx(1.2)
         assert c.e_rev == pytest.approx(50.0)
-        assert c.name == "hhna"
+        assert c.name == "na_hh"
 
     def test_n_states(self):
         assert NMConductanceHHNa().n_states() == 2
@@ -215,7 +220,7 @@ class TestNMConductanceHHNa:
     def test_to_dict(self):
         c = NMConductanceHHNa(g_density=1.0, e_rev=55.0)
         d = c.to_dict()
-        assert d["conductance"] == "hhna"
+        assert d["conductance"] == "na_hh"
         assert d["g_density"] == pytest.approx(1.0)
         assert d["e_rev"] == pytest.approx(55.0)
 
@@ -234,7 +239,7 @@ class TestNMConductanceHHK:
         c = NMConductanceHHK()
         assert c.g_density == pytest.approx(0.36)
         assert c.e_rev == pytest.approx(-77.0)
-        assert c.name == "hhk"
+        assert c.name == "k_hh"
 
     def test_n_states(self):
         assert NMConductanceHHK().n_states() == 1
@@ -285,7 +290,7 @@ class TestNMConductanceHHK:
     def test_to_dict(self):
         c = NMConductanceHHK(g_density=0.4, e_rev=-80.0)
         d = c.to_dict()
-        assert d["conductance"] == "hhk"
+        assert d["conductance"] == "k_hh"
         assert d["g_density"] == pytest.approx(0.4)
         assert d["e_rev"] == pytest.approx(-80.0)
 
@@ -429,13 +434,13 @@ class TestConductanceFactory:
         c = _conductance_from_dict(d)
         assert isinstance(c, NMConductanceLeak)
 
-    def test_dispatch_hhna(self):
-        d = {"conductance": "hhna", "g_density": 1.2, "e_rev": 50.0}
+    def test_dispatch_na_hh(self):
+        d = {"conductance": "na_hh", "g_density": 1.2, "e_rev": 50.0}
         c = _conductance_from_dict(d)
         assert isinstance(c, NMConductanceHHNa)
 
-    def test_dispatch_hhk(self):
-        d = {"conductance": "hhk", "g_density": 0.36, "e_rev": -77.0}
+    def test_dispatch_k_hh(self):
+        d = {"conductance": "k_hh", "g_density": 0.36, "e_rev": -77.0}
         c = _conductance_from_dict(d)
         assert isinstance(c, NMConductanceHHK)
 
@@ -555,3 +560,212 @@ class TestNMConductanceNMDA:
         assert d["v_half"] == pytest.approx(-10.0)
         assert d["v_slope"] == pytest.approx(20.0)
         assert d["mg_conc"] == pytest.approx(1.5)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rothman & Manis (2003) VCN conductances
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNMConductanceVCNNa:
+    def test_n_states(self):
+        assert NMConductanceVCNNa().n_states() == 2
+
+    def test_gate_names(self):
+        assert NMConductanceVCNNa().gate_names() == ["Na_m", "Na_h"]
+
+    def test_state_init_length(self):
+        init = NMConductanceVCNNa().state_init(V_REST)
+        assert len(init) == 2
+
+    def test_m_inf_increases_with_depolarisation(self):
+        c = NMConductanceVCNNa()
+        assert c._m_inf(-40.0) > c._m_inf(-80.0)
+
+    def test_h_inf_decreases_with_depolarisation(self):
+        c = NMConductanceVCNNa()
+        assert c._h_inf(-40.0) < c._h_inf(-80.0)
+
+    def test_tau_m_positive(self):
+        c = NMConductanceVCNNa()
+        for v in (-80.0, -65.0, -40.0, 0.0):
+            assert c._tau_m(v) > 0.0
+
+    def test_tau_h_positive(self):
+        c = NMConductanceVCNNa()
+        for v in (-80.0, -65.0, -40.0, 0.0):
+            assert c._tau_h(v) > 0.0
+
+    def test_current_zero_at_e_rev(self):
+        c = NMConductanceVCNNa()
+        m, h = 0.5, 0.5 # arbitrary open-gate values
+        assert c.current(c.e_rev, [m, h]) == pytest.approx(0.0)
+
+    def test_current_inward_below_e_rev(self):
+        c = NMConductanceVCNNa()
+        m, h = 0.8, 0.5 # arbitrary open-gate values
+        assert c.current(-80.0, [m, h]) < 0.0
+
+    def test_current_m3h_formula(self):
+        """I = g × m³ × h × (V − E)."""
+        c = NMConductanceVCNNa(g_density=1.0, e_rev=55.0)
+        m, h = 0.6, 0.7
+        I = c.current(-40.0, [m, h])
+        expected = 1.0 * (m ** 3) * h * (-40.0 - 55.0)
+        assert I == pytest.approx(expected)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceVCNNa(g_density=0.5, e_rev=50.0)
+        assert _conductance_from_dict(c.to_dict()) == c
+
+
+class TestNMConductanceVCNKHT:
+    def test_n_states(self):
+        assert NMConductanceVCNKHT().n_states() == 2
+
+    def test_gate_names(self):
+        assert NMConductanceVCNKHT().gate_names() == ["K_n", "K_p"]
+
+    def test_state_init_length(self):
+        assert len(NMConductanceVCNKHT().state_init(V_REST)) == 2
+
+    def test_n_inf_increases_with_depolarisation(self):
+        c = NMConductanceVCNKHT()
+        assert c._n_inf(-40.0) > c._n_inf(-80.0)
+
+    def test_p_inf_increases_with_depolarisation(self):
+        c = NMConductanceVCNKHT()
+        assert c._p_inf(-40.0) > c._p_inf(-80.0)
+
+    def test_current_n_only(self):
+        """With n=1, p=0: I = g × 0.85 × (V − E)."""
+        c = NMConductanceVCNKHT(g_density=1.0, e_rev=-70.0)
+        n, p = 1.0, 0.0
+        I = c.current(-40.0, [n, p])
+        expected = 1.0 * 0.85 * (-40.0 - (-70.0))
+        assert I == pytest.approx(expected)
+
+    def test_current_p_only(self):
+        """With n=0, p=1: I = g × 0.15 × (V − E)."""
+        c = NMConductanceVCNKHT(g_density=1.0, e_rev=-70.0)
+        n, p = 0.0, 1.0
+        I = c.current(-40.0, [n, p])
+        expected = 1.0 * 0.15 * (-40.0 - (-70.0))
+        assert I == pytest.approx(expected)
+
+    def test_current_outward_above_e_rev(self):
+        c = NMConductanceVCNKHT(g_density=0.1125)
+        n, p = 0.5, 0.5 # arbitrary open-gate values
+        assert c.current(-40.0, [n, p]) > 0.0
+
+    def test_current_blended_formula(self):
+        """I = g × (0.85×n² + 0.15×p) × (V − E)."""
+        c = NMConductanceVCNKHT(g_density=1.0, e_rev=-70.0)
+        n, p = 0.6, 0.4
+        I = c.current(-40.0, [n, p])
+        expected = 1.0 * (0.85 * n ** 2 + 0.15 * p) * (-40.0 - (-70.0))
+        assert I == pytest.approx(expected)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceVCNKHT(g_density=0.1, e_rev=-72.0)
+        assert _conductance_from_dict(c.to_dict()) == c
+
+
+class TestNMConductanceVCNKLT:
+    def test_n_states(self):
+        assert NMConductanceVCNKLT().n_states() == 2
+
+    def test_gate_names(self):
+        assert NMConductanceVCNKLT().gate_names() == ["KD_w", "KD_z"]
+
+    def test_z_inf_has_offset(self):
+        """z_inf must be >= z_fraction (0.5) at all voltages."""
+        c = NMConductanceVCNKLT()
+        for v in (-120.0, -80.0, -65.0, -40.0):
+            assert c._z_inf(v) >= 0.5
+
+    def test_z_inf_increases_with_hyperpolarisation(self):
+        c = NMConductanceVCNKLT()
+        assert c._z_inf(-100.0) > c._z_inf(-40.0)
+
+    def test_w_inf_increases_with_depolarisation(self):
+        c = NMConductanceVCNKLT()
+        assert c._w_inf(-40.0) > c._w_inf(-80.0)
+
+    def test_current_outward_above_e_rev(self):
+        c = NMConductanceVCNKLT(g_density=1.0)
+        w, z = 0.5, 0.8  # arbitrary open-gate values
+        assert c.current(-40.0, [w, z]) > 0.0
+
+    def test_current_w4z_formula(self):
+        """I = g × w⁴ × z × (V − E)."""
+        c = NMConductanceVCNKLT(g_density=1.0, e_rev=-70.0)
+        w, z = 0.5, 0.8
+        I = c.current(-40.0, [w, z])
+        expected = 1.0 * (w ** 4) * z * (-40.0 - (-70.0))
+        assert I == pytest.approx(expected)
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceVCNKLT(g_density=0.015, e_rev=-70.0)
+        assert _conductance_from_dict(c.to_dict()) == c
+
+
+class TestNMConductanceVCNKA:
+    def test_n_states(self):
+        assert NMConductanceVCNKA().n_states() == 3
+
+    def test_gate_names(self):
+        assert NMConductanceVCNKA().gate_names() == ["KA_a", "KA_b", "KA_c"]
+
+    def test_b_and_c_share_steady_state(self):
+        c = NMConductanceVCNKA()
+        init = c.state_init(V_REST)
+        assert init[1] == pytest.approx(init[2])
+
+    def test_current_outward_above_e_rev(self):
+        c = NMConductanceVCNKA(g_density=1.0)
+        a, b, cc = 0.6, 0.7, 0.8  # arbitrary open-gate values
+        assert c.current(-40.0, [a, b, cc]) > 0.0
+
+    def test_current_a4bc_formula(self):
+        """I = g × a⁴ × b × c × (V − E)."""
+        c = NMConductanceVCNKA(g_density=1.0, e_rev=-70.0)
+        a, b, cc = 0.6, 0.7, 0.8
+        I = c.current(-40.0, [a, b, cc])
+        expected = 1.0 * (a ** 4) * b * cc * (-40.0 - (-70.0))
+        assert I == pytest.approx(expected)
+
+    def test_tau_b_and_tau_c_differ(self):
+        """b and c have the same inf but different time constants."""
+        c = NMConductanceVCNKA()
+        assert c._tau_b(V_REST) != pytest.approx(c._tau_c(V_REST))
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceVCNKA(g_density=0.05, e_rev=-70.0)
+        assert _conductance_from_dict(c.to_dict()) == c
+
+
+class TestNMConductanceVCNH:
+    def test_n_states(self):
+        assert NMConductanceVCNH().n_states() == 1
+
+    def test_gate_names(self):
+        assert NMConductanceVCNH().gate_names() == ["H_r"]
+
+    def test_r_inf_larger_at_hyperpolarised(self):
+        c = NMConductanceVCNH()
+        assert c._r_inf(-100.0) > c._r_inf(-50.0)
+
+    def test_tau_r_positive(self):
+        c = NMConductanceVCNH()
+        for v in (-100.0, -80.0, -65.0, -40.0):
+            assert c._tau_r(v) > 0.0
+
+    def test_current_inward_below_e_rev(self):
+        """E_H = -43 mV; at V = -65 mV, current is inward."""
+        c = NMConductanceVCNH(g_density=1.0, e_rev=-43.0)
+        r = 0.5 # arbitrary open-gate value
+        assert c.current(-65.0, [r]) < 0.0
+
+    def test_to_dict_round_trip(self):
+        c = NMConductanceVCNH(g_density=3.75e-4, e_rev=-43.0)
+        assert _conductance_from_dict(c.to_dict()) == c
