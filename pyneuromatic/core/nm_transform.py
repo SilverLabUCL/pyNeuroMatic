@@ -25,6 +25,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 from __future__ import annotations
 
 import copy
+import math
 
 import numpy as np
 
@@ -602,6 +603,479 @@ class NMTransformFilter(NMTransform):
 
 
 # =========================================================================
+# Baseline transform
+# =========================================================================
+
+
+class NMTransformBaseline(NMTransform):
+    """Subtract a baseline mean from each array.
+
+    The baseline is the mean of the array over the xscale window
+    [*xbgn*, *xend*].  Calls
+    :func:`pyneuromatic.core.nm_math.baseline`.
+
+    Args:
+        xbgn:        Baseline window start in xscale units.  Default 0.0.
+        xend:        Baseline window end in xscale units.  Default 0.0.
+        ignore_nans: If True (default) use ``np.nanmean``; otherwise
+                     ``np.mean``.
+    """
+
+    def __init__(
+        self,
+        parent: object | None = None,
+        xbgn: float = 0.0,
+        xend: float = 0.0,
+        ignore_nans: bool = True,
+    ) -> None:
+        super().__init__(parent=parent)
+        self.xbgn = xbgn
+        self.xend = xend
+        self.ignore_nans = ignore_nans
+
+    def __repr__(self) -> str:
+        return "%s(xbgn=%r, xend=%r, ignore_nans=%r)" % (
+            self.__class__.__name__, self._xbgn, self._xend, self._ignore_nans,
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, NMTransformBaseline):
+            return (
+                self._xbgn == other._xbgn
+                and self._xend == other._xend
+                and self._ignore_nans == other._ignore_nans
+            )
+        if isinstance(other, dict):
+            return self.to_dict() == other
+        return NotImplemented
+
+    @property
+    def xbgn(self) -> float:
+        """Baseline window start (xscale units)."""
+        return self._xbgn
+
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("xbgn must not be NaN")
+        self._xbgn = float(value)
+
+    @property
+    def xend(self) -> float:
+        """Baseline window end (xscale units)."""
+        return self._xend
+
+    @xend.setter
+    def xend(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("xend must not be NaN")
+        self._xend = float(value)
+
+    @property
+    def ignore_nans(self) -> bool:
+        """If True, NaN values are excluded from the baseline mean."""
+        return self._ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self._ignore_nans = value
+
+    def apply(
+        self,
+        ydata: np.ndarray,
+        xscale: NMScaleX | None = None,
+    ) -> np.ndarray:
+        """Subtract baseline mean from *ydata* and return the result."""
+        if self._xend < self._xbgn:
+            raise ValueError(
+                "xend (%g) must be >= xbgn (%g)" % (self._xend, self._xbgn)
+            )
+        import pyneuromatic.core.nm_math as nm_math
+        xscale_dict = xscale.to_dict() if xscale is not None else {}
+        return nm_math.baseline(
+            ydata, xscale_dict, self._xbgn, self._xend, self._ignore_nans,
+        )
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            "xbgn": self._xbgn,
+            "xend": self._xend,
+            "ignore_nans": self._ignore_nans,
+        })
+        return d
+
+
+# =========================================================================
+# Normalize transform
+# =========================================================================
+
+
+class NMTransformNormalize(NMTransform):
+    """Rescale each array so that a low reference maps to *norm_min* and a high
+    reference maps to *norm_max*.
+
+    Two independent xscale windows define the low and high reference values.
+    Calls :func:`pyneuromatic.core.nm_math.apply_normalize`.
+
+    Args:
+        min_xbgn:   Window 1 start in xscale units.  Default 0.0.
+        min_xend:   Window 1 end in xscale units.  Default 0.0.
+        min_fxn:    Function for the low reference: ``"mean"``, ``"min"``, or
+                    ``"mean@min"``.  Default ``"mean"``.
+        min_mean_n: Points around extremum for ``"mean@min"``.  Default 1.
+        max_xbgn:   Window 2 start in xscale units.  Default 0.0.
+        max_xend:   Window 2 end in xscale units.  Default 0.0.
+        max_fxn:    Function for the high reference: ``"mean"``, ``"max"``, or
+                    ``"mean@max"``.  Default ``"mean"``.
+        max_mean_n: Points around extremum for ``"mean@max"``.  Default 1.
+        norm_min:   Target normalized minimum.  Default 0.0.
+        norm_max:   Target normalized maximum.  Default 1.0.
+    """
+
+    _VALID_MIN_FXN = frozenset({"mean", "min", "mean@min"})
+    _VALID_MAX_FXN = frozenset({"mean", "max", "mean@max"})
+
+    def __init__(
+        self,
+        parent: object | None = None,
+        min_xbgn: float = 0.0,
+        min_xend: float = 0.0,
+        min_fxn: str = "mean",
+        min_mean_n: int = 1,
+        max_xbgn: float = 0.0,
+        max_xend: float = 0.0,
+        max_fxn: str = "mean",
+        max_mean_n: int = 1,
+        norm_min: float = 0.0,
+        norm_max: float = 1.0,
+    ) -> None:
+        super().__init__(parent=parent)
+        self.min_xbgn = min_xbgn
+        self.min_xend = min_xend
+        self.min_fxn = min_fxn
+        self.min_mean_n = min_mean_n
+        self.max_xbgn = max_xbgn
+        self.max_xend = max_xend
+        self.max_fxn = max_fxn
+        self.max_mean_n = max_mean_n
+        self.norm_min = norm_min
+        self.norm_max = norm_max
+
+    def __repr__(self) -> str:
+        return (
+            "%s(min_xbgn=%r, min_xend=%r, min_fxn=%r, min_mean_n=%d, "
+            "max_xbgn=%r, max_xend=%r, max_fxn=%r, max_mean_n=%d, "
+            "norm_min=%r, norm_max=%r)"
+        ) % (
+            self.__class__.__name__,
+            self._min_xbgn, self._min_xend, self._min_fxn, self._min_mean_n,
+            self._max_xbgn, self._max_xend, self._max_fxn, self._max_mean_n,
+            self._norm_min, self._norm_max,
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, NMTransformNormalize):
+            return (
+                self._min_xbgn == other._min_xbgn
+                and self._min_xend == other._min_xend
+                and self._min_fxn == other._min_fxn
+                and self._min_mean_n == other._min_mean_n
+                and self._max_xbgn == other._max_xbgn
+                and self._max_xend == other._max_xend
+                and self._max_fxn == other._max_fxn
+                and self._max_mean_n == other._max_mean_n
+                and self._norm_min == other._norm_min
+                and self._norm_max == other._norm_max
+            )
+        if isinstance(other, dict):
+            return self.to_dict() == other
+        return NotImplemented
+
+    @property
+    def min_xbgn(self) -> float:
+        return self._min_xbgn
+
+    @min_xbgn.setter
+    def min_xbgn(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "min_xbgn", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("min_xbgn must not be NaN")
+        self._min_xbgn = float(value)
+
+    @property
+    def min_xend(self) -> float:
+        return self._min_xend
+
+    @min_xend.setter
+    def min_xend(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "min_xend", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("min_xend must not be NaN")
+        self._min_xend = float(value)
+
+    @property
+    def min_fxn(self) -> str:
+        """Low-reference function: ``'mean'``, ``'min'``, or ``'mean@min'``."""
+        return self._min_fxn
+
+    @min_fxn.setter
+    def min_fxn(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "min_fxn", "string"))
+        if value not in self._VALID_MIN_FXN:
+            raise ValueError(
+                "min_fxn must be one of %s, got %r" % (sorted(self._VALID_MIN_FXN), value)
+            )
+        self._min_fxn = value
+
+    @property
+    def min_mean_n(self) -> int:
+        """Points around extremum for ``'mean@min'``."""
+        return self._min_mean_n
+
+    @min_mean_n.setter
+    def min_mean_n(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "min_mean_n", "int"))
+        if value < 1:
+            raise ValueError("min_mean_n must be >= 1, got %d" % value)
+        self._min_mean_n = value
+
+    @property
+    def max_xbgn(self) -> float:
+        return self._max_xbgn
+
+    @max_xbgn.setter
+    def max_xbgn(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "max_xbgn", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("max_xbgn must not be NaN")
+        self._max_xbgn = float(value)
+
+    @property
+    def max_xend(self) -> float:
+        return self._max_xend
+
+    @max_xend.setter
+    def max_xend(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "max_xend", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("max_xend must not be NaN")
+        self._max_xend = float(value)
+
+    @property
+    def max_fxn(self) -> str:
+        """High-reference function: ``'mean'``, ``'max'``, or ``'mean@max'``."""
+        return self._max_fxn
+
+    @max_fxn.setter
+    def max_fxn(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(nmu.type_error_str(value, "max_fxn", "string"))
+        if value not in self._VALID_MAX_FXN:
+            raise ValueError(
+                "max_fxn must be one of %s, got %r" % (sorted(self._VALID_MAX_FXN), value)
+            )
+        self._max_fxn = value
+
+    @property
+    def max_mean_n(self) -> int:
+        """Points around extremum for ``'mean@max'``."""
+        return self._max_mean_n
+
+    @max_mean_n.setter
+    def max_mean_n(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, "max_mean_n", "int"))
+        if value < 1:
+            raise ValueError("max_mean_n must be >= 1, got %d" % value)
+        self._max_mean_n = value
+
+    @property
+    def norm_min(self) -> float:
+        """Target normalized minimum."""
+        return self._norm_min
+
+    @norm_min.setter
+    def norm_min(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "norm_min", "float"))
+        self._norm_min = float(value)
+
+    @property
+    def norm_max(self) -> float:
+        """Target normalized maximum."""
+        return self._norm_max
+
+    @norm_max.setter
+    def norm_max(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "norm_max", "float"))
+        self._norm_max = float(value)
+
+    def apply(
+        self,
+        ydata: np.ndarray,
+        xscale: NMScaleX | None = None,
+    ) -> np.ndarray:
+        """Normalize *ydata* to [norm_min, norm_max] and return the result."""
+        if self._min_xend < self._min_xbgn:
+            raise ValueError(
+                "min_xend (%g) must be >= min_xbgn (%g)" % (self._min_xend, self._min_xbgn)
+            )
+        if self._max_xend < self._max_xbgn:
+            raise ValueError(
+                "max_xend (%g) must be >= max_xbgn (%g)" % (self._max_xend, self._max_xbgn)
+            )
+        import pyneuromatic.core.nm_math as nm_math
+        xscale_dict = xscale.to_dict() if xscale is not None else {}
+        return nm_math.apply_normalize(
+            ydata, xscale_dict,
+            self._min_xbgn, self._min_xend, self._min_fxn, self._min_mean_n,
+            self._max_xbgn, self._max_xend, self._max_fxn, self._max_mean_n,
+            self._norm_min, self._norm_max,
+        )
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            "min_xbgn": self._min_xbgn,
+            "min_xend": self._min_xend,
+            "min_fxn": self._min_fxn,
+            "min_mean_n": self._min_mean_n,
+            "max_xbgn": self._max_xbgn,
+            "max_xend": self._max_xend,
+            "max_fxn": self._max_fxn,
+            "max_mean_n": self._max_mean_n,
+            "norm_min": self._norm_min,
+            "norm_max": self._norm_max,
+        })
+        return d
+
+
+# =========================================================================
+# DFOF transform
+# =========================================================================
+
+
+class NMTransformDFOF(NMTransform):
+    """Compute dF/F₀ = (F − F₀) / F₀ for each array.
+
+    F₀ is the mean fluorescence over the xscale window [*xbgn*, *xend*].
+    Calls :func:`pyneuromatic.core.nm_math.dfof`.
+
+    Args:
+        xbgn:        Baseline window start in xscale units.  Default ``-inf``
+                     (start of array).
+        xend:        Baseline window end in xscale units.  Default ``+inf``
+                     (end of array).
+        ignore_nans: If True (default) use ``np.nanmean``; otherwise
+                     ``np.mean``.
+    """
+
+    def __init__(
+        self,
+        parent: object | None = None,
+        xbgn: float = -math.inf,
+        xend: float = math.inf,
+        ignore_nans: bool = True,
+    ) -> None:
+        super().__init__(parent=parent)
+        self.xbgn = xbgn
+        self.xend = xend
+        self.ignore_nans = ignore_nans
+
+    def __repr__(self) -> str:
+        return "%s(xbgn=%r, xend=%r, ignore_nans=%r)" % (
+            self.__class__.__name__, self._xbgn, self._xend, self._ignore_nans,
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, NMTransformDFOF):
+            return (
+                self._xbgn == other._xbgn
+                and self._xend == other._xend
+                and self._ignore_nans == other._ignore_nans
+            )
+        if isinstance(other, dict):
+            return self.to_dict() == other
+        return NotImplemented
+
+    @property
+    def xbgn(self) -> float:
+        """Baseline window start (xscale units)."""
+        return self._xbgn
+
+    @xbgn.setter
+    def xbgn(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("xbgn must not be NaN")
+        self._xbgn = float(value)
+
+    @property
+    def xend(self) -> float:
+        """Baseline window end (xscale units)."""
+        return self._xend
+
+    @xend.setter
+    def xend(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "xend", "float"))
+        if math.isnan(float(value)):
+            raise ValueError("xend must not be NaN")
+        self._xend = float(value)
+
+    @property
+    def ignore_nans(self) -> bool:
+        """If True, NaN values are excluded from the F₀ mean."""
+        return self._ignore_nans
+
+    @ignore_nans.setter
+    def ignore_nans(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
+        self._ignore_nans = value
+
+    def apply(
+        self,
+        ydata: np.ndarray,
+        xscale: NMScaleX | None = None,
+    ) -> np.ndarray:
+        """Compute dF/F₀ from *ydata* and return the result."""
+        if self._xend < self._xbgn:
+            raise ValueError(
+                "xend (%g) must be >= xbgn (%g)" % (self._xend, self._xbgn)
+            )
+        import pyneuromatic.core.nm_math as nm_math
+        xscale_dict = xscale.to_dict() if xscale is not None else {}
+        return nm_math.dfof(
+            ydata, xscale_dict, self._xbgn, self._xend, self._ignore_nans,
+        )
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({
+            "xbgn": self._xbgn,
+            "xend": self._xend,
+            "ignore_nans": self._ignore_nans,
+        })
+        return d
+
+
+# =========================================================================
 # Registry and helper functions
 # =========================================================================
 
@@ -615,6 +1089,9 @@ _TRANSFORM_REGISTRY: dict[str, type[NMTransform]] = {
     "NMTransformLn": NMTransformLn,
     "NMTransformSmooth": NMTransformSmooth,
     "NMTransformFilter": NMTransformFilter,
+    "NMTransformBaseline": NMTransformBaseline,
+    "NMTransformNormalize": NMTransformNormalize,
+    "NMTransformDFOF": NMTransformDFOF,
 }
 
 

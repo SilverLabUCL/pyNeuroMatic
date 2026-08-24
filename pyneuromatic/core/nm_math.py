@@ -235,8 +235,161 @@ def xscale_window_to_slice(
 
 
 # =========================================================================
+# Baseline helper
+# =========================================================================
+
+
+def baseline(
+    arr: np.ndarray,
+    xscale_dict: dict,
+    xbgn: float,
+    xend: float,
+    ignore_nans: bool = True,
+) -> np.ndarray:
+    """Subtract a baseline mean from *arr*.
+
+    The baseline is the mean of *arr* over the xscale window [*xbgn*, *xend*].
+    If the window slice is empty the baseline is taken as 0.
+
+    Args:
+        arr:         Input array.
+        xscale_dict: Dict with ``"start"`` and ``"delta"`` keys.
+        xbgn:        Window start in xscale units.
+        xend:        Window end in xscale units.
+        ignore_nans: If True use ``np.nanmean``; otherwise ``np.mean``.
+
+    Returns:
+        Float ndarray with baseline subtracted.
+    """
+    arr = arr.astype(float)
+    sl = xscale_window_to_slice(arr, xscale_dict, xbgn, xend)
+    segment = arr[sl]
+    if len(segment) == 0:
+        baseline = 0.0
+    elif ignore_nans:
+        baseline = float(np.nanmean(segment))
+    else:
+        baseline = float(np.mean(segment))
+    return arr - baseline
+
+
+# =========================================================================
+# Normalize helper
+# =========================================================================
+
+
+def normalize(
+    arr: np.ndarray,
+    ref_min: float,
+    ref_max: float,
+    norm_min: float = 0.0,
+    norm_max: float = 1.0,
+) -> np.ndarray:
+    """Rescale *arr* so that *ref_min* maps to *norm_min* and *ref_max* maps to *norm_max*.
+
+    If ``ref_max == ref_min`` the result is a constant array of *norm_min*.
+
+    Args:
+        arr:      Input array.
+        ref_min:  Low reference value.
+        ref_max:  High reference value.
+        norm_min: Target minimum (default 0.0).
+        norm_max: Target maximum (default 1.0).
+
+    Returns:
+        Float ndarray rescaled to [*norm_min*, *norm_max*].
+    """
+    arr = arr.astype(float)
+    ref_range = ref_max - ref_min
+    if ref_range == 0:
+        return np.full_like(arr, norm_min)
+    return (arr - ref_min) / ref_range * (norm_max - norm_min) + norm_min
+
+
+def apply_normalize(
+    arr: np.ndarray,
+    xscale_dict: dict,
+    min_xbgn: float,
+    min_xend: float,
+    min_fxn: str,
+    min_mean_n: int,
+    max_xbgn: float,
+    max_xend: float,
+    max_fxn: str,
+    max_mean_n: int,
+    norm_min: float = 0.0,
+    norm_max: float = 1.0,
+) -> np.ndarray:
+    """Rescale *arr* so that a low reference maps to *norm_min* and a high reference maps to *norm_max*.
+
+    Two independent xscale windows define the low and high reference values via
+    :func:`compute_ref_value`.  Delegates the rescaling to
+    :func:`normalize`.
+
+    Args:
+        arr:         Input array.
+        xscale_dict: Dict with ``"start"`` and ``"delta"`` keys.
+        min_xbgn:    Window 1 start in xscale units.
+        min_xend:    Window 1 end in xscale units.
+        min_fxn:     Function for the low reference: ``"mean"``, ``"min"``, or
+                     ``"mean@min"``.
+        min_mean_n:  Points around extremum for ``"mean@min"``.
+        max_xbgn:    Window 2 start in xscale units.
+        max_xend:    Window 2 end in xscale units.
+        max_fxn:     Function for the high reference: ``"mean"``, ``"max"``, or
+                     ``"mean@max"``.
+        max_mean_n:  Points around extremum for ``"mean@max"``.
+        norm_min:    Target normalized minimum (default 0.0).
+        norm_max:    Target normalized maximum (default 1.0).
+
+    Returns:
+        Float ndarray normalized to [*norm_min*, *norm_max*].
+    """
+    arr = arr.astype(float)
+    sl1 = xscale_window_to_slice(arr, xscale_dict, min_xbgn, min_xend)
+    sl2 = xscale_window_to_slice(arr, xscale_dict, max_xbgn, max_xend)
+    ref_min = compute_ref_value(arr[sl1], min_fxn, min_mean_n)
+    ref_max = compute_ref_value(arr[sl2], max_fxn, max_mean_n)
+    return normalize(arr, ref_min, ref_max, norm_min, norm_max)
+
+
+# =========================================================================
 # Fluorescence dF/F₀ helper
 # =========================================================================
+
+
+def dfof(
+    arr: np.ndarray,
+    xscale_dict: dict,
+    xbgn: float,
+    xend: float,
+    ignore_nans: bool = True,
+) -> np.ndarray:
+    """Compute dF/F₀ using a baseline window to determine F₀.
+
+    F₀ is the mean of *arr* over the xscale window [*xbgn*, *xend*].
+    Delegates to :func:`apply_dfof` once F₀ is determined.
+    If the window slice is empty, F₀ is taken as 0.
+
+    Args:
+        arr:         Input fluorescence array.
+        xscale_dict: Dict with ``"start"`` and ``"delta"`` keys.
+        xbgn:        Baseline window start in xscale units.
+        xend:        Baseline window end in xscale units.
+        ignore_nans: If True use ``np.nanmean``; otherwise ``np.mean``.
+
+    Returns:
+        Float ndarray of dF/F₀ = (arr − F₀) / F₀.
+    """
+    sl = xscale_window_to_slice(arr, xscale_dict, xbgn, xend)
+    segment = arr.astype(float)[sl]
+    if len(segment) == 0:
+        f0 = 0.0
+    elif ignore_nans:
+        f0 = float(np.nanmean(segment))
+    else:
+        f0 = float(np.mean(segment))
+    return apply_dfof(arr, f0)
 
 
 def apply_dfof(arr: np.ndarray, f0: float) -> np.ndarray:
