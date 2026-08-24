@@ -16,6 +16,9 @@ from pyneuromatic.core.nm_transform import (
     NMTransformLn,
     NMTransformSmooth,
     NMTransformFilter,
+    NMTransformBaseline,
+    NMTransformNormalize,
+    NMTransformDFOF,
     _transform_from_dict,
     _transforms_from_list,
     apply_transforms,
@@ -679,6 +682,209 @@ class TestNMTransformFilter(unittest.TestCase):
         self.assertIn("notch", r)
         self.assertIn("q=", r)
         self.assertNotIn("btype", r)
+
+
+class TestNMTransformBaseline(unittest.TestCase):
+    """Tests for NMTransformBaseline."""
+
+    XD = NMScaleX(start=0.0, delta=1.0)
+
+    def test_default_params(self):
+        t = NMTransformBaseline()
+        self.assertEqual(t.xbgn, 0.0)
+        self.assertEqual(t.xend, 0.0)
+        self.assertTrue(t.ignore_nans)
+
+    def test_subtracts_window_mean(self):
+        t = NMTransformBaseline(xbgn=0.0, xend=2.0)
+        arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = t.apply(arr, self.XD)
+        np.testing.assert_array_almost_equal(result, [-1.0, 0.0, 1.0, 2.0, 3.0])
+
+    def test_no_xscale_uses_empty_dict(self):
+        t = NMTransformBaseline(xbgn=0.0, xend=0.0)
+        arr = np.array([3.0, 4.0, 5.0])
+        result = t.apply(arr, xscale=None)
+        self.assertEqual(result.shape, arr.shape)
+
+    def test_xend_lt_xbgn_raises(self):
+        t = NMTransformBaseline(xbgn=5.0, xend=1.0)
+        with self.assertRaises(ValueError):
+            t.apply(np.array([1.0, 2.0, 3.0]))
+
+    def test_rejects_nan_xbgn(self):
+        with self.assertRaises(ValueError):
+            NMTransformBaseline(xbgn=float("nan"))
+
+    def test_rejects_bool_ignore_nans(self):
+        t = NMTransformBaseline()
+        with self.assertRaises(TypeError):
+            t.ignore_nans = 1
+
+    def test_equality(self):
+        t1 = NMTransformBaseline(xbgn=1.0, xend=2.0, ignore_nans=True)
+        t2 = NMTransformBaseline(xbgn=1.0, xend=2.0, ignore_nans=True)
+        t3 = NMTransformBaseline(xbgn=0.0, xend=2.0)
+        self.assertEqual(t1, t2)
+        self.assertNotEqual(t1, t3)
+
+    def test_to_dict(self):
+        t = NMTransformBaseline(xbgn=1.0, xend=3.0, ignore_nans=False)
+        d = t.to_dict()
+        self.assertEqual(d["type"], "NMTransformBaseline")
+        self.assertEqual(d["xbgn"], 1.0)
+        self.assertEqual(d["xend"], 3.0)
+        self.assertFalse(d["ignore_nans"])
+
+    def test_from_dict_round_trip(self):
+        t = NMTransformBaseline(xbgn=2.0, xend=5.0, ignore_nans=False)
+        t2 = _transform_from_dict(t.to_dict())
+        self.assertEqual(t, t2)
+
+    def test_repr(self):
+        t = NMTransformBaseline(xbgn=1.0, xend=3.0)
+        self.assertIn("NMTransformBaseline", repr(t))
+        self.assertIn("xbgn", repr(t))
+
+
+class TestNMTransformNormalize(unittest.TestCase):
+    """Tests for NMTransformNormalize."""
+
+    XD = NMScaleX(start=0.0, delta=1.0)
+
+    def test_default_params(self):
+        t = NMTransformNormalize()
+        self.assertEqual(t.norm_min, 0.0)
+        self.assertEqual(t.norm_max, 1.0)
+        self.assertEqual(t.min_fxn, "mean")
+        self.assertEqual(t.max_fxn, "mean")
+
+    def test_normalizes_to_zero_one(self):
+        t = NMTransformNormalize(min_xbgn=0.0, min_xend=0.0,
+                                 max_xbgn=4.0, max_xend=4.0)
+        arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = t.apply(arr, self.XD)
+        np.testing.assert_array_almost_equal(result, [0.0, 0.25, 0.5, 0.75, 1.0])
+
+    def test_custom_norm_range(self):
+        t = NMTransformNormalize(min_xbgn=0.0, min_xend=0.0,
+                                 max_xbgn=2.0, max_xend=2.0,
+                                 norm_min=-1.0, norm_max=1.0)
+        arr = np.array([0.0, 5.0, 10.0])
+        result = t.apply(arr, self.XD)
+        np.testing.assert_array_almost_equal(result, [-1.0, 0.0, 1.0])
+
+    def test_min_xend_lt_min_xbgn_raises(self):
+        t = NMTransformNormalize(min_xbgn=5.0, min_xend=1.0)
+        with self.assertRaises(ValueError):
+            t.apply(np.array([1.0, 2.0, 3.0]))
+
+    def test_max_xend_lt_max_xbgn_raises(self):
+        t = NMTransformNormalize(max_xbgn=5.0, max_xend=1.0)
+        with self.assertRaises(ValueError):
+            t.apply(np.array([1.0, 2.0, 3.0]))
+
+    def test_rejects_invalid_min_fxn(self):
+        with self.assertRaises(ValueError):
+            NMTransformNormalize(min_fxn="bad")
+
+    def test_rejects_invalid_max_fxn(self):
+        with self.assertRaises(ValueError):
+            NMTransformNormalize(max_fxn="bad")
+
+    def test_rejects_zero_min_mean_n(self):
+        with self.assertRaises(ValueError):
+            NMTransformNormalize(min_mean_n=0)
+
+    def test_equality(self):
+        t1 = NMTransformNormalize(norm_min=0.0, norm_max=1.0)
+        t2 = NMTransformNormalize(norm_min=0.0, norm_max=1.0)
+        t3 = NMTransformNormalize(norm_min=-1.0, norm_max=1.0)
+        self.assertEqual(t1, t2)
+        self.assertNotEqual(t1, t3)
+
+    def test_to_dict(self):
+        t = NMTransformNormalize(min_fxn="min", max_fxn="max", norm_max=2.0)
+        d = t.to_dict()
+        self.assertEqual(d["type"], "NMTransformNormalize")
+        self.assertEqual(d["min_fxn"], "min")
+        self.assertEqual(d["max_fxn"], "max")
+        self.assertEqual(d["norm_max"], 2.0)
+
+    def test_from_dict_round_trip(self):
+        t = NMTransformNormalize(min_fxn="mean@min", max_fxn="mean@max",
+                                 norm_min=-1.0, norm_max=1.0)
+        t2 = _transform_from_dict(t.to_dict())
+        self.assertEqual(t, t2)
+
+    def test_repr(self):
+        t = NMTransformNormalize()
+        self.assertIn("NMTransformNormalize", repr(t))
+        self.assertIn("norm_min", repr(t))
+
+
+class TestNMTransformDFOF(unittest.TestCase):
+    """Tests for NMTransformDFOF."""
+
+    XD = NMScaleX(start=0.0, delta=1.0)
+
+    def test_default_params(self):
+        import math
+        t = NMTransformDFOF()
+        self.assertEqual(t.xbgn, -math.inf)
+        self.assertEqual(t.xend, math.inf)
+        self.assertTrue(t.ignore_nans)
+
+    def test_whole_array_baseline(self):
+        t = NMTransformDFOF()
+        arr = np.array([1.0, 2.0, 3.0])    # mean=2, dF/F = (arr-2)/2
+        result = t.apply(arr, self.XD)
+        np.testing.assert_array_almost_equal(result, [-0.5, 0.0, 0.5])
+
+    def test_window_baseline(self):
+        t = NMTransformDFOF(xbgn=0.0, xend=1.0)
+        arr = np.array([2.0, 2.0, 4.0, 6.0])   # f0=mean([2,2])=2
+        result = t.apply(arr, self.XD)
+        np.testing.assert_array_almost_equal(result, [0.0, 0.0, 1.0, 2.0])
+
+    def test_xend_lt_xbgn_raises(self):
+        t = NMTransformDFOF(xbgn=5.0, xend=1.0)
+        with self.assertRaises(ValueError):
+            t.apply(np.array([1.0, 2.0, 3.0]))
+
+    def test_rejects_nan_xend(self):
+        with self.assertRaises(ValueError):
+            NMTransformDFOF(xend=float("nan"))
+
+    def test_rejects_bool_ignore_nans(self):
+        t = NMTransformDFOF()
+        with self.assertRaises(TypeError):
+            t.ignore_nans = 0
+
+    def test_equality(self):
+        t1 = NMTransformDFOF(xbgn=1.0, xend=3.0)
+        t2 = NMTransformDFOF(xbgn=1.0, xend=3.0)
+        t3 = NMTransformDFOF(xbgn=0.0, xend=3.0)
+        self.assertEqual(t1, t2)
+        self.assertNotEqual(t1, t3)
+
+    def test_to_dict(self):
+        t = NMTransformDFOF(xbgn=1.0, xend=4.0, ignore_nans=False)
+        d = t.to_dict()
+        self.assertEqual(d["type"], "NMTransformDFOF")
+        self.assertEqual(d["xbgn"], 1.0)
+        self.assertEqual(d["xend"], 4.0)
+        self.assertFalse(d["ignore_nans"])
+
+    def test_from_dict_round_trip(self):
+        t = NMTransformDFOF(xbgn=0.5, xend=2.5, ignore_nans=False)
+        t2 = _transform_from_dict(t.to_dict())
+        self.assertEqual(t, t2)
+
+    def test_repr(self):
+        t = NMTransformDFOF(xbgn=1.0, xend=3.0)
+        self.assertIn("NMTransformDFOF", repr(t))
+        self.assertIn("xbgn", repr(t))
 
 
 if __name__ == "__main__":

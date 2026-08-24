@@ -13,13 +13,17 @@ from pyneuromatic.core.nm_math import (
     apply_arithmetic,
     apply_dfof,
     apply_inequality,
+    apply_normalize,
     array_stats,
+    baseline,
     compute_ref_value,
+    dfof,
     find_level_crossings,
     inequality_condition_str,
     inequality_mask,
     interp_x,
     linear_regression,
+    normalize,
     parse_si_units,
     si_scale_factor,
     xscale_window_to_slice,
@@ -640,6 +644,117 @@ class TestLinearRegression:
 # ---------------------------------------------------------------------------
 # TestApplyDFOF
 # ---------------------------------------------------------------------------
+
+
+class TestBaseline:
+    _XD = {"start": 0.0, "delta": 1.0}
+
+    def test_subtracts_window_mean(self):
+        arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = baseline(arr, self._XD, xbgn=0.0, xend=2.0)
+        np.testing.assert_array_almost_equal(result, [-1.0, 0.0, 1.0, 2.0, 3.0])
+
+    def test_empty_window_uses_zero(self):
+        arr = np.array([1.0, 2.0, 3.0])
+        result = baseline(arr, self._XD, xbgn=10.0, xend=20.0)
+        np.testing.assert_array_almost_equal(result, arr)
+
+    def test_ignore_nans_true(self):
+        arr = np.array([np.nan, 2.0, 3.0, 4.0])
+        result = baseline(arr, self._XD, xbgn=0.0, xend=1.0, ignore_nans=True)
+        assert not np.isnan(result[1])
+
+    def test_ignore_nans_false_propagates(self):
+        arr = np.array([np.nan, 2.0, 3.0])
+        result = baseline(arr, self._XD, xbgn=0.0, xend=1.0, ignore_nans=False)
+        assert np.all(np.isnan(result))
+
+    def test_shape_preserved(self):
+        arr = np.arange(10, dtype=float)
+        result = baseline(arr, self._XD, xbgn=0.0, xend=4.0)
+        assert result.shape == arr.shape
+
+    def test_whole_array_window_gives_zero_mean(self):
+        arr = np.array([1.0, 3.0, 5.0])
+        result = baseline(arr, self._XD, xbgn=0.0, xend=2.0)
+        assert abs(result.mean()) < 1e-10
+
+
+class TestNormalize:
+    def test_maps_refs_to_zero_one(self):
+        arr = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        result = normalize(arr, ref_min=0.0, ref_max=4.0)
+        np.testing.assert_array_almost_equal(result, [0.0, 0.25, 0.5, 0.75, 1.0])
+
+    def test_custom_norm_range(self):
+        arr = np.array([0.0, 5.0, 10.0])
+        result = normalize(arr, ref_min=0.0, ref_max=10.0, norm_min=-1.0, norm_max=1.0)
+        np.testing.assert_array_almost_equal(result, [-1.0, 0.0, 1.0])
+
+    def test_zero_range_returns_norm_min(self):
+        arr = np.array([3.0, 3.0, 3.0])
+        result = normalize(arr, ref_min=3.0, ref_max=3.0)
+        np.testing.assert_array_almost_equal(result, [0.0, 0.0, 0.0])
+
+    def test_shape_preserved(self):
+        arr = np.arange(5, dtype=float)
+        assert normalize(arr, 0.0, 4.0).shape == arr.shape
+
+
+class TestApplyNormalize:
+    _XD = {"start": 0.0, "delta": 1.0}
+
+    def test_min_window_max_window(self):
+        arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        # min window xbgn=0, xend=0 → ref_min=arr[0]=1; max window xend=4 → ref_max=arr[4]=5
+        result = apply_normalize(arr, self._XD,
+                                 min_xbgn=0.0, min_xend=0.0, min_fxn="mean", min_mean_n=1,
+                                 max_xbgn=4.0, max_xend=4.0, max_fxn="mean", max_mean_n=1)
+        np.testing.assert_array_almost_equal(result, [0.0, 0.25, 0.5, 0.75, 1.0])
+
+    def test_mean_at_min_fxn(self):
+        arr = np.array([5.0, 1.0, 3.0, 9.0, 7.0])
+        result = apply_normalize(arr, self._XD,
+                                 min_xbgn=0.0, min_xend=4.0, min_fxn="mean@min", min_mean_n=1,
+                                 max_xbgn=0.0, max_xend=4.0, max_fxn="mean@max", max_mean_n=1)
+        assert result.min() == pytest.approx(0.0)
+        assert result.max() == pytest.approx(1.0)
+
+    def test_zero_range_returns_norm_min(self):
+        arr = np.full(5, 4.0)
+        result = apply_normalize(arr, self._XD,
+                                 min_xbgn=0.0, min_xend=4.0, min_fxn="mean", min_mean_n=1,
+                                 max_xbgn=0.0, max_xend=4.0, max_fxn="mean", max_mean_n=1)
+        np.testing.assert_array_almost_equal(result, np.zeros(5))
+
+
+class TestDFOF:
+    _XD = {"start": 0.0, "delta": 1.0}
+
+    def test_whole_array_baseline(self):
+        arr = np.array([1.0, 2.0, 3.0])    # mean=2, dF/F = (arr-2)/2
+        result = dfof(arr, self._XD, xbgn=-math.inf, xend=math.inf)
+        np.testing.assert_array_almost_equal(result, [-0.5, 0.0, 0.5])
+
+    def test_window_baseline(self):
+        arr = np.array([2.0, 2.0, 4.0, 6.0])   # f0=mean([2,2])=2
+        result = dfof(arr, self._XD, xbgn=0.0, xend=1.0)
+        np.testing.assert_array_almost_equal(result, [0.0, 0.0, 1.0, 2.0])
+
+    def test_empty_window_f0_zero_returns_nan(self):
+        arr = np.array([1.0, 2.0])
+        result = dfof(arr, self._XD, xbgn=10.0, xend=20.0)
+        assert np.all(np.isnan(result))
+
+    def test_ignore_nans_true(self):
+        arr = np.array([np.nan, 2.0, 4.0])  # f0=nanmean([nan,2])=2
+        result = dfof(arr, self._XD, xbgn=0.0, xend=1.0, ignore_nans=True)
+        assert not np.isnan(result[2])
+
+    def test_shape_preserved(self):
+        arr = np.arange(1, 6, dtype=float)
+        result = dfof(arr, self._XD, xbgn=0.0, xend=0.0)
+        assert result.shape == arr.shape
 
 
 class TestApplyDFOF:

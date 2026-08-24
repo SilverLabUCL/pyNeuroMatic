@@ -2240,10 +2240,7 @@ class NMMainOpNormalize(NMMainOp):
 
     def _apply(self, arr: np.ndarray, ref_min: float, ref_max: float) -> np.ndarray:
         """Apply normalization formula to arr."""
-        range = ref_max - ref_min
-        if range == 0:
-            return np.full_like(arr, self._norm_min)
-        return (arr - ref_min) / range * (self._norm_max - self._norm_min) + self._norm_min
+        return nm_math.normalize(arr, ref_min, ref_max, self._norm_min, self._norm_max)
 
     def _note_str(self, ref_min: float, ref_max: float, channel_name: str | None = None) -> str:
         note = "%s(%s" % (self._op_name, self._op_params_str())
