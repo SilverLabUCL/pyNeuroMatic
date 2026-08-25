@@ -30,11 +30,11 @@ import pyneuromatic.core.nm_utilities as nmu
 class NMToolMain(NMTool):
     """Main NM Tool — always loaded by default.
 
-    Provides core array operations (Average, Scale, …) via a pluggable
-    ``op`` property.  Setting ``op`` to a string name (e.g. ``"average"``)
-    looks up and instantiates the corresponding :class:`NMMainOp` subclass
-    from the registry.  Setting it to an :class:`NMMainOp` instance allows
-    full parameter control::
+    Provides core array operations (Average, Scale, …) and display ops
+    (Plot) via a pluggable ``op`` property.  Setting ``op`` to a string
+    name (e.g. ``"average"``, ``"plot"``) looks up and instantiates the
+    corresponding :class:`NMMainOp` subclass from the registry.  Setting
+    it to an :class:`NMMainOp` instance allows full parameter control::
 
         tool = NMToolMain()
         tool.op = NMMainOpArithmetic(factor=2.0)

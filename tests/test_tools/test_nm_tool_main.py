@@ -9,6 +9,9 @@ acquiring and simulating electrophysiology data.
 import math
 import unittest
 
+import matplotlib
+matplotlib.use("Agg")
+
 import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
@@ -34,6 +37,7 @@ from pyneuromatic.tools.nm_main_op import (
     NMMainOpMax,
     NMMainOpMin,
     NMMainOpNormalize,
+    NMMainOpPlot,
     NMMainOpRedimension,
     NMMainOpReplaceValues,
     NMMainOpConcatenate,
@@ -1771,6 +1775,18 @@ class TestNMToolMain(unittest.TestCase):
         self.tool.run_all(targets)
         d = folder.data.get("RecordA0")
         np.testing.assert_array_almost_equal(d.nparray, [3.0, 6.0, 9.0])
+
+    # --- end-to-end: plot ---
+
+    def test_run_all_plot_end_to_end(self):
+        _, targets = _make_folder_with_data({
+            "RecordA0": [1.0, 2.0],
+            "RecordA1": [3.0, 4.0],
+        })
+        self.tool.op = NMMainOpPlot(show=False)
+        self.tool.run_all(targets)
+        self.assertIsNotNone(self.tool.op.fig)
+        self.assertEqual(len(self.tool.op.axes), 1)
 
     # --- run_meta populated ---
 
@@ -4134,6 +4150,87 @@ class TestNMMainOpFilter(unittest.TestCase):
     def test_op_from_name_filter(self):
         op = op_from_name("filter")
         self.assertIsInstance(op, NMMainOpFilter)
+
+
+# ===========================================================================
+# TestNMMainOpPlot
+# ===========================================================================
+
+class TestNMMainOpPlot(unittest.TestCase):
+    """Test NMMainOpPlot directly (no NMToolMain machinery)."""
+
+    def setUp(self):
+        self.op = NMMainOpPlot(show=False)
+        self.arrays = {
+            "RecordA0": [1.0, 2.0, 3.0],
+            "RecordA1": [2.0, 3.0, 4.0],
+            "RecordB0": [5.0, 6.0, 7.0],
+        }
+
+    def _run(self, arrays=None):
+        if arrays is None:
+            arrays = self.arrays
+        return _op_run_all(self.op, arrays)
+
+    # --- figure / axes ---
+
+    def test_one_axes_per_channel(self):
+        self._run()
+        self.assertEqual(len(self.op.axes), 2)
+
+    def test_lines_per_axes_match_epoch_count(self):
+        self._run()
+        by_title = {ax.get_title(): ax for ax in self.op.axes}
+        a_ax = next(ax for t, ax in by_title.items() if t.startswith("Channel A"))
+        b_ax = next(ax for t, ax in by_title.items() if t.startswith("Channel B"))
+        self.assertEqual(len(a_ax.lines), 2)
+        self.assertEqual(len(b_ax.lines), 1)
+
+    def test_fig_populated_after_run(self):
+        self._run()
+        self.assertIsNotNone(self.op.fig)
+
+    def test_fig_none_before_run(self):
+        self.assertIsNone(NMMainOpPlot().fig)
+        self.assertEqual(NMMainOpPlot().axes, [])
+
+    # --- writes nothing to the folder ---
+
+    def test_writes_no_output_array(self):
+        folder = self._run()
+        self.assertEqual(set(folder.data.keys()), set(self.arrays.keys()))
+
+    # --- graceful with no data ---
+
+    def test_no_data_is_graceful(self):
+        folder = self._run(arrays={})
+        self.assertIsNone(self.op.fig)
+
+    # --- parameter validation ---
+
+    def test_alpha_default(self):
+        self.assertEqual(NMMainOpPlot().alpha, 0.7)
+
+    def test_show_default_true(self):
+        self.assertTrue(NMMainOpPlot().show)
+
+    def test_alpha_rejects_non_float(self):
+        with self.assertRaises(TypeError):
+            NMMainOpPlot(alpha="0.5")
+
+    def test_show_rejects_non_bool(self):
+        with self.assertRaises(TypeError):
+            NMMainOpPlot(show="yes")
+
+    def test_op_params_str(self):
+        op = NMMainOpPlot(alpha=0.5, show=False)
+        self.assertEqual(op._op_params_str(), "alpha=0.5, show=False")
+
+    # --- registry ---
+
+    def test_plot_by_name(self):
+        op = op_from_name("plot")
+        self.assertIsInstance(op, NMMainOpPlot)
 
 
 if __name__ == "__main__":

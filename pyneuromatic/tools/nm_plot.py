@@ -2,11 +2,14 @@
 """
 Matplotlib plotting utilities for NMData and NMFolder.
 
-Provides two public functions:
+Provides three public functions:
 
 - :func:`plot_nmdata` — plot a single NMData array.
 - :func:`plot_folder`  — plot all epochs for a given prefix, one subplot
   per channel, with epochs overlaid.
+- :func:`plot_channel_data` — shared subplot-per-channel layout core
+  used by :func:`plot_folder` and by
+  :class:`~pyneuromatic.tools.nm_main_op.NMMainOpPlot`.
 
 No GUI framework integration is required.  Figures are displayed via
 ``matplotlib.pyplot.show()`` (or inline in Jupyter when the appropriate
@@ -142,8 +145,6 @@ def plot_folder(
     Raises:
         ValueError: if no matching data are found for *prefix*.
     """
-    import matplotlib.pyplot as plt
-
     # Collect matching NMData objects, grouped by channel then sorted by epoch
     channel_data: dict[str, list[tuple[int, "NMData"]]] = defaultdict(list)
 
@@ -165,6 +166,46 @@ def plot_folder(
             "no data found for prefix %r in folder %r" % (prefix, folder.name)
         )
 
+    fig_title = title if title is not None else "%s — %s" % (folder.name, prefix)
+    return plot_channel_data(
+        channel_data, title=fig_title, alpha=alpha, show=show, **line_kwargs
+    )
+
+
+def plot_channel_data(
+    channel_data: dict[str, list[tuple[int, "NMData"]]],
+    title: str | None = None,
+    alpha: float = 0.7,
+    show: bool = True,
+    **line_kwargs,
+) -> tuple["Figure", list["Axes"]]:
+    """Plot pre-grouped NMData, one subplot per channel, epochs overlaid.
+
+    Shared layout core used by :func:`plot_folder` and by
+    :class:`~pyneuromatic.tools.nm_main_op.NMMainOpPlot`, which build
+    *channel_data* from a folder scan and a tool-selection run loop
+    respectively.
+
+    Args:
+        channel_data: Mapping of channel name to a list of
+            ``(epoch, NMData)`` pairs.  Sorted in place: channels
+            alphabetically, epochs within each channel numerically.
+        title:     Figure suptitle.  No suptitle is set when None.
+        alpha:     Line opacity for overlaid epochs (default 0.7).
+        show:      If True call ``plt.show()`` after plotting.
+        **line_kwargs: Passed to ``ax.plot()`` for every epoch line.
+
+    Returns:
+        ``(fig, axes)`` where *axes* is a list with one entry per channel.
+
+    Raises:
+        ValueError: if *channel_data* is empty.
+    """
+    import matplotlib.pyplot as plt
+
+    if not channel_data:
+        raise ValueError("no data to plot: channel_data is empty")
+
     # Sort channels alphabetically; sort epochs within each channel
     sorted_channels = sorted(channel_data.keys())
     for chan in sorted_channels:
@@ -179,6 +220,7 @@ def plot_folder(
     )
     axes = [axes[i][0] for i in range(n_channels)]
 
+    xlabel = ""
     for ax, chan in zip(axes, sorted_channels):
         epoch_list = channel_data[chan]
         for _epoch_idx, nmdata in epoch_list:
@@ -200,8 +242,8 @@ def plot_folder(
     if xlabel:
         axes[-1].set_xlabel(xlabel)
 
-    fig_title = title if title is not None else "%s — %s" % (folder.name, prefix)
-    fig.suptitle(fig_title)
+    if title is not None:
+        fig.suptitle(title)
     fig.tight_layout()
 
     if show:

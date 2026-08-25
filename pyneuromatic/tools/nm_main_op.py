@@ -3559,6 +3559,124 @@ class NMMainOpHistogram(NMMainOp):
 
 
 # =========================================================================
+# Plot (display op — no output array)
+# =========================================================================
+
+
+class NMMainOpPlot(NMMainOp):
+    """Plot each selected array, one subplot per channel, epochs overlaid.
+
+    A *display* op: unlike the other :class:`NMMainOp` subclasses, this one
+    does not write an output array to the folder — it produces a matplotlib
+    figure as a side effect, accessible via :attr:`fig` / :attr:`axes` after
+    ``run_finish()`` completes.
+
+    Accumulates the selected arrays by channel (in run-order), then draws
+    them with :func:`pyneuromatic.tools.nm_plot.plot_channel_data` — the
+    same subplot-per-channel, epochs-overlaid layout used by
+    :func:`pyneuromatic.tools.nm_plot.plot_folder`, but driven by the
+    current tool selection (folder / dataseries / channel / epoch-set)
+    instead of scanning a folder by name prefix.
+
+    Parameters:
+        alpha: Line opacity for overlaid epochs (default 0.7).
+        show: If True (default), call ``plt.show()`` after plotting.
+    """
+
+    name = "plot"
+
+    def __init__(self, alpha: float = 0.7, show: bool = True) -> None:
+        self.alpha = alpha  # setters validate
+        self.show = show
+        self._fig = None
+        self._axes: list = []
+
+    @property
+    def alpha(self) -> float:
+        """Line opacity for overlaid epochs."""
+        return self._alpha
+
+    @alpha.setter
+    def alpha(self, value: float) -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "alpha", "float"))
+        self._alpha = float(value)
+
+    @property
+    def show(self) -> bool:
+        """If True, call ``plt.show()`` after plotting."""
+        return self._show
+
+    @show.setter
+    def show(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "show", "boolean"))
+        self._show = value
+
+    @property
+    def fig(self):
+        """Matplotlib Figure produced by the most recent run, or None."""
+        return self._fig
+
+    @property
+    def axes(self) -> list:
+        """Matplotlib Axes (one per channel) from the most recent run."""
+        return list(self._axes)
+
+    def run_init(self) -> None:
+        """Reset the per-channel accumulator and any previous figure."""
+        self._channel_data: dict[str, list[tuple[int, NMData]]] = {}
+        self._fig = None
+        self._axes = []
+
+    def run(
+        self,
+        data: NMData,
+        channel_name: str | None = None,
+    ) -> None:
+        """Bucket one array by channel for later plotting.
+
+        Args:
+            data: The NMData object to plot.
+            channel_name: Channel name from the selection context, or None
+                (parsed from data.name as a fallback).
+        """
+        if not isinstance(data.nparray, np.ndarray):
+            return
+
+        parsed = nmu.parse_data_name(data.name)
+        if channel_name is None:
+            channel_name = parsed[1] if parsed is not None else "A"
+        epoch = parsed[2] if parsed is not None else len(
+            self._channel_data.get(channel_name, [])
+        )
+
+        self._channel_data.setdefault(channel_name, []).append((epoch, data))
+
+    def run_finish(
+        self,
+        folder: NMFolder | None = None,
+        prefix: str | None = None,
+    ) -> None:
+        """Draw the figure from the accumulated per-channel arrays.
+
+        Args:
+            folder: Source NMFolder; used only to build the default title.
+            prefix: Dataseries name; used only to build the default title.
+        """
+        if not self._channel_data:
+            return
+        from pyneuromatic.tools import nm_plot  # lazy: matplotlib optional
+        title = "%s — %s" % (folder.name, prefix) if folder is not None and prefix else None
+        self._fig, self._axes = nm_plot.plot_channel_data(
+            self._channel_data, title=title, alpha=self._alpha, show=self._show,
+        )
+
+    def _op_params_str(self) -> str:
+        return "alpha=%r, show=%r" % (self._alpha, self._show)
+
+
+# =========================================================================
 # Registry and lookup
 # =========================================================================
 
@@ -3599,6 +3717,8 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "interpolate": NMMainOpInterpolate,
     "resample": NMMainOpResample,
     "rescale_x": NMMainOpRescaleX,
+    # --- display (no output array; produces a figure) ---
+    "plot": NMMainOpPlot,
 }
 
 

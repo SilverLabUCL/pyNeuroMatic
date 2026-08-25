@@ -5,7 +5,7 @@ matplotlib.use("Agg")
 import numpy as np
 import pytest
 
-from pyneuromatic.tools.nm_plot import plot_nmdata, plot_folder
+from pyneuromatic.tools.nm_plot import plot_nmdata, plot_folder, plot_channel_data
 from pyneuromatic.core.nm_folder import NMFolder
 
 
@@ -135,3 +135,51 @@ class TestPlotFolder:
         for ax in axes:
             assert "1 epoch" in ax.get_title()
             assert "1 epochs" not in ax.get_title()
+
+
+# ---------------------------------------------------------------------------
+# plot_channel_data
+# ---------------------------------------------------------------------------
+
+class TestPlotChannelData:
+    def _channel_data(self, folder):
+        return {
+            "A": [(e, folder.data["RecordA%d" % e]) for e in range(3)],
+            "B": [(e, folder.data["RecordB%d" % e]) for e in range(3)],
+        }
+
+    def test_returns_one_ax_per_channel(self, folder):
+        _, axes = plot_channel_data(self._channel_data(folder), show=False)
+        assert len(axes) == 2
+
+    def test_lines_per_channel_match_epoch_count(self, folder):
+        _, axes = plot_channel_data(self._channel_data(folder), show=False)
+        for ax in axes:
+            assert len(ax.lines) == 3
+
+    def test_epoch_count_in_subplot_title(self, folder):
+        _, axes = plot_channel_data(self._channel_data(folder), show=False)
+        for ax in axes:
+            assert "3 epochs" in ax.get_title()
+
+    def test_no_title_by_default(self, folder):
+        fig, _ = plot_channel_data(self._channel_data(folder), show=False)
+        assert fig._suptitle is None
+
+    def test_custom_title(self, folder):
+        fig, _ = plot_channel_data(
+            self._channel_data(folder), title="My Title", show=False
+        )
+        assert fig._suptitle.get_text() == "My Title"
+
+    def test_empty_dict_raises_value_error(self):
+        with pytest.raises(ValueError, match="no data to plot"):
+            plot_channel_data({}, show=False)
+
+    def test_plot_folder_uses_shared_layout(self, folder):
+        """plot_folder delegates to plot_channel_data for layout."""
+        fig1, axes1 = plot_folder(folder, prefix="Record", show=False)
+        fig2, axes2 = plot_channel_data(self._channel_data(folder), show=False)
+        assert len(axes1) == len(axes2)
+        for ax1, ax2 in zip(axes1, axes2):
+            assert len(ax1.lines) == len(ax2.lines)
