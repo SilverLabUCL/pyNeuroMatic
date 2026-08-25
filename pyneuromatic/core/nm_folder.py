@@ -22,7 +22,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
 import h5py
 
 from pyneuromatic.core.nm_data import NMData, NMDataContainer
@@ -30,11 +30,17 @@ from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
-from pyneuromatic.tools.nm_tool_folder import NMToolFolderContainer
 import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
+
+if TYPE_CHECKING:
+    # nm_tool_folder (pyneuromatic.tools) imports NMFolder for type hints,
+    # so importing it at module level here would create a core<->tools
+    # circular import; instantiation below uses a lazy, in-function import
+    # instead. See issue #325.
+    from pyneuromatic.tools.nm_tool_folder import NMToolFolderContainer
 
 
 """
@@ -90,6 +96,9 @@ class NMFolder(NMObject):
         name: str = "NMFolder0",
     ) -> None:
         super().__init__(parent=parent, name=name)
+
+        # Lazy import: see the TYPE_CHECKING import note above (issue #325).
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolderContainer
 
         self.__data_container: NMDataContainer = NMDataContainer(parent=self)
         self.__dataseries_container: NMDataSeriesContainer = NMDataSeriesContainer(parent=self)

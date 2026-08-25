@@ -39,10 +39,9 @@ from pyneuromatic.core.nm_tool_registry import get_global_registry, NMToolRegist
 from pyneuromatic.core.nm_workspace import NMWorkspace, NMWorkspaceManager
 import pyneuromatic.core.nm_utilities as nmu
 
-from pyneuromatic.tools.nm_tool_folder import NMToolFolder
-
 if TYPE_CHECKING:
     from pyneuromatic.tools.nm_tool import NMTool
+    from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 nm = None  # holds Manager, accessed via console
 
@@ -156,6 +155,15 @@ class NMManager(NMObject):
         nm_name: str = "nm",
         command_history: bool = False,
     ) -> None:
+        # Lazy import: pyneuromatic.tools.nm_tool_folder (tools) imports
+        # HIERARCHY_SELECT_KEYS from this module, so importing NMToolFolder
+        # at module level here would create a core<->tools circular import.
+        # Binds NMToolFolder into this module's globals so every isinstance
+        # check elsewhere in this file (all inside NMManager methods, which
+        # can only run after __init__) sees it. See issue #325.
+        global NMToolFolder
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+
         # Initialize centralized history logging
         self.__history = nmh.NMHistory(quiet=quiet)
         nmh.set_history(self.__history)
