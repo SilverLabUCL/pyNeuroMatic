@@ -35,9 +35,14 @@ def check_gui_available():
 
 # Only define exports if GUI is available
 if GUI_AVAILABLE:
+    from pyneuromatic.gui.folder_model import FolderTreeModel
+    from pyneuromatic.gui.folder_browser import FolderBrowserWidget
+
     __all__ = [
         'GUI_AVAILABLE',
         'check_gui_available',
+        'FolderTreeModel',
+        'FolderBrowserWidget',
     ]
 else:
     __all__ = [
