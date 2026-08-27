@@ -588,6 +588,17 @@ class NMManager(NMObject):
             select["toolfolder"] = current.name
             # Parent is NMFolder directly (skips NMToolFolderContainer)
             current = current._parent
+        elif isinstance(current, NMFolder):
+            # Reached the folder directly, not via a toolfolder. Unlike
+            # dataseries/channel/epoch (deliberately "sticky" per-container
+            # selectors — see test_preserves_lower_tier_selection),
+            # toolfolder is a context switch: _select_keys_set() resolves
+            # `ctx` (which container data/dataseries are read from) based on
+            # it. A stale toolfolder selection would silently redirect
+            # "data"/"dataseries" writes to the wrong (leftover) toolfolder's
+            # containers instead of this folder's, so it must be explicitly
+            # cleared here rather than left untouched.
+            select["toolfolder"] = None
 
         if isinstance(current, NMFolder):
             select["folder"] = current.name

@@ -617,6 +617,24 @@ class TestNMManagerSelectValueSet(NMManagerTestBase):
         with self.assertRaises(ValueError):
             self.nm.select_value_set(other_tf)
 
+    def test_select_data_after_toolfolder_clears_toolfolder(self):
+        # Regression test: selecting a toolfolder, then a plain folder-level
+        # NMData, used to leave the stale toolfolder selection in place.
+        # _select_keys_set() then resolved `ctx` to the (empty) toolfolder's
+        # containers instead of the folder's, raising KeyError when it tried
+        # to select the data name there.
+        f = self.nm.folders["folder1"]
+        tf = f.toolfolders.new("Spike_0")
+        self.nm.select_value_set(tf)
+        self.assertEqual(self.nm.select_keys["toolfolder"], "Spike_0")
+
+        data = f.data["data5"]
+        self.nm.select_value_set(data)  # must not raise
+
+        self.assertIsNone(self.nm.select_keys["toolfolder"])
+        self.assertEqual(self.nm.select_keys["data"], "data5")
+        self.assertEqual(self.nm.select_keys["folder"], "folder1")
+
 
 class TestNMManagerToolfolderSelect(unittest.TestCase):
     """Tests for toolfolder in select_keys / select_values / _select_keys_set."""
