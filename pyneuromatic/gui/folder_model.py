@@ -65,10 +65,83 @@ class _GroupNode:
         return list(container.values())
 
 
+class _SetsNode:
+    """Synthetic "Sets" row under a ``_GroupNode``, e.g. "Data" -> "Sets".
+
+    Every ``NMObjectContainer`` has a ``.sets`` (``NMSets``); this exposes
+    it as a browsable row. Cached the same way and for the same reason as
+    ``_GroupNode`` (see its docstring) — one canonical instance per
+    owning group, keyed by ``id(group)``.
+    """
+
+    __slots__ = ("group", "label")
+
+    def __init__(self, group: _GroupNode) -> None:
+        self.group = group
+        self.label = "Sets"
+
+    @property
+    def container(self):
+        """The NMObjectContainer whose .sets this represents."""
+        return getattr(self.group.owner, self.group.kind, None)
+
+
+class _SetNode:
+    """One named set under a ``_SetsNode``, e.g. "Sets" -> "Set1".
+
+    Cached per ``(id(sets_node), name)`` — see ``_GroupNode`` docstring.
+    """
+
+    __slots__ = ("sets_node", "name")
+
+    def __init__(self, sets_node: _SetsNode, name: str) -> None:
+        self.sets_node = sets_node
+        self.name = name
+
+    @property
+    def label(self) -> str:
+        return self.name
+
+    @property
+    def container(self):
+        return self.sets_node.container
+
+
+class _SetMemberNode:
+    """One member of a set, as shown under "Sets" -> "Set1" -> member.
+
+    A set's members are the *same* NMObjects already shown elsewhere in
+    the tree (e.g. under "Data") — but a QAbstractItemModel node can only
+    have one logical parent, and this member's parent here is the set,
+    not "Data". Reusing the raw NMObject as internalPointer in both
+    places would make ``parent()`` ambiguous for whichever wasn't
+    hard-coded. This wrapper gives each (set, member) pairing its own
+    distinct, unambiguous identity instead, the same way ``_GroupNode``
+    gives "Data" its own identity separate from the NMFolder it groups.
+    Cached per ``(id(set_node), id(obj))``.
+    """
+
+    __slots__ = ("set_node", "obj")
+
+    def __init__(self, set_node: _SetNode, obj: NMObject) -> None:
+        self.set_node = set_node
+        self.obj = obj
+
+    @property
+    def label(self) -> str:
+        return self.obj.name
+
+
 # (label, container attribute name) candidates, in display order, per owner type
 _FOLDER_LIKE_GROUPS = (("Data", "data"), ("Data Series", "dataseries"))
 _FOLDER_ONLY_GROUPS = (("Tool Folders", "toolfolders"),)
 _DATASERIES_GROUPS = (("Channels", "channels"), ("Epochs", "epochs"))
+
+# Kinds shown even when empty, so a brand-new folder always has a "Data"
+# and "Data Series" row to right-click "New..." on — otherwise a freshly
+# created, still-empty folder would show no children at all, with no way
+# to add anything through the tree's context menu (see _group_children).
+_ALWAYS_SHOWN_KINDS = frozenset({"data", "dataseries"})
 
 
 class FolderTreeModel(QtCore.QAbstractItemModel):
@@ -80,16 +153,49 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
     folders the same way ``QTreeView`` already lazily requests only
     expanded/visible rows.
 
-    Tree shape, per folder (and identically per tool folder, since
-    ``NMToolFolder`` exposes the same ``.data`` / ``.dataseries``
-    containers)::
+    Tree shape (identical per tool folder, since ``NMToolFolder``
+    exposes the same ``.data`` / ``.dataseries`` containers)::
 
-        NMFolder
-        |-- "Data"          (only if non-empty) -> NMData leaves
-        |-- "Data Series"   (only if non-empty) -> NMDataSeries
+        "Folders"  (always shown) -> NMFolder
+        |-- "Sets"          (only if non-empty) -> Set leaves -> member leaves
+        |-- "Data"          (always shown) -> NMData leaves
+        |   `-- "Sets"      (only if non-empty) -> Set leaves -> member leaves
+        |-- "Data Series"   (always shown) -> NMDataSeries
+        |   |-- "Sets"      (only if non-empty) -> Set leaves -> member leaves
         |   |-- "Channels"  (only if non-empty) -> NMChannel leaves
+        |   |   `-- "Sets"  (only if non-empty) -> Set leaves -> member leaves
         |   `-- "Epochs"    (only if non-empty) -> NMEpoch leaves
+        |       `-- "Sets"  (only if non-empty) -> Set leaves -> member leaves
         `-- "Tool Folders"  (only if non-empty) -> NMToolFolder
+
+    Every group row (including the top-level "Folders" row) can have a
+    "Sets" child, since every ``NMObjectContainer`` has a ``.sets``
+    (``NMSets``) — e.g. "Data" -> "Sets" -> "Set1" -> the NMData objects
+    in Set1. A set's members are the *same* objects shown elsewhere in
+    the tree (e.g. under "Data" directly), wrapped in a distinct
+    ``_SetMemberNode`` identity so each occurrence has an unambiguous
+    parent (see its docstring) — required because a QAbstractItemModel
+    node can only have one logical parent, but a member's own container
+    location and its set membership are two different things.
+
+    Unlike "Folders"/"Data"/"Data Series" (always shown so there's a row
+    to bootstrap from nothing), "Sets" is hidden when the container has
+    no sets defined yet — it appears under *every* group, potentially
+    many times per folder (every dataseries, every channel, every
+    epoch...), so always showing it added a lot of visual noise for a
+    feature most groups never use. Creating the *first* set therefore
+    doesn't go through "Sets" at all: "New Set..." is offered directly
+    on the parent group's own context menu too (see
+    ``FolderBrowserWidget._show_tree_context_menu``), and once that set
+    exists, "Sets" appears to browse/manage it like any other.
+    "Tool Folders" and "Channels"/"Epochs" (as groups, not their "Sets"
+    child) stay hidden when empty too; nothing creates those manually
+    through this UI the way folders/data/dataseries are.
+
+    The top-level "Folders" group node exists so it can be selected in
+    the tree (e.g. to show the flat list of folders in a detail pane),
+    consistent with every other group node — folders are not bare
+    top-level rows.
 
     There is no change-notification hookup from the core object model,
     so this model must be refreshed explicitly (:meth:`refresh`) after
@@ -104,6 +210,9 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         super().__init__(parent)
         self._nm = manager
         self._group_nodes: dict[tuple[str, int], _GroupNode] = {}
+        self._sets_nodes: dict[int, _SetsNode] = {}
+        self._set_nodes: dict[tuple[int, str], _SetNode] = {}
+        self._set_member_nodes: dict[tuple[int, int], _SetMemberNode] = {}
 
     # ------------------------------------------------------------------
     # Node traversal helpers
@@ -121,8 +230,41 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
             self._group_nodes[key] = node
         return node
 
+    def _sets_node(self, group: _GroupNode) -> _SetsNode:
+        """Return the canonical (cached) "Sets" node for *group*."""
+        key = id(group)
+        node = self._sets_nodes.get(key)
+        if node is None:
+            node = _SetsNode(group)
+            self._sets_nodes[key] = node
+        return node
+
+    def _set_node(self, sets_node: _SetsNode, name: str) -> _SetNode:
+        """Return the canonical (cached) node for one named set."""
+        key = (id(sets_node), name)
+        node = self._set_nodes.get(key)
+        if node is None:
+            node = _SetNode(sets_node, name)
+            self._set_nodes[key] = node
+        return node
+
+    def _set_member_node(self, set_node: _SetNode, obj: NMObject) -> _SetMemberNode:
+        """Return the canonical (cached) wrapper for one set member."""
+        key = (id(set_node), id(obj))
+        node = self._set_member_nodes.get(key)
+        if node is None:
+            node = _SetMemberNode(set_node, obj)
+            self._set_member_nodes[key] = node
+        return node
+
     def _group_children(self, owner: NMObject) -> list[_GroupNode]:
-        """Non-empty synthetic group rows for a folder-like or dataseries owner."""
+        """Synthetic group rows for a folder-like or dataseries owner.
+
+        Hidden when empty, except for ``_ALWAYS_SHOWN_KINDS`` ("Data",
+        "Data Series") — those stay visible even on a brand-new,
+        completely empty folder so there's always a row to right-click
+        "New..." on.
+        """
         if isinstance(owner, NMDataSeries):
             candidates = _DATASERIES_GROUPS
         else:
@@ -132,26 +274,64 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         groups = []
         for label, kind in candidates:
             container = getattr(owner, kind, None)
-            if container is not None and len(container) > 0:
+            if container is None:
+                continue
+            if len(container) > 0 or kind in _ALWAYS_SHOWN_KINDS:
                 groups.append(self._group_node(kind, label, owner))
         return groups
 
     def _children_of(self, node: object | None) -> list[object]:
         """Ordered Qt children of *node* (``None`` = invisible root)."""
         if node is None:
-            return list(self._nm.folders.values())
+            # Always shown, even with zero folders — same reasoning as
+            # _ALWAYS_SHOWN_KINDS: a brand-new, completely empty manager
+            # still needs a row to right-click "New..." on to create the
+            # first folder at all.
+            return [self._group_node("folders", "Folders", self._nm)]
         if isinstance(node, _GroupNode):
-            return node.children()
+            # "Sets" is hidden when the container has no sets defined
+            # yet, same as Tool Folders/Channels/Epochs — unlike those,
+            # it appears under *every* group (potentially many times per
+            # folder: every dataseries, channel, epoch...), so always
+            # showing it (as v1 did) added a lot of visual noise for a
+            # feature most groups never use. Bootstrapping the first set
+            # doesn't need "Sets" to be visible first: "New Set..." is
+            # also offered directly on the parent group's own context
+            # menu (see FolderBrowserWidget._show_tree_context_menu).
+            children = node.children()
+            container = getattr(node.owner, node.kind, None)
+            if container is not None and len(container.sets) > 0:
+                children = [self._sets_node(node)] + children
+            return children
+        if isinstance(node, _SetsNode):
+            container = node.container
+            if container is None:
+                return []
+            return [self._set_node(node, name) for name in container.sets.keys()]
+        if isinstance(node, _SetNode):
+            container = node.container
+            if container is None:
+                return []
+            members = container.sets.get_items(node.name, default=[])
+            if not isinstance(members, list):
+                return []
+            return [self._set_member_node(node, obj) for obj in members]
         if isinstance(node, (NMFolder, NMToolFolder, NMDataSeries)):
             return self._group_children(node)
-        return []  # NMData, NMChannel, NMEpoch are leaves
+        return []  # NMData, NMChannel, NMEpoch, _SetMemberNode are leaves
 
     def _logical_parent(self, node: object) -> object | None:
         """The node (``_GroupNode``, ``NMObject``, or ``None``) that owns *node*."""
+        if isinstance(node, _SetMemberNode):
+            return node.set_node
+        if isinstance(node, _SetNode):
+            return node.sets_node
+        if isinstance(node, _SetsNode):
+            return node.group
         if isinstance(node, _GroupNode):
-            return node.owner
+            return None if node.kind == "folders" else node.owner
         if isinstance(node, NMFolder):
-            return None
+            return self._group_node("folders", "Folders", self._nm)
         if isinstance(node, NMData):
             return self._group_node("data", "Data", node._parent)
         if isinstance(node, NMDataSeries):
@@ -212,7 +392,7 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         if role != QtCore.Qt.ItemDataRole.DisplayRole:
             return None
         node = index.internalPointer()
-        if isinstance(node, _GroupNode):
+        if isinstance(node, (_GroupNode, _SetsNode, _SetNode, _SetMemberNode)):
             return node.label
         if isinstance(node, NMObject):
             return node.name
@@ -235,10 +415,12 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlag:
         if not index.isValid():
             return QtCore.Qt.ItemFlag.NoItemFlags
-        base = QtCore.Qt.ItemFlag.ItemIsEnabled
-        if isinstance(index.internalPointer(), _GroupNode):
-            return base  # synthetic rows are not selectable
-        return base | QtCore.Qt.ItemFlag.ItemIsSelectable
+        # Group rows (Data, Data Series, Tool Folders, Channels, Epochs,
+        # Folders) are selectable too: selecting one is what drives the
+        # detail pane (see FolderBrowserWidget), so it needs the normal
+        # Qt highlight/feedback like any other row, not just a silent
+        # "current" move with nothing visibly selected.
+        return QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
 
     # ------------------------------------------------------------------
     # Refresh
@@ -254,4 +436,7 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         """
         self.beginResetModel()
         self._group_nodes.clear()
+        self._sets_nodes.clear()
+        self._set_nodes.clear()
+        self._set_member_nodes.clear()
         self.endResetModel()
