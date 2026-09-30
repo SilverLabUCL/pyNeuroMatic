@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
+from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.gui.folder_model import (
@@ -111,6 +112,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     placeholder for now — reserved for a future "open" action (e.g.
     quick-plot a leaf) that doesn't exist yet.
     """
+
+    selection_requested = QtCore.pyqtSignal(object)
+    content_changed = QtCore.pyqtSignal()
 
     def __init__(
         self,
@@ -290,8 +294,17 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             if node.kind != "toolfolders":
                 menu.addAction("New...", lambda: self._add_item(container))
             menu.addAction("New Set...", lambda: self._add_set(self._model._sets_node(node)))
+            if node.kind == "epochs":
+                menu.addAction(
+                    "New Group...",
+                    lambda: self._new_group(container),
+                )
         elif isinstance(node, _SetsNode):
             self._populate_sets_menu(menu, node)
+        elif isinstance(node, _SetNode):
+            menu.addAction("Select Set", lambda: self._request_selection(index))
+        elif isinstance(node, (_SetMemberNode, NMObject)):
+            menu.addAction("Select", lambda: self._request_selection(index))
         else:
             return
         if not menu.actions():
@@ -333,6 +346,39 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         previous: QtCore.QModelIndex,
     ) -> None:
         self._detail.setRootIndex(current if current.isValid() else QtCore.QModelIndex())
+
+    def _request_selection(self, index: QtCore.QModelIndex) -> None:
+        self.selection_requested.emit(self._selection_for_index(index))
+
+    @staticmethod
+    def _selection_for_index(index: QtCore.QModelIndex) -> dict[str, object | None]:
+        if not index.isValid():
+            return {"object": None, "set": None}
+
+        node = index.internalPointer()
+        if isinstance(node, _SetMemberNode):
+            return {"object": node.obj, "set": node.set_node.name}
+        if isinstance(node, _SetNode):
+            owner = node.sets_node.group.owner
+            return {
+                "object": owner if isinstance(owner, NMObject) else None,
+                "set": node.name,
+            }
+        if isinstance(node, _SetsNode):
+            owner = node.group.owner
+            return {
+                "object": owner if isinstance(owner, NMObject) else None,
+                "set": None,
+            }
+        if isinstance(node, _GroupNode):
+            owner = node.owner
+            return {
+                "object": owner if isinstance(owner, NMObject) else None,
+                "set": None,
+            }
+        if isinstance(node, NMObject):
+            return {"object": node, "set": None}
+        return {"object": None, "set": None}
 
     # ------------------------------------------------------------------
     # Detail pane: container/selection helpers
@@ -432,6 +478,15 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             if container.sets.keys():
                 set_menu.addSeparator()
             set_menu.addAction("New Set...", self._add_selected_to_new_set)
+        selected_epochs = [obj for obj in selected if isinstance(obj, NMEpoch)]
+        if selected_epochs and hasattr(container, "groups"):
+            group_menu = menu.addMenu("Add to Group")
+            for group_number in container.groups.group_numbers:
+                group_menu.addAction(
+                    f"Group {group_number}",
+                    lambda checked=False, number=group_number:
+                    self._assign_selected_to_group(container, selected_epochs, number),
+                )
         menu.exec(self._detail.viewport().mapToGlobal(pos))
 
     def _show_sets_list_context_menu(self, pos: QtCore.QPoint, sets_node: _SetsNode) -> None:
@@ -566,6 +621,40 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Add Set Failed", str(e))
             return
         self.refresh()
+
+    def _new_group(self, epoch_container) -> None:
+        existing = epoch_container.groups.group_numbers
+        group_count, accepted = QtWidgets.QInputDialog.getInt(
+            self,
+            "New Group",
+            "Number of groups to create:",
+            value=1,
+            min=1,
+        )
+        if not accepted:
+            return
+        try:
+            for group_number in range(group_count):
+                if group_number not in existing:
+                    epoch_container.groups.add_group(group_number)
+        except (KeyError, ValueError, TypeError) as error:
+            QtWidgets.QMessageBox.warning(self, "Group Creation Failed", str(error))
+            return
+        self.content_changed.emit()
+
+    def _assign_selected_to_group(
+        self,
+        epoch_container,
+        epochs: list[NMObject],
+        group_number: int,
+    ) -> None:
+        try:
+            for epoch in epochs:
+                epoch_container.groups.assign(epoch.name, group_number)
+        except (KeyError, ValueError, TypeError) as error:
+            QtWidgets.QMessageBox.warning(self, "Group Assignment Failed", str(error))
+            return
+        self.content_changed.emit()
 
     def _rename_set(self, sets_node: _SetsNode, old_name: str) -> None:
         container = sets_node.container

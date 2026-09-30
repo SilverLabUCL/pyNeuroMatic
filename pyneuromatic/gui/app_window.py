@@ -17,7 +17,9 @@ except ImportError:  # pragma: no cover - optional GUI dependency
     pg = None
 
 from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.core import nm_utilities
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
+from pyneuromatic.gui.selection_model import SelectionModel
 
 
 class SelectionStrip(QtWidgets.QWidget):
@@ -31,13 +33,36 @@ class SelectionStrip(QtWidgets.QWidget):
         "Data Series",
         "Channel",
         "Epoch",
-        "Group / Set",
+        "Set",
+        "Operator",
+        "Group",
     )
+    _TIERS = {
+        "Folder": "folder",
+        "Data": "data",
+        "Data Series": "dataseries",
+        "Channel": "channel",
+        "Epoch": "epoch",
+        "Set": "set",
+        "Operator": "group_operator",
+        "Group": "group",
+    }
+    _MIN_CONTENT_LENGTH = {
+        "Folder": 14,
+        "Data": 16,
+        "Data Series": 14,
+        "Channel": 4,
+        "Epoch": 4,
+        "Set": 8,
+        "Operator": 4,
+        "Group": 3,
+    }
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._labels = list(self._LABELS)
         self._combos: list[QtWidgets.QComboBox] = []
+        self._selection_model: SelectionModel | None = None
 
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -46,7 +71,7 @@ class SelectionStrip(QtWidgets.QWidget):
         for label in self._labels:
             label_widget = QtWidgets.QLabel(f"{label}:")
             combo = QtWidgets.QComboBox()
-            combo.setMinimumContentsLength(10)
+            combo.setMinimumContentsLength(self._MIN_CONTENT_LENGTH[label])
             combo.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
             combo.addItem("")
             self._combos.append(combo)
@@ -80,7 +105,7 @@ class SelectionStrip(QtWidgets.QWidget):
     def set_values(self, values: dict[str, str]) -> None:
         for index, label in enumerate(self._labels):
             combo = self._combos[index]
-            key = label.lower().replace(" / ", "_").replace(" ", "_")
+            key = self._TIERS[label]
             value = values.get(key, values.get(label.lower(), ""))
             combo.blockSignals(True)
             combo.clear()
@@ -91,6 +116,109 @@ class SelectionStrip(QtWidgets.QWidget):
             else:
                 combo.setCurrentIndex(0)
             combo.blockSignals(False)
+
+    def bind_selection_model(self, model: SelectionModel) -> None:
+        self._selection_model = model
+        model.selection_changed.connect(self._update_from_selection)
+        for index, label in enumerate(self._labels):
+            key = self._TIERS[label]
+            self._combos[index].currentIndexChanged.connect(
+                lambda combo_index, tier=key, combo=self._combos[index]:
+                self._on_selector_changed(tier, combo.itemData(combo_index))
+            )
+        self._update_from_selection(model.selection)
+
+    def _on_selector_changed(self, tier: str, value) -> None:
+        if self._selection_model is not None:
+            self._selection_model.update(**{tier: value})
+
+    def refresh_options(self) -> None:
+        if self._selection_model is not None:
+            self._update_from_selection(self._selection_model.selection)
+
+    def _update_from_selection(self, selection: dict) -> None:
+        if self._selection_model is None:
+            return
+        options = self._options_for_selection(selection)
+        for index, label in enumerate(self._labels):
+            tier = self._TIERS[label]
+            self._set_combo_options(
+                self._combos[index],
+                options.get(tier, []),
+                selection.get(tier),
+            )
+
+    def _options_for_selection(self, selection: dict) -> dict[str, list[tuple[str, object]]]:
+        manager = self._selection_model.manager
+        options: dict[str, list[tuple[str, object]]] = {
+            "folder": [(name, name) for name in manager.folders.keys()],
+            "data": [],
+            "dataseries": [],
+            "channel": [],
+            "epoch": [],
+            "set": [],
+            "group_operator": [],
+            "group": [],
+        }
+
+        folder = selection.get("folder")
+        if folder is None:
+            return options
+        context = selection.get("toolfolder") or folder
+        options["data"] = [(name, name) for name in context.data.keys()]
+        options["dataseries"] = [(name, name) for name in context.dataseries.keys()]
+
+        dataseries = selection.get("dataseries")
+        data = selection.get("data")
+        if dataseries is not None:
+            options["channel"] = [(name, name) for name in dataseries.channels.keys()]
+            options["epoch"] = [(name, name) for name in dataseries.epochs.keys()]
+
+        if dataseries is not None:
+            selection_container = dataseries.epochs
+            group_container = dataseries.epochs
+        elif data is not None:
+            selection_container = context.data
+            data_series = data._dataseries
+            if data_series is None:
+                parsed_name = nm_utilities.parse_data_name(data.name)
+                if parsed_name is not None:
+                    prefix, _, _ = parsed_name
+                    if prefix in context.dataseries:
+                        data_series = context.dataseries[prefix]
+            group_container = data_series.epochs if data_series is not None else None
+        else:
+            selection_container = context.data
+            group_container = None
+        options["set"] = [
+            (name, name) for name in selection_container.sets.keys()
+        ]
+        if group_container is not None:
+            options["group"] = [
+                (str(number), number)
+                for number in group_container.groups.group_numbers
+            ]
+        if selection.get("set") is not None and selection.get("group") is not None:
+            options["group_operator"] = [("AND", "AND"), ("OR", "OR")]
+        return options
+
+    @staticmethod
+    def _set_combo_options(
+        combo: QtWidgets.QComboBox,
+        options: list[tuple[str, object]],
+        selected,
+    ) -> None:
+        if hasattr(selected, "name"):
+            selected = selected.name
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("", None)
+        for text, value in options:
+            combo.addItem(text, value)
+        selected_index = combo.findData(selected)
+        combo.setCurrentIndex(max(selected_index, 0))
+        combo.setEnabled(bool(options))
+        combo.blockSignals(False)
 
 
 class ToolRail(QtWidgets.QWidget):
@@ -168,6 +296,8 @@ class PlotPanel(QtWidgets.QWidget):
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
+        self.selection_label = QtWidgets.QLabel("No selection", self)
+        layout.addWidget(self.selection_label)
 
         if pg is not None:
             self.plot_widget = pg.PlotWidget(self)
@@ -183,6 +313,20 @@ class PlotPanel(QtWidgets.QWidget):
             label.setWordWrap(True)
             label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(label)
+
+    def bind_selection_model(self, model: SelectionModel) -> None:
+        model.selection_changed.connect(self.update_selection)
+        self.update_selection(model.selection)
+
+    def update_selection(self, selection: dict) -> None:
+        selected = [
+            value.name if hasattr(value, "name") else str(value)
+            for value in selection.values()
+            if value is not None
+        ]
+        self.selection_label.setText(
+            "Selection: " + " / ".join(selected) if selected else "No selection"
+        )
 
 
 class NMAppWindow(QtWidgets.QMainWindow):
@@ -201,6 +345,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def __init__(self, manager: NMManager | None = None, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._manager = manager or NMManager(quiet=True)
+        self.selection_model = SelectionModel(self._manager, self)
         self.current_tool_name = "Browser"
 
         self.setWindowTitle("pyNeuroMatic")
@@ -210,6 +355,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self._build_selection_strip()
         self._build_tool_shell()
         self._build_history_panel()
+        self.selection_model.selection_changed.connect(self._append_selection_history)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("File")
@@ -234,6 +380,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def _build_selection_strip(self) -> None:
         self.selection_strip = SelectionStrip(self)
+        self.selection_strip.bind_selection_model(self.selection_model)
         self.setMenuWidget(self.selection_strip)
 
     def _build_tool_shell(self) -> None:
@@ -243,6 +390,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.tool_workspace = QtWidgets.QStackedWidget(self)
         if self._manager is not None:
             browser_widget = FolderBrowserWidget(self._manager, self.tool_workspace)
+            browser_widget.selection_requested.connect(self._on_browser_selection_requested)
+            browser_widget.content_changed.connect(self.selection_strip.refresh_options)
         else:
             browser_widget = QtWidgets.QTreeWidget()
             browser_widget.setHeaderLabels(["Browser"])
@@ -257,6 +406,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.context_panel = QtWidgets.QTabWidget(self)
         self.context_panel.setTabsClosable(False)
         self.plot_widget = PlotPanel(self.context_panel)
+        self.plot_widget.bind_selection_model(self.selection_model)
         self.context_panel.addTab(self.plot_widget, "Plot")
         # Future: Inspector tab reserved for later development.
         self.context_panel.setMinimumWidth(280)
@@ -302,6 +452,27 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.current_tool_name = tool_name
         idx = self.tool_rail.index_for_name(tool_name)
         self.tool_workspace.setCurrentIndex(idx)
+
+    def _on_browser_selection_requested(self, selection: dict) -> None:
+        obj = selection.get("object")
+        set_name = selection.get("set")
+        if obj is None:
+            self.selection_model.clear()
+            if set_name is not None:
+                self.selection_model.update(set=set_name)
+            return
+        changes = {"set": set_name}
+        changes[SelectionModel.tier_for_object(obj)] = obj
+        self.selection_model.update(changes)
+
+    def _append_selection_history(self, selection: dict) -> None:
+        selected = [
+            value.name if hasattr(value, "name") else str(value)
+            for value in selection.values()
+            if value is not None
+        ]
+        summary = " / ".join(selected) if selected else "cleared"
+        self.history_panel.appendPlainText(f"Selection: {summary}")
 
     @property
     def tool_names(self) -> list[str]:

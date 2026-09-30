@@ -323,6 +323,12 @@ class TestNMGroupsGroupNumbers(unittest.TestCase):
         g = NMGroups()
         self.assertEqual(g.group_numbers, [])
 
+    def test_add_empty_group(self):
+        g = NMGroups()
+        g.add_group(4, quiet=QUIET)
+        self.assertEqual(g.group_numbers, [4])
+        self.assertEqual(g.get_items(4), [])
+
     def test_group_numbers_after_unassign(self):
         g, _ = _make_groups(n=3)   # groups 0, 1, 2
         g.unassign("E2", quiet=QUIET)   # group 2 now empty

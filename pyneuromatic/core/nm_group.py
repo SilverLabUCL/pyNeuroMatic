@@ -31,7 +31,8 @@ class NMGroups:
     """Mutually exclusive integer group assignments for container item names.
 
     Stores a mapping ``{item_name: group_number}`` where each name belongs
-    to at most one group.  Group numbers are non-negative integers.
+    to at most one group, along with explicitly created group numbers that
+    may not have any members yet. Group numbers are non-negative integers.
 
     Typical use case — a repeating I-V relation of *n* voltage steps::
 
@@ -57,6 +58,7 @@ class NMGroups:
         self._name = name
         self._parent = parent
         self._map: dict[str, int] = {}  # item_name → group_number
+        self._declared_groups: set[int] = set()
 
     # ------------------------------------------------------------------
     # Identity / dunder
@@ -97,10 +99,17 @@ class NMGroups:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NMGroups):
             return NotImplemented
-        return self._map == other._map
+        return (
+            self._map == other._map
+            and self._declared_groups == other._declared_groups
+        )
 
     def __repr__(self) -> str:
-        return "%s(%r)" % (self.__class__.__name__, dict(self._map))
+        return "%s(%r, groups=%r)" % (
+            self.__class__.__name__,
+            dict(self._map),
+            self.group_numbers,
+        )
 
     def __deepcopy__(self, memo: dict) -> "NMGroups":
         cls = self.__class__
@@ -109,6 +118,7 @@ class NMGroups:
         result._name = self._name
         result._parent = None   # parent reference not copied (same pattern as NMSets)
         result._map = dict(self._map)   # str→int: shallow copy is sufficient
+        result._declared_groups = set(self._declared_groups)
         return result
 
     def copy(self) -> "NMGroups":
@@ -131,6 +141,18 @@ class NMGroups:
 
     # ------------------------------------------------------------------
     # Core operations
+
+    def add_group(
+        self,
+        group: int,
+        quiet: bool = nmc.QUIET,
+    ) -> None:
+        """Create an empty group with the given non-negative number."""
+        self._check_group(group)
+        if group in self.group_numbers:
+            raise ValueError("group %d already exists" % group)
+        self._declared_groups.add(group)
+        nmh.history("groups: created group %d" % group, path=self.path_str, quiet=quiet)
 
     def assign(
         self,
@@ -269,9 +291,10 @@ class NMGroups:
         Args:
             quiet: Suppress history output.
         """
-        if not self._map:
+        if not self._map and not self._declared_groups:
             return
         self._map.clear()
+        self._declared_groups.clear()
         nmh.history(
             "groups: cleared all assignments",
             path=self.path_str,
@@ -296,8 +319,8 @@ class NMGroups:
 
     @property
     def group_numbers(self) -> list[int]:
-        """Sorted list of distinct group numbers currently assigned."""
-        return sorted(set(self._map.values()))
+        """Sorted group numbers, including empty groups created explicitly."""
+        return sorted(set(self._map.values()).union(self._declared_groups))
 
     @property
     def n_groups(self) -> int:

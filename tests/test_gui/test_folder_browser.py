@@ -91,6 +91,17 @@ class TestSelectionIsPureNavigation:
         widget.tree.setCurrentIndex(rec_a0)
         assert widget.tree.currentIndex() == rec_a0
 
+    def test_navigation_does_not_request_global_selection(self, widget, folder):
+        requests = []
+        widget.selection_requested.connect(requests.append)
+        model = widget.model
+        data_group = _find(model, _folder0(model), "Data")
+        rec_a0 = _find(model, data_group, "RecordA0")
+
+        widget.tree.setCurrentIndex(rec_a0)
+
+        assert requests == []
+
 
 class TestActivated:
     def test_activated_does_not_raise(self, widget):
@@ -409,14 +420,113 @@ class TestTreeContextMenu:
 
         assert "FirstSet" in folder.data.sets.keys()
 
-    def test_no_menu_for_object_row(self, widget, monkeypatch):
-        # NMFolder rows aren't group nodes - nothing to add to directly.
+    def test_new_group_creates_empty_numbered_group(self, widget, folder, monkeypatch):
+        dataseries_group = _find(widget.model, _folder0(widget.model), "Data Series")
+        record = _find(widget.model, dataseries_group, "Record")
+        epochs_group = _find(widget.model, record, "Epochs")
+        widget.tree.setCurrentIndex(epochs_group)
+        pos = widget.tree.visualRect(epochs_group).center()
+        captured = self._captured_menu(monkeypatch)
+        content_changes = []
+        widget.content_changed.connect(lambda: content_changes.append(True))
+        dialog_arguments = {}
+
+        def get_group_count(*args, **kwargs):
+            dialog_arguments.update(kwargs)
+            return 3, True
+
+        monkeypatch.setattr(
+            QtWidgets.QInputDialog,
+            "getInt",
+            staticmethod(get_group_count),
+        )
+
+        widget._show_tree_context_menu(pos)
+
+        actions = captured["menu"].actions()
+        assert [action.text() for action in actions] == [
+            "New...",
+            "New Set...",
+            "New Group...",
+        ]
+        actions[-1].trigger()
+
+        groups = folder.dataseries["Record"].epochs.groups
+        assert dialog_arguments["min"] == 1
+        assert groups.group_numbers == [0, 1, 2]
+        assert all(groups.get_items(number) == [] for number in range(3))
+        assert content_changes == [True]
+
+    def test_add_selected_epochs_to_group(self, widget, folder, monkeypatch):
+        dataseries_group = _find(widget.model, _folder0(widget.model), "Data Series")
+        record = _find(widget.model, dataseries_group, "Record")
+        epochs_group = _find(widget.model, record, "Epochs")
+        epoch_container = folder.dataseries["Record"].epochs
+        epoch_container.groups.add_group(3, quiet=True)
+        widget.tree.setCurrentIndex(epochs_group)
+        _select_row(widget, epochs_group, "E0")
+        captured = self._captured_menu(monkeypatch)
+
+        widget._show_detail_context_menu(QtCore.QPoint(0, 0))
+
+        add_to_group = next(
+            action.menu()
+            for action in captured["menu"].actions()
+            if action.text() == "Add to Group"
+        )
+        assert [action.text() for action in add_to_group.actions()] == ["Group 3"]
+        add_to_group.actions()[0].trigger()
+
+        assert epoch_container.groups.get_group("E0") == 3
+
+    def test_assigning_epoch_moves_it_between_groups(self, widget, folder, monkeypatch):
+        dataseries_group = _find(widget.model, _folder0(widget.model), "Data Series")
+        record = _find(widget.model, dataseries_group, "Record")
+        epochs_group = _find(widget.model, record, "Epochs")
+        epoch_container = folder.dataseries["Record"].epochs
+        epoch_container.groups.add_group(0, quiet=True)
+        epoch_container.groups.add_group(1, quiet=True)
+        epoch_container.groups.assign("E0", 0, quiet=True)
+        widget.tree.setCurrentIndex(epochs_group)
+        _select_row(widget, epochs_group, "E0")
+        captured = self._captured_menu(monkeypatch)
+
+        widget._show_detail_context_menu(QtCore.QPoint(0, 0))
+
+        add_to_group = next(
+            action.menu()
+            for action in captured["menu"].actions()
+            if action.text() == "Add to Group"
+        )
+        next(action for action in add_to_group.actions() if action.text() == "Group 1").trigger()
+
+        assert epoch_container.groups.get_group("E0") == 1
+        assert epoch_container.groups.get_items(0) == []
+        assert epoch_container.groups.get_items(1) == ["E0"]
+
+    def test_select_menu_for_object_row(self, widget, monkeypatch):
+        # NMFolder rows aren't editable groups, but can be explicitly selected.
         pos = widget.tree.visualRect(_folder0(widget.model)).center()
         captured = self._captured_menu(monkeypatch)
 
         widget._show_tree_context_menu(pos)
 
-        assert "menu" not in captured
+        assert [action.text() for action in captured["menu"].actions()] == ["Select"]
+
+    def test_select_action_for_object_row(self, widget, monkeypatch):
+        model = widget.model
+        data_group = _find(model, _folder0(model), "Data")
+        record = _find(model, data_group, "RecordA0")
+        pos = widget.tree.visualRect(record).center()
+        captured = self._captured_menu(monkeypatch)
+        requests = []
+        widget.selection_requested.connect(requests.append)
+
+        widget._show_tree_context_menu(pos)
+
+        assert [action.text() for action in captured["menu"].actions()] == ["Select"]
+        captured["menu"].actions()[0].trigger()
+        assert requests == [{"object": record.internalPointer(), "set": None}]
 
     def test_no_menu_for_empty_area(self, widget, monkeypatch):
         captured = self._captured_menu(monkeypatch)
@@ -506,13 +616,13 @@ class TestSetsTreeContextMenu:
         assert [a.text() for a in rename_menu.actions()] == ["Set1"]
         assert [a.text() for a in delete_menu.actions()] == ["Set1"]
 
-    def test_no_menu_for_leaf_row(self, widget, monkeypatch):
+    def test_select_menu_for_leaf_row(self, widget, monkeypatch):
         data_group = _find(widget.model, _folder0(widget.model), "Data")
         rec_a0 = _find(widget.model, data_group, "RecordA0")
         pos = widget.tree.visualRect(rec_a0).center()
         captured = self._captured_menu(monkeypatch)
         widget._show_tree_context_menu(pos)
-        assert "menu" not in captured
+        assert [action.text() for action in captured["menu"].actions()] == ["Select"]
 
 
 class TestSetActions:
