@@ -5,6 +5,8 @@ import pytest
 pytest.importorskip("PyQt6")
 from PyQt6 import QtWidgets
 
+from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.gui.selection_model import SelectionModel
 from pyneuromatic.gui.tool_tab import ToolTabWidget
 
 pytestmark = pytest.mark.gui
@@ -90,3 +92,17 @@ def test_tool_tab_supports_preview_warnings_and_progress(qtbot):
 
     tab.set_preview_widget(None)
     assert tab.preview_group.isHidden()
+
+
+def test_tool_tab_subscribes_to_shared_selection(qtbot):
+    tab = _WorkingToolTab()
+    qtbot.addWidget(tab)
+    selection = SelectionModel(NMManager(quiet=True))
+    updates = []
+    tab.selection_updated.connect(updates.append)
+
+    tab.bind_selection_model(selection)
+    selection.update(set="SetA")
+
+    assert tab.selection["set"] == "SetA"
+    assert updates[-1]["set"] == "SetA"

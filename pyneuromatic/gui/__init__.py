@@ -38,6 +38,7 @@ if GUI_AVAILABLE:
     from pyneuromatic.gui.folder_model import FolderTreeModel
     from pyneuromatic.gui.folder_browser import FolderBrowserWidget
     from pyneuromatic.gui.app_window import NMAppWindow, SelectionStrip, ToolRail
+    from pyneuromatic.gui.selection_model import SelectionModel
     from pyneuromatic.gui.tool_tab import ResultPanel, ToolTabWidget
 
     __all__ = [
@@ -50,6 +51,7 @@ if GUI_AVAILABLE:
         'ToolRail',
         'ResultPanel',
         'ToolTabWidget',
+        'SelectionModel',
     ]
 else:
     __all__ = [

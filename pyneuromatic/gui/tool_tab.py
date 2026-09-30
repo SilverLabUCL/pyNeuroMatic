@@ -40,6 +40,7 @@ class ToolTabWidget(QtWidgets.QWidget):
 
     run_finished = QtCore.pyqtSignal(bool)
     run_failed = QtCore.pyqtSignal(str)
+    selection_updated = QtCore.pyqtSignal(dict)
 
     def __init__(
         self,
@@ -49,6 +50,7 @@ class ToolTabWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self._running = False
         self.warnings: list[str] = []
+        self._selection_model: Any = None
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -89,6 +91,25 @@ class ToolTabWidget(QtWidgets.QWidget):
     def run_tool(self) -> Any:
         """Run this tool and return a value for the shared results panel."""
         raise NotImplementedError("ToolTabWidget subclasses must implement run_tool()")
+
+    @property
+    def selection(self) -> dict[str, Any]:
+        """Current shared selection, or an empty mapping before binding."""
+        if self._selection_model is None:
+            return {}
+        return self._selection_model.selection
+
+    def bind_selection_model(self, model: Any) -> None:
+        if self._selection_model is model:
+            return
+        if self._selection_model is not None:
+            self._selection_model.selection_changed.disconnect(self._on_selection_changed)
+        self._selection_model = model
+        model.selection_changed.connect(self._on_selection_changed)
+        self._on_selection_changed(model.selection)
+
+    def _on_selection_changed(self, selection: dict[str, Any]) -> None:
+        self.selection_updated.emit(selection)
 
     def set_preview_widget(self, widget: QtWidgets.QWidget | None) -> None:
         while self.preview_layout.count():
