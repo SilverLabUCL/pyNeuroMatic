@@ -32,7 +32,6 @@ class SelectionStrip(QtWidgets.QWidget):
         "Data",
         "Data Series",
         "Channel",
-        "Epoch",
         "Set",
         "Operator",
         "Group",
@@ -42,7 +41,6 @@ class SelectionStrip(QtWidgets.QWidget):
         "Data": "data",
         "Data Series": "dataseries",
         "Channel": "channel",
-        "Epoch": "epoch",
         "Set": "set",
         "Operator": "group_operator",
         "Group": "group",
@@ -52,7 +50,6 @@ class SelectionStrip(QtWidgets.QWidget):
         "Data": 16,
         "Data Series": 14,
         "Channel": 4,
-        "Epoch": 4,
         "Set": 8,
         "Operator": 4,
         "Group": 3,
@@ -290,7 +287,7 @@ class _PlaceholderToolWidget(QtWidgets.QWidget):
 
 
 class PlotPanel(QtWidgets.QWidget):
-    """Simple plot panel for the right-hand context area."""
+    """Plot panel with a trace navigator for data and dataseries modes."""
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -299,22 +296,76 @@ class PlotPanel(QtWidgets.QWidget):
         self.selection_label = QtWidgets.QLabel("No selection", self)
         layout.addWidget(self.selection_label)
 
+        navigator_layout = QtWidgets.QHBoxLayout()
+        self.trace_previous_button = QtWidgets.QToolButton(self)
+        self.trace_previous_button.setArrowType(QtCore.Qt.ArrowType.LeftArrow)
+        self.trace_previous_button.setToolTip("Previous trace")
+        self.trace_previous_button.setFixedSize(28, 28)
+        navigator_layout.addWidget(self.trace_previous_button)
+
+        self.trace_index = QtWidgets.QSpinBox(self)
+        self.trace_index.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.trace_index.setFixedWidth(72)
+        self.trace_index.setRange(0, 0)
+        navigator_layout.addWidget(self.trace_index)
+
+        self.trace_count_label = QtWidgets.QLabel("of 0", self)
+        navigator_layout.addWidget(self.trace_count_label)
+
+        self.trace_next_button = QtWidgets.QToolButton(self)
+        self.trace_next_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        self.trace_next_button.setToolTip("Next trace")
+        self.trace_next_button.setFixedSize(28, 28)
+        navigator_layout.addWidget(self.trace_next_button)
+
+        self.trace_name_label = QtWidgets.QLabel("No trace", self)
+        navigator_layout.addWidget(self.trace_name_label, stretch=1)
+        layout.addLayout(navigator_layout)
+
+        overlay_layout = QtWidgets.QHBoxLayout()
+        self.overlay_checkbox = QtWidgets.QCheckBox("Overlay traces", self)
+        self.overlay_checkbox.setToolTip(
+            "Plot nearby epochs together for the selected data series and channel"
+        )
+        overlay_layout.addWidget(self.overlay_checkbox)
+        overlay_layout.addWidget(QtWidgets.QLabel("Limit", self))
+        self.overlay_limit = QtWidgets.QSpinBox(self)
+        self.overlay_limit.setRange(1, 2000)
+        self.overlay_limit.setValue(50)
+        self.overlay_limit.setFixedWidth(72)
+        overlay_layout.addWidget(self.overlay_limit)
+        self.overlay_status_label = QtWidgets.QLabel("", self)
+        overlay_layout.addWidget(self.overlay_status_label, stretch=1)
+        layout.addLayout(overlay_layout)
+
+        self._selection_model: SelectionModel | None = None
+        self._trace_entries: list[tuple[object, object | None]] = []
+        self._trace_mode: str | None = None
+        self._updating_navigator = False
+        self.current_trace = None
+        self.rendered_trace_count = 0
+        self.trace_index.valueChanged.connect(self._on_trace_index_changed)
+        self.trace_previous_button.clicked.connect(lambda: self._step_trace(-1))
+        self.trace_next_button.clicked.connect(lambda: self._step_trace(1))
+        self.overlay_checkbox.toggled.connect(self._render_current_traces)
+        self.overlay_limit.valueChanged.connect(self._render_current_traces)
+
         if pg is not None:
             self.plot_widget = pg.PlotWidget(self)
             self.plot_widget.setBackground("w")
             self.plot_widget.setTitle("Preview")
-            x = [i / 20.0 for i in range(200)]
-            y = [sin(value) for value in x]
-            self.plot_widget.plot(x, y, pen={"color": "#3b82f6", "width": 2})
             layout.addWidget(self.plot_widget)
         else:
             self.plot_widget = None
-            label = QtWidgets.QLabel("Plot view unavailable. Install pyqtgraph to enable preview plots.")
-            label.setWordWrap(True)
-            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(label)
+            self.plot_fallback_label = QtWidgets.QLabel(
+                "Plot view unavailable. Install pyqtgraph to enable preview plots."
+            )
+            self.plot_fallback_label.setWordWrap(True)
+            self.plot_fallback_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(self.plot_fallback_label)
 
     def bind_selection_model(self, model: SelectionModel) -> None:
+        self._selection_model = model
         model.selection_changed.connect(self.update_selection)
         self.update_selection(model.selection)
 
@@ -327,6 +378,151 @@ class PlotPanel(QtWidgets.QWidget):
         self.selection_label.setText(
             "Selection: " + " / ".join(selected) if selected else "No selection"
         )
+        self._update_trace_entries(selection)
+
+    def _update_trace_entries(self, selection: dict) -> None:
+        entries: list[tuple[object, object | None]] = []
+        mode = None
+        current_item = None
+
+        data = selection.get("data")
+        dataseries = selection.get("dataseries")
+        if data is not None:
+            folder = selection.get("folder")
+            context = selection.get("toolfolder") or folder
+            if context is not None:
+                entries = [(item, item) for item in context.data.values()]
+                mode = "data"
+                current_item = data
+        elif dataseries is not None:
+            channel = selection.get("channel")
+            if channel is None:
+                channel = dataseries.channels.selected_value
+            if channel is None and dataseries.channels.values():
+                channel = dataseries.channels.values()[0]
+            if channel is not None:
+                entries = [
+                    (epoch, dataseries.get_data(channel=channel.name, epoch=epoch.name))
+                    for epoch in dataseries.epochs.values()
+                ]
+                mode = "dataseries"
+                current_item = selection.get("epoch") or dataseries.epochs.selected_value
+
+        self._trace_entries = entries
+        self._trace_mode = mode
+        if not entries:
+            self._sync_trace_controls(0)
+            self.trace_name_label.setText("No trace")
+            self.current_trace = None
+            self._render_current_traces()
+            return
+
+        current_index = next(
+            (index for index, (item, _) in enumerate(entries) if item is current_item),
+            0,
+        )
+        self._sync_trace_controls(current_index)
+        item, self.current_trace = entries[current_index]
+        self.trace_name_label.setText(
+            self.current_trace.name
+            if self.current_trace is not None
+            else f"{item.name} (no data)"
+        )
+        self._render_current_traces()
+
+    def _sync_trace_controls(self, current_value: int) -> None:
+        count = len(self._trace_entries)
+        self._updating_navigator = True
+        self.trace_index.setRange(0, count - 1) if count else self.trace_index.setRange(0, 0)
+        if count:
+            self.trace_index.setValue(current_value)
+        self.trace_index.setEnabled(count > 0)
+        self.trace_count_label.setText(f"of {count}")
+        self.trace_previous_button.setEnabled(current_value > 0 and count > 0)
+        self.trace_next_button.setEnabled(current_value < count - 1 and count > 0)
+        can_overlay = self._trace_mode == "dataseries" and self.plot_widget is not None
+        self.overlay_checkbox.setEnabled(can_overlay)
+        self.overlay_limit.setEnabled(can_overlay and self.overlay_checkbox.isChecked())
+        self._updating_navigator = False
+
+    def _step_trace(self, delta: int) -> None:
+        if self.trace_index.isEnabled():
+            self.trace_index.setValue(self.trace_index.value() + delta)
+
+    def _on_trace_index_changed(self, value: int) -> None:
+        if self._updating_navigator or self._selection_model is None:
+            return
+        index = value
+        if not 0 <= index < len(self._trace_entries):
+            return
+        item, data = self._trace_entries[index]
+        if self._trace_mode == "data":
+            self._selection_model.update(data=item)
+        elif self._trace_mode == "dataseries":
+            self._selection_model.update(epoch=item)
+
+    def _render_current_traces(self, *_args) -> None:
+        if self.plot_widget is None:
+            return
+        self.plot_widget.clear()
+        self.rendered_trace_count = 0
+
+        if not self._trace_entries:
+            self.trace_count_label.setText("of 0")
+            self.overlay_status_label.setText("")
+            self.plot_widget.setTitle("Preview")
+            return
+
+        current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
+        overlay = self.overlay_checkbox.isChecked() and self._trace_mode == "dataseries"
+        if overlay:
+            total = len(self._trace_entries)
+            limit = min(self.overlay_limit.value(), total)
+            first_index = max(0, min(current_index - limit // 2, total - limit))
+            last_index = first_index + limit
+            entries = self._trace_entries[first_index:last_index]
+            self.overlay_status_label.setText(f"Showing {len(entries)} of {total} traces")
+        else:
+            entries = [self._trace_entries[current_index]]
+            self.overlay_status_label.setText("")
+
+        current_data = self._trace_entries[current_index][1]
+        if current_data is not None:
+            self.plot_widget.setLabel(
+                "bottom", current_data.xscale.label, units=current_data.xscale.units
+            )
+            self.plot_widget.setLabel(
+                "left", current_data.yscale.label, units=current_data.yscale.units
+            )
+
+        for item, data in entries:
+            if data is None or data.nparray is None:
+                continue
+            x_values = self._x_values(data)
+            is_current = item is self._trace_entries[current_index][0]
+            color = "#2563eb" if is_current else "#78909c"
+            width = 2 if is_current else 1
+            curve = self.plot_widget.plot(
+                x_values,
+                data.nparray,
+                pen=pg.mkPen(color=color, width=width, alpha=255 if is_current else 150),
+            )
+            curve.setDownsampling(auto=True, method="peak")
+            curve.setClipToView(True)
+            self.rendered_trace_count += 1
+
+        selected_item = self._trace_entries[current_index][0]
+        suffix = " (overlay)" if overlay else ""
+        self.plot_widget.setTitle(f"{selected_item.name}{suffix}")
+
+    @staticmethod
+    def _x_values(data):
+        if data.xarray is not None:
+            return data.xarray
+        x_values = [data.get_xvalue(index) for index in range(data.nparray.size)]
+        if any(value is None for value in x_values):
+            return list(range(data.nparray.size))
+        return x_values
 
 
 class NMAppWindow(QtWidgets.QMainWindow):
