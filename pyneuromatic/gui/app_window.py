@@ -296,6 +296,14 @@ class PlotPanel(QtWidgets.QWidget):
         self.selection_label = QtWidgets.QLabel("No selection", self)
         layout.addWidget(self.selection_label)
 
+        self.channel_tabs = QtWidgets.QTabBar(self)
+        self.channel_tabs.setShape(QtWidgets.QTabBar.Shape.RoundedNorth)
+        self.channel_tabs.setUsesScrollButtons(True)
+        self.channel_tabs.setExpanding(False)
+        self.channel_tabs.currentChanged.connect(self._on_plot_channel_changed)
+        self.channel_tabs.hide()
+        layout.addWidget(self.channel_tabs)
+
         navigator_layout = QtWidgets.QHBoxLayout()
         self.trace_previous_button = QtWidgets.QToolButton(self)
         self.trace_previous_button.setArrowType(QtCore.Qt.ArrowType.LeftArrow)
@@ -342,6 +350,10 @@ class PlotPanel(QtWidgets.QWidget):
         self._trace_entries: list[tuple[object, object | None]] = []
         self._trace_mode: str | None = None
         self._updating_navigator = False
+        self._updating_channel_tabs = False
+        self._plot_dataseries = None
+        self._plot_channel_name: str | None = None
+        self._last_selection: dict = {}
         self.current_trace = None
         self.rendered_trace_count = 0
         self.trace_index.valueChanged.connect(self._on_trace_index_changed)
@@ -370,6 +382,7 @@ class PlotPanel(QtWidgets.QWidget):
         self.update_selection(model.selection)
 
     def update_selection(self, selection: dict) -> None:
+        self._last_selection = selection.copy()
         selected = [
             value.name if hasattr(value, "name") else str(value)
             for value in selection.values()
@@ -378,7 +391,50 @@ class PlotPanel(QtWidgets.QWidget):
         self.selection_label.setText(
             "Selection: " + " / ".join(selected) if selected else "No selection"
         )
+        self._update_channel_tabs(selection)
         self._update_trace_entries(selection)
+
+    def _update_channel_tabs(self, selection: dict) -> None:
+        dataseries = selection.get("dataseries")
+        if dataseries is None:
+            self.channel_tabs.hide()
+            self._plot_dataseries = None
+            self._plot_channel_name = None
+            return
+
+        channel_names = list(dataseries.channels.keys())
+        previous_channel = self._plot_channel_name
+        if previous_channel not in channel_names:
+            selected_channel = selection.get("channel")
+            selected_name = selected_channel.name if selected_channel is not None else None
+            previous_channel = (
+                selected_name if selected_name in channel_names
+                else channel_names[0] if channel_names else None
+            )
+
+        current_names = [
+            self.channel_tabs.tabText(index)
+            for index in range(self.channel_tabs.count())
+        ]
+        self._updating_channel_tabs = True
+        if current_names != channel_names:
+            while self.channel_tabs.count():
+                self.channel_tabs.removeTab(0)
+            for name in channel_names:
+                self.channel_tabs.addTab(name)
+        if previous_channel in channel_names:
+            self.channel_tabs.setCurrentIndex(channel_names.index(previous_channel))
+        self.channel_tabs.setVisible(bool(channel_names))
+        self._updating_channel_tabs = False
+
+        self._plot_dataseries = dataseries
+        self._plot_channel_name = previous_channel
+
+    def _on_plot_channel_changed(self, index: int) -> None:
+        if self._updating_channel_tabs or index < 0:
+            return
+        self._plot_channel_name = self.channel_tabs.tabText(index)
+        self._update_trace_entries(self._last_selection)
 
     def _update_trace_entries(self, selection: dict) -> None:
         entries: list[tuple[object, object | None]] = []
@@ -395,7 +451,9 @@ class PlotPanel(QtWidgets.QWidget):
                 mode = "data"
                 current_item = data
         elif dataseries is not None:
-            channel = selection.get("channel")
+            channel = dataseries.channels.get(self._plot_channel_name)
+            if channel is None:
+                channel = selection.get("channel")
             if channel is None:
                 channel = dataseries.channels.selected_value
             if channel is None and dataseries.channels.values():

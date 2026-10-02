@@ -57,10 +57,6 @@ def test_plot_trace_navigator_steps_data_and_series(qtbot, nm):
     assert navigator.trace_index.minimum() == 0
     assert navigator.trace_index.maximum() == 1
     assert navigator.trace_name_label.text() == "RecordA0"
-    assert "Epoch" not in [
-        win.selection_strip.combo_label(index)
-        for index in range(win.selection_strip.count())
-    ]
 
     navigator.trace_next_button.click()
     assert nm.select_values["data"] is folder.data["RecordA1"]
@@ -75,6 +71,65 @@ def test_plot_trace_navigator_steps_data_and_series(qtbot, nm):
     navigator.trace_previous_button.click()
     assert nm.select_values["epoch"] is dataseries.epochs["E0"]
     assert navigator.trace_name_label.text() == "RecordA0"
+
+
+def test_plot_channel_tabs_are_independent_of_analysis_channel(qtbot, nm):
+    folder = nm.folders.new("Demo", select=False)
+    for channel in ("A", "B"):
+        for epoch in range(2):
+            folder.data.new(
+                f"Record{channel}{epoch}",
+                nparray=np.array([epoch + (0 if channel == "A" else 10), 1.0]),
+                xscale={"start": 0.0, "delta": 1.0},
+                yscale={"label": "Vm", "units": "mV"},
+            )
+    folder.data.new(
+        "StimA0",
+        nparray=np.array([2.0, 3.0]),
+        xscale={"start": 0.0, "delta": 1.0},
+        yscale={"label": "Current", "units": "pA"},
+    )
+    dataseries = folder.sync_dataseries("Record", select=True)
+    stim = folder.sync_dataseries("Stim")
+    win = NMAppWindow(nm)
+    qtbot.addWidget(win)
+    plot = win.plot_widget
+    if plot.plot_widget is None:
+        pytest.skip("pyqtgraph is not installed")
+
+    analysis_channel = nm.select_values["channel"]
+    assert [plot.channel_tabs.tabText(i) for i in range(plot.channel_tabs.count())] == [
+        "A", "B"
+    ]
+    assert plot.channel_tabs.currentIndex() == 0
+
+    plot.channel_tabs.setCurrentIndex(1)
+
+    assert nm.select_values["channel"] is analysis_channel
+    assert plot.current_trace is dataseries.get_data(channel="B", epoch="E0")
+    assert plot.trace_name_label.text() == "RecordB0"
+
+    plot.trace_index.setValue(1)
+    assert nm.select_values["channel"] is analysis_channel
+    assert plot.current_trace is dataseries.get_data(channel="B", epoch="E1")
+    assert plot.plot_widget.getPlotItem().listDataItems()
+    assert "Epoch" not in [
+        win.selection_strip.combo_label(index)
+        for index in range(win.selection_strip.count())
+    ]
+
+    win.selection_model.update(dataseries=stim)
+    assert nm.select_values["dataseries"] is stim
+    assert [plot.channel_tabs.tabText(i) for i in range(plot.channel_tabs.count())] == ["A"]
+    assert plot.channel_tabs.tabText(plot.channel_tabs.currentIndex()) == "A"
+    assert plot.current_trace is stim.get_data(channel="A", epoch="E0")
+
+    win.selection_model.update(dataseries=dataseries)
+    assert [plot.channel_tabs.tabText(i) for i in range(plot.channel_tabs.count())] == [
+        "A", "B"
+    ]
+    assert plot.channel_tabs.tabText(plot.channel_tabs.currentIndex()) == "A"
+    assert nm.select_values["channel"].name == "A"
 
 
 def test_plot_overlay_limits_and_downsamples_traces(qtbot, nm):
@@ -186,6 +241,14 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
         xscale={"start": 0.0, "delta": 1.0},
     )
     folder2.data.new(
+        "GammaA1", nparray=np.array([8.0, 9.0]),
+        xscale={"start": 0.0, "delta": 1.0},
+    )
+    folder2.data.new(
+        "GammaB0", nparray=np.array([9.0, 10.0]),
+        xscale={"start": 0.0, "delta": 1.0},
+    )
+    folder2.data.new(
         "GammaB1", nparray=np.array([9.0, 10.0]),
         xscale={"start": 0.0, "delta": 1.0},
     )
@@ -227,7 +290,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert nm.select_values["folder"] is folder2
     assert nm.select_values["data"] is None
     assert nm.select_values["dataseries"] is folder2.dataseries["Gamma"]
-    assert _combo_values(data_menu) == ["", "GammaA0", "GammaB1"]
+    assert _combo_values(data_menu) == ["", "GammaA0", "GammaA1", "GammaB0", "GammaB1"]
     assert _combo_values(series_menu) == ["", "Gamma"]
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA0"
@@ -269,7 +332,8 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     folder_menu.setCurrentText("Demo2")
     assert data_menu.currentText() == ""
     assert series_menu.currentText() == "Gamma"
-    assert win.plot_widget.trace_name_label.text() == "GammaB1"
+    assert win.plot_widget.channel_tabs.tabText(win.plot_widget.channel_tabs.currentIndex()) == "A"
+    assert win.plot_widget.trace_name_label.text() == "GammaA1"
     assert set_menu.currentText() == "Demo2Set"
     assert group_menu.currentText() == "0"
     assert operator_menu.currentText() == "OR"
