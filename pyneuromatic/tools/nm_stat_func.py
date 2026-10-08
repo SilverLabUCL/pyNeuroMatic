@@ -168,6 +168,18 @@ class NMStatFunc:
             r["Δs"] = ds
         return ds
 
+    @staticmethod
+    def _pct_level(
+        name: str, pct: float, ds: float, bsln_result: dict,
+    ) -> dict[str, Any]:
+        """Level func dict for the crossing *pct*% of the way from baseline to peak.
+
+        Δs is the peak height above baseline, so the absolute threshold is
+        ``baseline + pct% * Δs``. A new dict is returned for every call so each
+        result records its own ``ylevel``.
+        """
+        return {"name": name, "ylevel": bsln_result["s"] + 0.01 * pct * ds}
+
     def _params_str(self) -> str:
         """Return constructor args as a string for command history logging.
 
@@ -471,10 +483,10 @@ class NMStatFuncRiseTime(NMStatFunc):
         # Peak stat
         if "+" in f:
             peak_func: dict[str, Any] = {"name": "max"}
-            flevel: dict[str, Any] = {"name": "level+"}
+            flevel = "level+"
         else:
             peak_func = {"name": "min"}
-            flevel = {"name": "level-"}
+            flevel = "level-"
 
         r = run_stat(data, peak_func, f, xbgn, xend, ignore_nans)
         ds = self._add_ds(r, bsln_result)
@@ -485,13 +497,13 @@ class NMStatFuncRiseTime(NMStatFunc):
 
         peak_x = r["x"]
 
-        flevel["ylevel"] = 0.01 * self._p0 * ds
-        r0 = run_stat(data, flevel, f, xbgn, peak_x, ignore_nans,
+        level0 = self._pct_level(flevel, self._p0, ds, bsln_result)
+        r0 = run_stat(data, level0, f, xbgn, peak_x, ignore_nans,
                       p0=self._p0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
 
-        flevel["ylevel"] = 0.01 * self._p1 * ds
-        r1 = run_stat(data, flevel, f, xbgn, peak_x, ignore_nans,
+        level1 = self._pct_level(flevel, self._p1, ds, bsln_result)
+        r1 = run_stat(data, level1, f, xbgn, peak_x, ignore_nans,
                       p1=self._p1)
         r1_error = "x" not in r1 or badvalue(r1["x"])
 
@@ -594,10 +606,10 @@ class NMStatFuncFallTime(NMStatFunc):
         # Peak stat
         if "+" in f:
             peak_func: dict[str, Any] = {"name": "max"}
-            flevel: dict[str, Any] = {"name": "level-"}  # opposite sign
+            flevel = "level-"  # opposite sign
         else:
             peak_func = {"name": "min"}
-            flevel = {"name": "level+"}  # opposite sign
+            flevel = "level+"  # opposite sign
 
         r = run_stat(data, peak_func, f, xbgn, xend, ignore_nans)
         ds = self._add_ds(r, bsln_result)
@@ -608,15 +620,15 @@ class NMStatFuncFallTime(NMStatFunc):
 
         peak_x = r["x"]
 
-        flevel["ylevel"] = 0.01 * self._p0 * ds
-        r0 = run_stat(data, flevel, f, peak_x, xend, ignore_nans,
+        level0 = self._pct_level(flevel, self._p0, ds, bsln_result)
+        r0 = run_stat(data, level0, f, peak_x, xend, ignore_nans,
                       p0=self._p0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
         if r0_error:
             r0["error"] = "unable to locate p0 level"
 
-        flevel["ylevel"] = 0.01 * self._p1 * ds
-        r1 = run_stat(data, flevel, f, peak_x, xend, ignore_nans,
+        level1 = self._pct_level(flevel, self._p1, ds, bsln_result)
+        r1 = run_stat(data, level1, f, peak_x, xend, ignore_nans,
                       p1=self._p1)
         r1_error = "x" not in r1 or badvalue(r1["x"])
 
@@ -694,10 +706,10 @@ class NMStatFuncDecayTime(NMStatFunc):
         # Peak stat
         if "+" in f:
             peak_func: dict[str, Any] = {"name": "max"}
-            flevel: dict[str, Any] = {"name": "level-"}  # opposite sign
+            flevel = "level-"  # opposite sign
         else:
             peak_func = {"name": "min"}
-            flevel = {"name": "level+"}  # opposite sign
+            flevel = "level+"  # opposite sign
 
         r = run_stat(data, peak_func, f, xbgn, xend, ignore_nans)
         ds = self._add_ds(r, bsln_result)
@@ -708,8 +720,8 @@ class NMStatFuncDecayTime(NMStatFunc):
 
         peak_x = r["x"]
 
-        flevel["ylevel"] = 0.01 * self._p0 * ds
-        r0 = run_stat(data, flevel, f, peak_x, xend, ignore_nans,
+        level0 = self._pct_level(flevel, self._p0, ds, bsln_result)
+        r0 = run_stat(data, level0, f, peak_x, xend, ignore_nans,
                       p0=self._p0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
         if r0_error:
@@ -807,32 +819,32 @@ class NMStatFuncFWHM(NMStatFunc):
             return
 
         if "+" in f:
-            flevel1: dict[str, Any] = {"name": "level+"}
-            flevel2: dict[str, Any] = {"name": "level-"}  # opposite sign
+            flevel1 = "level+"
+            flevel2 = "level-"  # opposite sign
         else:
-            flevel1 = {"name": "level-"}
-            flevel2 = {"name": "level+"}  # opposite sign
+            flevel1 = "level-"
+            flevel2 = "level+"  # opposite sign
 
         w = None
         if self._p0 != 50 or self._p1 != 50:
             w = "unusual fwhm %% values: %s-%s" % (self._p0, self._p1)
 
-        flevel1["ylevel"] = 0.01 * self._p0 * ds
         peak_x = r["x"]
         extra0: dict[str, Any] = {"p0": self._p0}
         if w:
             extra0["warning"] = w
-        r0 = run_stat(data, flevel1, f, xbgn, peak_x, ignore_nans,
+        level0 = self._pct_level(flevel1, self._p0, ds, bsln_result)
+        r0 = run_stat(data, level0, f, xbgn, peak_x, ignore_nans,
                       **extra0)
         r0_error = "x" not in r0 or badvalue(r0["x"])
         if r0_error:
             r0["error"] = "unable to locate p0 level"
 
-        flevel2["ylevel"] = 0.01 * self._p1 * ds
         extra1: dict[str, Any] = {"p1": self._p1}
         if w:
             extra1["warning"] = w
-        r1 = run_stat(data, flevel2, f, peak_x, xend, ignore_nans,
+        level1 = self._pct_level(flevel2, self._p1, ds, bsln_result)
+        r1 = run_stat(data, level1, f, peak_x, xend, ignore_nans,
                       **extra1)
         r1_error = "x" not in r1 or badvalue(r1["x"])
 
