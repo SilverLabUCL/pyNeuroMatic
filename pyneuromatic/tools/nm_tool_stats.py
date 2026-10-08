@@ -103,6 +103,14 @@ class NMToolStats(NMTool):
         """Return the container of NMStatWin objects for this tool."""
         return self.__win_container
 
+    @property
+    def results(self) -> dict[str, list[list[dict[str, Any]]]]:
+        """Results from the most recent run, grouped by window then data item."""
+        return {
+            window_name: [list(data_results) for data_results in window_results]
+            for window_name, window_results in self.__results.items()
+        }
+
     def _add_note(self, data: NMData, text: str) -> None:
         """Append a note to *data*.notes if available."""
         notes = getattr(data, "notes", None)

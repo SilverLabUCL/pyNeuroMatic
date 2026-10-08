@@ -20,7 +20,7 @@ class ResultPanel(QtWidgets.QWidget):
 
     def set_result(self, result: Any) -> None:
         if isinstance(result, (dict, list, tuple)):
-            text = json.dumps(result, indent=2, default=str)
+            text = json.dumps(result, indent=2, default=str, ensure_ascii=False)
         else:
             text = "" if result is None else str(result)
         self.output.setPlainText(text)
