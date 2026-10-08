@@ -20,6 +20,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core import nm_utilities
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.selection_model import SelectionModel
+from pyneuromatic.gui.stats_tab import StatsToolTab
 
 
 class SelectionStrip(QtWidgets.QWidget):
@@ -654,8 +655,15 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.browser_widget = browser_widget
         self.tool_workspace.addWidget(browser_widget)
 
-        for name in ["Main", "Stats", "Spike"]:
-            self.tool_workspace.addWidget(_PlaceholderToolWidget(name, self.tool_workspace))
+        self.tool_workspace.addWidget(
+            _PlaceholderToolWidget("Main", self.tool_workspace)
+        )
+        self.stats_tab = StatsToolTab(self._manager, self.tool_workspace)
+        self.stats_tab.bind_selection_model(self.selection_model)
+        self.tool_workspace.addWidget(self.stats_tab)
+        self.tool_workspace.addWidget(
+            _PlaceholderToolWidget("Spike", self.tool_workspace)
+        )
 
         self.context_panel = QtWidgets.QTabWidget(self)
         self.context_panel.setTabsClosable(False)

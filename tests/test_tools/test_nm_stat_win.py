@@ -658,5 +658,67 @@ class TestNMStatWinContainer(unittest.TestCase):
             nmsw.NMStatWinContainer.load("/nonexistent/path/wins.toml")
 
 
+class TestPercentLevelsUseBaseline(unittest.TestCase):
+    """Percent levels (rise/fall/decay/FWHM) sit at baseline + p% of Δs.
+
+    A half-sine pulse (baseline 0 to 10 ms, peak 20 at 20 ms) is measured on a
+    zero baseline and again shifted down to -70; the timing must not change.
+    """
+
+    DX = 0.02
+    WIN = {
+        "bsln_on": True,
+        "bsln_func": {"name": "mean"},
+        "bsln_xbgn": 0.0,
+        "bsln_xend": 9.98,
+        "xbgn": 10.0,
+        "xend": 30.0,
+    }
+    FUNCS = (
+        {"name": "risetime+", "p0": 10, "p1": 90},
+        {"name": "falltime+", "p0": 90, "p1": 10},
+        {"name": "decaytime+", "p0": 50},
+        {"name": "fwhm+", "p0": 50, "p1": 50},
+    )
+
+    def _pulse(self, offset):
+        t = np.arange(2001) * self.DX
+        y = np.zeros_like(t)
+        mask = (t >= 10.0) & (t <= 30.0)
+        y[mask] = 20.0 * np.sin(np.pi * (t[mask] - 10.0) / 20.0)
+        return NMData(NM, name="pulse", nparray=y + offset,
+                      xscale={"start": 0.0, "delta": self.DX})
+
+    def _compute(self, func, offset):
+        w = nmsw.NMStatWin("w0")
+        w._win_set(dict(self.WIN, func=dict(func)), quiet=True)
+        return w.compute(self._pulse(offset))
+
+    def test_dx_independent_of_baseline_offset(self):
+        for func in self.FUNCS:
+            with self.subTest(func=func["name"]):
+                dx0 = self._compute(func, 0.0)[-1]["dx"]
+                dx70 = self._compute(func, -70.0)[-1]["dx"]
+                self.assertFalse(math.isnan(dx0))
+                self.assertAlmostEqual(dx70, dx0, places=6)
+
+    def test_levels_are_absolute(self):
+        # peak 20 above a -70 baseline: 10% -> -68, 90% -> -52, 50% -> -60
+        expected = {
+            "risetime+": [-68.0, -52.0],
+            "falltime+": [-52.0, -68.0],
+            "decaytime+": [-60.0],
+            "fwhm+": [-60.0, -60.0],
+        }
+        for func in self.FUNCS:
+            with self.subTest(func=func["name"]):
+                results = self._compute(func, -70.0)
+                levels = [r["func"]["ylevel"] for r in results
+                          if "ylevel" in r["func"]]
+                self.assertEqual(len(levels), len(expected[func["name"]]))
+                for got, want in zip(levels, expected[func["name"]]):
+                    self.assertAlmostEqual(got, want, places=2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
