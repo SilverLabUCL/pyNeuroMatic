@@ -51,7 +51,7 @@ class TestNMToolStats(unittest.TestCase):
         self.assertTrue(self.tool.results_to_cache)
 
     def test_results_to_numpy_default(self):
-        self.assertFalse(self.tool.results_to_numpy)
+        self.assertTrue(self.tool.results_to_numpy)
 
     # --- _write_results_to_history ---
 
@@ -204,6 +204,65 @@ class TestNMToolStats(unittest.TestCase):
         f = self.tool._write_results_to_numpy()
         self.assertIn("ST_w0_bsln_y", f.data)
 
+    def _run_win_on_arrays(self, win, ys):
+        """Compute window w0 configured by *win* on each y array in *ys*."""
+        w = list(self.tool.windows)[0]
+        w._win_set(win, quiet=True)
+        results = self.tool._NMToolStats__results
+        for k, y in enumerate(ys):
+            data = NMData(NM, name="recordA%d" % k, nparray=y,
+                          xscale={"start": 0.0, "delta": 1.0})
+            w.compute(data)
+            results.setdefault(w.name, []).append(w.results)
+
+    @staticmethod
+    def _ramp(base=-70.0, height=50.0):
+        """Baseline for x 0-9, linear rise over x 10-15, then plateau."""
+        return np.r_[np.full(10, base), np.linspace(base, base + height, 6),
+                     np.full(5, base + height)]
+
+    def test_results_to_numpy_saves_delta_s(self):
+        self._setup_folder()
+        self._run_win_on_arrays(
+            {"func": "max", "xbgn": 10.0, "bsln_on": True,
+             "bsln_func": "mean", "bsln_xbgn": 0.0, "bsln_xend": 9.0},
+            [self._ramp(height=h) for h in (50.0, 51.0, 52.0)],
+        )
+        f = self.tool._write_results_to_numpy()
+        self.assertEqual(list(f.data.get("ST_w0_max_ds").nparray),
+                         [50.0, 51.0, 52.0])
+
+    def test_results_to_numpy_multistep_arrays_one_value_per_data(self):
+        # Rise time records peak, p0 and p1 results per data array; each step
+        # gets its own arrays, aligned with ST_w0_data. The last array has an
+        # all-NaN baseline, so only its peak step runs; the others are NaN.
+        self._setup_folder()
+        bad = self._ramp()
+        bad[:10] = math.nan
+        self._run_win_on_arrays(
+            {"func": {"name": "risetime+", "p0": 10, "p1": 90},
+             "xbgn": 9.0, "bsln_on": True, "bsln_func": "mean",
+             "bsln_xbgn": 0.0, "bsln_xend": 8.0},
+            [self._ramp(), self._ramp(height=60.0), bad],
+        )
+        f = self.tool._write_results_to_numpy()
+        for name in f.data:
+            self.assertEqual(len(f.data.get(name).nparray), 3, name)
+        np.testing.assert_allclose(f.data.get("ST_w0_rt_p_y").nparray[:2],
+                                   [-20.0, -10.0])
+        np.testing.assert_allclose(f.data.get("ST_w0_rt_p_ds").nparray[:2],
+                                   [50.0, 60.0])
+        p0_x = f.data.get("ST_w0_rt_p_p0_x").nparray
+        p1_x = f.data.get("ST_w0_rt_p_p1_x").nparray
+        dx = f.data.get("ST_w0_rt_p_dx").nparray
+        np.testing.assert_allclose(p0_x[:2], [10.5, 10.5])
+        np.testing.assert_allclose(p1_x[:2], [14.5, 14.5])
+        np.testing.assert_allclose(dx[:2], [4.0, 4.0])
+        self.assertTrue(math.isnan(p0_x[2]) and math.isnan(dx[2]))
+        # Notes name the window's func and the step, not the helper func
+        note = f.data.get("ST_w0_rt_p_p1_x").notes[0]["note"]
+        self.assertIn("func=risetime+, id=risetime+, step=p1", note)
+
     # --- _sanitize_func_name / _st_array_name ---
 
     def test_sanitize_plain_name_unchanged(self):
@@ -248,6 +307,15 @@ class TestNMToolStats(unittest.TestCase):
     def test_st_array_name_complex_func(self):
         n = nms.NMToolStats._st_array_name("w0", "risetime+", "risetime+", "dx")
         self.assertEqual(n, "ST_w0_rt_p_dx")
+
+    def test_st_array_name_step(self):
+        name = nms.NMToolStats._st_array_name
+        self.assertEqual(name("w0", "level+", "risetime+", "x", "p0"),
+                         "ST_w0_rt_p_p0_x")
+        # dx is recorded by a single step, so it keeps the plain name
+        self.assertEqual(name("w0", "level+", "risetime+", "dx", "p1"),
+                         "ST_w0_rt_p_dx")
+        self.assertEqual(name("w0", "max", "main", "Δs"), "ST_w0_max_ds")
 
     def test_results_to_numpy_no_folder_returns_none(self):
         from pyneuromatic.tools.nm_tool import HIERARCHY_SELECT_KEYS
@@ -897,7 +965,7 @@ class TestNMToolStatsConfig(unittest.TestCase):
         self.assertTrue(self.cfg.results_to_cache)
 
     def test_results_to_numpy_default(self):
-        self.assertFalse(self.cfg.results_to_numpy)
+        self.assertTrue(self.cfg.results_to_numpy)
 
     def test_set_ignore_nans(self):
         self.cfg.ignore_nans = False

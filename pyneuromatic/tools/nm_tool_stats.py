@@ -51,7 +51,7 @@ class NMToolStatsConfig(NMToolConfig):
         results_to_cache: If True, save results to NMFolder tool-results cache.
             Defaults to True.
         results_to_numpy: If True, write results as ST_ NMData arrays.
-            Defaults to False.
+            Defaults to True.
     """
 
     _TOML_TYPE = "stats_config"
@@ -60,7 +60,7 @@ class NMToolStatsConfig(NMToolConfig):
         "overwrite":          {"type": bool, "default": False},
         "results_to_history": {"type": bool, "default": False},
         "results_to_cache":   {"type": bool, "default": True},
-        "results_to_numpy":   {"type": bool, "default": False},
+        "results_to_numpy":   {"type": bool, "default": True},
     }
 
 
@@ -97,6 +97,7 @@ class NMToolStats(NMTool):
         self.__win_container.new()
 
         self.__results: dict[str, list[Any]] = {}
+        self.__toolfolder: NMToolFolder | None = None
 
     @property
     def windows(self) -> NMStatWinContainer:
@@ -110,6 +111,11 @@ class NMToolStats(NMTool):
             window_name: [list(data_results) for data_results in window_results]
             for window_name, window_results in self.__results.items()
         }
+
+    @property
+    def toolfolder(self) -> NMToolFolder | None:
+        """Toolfolder of ST_ arrays written by the most recent run, if any."""
+        return self.__toolfolder
 
     def _add_note(self, data: NMData, text: str) -> None:
         """Append a note to *data*.notes if available."""
@@ -169,8 +175,9 @@ class NMToolStats(NMTool):
             self._write_results_to_history()
         if self._results_to_cache:
             self._write_results_to_cache()
+        self.__toolfolder = None
         if self._results_to_numpy:
-            self._write_results_to_numpy()
+            self.__toolfolder = self._write_results_to_numpy()
         return True  # ok
 
     def _write_results_to_history(self, quiet: bool = False) -> None:
@@ -223,6 +230,7 @@ class NMToolStats(NMTool):
         "sem":  ("sem",  "sunits"),
         "b":    ("b",    "bunits"),
         "dx":   ("dx",   "xunits"),
+        "Δs":   ("ds",   "sunits"),
     }
 
     # Maps stat function names containing special chars or long names to
@@ -279,7 +287,28 @@ class NMToolStats(NMTool):
         return name.replace("+", "_p").replace("-", "_m").replace("@", "_")
 
     @staticmethod
-    def _st_array_name(wname: str, func_name: str, id_str: str, rkey: str) -> str:
+    def _result_step(rdict: dict[str, Any]) -> str:
+        """Return the pipeline step of a result dict within its id.
+
+        Multi-step funcs (risetime, falltime, decaytime, fwhm) record several
+        results under one id per data array: the peak (``""``), the p0 and p1
+        level crossings (``"p0"``, ``"p1"``) and, for slope variants, the
+        regression between them (``"slope"``).
+        """
+        if "p0" in rdict:
+            return "p0"
+        if "p1" in rdict:
+            return "p1"
+        func = rdict.get("func")
+        if (rdict.get("id") not in ("main", "bsln")
+                and isinstance(func, dict) and func.get("name") == "slope"):
+            return "slope"
+        return ""
+
+    @staticmethod
+    def _st_array_name(
+        wname: str, func_name: str, id_str: str, rkey: str, step: str = "",
+    ) -> str:
         """Build the ST_ NMData array name for a single result key.
 
         Naming rules:
@@ -297,11 +326,14 @@ class NMToolStats(NMTool):
             id_str: Computation stage (``"main"``, ``"bsln"``, or func name
                 for complex pipelines).
             rkey: Result dict key (e.g. ``"s"``, ``"x"``, ``"dx"``).
+            step: Pipeline step from ``_result_step`` (e.g. ``"p0"``). Added
+                after the func name, except for ``"dx"`` which only one step
+                records (e.g. ``ST_w0_rt_p_p0_x`` but ``ST_w0_rt_p_dx``).
 
         Returns:
             Array name string (e.g. ``"ST_w0_mean_y"``).
         """
-        suffix = "y" if rkey == "s" else rkey
+        suffix = "y" if rkey == "s" else "ds" if rkey == "Δs" else rkey
 
         if id_str == "bsln":
             return "ST_%s_bsln_%s" % (wname, suffix)
@@ -319,6 +351,8 @@ class NMToolStats(NMTool):
         safe = NMToolStats._sanitize_func_name(
             func_name if id_str == "main" else id_str
         )
+        if step and rkey != "dx":
+            safe = "%s_%s" % (safe, step)
         return "ST_%s_%s_%s" % (wname, safe, suffix)
 
     def _write_results_to_numpy(self) -> NMToolFolder | None:
@@ -360,20 +394,19 @@ class NMToolStats(NMTool):
 
             # Collect data path strings (one per array, from first rdict)
             data_paths: list[str] = []
-            # Collect result dicts grouped by id: {id_str: [rdict, ...]}
-            id_rdicts: dict[str, list[dict]] = {}
+            # Result dicts grouped by (id, step), one slot per data array so
+            # every ST_ array lines up with ST_{w}_data; a step a data array
+            # did not reach (e.g. no peak found) stays None and becomes NaN
+            step_rdicts: dict[tuple[str, str], list[dict | None]] = {}
+            n_arrays = len(vlist)
 
-            for ilist in vlist:
-                array_path: str | None = None
+            for index, ilist in enumerate(vlist):
+                data_paths.append(ilist[0].get("data", "") if ilist else "")
                 for rdict in ilist:
-                    id_str = rdict.get("id", "main")
-                    if array_path is None:
-                        array_path = rdict.get("data", "")
-                    if id_str not in id_rdicts:
-                        id_rdicts[id_str] = []
-                    id_rdicts[id_str].append(rdict)
-                if array_path is not None:
-                    data_paths.append(array_path)
+                    key = (rdict.get("id", "main"), self._result_step(rdict))
+                    if key not in step_rdicts:
+                        step_rdicts[key] = [None] * n_arrays
+                    step_rdicts[key][index] = rdict
 
             # Save data path strings
             if data_paths and f.data is not None:
@@ -382,20 +415,26 @@ class NMToolStats(NMTool):
                     nparray=np.array(data_paths, dtype=object),
                 )
 
-            # Save numeric arrays per id
-            for id_str, rdicts in id_rdicts.items():
-                func_name = rdicts[0].get("func", {}).get("name", "") if rdicts else ""
+            # Save numeric arrays per (id, step)
+            for (id_str, step), slots in step_rdicts.items():
+                present = [rdict for rdict in slots if rdict is not None]
+                func_name = present[0].get("func", {}).get("name", "")
                 for rkey, (_suffix, units_key) in self._NUMERIC_KEYS.items():
-                    values = [rdict.get(rkey) for rdict in rdicts]
+                    values = [
+                        rdict.get(rkey) if rdict is not None else None
+                        for rdict in slots
+                    ]
                     if all(v is None for v in values):
                         continue  # key not present for this func
                     arr = np.array(
                         [v if v is not None else math.nan for v in values],
                         dtype=float,
                     )
-                    units = rdicts[0].get(units_key) if units_key else None
+                    units = present[0].get(units_key) if units_key else None
                     yscale = {"units": units} if units else None
-                    dname = self._st_array_name(wname, func_name, id_str, rkey)
+                    dname = self._st_array_name(
+                        wname, func_name, id_str, rkey, step
+                    )
                     if f.data is not None:
                         d = f.data.new(dname, nparray=arr, yscale=yscale)
                         win = self.windows[wname] if wname in self.windows else None
@@ -406,17 +445,26 @@ class NMToolStats(NMTool):
                         else:
                             xbgn = win.xbgn if win is not None else None
                             xend = win.xend if win is not None else None
-                            note_func = func_name
+                            # Steps of multi-step funcs run helper funcs
+                            # (max, level+, ...); name the window's func
+                            note_func = func_name if id_str == "main" else id_str
+                        step_str = ", step=%s" % step if step else ""
                         self._add_note(
                             d,
-                            "NMStats(win=%s, func=%s, id=%s, xbgn=%s, xend=%s, n=%d)"
-                            % (wname, note_func, id_str, xbgn, xend, len(rdicts)),
+                            "NMStats(win=%s, func=%s, id=%s%s, xbgn=%s, xend=%s, n=%d)"
+                            % (wname, note_func, id_str, step_str, xbgn, xend,
+                               len(present)),
                         )
 
                 # Save warnings if any occurred
-                warnings = [rdict.get("warning") for rdict in rdicts]
+                warnings = [
+                    rdict.get("warning") if rdict is not None else None
+                    for rdict in slots
+                ]
                 if any(w is not None for w in warnings):
-                    dname = self._st_array_name(wname, func_name, id_str, "warning")
+                    dname = self._st_array_name(
+                        wname, func_name, id_str, "warning", step
+                    )
                     if f.data is not None:
                         f.data.new(
                             dname,
