@@ -13,6 +13,12 @@ from pyneuromatic.gui.stats_tab import StatsToolTab
 pytestmark = pytest.mark.gui
 
 
+def _main_result(manager, window="w0", index=0):
+    """Main (non-baseline) result of the last Stats run for data *index*."""
+    results = manager.stats.results[window][index]
+    return next(r for r in results if r["id"] != "bsln")
+
+
 def test_stats_tab_runs_selected_trace_and_shows_backend_results(qtbot):
     manager = NMManager(quiet=True)
     folder = manager.folders.new("Demo", select=False)
@@ -38,9 +44,8 @@ def test_stats_tab_runs_selected_trace_and_shows_backend_results(qtbot):
     tab.run_button.click()
 
     assert tab.status_label.text() == "Complete"
-    output = tab.results_panel.output.toPlainText()
-    assert '"s": 20.0' in output
-    assert '"sunits": "mV"' in output
+    assert _main_result(manager)["s"] == 20.0
+    assert _main_result(manager)["sunits"] == "mV"
     assert manager.stats.windows["w0"].xbgn == 1.0
     assert manager.stats.windows["w0"].xend == 3.0
 
@@ -144,13 +149,13 @@ def test_stats_tab_uses_analysis_channel_not_plot_channel(qtbot):
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
     tab = window.stats_tab
-    window.plot_widget.channel_tabs.setCurrentIndex(1)
+    window.plot_widget.view_tabs.setCurrentIndex(1)
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
 
     assert manager.select_values["channel"].name == "A"
     assert window.plot_widget.current_trace is dataseries.get_data("B", "E0")
-    assert '"s": 2.0' in tab.results_panel.output.toPlainText()
+    assert _main_result(manager)["s"] == 2.0
 
 
 def test_stats_output_options_control_backend_sinks(qtbot):
@@ -237,7 +242,7 @@ def test_mean_at_max_uses_n_mean_parameter(qtbot):
 
     tab.run_button.click()
     assert tab.status_label.text() == "Complete"
-    assert '"s": 9.0' in tab.results_panel.output.toPlainText()
+    assert _main_result(manager)["s"] == 9.0
 
 
 def test_level_uses_ylevel_parameter_and_rejects_bad_input(qtbot):
@@ -321,7 +326,7 @@ def test_optional_baseline_adds_delta_and_prefills_range(qtbot):
     _set_text(tab.bsln_xend_edit, "9")
     tab.run_button.click()
     assert tab.status_label.text() == "Complete"
-    assert '"Δs": 50.0' in tab.results_panel.output.toPlainText()
+    assert _main_result(manager)["Δs"] == 50.0
 
 
 def test_baseline_disabled_for_non_y_measurements(qtbot):
@@ -475,3 +480,41 @@ def test_risetime_runs_with_required_baseline(qtbot):
         pytest.approx(-68.0, abs=0.01),
         pytest.approx(-52.0, abs=0.01),
     ]
+
+
+def test_run_info_counts_epochs_and_data_arrays(qtbot):
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=False)
+    for epoch in range(3):
+        folder.data.new(
+            f"RecordA{epoch}",
+            nparray=np.array([1.0, 2.0]),
+            xscale={"start": 0.0, "delta": 1.0},
+        )
+    dataseries = folder.sync_dataseries("Record", select=True)
+    dataseries.epochs.sets.add("Pair", ["E0", "E2"])
+    manager.select_keys = {
+        "folder": folder.name,
+        "dataseries": dataseries.name,
+        "channel": "A",
+        "epoch": "E0",
+    }
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    tab = window.stats_tab
+
+    assert tab.run_info_label.text() == "1 epoch"
+    window.selection_model.update(set="Pair")
+    assert tab.run_info_label.text() == "2 epochs"
+
+    window.selection_model.update(data=folder.data["RecordA1"])
+    assert tab.run_info_label.text() == "1 data array"
+
+
+def test_run_info_explains_missing_selection(qtbot):
+    manager = NMManager(quiet=True)
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    assert window.stats_tab.run_info_label.text() == (
+        "Select a data array or a Data Series channel and epoch first"
+    )

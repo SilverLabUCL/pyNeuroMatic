@@ -720,5 +720,33 @@ class TestPercentLevelsUseBaseline(unittest.TestCase):
                     self.assertAlmostEqual(got, want, places=2)
 
 
+class TestIntegerXScaleWindowOffset(unittest.TestCase):
+    """Level and slope x values on an integer x-scale with a window start.
+
+    get_xvalue() returns an int for integer x-scales; the window's x start
+    must still be applied (it used to be dropped, shifting x by xbgn).
+    """
+
+    def _compute(self, func, xbgn):
+        data = NMData(NM, name="ramp", nparray=np.arange(30.0),
+                      xscale={"start": 0, "delta": 1})
+        w = nmsw.NMStatWin("w0")
+        w._win_set({"func": func, "xbgn": xbgn}, quiet=True)
+        return w.compute(data)[-1]
+
+    def test_level_x(self):
+        for xbgn in (0, 9, 20):
+            with self.subTest(xbgn=xbgn):
+                r = self._compute({"name": "level+", "ylevel": 25.5}, xbgn)
+                self.assertAlmostEqual(r["x"], 25.5)
+
+    def test_slope_intercept(self):
+        for xbgn in (0, 9, 20):
+            with self.subTest(xbgn=xbgn):
+                r = self._compute({"name": "slope"}, xbgn)
+                self.assertAlmostEqual(r["s"], 1.0)
+                self.assertAlmostEqual(r["b"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -98,12 +98,12 @@ def test_plot_channel_tabs_are_independent_of_analysis_channel(qtbot, nm):
         pytest.skip("pyqtgraph is not installed")
 
     analysis_channel = nm.select_values["channel"]
-    assert [plot.channel_tabs.tabText(i) for i in range(plot.channel_tabs.count())] == [
+    assert [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())] == [
         "A", "B"
     ]
-    assert plot.channel_tabs.currentIndex() == 0
+    assert plot.view_tabs.currentIndex() == 0
 
-    plot.channel_tabs.setCurrentIndex(1)
+    plot.view_tabs.setCurrentIndex(1)
 
     assert nm.select_values["channel"] is analysis_channel
     assert plot.current_trace is dataseries.get_data(channel="B", epoch="E0")
@@ -120,15 +120,15 @@ def test_plot_channel_tabs_are_independent_of_analysis_channel(qtbot, nm):
 
     win.selection_model.update(dataseries=stim)
     assert nm.select_values["dataseries"] is stim
-    assert [plot.channel_tabs.tabText(i) for i in range(plot.channel_tabs.count())] == ["A"]
-    assert plot.channel_tabs.tabText(plot.channel_tabs.currentIndex()) == "A"
+    assert [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())] == ["A"]
+    assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "A"
     assert plot.current_trace is stim.get_data(channel="A", epoch="E0")
 
     win.selection_model.update(dataseries=dataseries)
-    assert [plot.channel_tabs.tabText(i) for i in range(plot.channel_tabs.count())] == [
+    assert [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())] == [
         "A", "B"
     ]
-    assert plot.channel_tabs.tabText(plot.channel_tabs.currentIndex()) == "A"
+    assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "A"
     assert nm.select_values["channel"].name == "A"
 
 
@@ -332,7 +332,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     folder_menu.setCurrentText("Demo2")
     assert data_menu.currentText() == ""
     assert series_menu.currentText() == "Gamma"
-    assert win.plot_widget.channel_tabs.tabText(win.plot_widget.channel_tabs.currentIndex()) == "A"
+    assert win.plot_widget.view_tabs.tabText(win.plot_widget.view_tabs.currentIndex()) == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA1"
     assert set_menu.currentText() == "Demo2Set"
     assert group_menu.currentText() == "0"

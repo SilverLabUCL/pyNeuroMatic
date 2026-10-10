@@ -95,7 +95,12 @@ def _stat_level(f, func, yarray, data, i0, ignore_nans, results, yunits,
             xarray=xarray, ignore_nans=ignore_nans
         )
     else:
-        xstart_val = xstart if isinstance(xstart, float) else 0.0
+        # get_xvalue() returns an int for integer x-scales, so accept any real
+        xstart_val = (
+            float(xstart)
+            if isinstance(xstart, (int, float)) and not isinstance(xstart, bool)
+            else 0.0
+        )
         xdelta_val = float(data.xscale.delta)
         i_x = find_level_crossings(
             yarray, ylevel, func_name=f,
@@ -129,7 +134,12 @@ def _stat_slope(yarray, data, ignore_nans, results, yunits, xunits,
             yarray, xarray=xarray, ignore_nans=ignore_nans
         )
     else:
-        xstart_val = xstart if isinstance(xstart, float) else 0.0
+        # get_xvalue() returns an int for integer x-scales, so accept any real
+        xstart_val = (
+            float(xstart)
+            if isinstance(xstart, (int, float)) and not isinstance(xstart, bool)
+            else 0.0
+        )
         xdelta_val = float(data.xscale.delta)
         mb = linear_regression(
             yarray, xstart=xstart_val, xdelta=xdelta_val,

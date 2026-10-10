@@ -38,6 +38,8 @@ if GUI_AVAILABLE:
     from pyneuromatic.gui.folder_model import FolderTreeModel
     from pyneuromatic.gui.folder_browser import FolderBrowserWidget
     from pyneuromatic.gui.app_window import NMAppWindow, SelectionStrip, ToolRail
+    from pyneuromatic.gui.context_views import TablePanel
+    from pyneuromatic.gui.results_view import Stats2Panel, StatsTables
     from pyneuromatic.gui.selection_model import SelectionModel
     from pyneuromatic.gui.stats_tab import StatsToolTab
     from pyneuromatic.gui.tool_tab import ResultPanel, ToolTabWidget
@@ -54,6 +56,9 @@ if GUI_AVAILABLE:
         'ToolTabWidget',
         'SelectionModel',
         'StatsToolTab',
+        'Stats2Panel',
+        'StatsTables',
+        'TablePanel',
     ]
 else:
     __all__ = [
