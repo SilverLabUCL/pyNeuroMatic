@@ -18,6 +18,12 @@ except ImportError:  # pragma: no cover - optional GUI dependency
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core import nm_utilities
+from pyneuromatic.gui.context_views import (
+    DATA_VIEW,
+    ChannelToolBar,
+    TablePanel,
+    ValuesPlot,
+)
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.selection_model import SelectionModel
 from pyneuromatic.gui.stats_tab import StatsToolTab
@@ -297,13 +303,18 @@ class PlotPanel(QtWidgets.QWidget):
         self.selection_label = QtWidgets.QLabel("No selection", self)
         layout.addWidget(self.selection_label)
 
-        self.channel_tabs = QtWidgets.QTabBar(self)
-        self.channel_tabs.setShape(QtWidgets.QTabBar.Shape.RoundedNorth)
-        self.channel_tabs.setUsesScrollButtons(True)
-        self.channel_tabs.setExpanding(False)
-        self.channel_tabs.currentChanged.connect(self._on_plot_channel_changed)
-        self.channel_tabs.hide()
-        layout.addWidget(self.channel_tabs)
+        # Channel tabs, then tabs of tools with results (e.g. Stats)
+        self.view_tabs = ChannelToolBar(self)
+        self.view_tabs.view_changed.connect(self._on_view_changed)
+        layout.addWidget(self.view_tabs)
+        self.stack = QtWidgets.QStackedWidget(self)
+        layout.addWidget(self.stack, stretch=1)
+        self.trace_page = QtWidgets.QWidget(self.stack)
+        trace_layout = QtWidgets.QVBoxLayout(self.trace_page)
+        trace_layout.setContentsMargins(0, 0, 0, 0)
+        self.stack.addWidget(self.trace_page)
+        self._tool_pages: dict[str, QtWidgets.QWidget] = {}
+        self._tools: list[str] = []
 
         navigator_layout = QtWidgets.QHBoxLayout()
         self.trace_previous_button = QtWidgets.QToolButton(self)
@@ -329,7 +340,7 @@ class PlotPanel(QtWidgets.QWidget):
 
         self.trace_name_label = QtWidgets.QLabel("No trace", self)
         navigator_layout.addWidget(self.trace_name_label, stretch=1)
-        layout.addLayout(navigator_layout)
+        trace_layout.addLayout(navigator_layout)
 
         overlay_layout = QtWidgets.QHBoxLayout()
         self.overlay_checkbox = QtWidgets.QCheckBox("Overlay traces", self)
@@ -345,7 +356,7 @@ class PlotPanel(QtWidgets.QWidget):
         overlay_layout.addWidget(self.overlay_limit)
         self.overlay_status_label = QtWidgets.QLabel("", self)
         overlay_layout.addWidget(self.overlay_status_label, stretch=1)
-        layout.addLayout(overlay_layout)
+        trace_layout.addLayout(overlay_layout)
 
         self._selection_model: SelectionModel | None = None
         self._trace_entries: list[tuple[object, object | None]] = []
@@ -367,7 +378,7 @@ class PlotPanel(QtWidgets.QWidget):
             self.plot_widget = pg.PlotWidget(self)
             self.plot_widget.setBackground("w")
             self.plot_widget.setTitle("Preview")
-            layout.addWidget(self.plot_widget)
+            trace_layout.addWidget(self.plot_widget)
         else:
             self.plot_widget = None
             self.plot_fallback_label = QtWidgets.QLabel(
@@ -375,7 +386,31 @@ class PlotPanel(QtWidgets.QWidget):
             )
             self.plot_fallback_label.setWordWrap(True)
             self.plot_fallback_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(self.plot_fallback_label)
+            trace_layout.addWidget(self.plot_fallback_label)
+
+    # --- tool views -------------------------------------------------------
+
+    def register_tool(self, name: str, page: QtWidgets.QWidget) -> None:
+        self._tool_pages[name] = page
+        self.stack.addWidget(page)
+
+    def tool_page(self, name: str) -> QtWidgets.QWidget | None:
+        return self._tool_pages.get(name)
+
+    def set_tools(self, names: list[str]) -> None:
+        """Show tabs for the registered tools in *names*, in that order."""
+        self._tools = [name for name in names if name in self._tool_pages]
+        self._update_channel_tabs(self._last_selection)
+
+    def show_tool(self, name: str) -> None:
+        self.view_tabs.select_tool(name)
+
+    def _show_current_page(self) -> None:
+        view = self.view_tabs.current_view()
+        if view is not None and view[0] == "tool":
+            self.stack.setCurrentWidget(self._tool_pages[view[1]])
+        else:
+            self.stack.setCurrentWidget(self.trace_page)
 
     def bind_selection_model(self, model: SelectionModel) -> None:
         self._selection_model = model
@@ -398,9 +433,10 @@ class PlotPanel(QtWidgets.QWidget):
     def _update_channel_tabs(self, selection: dict) -> None:
         dataseries = selection.get("dataseries")
         if dataseries is None:
-            self.channel_tabs.hide()
             self._plot_dataseries = None
             self._plot_channel_name = None
+            channels = [DATA_VIEW] if selection.get("data") is not None else []
+            self._set_views(channels, DATA_VIEW)
             return
 
         channel_names = list(dataseries.channels.keys())
@@ -413,29 +449,24 @@ class PlotPanel(QtWidgets.QWidget):
                 else channel_names[0] if channel_names else None
             )
 
-        current_names = [
-            self.channel_tabs.tabText(index)
-            for index in range(self.channel_tabs.count())
-        ]
-        self._updating_channel_tabs = True
-        if current_names != channel_names:
-            while self.channel_tabs.count():
-                self.channel_tabs.removeTab(0)
-            for name in channel_names:
-                self.channel_tabs.addTab(name)
-        if previous_channel in channel_names:
-            self.channel_tabs.setCurrentIndex(channel_names.index(previous_channel))
-        self.channel_tabs.setVisible(bool(channel_names))
-        self._updating_channel_tabs = False
-
         self._plot_dataseries = dataseries
         self._plot_channel_name = previous_channel
+        self._set_views(channel_names, previous_channel)
 
-    def _on_plot_channel_changed(self, index: int) -> None:
-        if self._updating_channel_tabs or index < 0:
+    def _set_views(self, channels: list[str], current_channel: str | None) -> None:
+        self._updating_channel_tabs = True
+        self.view_tabs.set_views(channels, self._tools, current_channel=current_channel)
+        self._updating_channel_tabs = False
+        self._show_current_page()
+
+    def _on_view_changed(self, kind: str, name: str) -> None:
+        if self._updating_channel_tabs:
             return
-        self._plot_channel_name = self.channel_tabs.tabText(index)
-        self._update_trace_entries(self._last_selection)
+        self._show_current_page()
+        if kind == "channel":
+            if name != DATA_VIEW:
+                self._plot_channel_name = name
+            self._update_trace_entries(self._last_selection)
 
     def _update_trace_entries(self, selection: dict) -> None:
         entries: list[tuple[object, object | None]] = []
@@ -670,6 +701,19 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.plot_widget = PlotPanel(self.context_panel)
         self.plot_widget.bind_selection_model(self.selection_model)
         self.context_panel.addTab(self.plot_widget, "Plot")
+        self.table_panel = TablePanel(self.context_panel)
+        self.table_panel.bind_selection_model(self.selection_model)
+        self.context_panel.addTab(self.table_panel, "Table")
+
+        # Tool views appear in both panels while the folder has their results
+        stats2 = self.stats_tab.stats2
+        self.stats_plot = ValuesPlot()
+        self.plot_widget.register_tool("Stats", self.stats_plot)
+        self.table_panel.register_tool("Stats", stats2.tables)
+        stats2.results_changed.connect(self._update_tool_tabs)
+        stats2.plot_requested.connect(self._show_plot_values)
+        self.stats_tab.run_finished.connect(self._on_stats_run_finished)
+        self._update_tool_tabs()
         # Future: Inspector tab reserved for later development.
         self.context_panel.setMinimumWidth(280)
 
@@ -714,6 +758,21 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.current_tool_name = tool_name
         idx = self.tool_rail.index_for_name(tool_name)
         self.tool_workspace.setCurrentIndex(idx)
+
+    def _update_tool_tabs(self) -> None:
+        tools = ["Stats"] if self.stats_tab.stats2.has_results() else []
+        self.plot_widget.set_tools(tools)
+        self.table_panel.set_tools(tools)
+
+    def _show_plot_values(self, title, y, x, xlabel, ylabel, style) -> None:
+        self.stats_plot.show_values(title, y, x, xlabel, ylabel, style)
+        self.plot_widget.show_tool("Stats")
+        self.context_panel.setCurrentWidget(self.plot_widget)
+
+    def _on_stats_run_finished(self, succeeded: bool) -> None:
+        if succeeded and self.stats_tab.stats_tool.toolfolder is not None:
+            self.table_panel.show_tool("Stats")
+            self.context_panel.setCurrentWidget(self.table_panel)
 
     def _on_browser_selection_requested(self, selection: dict) -> None:
         obj = selection.get("object")

@@ -305,4 +305,58 @@ class SelectionModel(QtCore.QObject):
         return first == second
 
 
-__all__ = ["SelectionModel"]
+def combine_scope_names(
+    all_names: list[str],
+    set_names: list[str] | None,
+    group_names: list[str] | None,
+    operator: str | None,
+) -> list[str]:
+    """Names from *all_names* allowed by a Set and/or Group selection.
+
+    ``None`` means that tier is not selected. When both are selected,
+    *operator* (``"AND"`` or ``"OR"``) combines them.
+    """
+    if set_names is not None and group_names is not None:
+        if operator not in ("AND", "OR"):
+            raise RuntimeError("Choose AND or OR to combine the selected Set and Group")
+        allowed = (
+            set(set_names).intersection(group_names)
+            if operator == "AND"
+            else set(set_names).union(group_names)
+        )
+    elif set_names is not None:
+        allowed = set(set_names)
+    elif group_names is not None:
+        allowed = set(group_names)
+    else:
+        return all_names
+    return [name for name in all_names if name in allowed]
+
+
+def scoped_epoch_names(
+    dataseries: NMDataSeries, selection: Mapping[str, Any]
+) -> list[str] | None:
+    """Epoch names of *dataseries* in the selected Set/Group, in epoch order.
+
+    Returns None when neither a Set nor a Group is selected, so callers can
+    choose their own default (the current epoch, or all epochs).
+    """
+    selected_set = selection.get("set")
+    selected_group = selection.get("group")
+    if selected_set is None and selected_group is None:
+        return None
+    set_names = None
+    group_names = None
+    if selected_set is not None:
+        set_names = dataseries.epochs.sets.get_items(selected_set, get_keys=True) or []
+    if selected_group is not None:
+        group_names = dataseries.epochs.groups.get_items(selected_group)
+    return combine_scope_names(
+        list(dataseries.epochs.keys()),
+        set_names,
+        group_names,
+        selection.get("group_operator"),
+    )
+
+
+__all__ = ["SelectionModel", "combine_scope_names", "scoped_epoch_names"]

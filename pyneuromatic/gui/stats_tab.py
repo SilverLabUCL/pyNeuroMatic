@@ -26,7 +26,12 @@ from pyneuromatic.tools.nm_stat_func import (
 )
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
 import pyneuromatic.core.nm_utilities as nmu
-from pyneuromatic.gui.selection_model import SelectionModel
+from pyneuromatic.gui.results_view import Stats2Panel
+from pyneuromatic.gui.selection_model import (
+    SelectionModel,
+    combine_scope_names,
+    scoped_epoch_names,
+)
 from pyneuromatic.gui.tool_tab import ToolTabWidget
 
 
@@ -99,15 +104,25 @@ class StatsToolTab(ToolTabWidget):
             raise TypeError("manager Stats tool must be an NMToolStats instance")
         self._tool = tool
 
-        self.parameters_group.setTitle("Stats1")
+        # Stats1 configures and runs windows; Stats2 works on saved results
+        self.parameters_group.setTitle("")
+        self.mode_tabs = QtWidgets.QTabWidget(self)
+        self.mode_tabs.setObjectName("statsModeTabs")
+        self.parameter_layout.addWidget(self.mode_tabs)
+        stats1_tab = QtWidgets.QWidget(self.mode_tabs)
+        stats1_tab_layout = QtWidgets.QVBoxLayout(stats1_tab)
+        self.mode_tabs.addTab(stats1_tab, "Stats1")
+        self.stats2 = Stats2Panel(manager, self.mode_tabs)
+        self.mode_tabs.addTab(self.stats2, "Stats2")
+
         mode_row = QtWidgets.QHBoxLayout()
         mode_row.addStretch(1)
         self.config_checkbox = QtWidgets.QCheckBox("Config", self)
         mode_row.addWidget(self.config_checkbox)
-        self.parameter_layout.addLayout(mode_row)
+        stats1_tab_layout.addLayout(mode_row)
 
-        self.settings_stack = QtWidgets.QStackedWidget(self)
-        self.parameter_layout.addWidget(self.settings_stack)
+        self.settings_stack = QtWidgets.QStackedWidget(stats1_tab)
+        stats1_tab_layout.addWidget(self.settings_stack)
         self.stats1_page = QtWidgets.QWidget(self.settings_stack)
         stats1_layout = QtWidgets.QVBoxLayout(self.stats1_page)
         stats1_layout.setContentsMargins(0, 0, 0, 0)
@@ -200,6 +215,8 @@ class StatsToolTab(ToolTabWidget):
         ):
             output_layout.addWidget(checkbox)
         stats1_layout.addWidget(output_group)
+        # Keep the settings at the top when Stats2 makes the tabs taller
+        stats1_layout.addStretch(1)
 
         self.tool_config_list = QtWidgets.QListWidget(self)
         self.tool_config_list.setObjectName("statsToolConfigurationList")
@@ -239,6 +256,42 @@ class StatsToolTab(ToolTabWidget):
         self._sync_output_options()
         self._refresh_window_combo()
         self._load_selected_window()
+
+        # Results are shown in Stats2 (Details) and the Table pane instead
+        self.results_group.hide()
+        self.mode_tabs.currentChanged.connect(self._on_mode_tab_changed)
+        self.run_finished.connect(self._on_run_finished)
+
+    def _on_mode_tab_changed(self, _index: int) -> None:
+        # Run belongs to Stats1
+        self.run_row.setVisible(self.mode_tabs.currentWidget() is not self.stats2)
+
+    def _on_selection_changed(self, selection: dict[str, Any]) -> None:
+        super()._on_selection_changed(selection)
+        self._update_run_info()
+
+    def _update_run_info(self) -> None:
+        """Show beside Run how many epochs or data arrays it will analyse."""
+        try:
+            targets = self._selected_targets()
+        except RuntimeError as error:
+            self.run_info_label.setText(str(error))
+            return
+        count = len(targets)
+        if isinstance(self.selection.get("dataseries"), NMDataSeries):
+            noun = "epoch" if count == 1 else "epochs"
+        else:
+            noun = "data array" if count == 1 else "data arrays"
+        self.run_info_label.setText(f"{count} {noun}")
+
+    def _on_run_finished(self, succeeded: bool) -> None:
+        # Saved arrays are viewed in Stats2; without them there is nothing new
+        if succeeded and self._tool.toolfolder is not None:
+            self.mode_tabs.setCurrentWidget(self.stats2)
+
+    def bind_selection_model(self, model: Any) -> None:
+        super().bind_selection_model(model)
+        self.stats2.bind_selection_model(model)
 
     @property
     def stats_tool(self) -> NMToolStats:
@@ -590,18 +643,8 @@ class StatsToolTab(ToolTabWidget):
             if not isinstance(channel, NMChannel):
                 raise RuntimeError("Select a channel before running Stats")
             all_epochs = list(dataseries.epochs.values())
-            epoch_names = [epoch.name for epoch in all_epochs]
-            set_names = None
-            group_names = None
-            if selected_set is not None:
-                members = dataseries.epochs.sets.get_items(selected_set, get_keys=True)
-                set_names = members or []
-            if selected_group is not None:
-                group_names = dataseries.epochs.groups.get_items(selected_group)
-            target_names = self._combine_scope_names(
-                epoch_names, set_names, group_names, operator
-            )
-            if set_names is None and group_names is None:
+            target_names = scoped_epoch_names(dataseries, selection)
+            if target_names is None:  # no Set or Group: the current epoch
                 epoch = selection.get("epoch")
                 target_names = [epoch.name] if isinstance(epoch, NMEpoch) else []
 
@@ -649,7 +692,7 @@ class StatsToolTab(ToolTabWidget):
                     and parsed[0] == series.name
                     and f"E{parsed[2]}" in epoch_names
                 ]
-            data_names = self._combine_scope_names(
+            data_names = combine_scope_names(
                 list(context.data.keys()), set_names, group_names, operator
             )
             if set_names is None and group_names is None:
@@ -665,29 +708,6 @@ class StatsToolTab(ToolTabWidget):
             return targets
 
         raise RuntimeError("Select a data array or a Data Series channel and epoch first")
-
-    @staticmethod
-    def _combine_scope_names(
-        all_names: list[str],
-        set_names: list[str] | None,
-        group_names: list[str] | None,
-        operator: str | None,
-    ) -> list[str]:
-        if set_names is not None and group_names is not None:
-            if operator not in ("AND", "OR"):
-                raise RuntimeError("Choose AND or OR to combine the selected Set and Group")
-            allowed = (
-                set(set_names).intersection(group_names)
-                if operator == "AND"
-                else set(set_names).union(group_names)
-            )
-        elif set_names is not None:
-            allowed = set(set_names)
-        elif group_names is not None:
-            allowed = set(group_names)
-        else:
-            return all_names
-        return [name for name in all_names if name in allowed]
 
     def _manager_target(self, selection: dict[str, Any]) -> dict[str, NMObject]:
         return {
@@ -731,7 +751,8 @@ class StatsToolTab(ToolTabWidget):
         records = self._tool.results
         if not records:
             self.show_warning("No results were produced")
-        return records
+        self.stats2.show_toolfolder(self._tool.toolfolder)
+        return None
 
 
 __all__ = ["StatsToolTab"]
