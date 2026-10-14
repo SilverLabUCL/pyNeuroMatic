@@ -75,9 +75,9 @@ def test_channel_table_follows_set_and_channel_tab(two_channel_window):
     table = window.table_panel
     model = table.channel_table.model
 
-    window.selection_model.update(set="Odd")
+    window.selection_model.update(epoch_set="Odd")
     assert _headers(model) == ["x (ms)", "RecordA1", "RecordA3"]
-    assert table.channel_table.title_label.text() == "Record  channel A: 2 epochs (Odd)"
+    assert table.channel_table.title_label.text() == "Record  channel A: 2 epochs (Epoch Set: Odd)"
 
     table.view_tabs.select_channel("B")
     assert _headers(model) == ["x (ms)", "RecordB1", "RecordB3"]
@@ -90,7 +90,7 @@ def test_channel_table_reports_missing_operator(two_channel_window):
     window, _folder, dataseries = two_channel_window
     dataseries.epochs.sets.add("Odd", ["E1", "E3"])
     dataseries.epochs.groups.assign_cyclic(["E0", "E1", "E2", "E3"], n_groups=2)
-    window.selection_model.update(set="Odd", group=0, group_operator=None)
+    window.selection_model.update(epoch_set="Odd", group=0, group_operator=None)
     table = window.table_panel
     assert window.selection_model.selection.get("group_operator") is None
     assert table.channel_table.model.columnCount() == 0

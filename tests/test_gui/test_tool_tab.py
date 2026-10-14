@@ -102,7 +102,7 @@ def test_tool_tab_subscribes_to_shared_selection(qtbot):
     tab.selection_updated.connect(updates.append)
 
     tab.bind_selection_model(selection)
-    selection.update(set="SetA")
+    selection.update(data_set="SetA")
 
-    assert tab.selection["set"] == "SetA"
-    assert updates[-1]["set"] == "SetA"
+    assert tab.selection["data_set"] == "SetA"
+    assert updates[-1]["data_set"] == "SetA"

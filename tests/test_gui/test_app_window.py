@@ -18,23 +18,33 @@ def nm():
     return NMManager(quiet=True)
 
 
-def test_selection_strip_exposes_expected_selectors():
+def test_selection_strip_has_folder_data_and_series_sections(qtbot):
     strip = SelectionStrip()
-    labels = [strip.combo_label(i) for i in range(strip.count())]
-    assert labels == [
-        "Folder",
-        "Data",
-        "Data Series",
-        "Channel",
-        "Set",
-        "Operator",
-        "Group",
+    qtbot.addWidget(strip)
+    assert strip.keys() == [
+        "folder", "toolfolder",
+        "data", "data_set",
+        "dataseries", "channel", "epoch_set", "group_operator", "group",
     ]
-    strip.set_values({"dataseries": "Record"})
-    assert strip.combo_boxes()[2].currentText() == "Record"
-    assert [combo.minimumContentsLength() for combo in strip.combo_boxes()] == [
-        14, 16, 14, 4, 8, 4, 3
+    assert [strip.label(key) for key in strip.keys()] == [
+        "Folder", "Subfolder",
+        "Data", "Data Set",
+        "Prefix", "Channel", "Epoch Set", "Operator", "Group",
     ]
+    # Actions buttons are in place but not active yet
+    for key in ("folder", "toolfolder", "data", "data_set", "dataseries",
+                "epoch_set", "group"):
+        assert strip.action_button(key).text() == "⋯"
+        assert not strip.action_button(key).isEnabled()
+    assert strip.source_button("data").text() == "Data"
+    assert strip.source_button("dataseries").text() == "Data Series"
+
+
+def test_menu_bar_is_not_replaced_by_selection_strip(qtbot, nm):
+    win = NMAppWindow(nm)
+    qtbot.addWidget(win)
+    assert win.menuWidget() is win.menuBar()
+    assert win.centralWidget().layout().itemAt(0).widget() is win.selection_strip
 
 
 def test_plot_trace_navigator_steps_data_and_series(qtbot, nm):
@@ -113,10 +123,7 @@ def test_plot_channel_tabs_are_independent_of_analysis_channel(qtbot, nm):
     assert nm.select_values["channel"] is analysis_channel
     assert plot.current_trace is dataseries.get_data(channel="B", epoch="E1")
     assert plot.plot_widget.getPlotItem().listDataItems()
-    assert "Epoch" not in [
-        win.selection_strip.combo_label(index)
-        for index in range(win.selection_strip.count())
-    ]
+    assert "epoch" not in win.selection_strip.keys()
 
     win.selection_model.update(dataseries=stim)
     assert nm.select_values["dataseries"] is stim
@@ -205,14 +212,14 @@ def test_browser_selection_updates_shared_gui_state(qtbot, nm):
     win.browser_widget._request_selection(data_index)
 
     assert win.selection_model.selection["data"] is data
-    assert win.selection_strip.combo_boxes()[1].currentText() == "Record"
+    assert win.selection_strip.combo("data").currentText() == "Record"
     assert "Record" in win.plot_widget.selection_label.text()
     assert "Record" in win.history_panel.toPlainText()
 
     win.selection_model.clear()
 
     assert all(value is None for value in win.selection_model.selection.values())
-    assert win.selection_strip.combo_boxes()[1].currentText() == ""
+    assert win.selection_strip.combo("data").currentText() == ""
     assert "No selection" in win.plot_widget.selection_label.text()
 
 
@@ -267,13 +274,13 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
         set_menu,
         operator_menu,
         group_menu,
-    ) = strip.combo_boxes()
+    ) = (strip.combo(key) for key in ("folder", "data", "dataseries", "channel", "epoch_set", "group_operator", "group"))
 
     assert _combo_values(folder_menu) == ["", "Demo1", "Demo2"]
     assert _combo_values(data_menu) == ["", "AlphaA0", "AlphaB1", "BetaA0"]
     assert _combo_values(series_menu) == ["", "Alpha", "Beta"]
     assert folder_menu.currentText() == "Demo1"
-    assert data_menu.currentText() == ""
+    assert win.selection_model.selection["source"] == "dataseries"
     assert series_menu.currentText() == "Alpha"
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "AlphaA0"
@@ -288,7 +295,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     folder_menu.setCurrentText("Demo2")
 
     assert nm.select_values["folder"] is folder2
-    assert nm.select_values["data"] is None
+    assert win.selection_model.selection["source"] == "dataseries"
     assert nm.select_values["dataseries"] is folder2.dataseries["Gamma"]
     assert _combo_values(data_menu) == ["", "GammaA0", "GammaA1", "GammaB0", "GammaB1"]
     assert _combo_values(series_menu) == ["", "Gamma"]
@@ -322,7 +329,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     folder_menu.setCurrentIndex(0)
     assert all(value is None for value in win.selection_model.selection.values())
     folder_menu.setCurrentText("Demo1")
-    assert data_menu.currentText() == ""
+    assert win.selection_model.selection["source"] == "dataseries"
     assert series_menu.currentText() == "Alpha"
     assert win.plot_widget.trace_name_label.text() == "AlphaA0"
     assert set_menu.currentText() == "Demo1Set"
@@ -330,7 +337,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert operator_menu.currentText() == "AND"
 
     folder_menu.setCurrentText("Demo2")
-    assert data_menu.currentText() == ""
+    assert win.selection_model.selection["source"] == "dataseries"
     assert series_menu.currentText() == "Gamma"
     assert win.plot_widget.view_tabs.tabText(win.plot_widget.view_tabs.currentIndex()) == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA1"
@@ -358,7 +365,7 @@ def test_selection_memory_is_independent_per_dataseries(qtbot, nm):
     win = NMAppWindow(nm)
     qtbot.addWidget(win)
     _, _, series_menu, channel_menu, set_menu, operator_menu, group_menu = (
-        win.selection_strip.combo_boxes()
+        win.selection_strip.combo(key) for key in ("folder", "data", "dataseries", "channel", "epoch_set", "group_operator", "group")
     )
     trace_navigator = win.plot_widget
 
@@ -397,7 +404,7 @@ def test_selection_memory_is_independent_per_dataseries(qtbot, nm):
     assert operator_menu.currentText() == "OR"
 
 
-def test_data_and_dataseries_selectors_toggle_exclusively(qtbot, nm):
+def test_data_and_dataseries_sections_are_independent(qtbot, nm):
     folder = nm.folders.new("Demo", select=False)
     scale = {"start": 0.0, "delta": 1.0, "label": "Time", "units": "ms"}
     yscale = {"label": "Vm", "units": "mV"}
@@ -412,54 +419,73 @@ def test_data_and_dataseries_selectors_toggle_exclusively(qtbot, nm):
 
     win = NMAppWindow(nm)
     qtbot.addWidget(win)
-    _, data_menu, series_menu, channel_menu, set_menu, operator_menu, group_menu = (
-        win.selection_strip.combo_boxes()
+    strip = win.selection_strip
+    data_menu, data_set_menu, series_menu, channel_menu, epoch_set_menu, group_menu = (
+        strip.combo(key)
+        for key in ("data", "data_set", "dataseries", "channel", "epoch_set", "group")
     )
-    trace_navigator = win.plot_widget
+    plot = win.plot_widget
 
-    assert data_menu.currentText() == ""
     assert series_menu.currentText() == "Record"
-    assert channel_menu.isEnabled()
-    assert trace_navigator.trace_index.isEnabled()
-    assert _combo_values(set_menu) == ["", "EpochSet"]
+    assert strip.source_button("dataseries").isChecked()
+    assert strip.is_active_section("dataseries")
+    assert strip.source_button("data").isEnabled()  # a data array is selected too
+    assert _combo_values(data_set_menu) == ["", "FlatSet", "DataSet"]
+    assert _combo_values(epoch_set_menu) == ["", "EpochSet"]
     assert _combo_values(group_menu) == ["", "0", "1"]
 
     channel_menu.setCurrentText("B")
-    trace_navigator.trace_index.setValue(1)
-    set_menu.setCurrentText("EpochSet")
-    group_menu.setCurrentText("1")
-    operator_menu.setCurrentText("AND")
+    epoch_set_menu.setCurrentText("EpochSet")
     data_menu.setCurrentText("RecordA0")
 
+    # Choosing data makes Data the source; the data series stays selected
     assert nm.select_values["data"] is folder.data["RecordA0"]
-    assert nm.select_values["dataseries"] is None
-    assert series_menu.currentText() == ""
-    assert not channel_menu.isEnabled()
-    assert trace_navigator.trace_index.isEnabled()
-    assert trace_navigator.trace_name_label.text() == "RecordA0"
-    assert _combo_values(set_menu) == ["", "FlatSet", "DataSet"]
-    assert _combo_values(group_menu) == ["", "0", "1"]
-    set_menu.setCurrentText("DataSet")
-    group_menu.setCurrentText("0")
-    operator_menu.setCurrentText("OR")
-
-    series_menu.setCurrentText("Record")
-
-    assert nm.select_values["data"] is None
     assert nm.select_values["dataseries"] is record
-    assert data_menu.currentText() == ""
+    assert strip.source_button("data").isChecked()
+    assert strip.is_active_section("data")
+    assert not strip.is_active_section("dataseries")
+    assert series_menu.currentText() == "Record"
     assert channel_menu.currentText() == "B"
-    assert trace_navigator.trace_index.value() == 1
-    assert channel_menu.isEnabled()
-    assert trace_navigator.trace_index.isEnabled()
-    assert set_menu.currentText() == "EpochSet"
-    assert group_menu.currentText() == "1"
-    assert operator_menu.currentText() == "AND"
+    assert epoch_set_menu.currentText() == "EpochSet"
+    assert plot.trace_name_label.text() == "RecordA0"
 
-    data_menu.setCurrentText("RecordA0")
-    assert set_menu.currentText() == "DataSet"
-    assert group_menu.currentText() == "0"
-    assert operator_menu.currentText() == "OR"
+    data_set_menu.setCurrentText("DataSet")
+    assert win.selection_model.selection["data_set"] == "DataSet"
+    assert win.selection_model.selection["epoch_set"] == "EpochSet"
+
+    # The radio buttons switch the source without changing the choices
+    strip.source_button("dataseries").click()
+    assert win.selection_model.selection["source"] == "dataseries"
+    assert plot._trace_mode == "dataseries"
+    assert data_menu.currentText() == "RecordA0"
+    strip.source_button("data").click()
+    assert plot.trace_name_label.text() == "RecordA0"
+
+
+def test_subfolder_selector_lists_toolfolder_data(qtbot, nm):
+    folder = nm.folders.new("Demo", select=False)
+    folder.data.new("RecordA0", nparray=np.array([1.0, 2.0]))
+    stats = folder.toolfolders.new("Stats_0")
+    stats.data.new("ST_w0_mean_y", nparray=np.array([1.5]))
+    nm.select_value_set(folder)
+
+    win = NMAppWindow(nm)
+    qtbot.addWidget(win)
+    strip = win.selection_strip
+    sub_menu, data_menu = strip.combo("toolfolder"), strip.combo("data")
+
+    assert _combo_values(sub_menu) == ["—", "Stats_0"]
+    assert _combo_values(data_menu) == ["", "RecordA0"]
+
+    sub_menu.setCurrentText("Stats_0")
+    assert nm.select_values["toolfolder"] is stats
+    assert _combo_values(data_menu) == ["", "ST_w0_mean_y"]
+    data_menu.setCurrentText("ST_w0_mean_y")
+    assert win.plot_widget.trace_name_label.text() == "ST_w0_mean_y"
+
+    sub_menu.setCurrentIndex(0)
+    assert nm.select_values["toolfolder"] is None
+    assert _combo_values(data_menu) == ["", "RecordA0"]
 
 
 def test_new_group_refreshes_group_selector(qtbot, nm, monkeypatch):
@@ -473,7 +499,7 @@ def test_new_group_refreshes_group_selector(qtbot, nm, monkeypatch):
     dataseries = folder.sync_dataseries("Record", select=True)
     win = NMAppWindow(nm)
     qtbot.addWidget(win)
-    group_menu = win.selection_strip.combo_boxes()[6]
+    group_menu = win.selection_strip.combo("group")
 
     assert _combo_values(group_menu) == [""]
 

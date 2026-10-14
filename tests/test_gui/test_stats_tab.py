@@ -85,7 +85,7 @@ def test_run_uses_selected_epoch_set_instead_of_current_trace(qtbot):
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
     tab = window.stats_tab
-    window.selection_model.update(set="Chosen")
+    window.selection_model.update(epoch_set="Chosen")
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
 
@@ -504,7 +504,7 @@ def test_run_info_counts_epochs_and_data_arrays(qtbot):
     tab = window.stats_tab
 
     assert tab.run_info_label.text() == "1 epoch"
-    window.selection_model.update(set="Pair")
+    window.selection_model.update(epoch_set="Pair")
     assert tab.run_info_label.text() == "2 epochs"
 
     window.selection_model.update(data=folder.data["RecordA1"])

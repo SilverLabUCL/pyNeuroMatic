@@ -17,7 +17,11 @@ except ImportError:  # pragma: no cover - optional GUI dependency
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
-from pyneuromatic.gui.selection_model import scoped_epoch_names
+from pyneuromatic.gui.selection_model import (
+    epoch_scope_label,
+    scoped_epoch_names,
+    source_object,
+)
 
 # Tab label used for the data view when a single data array is selected
 DATA_VIEW = "Data"
@@ -358,7 +362,7 @@ class TablePanel(QtWidgets.QWidget):
         self.update_selection(model.selection)
 
     def _channels(self, selection: dict) -> list[str]:
-        dataseries = selection.get("dataseries")
+        dataseries = source_object(selection, "dataseries")
         if isinstance(dataseries, NMDataSeries):
             names = list(dataseries.channels.keys())
             if self._channel_name not in names:
@@ -369,7 +373,7 @@ class TablePanel(QtWidgets.QWidget):
                 )
             return names
         self._channel_name = None
-        if isinstance(selection.get("data"), NMData):
+        if isinstance(source_object(selection, "data"), NMData):
             return [DATA_VIEW]
         return []
 
@@ -401,16 +405,16 @@ class TablePanel(QtWidgets.QWidget):
 
     def _refresh_channel_table(self) -> None:
         selection = self._last_selection
-        dataseries = selection.get("dataseries")
-        data = selection.get("data")
+        dataseries = source_object(selection, "dataseries")
+        data = source_object(selection, "data")
         if isinstance(dataseries, NMDataSeries) and self._channel_name is not None:
             try:
                 names = scoped_epoch_names(dataseries, selection)
             except RuntimeError as error:
                 self.channel_table.show_arrays([], str(error))
                 return
-            scope = selection.get("set") or selection.get("group")
-            if names is None:  # no Set or Group: every epoch
+            scope = epoch_scope_label(selection)
+            if names is None:  # no Epoch Set or Group: every epoch
                 names = list(dataseries.epochs.keys())
             arrays = [
                 item
@@ -432,7 +436,16 @@ class TablePanel(QtWidgets.QWidget):
                 title += f" ({scope})"
             self.channel_table.show_arrays(arrays, title, current)
         elif isinstance(data, NMData):
-            self.channel_table.show_arrays([data], data.name, data)
+            context = selection.get("toolfolder") or selection.get("folder")
+            data_set = selection.get("data_set")
+            if data_set is None or context is None:
+                self.channel_table.show_arrays([data], data.name, data)
+                return
+            members = set(context.data.sets.get_items(data_set, get_keys=True) or [])
+            arrays = [item for name, item in context.data.items() if name in members]
+            noun = "data array" if len(arrays) == 1 else "data arrays"
+            title = f"{len(arrays)} {noun} (Data Set: {data_set})"
+            self.channel_table.show_arrays(arrays, title, data)
         else:
             self.channel_table.show_arrays([], "No selection")
 
