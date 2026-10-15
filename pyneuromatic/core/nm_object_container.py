@@ -629,6 +629,12 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__map.clear()
         self.__map.update(new_map)
         self.__sets.rename_item(key, actual_newname)
+        # Keep a renamed item selected
+        if (
+            isinstance(self.__selected_name, str)
+            and self.__selected_name.lower() == key.lower()
+        ):
+            self.__selected_name = actual_newname
         nmh.history(
             "renamed '%s' as '%s'" % (key, actual_newname),
             path=self.path_str, quiet=quiet,

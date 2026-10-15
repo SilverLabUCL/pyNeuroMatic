@@ -727,6 +727,17 @@ class TestNMObjectContainerRename(NMObjectContainerTestBase):
         klist = [OPREFIX0 + str(i) for i in [3, 1, 2, 4, 5]]
         self.assertEqual(list(self.map0.keys()), klist)
 
+    def test_rename_keeps_selected_item_selected(self):
+        self.map0.selected_name = ONLIST0[1]
+        self.map0.rename(ONLIST0[1], "renamed")
+        self.assertEqual(self.map0.selected_name, "renamed")
+        self.assertIs(self.map0.selected_value, self.map0["renamed"])
+
+    def test_rename_leaves_other_selection_alone(self):
+        self.map0.selected_name = ONLIST0[1]
+        self.map0.rename(ONLIST0[2], "renamed")
+        self.assertEqual(self.map0.selected_name, ONLIST0[1])
+
     def test_rename_with_none_uses_next_auto_name(self):
         self.map0.pop(ONLIST0[3])
         self.map0.rename(ONLIST0[0], ONLIST0[3])
