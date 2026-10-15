@@ -125,6 +125,7 @@ class SelectionStrip(QtWidgets.QWidget):
             " border-radius: 4px; }"
             "QFrame#selectionSection[active=\"true\"] {"
             " border: 2px solid palette(highlight); }"
+            "QToolButton::menu-indicator { image: none; width: 0px; }"
         )
         layout = FlowLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -193,6 +194,14 @@ class SelectionStrip(QtWidgets.QWidget):
 
     def action_button(self, key: str) -> QtWidgets.QToolButton:
         return self._action_buttons[key]
+
+    def set_actions_menu(self, key: str, menu: QtWidgets.QMenu) -> None:
+        """Show *menu* from the ⋯ button of the *key* selector."""
+        button = self._action_buttons[key]
+        button.setMenu(menu)
+        button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setEnabled(True)
+        button.setToolTip(f"{self._labels[key]} actions")
 
     def source_button(self, source: str) -> QtWidgets.QRadioButton:
         return self._source_buttons[source]

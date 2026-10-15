@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from math import sin
 
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 try:
     import pyqtgraph as pg
@@ -30,6 +30,7 @@ from pyneuromatic.gui.selection_model import (
     source_object,
 )
 from pyneuromatic.gui.selection_strip import SelectionStrip
+from pyneuromatic.gui.tier_actions import FolderActions
 from pyneuromatic.gui.stats_tab import StatsToolTab
 
 
@@ -441,6 +442,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("pyNeuroMatic")
         self.resize(1200, 800)
 
+        # Tier actions, shared by the strip's ⋯ menus and the menu bar
+        self.folder_actions = FolderActions(self.selection_model, self)
+
         self._build_menu()
         self._build_selection_strip()
         self._build_tool_shell()
@@ -449,10 +453,17 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("File")
-        file_menu.addAction("Open")
-        file_menu.addAction("Save")
+        file_menu.addAction(self.folder_actions.open_action)
+        file_menu.addAction(self.folder_actions.save_action)
         file_menu.addSeparator()
-        file_menu.addAction("Quit")
+        quit_action = file_menu.addAction("Quit")
+        quit_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Quit))
+        quit_action.triggered.connect(self.close)
+
+        folder_menu = self.folder_actions.folder_menu(self)
+        folder_menu.addSeparator()
+        folder_menu.addMenu(self.folder_actions.subfolder_menu(folder_menu))
+        self.menuBar().addMenu(folder_menu)
 
         edit_menu = self.menuBar().addMenu("Edit")
         edit_menu.addAction("Rename")
@@ -473,6 +484,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         # bar in its usual place
         self.selection_strip = SelectionStrip(self)
         self.selection_strip.bind_selection_model(self.selection_model)
+        strip = self.selection_strip
+        strip.set_actions_menu("folder", self.folder_actions.folder_menu(strip))
+        strip.set_actions_menu("toolfolder", self.folder_actions.subfolder_menu(strip))
 
     def _build_tool_shell(self) -> None:
         self.tool_rail = ToolRail(["Browser", "Main", "Stats", "Spike"], self)
@@ -516,6 +530,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.plot_widget.register_tool("Stats", self.stats_plot)
         self.table_panel.register_tool("Stats", stats2.tables)
         stats2.results_changed.connect(self._update_tool_tabs)
+        self.folder_actions.content_changed.connect(self._on_folders_changed)
         # A run or a deleted folder changes the Subfolder list
         stats2.results_changed.connect(self.selection_strip.refresh_options)
         stats2.plot_requested.connect(self._show_plot_values)
@@ -566,6 +581,13 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.current_tool_name = tool_name
         idx = self.tool_rail.index_for_name(tool_name)
         self.tool_workspace.setCurrentIndex(idx)
+
+    def _on_folders_changed(self) -> None:
+        """Reload views that list folders or subfolders."""
+        if isinstance(self.browser_widget, FolderBrowserWidget):
+            self.browser_widget.refresh()
+        self.selection_strip.refresh_options()
+        self.stats_tab.stats2.refresh()
 
     def _update_tool_tabs(self) -> None:
         tools = ["Stats"] if self.stats_tab.stats2.has_results() else []
