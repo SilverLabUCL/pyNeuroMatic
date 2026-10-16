@@ -88,7 +88,8 @@ class ChooseItemDialog(QtWidgets.QDialog):
     name field; *default_name(item, *extras)* fills it whenever the item or
     an extra choice changes.
     *extras* adds further dropdowns, as ``(label, items, current)``.
-    *message* is a note below the fields, or a function of the item.
+    *message* is a note below the fields, or a function of the item and
+    extra choices, updated when they change.
     *context* adds a read-only first row, as ``(label, text)`` (e.g. the
     folder an action applies to).
     *validate(item, name, *extras)* returns an error message, shown inline
@@ -182,7 +183,10 @@ class ChooseItemDialog(QtWidgets.QDialog):
     def _fill_default_name(self, *_args) -> None:
         if self.name_edit is not None and self._default_name is not None:
             self.name_edit.setText(self._default_name(self.item(), *self.extras()))
-        message = self._message(self.item()) if callable(self._message) else self._message
+        message = (
+            self._message(self.item(), *self.extras())
+            if callable(self._message) else self._message
+        )
         self.message_label.setText(message)
         self.message_label.setVisible(bool(message))
         self.error_label.hide()
@@ -200,22 +204,25 @@ class ChooseItemDialog(QtWidgets.QDialog):
 
 
 class NewDataDialog(QtWidgets.QDialog):
-    """Name, size, fill value and scales for a new data array.
+    """Name, size, fill value and scales for a new data array, or with
+    *series*, a prefix, channel and epoch counts and noise for a data series.
 
-    *defaults* fills the fields (keys as in :meth:`values`); *validate(name)*
-    returns a name error, shown inline while the dialog stays open.
+    *defaults* fills the fields (keys as in :meth:`values`); *validate(values)*
+    returns an error, shown inline while the dialog stays open.
     """
 
     def __init__(
         self,
         defaults: dict,
-        validate: Callable[[str], str | None] | None = None,
+        validate: Callable[[dict], str | None] | None = None,
         context: tuple[str, str] | None = None,
+        series: bool = False,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("New Data")
+        self.setWindowTitle("New Data Series" if series else "New Data")
         self._validate = validate
+        self._series = series
         layout = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
         layout.addLayout(form)
@@ -229,17 +236,42 @@ class NewDataDialog(QtWidgets.QDialog):
             edit.setObjectName(key)
             return edit
 
-        self.edits = {key: line(key) for key in (
-            "name", "value", "xstart", "xdelta", "xlabel", "xunits", "ylabel", "yunits",
-        )}
-        self.points_spin = QtWidgets.QSpinBox(self)
-        self.points_spin.setRange(1, 100_000_000)
-        self.points_spin.setValue(int(defaults.get("points", 100)))
+        def spin(key: str, low: int, high: int, default: int) -> QtWidgets.QSpinBox:
+            box = QtWidgets.QSpinBox(self)
+            box.setObjectName(key)
+            box.setRange(low, high)
+            box.setValue(int(defaults.get(key, default)))
+            return box
+
+        keys = ["name", "value", "xstart", "xdelta", "xlabel", "xunits", "ylabel", "yunits"]
+        if series:
+            keys.append("noise")
+        self.edits = {key: line(key) for key in keys}
+        self.points_spin = spin("points", 1, 100_000_000, 100)
         self.edits["value"].setToolTip("Initial value of every point, e.g. 0 or NaN")
 
-        form.addRow("Name", self.edits["name"])
-        form.addRow("Points", self.points_spin)
-        form.addRow("Value", self.edits["value"])
+        if series:
+            self.channels_spin = spin("n_channels", 1, 26, 1)
+            self.epochs_spin = spin("n_epochs", 1, 1_000_000, 10)
+            self.edits["noise"].setToolTip(
+                "Standard deviation of Gaussian noise added to every point (0: none)"
+            )
+            form.addRow("Prefix", self.edits["name"])
+            counts = QtWidgets.QHBoxLayout()
+            counts.addWidget(self.channels_spin)
+            counts.addWidget(QtWidgets.QLabel("Epochs", self))
+            counts.addWidget(self.epochs_spin)
+            form.addRow("Channels", counts)
+            form.addRow("Points", self.points_spin)
+            fill = QtWidgets.QHBoxLayout()
+            fill.addWidget(self.edits["value"])
+            fill.addWidget(QtWidgets.QLabel("Noise SD", self))
+            fill.addWidget(self.edits["noise"])
+            form.addRow("Value", fill)
+        else:
+            form.addRow("Name", self.edits["name"])
+            form.addRow("Points", self.points_spin)
+            form.addRow("Value", self.edits["value"])
         for axis, keys in (("X", ("xstart", "xdelta")), ("X", ("xlabel", "xunits")),
                            ("Y", ("ylabel", "yunits"))):
             row = QtWidgets.QHBoxLayout()
@@ -267,7 +299,12 @@ class NewDataDialog(QtWidgets.QDialog):
     def values(self) -> dict:
         """The fields, with numbers converted (raises ValueError if invalid)."""
         text = {key: edit.text().strip() for key, edit in self.edits.items()}
-        return {
+        values = {} if not self._series else {
+            "n_channels": self.channels_spin.value(),
+            "n_epochs": self.epochs_spin.value(),
+            "noise": float(text["noise"] or 0),
+        }
+        return values | {
             "name": text["name"],
             "points": self.points_spin.value(),
             "value": float(text["value"] or 0),
@@ -283,13 +320,151 @@ class NewDataDialog(QtWidgets.QDialog):
         try:
             values = self.values()
         except ValueError:
-            error = "Value, Start and Delta must be numbers"
+            error = (
+                "Value, Noise SD, Start and Delta must be numbers" if self._series
+                else "Value, Start and Delta must be numbers"
+            )
         else:
             error = None
             if values["xdelta"] == 0:
                 error = "Delta must not be 0"
+            elif values.get("noise", 0) < 0:
+                error = "Noise SD must not be negative"
             elif self._validate is not None:
-                error = self._validate(values["name"])
+                error = self._validate(values)
+        if error:
+            self.error_label.setText(error)
+            self.error_label.show()
+            return
+        super().accept()
+
+
+def common_value(values) -> str | None:
+    """The shared value of *values* as text, or None if they differ ("mixed")."""
+    values = set(values)
+    if len(values) > 1:
+        return None
+    if not values:
+        return ""
+    value = values.pop()
+    return f"{value:g}" if isinstance(value, (int, float)) else str(value)
+
+
+def scale_fields(arrays) -> dict[str, str | None]:
+    """Shared x start/delta/label/units of *arrays* (None where they differ)."""
+    return {
+        "xstart": common_value(d.xscale.start for d in arrays),
+        "xdelta": common_value(d.xscale.delta for d in arrays),
+        "xlabel": common_value(d.xscale.label for d in arrays),
+        "xunits": common_value(d.xscale.units for d in arrays),
+    }
+
+
+class EditScalesDialog(QtWidgets.QDialog):
+    """Edit x start/delta/label/units and the y label/units of each row
+    (each channel of a data series, or a single array).
+
+    Fields start at the current values; a field whose arrays differ is
+    blank, marked "(mixed)". Only fields you change are applied.
+    *error* (e.g. a locked series) is shown when OK is pressed.
+    """
+
+    def __init__(
+        self,
+        x: dict[str, str | None],
+        y_rows: list[tuple[str, str | None, str | None]],
+        context: tuple[str, str] | None = None,
+        error: str | None = None,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Edit Scales")
+        self._error = error
+        self._initial: dict = {}
+        layout = QtWidgets.QVBoxLayout(self)
+        if context is not None:
+            form = QtWidgets.QFormLayout()
+            context_label = QtWidgets.QLabel(context[1], self)
+            context_label.setStyleSheet("font-weight: bold;")
+            form.addRow(context[0], context_label)
+            layout.addLayout(form)
+
+        def edit(key, value) -> QtWidgets.QLineEdit:
+            line = QtWidgets.QLineEdit(value or "", self)
+            line.setObjectName(str(key))
+            if value is None:
+                line.setPlaceholderText("(mixed)")
+            self._initial[key] = line.text()
+            return line
+
+        grid = QtWidgets.QGridLayout()
+        grid.addWidget(QtWidgets.QLabel("<b>X</b>", self), 0, 0)
+        self.x_edits = {key: edit(key, x.get(key)) for key in
+                        ("xstart", "xdelta", "xlabel", "xunits")}
+        for row, (first, second) in enumerate((("xstart", "xdelta"), ("xlabel", "xunits")), 1):
+            for col, key in ((0, first), (2, second)):
+                grid.addWidget(QtWidgets.QLabel(key[1:].capitalize(), self), row, col)
+                grid.addWidget(self.x_edits[key], row, col + 1)
+        grid.addWidget(QtWidgets.QLabel("<b>Y</b>", self), 3, 0)
+        self.y_edits: dict[str, dict[str, QtWidgets.QLineEdit]] = {}
+        multi = len(y_rows) > 1
+        if multi:
+            grid.addWidget(QtWidgets.QLabel("Channel", self), 4, 0)
+            grid.addWidget(QtWidgets.QLabel("Label", self), 4, 1)
+        for offset, (name, label, units) in enumerate(y_rows, 5 if multi else 4):
+            self.y_edits[name] = {
+                "label": edit((name, "label"), label),
+                "units": edit((name, "units"), units),
+            }
+            # One row per channel, labelled by the channel; a single array's
+            # row is labelled "Label"
+            grid.addWidget(QtWidgets.QLabel(name if multi else "Label", self), offset, 0)
+            grid.addWidget(self.y_edits[name]["label"], offset, 1)
+            grid.addWidget(QtWidgets.QLabel("Units", self), offset, 2)
+            grid.addWidget(self.y_edits[name]["units"], offset, 3)
+        layout.addLayout(grid)
+
+        self.error_label = QtWidgets.QLabel("", self)
+        self.error_label.setStyleSheet("color: #b91c1c;")
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def changes(self) -> dict:
+        """Changed fields: ``xstart``... (numbers converted) and ``y`` as
+        ``{row: {"label": ..., "units": ...}}``. Raises ValueError if a
+        changed Start or Delta is not a number."""
+        changed: dict = {}
+        for key, line in self.x_edits.items():
+            if line.text() != self._initial[key]:
+                text = line.text().strip()
+                changed[key] = float(text) if key in ("xstart", "xdelta") else text
+        y: dict = {}
+        for name, edits in self.y_edits.items():
+            for field, line in edits.items():
+                if line.text() != self._initial[(name, field)]:
+                    y.setdefault(name, {})[field] = line.text().strip()
+        if y:
+            changed["y"] = y
+        return changed
+
+    def accept(self) -> None:
+        try:
+            changed = self.changes()
+        except ValueError:
+            error = "Start and Delta must be numbers"
+        else:
+            error = self._error
+            if error is None and changed.get("xdelta", 1) == 0:
+                error = "Delta must not be 0"
         if error:
             self.error_label.setText(error)
             self.error_label.show()
@@ -309,12 +484,13 @@ def new_data_defaults(container, points: int = 100) -> dict:
 
 def ask_new_data(
     defaults: dict,
-    validate: Callable[[str], str | None],
+    validate: Callable[[dict], str | None],
     context: tuple[str, str] | None = None,
     parent: QtWidgets.QWidget | None = None,
+    series: bool = False,
 ) -> dict | None:
     """Show a :class:`NewDataDialog`; returns its values, or None if cancelled."""
-    dialog = NewDataDialog(defaults, validate, context=context, parent=parent)
+    dialog = NewDataDialog(defaults, validate, context=context, series=series, parent=parent)
     if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
         return None
     return dialog.values()
@@ -387,6 +563,13 @@ class TierActions(QtCore.QObject):
         show = QtWidgets.QMessageBox.warning if warning else QtWidgets.QMessageBox.information
         show(self._parent_widget, title, text)
 
+    def _ask_scales(self, x, y_rows, context, error) -> dict | None:
+        """The Edit Scales dialog (replaced in tests); returns the changes."""
+        dialog = EditScalesDialog(x, y_rows, context, error, parent=self._parent_widget)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return None
+        return dialog.changes()
+
     def _confirm(self, title: str, text: str) -> bool:
         answer = QtWidgets.QMessageBox.question(self._parent_widget, title, text)
         return answer == QtWidgets.QMessageBox.StandardButton.Yes
@@ -399,6 +582,16 @@ class TierActions(QtCore.QObject):
 
     def _folder(self):
         return self._selection.selection.get("folder")
+
+    def _context(self):
+        """The subfolder if one is selected, else the folder."""
+        return self._selection.selection.get("toolfolder") or self._folder()
+
+    def _context_text(self) -> str:
+        folder = self._folder()
+        subfolder = self._selection.selection.get("toolfolder")
+        names = [obj.name for obj in (folder, subfolder) if obj is not None]
+        return " / ".join(names)
 
     def _current_name(self, key: str) -> str | None:
         value = self._selection.selection.get(key)
@@ -752,6 +945,8 @@ class DataActions(TierActions):
         self.duplicate_action = action("Duplicate…", self.duplicate_data,
                                        tip="Copy a data array in this folder")
         self.rename_action = action("Rename…", self.rename_data, tip="Rename a data array")
+        self.scales_action = action("Edit Scales…", self.edit_scales,
+                                    tip="Edit the x and y labels, units, start and delta")
         self.copy_action = action("Copy to Folder…", self.copy_data_to_folder,
                                   tip="Copy a data array into another folder")
         self.delete_action = action("Delete…", self.delete_data, tip="Delete a data array")
@@ -786,6 +981,7 @@ class DataActions(TierActions):
         menu.addSeparator()
         menu.addAction(self.duplicate_action)
         menu.addAction(self.rename_action)
+        menu.addAction(self.scales_action)
         menu.addAction(self.copy_action)
         menu.addSeparator()
         menu.addAction(self.delete_action)
@@ -816,6 +1012,7 @@ class DataActions(TierActions):
         self.copy_action.setEnabled(has_data and len(self._selection.manager.folders) > 1)
         self.browse_action.setEnabled(data is not None)
         self.new_action.setEnabled(data is not None)
+        self.scales_action.setEnabled(self._selection.selection.get("data") is not None)
         self.set_browse_action.setEnabled(data is not None)
         self.set_new_action.setEnabled(data is not None)
         for item in (self.set_add_action, self.set_remove_action, self.set_combine_action,
@@ -834,16 +1031,6 @@ class DataActions(TierActions):
         # Every data dialog shows the folder (and subfolder) it applies to
         options.setdefault("context", ("Folder", self._context_text()))
         return super()._choose(title, **options)
-
-    def _context_text(self) -> str:
-        folder = self._folder()
-        subfolder = self._selection.selection.get("toolfolder")
-        names = [obj.name for obj in (folder, subfolder) if obj is not None]
-        return " / ".join(names)
-
-    def _context(self):
-        """The subfolder if one is selected, else the folder."""
-        return self._selection.selection.get("toolfolder") or self._folder()
 
     def _data_container(self):
         context = self._context()
@@ -889,8 +1076,8 @@ class DataActions(TierActions):
         points = current.nparray.size if current is not None and current.nparray is not None else 100
         values = self._ask_new_data(
             new_data_defaults(container, points),
-            lambda name: name_error(container, name)
-            or series_name_error(self._context(), name),
+            lambda values: name_error(container, values["name"])
+            or series_name_error(self._context(), values["name"]),
         )
         if values is None:
             return
@@ -939,7 +1126,7 @@ class DataActions(TierActions):
             current=self._current_name("data"),
             name_label="New name",
             default_name=lambda item: item,
-            message=lambda item: self._series_note(container, item),
+            message=lambda item, *_: self._series_note(container, item),
             validate=lambda item, name: (
                 self._lock_error(container, item)
                 or (None if name == item else (
@@ -957,6 +1144,28 @@ class DataActions(TierActions):
         ):
             return
         container.rename(answer[0], answer[1])
+        self._changed()
+
+    def edit_scales(self) -> None:
+        data = self._selection.selection.get("data")
+        container = self._data_container()
+        if data is None or container is None:
+            return
+        lock_error = self._lock_error(container, data.name)
+        changes = self._ask_scales(
+            scale_fields([data]),
+            [("Y", data.yscale.label, data.yscale.units)],
+            ("Data", f"{self._context_text()} › {data.name}"),
+            lock_error,
+        )
+        if not changes or lock_error:  # the dialog only shows a locked array
+            return
+        for key, attribute in (("xstart", "start"), ("xdelta", "delta"),
+                               ("xlabel", "label"), ("xunits", "units")):
+            if key in changes:
+                setattr(data.xscale, attribute, changes[key])
+        for field, value in changes.get("y", {}).get("Y", {}).items():
+            setattr(data.yscale, field, value)
         self._changed()
 
     def copy_data_to_folder(self) -> None:
@@ -999,7 +1208,7 @@ class DataActions(TierActions):
             item_label="Data",
             items=list(container.keys()),
             current=self._current_name("data"),
-            message=lambda item: self._series_note(container, item)
+            message=lambda item, *_: self._series_note(container, item)
             or "The data array will be deleted.",
             validate=lambda item, name: self._lock_error(container, item),
         )
@@ -1151,10 +1360,487 @@ class DataActions(TierActions):
         self._changed()
 
 
+def prefix_error(owner, prefix: str | None, suffixes: list[str] | None = None,
+                 renaming=None) -> str | None:
+    """Why *prefix* cannot name a new data series in *owner*, or None.
+
+    *suffixes* are the channel+epoch endings of its data (e.g. ``A0``); a
+    data name they would make that already exists is an error, except for
+    data of the series being renamed (*renaming*).
+    """
+    if not prefix:
+        return "Enter a prefix"
+    if not nmu.name_ok(prefix):
+        return f"'{prefix}' is not a valid prefix (use letters, digits and _)"
+    if owner.dataseries._getkey(prefix) is not None:
+        return f"Data series '{prefix}' already exists"
+    own = set()
+    if renaming is not None:
+        own = {d.name.lower() for ch in renaming.channels.values() for d in ch.data}
+    for suffix in suffixes or []:
+        key = owner.data._getkey(prefix + suffix)
+        if key is not None and key.lower() not in own:
+            return f"Data '{prefix + suffix}' already exists"
+    return None
+
+
+def series_suffixes(dataseries) -> list[str]:
+    """Channel+epoch endings of a series' data names (``A0``, ``B12``, ...)."""
+    names = {d.name for ch in dataseries.channels.values() for d in ch.data}
+    return sorted(n[len(dataseries.name):] for n in names
+                  if n.lower().startswith(dataseries.name.lower()))
+
+
+def epoch_ranges(numbers: list[int]) -> str:
+    """Compact epoch list: [0, 1, 2, 5] -> "E0–E2, E5"."""
+    parts, numbers = [], sorted(numbers)
+    start = previous = None
+    for number in numbers + [None]:
+        if number is not None and previous is not None and number == previous + 1:
+            previous = number
+            continue
+        if start is not None:
+            parts.append(f"E{start}" if start == previous else f"E{start}–E{previous}")
+        start = previous = number
+    return ", ".join(parts)
+
+
+def series_update_preview(owner, series) -> dict:
+    """What updating *series* from the folder's data would add.
+
+    Returns ``new_channels`` (channel letters), ``new_epochs`` (epoch numbers)
+    and ``new_arrays`` (data names) not yet in the series.
+    """
+    result = owner._scan_dataseries(series.name)
+    matches = result[1] if result is not None else {}
+    linked = {id(d) for channel in series.channels.values() for d in channel.data}
+    existing_epochs = set()
+    for name in series.epochs.keys():
+        try:
+            existing_epochs.add(int(name[1:]))
+        except ValueError:
+            pass
+    new = {key: data for key, data in matches.items() if id(data) not in linked}
+    return {
+        "new_channels": sorted({ch for ch, _ in new} - set(series.channels.keys())),
+        "new_epochs": sorted({ep for _, ep in new} - existing_epochs),
+        "new_arrays": sorted(data.name for data in new.values()),
+    }
+
+
+class SeriesActions(TierActions):
+    """Data series (Prefix) actions, for the folder's data series."""
+
+    # Ask the app to select a data series in the browser
+    browse_requested = QtCore.pyqtSignal(object)
+
+    KEEP, DELETE = "Keep", "Delete"
+
+    def __init__(
+        self,
+        selection_model: SelectionModel,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(selection_model, parent)
+        action = self._action
+        self.new_action = action("New Series…", self.new_series,
+                                 tip="Create a data series of new arrays, with optional noise")
+        self.from_data_action = action(
+            "Series from Data…", self.series_from_data,
+            tip="Make a data series from arrays named <prefix><channel><epoch>",
+        )
+        self.update_action = action("Update from Data", self.update_series,
+                                    tip="Add newly named or imported arrays to the series")
+        self.copy_action = action("Copy Series…", self.copy_series,
+                                  tip="Copy the series under a new prefix (the copy is unlocked)")
+        self.rename_action = action("Rename Series…", self.rename_series,
+                                    tip="Rename the series prefix and its arrays")
+        self.scales_action = action("Edit Scales…", self.edit_scales,
+                                    tip="Edit the series' x and y labels, units, start and delta")
+        self.lock_action = action("Lock Series", self.toggle_lock,
+                                  tip="A locked series' arrays cannot be changed")
+        self.lock_action.setCheckable(True)
+        self.remove_channel_action = action("Remove Channel…", self.remove_channel,
+                                            tip="Remove a channel from the series")
+        self.remove_epoch_action = action("Remove Epochs…", self.remove_epoch,
+                                          tip="Remove an epoch, or a range of epochs")
+        self.delete_action = action("Delete Series…", self.delete_series,
+                                    tip="Delete the series, optionally with its arrays")
+        self.browse_action = action("Choose in Browser…", self.choose_in_browser,
+                                    tip="Select the series in the browser")
+
+        selection_model.selection_changed.connect(self.update_enabled)
+        self.update_enabled()
+
+    def series_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu("Series", parent)
+        for item in (self.new_action, self.from_data_action, self.update_action, None,
+                     self.copy_action, self.rename_action, self.scales_action, None,
+                     self.lock_action, None,
+                     self.remove_channel_action, self.remove_epoch_action,
+                     self.delete_action, None, self.browse_action):
+            if item is None:
+                menu.addSeparator()
+            else:
+                menu.addAction(item)
+        return menu
+
+    # --- helpers ------------------------------------------------------------
+
+    def _owner(self):
+        """Folder (or subfolder) whose data series these actions edit."""
+        context = self._context()
+        return context if hasattr(context, "new_dataseries") else None
+
+    def _series(self):
+        series = self._selection.selection.get("dataseries")
+        owner = self._owner()
+        if series is None or owner is None or series.name not in owner.dataseries:
+            return None
+        return series
+
+    def _candidate_prefixes(self) -> list[str]:
+        owner = self._owner()
+        if owner is None:
+            return []
+        return [p for p in owner.detect_data_prefixes() if p not in owner.dataseries]
+
+    def _locked_actions(self) -> tuple:
+        """Actions that change the *current* series, greyed out while it is
+        locked. Actions whose dialog chooses the series (Update, Rename,
+        Delete) check the lock of the chosen series in the dialog instead."""
+        return (self.scales_action, self.remove_channel_action, self.remove_epoch_action)
+
+    def update_enabled(self, *_args) -> None:
+        owner = self._owner()
+        series = self._series()
+        has_series = owner is not None and len(owner.dataseries) > 0
+        locked = series is not None and series.locked
+        self.new_action.setEnabled(owner is not None)
+        self.from_data_action.setEnabled(bool(self._candidate_prefixes()))
+        for item in (self.copy_action, self.rename_action, self.delete_action,
+                     self.browse_action):
+            item.setEnabled(has_series)
+        for item in (self.update_action, self.lock_action, self.remove_channel_action,
+                     self.remove_epoch_action, self.scales_action):
+            item.setEnabled(series is not None)
+        self.lock_action.setChecked(locked)
+        if not hasattr(self, "_tips"):
+            self._tips = {item: item.toolTip() for item in self._locked_actions()}
+        for item in self._locked_actions():
+            if locked:
+                item.setEnabled(False)
+                item.setToolTip(f"Data series '{series.name}' is locked.")
+            else:
+                item.setToolTip(self._tips[item])
+
+    def _series_context(self, series) -> tuple[str, str]:
+        return ("Series", f"{self._context_text()} › {series.name}")
+
+    @staticmethod
+    def _lock_error(owner, name: str | None) -> str | None:
+        series = owner.dataseries.get(name) if name else None
+        if series is not None and series.locked:
+            return (f"Data series '{name}' is locked. Untick Lock Series "
+                    "to change it.")
+        return None
+
+    def _choose_series(self, title: str, **options):
+        owner = self._owner()
+        if owner is None or len(owner.dataseries) == 0:
+            return None
+        current = self._series()
+        options.setdefault("context", ("Folder", self._context_text()))
+        return self._choose(
+            title, item_label="Series", items=list(owner.dataseries.keys()),
+            current=current.name if current is not None else None, **options,
+        )
+
+    # --- actions ------------------------------------------------------------
+
+    def _ask_new_series(self, defaults: dict, validate) -> dict | None:
+        """The New Data Series dialog (replaced in tests)."""
+        return ask_new_data(
+            defaults, validate, context=("Folder", self._context_text()),
+            parent=self._parent_widget, series=True,
+        )
+
+    def new_series(self) -> None:
+        owner = self._owner()
+        if owner is None:
+            return
+
+        def error(values):
+            suffixes = [f"{nmu.channel_char(c)}{e}" for c in range(values["n_channels"])
+                        for e in range(values["n_epochs"])]
+            return prefix_error(owner, values["name"], suffixes)
+
+        prefix = next(p for p in ("Record", *(f"Record{n}" for n in range(1, 1000)))
+                      if error({"name": p, "n_channels": 1, "n_epochs": 1}) is None)
+        defaults = new_data_defaults(owner.data) | {
+            "name": prefix, "n_channels": 1, "n_epochs": 10, "noise": 0,
+        }
+        values = self._ask_new_series(defaults, error)
+        if values is None:
+            return
+        value, noise = values["value"], values["noise"]
+        if noise > 0:
+            rng = np.random.default_rng()
+            fill = lambda n: value + rng.normal(0.0, noise, n)  # noqa: E731
+        else:
+            fill = value
+        series = owner.new_dataseries(
+            values["name"],
+            n_channels=values["n_channels"], n_epochs=values["n_epochs"],
+            n_points=values["points"], dx=values["xdelta"], x_start=values["xstart"],
+            x_label=values["xlabel"], x_units=values["xunits"],
+            y_label=values["ylabel"], y_units=values["yunits"], fill=fill,
+        )
+        self._selection.update(dataseries=series)
+        self._changed()
+
+    def series_from_data(self) -> None:
+        owner = self._owner()
+        prefixes = self._candidate_prefixes()
+        if owner is None or not prefixes:
+            return
+        answer = self._choose(
+            "Series from Data", context=("Folder", self._context_text()),
+            item_label="Prefix", items=prefixes, current=prefixes[0],
+            message="Arrays named <prefix><channel><epoch> become the series.",
+        )
+        if answer is None:
+            return
+        series = owner.sync_dataseries(answer[0])
+        self._selection.update(dataseries=series)
+        self._changed()
+
+    def update_summary(self, name: str, *_extras) -> str:
+        """The series' channels and epochs, and what an update would add."""
+        owner = self._owner()
+        series = owner.dataseries.get(name)
+        channels = list(series.channels.keys())
+        epochs = [int(e[1:]) for e in series.epochs.keys() if e[1:].isdigit()]
+        lines = [
+            f"Channels: {', '.join(channels) or 'none'} ({len(channels)})",
+            f"Epochs: {epoch_ranges(epochs) or 'none'} ({len(series.epochs)})",
+            "",
+        ]
+        preview = series_update_preview(owner, series)
+        arrays = preview["new_arrays"]
+        if not arrays:
+            lines.append("Up to date: no new arrays.")
+        else:
+            adds = []
+            if preview["new_channels"]:
+                adds.append(f"channel{'s' if len(preview['new_channels']) > 1 else ''} "
+                            + ", ".join(preview["new_channels"]))
+            if preview["new_epochs"]:
+                adds.append("epochs " + epoch_ranges(preview["new_epochs"]))
+            noun = "array" if len(arrays) == 1 else "arrays"
+            lines.append(f"Update adds {len(arrays)} {noun}"
+                         + (": " + "; ".join(adds) if adds else "") + ".")
+            shown = ", ".join(arrays[:8]) + (", …" if len(arrays) > 8 else "")
+            lines.append(shown)
+            if series.locked:
+                lines.append("")
+                lines.append("The series is locked, so it will not be updated.")
+        return "\n".join(lines)
+
+    def update_series(self) -> None:
+        owner = self._owner()
+
+        def error(item):
+            series = owner.dataseries.get(item)
+            if not series_update_preview(owner, series)["new_arrays"]:
+                return f"Data series '{item}' is already up to date"
+            return self._lock_error(owner, item)
+
+        answer = self._choose_series(
+            "Update from Data",
+            message=self.update_summary,
+            validate=lambda item, name: error(item),
+        )
+        if answer is None:
+            return
+        owner.sync_dataseries(answer[0])
+        self._changed()
+
+    def copy_series(self) -> None:
+        owner = self._owner()
+        folders = self._selection.manager.folders
+        here = self._folder()
+        targets = ([here.name] if here is not None else []) + [
+            name for name in folders.keys() if here is None or name != here.name
+        ]
+
+        def target_owner(target):
+            return owner if target == here.name and owner is not None else folders[target]
+
+        def default_prefix(item, target):
+            target_folder = target_owner(target)
+            suffixes = series_suffixes(owner.dataseries[item])
+            candidate, number = f"{COPY_PREFIX}_{item}", 1
+            while prefix_error(target_folder, candidate, suffixes) is not None:
+                candidate, number = f"{COPY_PREFIX}{number}_{item}", number + 1
+            return candidate
+
+        answer = self._choose_series(
+            "Copy Series",
+            extras=[("To folder", targets, targets[0] if targets else None)],
+            name_label="New prefix",
+            default_name=default_prefix,
+            validate=lambda item, name, target: prefix_error(
+                target_owner(target), name, series_suffixes(owner.dataseries[item])
+            ),
+        )
+        if answer is None:
+            return
+        item, name, target = answer
+        destination = target_owner(target)
+        copy = owner.copy_dataseries(
+            item, name, folder=None if destination is owner else destination
+        )
+        if destination is owner:
+            self._selection.update(dataseries=copy)
+        self._changed()
+
+    def rename_series(self) -> None:
+        owner = self._owner()
+        answer = self._choose_series(
+            "Rename Series",
+            name_label="New prefix",
+            default_name=lambda item: item,
+            validate=lambda item, name: self._lock_error(owner, item) or (
+                None if name == item else prefix_error(
+                    owner, name, series_suffixes(owner.dataseries[item]),
+                    renaming=owner.dataseries[item],
+                )
+            ),
+        )
+        if answer is None or answer[0] == answer[1]:
+            return
+        owner.rename_dataseries(answer[0], answer[1])
+        self._changed()
+
+    def edit_scales(self) -> None:
+        series, owner = self._series(), self._owner()
+        if series is None:
+            return
+        arrays = [d for ch in series.channels.values() for d in ch.data]
+        y_rows = [
+            (name, common_value(d.yscale.label for d in channel.data),
+             common_value(d.yscale.units for d in channel.data))
+            for name, channel in series.channels.items()
+        ]
+        lock_error = self._lock_error(owner, series.name)
+        changes = self._ask_scales(
+            scale_fields(arrays), y_rows, self._series_context(series), lock_error,
+        )
+        if not changes or lock_error:  # the dialog only shows a locked series
+            return
+        for key, setter in (("xstart", series.set_xstart), ("xdelta", series.set_xdelta),
+                            ("xlabel", series.set_xlabel), ("xunits", series.set_xunits)):
+            if key in changes:
+                setter(changes[key])
+        for channel, fields in changes.get("y", {}).items():
+            if "label" in fields:
+                series.set_ylabel(fields["label"], channel=channel)
+            if "units" in fields:
+                series.set_yunits(fields["units"], channel=channel)
+        self._changed()
+
+    def toggle_lock(self) -> None:
+        series = self._series()
+        if series is not None:
+            series.locked = not series.locked
+        self._changed()
+
+    def _remove_part(self, title: str, label: str, names: list[str], remove) -> None:
+        series, owner = self._series(), self._owner()
+        if series is None or not names:
+            return
+        answer = self._choose(
+            title, context=self._series_context(series), item_label=label,
+            items=names, extras=[("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
+            message=f"Keep the {label.lower()}'s arrays in the folder, or delete them.",
+            validate=lambda item, name, arrays: self._lock_error(owner, series.name),
+        )
+        if answer is None:
+            return
+        item, _name, arrays = answer
+        remove(series.name, item, delete_data=arrays == self.DELETE)
+        self._changed()
+
+    def remove_channel(self) -> None:
+        series, owner = self._series(), self._owner()
+        if series is not None:
+            self._remove_part("Remove Channel", "Channel", list(series.channels.keys()),
+                              owner.remove_dataseries_channel)
+
+    def remove_epoch(self) -> None:
+        """Remove a range of epochs, From..To inclusive (one if they match)."""
+        series, owner = self._series(), self._owner()
+        if series is None or len(series.epochs) == 0:
+            return
+        names = list(series.epochs.keys())
+        epoch = self._selection.selection.get("epoch")
+        current = epoch.name if epoch is not None and epoch.name in names else names[0]
+
+        def chosen(first: str, last: str) -> list[str]:
+            return names[names.index(first):names.index(last) + 1]
+
+        def summary(first, last, _arrays):
+            epochs = chosen(first, last)
+            if not epochs:
+                return ""
+            span = first if len(epochs) == 1 else f"{first}–{last}"
+            return f"Removes {len(epochs)} epoch{'s' * (len(epochs) != 1)} ({span})."
+
+        answer = self._choose(
+            "Remove Epochs", context=self._series_context(series),
+            item_label="From", items=names, current=current,
+            extras=[("To", names, current), ("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
+            message=summary,
+            validate=lambda first, _name, last, _arrays: (
+                self._lock_error(owner, series.name)
+                or (None if chosen(first, last) else "To must not be before From")
+            ),
+        )
+        if answer is None:
+            return
+        first, _name, last, arrays = answer
+        owner.remove_dataseries_epoch(
+            series.name, chosen(first, last), delete_data=arrays == self.DELETE
+        )
+        self._changed()
+
+    def delete_series(self) -> None:
+        owner = self._owner()
+        answer = self._choose_series(
+            "Delete Series",
+            extras=[("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
+            message="Keep the series' arrays in the folder, or delete them too.",
+            validate=lambda item, name, arrays: self._lock_error(owner, item),
+        )
+        if answer is None:
+            return
+        item, _name, arrays = answer
+        owner.remove_dataseries(item, delete_data=arrays == self.DELETE)
+        self._changed()
+
+    def choose_in_browser(self) -> None:
+        series = self._series()
+        if series is not None:
+            self.browse_requested.emit(series)
+
+
 __all__ = [
     "ChooseItemDialog",
     "DataActions",
+    "EditScalesDialog",
     "NewDataDialog",
+    "SeriesActions",
     "FolderActions",
     "TierActions",
     "COPY_PREFIX",
@@ -1166,8 +1852,12 @@ __all__ = [
     "copy_name",
     "copy_target_name",
     "name_error",
+    "prefix_error",
     "series_name_error",
+    "series_suffixes",
     "series_name_hint",
+    "series_update_preview",
+    "epoch_ranges",
     "set_name_error",
     "unique_name",
 ]

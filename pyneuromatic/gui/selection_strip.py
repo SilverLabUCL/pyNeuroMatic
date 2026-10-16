@@ -268,7 +268,11 @@ class SelectionStrip(QtWidgets.QWidget):
         context = selection.get("toolfolder") or folder
         options["data"] = [(name, name) for name in context.data.keys()]
         options["data_set"] = [(name, name) for name in context.data.sets.keys()]
-        options["dataseries"] = [(name, name) for name in context.dataseries.keys()]
+        # A lock marks series whose arrays cannot be changed
+        options["dataseries"] = [
+            (f"🔒 {name}" if series.locked else name, name)
+            for name, series in context.dataseries.items()
+        ]
 
         dataseries = selection.get("dataseries")
         if dataseries is not None:

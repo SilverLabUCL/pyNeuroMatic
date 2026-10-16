@@ -59,8 +59,8 @@ def _menu_texts(menu):
 def test_data_menus_in_strip_and_menu_bar(app):
     strip = app.selection_strip
     assert _menu_texts(strip.action_button("data").menu()) == [
-        "New…", "Duplicate…", "Rename…", "Copy to Folder…", "Delete…",
-        "Choose in Browser…",
+        "New…", "Duplicate…", "Rename…", "Edit Scales…", "Copy to Folder…",
+        "Delete…", "Choose in Browser…",
     ]
     assert _menu_texts(strip.action_button("data_set").menu()) == [
         "New Set…", "Add Data to Set…", "Remove Data from Set…", "Combine Sets…",
@@ -563,7 +563,7 @@ def test_new_data_is_created_selected_and_shown_in_table(app, monkeypatch):
     assert (seen["defaults"]["xstart"], seen["defaults"]["xdelta"]) == (0, 1)
     assert seen["defaults"]["xunits"] == seen["defaults"]["ylabel"] == ""
     assert seen["defaults"]["name"].startswith("data")  # the next auto name
-    assert seen["validate"]("Loose0") == "'Loose0' already exists"
+    assert seen["validate"]({"name": "Loose0"}) == "'Loose0' already exists"
 
 
 def test_new_data_asks_when_name_fits_a_series(app, monkeypatch):
@@ -580,7 +580,9 @@ def test_new_data_dialog_checks_fields_inline(qtbot):
 
     dialog = NewDataDialog(
         {"name": "data0", "points": 10, "value": 0, "xstart": 0, "xdelta": 1},
-        validate=lambda name: "'taken' already exists" if name == "taken" else None,
+        validate=lambda values: (
+            "'taken' already exists" if values["name"] == "taken" else None
+        ),
         context=("Folder", "Demo"),
     )
     qtbot.addWidget(dialog)

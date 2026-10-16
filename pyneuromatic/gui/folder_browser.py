@@ -641,7 +641,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         owner = container._parent
         values = self._ask_new_data(
             new_data_defaults(container),
-            lambda name: name_error(container, name) or series_name_error(owner, name),
+            lambda values: name_error(container, values["name"])
+            or series_name_error(owner, values["name"]),
             ("Folder", getattr(owner, "name", "")),
         )
         if values is None:
@@ -652,6 +653,31 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         data = create_data(container, values)
         self._changed()
         self.data_created.emit(data)
+
+    def show_object(self, obj) -> None:
+        """Select *obj* (e.g. a data series) in the tree, expanding its parents."""
+        model = self._model
+
+        def find(parent: QtCore.QModelIndex):
+            for row in range(model.rowCount(parent)):
+                index = model.index(row, 0, parent)
+                if index.internalPointer() is obj:
+                    return index
+                found = find(index)
+                if found is not None:
+                    return found
+            return None
+
+        index = find(QtCore.QModelIndex())
+        if index is None:
+            return
+        parent = index.parent()
+        while parent.isValid():
+            self._tree.expand(parent)
+            parent = parent.parent()
+        self._tree.setCurrentIndex(index)
+        self._tree.scrollTo(index)
+        self._tree.setFocus()
 
     def _changed(self) -> None:
         """Reload the tree after an edit and tell the app (strip, plots...)."""
