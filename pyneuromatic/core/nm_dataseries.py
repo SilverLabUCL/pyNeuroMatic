@@ -87,6 +87,7 @@ class NMDataSeries(NMObject):
 
         self.__channel_container: NMChannelContainer = NMChannelContainer(parent=self)
         self.__epoch_container: NMEpochContainer = NMEpochContainer(parent=self)
+        self.__locked = False
 
     # override
     def __eq__(
@@ -160,7 +161,27 @@ class NMDataSeries(NMObject):
     @property
     def parameters(self) -> dict[str, object]:
         k = super().parameters
+        k.update({"locked": self.__locked})
         return k
+
+    @property
+    def locked(self) -> bool:
+        """True if this series' data must not be renamed or deleted.
+
+        Series created by the file readers start locked, protecting raw
+        recordings; series built from data in the folder start unlocked.
+        """
+        return self.__locked
+
+    @locked.setter
+    def locked(self, locked: bool) -> None:
+        if not isinstance(locked, bool):
+            raise TypeError(nmu.type_error_str(locked, "locked", "boolean"))
+        self.__locked = locked
+        nmh.history(
+            "%s dataseries '%s'" % ("locked" if locked else "unlocked", self.name),
+            path=self.path_str,
+        )
 
     # override
     @property

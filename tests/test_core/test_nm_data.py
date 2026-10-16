@@ -386,3 +386,103 @@ class TestNMDataNotes(unittest.TestCase):
         self.assertIsInstance(c1._select_set('RecordA0'), NMData)
         self.assertFalse(c0._isequivalent(c1, alert=ALERT))
     """
+
+
+class TestNMDataContainerDataSeriesMembership(unittest.TestCase):
+    """Deleting, renaming and copying data that belongs to a data series."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.other = self.nm.folders.new("Other")
+        for name in ("RecordA0", "RecordA1", "RecordA2", "RecordB0", "Loose0"):
+            self.folder.data.new(name, nparray=numpy.zeros(3))
+        self.series = self.folder.sync_dataseries("Record")
+        self.data = self.folder.data
+
+    def test_dataseries_of(self):
+        self.assertEqual([s.name for s in self.data.dataseries_of("RecordA1")], ["Record"])
+        self.assertEqual(self.data.dataseries_of("Loose0"), [])
+        with self.assertRaises(KeyError):
+            self.data.dataseries_of("Missing")
+
+    def test_pop_unlinks_data_from_series(self):
+        removed = self.data.pop("RecordA1")
+        self.assertIsNone(self.series.get_data("A", "E1"))
+        for item in list(self.series.channels.values()) + list(self.series.epochs.values()):
+            self.assertNotIn(removed, item.data)
+        self.assertIs(self.series.get_data("A", "E0"), self.data["RecordA0"])
+
+    def test_rename_leaves_series_unless_name_still_matches(self):
+        self.data.rename("RecordA2", "Kept")
+        self.assertIsNone(self.series.get_data("A", "E2"))
+        self.assertEqual(self.data.dataseries_of("Kept"), [])
+        self.data.rename("Kept", "RecordA5")
+        self.assertEqual([s.name for s in self.data.dataseries_of("RecordA5")], ["Record"])
+
+    def test_locked_series_blocks_pop_and_rename(self):
+        self.series.locked = True
+        with self.assertRaisesRegex(RuntimeError, "locked data series 'Record'"):
+            self.data.pop("RecordA0")
+        with self.assertRaisesRegex(RuntimeError, "locked data series 'Record'"):
+            self.data.rename("RecordA0", "Other0")
+        self.assertIn("RecordA0", self.data)
+        self.assertIs(self.series.get_data("A", "E0"), self.data["RecordA0"])
+        # Data outside the series is unaffected
+        self.data.rename("Loose0", "Free0")
+        self.data.pop("Free0")
+
+    def test_copy_to_another_folder(self):
+        copy = self.data.copy_to("RecordA0", self.other.data)
+        self.assertIs(self.other.data["RecordA0"], copy)
+        self.assertIsNot(copy, self.data["RecordA0"])
+        self.assertEqual(self.other.data.dataseries_of("RecordA0"), [])
+        renamed = self.data.copy_to("RecordA0", self.other.data, "Copy0")
+        self.assertEqual(renamed.name, "Copy0")
+        with self.assertRaises(KeyError):
+            self.data.copy_to("RecordA0", self.other.data)  # name taken
+        with self.assertRaises(TypeError):
+            self.data.copy_to("RecordA0", self.other)
+
+    def test_lock_flag(self):
+        self.assertFalse(self.series.locked)
+        self.series.locked = True
+        self.assertTrue(self.series.parameters["locked"])
+        self.assertTrue(copy.deepcopy(self.series).locked)
+        with self.assertRaises(TypeError):
+            self.series.locked = "yes"
+
+
+class TestLockedDataSeriesMembership(unittest.TestCase):
+    """A locked data series neither loses nor gains members."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        for name in ("RecordA0", "RecordA1", "Loose0"):
+            self.folder.data.new(name, nparray=numpy.zeros(3))
+        self.series = self.folder.sync_dataseries("Record")
+        self.series.locked = True
+
+    def test_sync_does_not_add_to_locked_series(self):
+        self.folder.data.new("RecordA2", nparray=numpy.zeros(3))
+        self.assertIs(self.folder.sync_dataseries("Record"), self.series)
+        self.assertEqual(list(self.series.epochs.keys()), ["E0", "E1"])
+        self.assertEqual(self.folder.data.dataseries_of("RecordA2"), [])
+        self.series.locked = False
+        self.folder.sync_dataseries("Record")
+        self.assertEqual(list(self.series.epochs.keys()), ["E0", "E1", "E2"])
+
+    def test_rename_into_locked_series_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "fits locked data series 'Record'"):
+            self.folder.data.rename("Loose0", "RecordA7")
+        self.assertIn("Loose0", self.folder.data)
+        self.assertIsNone(self.folder.data.locked_dataseries_for_name("C_RecordA7"))
+
+    def test_copy_under_new_prefix_is_unlocked(self):
+        copy = self.folder.copy_dataseries("Record", "Work")
+        self.assertFalse(copy.locked)
+        self.folder.data.rename("WorkA1", "Edited")
+        self.assertEqual(self.folder.data.dataseries_of("Edited"), [])
+        # The original is untouched
+        self.assertIs(self.series.get_data("A", "E1"), self.folder.data["RecordA1"])

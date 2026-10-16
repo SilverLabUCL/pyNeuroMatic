@@ -127,6 +127,8 @@ def read_abf(
 
     # Optionally create dataseries directly from the matches dict
     if make_dataseries and matches:
-        folder.build_dataseries(prefix, matches)
+        dataseries = folder.build_dataseries(prefix, matches)
+        if dataseries is not None:
+            dataseries.locked = True  # protect raw recordings
 
     return folder

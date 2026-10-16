@@ -463,6 +463,14 @@ class NMFolder(NMObject):
             ds = self.dataseries.get(prefix)
             if select:
                 self.dataseries.selected_name = prefix
+            if ds.locked:
+                # A locked series keeps its membership; copy it to change it
+                nmh.history(
+                    "dataseries '%s' is locked; not updated" % prefix,
+                    path=self.path_str,
+                    quiet=quiet,
+                )
+                return ds
             # Pre-populate so we only create genuinely new channels/epochs
             channel_map = {
                 ch_name: ds.channels.get(ch_name) for ch_name in ds.channels
