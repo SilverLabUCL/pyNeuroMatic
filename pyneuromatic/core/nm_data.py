@@ -522,9 +522,10 @@ class NMDataContainer(NMObjectContainer):
         container = getattr(self._parent, "dataseries", None)
         if not isinstance(container, NMDataSeriesContainer):
             return []
+        # Identity, not ==: NMData.__eq__ compares contents and is slow
         return [
             ds for ds in container.values()
-            if any(data in channel.data for channel in ds.channels.values())
+            if any(d is data for channel in ds.channels.values() for d in channel.data)
         ]
 
     def locked_dataseries_for_name(self, name: str) -> NMDataSeries | None:
@@ -554,8 +555,10 @@ class NMDataContainer(NMObjectContainer):
         series = self.dataseries_of(key)
         for ds in series:
             for item in list(ds.channels.values()) + list(ds.epochs.values()):
-                if data in item.data:
-                    item.data.remove(data)
+                for index, member in enumerate(item.data):
+                    if member is data:
+                        del item.data[index]
+                        break
         return series
 
     # override

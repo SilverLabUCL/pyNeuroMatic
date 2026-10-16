@@ -332,6 +332,62 @@ class NMFolder(NMObject):
             raise ValueError("dataseries %r not found" % prefix)
         return ds
 
+    def _get_unlocked_dataseries(self, prefix: str):
+        """Return the NMDataSeries for *prefix*; raise if it is locked."""
+        ds = self._get_dataseries(prefix)
+        if ds.locked:
+            raise RuntimeError("dataseries %r is locked" % ds.name)
+        return ds
+
+    def rename_dataseries(
+        self,
+        prefix: str,
+        new_prefix: str,
+        quiet: bool = nmc.QUIET,
+    ) -> NMDataSeries:
+        """Rename a dataseries and its data arrays (RecordA0 -> CellA0, ...).
+
+        Raises:
+            ValueError: If *prefix* is not a dataseries, *new_prefix* is not a
+                valid name or is already a dataseries, or a new data name is
+                already taken.
+            RuntimeError: If the dataseries is locked.
+        """
+        ds = self._get_unlocked_dataseries(prefix)
+        if not isinstance(new_prefix, str) or not new_prefix or not nmu.name_ok(new_prefix):
+            raise ValueError("new prefix: %r" % new_prefix)
+        if self.dataseries._getkey(new_prefix) is not None:
+            raise ValueError("dataseries %r already exists" % new_prefix)
+        members: list[NMData] = []
+        for channel in ds.channels.values():
+            for data in channel.data:
+                if data not in members:
+                    members.append(data)
+        renames = {
+            data.name: new_prefix + data.name[len(ds.name):]
+            for data in members
+            if data.name.lower().startswith(ds.name.lower())
+        }
+        member_keys = {name.lower() for name in renames}
+        for new_name in renames.values():
+            key = self.data._getkey(new_name)
+            if key is not None and key.lower() not in member_keys:
+                raise ValueError("data %r already exists" % new_name)
+        # Rename the arrays directly: NMDataContainer.rename() would unlink
+        # them from the series, which keeps the same members here
+        for old_name, new_name in renames.items():
+            NMObjectContainer.rename(self.data, old_name, new_name, quiet=True)
+        old = ds.name
+        self.dataseries._rename_locked(old, new_prefix, quiet=True)
+        nmh.history(
+            "renamed dataseries '%s' as '%s' (%d data)" % (old, new_prefix, len(renames)),
+            path=self.path_str,
+            quiet=quiet,
+        )
+        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        nmch.add_nm_command('%s.rename_dataseries(%r, %r)' % (_p, old, new_prefix))
+        return ds
+
     def _resolve_channel_names(self, ds, channel) -> list[str]:
         """Resolve *channel* (str | int | list | range) to a list of channel chars.
 
@@ -971,7 +1027,7 @@ class NMFolder(NMObject):
         Raises:
             ValueError: If no dataseries with *prefix* exists.
         """
-        ds = self._get_dataseries(prefix)
+        ds = self._get_unlocked_dataseries(prefix)
 
         if delete_data:
             # Collect unique data names across all channels
@@ -1012,7 +1068,7 @@ class NMFolder(NMObject):
             ValueError: If dataseries or channel not found.
             TypeError: If *channel* has an unsupported type.
         """
-        ds = self._get_dataseries(prefix)
+        ds = self._get_unlocked_dataseries(prefix)
         ch_names = self._resolve_channel_names(ds, channel)
         n_deleted = 0
 
@@ -1064,7 +1120,7 @@ class NMFolder(NMObject):
             ValueError: If dataseries or epoch not found.
             TypeError: If *epoch* has an unsupported type.
         """
-        ds = self._get_dataseries(prefix)
+        ds = self._get_unlocked_dataseries(prefix)
         ep_names = self._resolve_epoch_names(ds, epoch)
         n_deleted = 0
 

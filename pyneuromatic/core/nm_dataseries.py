@@ -319,6 +319,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(value, (float, int)) or isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "value", "number"))
 
@@ -351,6 +352,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(value, (float, int)) or isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "value", "number"))
 
@@ -383,6 +385,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(label, str):
             raise TypeError(nmu.type_error_str(label, "label", "string"))
 
@@ -415,6 +418,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(units, str):
             raise TypeError(nmu.type_error_str(units, "units", "string"))
 
@@ -447,6 +451,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(label, str):
             raise TypeError(nmu.type_error_str(label, "label", "string"))
 
@@ -479,6 +484,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(units, str):
             raise TypeError(nmu.type_error_str(units, "units", "string"))
 
@@ -551,6 +557,11 @@ class NMDataSeries(NMObject):
                 "units": units,
             }
         return result
+
+    def _check_unlocked(self) -> None:
+        """Raise RuntimeError if this series is locked."""
+        if self.__locked:
+            raise RuntimeError("dataseries %r is locked" % self.name)
 
     def _iter_channels(self, channel: str | None = None):
         """Iterate over channels, optionally filtering to a single channel.
