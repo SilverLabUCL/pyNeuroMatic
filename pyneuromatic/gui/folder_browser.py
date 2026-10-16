@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
+from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
@@ -31,6 +32,16 @@ from pyneuromatic.gui.folder_model import (
     _SetMemberNode,
     _SetNode,
     _SetsNode,
+)
+from pyneuromatic.gui.tier_actions import (
+    ask_new_data,
+    copy_name,
+    copy_target_name,
+    create_data,
+    name_error,
+    new_data_defaults,
+    series_name_error,
+    series_name_hint,
 )
 
 
@@ -115,6 +126,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
 
     selection_requested = QtCore.pyqtSignal(object)
     content_changed = QtCore.pyqtSignal()
+    # A data array was created with New…; the app shows it in the Table
+    data_created = QtCore.pyqtSignal(object)
 
     def __init__(
         self,
@@ -467,6 +480,20 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         menu = QtWidgets.QMenu(self)
         if len(selected) == 1:
             menu.addAction("Rename...", self._rename_selected)
+        if isinstance(container, NMDataContainer):
+            menu.addAction("Duplicate", lambda: self._duplicate_selected(container, selected))
+            folders = [
+                folder for folder in self._nm.folders.values()
+                if folder.data is not container
+            ]
+            if folders:
+                copy_menu = menu.addMenu("Copy to Folder")
+                for folder in folders:
+                    copy_menu.addAction(
+                        folder.name,
+                        lambda checked=False, f=folder:
+                        self._copy_selected_to(container, selected, f),
+                    )
         menu.addAction("Delete", self._delete_selected)
         if hasattr(container, "sets"):
             set_menu = menu.addMenu("Add to Set")
@@ -533,6 +560,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             container = self._current_container()
         if container is None:
             return
+        if isinstance(container, NMDataContainer):
+            self._new_data(container)
+            return
         name, ok = QtWidgets.QInputDialog.getText(
             self, "New Item", "Name (leave blank for auto):"
         )
@@ -543,7 +573,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError) as e:
             QtWidgets.QMessageBox.warning(self, "Add Failed", str(e))
             return
-        self.refresh()
+        self._changed()
 
     def _rename_selected(self) -> None:
         container = self._current_container()
@@ -558,12 +588,21 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         )
         if not ok or not newname:
             return
+        # Warn about joining a data series only if the name is free to use
+        if (
+            isinstance(container, NMDataContainer)
+            and newname != obj.name
+            and container._getkey(newname) is None
+        ):
+            hint = series_name_hint(container._parent, newname, joins_now=True)
+            if hint and not self._confirm("Rename", hint + "\n\nRename anyway?"):
+                return
         try:
             container.rename(obj.name, newname)
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError, RuntimeError) as e:
             QtWidgets.QMessageBox.warning(self, "Rename Failed", str(e))
             return
-        self.refresh()
+        self._changed()
 
     def _delete_selected(self) -> None:
         container = self._current_container()
@@ -573,21 +612,137 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         if not selected:
             return
         names = ", ".join(o.name for o in selected)
+        text = "Delete %s?" % names
+        if isinstance(container, NMDataContainer):
+            in_series = [o.name for o in selected if container.dataseries_of(o.name)]
+            if in_series:
+                text += (
+                    "\n\n%d belong to a data series and will be removed from it "
+                    "(data in a locked series is kept)." % len(in_series)
+                )
+        if not self._confirm("Delete", text):
+            return
+        problems = []
+        for obj in selected:
+            try:
+                del container[obj.name]
+            except (KeyError, ValueError, TypeError, RuntimeError) as e:
+                problems.append(str(e))
+        if problems:
+            QtWidgets.QMessageBox.warning(self, "Delete Failed", "\n".join(problems))
+        self._changed()
+
+    def _ask_new_data(self, defaults: dict, validate, context) -> dict | None:
+        """The New Data dialog (replaced in tests)."""
+        return ask_new_data(defaults, validate, context=context, parent=self)
+
+    def _new_data(self, container: NMDataContainer) -> None:
+        """New data array with the same dialog as Data ⋯ › New…"""
+        owner = container._parent
+        values = self._ask_new_data(
+            new_data_defaults(container),
+            lambda name: name_error(container, name) or series_name_error(owner, name),
+            ("Folder", getattr(owner, "name", "")),
+        )
+        if values is None:
+            return
+        hint = series_name_hint(owner, values["name"])
+        if hint and not self._confirm("New Data", hint + "\n\nCreate anyway?"):
+            return
+        data = create_data(container, values)
+        self._changed()
+        self.data_created.emit(data)
+
+    def _changed(self) -> None:
+        """Reload the tree after an edit and tell the app (strip, plots...)."""
+        self.refresh()
+        self.content_changed.emit()
+
+    def _confirm(self, title: str, text: str) -> bool:
         reply = QtWidgets.QMessageBox.question(
             self,
-            "Delete",
-            "Delete %s?" % names,
+            title,
+            text,
             QtWidgets.QMessageBox.StandardButton.Yes
             | QtWidgets.QMessageBox.StandardButton.No,
         )
-        if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+        return reply == QtWidgets.QMessageBox.StandardButton.Yes
+
+    def _duplicate_selected(self, container, selected: list[NMObject]) -> None:
+        for obj in selected:
+            container.duplicate(obj.name, copy_name(container, obj.name))
+        self._changed()
+
+    def _copy_selected_to(self, container, selected: list[NMObject], folder) -> None:
+        for obj in selected:
+            container.copy_to(obj.name, folder.data, copy_target_name(folder.data, obj.name))
+        self._changed()
+
+    def show_data_of(self, owner, sets: bool = False, select: str | None = None) -> None:
+        """Show *owner*'s (a folder's or subfolder's) data in the browser.
+
+        Without *sets*: expand Data and select the data array named
+        *select* in the tree (the detail pane shows that array).
+        With *sets*: expand Data > Sets and select the set named *select* in
+        the tree, so the detail pane lists its arrays.
+        Without a matching *select*, the Data (or Sets) row is selected; with
+        no sets, the Data row is.
+        """
+        model = self._model
+
+        def is_data_group(node) -> bool:
+            return isinstance(node, _GroupNode) and node.kind == "data" and node.owner is owner
+
+        def is_data_sets(node) -> bool:
+            return isinstance(node, _SetsNode) and is_data_group(node.group)
+
+        def is_named_set(node) -> bool:
+            return (
+                isinstance(node, _SetNode)
+                and is_data_sets(node.sets_node)
+                and select is not None
+                and node.name.lower() == select.lower()
+            )
+
+        def find(parent: QtCore.QModelIndex, match):
+            for row in range(model.rowCount(parent)):
+                index = model.index(row, 0, parent)
+                if match(index.internalPointer()):
+                    return index
+                found = find(index, match)
+                if found is not None:
+                    return found
+            return None
+
+        def named_data(group_index: QtCore.QModelIndex):
+            """The row of data *select* directly under the Data row."""
+            if select is None:
+                return None
+            for row in range(model.rowCount(group_index)):
+                index = model.index(row, 0, group_index)
+                node = index.internalPointer()
+                if isinstance(node, NMObject) and node.name.lower() == select.lower():
+                    return index
+            return None
+
+        root = QtCore.QModelIndex()
+        index = None
+        if sets:
+            index = find(root, is_named_set) or find(root, is_data_sets)
+        if index is None:
+            index = find(root, is_data_group)
+            if index is not None and not sets:
+                index = named_data(index) or index
+        if index is None:
             return
-        try:
-            for obj in selected:
-                del container[obj.name]
-        except (KeyError, ValueError, TypeError) as e:
-            QtWidgets.QMessageBox.warning(self, "Delete Failed", str(e))
-        self.refresh()
+        self._tree.expand(index)
+        parent = index.parent()
+        while parent.isValid():
+            self._tree.expand(parent)
+            parent = parent.parent()
+        self._tree.setCurrentIndex(index)
+        self._tree.scrollTo(index)
+        self._tree.setFocus()
 
     def _add_selected_to_set(self, set_name: str) -> None:
         container = self._current_container()
@@ -600,6 +755,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             container.sets.add(set_name, selected)
         except (KeyError, ValueError, TypeError) as e:
             QtWidgets.QMessageBox.warning(self, "Add to Set Failed", str(e))
+            return
+        self._changed()
 
     def _add_selected_to_new_set(self) -> None:
         name, ok = QtWidgets.QInputDialog.getText(self, "New Set", "Set name:")
@@ -620,7 +777,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError) as e:
             QtWidgets.QMessageBox.warning(self, "Add Set Failed", str(e))
             return
-        self.refresh()
+        self._changed()
 
     def _new_group(self, epoch_container) -> None:
         existing = epoch_container.groups.group_numbers
@@ -640,7 +797,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError) as error:
             QtWidgets.QMessageBox.warning(self, "Group Creation Failed", str(error))
             return
-        self.content_changed.emit()
+        self._changed()
 
     def _assign_selected_to_group(
         self,
@@ -654,7 +811,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError) as error:
             QtWidgets.QMessageBox.warning(self, "Group Assignment Failed", str(error))
             return
-        self.content_changed.emit()
+        self._changed()
 
     def _rename_set(self, sets_node: _SetsNode, old_name: str) -> None:
         container = sets_node.container
@@ -676,7 +833,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError, AttributeError) as e:
             QtWidgets.QMessageBox.warning(self, "Rename Set Failed", str(e))
             return
-        self.refresh()
+        self._changed()
 
     def _delete_sets(self, sets_node: _SetsNode, names: list[str]) -> None:
         container = sets_node.container
@@ -696,7 +853,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                 del container.sets[name]
         except (KeyError, ValueError, TypeError) as e:
             QtWidgets.QMessageBox.warning(self, "Delete Set Failed", str(e))
-        self.refresh()
+        self._changed()
 
     def _remove_from_set(self, set_node: _SetNode, objects: list[NMObject]) -> None:
         """Remove *objects* from the set — membership only, never deletes them."""
@@ -708,4 +865,4 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError) as e:
             QtWidgets.QMessageBox.warning(self, "Remove from Set Failed", str(e))
             return
-        self.refresh()
+        self._changed()

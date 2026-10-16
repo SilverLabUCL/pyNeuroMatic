@@ -267,3 +267,17 @@ def test_subfolder_duplicate_rename_and_delete(app):
     actions.delete_subfolder()
     assert len(demo.toolfolders) == 0
     assert not actions.subfolder_delete_action.isEnabled()
+
+
+def test_copy_name_uses_prefix_and_numbers_it():
+    from pyneuromatic.gui.tier_actions import copy_name
+
+    folder = NMManager(quiet=True).folders.new("Demo")
+    data = folder.data
+    data.new("RecordA0", nparray=np.array([1.0]))
+    assert copy_name(data, "RecordA0") == "C_RecordA0"
+    data.new("c_recorda0", nparray=np.array([1.0]))  # names are case insensitive
+    assert copy_name(data, "RecordA0") == "C1_RecordA0"
+    data.new("C1_RecordA0", nparray=np.array([1.0]))
+    assert copy_name(data, "RecordA0") == "C2_RecordA0"
+    assert copy_name(data, "RecordA0", prefix="Avg") == "Avg_RecordA0"

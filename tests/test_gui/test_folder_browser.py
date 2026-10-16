@@ -202,22 +202,29 @@ class TestAddItem:
         model = widget.model
         data_group = _find(model, _folder0(model), "Data")
         widget.tree.setCurrentIndex(data_group)
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("NewData", True)),
-        )
+        # A Data list uses the New Data dialog (name, points, scales)
+        asked = []
+
+        def ask(defaults, validate, context):
+            asked.append((defaults, context))
+            return dict(defaults, name="NewData", points=3, value=2.0)
+
+        monkeypatch.setattr(widget, "_ask_new_data", ask)
+        created = []
+        widget.data_created.connect(created.append)
         widget._add_item()
-        assert "NewData" in folder.data
+        assert list(folder.data["NewData"].nparray) == [2.0, 2.0, 2.0]
+        assert created == [folder.data["NewData"]]
+        defaults, context = asked[0]
+        assert (defaults["xdelta"], defaults["xunits"], defaults["ylabel"]) == (1, "", "")
+        assert context == ("Folder", folder.name)
 
     def test_cancelled_dialog_does_nothing(self, widget, folder, monkeypatch):
         model = widget.model
         data_group = _find(model, _folder0(model), "Data")
         widget.tree.setCurrentIndex(data_group)
         before = set(folder.data.keys())
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("", False)),
-        )
+        monkeypatch.setattr(widget, "_ask_new_data", lambda *args: None)
         widget._add_item()
         assert set(folder.data.keys()) == before
 
@@ -391,8 +398,8 @@ class TestTreeContextMenu:
         pos = widget.tree.visualRect(data_group).center()
         captured = self._captured_menu(monkeypatch)
         monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("FromMenu", True)),
+            widget, "_ask_new_data",
+            lambda defaults, validate, context: dict(defaults, name="FromMenu"),
         )
 
         widget._show_tree_context_menu(pos)

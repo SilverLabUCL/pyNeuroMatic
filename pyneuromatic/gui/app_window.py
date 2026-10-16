@@ -30,7 +30,7 @@ from pyneuromatic.gui.selection_model import (
     source_object,
 )
 from pyneuromatic.gui.selection_strip import SelectionStrip
-from pyneuromatic.gui.tier_actions import FolderActions
+from pyneuromatic.gui.tier_actions import DataActions, FolderActions
 from pyneuromatic.gui.stats_tab import StatsToolTab
 
 
@@ -444,6 +444,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
         # Tier actions, shared by the strip's ⋯ menus and the menu bar
         self.folder_actions = FolderActions(self.selection_model, self)
+        self.data_actions = DataActions(self.selection_model, self)
 
         self._build_menu()
         self._build_selection_strip()
@@ -464,6 +465,11 @@ class NMAppWindow(QtWidgets.QMainWindow):
         folder_menu.addSeparator()
         folder_menu.addMenu(self.folder_actions.subfolder_menu(folder_menu))
         self.menuBar().addMenu(folder_menu)
+
+        data_menu = self.data_actions.data_menu(self)
+        data_menu.addSeparator()
+        data_menu.addMenu(self.data_actions.data_set_menu(data_menu))
+        self.menuBar().addMenu(data_menu)
 
         edit_menu = self.menuBar().addMenu("Edit")
         edit_menu.addAction("Rename")
@@ -487,6 +493,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         strip = self.selection_strip
         strip.set_actions_menu("folder", self.folder_actions.folder_menu(strip))
         strip.set_actions_menu("toolfolder", self.folder_actions.subfolder_menu(strip))
+        strip.set_actions_menu("data", self.data_actions.data_menu(strip))
+        strip.set_actions_menu("data_set", self.data_actions.data_set_menu(strip))
 
     def _build_tool_shell(self) -> None:
         self.tool_rail = ToolRail(["Browser", "Main", "Stats", "Spike"], self)
@@ -496,7 +504,6 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if self._manager is not None:
             browser_widget = FolderBrowserWidget(self._manager, self.tool_workspace)
             browser_widget.selection_requested.connect(self._on_browser_selection_requested)
-            browser_widget.content_changed.connect(self.selection_strip.refresh_options)
         else:
             browser_widget = QtWidgets.QTreeWidget()
             browser_widget.setHeaderLabels(["Browser"])
@@ -530,7 +537,14 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.plot_widget.register_tool("Stats", self.stats_plot)
         self.table_panel.register_tool("Stats", stats2.tables)
         stats2.results_changed.connect(self._update_tool_tabs)
-        self.folder_actions.content_changed.connect(self._on_folders_changed)
+        self.folder_actions.content_changed.connect(self._on_content_changed)
+        self.data_actions.content_changed.connect(self._on_content_changed)
+        self.data_actions.browse_requested.connect(self._show_in_browser)
+        self.data_actions.table_requested.connect(self._show_data_table)
+        self.table_panel.data_edited.connect(self._on_data_edited)
+        if isinstance(self.browser_widget, FolderBrowserWidget):
+            self.browser_widget.content_changed.connect(self._on_browser_content_changed)
+            self.browser_widget.data_created.connect(self._on_browser_data_created)
         # A run or a deleted folder changes the Subfolder list
         stats2.results_changed.connect(self.selection_strip.refresh_options)
         stats2.plot_requested.connect(self._show_plot_values)
@@ -582,12 +596,61 @@ class NMAppWindow(QtWidgets.QMainWindow):
         idx = self.tool_rail.index_for_name(tool_name)
         self.tool_workspace.setCurrentIndex(idx)
 
-    def _on_folders_changed(self) -> None:
-        """Reload views that list folders or subfolders."""
+    def closeEvent(self, event) -> None:
+        # Tear pyqtgraph views down before Qt deletes them, so a queued paint
+        # event never reaches a half-deleted plot (this crashed the GUI tests)
+        for view in (
+            getattr(self.plot_widget, "plot_widget", None),
+            getattr(getattr(self, "stats_plot", None), "plot_widget", None),
+        ):
+            if view is not None and not getattr(view, "closed", False):
+                view.close()
+        super().closeEvent(event)
+
+    def _on_content_changed(self) -> None:
+        """Reload views after folders, subfolders, data or sets change."""
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.refresh()
+        self._on_browser_content_changed()
+
+    def _on_browser_content_changed(self) -> None:
+        self.selection_model.refresh()
         self.selection_strip.refresh_options()
         self.stats_tab.stats2.refresh()
+        self.folder_actions.update_enabled()
+        self.data_actions.update_enabled()
+        # Names or data series membership may have changed
+        selection = self.selection_model.selection
+        self.plot_widget.update_selection(selection)
+        self.table_panel.update_selection(selection)
+
+    def _show_in_browser(self, owner, sets: bool = False) -> None:
+        """Switch to the Browser showing *owner*'s Data list, or its data Sets,
+        with the current data array (or Data Set) selected."""
+        self.tool_rail.select_tool("Browser")
+        if not isinstance(self.browser_widget, FolderBrowserWidget):
+            return
+        selection = self.selection_model.selection
+        if sets:
+            name = selection.get("data_set")
+        else:
+            data = selection.get("data")
+            name = data.name if data is not None else None
+        self.browser_widget.show_data_of(owner, sets=sets, select=name)
+
+    def _show_data_table(self) -> None:
+        """Show the current data array in the Table panel, ready to edit."""
+        self.table_panel.update_selection(self.selection_model.selection)
+        self.table_panel.show_channel_table()
+        self.context_panel.setCurrentWidget(self.table_panel)
+
+    def _on_browser_data_created(self, data) -> None:
+        self.selection_model.update(data=data)
+        self._show_data_table()
+
+    def _on_data_edited(self, _data) -> None:
+        # Redraw the trace with the edited values
+        self.plot_widget.update_selection(self.selection_model.selection)
 
     def _update_tool_tabs(self) -> None:
         tools = ["Stats"] if self.stats_tab.stats2.has_results() else []
