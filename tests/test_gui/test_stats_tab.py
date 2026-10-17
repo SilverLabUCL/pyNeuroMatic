@@ -503,6 +503,8 @@ def test_run_info_counts_epochs_and_data_arrays(qtbot):
     qtbot.addWidget(window)
     tab = window.stats_tab
 
+    assert tab.run_info_label.text() == "3 epochs"  # All epochs by default
+    window.selection_model.update(epoch_set="Current Epoch")
     assert tab.run_info_label.text() == "1 epoch"
     window.selection_model.update(epoch_set="Pair")
     assert tab.run_info_label.text() == "2 epochs"

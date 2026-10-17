@@ -9,11 +9,18 @@ from PyQt6 import QtCore
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
-from pyneuromatic.core.nm_epoch import NMEpoch
+from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS, NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+
+
+# Built-in Epoch Set choices (not stored sets): every epoch, or only the
+# current one (Igor NeuroMatic's "All" and "This Wave")
+ALL_EPOCHS = "All"
+CURRENT_EPOCH = "Current Epoch"
+BUILTIN_EPOCH_SETS = (ALL_EPOCHS, CURRENT_EPOCH)
 
 
 class SelectionModel(QtCore.QObject):
@@ -67,6 +74,8 @@ class SelectionModel(QtCore.QObject):
             tuple[str | None, ...], tuple[str | None, int | None, str | None]
         ] = {}
         self._normalize_source()
+        if self._manager.select_values.get("dataseries") is not None:
+            self._epoch_set = ALL_EPOCHS
         self._emitted_selection = self.selection.copy()
 
     @property
@@ -239,8 +248,10 @@ class SelectionModel(QtCore.QObject):
         if data_scope != previous_scopes[0]:
             self._data_set = self._data_set_memory.get(data_scope)
         if epoch_scope != previous_scopes[1]:
+            # A data series starts with All epochs
+            default_set = ALL_EPOCHS if epoch_scope[2] is not None else None
             self._epoch_set, self._group, self._group_operator = (
-                self._epoch_memory.get(epoch_scope, (None, None, None))
+                self._epoch_memory.get(epoch_scope, (default_set, None, None))
             )
 
     def _clear_all_folder_selections(self) -> None:
@@ -349,30 +360,43 @@ def combine_scope_names(
     return [name for name in all_names if name in allowed]
 
 
+def is_stored_epoch_set(name: str | None) -> bool:
+    """True for a real epoch set (Set1, SetX...), not All or Current Epoch."""
+    return name is not None and name not in BUILTIN_EPOCH_SETS
+
+
 def scoped_epoch_names(
-    dataseries: NMDataSeries, selection: Mapping[str, Any]
+    dataseries: NMDataSeries,
+    selection: Mapping[str, Any],
+    exclude: bool = True,
 ) -> list[str] | None:
     """Epoch names of *dataseries* in the selected Epoch Set/Group, in order.
 
-    Returns None when neither an Epoch Set nor a Group is selected, so
-    callers can choose their own default (the current epoch, or all epochs).
+    "All" means every epoch. Returns None for "Current Epoch" (or no Epoch
+    Set and no Group), so callers choose their default, usually the current
+    epoch. With *exclude*, epochs in the exclusion set (SetX) are left out,
+    unless SetX itself is the Epoch Set.
     """
     selected_set = selection.get("epoch_set")
     selected_group = selection.get("group")
-    if selected_set is None and selected_group is None:
+    if selected_set == CURRENT_EPOCH or (selected_set is None and selected_group is None):
         return None
     set_names = None
     group_names = None
-    if selected_set is not None:
+    if is_stored_epoch_set(selected_set):
         set_names = dataseries.epochs.sets.get_items(selected_set, get_keys=True) or []
     if selected_group is not None:
         group_names = dataseries.epochs.groups.get_items(selected_group)
-    return combine_scope_names(
+    names = combine_scope_names(
         list(dataseries.epochs.keys()),
         set_names,
         group_names,
         selection.get("group_operator"),
     )
+    if exclude and (selected_set or "").lower() != EXCLUDE_SET.lower():
+        excluded = dataseries.epochs.excluded_names()
+        names = [name for name in names if name not in excluded]
+    return names
 
 
 def source_object(selection: Mapping[str, Any], source: str) -> Any:
@@ -406,8 +430,11 @@ def selection_summary(selection: Mapping[str, Any]) -> list[str]:
 def epoch_scope_label(selection: Mapping[str, Any]) -> str:
     """Short description of the epoch scope, e.g. "Epoch Set: Set1 AND Group 0"."""
     parts = []
-    if selection.get("epoch_set") is not None:
-        parts.append(f"Epoch Set: {selection['epoch_set']}")
+    epoch_set = selection.get("epoch_set")
+    if is_stored_epoch_set(epoch_set):
+        parts.append(f"Epoch Set: {epoch_set}")
+    elif epoch_set == CURRENT_EPOCH:
+        parts.append(CURRENT_EPOCH)
     if selection.get("group") is not None:
         parts.append(f"Group {selection['group']}")
     operator = selection.get("group_operator") or "+"
@@ -415,7 +442,11 @@ def epoch_scope_label(selection: Mapping[str, Any]) -> str:
 
 
 __all__ = [
+    "ALL_EPOCHS",
+    "BUILTIN_EPOCH_SETS",
+    "CURRENT_EPOCH",
     "SelectionModel",
+    "is_stored_epoch_set",
     "combine_scope_names",
     "epoch_scope_label",
     "scoped_epoch_names",

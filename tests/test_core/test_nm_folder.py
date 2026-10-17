@@ -1412,3 +1412,43 @@ class TestRenameDataSeriesAndLock(unittest.TestCase):
                 call()
         self.assertIn("Record", self.folder.dataseries)
         self.assertIn("RecordB1", self.folder.data)
+
+
+class TestDefaultEpochSetsAndExclusion(unittest.TestCase):
+    """Every series starts with Set1, Set2 and SetX; SetX epochs are not run."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_object_container import RunMode
+
+        self.RunMode = RunMode
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_epochs=6, n_points=3)
+        self.epochs = self.series.epochs
+
+    def _run(self):
+        return [epoch.name for epoch in self.epochs.run_targets]
+
+    def test_default_sets(self):
+        self.assertEqual(list(self.epochs.sets.keys()), ["Set1", "Set2", "SetX"])
+        self.assertEqual(self.epochs.excluded_names(), set())
+
+    def test_setx_epochs_are_left_out_of_runs(self):
+        self.epochs.sets.add("SetX", [self.epochs["E1"], self.epochs["E4"]])
+        self.epochs.run_mode = self.RunMode.ALL
+        self.assertEqual(self._run(), ["E0", "E2", "E3", "E5"])
+
+        self.epochs.sets.add("Set1", [self.epochs["E0"], self.epochs["E1"]])
+        self.epochs.run_mode = self.RunMode.SET
+        self.epochs.run_target_name = "Set1"
+        self.assertEqual(self._run(), ["E0"])
+
+        # Running SetX itself lists its epochs
+        self.epochs.run_target_name = "SetX"
+        self.assertEqual(self._run(), ["E1", "E4"])
+
+    def test_setx_applies_to_group_runs(self):
+        self.epochs.groups.assign_cyclic(list(self.epochs.keys()), n_groups=2)
+        self.epochs.sets.add("SetX", [self.epochs["E2"]])
+        self.epochs.run_target = "group0"
+        self.assertEqual(self._run(), ["E0", "E4"])

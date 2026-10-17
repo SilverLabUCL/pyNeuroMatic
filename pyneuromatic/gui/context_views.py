@@ -468,7 +468,8 @@ class TablePanel(QtWidgets.QWidget):
         data = source_object(selection, "data")
         if isinstance(dataseries, NMDataSeries) and self._channel_name is not None:
             try:
-                names = scoped_epoch_names(dataseries, selection)
+                # Excluded epochs (SetX) are still shown, as in the Plot
+                names = scoped_epoch_names(dataseries, selection, exclude=False)
             except RuntimeError as error:
                 self.channel_table.show_arrays([], str(error))
                 return

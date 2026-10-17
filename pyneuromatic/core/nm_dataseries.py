@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
-from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
+from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, NMEpoch, NMEpochContainer
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
@@ -88,6 +88,9 @@ class NMDataSeries(NMObject):
         self.__channel_container: NMChannelContainer = NMChannelContainer(parent=self)
         self.__epoch_container: NMEpochContainer = NMEpochContainer(parent=self)
         self.__locked = False
+        # Empty epoch sets to start with; SetX excludes its epochs from runs
+        for set_name in DEFAULT_EPOCH_SETS:
+            self.__epoch_container.sets.add(set_name, quiet=True)
 
     # override
     def __eq__(

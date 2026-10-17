@@ -15,7 +15,8 @@ import numpy as np
 
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_object_container import NMObjectContainer
-from pyneuromatic.gui.selection_model import SelectionModel
+from pyneuromatic.core.nm_epoch import EXCLUDE_SET
+from pyneuromatic.gui.selection_model import BUILTIN_EPOCH_SETS, SelectionModel
 
 
 def _read_abf(path, folder):
@@ -1835,10 +1836,331 @@ class SeriesActions(TierActions):
             self.browse_requested.emit(series)
 
 
+def epoch_range(names: list[str], first: str, last: str, every: int = 1) -> list[str]:
+    """Epoch names from *first* to *last* (inclusive), every *every*-th."""
+    if first not in names or last not in names:
+        return []
+    return names[names.index(first):names.index(last) + 1:max(every, 1)]
+
+
+def range_summary(verb: str, epochs: list[str], every: int) -> str:
+    """e.g. "Adds 10 epochs (E2–E20, every 2nd)." """
+    if not epochs:
+        return ""
+    span = epochs[0] if len(epochs) == 1 else f"{epochs[0]}–{epochs[-1]}"
+    if every > 1 and len(epochs) > 1:
+        suffix = {2: "nd", 3: "rd"}.get(every, "th")
+        span += f", every {every}{suffix}"
+    return f"{verb} {len(epochs)} epoch{'s' * (len(epochs) != 1)} ({span})."
+
+
+def epoch_set_name_error(sets, name: str | None) -> str | None:
+    """Like set_name_error, also refusing the built-in All and Current Epoch."""
+    if name is not None and name.lower() in (b.lower() for b in BUILTIN_EPOCH_SETS):
+        return f"'{name}' is a built-in Epoch Set choice"
+    return set_name_error(sets, name)
+
+
+class EpochSetActions(TierActions):
+    """Epoch Set actions, for the current data series' epochs.
+
+    Sets select epochs for analysis and do not change the recording, so
+    they can be edited on a locked series too.
+    """
+
+    # Ask the app to show a series' epoch sets in the browser (set to select)
+    browse_requested = QtCore.pyqtSignal(object, object)
+
+    EVERY = ["1", "2", "3", "4", "5", "10"]
+
+    def __init__(
+        self,
+        selection_model: SelectionModel,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(selection_model, parent)
+        action = self._action
+        self.new_action = action("New Set…", self.new_set, tip="Create an empty epoch set")
+        self.add_action = action("Add Epochs…", self.add_epochs,
+                                 tip="Add an epoch, or a range of epochs, to a set")
+        self.remove_action = action("Remove Epochs…", self.remove_epochs,
+                                    tip="Remove an epoch, or a range of epochs, from a set")
+        self.exclude_action = action(
+            "Exclude Epochs…", self.exclude_epochs,
+            tip=f"Add epochs to {EXCLUDE_SET}, leaving them out of every Run",
+        )
+        self.include_action = action(
+            "Include Epochs…", self.include_epochs,
+            tip=f"Remove epochs from {EXCLUDE_SET}, so Run uses them again",
+        )
+        self.invert_action = action("Invert…", self.invert_set,
+                                    tip="Make a set of the epochs not in a set")
+        self.combine_action = action("Combine Sets…", self.combine_sets,
+                                     tip="Make a set from two sets with AND or OR")
+        self.clear_action = action("Clear Set…", self.clear_set,
+                                   tip="Remove all epochs from a set, keeping the set")
+        self.rename_action = action("Rename Set…", self.rename_set, tip="Rename an epoch set")
+        self.delete_action = action("Delete Set…", self.delete_set, tip="Delete an epoch set")
+        self.browse_action = action("Choose in Browser…", self.choose_in_browser,
+                                    tip="Show the epoch sets in the browser")
+        selection_model.selection_changed.connect(self.update_enabled)
+        self.update_enabled()
+
+    def epoch_set_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu("Epoch Set", parent)
+        for item in (self.new_action, self.add_action, self.remove_action, None,
+                     self.exclude_action, self.include_action, None,
+                     self.invert_action, self.combine_action, None, self.clear_action,
+                     self.rename_action, self.delete_action, None, self.browse_action):
+            if item is None:
+                menu.addSeparator()
+            else:
+                menu.addAction(item)
+        return menu
+
+    # --- helpers ------------------------------------------------------------
+
+    def _series(self):
+        series = self._selection.selection.get("dataseries")
+        context = self._context()
+        if series is None or context is None or series.name not in context.dataseries:
+            return None
+        return series
+
+    def _set_names(self) -> list[str]:
+        series = self._series()
+        return list(series.epochs.sets.keys()) if series is not None else []
+
+    def update_enabled(self, *_args) -> None:
+        series = self._series()
+        sets = self._set_names()
+        has_epochs = series is not None and len(series.epochs) > 0
+        self.new_action.setEnabled(series is not None)
+        self.browse_action.setEnabled(series is not None)
+        self.exclude_action.setEnabled(has_epochs)
+        self.include_action.setEnabled(
+            series is not None and bool(series.epochs.excluded_names())
+        )
+        for item in (self.clear_action, self.rename_action, self.delete_action):
+            item.setEnabled(bool(sets))
+        for item in (self.add_action, self.remove_action, self.invert_action):
+            item.setEnabled(bool(sets) and has_epochs)
+        self.combine_action.setEnabled(len(sets) > 1)
+
+    def _series_context(self, series) -> tuple[str, str]:
+        return ("Series", f"{self._context_text()} › {series.name}")
+
+    @staticmethod
+    def _exclude_set_error(name: str | None, done: str) -> str | None:
+        if name is not None and name.lower() == EXCLUDE_SET.lower():
+            return (f"{EXCLUDE_SET} is the exclusion set and cannot be {done}; "
+                    "clear it instead")
+        return None
+
+    def _choose_set(self, title: str, **options):
+        series = self._series()
+        sets = self._set_names()
+        if series is None or not sets:
+            return None
+        current = self._selection.selection.get("epoch_set")
+        return self._choose(
+            title, context=self._series_context(series), item_label="Epoch Set",
+            items=sets, current=current if current in sets else sets[0], **options,
+        )
+
+    def _range_extras(self, series) -> list:
+        names = list(series.epochs.keys())
+        epoch = self._selection.selection.get("epoch")
+        current = epoch.name if epoch is not None and epoch.name in names else names[0]
+        return [("From", names, current), ("To", names, current),
+                ("Every", self.EVERY, "1")]
+
+    # --- actions ------------------------------------------------------------
+
+    def new_set(self) -> None:
+        series = self._series()
+        if series is None:
+            return
+        sets = series.epochs.sets
+        answer = self._choose(
+            "New Epoch Set", context=self._series_context(series),
+            name_label="Set name", default_name=lambda _item: sets.auto_name_next(),
+            validate=lambda _item, name: epoch_set_name_error(sets, name),
+        )
+        if answer is None:
+            return
+        sets.add(answer[1])
+        self._selection.update(epoch_set=answer[1])
+        self._changed()
+
+    def _edit_range(self, title: str, verb: str, adding: bool, fixed: str | None = None) -> None:
+        """Add or remove a range of epochs to a chosen set, or to *fixed*."""
+        series = self._series()
+        if series is None or len(series.epochs) == 0:
+            return
+        names = list(series.epochs.keys())
+        sets = series.epochs.sets
+        if fixed is not None and sets._getkey(fixed) is None:
+            sets.add(fixed, quiet=True)  # e.g. SetX of an older series
+
+        def chosen(first, last, every):
+            return epoch_range(names, first, last, int(every))
+
+        def targets(set_name, first, last, every):
+            set_name = fixed or set_name
+            epochs = chosen(first, last, every)
+            if adding:
+                return epochs
+            members = set(sets.get_items(set_name, get_keys=True) or [])
+            return [e for e in epochs if e in members]
+
+        def error(set_name, _name, first, last, every):
+            set_name = fixed or set_name
+            if not chosen(first, last, every):
+                return "To must not be before From"
+            if not adding and not targets(set_name, first, last, every):
+                return f"None of these epochs are in '{set_name}'"
+            return None
+
+        options = dict(
+            extras=self._range_extras(series),
+            message=lambda set_name, first, last, every: range_summary(
+                verb, targets(set_name, first, last, every), int(every)),
+            validate=error,
+        )
+        if fixed is None:
+            answer = self._choose_set(title, **options)
+        else:
+            answer = self._choose(title, context=self._series_context(series), **options)
+        if answer is None:
+            return
+        set_name, _name, first, last, every = answer
+        set_name = fixed or set_name
+        epochs = [series.epochs[e] for e in targets(set_name, first, last, every)]
+        if adding:
+            sets.add(set_name, epochs)
+        else:
+            sets.remove(set_name, epochs)
+        self._changed()
+
+    def add_epochs(self) -> None:
+        self._edit_range("Add Epochs to Set", "Adds", adding=True)
+
+    def remove_epochs(self) -> None:
+        self._edit_range("Remove Epochs from Set", "Removes", adding=False)
+
+    def exclude_epochs(self) -> None:
+        """Add a range of epochs to SetX, leaving them out of every run."""
+        self._edit_range("Exclude Epochs", "Excludes", adding=True, fixed=EXCLUDE_SET)
+
+    def include_epochs(self) -> None:
+        """Remove a range of epochs from SetX, so runs use them again."""
+        self._edit_range("Include Epochs", "Includes", adding=False, fixed=EXCLUDE_SET)
+
+    def invert_set(self) -> None:
+        series = self._series()
+        if series is None:
+            return
+        sets = series.epochs.sets
+        names = list(series.epochs.keys())
+
+        def complement(set_name):
+            members = set(sets.get_items(set_name, get_keys=True) or [])
+            return [e for e in names if e not in members]
+
+        answer = self._choose_set(
+            "Invert Epoch Set", name_label="New set",
+            default_name=lambda _item: sets.auto_name_next(),
+            message=lambda set_name, *_: (
+                f"The new set has the {len(complement(set_name))} epochs not in "
+                f"'{set_name}'."
+            ),
+            validate=lambda _item, name: epoch_set_name_error(sets, name),
+        )
+        if answer is None:
+            return
+        set_name, name = answer[0], answer[1]
+        sets.add(name, [series.epochs[e] for e in complement(set_name)])
+        self._selection.update(epoch_set=name)
+        self._changed()
+
+    def combine_sets(self) -> None:
+        series = self._series()
+        names = self._set_names()
+        if series is None or len(names) < 2:
+            return
+        sets = series.epochs.sets
+        current = self._selection.selection.get("epoch_set")
+        first = current if current in names else names[0]
+        second = next((n for n in names if n != first), first)
+        answer = self._choose_set(
+            "Combine Sets",
+            extras=[("Operator", ["AND", "OR"], "OR"), ("With Set", names, second)],
+            name_label="New Set",
+            default_name=lambda _item, *_extras: sets.auto_name_next(),
+            validate=lambda item, name, _operator, other: (
+                "Choose two different sets" if item == other
+                else epoch_set_name_error(sets, name)
+            ),
+        )
+        if answer is None:
+            return
+        first, name, operator, second = answer
+        (sets.define_and if operator == "AND" else sets.define_or)(name, first, second)
+        self._selection.update(epoch_set=name)
+        self._changed()
+
+    def clear_set(self) -> None:
+        answer = self._choose_set(
+            "Clear Epoch Set",
+            message="All epochs will be removed from the set; the set is kept.",
+        )
+        if answer is None:
+            return
+        self._series().epochs.sets.empty(answer[0])
+        self._changed()
+
+    def rename_set(self) -> None:
+        series = self._series()
+        sets = series.epochs.sets if series is not None else None
+        answer = self._choose_set(
+            "Rename Epoch Set", name_label="New name", default_name=lambda item: item,
+            validate=lambda item, name: (
+                self._exclude_set_error(item, "renamed")
+                or (None if name == item else epoch_set_name_error(sets, name))
+            ),
+        )
+        if answer is None or answer[0] == answer[1]:
+            return
+        was_current = answer[0] == self._selection.selection.get("epoch_set")
+        sets.rename(answer[0], answer[1])
+        if was_current:
+            self._selection.update(epoch_set=answer[1])
+        self._changed()
+
+    def delete_set(self) -> None:
+        answer = self._choose_set(
+            "Delete Epoch Set", message="The set will be deleted; its epochs are kept.",
+            validate=lambda item, _name: self._exclude_set_error(item, "deleted"),
+        )
+        if answer is None:
+            return
+        if answer[0] == self._selection.selection.get("epoch_set"):
+            self._selection.update(epoch_set=None)
+        self._series().epochs.sets.pop(answer[0])
+        self._changed()
+
+    def choose_in_browser(self) -> None:
+        series = self._series()
+        if series is not None:
+            self.browse_requested.emit(series, self._selection.selection.get("epoch_set"))
+
+
 __all__ = [
     "ChooseItemDialog",
     "DataActions",
     "EditScalesDialog",
+    "EpochSetActions",
     "NewDataDialog",
     "SeriesActions",
     "FolderActions",
@@ -1857,7 +2179,10 @@ __all__ = [
     "series_suffixes",
     "series_name_hint",
     "series_update_preview",
+    "epoch_range",
+    "epoch_set_name_error",
     "epoch_ranges",
+    "range_summary",
     "set_name_error",
     "unique_name",
 ]

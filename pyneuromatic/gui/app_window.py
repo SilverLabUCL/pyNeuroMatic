@@ -30,7 +30,12 @@ from pyneuromatic.gui.selection_model import (
     source_object,
 )
 from pyneuromatic.gui.selection_strip import SelectionStrip
-from pyneuromatic.gui.tier_actions import DataActions, FolderActions, SeriesActions
+from pyneuromatic.gui.tier_actions import (
+    DataActions,
+    EpochSetActions,
+    FolderActions,
+    SeriesActions,
+)
 from pyneuromatic.gui.stats_tab import StatsToolTab
 
 
@@ -446,6 +451,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.folder_actions = FolderActions(self.selection_model, self)
         self.data_actions = DataActions(self.selection_model, self)
         self.series_actions = SeriesActions(self.selection_model, self)
+        self.epoch_set_actions = EpochSetActions(self.selection_model, self)
 
         self._build_menu()
         self._build_selection_strip()
@@ -472,7 +478,10 @@ class NMAppWindow(QtWidgets.QMainWindow):
         data_menu.addMenu(self.data_actions.data_set_menu(data_menu))
         self.menuBar().addMenu(data_menu)
 
-        self.menuBar().addMenu(self.series_actions.series_menu(self))
+        series_menu = self.series_actions.series_menu(self)
+        series_menu.addSeparator()
+        series_menu.addMenu(self.epoch_set_actions.epoch_set_menu(series_menu))
+        self.menuBar().addMenu(series_menu)
 
         edit_menu = self.menuBar().addMenu("Edit")
         edit_menu.addAction("Rename")
@@ -499,6 +508,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         strip.set_actions_menu("data", self.data_actions.data_menu(strip))
         strip.set_actions_menu("data_set", self.data_actions.data_set_menu(strip))
         strip.set_actions_menu("dataseries", self.series_actions.series_menu(strip))
+        strip.set_actions_menu("epoch_set", self.epoch_set_actions.epoch_set_menu(strip))
 
     def _build_tool_shell(self) -> None:
         self.tool_rail = ToolRail(["Browser", "Main", "Stats", "Spike"], self)
@@ -545,6 +555,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.data_actions.content_changed.connect(self._on_content_changed)
         self.series_actions.content_changed.connect(self._on_content_changed)
         self.series_actions.browse_requested.connect(self._show_object_in_browser)
+        self.epoch_set_actions.content_changed.connect(self._on_content_changed)
+        self.epoch_set_actions.browse_requested.connect(self._show_epoch_sets_in_browser)
         self.data_actions.browse_requested.connect(self._show_in_browser)
         self.data_actions.table_requested.connect(self._show_data_table)
         self.table_panel.data_edited.connect(self._on_data_edited)
@@ -626,6 +638,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.folder_actions.update_enabled()
         self.data_actions.update_enabled()
         self.series_actions.update_enabled()
+        self.epoch_set_actions.update_enabled()
         # Names or data series membership may have changed
         selection = self.selection_model.selection
         self.plot_widget.update_selection(selection)
@@ -650,6 +663,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.tool_rail.select_tool("Browser")
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.show_object(obj)
+
+    def _show_epoch_sets_in_browser(self, series, set_name) -> None:
+        """Switch to the Browser with *series*' epoch set (or Sets) selected."""
+        self.tool_rail.select_tool("Browser")
+        if isinstance(self.browser_widget, FolderBrowserWidget):
+            self.browser_widget.show_data_of(series, sets=True, select=set_name, kind="epochs")
 
     def _show_data_table(self) -> None:
         """Show the current data array in the Table panel, ready to edit."""

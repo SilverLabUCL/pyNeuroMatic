@@ -7,7 +7,7 @@ from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
-from pyneuromatic.core.nm_epoch import NMEpoch
+from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch
 from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS, NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_stat_func import (
@@ -276,11 +276,38 @@ class StatsToolTab(ToolTabWidget):
             self.run_info_label.setText(str(error))
             return
         count = len(targets)
+        text = ""
         if self.selection.get("source") == "dataseries":
             noun = "epoch" if count == 1 else "epochs"
+            excluded = self._excluded_in_scope()
+            if excluded:
+                text = f" ({excluded} excluded)"
         else:
             noun = "data array" if count == 1 else "data arrays"
-        self.run_info_label.setText(f"{count} {noun}")
+        self.run_info_label.setText(f"{count} {noun}{text}")
+
+    @staticmethod
+    def _excluded_names(dataseries, selection) -> set[str]:
+        """Epochs left out of runs (SetX), unless SetX is the Epoch Set."""
+        if (selection.get("epoch_set") or "").lower() == EXCLUDE_SET.lower():
+            return set()
+        return dataseries.epochs.excluded_names()
+
+    def _excluded_in_scope(self) -> int:
+        """How many epochs of the Epoch Set/Group scope SetX leaves out."""
+        selection = self.selection
+        dataseries = selection.get("dataseries")
+        if dataseries is None:
+            return 0
+        excluded = self._excluded_names(dataseries, selection)
+        try:
+            names = scoped_epoch_names(dataseries, selection, exclude=False)
+        except RuntimeError:
+            return 0
+        if names is None:
+            epoch = selection.get("epoch")
+            names = [epoch.name] if epoch is not None else []
+        return sum(name in excluded for name in names)
 
     def _on_run_finished(self, succeeded: bool) -> None:
         # Saved arrays are viewed in Stats2; without them there is nothing new
@@ -634,9 +661,14 @@ class StatsToolTab(ToolTabWidget):
             if not isinstance(channel, NMChannel):
                 raise RuntimeError("Select a channel before running Stats")
             target_names = scoped_epoch_names(dataseries, selection)
-            if target_names is None:  # no Epoch Set or Group: the current epoch
+            if target_names is None:  # Current Epoch, unless it is excluded
                 epoch = selection.get("epoch")
-                target_names = [epoch.name] if isinstance(epoch, NMEpoch) else []
+                target_names = (
+                    [epoch.name]
+                    if isinstance(epoch, NMEpoch)
+                    and epoch.name not in self._excluded_names(dataseries, selection)
+                    else []
+                )
             targets = []
             for epoch in dataseries.epochs.values():
                 if epoch.name not in target_names:
@@ -703,6 +735,11 @@ class StatsToolTab(ToolTabWidget):
         if window.bsln_xbgn == float("-inf") and window.bsln_xend == float("inf"):
             raise RuntimeError(f"{window.name}: set a baseline X range")
 
+    def _confirm(self, title: str, text: str) -> bool:
+        """Yes/No question (replaced in tests)."""
+        answer = QtWidgets.QMessageBox.question(self, title, text)
+        return answer == QtWidgets.QMessageBox.StandardButton.Yes
+
     def run_tool(self) -> Any:
         self._save_window_controls()
         windows = list(self._tool.windows)
@@ -711,6 +748,16 @@ class StatsToolTab(ToolTabWidget):
         for window in windows:
             if window.on and window.func:
                 self._check_baseline(window)
+        selection = self.selection
+        if (
+            selection.get("source") == "dataseries"
+            and (selection.get("epoch_set") or "").lower() == EXCLUDE_SET.lower()
+            and not self._confirm(
+                "Run on SetX",
+                f"{EXCLUDE_SET} lists epochs excluded from analysis. Run on them anyway?",
+            )
+        ):
+            raise RuntimeError(f"Cancelled: {EXCLUDE_SET} lists excluded epochs")
 
         targets = self._selected_targets()
         if not targets:

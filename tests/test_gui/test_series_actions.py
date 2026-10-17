@@ -71,7 +71,7 @@ def test_prefix_menu_in_strip_and_menu_bar(app):
     assert button.isEnabled()
     assert _menu_texts(button.menu()) == expected
     menus = {action.text(): action.menu() for action in app.menuBar().actions()}
-    assert _menu_texts(menus["Series"]) == expected
+    assert _menu_texts(menus["Series"]) == expected + ["Epoch Set"]
 
 
 def test_new_series_with_noise(app, monkeypatch):

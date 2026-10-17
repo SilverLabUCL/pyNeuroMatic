@@ -5,7 +5,11 @@ from typing import Any
 
 from PyQt6 import QtCore, QtWidgets
 
-from pyneuromatic.gui.selection_model import SelectionModel
+from pyneuromatic.gui.selection_model import (
+    BUILTIN_EPOCH_SETS,
+    SelectionModel,
+    is_stored_epoch_set,
+)
 
 # Shown for "no subfolder", i.e. the folder itself
 NO_SUBFOLDER = "—"
@@ -243,7 +247,8 @@ class SelectionStrip(QtWidgets.QWidget):
             return
         options = self._options_for_selection(selection)
         for key, combo in self._combos.items():
-            empty_text = NO_SUBFOLDER if key == "toolfolder" else ""
+            # The Epoch Set list starts with All and Current Epoch, not a blank
+            empty_text = {"toolfolder": NO_SUBFOLDER, "epoch_set": None}.get(key, "")
             self._set_combo_options(combo, options.get(key, []), selection.get(key), empty_text)
         source = selection.get("source")
         for name, button in self._source_buttons.items():
@@ -277,11 +282,14 @@ class SelectionStrip(QtWidgets.QWidget):
         dataseries = selection.get("dataseries")
         if dataseries is not None:
             options["channel"] = [(name, name) for name in dataseries.channels.keys()]
-            options["epoch_set"] = [(name, name) for name in dataseries.epochs.sets.keys()]
+            options["epoch_set"] = [(name, name) for name in BUILTIN_EPOCH_SETS] + [
+                (name, name) for name in dataseries.epochs.sets.keys()
+            ]
             options["group"] = [
                 (str(number), number) for number in dataseries.epochs.groups.group_numbers
             ]
-        if selection.get("epoch_set") is not None and selection.get("group") is not None:
+        # AND/OR combines a stored Epoch Set with a Group (All needs neither)
+        if is_stored_epoch_set(selection.get("epoch_set")) and selection.get("group") is not None:
             options["group_operator"] = [("AND", "AND"), ("OR", "OR")]
         return options
 
@@ -290,13 +298,14 @@ class SelectionStrip(QtWidgets.QWidget):
         combo: QtWidgets.QComboBox,
         options: list[tuple[str, object]],
         selected,
-        empty_text: str = "",
+        empty_text: str | None = "",
     ) -> None:
         if hasattr(selected, "name"):
             selected = selected.name
         combo.blockSignals(True)
         combo.clear()
-        combo.addItem(empty_text, None)
+        if empty_text is not None:
+            combo.addItem(empty_text, None)
         for text, value in options:
             combo.addItem(text, value)
         selected_index = combo.findData(selected)

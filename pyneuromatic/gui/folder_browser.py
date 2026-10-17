@@ -704,7 +704,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             container.copy_to(obj.name, folder.data, copy_target_name(folder.data, obj.name))
         self._changed()
 
-    def show_data_of(self, owner, sets: bool = False, select: str | None = None) -> None:
+    def show_data_of(
+        self, owner, sets: bool = False, select: str | None = None, kind: str = "data",
+    ) -> None:
         """Show *owner*'s (a folder's or subfolder's) data in the browser.
 
         Without *sets*: expand Data and select the data array named
@@ -712,12 +714,13 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         With *sets*: expand Data > Sets and select the set named *select* in
         the tree, so the detail pane lists its arrays.
         Without a matching *select*, the Data (or Sets) row is selected; with
-        no sets, the Data row is.
+        no sets, the Data row is. *kind* "epochs" does the same for a data
+        series' Epochs row and its epoch sets (*owner* is the series).
         """
         model = self._model
 
         def is_data_group(node) -> bool:
-            return isinstance(node, _GroupNode) and node.kind == "data" and node.owner is owner
+            return isinstance(node, _GroupNode) and node.kind == kind and node.owner is owner
 
         def is_data_sets(node) -> bool:
             return isinstance(node, _SetsNode) and is_data_group(node.group)

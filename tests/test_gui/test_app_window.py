@@ -284,7 +284,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert series_menu.currentText() == "Alpha"
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "AlphaA0"
-    assert _combo_values(set_menu) == ["", "Demo1Set"]
+    assert _combo_values(set_menu) == ["All", "Current Epoch", "Set1", "Set2", "SetX", "Demo1Set"]
     assert _combo_values(group_menu) == ["", "0", "1"]
     assert _combo_values(operator_menu) == [""]
 
@@ -301,8 +301,8 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert _combo_values(series_menu) == ["", "Gamma"]
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA0"
-    assert _combo_values(set_menu) == ["", "Demo2Set"]
-    assert set_menu.currentText() == ""
+    assert _combo_values(set_menu) == ["All", "Current Epoch", "Set1", "Set2", "SetX", "Demo2Set"]
+    assert set_menu.currentText() == "All"
     assert _combo_values(group_menu) == ["", "0", "1"]
     assert group_menu.currentText() == ""
     assert _combo_values(operator_menu) == [""]
@@ -379,7 +379,7 @@ def test_selection_memory_is_independent_per_dataseries(qtbot, nm):
     assert nm.select_values["dataseries"] is beta
     assert channel_menu.currentText() == "A"
     assert trace_navigator.trace_index.value() == 0
-    assert set_menu.currentText() == ""
+    assert set_menu.currentText() == "All"
     assert group_menu.currentText() == ""
     assert operator_menu.currentText() == ""
 
@@ -431,7 +431,7 @@ def test_data_and_dataseries_sections_are_independent(qtbot, nm):
     assert strip.is_active_section("dataseries")
     assert strip.source_button("data").isEnabled()  # a data array is selected too
     assert _combo_values(data_set_menu) == ["", "FlatSet", "DataSet"]
-    assert _combo_values(epoch_set_menu) == ["", "EpochSet"]
+    assert _combo_values(epoch_set_menu) == ["All", "Current Epoch", "Set1", "Set2", "SetX", "EpochSet"]
     assert _combo_values(group_menu) == ["", "0", "1"]
 
     channel_menu.setCurrentText("B")
