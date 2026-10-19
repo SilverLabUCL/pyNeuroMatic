@@ -7,6 +7,7 @@ pytest.importorskip("PyQt6")
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
+from pyneuromatic.gui.selection_model import scoped_epoch_names
 from pyneuromatic.gui.tier_actions import epoch_range, range_summary
 
 pytestmark = pytest.mark.gui
@@ -153,8 +154,8 @@ def test_choose_in_browser_selects_epoch_set(app):
 def test_epoch_set_list_starts_with_all_and_current(app):
     combo = app.selection_strip.combo("epoch_set")
     texts = [combo.itemText(i) for i in range(combo.count())]
-    assert texts[:2] == ["All", "Current Epoch"]
-    assert texts[2:] == ["Set1", "Set2", "SetX", "Set0"]  # creation order
+    assert texts[:3] == ["", "All", "Current Epoch"]  # blank, like Data Set
+    assert texts[3:] == ["Set1", "Set2", "SetX", "Set0"]  # creation order
     assert combo.currentText() == "All"  # the default for a series
     # AND/OR only combines a stored set with a group
     app.series.epochs.groups.assign_cyclic(list(app.series.epochs.keys()), n_groups=2)
@@ -245,3 +246,14 @@ def test_number_boxes_and_numeric_ranges(qtbot, app):
     spin.setValue(250)
     assert dialog.extras() == ["E10", "E250", "1"]
     assert dialog.message_label.text() == "E10-E250/1"  # updates with the box
+
+
+def test_blank_epoch_set_scopes_to_the_group_alone(app):
+    app.series.epochs.groups.assign_cyclic(list(app.series.epochs.keys()), n_groups=2)
+    combo = app.selection_strip.combo("epoch_set")
+    combo.setCurrentIndex(0)  # the blank
+    assert app.selection_model.selection["epoch_set"] is None
+    app.selection_model.update(group=1)
+    names = scoped_epoch_names(app.series, app.selection_model.selection)
+    assert names == app.series.epochs.groups.get_items(1)
+    assert app.selection_strip.combo("group_operator").count() == 1  # no AND/OR

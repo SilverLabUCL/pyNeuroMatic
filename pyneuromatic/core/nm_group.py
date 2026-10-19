@@ -312,6 +312,28 @@ class NMGroups:
             quiet=quiet,
         )
 
+    def delete_group(self, group: int, quiet: bool = nmc.QUIET) -> None:
+        """Delete *group*: its items are unassigned (the items are kept).
+
+        Args:
+            group: Group number to delete.
+            quiet: Suppress history output.
+
+        Raises:
+            TypeError: If *group* is not an int.
+            KeyError: If *group* does not exist.
+        """
+        self._check_group(group)
+        if group not in self.group_numbers:
+            raise KeyError(
+                "group %d does not exist; existing groups: %s"
+                % (group, self.group_numbers)
+            )
+        for name in [n for n, g in self._map.items() if g == group]:
+            del self._map[name]
+        self._declared_groups.discard(group)
+        nmh.history("groups: deleted group %d" % group, path=self.path_str, quiet=quiet)
+
     def rename_item(self, old_name: str, new_name: str) -> None:
         """Rename an item across all group assignments.
 

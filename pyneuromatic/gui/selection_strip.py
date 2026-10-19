@@ -104,14 +104,14 @@ class SelectionStrip(QtWidgets.QWidget):
     )
     _MIN_CONTENT_LENGTH = {
         "folder": 14,
-        "toolfolder": 14,
+        "toolfolder": 9,
         "data": 14,
-        "data_set": 14,
+        "data_set": 9,
         "dataseries": 10,
-        "channel": 3,
-        "epoch_set": 10,
-        "group_operator": 3,
-        "group": 3,
+        "channel": 1,
+        "epoch_set": 7,
+        "group_operator": 1,
+        "group": 1,
     }
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -274,8 +274,7 @@ class SelectionStrip(QtWidgets.QWidget):
             return
         options = self._options_for_selection(selection)
         for key, combo in self._combos.items():
-            # The Epoch Set list starts with All and Current Epoch, not a blank
-            empty_text = {"toolfolder": NO_SUBFOLDER, "epoch_set": None}.get(key, "")
+            empty_text = {"toolfolder": NO_SUBFOLDER}.get(key, "")
             self._set_combo_options(combo, options.get(key, []), selection.get(key), empty_text)
         self.epoch_count_label.setText(self.epoch_count_text(selection))
         source = selection.get("source")

@@ -2242,6 +2242,10 @@ class GroupActions(TierActions):
     ) -> None:
         super().__init__(selection_model, parent)
         action = self._action
+        self.new_action = action(
+            "New Groups…", self.new_groups,
+            tip="Create empty groups 0, 1, 2…, to fill later (e.g. in the browser's Edit mode)",
+        )
         self.cyclic_action = action(
             "Assign Cyclic…", self.assign_cyclic,
             tip="Assign epochs to groups in turn, e.g. 0 1 0 1 or 000 111 (block 3)",
@@ -2259,8 +2263,8 @@ class GroupActions(TierActions):
 
     def group_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Group", parent)
-        for item in (self.cyclic_action, self.assign_action, self.unassign_action, None,
-                     self.clear_action, None, self.browse_action):
+        for item in (self.new_action, None, self.cyclic_action, self.assign_action,
+                     self.unassign_action, None, self.clear_action, None, self.browse_action):
             if item is None:
                 menu.addSeparator()
             else:
@@ -2285,6 +2289,7 @@ class GroupActions(TierActions):
         series = self._series()
         has_epochs = series is not None and len(series.epochs) > 0
         has_groups = series is not None and len(series.epochs.groups.group_numbers) > 0
+        self.new_action.setEnabled(series is not None)
         self.cyclic_action.setEnabled(has_epochs)
         self.assign_action.setEnabled(has_epochs)
         self.unassign_action.setEnabled(series is not None and bool(self._assigned(series)))
@@ -2302,6 +2307,38 @@ class GroupActions(TierActions):
         super()._changed()
 
     # --- actions ------------------------------------------------------------
+
+    def new_groups(self) -> None:
+        """Create empty groups 0 … N-1 (those that do not exist yet)."""
+        series = self._series()
+        if series is None:
+            return
+        groups = series.epochs.groups
+        existing = set(groups.group_numbers)
+
+        def missing(count):
+            return [n for n in range(int(count)) if n not in existing]
+
+        def summary(_item, count):
+            new = missing(count)
+            if not new:
+                return ""
+            span = f"Group {new[0]}" if len(new) == 1 else f"Groups {new[0]}–{new[-1]}"
+            return f"Creates {span}, with no epochs yet."
+
+        answer = self._choose(
+            "New Groups", context=self._series_context(series),
+            extras=[("Groups", Spin(1, 1000, max(len(existing) + 1, 2)))],
+            message=summary,
+            validate=lambda _item, _name, count: (
+                None if missing(count) else f"Groups 0–{int(count) - 1} already exist"
+            ),
+        )
+        if answer is None:
+            return
+        for number in missing(answer[2]):
+            groups.add_group(number, quiet=True)
+        self._changed()
 
     def assign_cyclic(self) -> None:
         series = self._series()

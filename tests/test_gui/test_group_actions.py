@@ -42,8 +42,8 @@ def test_cyclic_groups():
 
 
 def test_group_menu_in_strip_and_series_menu(app):
-    texts = ["Assign Cyclic…", "Assign Epochs…", "Unassign Epochs…", "Clear Groups…",
-             "Choose in Browser…"]
+    texts = ["New Groups…", "Assign Cyclic…", "Assign Epochs…", "Unassign Epochs…",
+             "Clear Groups…", "Choose in Browser…"]
     button = app.selection_strip.action_button("group")
     assert button.isEnabled()
     assert [a.text() for a in button.menu().actions() if a.text()] == texts
@@ -138,8 +138,10 @@ def test_run_uses_group_minus_setx(app):
 def test_choose_in_browser_selects_epochs(app):
     app.group_actions.browse_action.trigger()
     assert app.tool_rail.current_tool_name == "Browser"
+    from pyneuromatic.gui.folder_model import _GroupsNode
+
     node = app.browser_widget.tree.currentIndex().internalPointer()
-    assert node.kind == "epochs" and node.owner is app.series
+    assert isinstance(node, _GroupsNode) and node.group.owner is app.series
 
 
 def _child(model, parent, label):
@@ -158,7 +160,8 @@ def test_browser_lists_groups_under_epochs(app):
     model = app.browser_widget.tree.model()
     folder = _child(model, _child(model, model.index(0, 0), "Demo"), "Data Series")
     epochs = _child(model, _child(model, folder, "Record"), "Epochs")
-    assert _labels(model, epochs)[:1] == ["Sets"]  # no Groups row yet
+    assert _labels(model, epochs)[:2] == ["Sets", "Groups"]  # always listed
+    assert _labels(model, _child(model, epochs, "Groups")) == []
 
     app.groups.assign_cyclic([f"E{i}" for i in range(6)], n_groups=2)
     app.browser_widget.refresh()
@@ -209,3 +212,37 @@ def test_strip_shows_epoch_count_beside_group(app):
     assert label.text() == "1 epoch"  # E3
     app.selection_model.update(epoch=app.series.epochs["E0"])
     assert label.text() == "0 epochs (1 excluded)"
+
+
+def test_new_groups_creates_empty_groups(app):
+    actions = app.group_actions
+    actions.new_groups()  # cancelled; check the options
+    options = app.dialogs[-1][1]
+    assert options["extras"][0][1].value == 2
+    assert options["message"](None, "3") == "Creates Groups 0–2, with no epochs yet."
+
+    app.answers = [(None, None, "3")]
+    actions.new_action.trigger()
+    assert app.groups.group_numbers == [0, 1, 2]
+    assert all(app.groups.get_items(n) == [] for n in range(3))
+    combo = app.selection_strip.combo("group")
+    assert [combo.itemText(i) for i in range(combo.count())] == ["", "0", "1", "2"]
+
+    actions.new_groups()
+    options = app.dialogs[-1][1]
+    assert options["message"](None, "4") == "Creates Group 3, with no epochs yet."
+    assert options["validate"](None, None, "3") == "Groups 0–2 already exist"
+
+
+def test_new_groups_then_fill_in_browser_edit_mode(app):
+    from PyQt6 import QtCore
+
+    app.answers = [(None, None, "2")]
+    app.group_actions.new_groups()
+    browser = app.browser_widget
+    browser.show_groups_of(app.series, 1)
+    browser.edit_checkbox.setChecked(True)
+    model = browser.membership_model
+    model.setData(model.index(4, 0), QtCore.Qt.CheckState.Checked.value,
+                  QtCore.Qt.ItemDataRole.CheckStateRole)
+    assert app.groups.get_items(1) == ["E4"]

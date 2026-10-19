@@ -296,6 +296,29 @@ class TestNMGroupsClear(unittest.TestCase):
         self.assertIsNone(g.get_group("E0"))
 
 
+class TestNMGroupsDeleteGroup(unittest.TestCase):
+
+    def test_delete_group_unassigns_its_items(self):
+        g, _ = _make_groups(n=6)
+        g.delete_group(1, quiet=QUIET)
+        self.assertEqual(g.group_numbers, [0, 2])
+        self.assertIsNone(g.get_group("E1"))
+        self.assertEqual(g.get_items(0), ["E0", "E3"])
+
+    def test_delete_empty_group(self):
+        g = NMGroups()
+        g.add_group(3, quiet=QUIET)
+        g.delete_group(3, quiet=QUIET)
+        self.assertEqual(g.group_numbers, [])
+
+    def test_delete_missing_group_raises(self):
+        g, _ = _make_groups(n=3)
+        with self.assertRaises(KeyError):
+            g.delete_group(7, quiet=QUIET)
+        with self.assertRaises(TypeError):
+            g.delete_group("1", quiet=QUIET)
+
+
 # =========================================================================
 # NMGroups — rename_item
 # =========================================================================

@@ -26,6 +26,7 @@ from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
+from pyneuromatic.gui.membership import MembershipModel, unassign_from_group
 from pyneuromatic.gui.folder_model import (
     FolderTreeModel,
     _GroupMemberNode,
@@ -46,6 +47,10 @@ from pyneuromatic.gui.tier_actions import (
     series_name_error,
     series_name_hint,
 )
+
+
+# Rows with Set / Group actions (the same in the tree and the detail pane)
+_SET_GROUP_NODES = (_SetsNode, _SetNode, _GroupsNode, _GroupNumberNode)
 
 
 class FolderBrowserWidget(QtWidgets.QWidget):
@@ -165,9 +170,63 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         )
         self._detail.customContextMenuRequested.connect(self._show_detail_context_menu)
 
+        # Edit mode: when a set or group is chosen in the tree, the second
+        # column can list every item with a checkbox for membership
+        self._edit_checkbox = QtWidgets.QCheckBox("Edit", self)
+        self._edit_checkbox.setToolTip("List every item with a checkbox to add or remove it")
+        self._edit_label = QtWidgets.QLabel("", self)
+        # Let the label shrink (it is also the tooltip) so the bar never
+        # forces the second column wider than the tree leaves it
+        self._edit_label.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred
+        )
+        self._all_button = QtWidgets.QToolButton(self)
+        self._all_button.setText("All")
+        self._none_button = QtWidgets.QToolButton(self)
+        self._none_button.setText("Clear")
+        self._invert_button = QtWidgets.QToolButton(self)
+        self._invert_button.setText("Invert")
+        edit_row = QtWidgets.QHBoxLayout()
+        edit_row.setContentsMargins(4, 2, 4, 2)
+        edit_row.addWidget(self._edit_label, stretch=1)
+        for widget in (self._all_button, self._none_button, self._invert_button,
+                       self._edit_checkbox):
+            edit_row.addWidget(widget)
+        self._edit_bar = QtWidgets.QWidget(self)
+        self._edit_bar.setLayout(edit_row)
+        self._edit_bar.hide()
+
+        self._membership_view = QtWidgets.QTableView(self)
+        self._membership_view.verticalHeader().hide()
+        self._membership_view.horizontalHeader().setStretchLastSection(True)
+        self._membership_view.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self._membership_view.viewport().installEventFilter(self)
+        self._membership_model: MembershipModel | None = None
+        self._last_toggled_row: int | None = None
+        # Rows selected when the mouse went down (a click changes the selection)
+        self._press_rows: list[int] | None = None
+        self._reselect_rows: list[int] = []
+
+        self._detail_stack = QtWidgets.QStackedWidget(self)
+        self._detail_stack.addWidget(self._detail)
+        self._detail_stack.addWidget(self._membership_view)
+        right = QtWidgets.QWidget(self)
+        right_layout = QtWidgets.QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
+        right_layout.addWidget(self._edit_bar)
+        right_layout.addWidget(self._detail_stack, stretch=1)
+
+        self._edit_checkbox.toggled.connect(self._on_edit_toggled)
+        self._all_button.clicked.connect(lambda: self._edit_all("all"))
+        self._none_button.clicked.connect(lambda: self._edit_all("none"))
+        self._invert_button.clicked.connect(lambda: self._edit_all("invert"))
+
         splitter = QtWidgets.QSplitter(self)
         splitter.addWidget(self._tree)
-        splitter.addWidget(self._detail)
+        splitter.addWidget(right)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -184,6 +243,153 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     @property
     def detail(self) -> QtWidgets.QTableView:
         return self._detail
+
+    @property
+    def edit_checkbox(self) -> QtWidgets.QCheckBox:
+        return self._edit_checkbox
+
+    @property
+    def membership_view(self) -> QtWidgets.QTableView:
+        return self._membership_view
+
+    @property
+    def membership_model(self) -> MembershipModel | None:
+        """The checkbox list shown in edit mode, if any."""
+        return self._membership_model if self.is_editing else None
+
+    @property
+    def is_editing(self) -> bool:
+        return self._detail_stack.currentWidget() is self._membership_view
+
+    # ------------------------------------------------------------------
+    # Edit mode: set / group membership with checkboxes
+
+    @staticmethod
+    def _edit_target(node) -> tuple | None:
+        """(container, set name, group number, note) for an editable row."""
+        if isinstance(node, _SetNode) and node.container is not None:
+            note = None
+            if node.container.sets.is_equation(node.name):
+                note = "A combined (AND/OR) set: edit the sets it combines"
+            return node.container, node.name, None, note
+        if isinstance(node, _GroupNumberNode) and node.container is not None:
+            return node.container, None, node.number, None
+        return None
+
+    def _update_edit_mode(self) -> None:
+        """Show the Edit bar for a set or group row, and keep edit mode on
+        while moving between sets and groups."""
+        target = self._edit_target(self._tree.currentIndex().internalPointer())
+        self._edit_bar.setVisible(target is not None)
+        if target is None or target[3] is not None:
+            self._edit_checkbox.blockSignals(True)
+            self._edit_checkbox.setChecked(False)
+            self._edit_checkbox.blockSignals(False)
+            self._edit_checkbox.setEnabled(target is not None and target[3] is None)
+            self._edit_checkbox.setToolTip(target[3] if target else "")
+            self._show_edit_list(None)
+            return
+        self._edit_checkbox.setEnabled(True)
+        self._edit_checkbox.setToolTip("List every item with a checkbox to add or remove it")
+        self._show_edit_list(target if self._edit_checkbox.isChecked() else None)
+
+    def _show_edit_list(self, target) -> None:
+        editing = target is not None
+        for button in (self._all_button, self._none_button, self._invert_button):
+            button.setVisible(editing)
+        if not editing:
+            self._detail_stack.setCurrentWidget(self._detail)
+            self._edit_label.setText("")
+            return
+        container, set_name, group, _note = target
+        model = self._membership_model
+        if model is None or not model.same_target(container, set_name, group):
+            model = MembershipModel(container, set_name=set_name, group=group, parent=self)
+            model.membership_changed.connect(self._on_membership_changed)
+            model.toggled.connect(self._on_member_toggled)
+            self._membership_model = model
+            self._membership_view.setModel(model)
+            self._last_toggled_row = None
+        noun = "epochs" if hasattr(container, "groups") else "items"
+        text = f"Tick {noun} to add them to {model.target_label}"
+        self._edit_label.setText(text)
+        self._edit_label.setToolTip(text)
+        # Groups are exclusive, so Invert (and All) would raid other groups
+        self._all_button.setText("Ungrouped" if model.is_group else "All")
+        self._all_button.setToolTip(
+            f"Tick every {noun[:-1]} that is in no group" if model.is_group
+            else f"Tick every {noun[:-1]}"
+        )
+        self._invert_button.setVisible(not model.is_group)
+        self._detail_stack.setCurrentWidget(self._membership_view)
+
+    def _on_edit_toggled(self, _checked: bool) -> None:
+        self._update_edit_mode()
+
+    def eventFilter(self, watched, event) -> bool:
+        if watched is self._membership_view.viewport():
+            if event.type() == QtCore.QEvent.Type.MouseButtonPress:
+                self._press_rows = self._selected_member_rows()
+            elif event.type() == QtCore.QEvent.Type.MouseButtonRelease:
+                QtCore.QTimer.singleShot(0, self._forget_press_rows)
+        return super().eventFilter(watched, event)
+
+    def _forget_press_rows(self) -> None:
+        self._press_rows = None
+
+    def _selected_member_rows(self) -> list[int]:
+        sel_model = self._membership_view.selectionModel()
+        if sel_model is None:
+            return []
+        return sorted(index.row() for index in sel_model.selectedRows())
+
+    def _reselect_member_rows(self) -> None:
+        self._select_member_rows(self._reselect_rows)
+
+    def _select_member_rows(self, rows: list[int]) -> None:
+        model = self._membership_model
+        sel_model = self._membership_view.selectionModel()
+        if model is None or sel_model is None:
+            return
+        selection = QtCore.QItemSelection()
+        for row in rows:
+            selection.select(model.index(row, 0),
+                             model.index(row, model.columnCount() - 1))
+        sel_model.select(selection,
+                         QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect)
+
+    def _on_member_toggled(self, row: int, checked: bool) -> None:
+        # Ticking a box inside a multi-row selection ticks the whole selection
+        rows = self._press_rows if self._press_rows is not None \
+            else self._selected_member_rows()
+        if row in rows and len(rows) > 1:
+            self._membership_model.set_checked(rows, checked)
+            self._last_toggled_row = row
+            # Keep the selection, after the click has finished changing it
+            self._reselect_rows = rows
+            QtCore.QTimer.singleShot(0, self._reselect_member_rows)
+            return
+        # Shift-click applies the same state to every row since the last click
+        last = self._last_toggled_row
+        shift = QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+        if shift and last is not None and last != row:
+            low, high = sorted((last, row))
+            self._membership_model.set_checked(range(low, high + 1), checked)
+        self._last_toggled_row = row
+
+    def _edit_all(self, how: str) -> None:
+        model = self._membership_model
+        if model is None:
+            return
+        if how == "all":
+            # A group takes only ungrouped epochs: All would empty other groups
+            (model.check_ungrouped if model.is_group else model.check_all)()
+        else:
+            {"none": model.check_none, "invert": model.invert}[how]()
+
+    def _on_membership_changed(self, _count: int) -> None:
+        # Reload the tree (its set/group member rows) and tell the app
+        self._changed()
 
     def refresh(self) -> None:
         """Re-read the hierarchy from the manager (see FolderTreeModel.refresh).
@@ -312,20 +518,59 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             menu.addAction("New Set...", lambda: self._add_set(self._model._sets_node(node)))
             if node.kind == "epochs":
                 menu.addAction(
-                    "New Group...",
+                    "New Groups...",
                     lambda: self._new_group(container),
                 )
-        elif isinstance(node, _SetsNode):
-            self._populate_sets_menu(menu, node)
-        elif isinstance(node, _SetNode):
-            menu.addAction("Select Set", lambda: self._request_selection(index))
-        elif isinstance(node, (_SetMemberNode, NMObject)):
+        elif isinstance(node, _SET_GROUP_NODES):
+            self._populate_node_menu(menu, index)
+        elif isinstance(node, _SetMemberNode):
+            menu.addAction("Select", lambda: self._request_selection(index))
+            menu.addAction("Remove from Set",
+                           lambda: self._remove_from_set(node.set_node, [node.obj]))
+        elif isinstance(node, _GroupMemberNode):
+            menu.addAction("Select", lambda: self._request_selection(index))
+            menu.addAction("Remove from Group",
+                           lambda: self._remove_from_group(node.group_number_node, [node.obj]))
+        elif isinstance(node, NMObject):
             menu.addAction("Select", lambda: self._request_selection(index))
         else:
             return
         if not menu.actions():
             return
         menu.exec(self._tree.viewport().mapToGlobal(pos))
+
+    def _populate_node_menu(self, menu: QtWidgets.QMenu, index: QtCore.QModelIndex) -> None:
+        """Actions for a Sets, set, Groups or group row — shared by both panes."""
+        node = index.internalPointer()
+        if isinstance(node, _GroupsNode) and node.container is not None:
+            menu.addAction("New Groups...", lambda: self._new_group(node.container))
+            numbers = node.container.groups.group_numbers
+            if numbers:
+                every = [self._model._group_number_node(node, n) for n in numbers]
+                menu.addAction("Clear Groups", lambda: self._clear_groups(every))
+                delete_menu = menu.addMenu("Delete Group")
+                for number_node in every:
+                    delete_menu.addAction(
+                        str(number_node.number),
+                        lambda checked=False, n=number_node: self._delete_groups([n]),
+                    )
+                delete_menu.addSeparator()
+                delete_menu.addAction("All Groups", lambda: self._delete_groups(every))
+        elif isinstance(node, _GroupNumberNode):
+            menu.addAction("Select Group", lambda: self._request_selection(index))
+            menu.addAction("Clear Group", lambda: self._clear_groups([node]))
+            menu.addAction("Delete Group", lambda: self._delete_groups([node]))
+        elif isinstance(node, _SetsNode):
+            self._populate_sets_menu(menu, node)
+        elif isinstance(node, _SetNode):
+            menu.addAction("Select Set", lambda: self._request_selection(index))
+            menu.addAction("Rename Set...",
+                           lambda: self._rename_set(node.sets_node, node.name))
+            menu.addAction("Delete Set",
+                           lambda: self._delete_sets(node.sets_node, [node.name]))
+            if not self._is_combined_set(node):
+                menu.addAction("Clear Set",
+                               lambda: self._clear_sets(node.sets_node, [node.name]))
 
     def _populate_sets_menu(self, menu: QtWidgets.QMenu, sets_node: _SetsNode) -> None:
         """New Set... / Rename Set / Delete Set actions for *sets_node*.
@@ -347,6 +592,13 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                 delete_menu.addAction(
                     name, lambda checked=False, n=name: self._delete_sets(sets_node, [n])
                 )
+            clearable = [name for name in existing if not container.sets.is_equation(name)]
+            if clearable:
+                clear_menu = menu.addMenu("Clear Set")
+                for name in clearable:
+                    clear_menu.addAction(
+                        name, lambda checked=False, n=name: self._clear_sets(sets_node, [n])
+                    )
 
     def _on_activated(self, index: QtCore.QModelIndex) -> None:
         """Placeholder for a future "open" action (e.g. quick-plot a leaf).
@@ -362,6 +614,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         previous: QtCore.QModelIndex,
     ) -> None:
         self._detail.setRootIndex(current if current.isValid() else QtCore.QModelIndex())
+        self._update_edit_mode()
 
     def _request_selection(self, index: QtCore.QModelIndex) -> None:
         self.selection_requested.emit(self._selection_for_index(index))
@@ -443,13 +696,20 @@ class FolderBrowserWidget(QtWidgets.QWidget):
 
     def _selected_set_members(self) -> list[NMObject]:
         """Selected members, when the detail pane's root is a specific set."""
+        return self._selected_members(_SetMemberNode)
+
+    def _selected_group_members(self) -> list[NMObject]:
+        """Selected epochs, when the detail pane's root is a group."""
+        return self._selected_members(_GroupMemberNode)
+
+    def _selected_members(self, member_class) -> list[NMObject]:
         sel_model = self._detail.selectionModel()
         if sel_model is None:
             return []
         return [
             node.obj
             for index in sel_model.selectedRows()
-            if isinstance(node := index.internalPointer(), _SetMemberNode)
+            if isinstance(node := index.internalPointer(), member_class)
         ]
 
     # ------------------------------------------------------------------
@@ -463,6 +723,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         - "Sets" root: Rename Set / Delete Set for selected set name(s).
         - A specific set's root: Remove from Set for selected member(s) —
           removes membership only, never deletes the underlying object.
+        - A group's root: Remove from Group for selected epoch(s).
+        - "Groups" root: Select / Clear / Delete Group for selected group(s).
 
         "New..." / "New Set..." live in the tree's context menu instead
         (see :meth:`_show_tree_context_menu`) — nothing here to act on
@@ -471,11 +733,38 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         root = self._detail.rootIndex()
         root_node = root.internalPointer() if root.isValid() else None
 
+        # One set or group row, or empty space under a Sets or Groups list:
+        # the same menu as that row has in the tree
+        clicked = self._detail.indexAt(pos)
+        sel_model = self._detail.selectionModel()
+        selected = sel_model.selectedRows() if sel_model is not None else []
+        target = None
+        if clicked.isValid():
+            clicked = clicked.siblingAtColumn(0)
+            if isinstance(clicked.internalPointer(), _SET_GROUP_NODES) and (
+                not selected or selected == [clicked]
+            ):
+                target = clicked
+        elif isinstance(root_node, (_SetsNode, _GroupsNode)):
+            target = root
+        if target is not None:
+            menu = QtWidgets.QMenu(self)
+            self._populate_node_menu(menu, target)
+            if menu.actions():
+                menu.exec(self._detail.viewport().mapToGlobal(pos))
+            return
+
         if isinstance(root_node, _SetsNode):
             self._show_sets_list_context_menu(pos, root_node)
             return
         if isinstance(root_node, _SetNode):
             self._show_set_members_context_menu(pos, root_node)
+            return
+        if isinstance(root_node, _GroupNumberNode):
+            self._show_group_members_context_menu(pos, root_node)
+            return
+        if isinstance(root_node, _GroupsNode):
+            self._show_groups_list_context_menu(pos)
             return
 
         container = self._current_container()
@@ -543,6 +832,26 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             "Delete Set",
             lambda: self._delete_sets(sets_node, [n.name for n in selected]),
         )
+        clearable = [n.name for n in selected if not self._is_combined_set(n)]
+        if clearable:
+            menu.addAction("Clear Set", lambda: self._clear_sets(sets_node, clearable))
+        menu.exec(self._detail.viewport().mapToGlobal(pos))
+
+    def _show_groups_list_context_menu(self, pos: QtCore.QPoint) -> None:
+        """Select / Clear / Delete Group for whichever group row(s) are selected."""
+        sel_model = self._detail.selectionModel()
+        rows = [] if sel_model is None else [
+            index for index in sel_model.selectedRows()
+            if isinstance(index.internalPointer(), _GroupNumberNode)
+        ]
+        if not rows:
+            return
+        selected = [index.internalPointer() for index in rows]
+        menu = QtWidgets.QMenu(self)
+        if len(rows) == 1:
+            menu.addAction("Select Group", lambda: self._request_selection(rows[0]))
+        menu.addAction("Clear Group", lambda: self._clear_groups(selected))
+        menu.addAction("Delete Group", lambda: self._delete_groups(selected))
         menu.exec(self._detail.viewport().mapToGlobal(pos))
 
     def _show_set_members_context_menu(self, pos: QtCore.QPoint, set_node: _SetNode) -> None:
@@ -552,6 +861,18 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             return
         menu = QtWidgets.QMenu(self)
         menu.addAction("Remove from Set", lambda: self._remove_from_set(set_node, selected))
+        menu.exec(self._detail.viewport().mapToGlobal(pos))
+
+    def _show_group_members_context_menu(
+        self, pos: QtCore.QPoint, group_node: _GroupNumberNode,
+    ) -> None:
+        """Remove from Group for whichever epoch row(s) are selected."""
+        selected = self._selected_group_members()
+        if not selected:
+            return
+        menu = QtWidgets.QMenu(self)
+        menu.addAction("Remove from Group",
+                       lambda: self._remove_from_group(group_node, selected))
         menu.exec(self._detail.viewport().mapToGlobal(pos))
 
     # ------------------------------------------------------------------
@@ -856,9 +1177,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         existing = epoch_container.groups.group_numbers
         group_count, accepted = QtWidgets.QInputDialog.getInt(
             self,
-            "New Group",
-            "Number of groups to create:",
-            value=1,
+            "New Groups",
+            "Number of groups (empty groups 0, 1, ... are created):",
+            value=max(len(existing) + 1, 2),
             min=1,
         )
         if not accepted:
@@ -928,6 +1249,60 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Delete Set Failed", str(e))
         self._changed()
 
+    @staticmethod
+    def _is_combined_set(set_node: _SetNode) -> bool:
+        """An AND/OR set: clearing it would replace its definition."""
+        container = set_node.container
+        return container is not None and container.sets.is_equation(set_node.name)
+
+    def _clear_sets(self, sets_node: _SetsNode, names: list[str]) -> None:
+        """Remove every member of the sets — the sets and members are kept."""
+        container = sets_node.container
+        if container is None or not names:
+            return
+        if not self._confirm(
+            "Clear Set",
+            "Remove every item from set%s %s? The items themselves are kept."
+            % ("s" if len(names) != 1 else "", ", ".join(names)),
+        ):
+            return
+        for name in names:
+            container.sets.empty(name)
+        self._changed()
+
+    def _clear_groups(self, group_nodes: list[_GroupNumberNode]) -> None:
+        """Take every epoch out of the groups — the (empty) groups are kept."""
+        if not group_nodes or group_nodes[0].container is None:
+            return
+        groups = group_nodes[0].container.groups
+        labels = ", ".join(str(node.number) for node in group_nodes)
+        if not self._confirm(
+            "Clear Group",
+            "Remove every epoch from group%s %s? The epochs themselves are kept."
+            % ("s" if len(group_nodes) != 1 else "", labels),
+        ):
+            return
+        for node in group_nodes:
+            unassign_from_group(groups, groups.get_items(node.number), node.number)
+        self._changed()
+
+    def _delete_groups(self, group_nodes: list[_GroupNumberNode]) -> None:
+        """Delete the groups; their epochs are unassigned, never deleted."""
+        if not group_nodes or group_nodes[0].container is None:
+            return
+        groups = group_nodes[0].container.groups
+        labels = ", ".join(str(node.number) for node in group_nodes)
+        if not self._confirm(
+            "Delete Group",
+            "Delete group%s %s? Their epochs are kept, with no group."
+            % ("s" if len(group_nodes) != 1 else "", labels),
+        ):
+            return
+        for node in group_nodes:
+            if node.number in groups.group_numbers:
+                groups.delete_group(node.number, quiet=True)
+        self._changed()
+
     def _remove_from_set(self, set_node: _SetNode, objects: list[NMObject]) -> None:
         """Remove *objects* from the set — membership only, never deletes them."""
         container = set_node.container
@@ -938,4 +1313,15 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError) as e:
             QtWidgets.QMessageBox.warning(self, "Remove from Set Failed", str(e))
             return
+        self._changed()
+
+    def _remove_from_group(
+        self, group_node: _GroupNumberNode, objects: list[NMObject],
+    ) -> None:
+        """Take *objects* out of the group — they stay in the data series."""
+        container = group_node.container
+        if container is None:
+            return
+        unassign_from_group(container.groups, [obj.name for obj in objects],
+                            group_node.number)
         self._changed()
