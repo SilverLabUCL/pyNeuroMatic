@@ -639,6 +639,11 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self._on_browser_content_changed()
 
     def _on_browser_content_changed(self) -> None:
+        selection = self.selection_model.selection
+        series, group = selection.get("dataseries"), selection.get("group")
+        if (series is not None and group is not None
+                and group not in series.epochs.groups.group_numbers):
+            self.selection_model.update(group=None)  # the group was deleted
         self.selection_model.refresh()
         self.selection_strip.refresh_options()
         self.stats_tab.stats2.refresh()
@@ -710,6 +715,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.context_panel.setCurrentWidget(self.plot_widget)
 
     def _on_stats_run_finished(self, succeeded: bool) -> None:
+        # A run adds a results subfolder: show it in the browser too
+        if succeeded and isinstance(self.browser_widget, FolderBrowserWidget):
+            self.browser_widget.refresh()
         if succeeded and self.stats_tab.stats_tool.toolfolder is not None:
             self.table_panel.show_tool("Stats")
             self.context_panel.setCurrentWidget(self.table_panel)

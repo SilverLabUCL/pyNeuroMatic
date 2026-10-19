@@ -276,6 +276,9 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         self._groups_nodes: dict[int, _GroupsNode] = {}
         self._group_number_nodes: dict[tuple[int, int], _GroupNumberNode] = {}
         self._group_member_nodes: dict[tuple[int, int], _GroupMemberNode] = {}
+        # Children of each node, computed once per refresh: Qt asks for rows
+        # one at a time, and rebuilding a 1000-item list per row is quadratic
+        self._children_cache: dict[int, list[object]] = {}
 
     # ------------------------------------------------------------------
     # Node traversal helpers
@@ -369,7 +372,19 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         return groups
 
     def _children_of(self, node: object | None) -> list[object]:
-        """Ordered Qt children of *node* (``None`` = invisible root)."""
+        """Ordered Qt children of *node* (``None`` = invisible root).
+
+        Cached until the next :meth:`refresh` (nodes are cached too, so
+        ``id(node)`` is stable in between).
+        """
+        key = id(node)
+        children = self._children_cache.get(key)
+        if children is None:
+            children = self._compute_children(node)
+            self._children_cache[key] = children
+        return children
+
+    def _compute_children(self, node: object | None) -> list[object]:
         if node is None:
             # Always shown, even with zero folders — same reasoning as
             # _ALWAYS_SHOWN_KINDS: a brand-new, completely empty manager
@@ -388,9 +403,10 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
             # menu (see FolderBrowserWidget._show_tree_context_menu).
             children = node.children()
             container = getattr(node.owner, node.kind, None)
-            # Epochs also show their groups, after the sets
+            # Epochs always show a Groups row, after the sets, so groups can
+            # be created and filled from the browser
             groups = getattr(container, "groups", None) if node.kind == "epochs" else None
-            if groups is not None and groups.group_numbers:
+            if groups is not None:
                 children = [self._groups_node(node)] + children
             if container is not None and len(container.sets) > 0:
                 children = [self._sets_node(node)] + children
@@ -552,4 +568,5 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         self._groups_nodes.clear()
         self._group_number_nodes.clear()
         self._group_member_nodes.clear()
+        self._children_cache.clear()
         self.endResetModel()

@@ -239,7 +239,8 @@ class SelectionModel(QtCore.QObject):
         if self._data_set is not None:
             self._data_set_memory[self._data_scope()] = self._data_set
         epoch_state = (self._epoch_set, self._group, self._group_operator)
-        if any(value is not None for value in epoch_state):
+        # A data series remembers an empty Epoch Set too (not back to All)
+        if any(value is not None for value in epoch_state) or self._epoch_scope()[2] is not None:
             self._epoch_memory[self._epoch_scope()] = epoch_state
 
     def _restore_context(self, previous_scopes: tuple[tuple, tuple]) -> None:

@@ -454,7 +454,7 @@ class TestTreeContextMenu:
         assert [action.text() for action in actions] == [
             "New...",
             "New Set...",
-            "New Group...",
+            "New Groups...",
         ]
         actions[-1].trigger()
 
@@ -751,8 +751,8 @@ class TestSetsDetailPaneContextMenu:
         widget.tree.setCurrentIndex(sets_idx)
         return sets_idx
 
-    def test_no_new_set_action_in_detail_pane(self, widget, folder, monkeypatch):
-        # "New Set..." is tree-only, same convention as "New..." for items.
+    def test_set_row_menu_matches_tree(self, widget, folder, monkeypatch):
+        # A set's row has the same menu as in the tree (no "New Set...").
         folder.data.sets.add("Set1")
         widget.refresh()
         sets_idx = self._navigate_to_sets(widget)
@@ -766,15 +766,17 @@ class TestSetsDetailPaneContextMenu:
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
         titles = [a.text() for a in captured["menu"].actions()]
         assert "New Set..." not in titles
-        assert titles == ["Rename Set...", "Delete Set"]
+        assert titles == ["Select Set", "Rename Set...", "Delete Set", "Clear Set"]
 
-    def test_no_menu_when_nothing_selected_in_sets_list(self, widget, folder, monkeypatch):
+    def test_empty_space_under_sets_list_has_sets_row_menu(self, widget, folder, monkeypatch):
         folder.data.sets.add("Set1")
         widget.refresh()
         self._navigate_to_sets(widget)
+        monkeypatch.setattr(widget.detail, "indexAt", lambda pos: QtCore.QModelIndex())
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
-        assert "menu" not in captured
+        titles = [a.text() for a in captured["menu"].actions()]
+        assert titles == ["New Set...", "Rename Set", "Delete Set", "Clear Set"]
 
     def test_rename_set_from_detail_pane(self, widget, folder, monkeypatch):
         folder.data.sets.add("Set1")
@@ -792,7 +794,7 @@ class TestSetsDetailPaneContextMenu:
         )
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
-        captured["menu"].actions()[0].trigger()  # "Rename Set..."
+        next(a for a in captured["menu"].actions() if a.text() == "Rename Set...").trigger()
         assert "Renamed" in folder.data.sets.keys()
 
     def test_delete_sets_from_detail_pane_multi_select(self, widget, folder, monkeypatch):
@@ -814,7 +816,7 @@ class TestSetsDetailPaneContextMenu:
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
         titles = [a.text() for a in captured["menu"].actions()]
-        assert titles == ["Delete Set"]  # no Rename... with 2 selected
+        assert titles == ["Delete Set", "Clear Set"]  # no Rename... with 2 selected
         captured["menu"].actions()[0].trigger()
         assert list(folder.data.sets.keys()) == []
 

@@ -313,3 +313,23 @@ def test_without_stats_arrays_table_explains(qtbot):
     assert window.context_panel.currentWidget() is window.plot_widget
     assert stats2.folder_combo.count() == 0
     assert "Run Stats1 with 'Stats arrays' on" in stats2.message_label.text()
+
+
+def test_browser_shows_new_results_folder_after_run(qtbot):
+    _manager, folder, window = _stats_window(qtbot)
+    browser = window.browser_widget
+    model = browser.tree.model()
+
+    def tool_folders():
+        root = model.index(0, 0)
+        demo = next(model.index(r, 0, root) for r in range(model.rowCount(root))
+                    if model.data(model.index(r, 0, root)) == folder.name)
+        for r in range(model.rowCount(demo)):
+            index = model.index(r, 0, demo)
+            if model.data(index) == "Tool Folders":
+                return [model.data(model.index(i, 0, index)) for i in range(model.rowCount(index))]
+        return []
+
+    assert tool_folders() == []
+    window.stats_tab.run_button.click()
+    assert tool_folders() == ["Stats_Record_A_0"]
