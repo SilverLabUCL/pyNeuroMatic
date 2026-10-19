@@ -9,6 +9,7 @@ from pyneuromatic.gui.selection_model import (
     BUILTIN_EPOCH_SETS,
     SelectionModel,
     is_stored_epoch_set,
+    scoped_epoch_names,
 )
 
 # Shown for "no subfolder", i.e. the folder itself
@@ -180,6 +181,11 @@ class SelectionStrip(QtWidgets.QWidget):
                     button.setToolTip(f"{self._labels[key]} actions (coming soon)")
                     self._action_buttons[key] = button
                     row_layout.addWidget(button)
+                if key == "group":
+                    # How many epochs the Epoch Set/Group selects
+                    self.epoch_count_label = QtWidgets.QLabel("", frame)
+                    self.epoch_count_label.setObjectName("epochCount")
+                    row_layout.addWidget(self.epoch_count_label)
             row_layout.addStretch(1)
             layout.addLayout(row_layout)
         return frame
@@ -242,6 +248,27 @@ class SelectionStrip(QtWidgets.QWidget):
         if self._selection_model is not None:
             self._update_from_selection(self._selection_model.selection)
 
+    @staticmethod
+    def epoch_count_text(selection: dict) -> str:
+        """e.g. "7 epochs (3 excluded)" for the Epoch Set/Group selection."""
+        dataseries = selection.get("dataseries")
+        if dataseries is None:
+            return ""
+        try:
+            scoped = scoped_epoch_names(dataseries, selection)
+            unscoped = scoped_epoch_names(dataseries, selection, exclude=False)
+        except RuntimeError:
+            return "Choose AND or OR"
+        if scoped is None:  # Current Epoch
+            epoch = selection.get("epoch")
+            unscoped = [epoch.name] if epoch is not None else []
+            excluded = dataseries.epochs.excluded_names()
+            scoped = [name for name in unscoped if name not in excluded]
+        count = len(scoped)
+        text = f"{count} epoch{'s' * (count != 1)}"
+        left_out = len(unscoped) - count
+        return text + (f" ({left_out} excluded)" if left_out else "")
+
     def _update_from_selection(self, selection: dict) -> None:
         if self._selection_model is None:
             return
@@ -250,6 +277,7 @@ class SelectionStrip(QtWidgets.QWidget):
             # The Epoch Set list starts with All and Current Epoch, not a blank
             empty_text = {"toolfolder": NO_SUBFOLDER, "epoch_set": None}.get(key, "")
             self._set_combo_options(combo, options.get(key, []), selection.get(key), empty_text)
+        self.epoch_count_label.setText(self.epoch_count_text(selection))
         source = selection.get("source")
         for name, button in self._source_buttons.items():
             button.setEnabled(selection.get(name) is not None)

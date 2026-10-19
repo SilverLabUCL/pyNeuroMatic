@@ -71,7 +71,7 @@ def test_prefix_menu_in_strip_and_menu_bar(app):
     assert button.isEnabled()
     assert _menu_texts(button.menu()) == expected
     menus = {action.text(): action.menu() for action in app.menuBar().actions()}
-    assert _menu_texts(menus["Series"]) == expected + ["Epoch Set"]
+    assert _menu_texts(menus["Series"]) == expected + ["Epoch Set", "Group"]
 
 
 def test_new_series_with_noise(app, monkeypatch):
@@ -218,14 +218,14 @@ def test_remove_channel_and_epoch(app):
     assert list(app.series.channels.keys()) == ["A"]
     assert "RecordB0" in app.demo.data  # kept
 
-    app.answers = [("E1", None, "E1", "Delete")]
+    app.answers = [(None, None, "E1", "E1", "Delete")]
     app.series_actions.remove_epoch()
     assert list(app.series.epochs.keys()) == ["E0"]
     assert "RecordA1" not in app.demo.data
 
     app.series.locked = True
     app.series_actions.remove_epoch()
-    assert "is locked" in app.dialogs[-1][1]["validate"]("E0", None, "E0", "Keep")
+    assert "is locked" in app.dialogs[-1][1]["validate"](None, None, "E0", "E0", "Keep")
 
 
 def test_remove_a_range_of_epochs(app, monkeypatch):
@@ -239,14 +239,15 @@ def test_remove_a_range_of_epochs(app, monkeypatch):
 
     actions.remove_epoch()  # cancelled; check the options
     options = app.dialogs[-1][1]
-    assert options["current"] == "E10"
-    assert options["extras"][0] == ("To", list(series.epochs.keys()), "E10")
-    assert options["message"]("E10", "E999", "Keep") == "Removes 990 epochs (E10–E999)."
-    assert options["message"]("E5", "E5", "Keep") == "Removes 1 epoch (E5)."
-    assert options["validate"]("E20", None, "E10", "Keep") == "To must not be before From"
+    from_spin, to_spin = options["extras"][0][1], options["extras"][1][1]
+    assert (from_spin.minimum, from_spin.maximum, from_spin.value) == (0, 999, 10)
+    assert to_spin.value == 10
+    assert options["message"](None, "E10", "E999", "Keep") == "Removes 990 epochs (E10–E999)."
+    assert options["message"](None, "E5", "E5", "Keep") == "Removes 1 epoch (E5)."
+    assert options["validate"](None, None, "E20", "E10", "Keep") == "To must not be before From"
 
     # Keep only the first 10 recordings
-    app.answers = [("E10", None, "E999", "Delete")]
+    app.answers = [(None, None, "E10", "E999", "Delete")]
     actions.remove_epoch()
     assert list(series.epochs.keys()) == [f"E{i}" for i in range(10)]
     assert "LongA9" in app.demo.data and "LongA10" not in app.demo.data

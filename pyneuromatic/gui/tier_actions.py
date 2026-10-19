@@ -5,6 +5,7 @@ bar menu both show the same objects, so enabled state and shortcuts agree.
 """
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -82,13 +83,26 @@ def copy_target_name(container: NMObjectContainer, name: str) -> str:
     return name if container._getkey(name) is None else copy_name(container, name)
 
 
+@dataclasses.dataclass(frozen=True)
+class Spin:
+    """An integer field with up/down arrows, for :class:`ChooseItemDialog`
+    extras: ``(label, Spin(minimum, maximum, value, prefix))``. Its value is
+    returned as text with the prefix, e.g. ``"E250"``."""
+
+    minimum: int
+    maximum: int
+    value: int
+    prefix: str = ""
+
+
 class ChooseItemDialog(QtWidgets.QDialog):
     """Choose an item (e.g. a folder) and/or enter a name, in one dialog.
 
     *items* adds an item dropdown, starting at *current*. *name_label* adds a
     name field; *default_name(item, *extras)* fills it whenever the item or
     an extra choice changes.
-    *extras* adds further dropdowns, as ``(label, items, current)``.
+    *extras* adds further dropdowns, as ``(label, items, current)``, or
+    number boxes, as ``(label, Spin(...))``.
     *message* is a note below the fields, or a function of the item and
     extra choices, updated when they change.
     *context* adds a read-only first row, as ``(label, text)`` (e.g. the
@@ -133,14 +147,24 @@ class ChooseItemDialog(QtWidgets.QDialog):
             if current in items:
                 self.item_combo.setCurrentText(current)
             form.addRow(item_label or "Item", self.item_combo)
-        self.extra_combos: list[QtWidgets.QComboBox] = []
-        for label, extra_items, extra_current in extras or []:
-            combo = QtWidgets.QComboBox(self)
-            combo.addItems(extra_items)
-            if extra_current in extra_items:
-                combo.setCurrentText(extra_current)
-            form.addRow(label, combo)
-            self.extra_combos.append(combo)
+        # Dropdowns (QComboBox) or number boxes (QSpinBox), in order
+        self.extra_widgets: list[QtWidgets.QWidget] = []
+        for extra in extras or []:
+            label = extra[0]
+            if isinstance(extra[1], Spin):
+                spec = extra[1]
+                widget = QtWidgets.QSpinBox(self)
+                widget.setRange(spec.minimum, spec.maximum)
+                widget.setValue(spec.value)
+                widget.setPrefix(spec.prefix)
+                widget.setKeyboardTracking(False)  # update after typing
+            else:
+                widget = QtWidgets.QComboBox(self)
+                widget.addItems(extra[1])
+                if extra[2] in extra[1]:
+                    widget.setCurrentText(extra[2])
+            form.addRow(label, widget)
+            self.extra_widgets.append(widget)
         self.name_edit: QtWidgets.QLineEdit | None = None
         if name_label is not None:
             self.name_edit = QtWidgets.QLineEdit(self)
@@ -165,8 +189,11 @@ class ChooseItemDialog(QtWidgets.QDialog):
 
         if self.item_combo is not None:
             self.item_combo.currentTextChanged.connect(self._fill_default_name)
-        for combo in self.extra_combos:
-            combo.currentTextChanged.connect(self._fill_default_name)
+        for widget in self.extra_widgets:
+            if isinstance(widget, QtWidgets.QSpinBox):
+                widget.valueChanged.connect(self._fill_default_name)
+            else:
+                widget.currentTextChanged.connect(self._fill_default_name)
         self._fill_default_name()
         if self.name_edit is not None:
             self.name_edit.selectAll()
@@ -178,8 +205,16 @@ class ChooseItemDialog(QtWidgets.QDialog):
     def name(self) -> str | None:
         return self.name_edit.text().strip() if self.name_edit is not None else None
 
+    @property
+    def extra_combos(self) -> list[QtWidgets.QComboBox]:
+        """The extra dropdowns (not number boxes)."""
+        return [w for w in self.extra_widgets if isinstance(w, QtWidgets.QComboBox)]
+
     def extras(self) -> list[str]:
-        return [combo.currentText() for combo in self.extra_combos]
+        return [
+            f"{w.prefix()}{w.value()}" if isinstance(w, QtWidgets.QSpinBox) else w.currentText()
+            for w in self.extra_widgets
+        ]
 
     def _fill_default_name(self, *_args) -> None:
         if self.name_edit is not None and self._default_name is not None:
@@ -1789,28 +1824,23 @@ class SeriesActions(TierActions):
         current = epoch.name if epoch is not None and epoch.name in names else names[0]
 
         def chosen(first: str, last: str) -> list[str]:
-            return names[names.index(first):names.index(last) + 1]
+            return epoch_range(names, first, last)
 
-        def summary(first, last, _arrays):
-            epochs = chosen(first, last)
-            if not epochs:
-                return ""
-            span = first if len(epochs) == 1 else f"{first}–{last}"
-            return f"Removes {len(epochs)} epoch{'s' * (len(epochs) != 1)} ({span})."
+        def summary(_item, first, last, _arrays):
+            return range_summary("Removes", chosen(first, last), 1)
 
         answer = self._choose(
             "Remove Epochs", context=self._series_context(series),
-            item_label="From", items=names, current=current,
-            extras=[("To", names, current), ("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
+            extras=epoch_spins(names, current)
+            + [("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
             message=summary,
-            validate=lambda first, _name, last, _arrays: (
-                self._lock_error(owner, series.name)
-                or (None if chosen(first, last) else "To must not be before From")
+            validate=lambda _item, _name, first, last, _arrays: (
+                self._lock_error(owner, series.name) or range_error(names, first, last)
             ),
         )
         if answer is None:
             return
-        first, _name, last, arrays = answer
+        _item, _name, first, last, arrays = answer
         owner.remove_dataseries_epoch(
             series.name, chosen(first, last), delete_data=arrays == self.DELETE
         )
@@ -1836,11 +1866,46 @@ class SeriesActions(TierActions):
             self.browse_requested.emit(series)
 
 
+def epoch_number(name: str) -> int | None:
+    """The number of epoch *name*: "E12" or "12" -> 12; otherwise None."""
+    text = name[1:] if name[:1] in ("E", "e") else name
+    return int(text) if text.isdigit() else None
+
+
 def epoch_range(names: list[str], first: str, last: str, every: int = 1) -> list[str]:
-    """Epoch names from *first* to *last* (inclusive), every *every*-th."""
-    if first not in names or last not in names:
+    """Epochs numbered *first* to *last* (inclusive), every *every*-th.
+
+    Works by number, so gaps (e.g. removed epochs) are skipped.
+    """
+    low, high = epoch_number(first), epoch_number(last)
+    if low is None or high is None:
         return []
-    return names[names.index(first):names.index(last) + 1:max(every, 1)]
+    within = [n for n in names if (k := epoch_number(n)) is not None and low <= k <= high]
+    return within[::max(every, 1)]
+
+
+def range_error(names: list[str], first: str, last: str, every: int = 1) -> str | None:
+    """Why the range *first*..*last* selects no epochs, or None."""
+    low, high = epoch_number(first), epoch_number(last)
+    if low is not None and high is not None and low > high:
+        return "To must not be before From"
+    if not epoch_range(names, first, last, every):
+        return f"No epochs numbered {low} to {high}"
+    return None
+
+
+def epoch_spins(names: list[str], first: str | None = None,
+                last: str | None = None) -> list:
+    """From/To Epoch number boxes over the epoch numbers of *names*."""
+    numbers = [k for n in names if (k := epoch_number(n)) is not None] or [0]
+    low, high = min(numbers), max(numbers)
+
+    def value(name):
+        number = epoch_number(name) if name else None
+        return number if number is not None else low
+
+    return [("From Epoch", Spin(low, high, value(first))),
+            ("To Epoch", Spin(low, high, value(last if last else first)))]
 
 
 def range_summary(verb: str, epochs: list[str], every: int) -> str:
@@ -1870,8 +1935,6 @@ class EpochSetActions(TierActions):
 
     # Ask the app to show a series' epoch sets in the browser (set to select)
     browse_requested = QtCore.pyqtSignal(object, object)
-
-    EVERY = ["1", "2", "3", "4", "5", "10"]
 
     def __init__(
         self,
@@ -1972,8 +2035,7 @@ class EpochSetActions(TierActions):
         names = list(series.epochs.keys())
         epoch = self._selection.selection.get("epoch")
         current = epoch.name if epoch is not None and epoch.name in names else names[0]
-        return [("From", names, current), ("To", names, current),
-                ("Every", self.EVERY, "1")]
+        return epoch_spins(names, current) + [("Every", Spin(1, max(len(names), 1), 1))]
 
     # --- actions ------------------------------------------------------------
 
@@ -2016,8 +2078,8 @@ class EpochSetActions(TierActions):
 
         def error(set_name, _name, first, last, every):
             set_name = fixed or set_name
-            if not chosen(first, last, every):
-                return "To must not be before From"
+            if range_error(names, first, last, int(every)):
+                return range_error(names, first, last, int(every))
             if not adding and not targets(set_name, first, last, every):
                 return f"None of these epochs are in '{set_name}'"
             return None
@@ -2156,16 +2218,229 @@ class EpochSetActions(TierActions):
             self.browse_requested.emit(series, self._selection.selection.get("epoch_set"))
 
 
+def cyclic_groups(n_epochs: int, n_groups: int, block: int = 1) -> list[int]:
+    """Group numbers of a cyclic assignment: (i // block) % n_groups."""
+    return [(i // max(block, 1)) % max(n_groups, 1) for i in range(n_epochs)]
+
+
+class GroupActions(TierActions):
+    """Group actions, assigning the current data series' epochs to groups.
+
+    Groups select epochs for analysis and do not change the recording, so
+    they can be edited on a locked series too.
+    """
+
+    # Ask the app to show a series' epochs in the browser
+    browse_requested = QtCore.pyqtSignal(object)
+
+    PREVIEW = 16  # group numbers shown in the Assign Cyclic preview
+
+    def __init__(
+        self,
+        selection_model: SelectionModel,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(selection_model, parent)
+        action = self._action
+        self.cyclic_action = action(
+            "Assign Cyclic…", self.assign_cyclic,
+            tip="Assign epochs to groups in turn, e.g. 0 1 0 1 or 000 111 (block 3)",
+        )
+        self.assign_action = action("Assign Epochs…", self.assign_epochs,
+                                    tip="Assign an epoch, or a range of epochs, to a group")
+        self.unassign_action = action("Unassign Epochs…", self.unassign_epochs,
+                                      tip="Take an epoch, or a range of epochs, out of groups")
+        self.clear_action = action("Clear Groups…", self.clear_groups,
+                                   tip="Remove every group assignment")
+        self.browse_action = action("Choose in Browser…", self.choose_in_browser,
+                                    tip="Show the series' epochs in the browser")
+        selection_model.selection_changed.connect(self.update_enabled)
+        self.update_enabled()
+
+    def group_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu("Group", parent)
+        for item in (self.cyclic_action, self.assign_action, self.unassign_action, None,
+                     self.clear_action, None, self.browse_action):
+            if item is None:
+                menu.addSeparator()
+            else:
+                menu.addAction(item)
+        return menu
+
+    # --- helpers ------------------------------------------------------------
+
+    def _series(self):
+        series = self._selection.selection.get("dataseries")
+        context = self._context()
+        if series is None or context is None or series.name not in context.dataseries:
+            return None
+        return series
+
+    def _assigned(self, series) -> dict[str, int]:
+        groups = series.epochs.groups
+        return {name: groups.get_group(name) for name in series.epochs.keys()
+                if groups.get_group(name) is not None}
+
+    def update_enabled(self, *_args) -> None:
+        series = self._series()
+        has_epochs = series is not None and len(series.epochs) > 0
+        has_groups = series is not None and len(series.epochs.groups.group_numbers) > 0
+        self.cyclic_action.setEnabled(has_epochs)
+        self.assign_action.setEnabled(has_epochs)
+        self.unassign_action.setEnabled(series is not None and bool(self._assigned(series)))
+        self.clear_action.setEnabled(has_groups)
+        self.browse_action.setEnabled(series is not None)
+
+    def _series_context(self, series) -> tuple[str, str]:
+        return ("Series", f"{self._context_text()} › {series.name}")
+
+    def _changed(self) -> None:
+        series = self._series()
+        group = self._selection.selection.get("group")
+        if series is not None and group is not None and group not in series.epochs.groups.group_numbers:
+            self._selection.update(group=None)  # the chosen group no longer exists
+        super()._changed()
+
+    # --- actions ------------------------------------------------------------
+
+    def assign_cyclic(self) -> None:
+        series = self._series()
+        if series is None or len(series.epochs) == 0:
+            return
+        names = list(series.epochs.keys())
+
+        def chosen(first, last):
+            return epoch_range(names, first, last)
+
+        def preview(_item, groups, block, first, last):
+            epochs = chosen(first, last)
+            if not epochs:
+                return ""
+            numbers = cyclic_groups(len(epochs), int(groups), int(block))
+            shown = " ".join(str(n) for n in numbers[:self.PREVIEW])
+            more = " …" if len(numbers) > self.PREVIEW else ""
+            noun = "epoch" if len(epochs) == 1 else "epochs"
+            return (f"{shown}{more} ({groups} group{'s' * (groups != '1')}, "
+                    f"block {block}, {len(epochs)} {noun})")
+
+        answer = self._choose(
+            "Assign Cyclic", context=self._series_context(series),
+            extras=[("Groups", Spin(1, 1000, 2)), ("Block", Spin(1, 100_000, 1))]
+            + epoch_spins(names, names[0], names[-1]),
+            message=preview,
+            validate=lambda _item, _name, _groups, _block, first, last: (
+                range_error(names, first, last)
+            ),
+        )
+        if answer is None:
+            return
+        _item, _name, groups, block, first, last = answer
+        series.epochs.groups.assign_cyclic(chosen(first, last), int(groups), block=int(block))
+        self._changed()
+
+    def _range_extras(self, series, group_choices=None) -> list:
+        names = list(series.epochs.keys())
+        epoch = self._selection.selection.get("epoch")
+        current = epoch.name if epoch is not None and epoch.name in names else names[0]
+        extras = epoch_spins(names, current) + [("Every", Spin(1, max(len(names), 1), 1))]
+        return (group_choices or []) + extras
+
+    def assign_epochs(self) -> None:
+        series = self._series()
+        if series is None or len(series.epochs) == 0:
+            return
+        names = list(series.epochs.keys())
+        numbers = series.epochs.groups.group_numbers
+        current = self._selection.selection.get("group")
+        default = current if current is not None else (numbers[0] if numbers else 0)
+
+        def chosen(first, last, every):
+            return epoch_range(names, first, last, int(every))
+
+        answer = self._choose(
+            "Assign Epochs to Group", context=self._series_context(series),
+            extras=self._range_extras(series, [("Group", Spin(0, 9999, default))]),
+            message=lambda _item, group, first, last, every: (
+                range_summary("Assigns", chosen(first, last, every), int(every))[:-1]
+                + f" to group {group}." if chosen(first, last, every) else ""
+            ),
+            validate=lambda _item, _name, _group, first, last, every: (
+                range_error(names, first, last, int(every))
+            ),
+        )
+        if answer is None:
+            return
+        _item, _name, group, first, last, every = answer
+        groups = series.epochs.groups
+        for name in chosen(first, last, every):
+            groups.assign(name, int(group), quiet=True)
+        self._changed()
+
+    def unassign_epochs(self) -> None:
+        series = self._series()
+        if series is None or not self._assigned(series):
+            return
+        names = list(series.epochs.keys())
+
+        def targets(first, last, every):
+            assigned = self._assigned(series)
+            return [e for e in epoch_range(names, first, last, int(every)) if e in assigned]
+
+        def error(_item, _name, first, last, every):
+            if range_error(names, first, last, int(every)):
+                return range_error(names, first, last, int(every))
+            if not targets(first, last, every):
+                return "None of these epochs are in a group"
+            return None
+
+        answer = self._choose(
+            "Unassign Epochs", context=self._series_context(series),
+            extras=self._range_extras(series),
+            message=lambda _item, first, last, every: range_summary(
+                "Unassigns", targets(first, last, every), int(every)),
+            validate=error,
+        )
+        if answer is None:
+            return
+        _item, _name, first, last, every = answer
+        groups = series.epochs.groups
+        for name in targets(first, last, every):
+            groups.unassign(name, quiet=True)
+        self._changed()
+
+    def clear_groups(self) -> None:
+        series = self._series()
+        if series is None:
+            return
+        n_groups = len(series.epochs.groups.group_numbers)
+        answer = self._choose(
+            "Clear Groups", context=self._series_context(series),
+            message=f"Every group assignment ({n_groups} group"
+                    f"{'s' * (n_groups != 1)}) will be removed; the epochs are kept.",
+        )
+        if answer is None:
+            return
+        series.epochs.groups.clear()
+        self._changed()
+
+    def choose_in_browser(self) -> None:
+        series = self._series()
+        if series is not None:
+            self.browse_requested.emit(series)
+
+
 __all__ = [
     "ChooseItemDialog",
     "DataActions",
     "EditScalesDialog",
     "EpochSetActions",
+    "GroupActions",
     "NewDataDialog",
     "SeriesActions",
     "FolderActions",
     "TierActions",
     "COPY_PREFIX",
+    "Spin",
     "ask_new_data",
     "create_data",
     "new_data_defaults",
@@ -2179,6 +2454,7 @@ __all__ = [
     "series_suffixes",
     "series_name_hint",
     "series_update_preview",
+    "cyclic_groups",
     "epoch_range",
     "epoch_set_name_error",
     "epoch_ranges",

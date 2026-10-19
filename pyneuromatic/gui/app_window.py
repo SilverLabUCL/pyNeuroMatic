@@ -34,6 +34,7 @@ from pyneuromatic.gui.tier_actions import (
     DataActions,
     EpochSetActions,
     FolderActions,
+    GroupActions,
     SeriesActions,
 )
 from pyneuromatic.gui.stats_tab import StatsToolTab
@@ -301,9 +302,10 @@ class PlotPanel(QtWidgets.QWidget):
             if channel is None and dataseries.channels.values():
                 channel = dataseries.channels.values()[0]
             if channel is not None:
+                # One pass over the series, not a lookup per epoch
+                found = dataseries.epoch_data_map(channel.name)
                 entries = [
-                    (epoch, dataseries.get_data(channel=channel.name, epoch=epoch.name))
-                    for epoch in dataseries.epochs.values()
+                    (epoch, found.get(name)) for name, epoch in dataseries.epochs.items()
                 ]
                 mode = "dataseries"
                 current_item = selection.get("epoch") or dataseries.epochs.selected_value
@@ -452,6 +454,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.data_actions = DataActions(self.selection_model, self)
         self.series_actions = SeriesActions(self.selection_model, self)
         self.epoch_set_actions = EpochSetActions(self.selection_model, self)
+        self.group_actions = GroupActions(self.selection_model, self)
 
         self._build_menu()
         self._build_selection_strip()
@@ -481,6 +484,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         series_menu = self.series_actions.series_menu(self)
         series_menu.addSeparator()
         series_menu.addMenu(self.epoch_set_actions.epoch_set_menu(series_menu))
+        series_menu.addMenu(self.group_actions.group_menu(series_menu))
         self.menuBar().addMenu(series_menu)
 
         edit_menu = self.menuBar().addMenu("Edit")
@@ -509,6 +513,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         strip.set_actions_menu("data_set", self.data_actions.data_set_menu(strip))
         strip.set_actions_menu("dataseries", self.series_actions.series_menu(strip))
         strip.set_actions_menu("epoch_set", self.epoch_set_actions.epoch_set_menu(strip))
+        strip.set_actions_menu("group", self.group_actions.group_menu(strip))
 
     def _build_tool_shell(self) -> None:
         self.tool_rail = ToolRail(["Browser", "Main", "Stats", "Spike"], self)
@@ -557,6 +562,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.series_actions.browse_requested.connect(self._show_object_in_browser)
         self.epoch_set_actions.content_changed.connect(self._on_content_changed)
         self.epoch_set_actions.browse_requested.connect(self._show_epoch_sets_in_browser)
+        self.group_actions.content_changed.connect(self._on_content_changed)
+        self.group_actions.browse_requested.connect(self._show_epochs_in_browser)
         self.data_actions.browse_requested.connect(self._show_in_browser)
         self.data_actions.table_requested.connect(self._show_data_table)
         self.table_panel.data_edited.connect(self._on_data_edited)
@@ -639,6 +646,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.data_actions.update_enabled()
         self.series_actions.update_enabled()
         self.epoch_set_actions.update_enabled()
+        self.group_actions.update_enabled()
         # Names or data series membership may have changed
         selection = self.selection_model.selection
         self.plot_widget.update_selection(selection)
@@ -669,6 +677,13 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.tool_rail.select_tool("Browser")
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.show_data_of(series, sets=True, select=set_name, kind="epochs")
+
+    def _show_epochs_in_browser(self, series) -> None:
+        """Switch to the Browser with *series*' current group (or its Groups,
+        or Epochs, row) selected."""
+        self.tool_rail.select_tool("Browser")
+        if isinstance(self.browser_widget, FolderBrowserWidget):
+            self.browser_widget.show_groups_of(series, self.selection_model.selection.get("group"))
 
     def _show_data_table(self) -> None:
         """Show the current data array in the Table panel, ready to edit."""
@@ -710,7 +725,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
         tier = SelectionModel.tier_for_object(obj)
         # Sets of a data series' epochs are epoch sets; others are data sets
         set_key = "epoch_set" if tier in ("dataseries", "channel", "epoch") else "data_set"
-        self.selection_model.update({tier: obj, set_key: set_name})
+        changes = {tier: obj}
+        if set_name is not None or "group" not in selection:
+            changes[set_key] = set_name
+        if "group" in selection:  # a group row, or one of its epochs
+            changes["group"] = selection["group"]
+        self.selection_model.update(changes)
 
     def _append_selection_history(self, selection: dict) -> None:
         selected = selection_summary(selection)

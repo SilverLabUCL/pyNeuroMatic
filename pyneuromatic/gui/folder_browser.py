@@ -28,7 +28,10 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.gui.folder_model import (
     FolderTreeModel,
+    _GroupMemberNode,
     _GroupNode,
+    _GroupNumberNode,
+    _GroupsNode,
     _SetMemberNode,
     _SetNode,
     _SetsNode,
@@ -369,6 +372,12 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             return {"object": None, "set": None}
 
         node = index.internalPointer()
+        if isinstance(node, _GroupMemberNode):
+            return {"object": node.obj, "set": None, "group": node.group_number_node.number}
+        if isinstance(node, _GroupNumberNode):
+            return {"object": node.groups_node.group.owner, "set": None, "group": node.number}
+        if isinstance(node, _GroupsNode):
+            return {"object": node.group.owner, "set": None}
         if isinstance(node, _SetMemberNode):
             return {"object": node.obj, "set": node.set_node.name}
         if isinstance(node, _SetNode):
@@ -653,6 +662,41 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         data = create_data(container, values)
         self._changed()
         self.data_created.emit(data)
+
+    def show_groups_of(self, series, number: int | None = None) -> None:
+        """Select *series*' group *number* (or its Groups row, or Epochs row)."""
+        model = self._model
+
+        def find(parent: QtCore.QModelIndex, match):
+            for row in range(model.rowCount(parent)):
+                index = model.index(row, 0, parent)
+                if match(index.internalPointer()):
+                    return index
+                found = find(index, match)
+                if found is not None:
+                    return found
+            return None
+
+        def is_groups(node) -> bool:
+            return isinstance(node, _GroupsNode) and node.group.owner is series
+
+        root = QtCore.QModelIndex()
+        index = None
+        if number is not None:
+            index = find(root, lambda node: isinstance(node, _GroupNumberNode)
+                         and is_groups(node.groups_node) and node.number == number)
+        index = index or find(root, is_groups)
+        if index is None:
+            self.show_data_of(series, kind="epochs")
+            return
+        self._tree.expand(index)
+        parent = index.parent()
+        while parent.isValid():
+            self._tree.expand(parent)
+            parent = parent.parent()
+        self._tree.setCurrentIndex(index)
+        self._tree.scrollTo(index)
+        self._tree.setFocus()
 
     def show_object(self, obj) -> None:
         """Select *obj* (e.g. a data series) in the tree, expanding its parents."""

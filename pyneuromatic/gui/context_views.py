@@ -476,20 +476,10 @@ class TablePanel(QtWidgets.QWidget):
             scope = epoch_scope_label(selection)
             if names is None:  # no Epoch Set or Group: every epoch
                 names = list(dataseries.epochs.keys())
-            arrays = [
-                item
-                for name in names
-                if isinstance(
-                    item := dataseries.get_data(channel=self._channel_name, epoch=name),
-                    NMData,
-                )
-            ]
+            found = dataseries.epoch_data_map(self._channel_name)
+            arrays = [found[name] for name in names if name in found]
             epoch = selection.get("epoch")
-            current = (
-                dataseries.get_data(channel=self._channel_name, epoch=epoch.name)
-                if epoch is not None
-                else None
-            )
+            current = found.get(epoch.name) if epoch is not None else None
             noun = "epoch" if len(arrays) == 1 else "epochs"
             title = f"{dataseries.name}  channel {self._channel_name}: {len(arrays)} {noun}"
             if scope:

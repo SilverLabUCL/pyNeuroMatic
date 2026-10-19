@@ -670,10 +670,12 @@ class StatsToolTab(ToolTabWidget):
                     else []
                 )
             targets = []
+            wanted = set(target_names)
+            found = dataseries.epoch_data_map(channel.name)
             for epoch in dataseries.epochs.values():
-                if epoch.name not in target_names:
+                if epoch.name not in wanted:
                     continue
-                item = dataseries.get_data(channel=channel.name, epoch=epoch.name)
+                item = found.get(epoch.name)
                 if isinstance(item, NMData):
                     target = self._manager_target(selection)
                     target.update(

@@ -77,7 +77,11 @@ def test_add_and_remove_a_range(app):
     actions.add_epochs()  # cancelled; check the options
     options = app.dialogs[-1][1]
     assert options["current"] == "Set0"
-    assert options["extras"][0][2] == "E2" and options["extras"][1][2] == "E2"
+    assert [label for label, *_ in options["extras"]] == ["From Epoch", "To Epoch", "Every"]
+    assert options["extras"][0][1].value == 2 and options["extras"][1][1].value == 2
+    assert options["extras"][0][1].prefix == ""
+    # The boxes give plain numbers
+    assert options["message"]("Set0", "1", "9", "2") == "Adds 5 epochs (E1–E9, every 2nd)."
     assert options["message"]("Set0", "E1", "E9", "2") == "Adds 5 epochs (E1–E9, every 2nd)."
     assert options["validate"]("Set0", None, "E5", "E2", "1") == "To must not be before From"
 
@@ -215,3 +219,29 @@ def test_run_leaves_out_setx_and_reports_it(app, monkeypatch):
     tab.run_button.click()
     assert "excluded from analysis" in asked[0]
     assert tab.status_label.text().startswith("Failed: Cancelled")
+
+
+def test_number_boxes_and_numeric_ranges(qtbot, app):
+    from pyneuromatic.gui.tier_actions import (
+        ChooseItemDialog, Spin, epoch_range, range_error,
+    )
+
+    # Ranges work by number, so gaps from removed epochs are skipped
+    names = ["E0", "E1", "E5", "E6", "E9"]
+    assert epoch_range(names, "E1", "E6") == ["E1", "E5", "E6"]
+    assert epoch_range(names, "E0", "E9", 2) == ["E0", "E5", "E9"]
+    assert range_error(names, "E2", "E4") == "No epochs numbered 2 to 4"
+    assert epoch_range(names, "1", "6") == ["E1", "E5", "E6"]  # plain numbers too
+    assert range_error(names, "E6", "E1") == "To must not be before From"
+
+    dialog = ChooseItemDialog(
+        "Add Epochs", extras=[("From", Spin(0, 999, 10, "E")), ("To", Spin(0, 999, 10, "E")),
+                              ("Every", Spin(1, 1000, 1))],
+        message=lambda _item, first, last, every: f"{first}-{last}/{every}",
+    )
+    qtbot.addWidget(dialog)
+    spin = dialog.extra_widgets[1]
+    assert spin.text() == "E10" and spin.maximum() == 999
+    spin.setValue(250)
+    assert dialog.extras() == ["E10", "E250", "1"]
+    assert dialog.message_label.text() == "E10-E250/1"  # updates with the box
