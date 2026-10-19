@@ -260,9 +260,11 @@ class NMDataSeries(NMObject):
             c = self.channels.get(channel)
             if c is None:
                 raise KeyError("channel '%s' does not exist" % channel)
+        found = self.epoch_data_map(channel)
         result: list = []
         for epoch_name in epoch_names:
-            d = self.get_data(channel=channel, epoch=epoch_name)
+            key = self.epochs._getkey(epoch_name)
+            d = found.get(key) if key is not None else None
             if d is not None:
                 result.append(d.name if get_keys else d)
         return result
@@ -295,10 +297,38 @@ class NMDataSeries(NMObject):
         if e is None:
             return None
 
-        for d in c.data:
-            if d in e.data:
+        # Identity, not ==: NMData.__eq__ compares contents. Scan the epoch's
+        # list (one array per channel), not the channel's (one per epoch)
+        channel_ids = None
+        for d in e.data:
+            if channel_ids is None:
+                if len(e.data) == 1:
+                    return d if any(x is d for x in c.data) else None
+                channel_ids = {id(x) for x in c.data}
+            if id(d) in channel_ids:
                 return d
         return None
+
+    def epoch_data_map(self, channel: str | None = None) -> dict[str, "NMData"]:
+        """Map each epoch name to its data for *channel*, in one pass.
+
+        Much faster than calling :meth:`get_data` for every epoch of a long
+        series. Epochs with no data at the channel are left out.
+
+        Args:
+            channel: Channel name (e.g. "A"). If None, uses selected channel.
+        """
+        c = self.channels.selected_value if channel is None else self.channels.get(channel)
+        if c is None:
+            return {}
+        in_channel = {id(d) for d in c.data}
+        result: dict[str, NMData] = {}
+        for name, epoch in self.epochs.items():
+            for d in epoch.data:
+                if id(d) in in_channel:
+                    result[name] = d
+                    break
+        return result
 
     # =========================================================================
     # Bulk scale utility methods

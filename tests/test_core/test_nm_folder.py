@@ -1452,3 +1452,25 @@ class TestDefaultEpochSetsAndExclusion(unittest.TestCase):
         self.epochs.sets.add("SetX", [self.epochs["E2"]])
         self.epochs.run_target = "group0"
         self.assertEqual(self._run(), ["E0", "E4"])
+
+
+class TestEpochDataLookup(unittest.TestCase):
+    """get_data(), epoch_data_map() and get_data_for_epochs() agree."""
+
+    def test_lookups(self):
+        nm = NMManager(quiet=True)
+        folder = nm.folders.new("Demo")
+        # Equal contents in every array, so lookups must use identity
+        series = folder.new_dataseries("Record", n_channels=2, n_epochs=50, n_points=3)
+        data = folder.data
+        found = series.epoch_data_map("B")
+        self.assertEqual(len(found), 50)
+        self.assertIs(found["E7"], data["RecordB7"])
+        self.assertIs(series.get_data("B", "E7"), data["RecordB7"])
+        self.assertIs(series.get_data("A", "E7"), data["RecordA7"])
+        self.assertEqual(series.get_data_for_epochs(["E3", "e4"], "A", get_keys=True),
+                         ["RecordA3", "RecordA4"])
+        data.pop("RecordB7")
+        self.assertNotIn("E7", series.epoch_data_map("B"))
+        self.assertIsNone(series.get_data("B", "E7"))
+        self.assertEqual(series.epoch_data_map("Z"), {})
