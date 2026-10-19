@@ -122,6 +122,9 @@ class TestReadPxpFile(unittest.TestCase):
     def test_dataseries_created(self):
         self.assertIn("Record", self.folder.dataseries)
 
+    def test_imported_dataseries_start_locked(self):
+        self.assertTrue(self.folder.dataseries["Record"].locked)
+
 
 @unittest.skipUnless(PXP_FILE.exists(), "PXP fixture file not available")
 class TestReadPxpOptions(unittest.TestCase):

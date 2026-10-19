@@ -132,6 +132,66 @@ class _SetMemberNode:
         return self.obj.name
 
 
+class _GroupsNode:
+    """Synthetic "Groups" row under a data series' "Epochs" row.
+
+    Shown when the epochs have groups (``NMEpochContainer.groups``); its
+    children are one row per group number. Cached per owning group node,
+    like ``_SetsNode``.
+    """
+
+    __slots__ = ("group", "label")
+
+    def __init__(self, group: _GroupNode) -> None:
+        self.group = group
+        self.label = "Groups"
+
+    @property
+    def container(self):
+        """The NMEpochContainer whose .groups this represents."""
+        return getattr(self.group.owner, self.group.kind, None)
+
+
+class _GroupNumberNode:
+    """One group under "Groups", e.g. "Groups" -> "Group 0".
+
+    Cached per ``(id(groups_node), number)``.
+    """
+
+    __slots__ = ("groups_node", "number")
+
+    def __init__(self, groups_node: _GroupsNode, number: int) -> None:
+        self.groups_node = groups_node
+        self.number = number
+
+    @property
+    def label(self) -> str:
+        return f"Group {self.number}"
+
+    @property
+    def container(self):
+        return self.groups_node.container
+
+
+class _GroupMemberNode:
+    """One epoch of a group, as shown under "Groups" -> "Group 0" -> epoch.
+
+    A wrapper for the same reason as ``_SetMemberNode``: the epoch is also
+    shown under "Epochs", and each row needs one unambiguous parent.
+    Cached per ``(id(group_number_node), id(obj))``.
+    """
+
+    __slots__ = ("group_number_node", "obj")
+
+    def __init__(self, group_number_node: _GroupNumberNode, obj: NMObject) -> None:
+        self.group_number_node = group_number_node
+        self.obj = obj
+
+    @property
+    def label(self) -> str:
+        return self.obj.name
+
+
 # (label, container attribute name) candidates, in display order, per owner type
 _FOLDER_LIKE_GROUPS = (("Data", "data"), ("Data Series", "dataseries"))
 _FOLDER_ONLY_GROUPS = (("Tool Folders", "toolfolders"),)
@@ -213,6 +273,9 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         self._sets_nodes: dict[int, _SetsNode] = {}
         self._set_nodes: dict[tuple[int, str], _SetNode] = {}
         self._set_member_nodes: dict[tuple[int, int], _SetMemberNode] = {}
+        self._groups_nodes: dict[int, _GroupsNode] = {}
+        self._group_number_nodes: dict[tuple[int, int], _GroupNumberNode] = {}
+        self._group_member_nodes: dict[tuple[int, int], _GroupMemberNode] = {}
 
     # ------------------------------------------------------------------
     # Node traversal helpers
@@ -255,6 +318,31 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         if node is None:
             node = _SetMemberNode(set_node, obj)
             self._set_member_nodes[key] = node
+        return node
+
+    def _groups_node(self, group: _GroupNode) -> _GroupsNode:
+        """Return the canonical (cached) "Groups" node for an Epochs row."""
+        key = id(group)
+        node = self._groups_nodes.get(key)
+        if node is None:
+            node = _GroupsNode(group)
+            self._groups_nodes[key] = node
+        return node
+
+    def _group_number_node(self, groups_node: _GroupsNode, number: int) -> _GroupNumberNode:
+        key = (id(groups_node), number)
+        node = self._group_number_nodes.get(key)
+        if node is None:
+            node = _GroupNumberNode(groups_node, number)
+            self._group_number_nodes[key] = node
+        return node
+
+    def _group_member_node(self, number_node: _GroupNumberNode, obj: NMObject) -> _GroupMemberNode:
+        key = (id(number_node), id(obj))
+        node = self._group_member_nodes.get(key)
+        if node is None:
+            node = _GroupMemberNode(number_node, obj)
+            self._group_member_nodes[key] = node
         return node
 
     def _group_children(self, owner: NMObject) -> list[_GroupNode]:
@@ -300,9 +388,24 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
             # menu (see FolderBrowserWidget._show_tree_context_menu).
             children = node.children()
             container = getattr(node.owner, node.kind, None)
+            # Epochs also show their groups, after the sets
+            groups = getattr(container, "groups", None) if node.kind == "epochs" else None
+            if groups is not None and groups.group_numbers:
+                children = [self._groups_node(node)] + children
             if container is not None and len(container.sets) > 0:
                 children = [self._sets_node(node)] + children
             return children
+        if isinstance(node, _GroupsNode):
+            container = node.container
+            if container is None:
+                return []
+            return [self._group_number_node(node, n) for n in container.groups.group_numbers]
+        if isinstance(node, _GroupNumberNode):
+            container = node.container
+            if container is None:
+                return []
+            members = [container.get(name) for name in container.groups.get_items(node.number)]
+            return [self._group_member_node(node, obj) for obj in members if obj is not None]
         if isinstance(node, _SetsNode):
             container = node.container
             if container is None:
@@ -318,10 +421,16 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
             return [self._set_member_node(node, obj) for obj in members]
         if isinstance(node, (NMFolder, NMToolFolder, NMDataSeries)):
             return self._group_children(node)
-        return []  # NMData, NMChannel, NMEpoch, _SetMemberNode are leaves
+        return []  # NMData, NMChannel, NMEpoch, _SetMemberNode, _GroupMemberNode are leaves
 
     def _logical_parent(self, node: object) -> object | None:
         """The node (``_GroupNode``, ``NMObject``, or ``None``) that owns *node*."""
+        if isinstance(node, _GroupMemberNode):
+            return node.group_number_node
+        if isinstance(node, _GroupNumberNode):
+            return node.groups_node
+        if isinstance(node, _GroupsNode):
+            return node.group
         if isinstance(node, _SetMemberNode):
             return node.set_node
         if isinstance(node, _SetNode):
@@ -392,7 +501,8 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         if role != QtCore.Qt.ItemDataRole.DisplayRole:
             return None
         node = index.internalPointer()
-        if isinstance(node, (_GroupNode, _SetsNode, _SetNode, _SetMemberNode)):
+        if isinstance(node, (_GroupNode, _SetsNode, _SetNode, _SetMemberNode,
+                             _GroupsNode, _GroupNumberNode, _GroupMemberNode)):
             return node.label
         if isinstance(node, NMObject):
             return node.name
@@ -439,4 +549,7 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         self._sets_nodes.clear()
         self._set_nodes.clear()
         self._set_member_nodes.clear()
+        self._groups_nodes.clear()
+        self._group_number_nodes.clear()
+        self._group_member_nodes.clear()
         self.endResetModel()

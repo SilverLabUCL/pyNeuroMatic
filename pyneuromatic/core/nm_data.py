@@ -511,6 +511,139 @@ class NMDataContainer(NMObjectContainer):
     def content_type(self) -> str:
         return NMData.__name__
 
+    # --- data series membership ----------------------------------------------
+
+    def dataseries_of(self, name: str) -> list[NMDataSeries]:
+        """Data series of the parent folder that contain data *name*."""
+        key = self._getkey(name)
+        if key is None:
+            raise KeyError("key name '%s' does not exist" % name)
+        data = self[key]
+        container = getattr(self._parent, "dataseries", None)
+        if not isinstance(container, NMDataSeriesContainer):
+            return []
+        # Identity, not ==: NMData.__eq__ compares contents and is slow
+        return [
+            ds for ds in container.values()
+            if any(d is data for channel in ds.channels.values() for d in channel.data)
+        ]
+
+    def locked_dataseries_for_name(self, name: str) -> NMDataSeries | None:
+        """The locked data series whose naming pattern *name* fits, if any.
+
+        Such a name would add data to the series, which a lock prevents.
+        """
+        parsed = nmu.parse_data_name(name) if isinstance(name, str) else None
+        container = getattr(self._parent, "dataseries", None)
+        if parsed is None or not isinstance(container, NMDataSeriesContainer):
+            return None
+        key = container._getkey(parsed[0])
+        if key is None or not container[key].locked:
+            return None
+        return container[key]
+
+    def _check_unlocked(self, key: str) -> None:
+        for ds in self.dataseries_of(key):
+            if ds.locked:
+                raise RuntimeError(
+                    "'%s' is part of locked data series '%s'" % (key, ds.name)
+                )
+
+    def _unlink_from_dataseries(self, key: str) -> list[NMDataSeries]:
+        """Remove data *key* from the channels and epochs of its data series."""
+        data = self[key]
+        series = self.dataseries_of(key)
+        for ds in series:
+            for item in list(ds.channels.values()) + list(ds.epochs.values()):
+                for index, member in enumerate(item.data):
+                    if member is data:
+                        del item.data[index]
+                        break
+        return series
+
+    # override
+    def pop(  # type: ignore[override]
+        self,
+        key: str,
+        default: object = NMObjectContainer._POPDEFAULT,
+        quiet: bool = nmc.QUIET,
+    ) -> NMData | None:
+        """Remove data *key*, also unlinking it from its data series.
+
+        Raises:
+            RuntimeError: If the data is part of a locked data series.
+        """
+        actual_key = self._getkey(key)
+        if actual_key is not None:
+            self._check_unlocked(actual_key)
+            self._unlink_from_dataseries(actual_key)
+        return super().pop(key, default, quiet=quiet)
+
+    # override
+    def rename(
+        self,
+        name: str,
+        newname: str | None = None,
+        quiet: bool = nmc.QUIET,
+    ) -> bool:
+        """Rename data *name*; its data series are then resynced.
+
+        The data leaves its series, and rejoins one if the new name still
+        matches the series' naming pattern (e.g. ``RecordA0`` -> ``RecordA9``).
+
+        Raises:
+            RuntimeError: If the data is part of a locked data series, or the
+                new name fits a locked series' naming pattern.
+        """
+        key = self._getkey(name)
+        if key is None:
+            return super().rename(name, newname, quiet=quiet)  # raises
+        self._check_unlocked(key)
+        if newname is not None:
+            locked = self.locked_dataseries_for_name(newname)
+            if locked is not None:
+                raise RuntimeError(
+                    "'%s' fits locked data series '%s'" % (newname, locked.name)
+                )
+        data = self[key]
+        prefixes = [ds.name for ds in self._unlink_from_dataseries(key)]
+        result = super().rename(name, newname, quiet=quiet)
+        series = getattr(self._parent, "dataseries", None)
+        sync = getattr(self._parent, "sync_dataseries", None)
+        if callable(sync) and isinstance(series, NMDataSeriesContainer):
+            # Also rejoin an existing series whose pattern the new name fits
+            parsed = nmu.parse_data_name(data.name)
+            if parsed is not None and parsed[0] in series and parsed[0] not in prefixes:
+                prefixes.append(parsed[0])
+            for prefix in prefixes:
+                if prefix in series:
+                    sync(prefix, quiet=True)
+        return result
+
+    def copy_to(
+        self,
+        name: str,
+        container: NMDataContainer,
+        newname: str | None = None,
+        quiet: bool = nmc.QUIET,
+    ) -> NMData:
+        """Copy data *name* into another data *container* (e.g. another folder).
+
+        The copy is named *newname*, or keeps its name. It is not linked to
+        any data series.
+        """
+        key = self._getkey(name)
+        if key is None:
+            raise KeyError("key name '%s' does not exist" % name)
+        if not isinstance(container, NMDataContainer):
+            raise TypeError(nmu.type_error_str(container, "container", "NMDataContainer"))
+        copy = self[key].copy()
+        copy._dataseries_set(None, None)
+        copy._parent = container._parent
+        copy._name_set(newname=container._newkey(newname or key), quiet=True)
+        container._add(copy, quiet=quiet)
+        return copy
+
     # override
     def new(
         self,

@@ -185,23 +185,30 @@ class NMGroups:
         self,
         item_names: list[str],
         n_groups: int,
+        block: int = 1,
         quiet: bool = nmc.QUIET,
     ) -> None:
         """Assign *item_names* cyclically to groups ``0 … n_groups-1``.
+
+        Each group number is repeated *block* times before the next one.
 
         Example::
 
             groups.assign_cyclic(["E0","E1","E2","E3","E4","E5"], n_groups=3)
             # E0→0, E1→1, E2→2, E3→0, E4→1, E5→2
+            groups.assign_cyclic(names_of_12_epochs, n_groups=2, block=3)
+            # 0 0 0 1 1 1 0 0 0 1 1 1
 
         Args:
             item_names: Ordered list of item names.
             n_groups: Number of groups (must be >= 1).
+            block: Items per group before the next group (must be >= 1).
             quiet: Suppress history output.
 
         Raises:
-            TypeError: If *item_names* is not a list or *n_groups* is not an int.
-            ValueError: If *n_groups* < 1.
+            TypeError: If *item_names* is not a list, or *n_groups* or *block*
+                is not an int.
+            ValueError: If *n_groups* or *block* < 1.
         """
         if not isinstance(item_names, list):
             raise TypeError(nmu.type_error_str(item_names, "item_names", "list"))
@@ -209,11 +216,15 @@ class NMGroups:
             raise TypeError(nmu.type_error_str(n_groups, "n_groups", "int"))
         if n_groups < 1:
             raise ValueError("n_groups must be >= 1, got %d" % n_groups)
+        if isinstance(block, bool) or not isinstance(block, int):
+            raise TypeError(nmu.type_error_str(block, "block", "int"))
+        if block < 1:
+            raise ValueError("block must be >= 1, got %d" % block)
         for i, name in enumerate(item_names):
-            self.assign(name, i % n_groups, quiet=True)
+            self.assign(name, (i // block) % n_groups, quiet=True)
         nmh.history(
-            "groups: cyclic assignment, %d names, %d groups"
-            % (len(item_names), n_groups),
+            "groups: cyclic assignment, %d names, %d groups, block %d"
+            % (len(item_names), n_groups, block),
             path=self.path_str,
             quiet=quiet,
         )

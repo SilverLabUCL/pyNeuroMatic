@@ -38,7 +38,7 @@ def _stats_window(qtbot, *, arrays=True):
     }
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    window.selection_model.update(set="Set1")
+    window.selection_model.update(epoch_set="Set1")
 
     tab = window.stats_tab
     tab.output_arrays_checkbox.setChecked(arrays)
@@ -120,6 +120,17 @@ def test_run_selects_stats2_when_arrays_saved(qtbot):
     tab.run_button.click()
     assert tab.mode_tabs.currentWidget() is tab.stats2
     assert tab.stats2.folder_combo.currentText() == "Stats_Record_A_0"
+
+
+def test_run_adds_subfolder_to_selection_strip(qtbot):
+    _manager, _folder, window = _stats_window(qtbot)
+    sub_menu = window.selection_strip.combo("toolfolder")
+    assert [sub_menu.itemText(i) for i in range(sub_menu.count())] == ["—"]
+    window.stats_tab.run_button.click()
+    assert [sub_menu.itemText(i) for i in range(sub_menu.count())] == [
+        "—", "Stats_Record_A_0",
+    ]
+    assert sub_menu.isEnabled()
 
 
 def test_run_stays_on_stats1_without_arrays(qtbot):

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
-from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
+from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, NMEpoch, NMEpochContainer
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
@@ -87,6 +87,10 @@ class NMDataSeries(NMObject):
 
         self.__channel_container: NMChannelContainer = NMChannelContainer(parent=self)
         self.__epoch_container: NMEpochContainer = NMEpochContainer(parent=self)
+        self.__locked = False
+        # Empty epoch sets to start with; SetX excludes its epochs from runs
+        for set_name in DEFAULT_EPOCH_SETS:
+            self.__epoch_container.sets.add(set_name, quiet=True)
 
     # override
     def __eq__(
@@ -160,7 +164,27 @@ class NMDataSeries(NMObject):
     @property
     def parameters(self) -> dict[str, object]:
         k = super().parameters
+        k.update({"locked": self.__locked})
         return k
+
+    @property
+    def locked(self) -> bool:
+        """True if this series' data must not be renamed or deleted.
+
+        Series created by the file readers start locked, protecting raw
+        recordings; series built from data in the folder start unlocked.
+        """
+        return self.__locked
+
+    @locked.setter
+    def locked(self, locked: bool) -> None:
+        if not isinstance(locked, bool):
+            raise TypeError(nmu.type_error_str(locked, "locked", "boolean"))
+        self.__locked = locked
+        nmh.history(
+            "%s dataseries '%s'" % ("locked" if locked else "unlocked", self.name),
+            path=self.path_str,
+        )
 
     # override
     @property
@@ -236,9 +260,11 @@ class NMDataSeries(NMObject):
             c = self.channels.get(channel)
             if c is None:
                 raise KeyError("channel '%s' does not exist" % channel)
+        found = self.epoch_data_map(channel)
         result: list = []
         for epoch_name in epoch_names:
-            d = self.get_data(channel=channel, epoch=epoch_name)
+            key = self.epochs._getkey(epoch_name)
+            d = found.get(key) if key is not None else None
             if d is not None:
                 result.append(d.name if get_keys else d)
         return result
@@ -271,10 +297,38 @@ class NMDataSeries(NMObject):
         if e is None:
             return None
 
-        for d in c.data:
-            if d in e.data:
+        # Identity, not ==: NMData.__eq__ compares contents. Scan the epoch's
+        # list (one array per channel), not the channel's (one per epoch)
+        channel_ids = None
+        for d in e.data:
+            if channel_ids is None:
+                if len(e.data) == 1:
+                    return d if any(x is d for x in c.data) else None
+                channel_ids = {id(x) for x in c.data}
+            if id(d) in channel_ids:
                 return d
         return None
+
+    def epoch_data_map(self, channel: str | None = None) -> dict[str, "NMData"]:
+        """Map each epoch name to its data for *channel*, in one pass.
+
+        Much faster than calling :meth:`get_data` for every epoch of a long
+        series. Epochs with no data at the channel are left out.
+
+        Args:
+            channel: Channel name (e.g. "A"). If None, uses selected channel.
+        """
+        c = self.channels.selected_value if channel is None else self.channels.get(channel)
+        if c is None:
+            return {}
+        in_channel = {id(d) for d in c.data}
+        result: dict[str, NMData] = {}
+        for name, epoch in self.epochs.items():
+            for d in epoch.data:
+                if id(d) in in_channel:
+                    result[name] = d
+                    break
+        return result
 
     # =========================================================================
     # Bulk scale utility methods
@@ -298,6 +352,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(value, (float, int)) or isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "value", "number"))
 
@@ -330,6 +385,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(value, (float, int)) or isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "value", "number"))
 
@@ -362,6 +418,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(label, str):
             raise TypeError(nmu.type_error_str(label, "label", "string"))
 
@@ -394,6 +451,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(units, str):
             raise TypeError(nmu.type_error_str(units, "units", "string"))
 
@@ -426,6 +484,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(label, str):
             raise TypeError(nmu.type_error_str(label, "label", "string"))
 
@@ -458,6 +517,7 @@ class NMDataSeries(NMObject):
         Returns:
             Number of data objects modified.
         """
+        self._check_unlocked()
         if not isinstance(units, str):
             raise TypeError(nmu.type_error_str(units, "units", "string"))
 
@@ -530,6 +590,11 @@ class NMDataSeries(NMObject):
                 "units": units,
             }
         return result
+
+    def _check_unlocked(self) -> None:
+        """Raise RuntimeError if this series is locked."""
+        if self.__locked:
+            raise RuntimeError("dataseries %r is locked" % self.name)
 
     def _iter_channels(self, channel: str | None = None):
         """Iterate over channels, optionally filtering to a single channel.

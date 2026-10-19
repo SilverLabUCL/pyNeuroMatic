@@ -169,7 +169,8 @@ class TestGroups:
         ep_group = _find_child(model, ds_idx, "Epochs")
         names = {model.data(model.index(r, 0, ep_group))
                   for r in range(model.rowCount(ep_group))}
-        assert names == {"E0", "E1", "E2"}
+        # Every series has default epoch sets (Set1, Set2, SetX)
+        assert names == {"Sets", "E0", "E1", "E2"}
 
     def test_toolfolders_group_children(self, model):
         root = _folder0(model)

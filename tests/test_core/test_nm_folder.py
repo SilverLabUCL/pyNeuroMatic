@@ -7,6 +7,7 @@ Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
 """
 import copy
+import numpy
 import unittest
 
 from pyneuromatic.core.nm_data import NMDataContainer
@@ -1363,3 +1364,113 @@ class TestNMFolderToolResults(NMFolderTestBase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestRenameDataSeriesAndLock(unittest.TestCase):
+    """rename_dataseries(), and locked series refusing membership changes."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_channels=2, n_epochs=2,
+                                                 n_points=3)
+        self.folder.data.new("Other0", nparray=numpy.zeros(3))
+        self.folder.data.sets.add("Picked", [self.folder.data["RecordA1"]])
+
+    def test_rename_renames_series_and_data(self):
+        data_a1 = self.folder.data["RecordA1"]
+        self.folder.rename_dataseries("Record", "Cell")
+        self.assertEqual(list(self.folder.dataseries.keys()), ["Cell"])
+        self.assertEqual(
+            sorted(self.folder.data.keys()),
+            ["CellA0", "CellA1", "CellB0", "CellB1", "Other0"],
+        )
+        self.assertIs(self.series.get_data("A", "E1"), data_a1)
+        self.assertEqual(data_a1.name, "CellA1")
+        self.assertEqual(self.folder.data.sets.get_items("Picked", get_keys=True), ["CellA1"])
+
+    def test_rename_checks_names(self):
+        with self.assertRaises(ValueError):
+            self.folder.rename_dataseries("Record", "bad name")
+        self.folder.data.new("CellA0", nparray=numpy.zeros(3))
+        with self.assertRaisesRegex(ValueError, "'CellA0' already exists"):
+            self.folder.rename_dataseries("Record", "Cell")
+        self.assertIn("RecordA0", self.folder.data)  # nothing renamed
+        self.folder.new_dataseries("Stim", n_points=3)
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            self.folder.rename_dataseries("Record", "Stim")
+
+    def test_locked_series_refuses_rename_and_removal(self):
+        self.series.locked = True
+        for call in (
+            lambda: self.folder.rename_dataseries("Record", "Cell"),
+            lambda: self.folder.remove_dataseries("Record"),
+            lambda: self.folder.remove_dataseries_channel("Record", "B"),
+            lambda: self.folder.remove_dataseries_epoch("Record", "E1"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "locked"):
+                call()
+        self.assertIn("Record", self.folder.dataseries)
+        self.assertIn("RecordB1", self.folder.data)
+
+
+class TestDefaultEpochSetsAndExclusion(unittest.TestCase):
+    """Every series starts with Set1, Set2 and SetX; SetX epochs are not run."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_object_container import RunMode
+
+        self.RunMode = RunMode
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_epochs=6, n_points=3)
+        self.epochs = self.series.epochs
+
+    def _run(self):
+        return [epoch.name for epoch in self.epochs.run_targets]
+
+    def test_default_sets(self):
+        self.assertEqual(list(self.epochs.sets.keys()), ["Set1", "Set2", "SetX"])
+        self.assertEqual(self.epochs.excluded_names(), set())
+
+    def test_setx_epochs_are_left_out_of_runs(self):
+        self.epochs.sets.add("SetX", [self.epochs["E1"], self.epochs["E4"]])
+        self.epochs.run_mode = self.RunMode.ALL
+        self.assertEqual(self._run(), ["E0", "E2", "E3", "E5"])
+
+        self.epochs.sets.add("Set1", [self.epochs["E0"], self.epochs["E1"]])
+        self.epochs.run_mode = self.RunMode.SET
+        self.epochs.run_target_name = "Set1"
+        self.assertEqual(self._run(), ["E0"])
+
+        # Running SetX itself lists its epochs
+        self.epochs.run_target_name = "SetX"
+        self.assertEqual(self._run(), ["E1", "E4"])
+
+    def test_setx_applies_to_group_runs(self):
+        self.epochs.groups.assign_cyclic(list(self.epochs.keys()), n_groups=2)
+        self.epochs.sets.add("SetX", [self.epochs["E2"]])
+        self.epochs.run_target = "group0"
+        self.assertEqual(self._run(), ["E0", "E4"])
+
+
+class TestEpochDataLookup(unittest.TestCase):
+    """get_data(), epoch_data_map() and get_data_for_epochs() agree."""
+
+    def test_lookups(self):
+        nm = NMManager(quiet=True)
+        folder = nm.folders.new("Demo")
+        # Equal contents in every array, so lookups must use identity
+        series = folder.new_dataseries("Record", n_channels=2, n_epochs=50, n_points=3)
+        data = folder.data
+        found = series.epoch_data_map("B")
+        self.assertEqual(len(found), 50)
+        self.assertIs(found["E7"], data["RecordB7"])
+        self.assertIs(series.get_data("B", "E7"), data["RecordB7"])
+        self.assertIs(series.get_data("A", "E7"), data["RecordA7"])
+        self.assertEqual(series.get_data_for_epochs(["E3", "e4"], "A", get_keys=True),
+                         ["RecordA3", "RecordA4"])
+        data.pop("RecordB7")
+        self.assertNotIn("E7", series.epoch_data_map("B"))
+        self.assertIsNone(series.get_data("B", "E7"))
+        self.assertEqual(series.epoch_data_map("Z"), {})

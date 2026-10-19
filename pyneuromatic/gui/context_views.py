@@ -17,7 +17,11 @@ except ImportError:  # pragma: no cover - optional GUI dependency
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
-from pyneuromatic.gui.selection_model import scoped_epoch_names
+from pyneuromatic.gui.selection_model import (
+    epoch_scope_label,
+    scoped_epoch_names,
+    source_object,
+)
 
 # Tab label used for the data view when a single data array is selected
 DATA_VIEW = "Data"
@@ -188,8 +192,11 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
     """Data arrays side by side: an x column, then one column per array.
 
     Cells are formatted only when Qt asks for them, so long recordings with
-    many epochs stay responsive.
+    many epochs stay responsive. Values can be edited, except the x column
+    and arrays in a locked data series.
     """
+
+    data_edited = QtCore.pyqtSignal(object)  # the NMData that changed
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
@@ -228,7 +235,7 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
             return int(
                 QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
             )
-        if role != QtCore.Qt.ItemDataRole.DisplayRole:
+        if role not in (QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole):
             return None
         row, column = index.row(), index.column()
         if column == 0:
@@ -236,7 +243,49 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         else:
             values = self._columns[column - 1].nparray
             value = values[row] if row < values.size else None
+        if role == QtCore.Qt.ItemDataRole.EditRole and value is not None:
+            return repr(float(value))  # full precision while editing
         return self.format_value(value)
+
+    @staticmethod
+    def is_locked(data: NMData) -> bool:
+        """True if *data* belongs to a locked data series."""
+        container = getattr(data._parent, "data", None)
+        if container is None or data.name not in container:
+            return False
+        return any(ds.locked for ds in container.dataseries_of(data.name))
+
+    def _editable(self, index: QtCore.QModelIndex) -> bool:
+        if not index.isValid() or index.column() == 0:
+            return False
+        data = self._columns[index.column() - 1]
+        return index.row() < data.nparray.size and not self.is_locked(data)
+
+    def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlag:
+        flags = super().flags(index)
+        if self._editable(index):
+            flags |= QtCore.Qt.ItemFlag.ItemIsEditable
+        return flags
+
+    def setData(
+        self,
+        index: QtCore.QModelIndex,
+        value: Any,
+        role: int = QtCore.Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if role != QtCore.Qt.ItemDataRole.EditRole or not self._editable(index):
+            return False
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return False
+        data = self._columns[index.column() - 1]
+        if data.nparray.dtype.kind != "f":
+            data.nparray = data.nparray.astype(float)  # keep fractional edits
+        data.nparray[index.row()] = number
+        self.dataChanged.emit(index, index)
+        self.data_edited.emit(data)
+        return True
 
     @staticmethod
     def format_value(value) -> str:
@@ -285,6 +334,11 @@ class ChannelTable(QtWidgets.QWidget):
             QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
         )
         self.view.verticalHeader().setDefaultSectionSize(22)
+        self.view.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
+            | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed
+            | QtWidgets.QAbstractItemView.EditTrigger.AnyKeyPressed
+        )
         layout.addWidget(self.view, stretch=1)
 
     def show_arrays(
@@ -314,6 +368,8 @@ class ChannelTable(QtWidgets.QWidget):
 class TablePanel(QtWidgets.QWidget):
     """Table context panel: channel tables and the tables of tools with results."""
 
+    data_edited = QtCore.pyqtSignal(object)  # an NMData value was edited
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
@@ -325,6 +381,7 @@ class TablePanel(QtWidgets.QWidget):
         layout.addWidget(self.stack, stretch=1)
         self.channel_table = ChannelTable(self.stack)
         self.stack.addWidget(self.channel_table)
+        self.channel_table.model.data_edited.connect(self.data_edited)
 
         self._selection_model: Any = None
         self._last_selection: dict = {}
@@ -350,6 +407,12 @@ class TablePanel(QtWidgets.QWidget):
     def show_tool(self, name: str) -> None:
         self.view_tabs.select_tool(name)
 
+    def show_channel_table(self) -> None:
+        """Show the channel (or Data) table rather than a tool's tables."""
+        channels = self.view_tabs.channel_names
+        if channels:
+            self.view_tabs.select_channel(self._channel_name or channels[0])
+
     # --- selection --------------------------------------------------------
 
     def bind_selection_model(self, model) -> None:
@@ -358,7 +421,7 @@ class TablePanel(QtWidgets.QWidget):
         self.update_selection(model.selection)
 
     def _channels(self, selection: dict) -> list[str]:
-        dataseries = selection.get("dataseries")
+        dataseries = source_object(selection, "dataseries")
         if isinstance(dataseries, NMDataSeries):
             names = list(dataseries.channels.keys())
             if self._channel_name not in names:
@@ -369,7 +432,7 @@ class TablePanel(QtWidgets.QWidget):
                 )
             return names
         self._channel_name = None
-        if isinstance(selection.get("data"), NMData):
+        if isinstance(source_object(selection, "data"), NMData):
             return [DATA_VIEW]
         return []
 
@@ -401,38 +464,41 @@ class TablePanel(QtWidgets.QWidget):
 
     def _refresh_channel_table(self) -> None:
         selection = self._last_selection
-        dataseries = selection.get("dataseries")
-        data = selection.get("data")
+        dataseries = source_object(selection, "dataseries")
+        data = source_object(selection, "data")
         if isinstance(dataseries, NMDataSeries) and self._channel_name is not None:
             try:
-                names = scoped_epoch_names(dataseries, selection)
+                # Excluded epochs (SetX) are still shown, as in the Plot
+                names = scoped_epoch_names(dataseries, selection, exclude=False)
             except RuntimeError as error:
                 self.channel_table.show_arrays([], str(error))
                 return
-            scope = selection.get("set") or selection.get("group")
-            if names is None:  # no Set or Group: every epoch
+            scope = epoch_scope_label(selection)
+            if names is None:  # no Epoch Set or Group: every epoch
                 names = list(dataseries.epochs.keys())
-            arrays = [
-                item
-                for name in names
-                if isinstance(
-                    item := dataseries.get_data(channel=self._channel_name, epoch=name),
-                    NMData,
-                )
-            ]
+            found = dataseries.epoch_data_map(self._channel_name)
+            arrays = [found[name] for name in names if name in found]
             epoch = selection.get("epoch")
-            current = (
-                dataseries.get_data(channel=self._channel_name, epoch=epoch.name)
-                if epoch is not None
-                else None
-            )
+            current = found.get(epoch.name) if epoch is not None else None
             noun = "epoch" if len(arrays) == 1 else "epochs"
             title = f"{dataseries.name}  channel {self._channel_name}: {len(arrays)} {noun}"
             if scope:
                 title += f" ({scope})"
             self.channel_table.show_arrays(arrays, title, current)
         elif isinstance(data, NMData):
-            self.channel_table.show_arrays([data], data.name, data)
+            context = selection.get("toolfolder") or selection.get("folder")
+            data_set = selection.get("data_set")
+            members = (
+                set(context.data.sets.get_items(data_set, get_keys=True) or [])
+                if data_set is not None and context is not None else set()
+            )
+            if data.name not in members:  # e.g. a new array, in no set yet
+                self.channel_table.show_arrays([data], data.name, data)
+                return
+            arrays = [item for name, item in context.data.items() if name in members]
+            noun = "data array" if len(arrays) == 1 else "data arrays"
+            title = f"{len(arrays)} {noun} (Data Set: {data_set})"
+            self.channel_table.show_arrays(arrays, title, data)
         else:
             self.channel_table.show_arrays([], "No selection")
 

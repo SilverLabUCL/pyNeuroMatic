@@ -119,6 +119,23 @@ class TestNMGroupsAssignCyclic(unittest.TestCase):
         self.assertEqual(g.get_group("E4"), 1)
         self.assertEqual(g.get_group("E5"), 2)
 
+    def test_cyclic_block(self):
+        # 4 groups in blocks of 3: 000111222333000...
+        g = NMGroups()
+        names = ["E%d" % i for i in range(15)]
+        g.assign_cyclic(names, n_groups=4, block=3, quiet=QUIET)
+        self.assertEqual(
+            [g.get_group(n) for n in names],
+            [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 0, 0, 0],
+        )
+
+    def test_cyclic_bad_block_raises(self):
+        g = NMGroups()
+        with self.assertRaises(ValueError):
+            g.assign_cyclic(["E0"], n_groups=2, block=0)
+        with self.assertRaises(TypeError):
+            g.assign_cyclic(["E0"], n_groups=2, block=1.5)
+
     def test_cyclic_5_groups_iv_relation(self):
         g = NMGroups()
         names = ["E%d" % i for i in range(15)]

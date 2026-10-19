@@ -9,26 +9,50 @@ from PyQt6 import QtCore
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
-from pyneuromatic.core.nm_epoch import NMEpoch
+from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS, NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 
+# Built-in Epoch Set choices (not stored sets): every epoch, or only the
+# current one (Igor NeuroMatic's "All" and "This Wave")
+ALL_EPOCHS = "All"
+CURRENT_EPOCH = "Current Epoch"
+BUILTIN_EPOCH_SETS = (ALL_EPOCHS, CURRENT_EPOCH)
+
+
 class SelectionModel(QtCore.QObject):
     """Expose shared selection state and notify GUI subscribers on changes.
 
-    The hierarchy tiers are read from and written to ``NMManager``. The
-    Set and group selections are GUI context; the manager's epoch groups and
-    container sets are queried by the selector widget. The operator combines
-    those two selections when a tool consumes the snapshot.
+    The hierarchy tiers are read from and written to ``NMManager``. A data
+    array and a data series can both be selected; ``source`` says which one
+    tools analyse (``"data"`` or ``"dataseries"``). Choosing an item in one
+    of them makes it the source.
+
+    The remaining keys are GUI context: ``data_set`` is a set of the folder's
+    (or subfolder's) data, while ``epoch_set``, ``group`` and
+    ``group_operator`` scope the data series' epochs. Each is remembered per
+    folder/subfolder (data set) or per data series (epoch scope).
     """
 
     selection_changed = QtCore.pyqtSignal(dict)
 
-    _GUI_KEYS = ("set", "group", "group_operator")
+    SOURCES = ("data", "dataseries")
+    _EPOCH_KEYS = ("epoch_set", "group", "group_operator")
+    _GUI_KEYS = ("source", "data_set") + _EPOCH_KEYS
     _KEYS = HIERARCHY_SELECT_KEYS + _GUI_KEYS
+    # Tiers whose selection makes that section the source
+    _SOURCE_FOR_KEY = {
+        "data": "data",
+        "data_set": "data",
+        "dataseries": "dataseries",
+        "channel": "dataseries",
+        "epoch": "dataseries",
+        "epoch_set": "dataseries",
+        "group": "dataseries",
+    }
 
     def __init__(
         self,
@@ -39,15 +63,19 @@ class SelectionModel(QtCore.QObject):
         if not isinstance(manager, NMManager):
             raise TypeError("manager must be an NMManager")
         self._manager = manager
-        initial = manager.select_values
-        if initial.get("data") is not None and initial.get("dataseries") is not None:
-            manager.select_keys = {"data": None}
-        self._set: str | None = None
+        self._source: str | None = None
+        self._data_set: str | None = None
+        self._epoch_set: str | None = None
         self._group: int | None = None
         self._group_operator: str | None = None
-        self._selector_memory: dict[
+        # Remembered GUI context, restored when returning to a scope
+        self._data_set_memory: dict[tuple[str | None, ...], str] = {}
+        self._epoch_memory: dict[
             tuple[str | None, ...], tuple[str | None, int | None, str | None]
         ] = {}
+        self._normalize_source()
+        if self._manager.select_values.get("dataseries") is not None:
+            self._epoch_set = ALL_EPOCHS
         self._emitted_selection = self.selection.copy()
 
     @property
@@ -56,11 +84,13 @@ class SelectionModel(QtCore.QObject):
 
     @property
     def selection(self) -> dict[str, Any]:
-        """Current selection snapshot, including GUI group/set context."""
+        """Current selection snapshot, including the GUI context keys."""
         values = self._manager.select_values
         values.update(
             {
-                "set": self._set,
+                "source": self._source,
+                "data_set": self._data_set,
+                "epoch_set": self._epoch_set,
                 "group": self._group,
                 "group_operator": self._group_operator,
             }
@@ -100,8 +130,8 @@ class SelectionModel(QtCore.QObject):
             raise KeyError(f"unknown selection tier(s): {sorted(unknown)}")
         self._validate(updates)
         previous = self.selection
-        previous_scope = self._scope_key()
-        self._remember_selectors(previous_scope)
+        self._remember_context()
+        previous_scopes = self._data_scope(), self._epoch_scope()
 
         object_updates = {
             tier: value
@@ -113,61 +143,45 @@ class SelectionModel(QtCore.QObject):
             for tier, value in updates.items()
             if tier in HIERARCHY_SELECT_KEYS and not isinstance(value, NMObject)
         }
-        requested_data = object_updates.get("data", manager_updates.get("data"))
-        requested_dataseries = object_updates.get(
-            "dataseries", manager_updates.get("dataseries")
-        )
-        if requested_data is not None:
-            manager_updates["dataseries"] = None
-        elif requested_dataseries is not None:
-            manager_updates["data"] = None
-
         for tier in HIERARCHY_SELECT_KEYS:
             value = object_updates.get(tier)
             if value is not None:
                 self._manager.select_value_set(value)
-
         if manager_updates:
-            ordered_updates = {
+            self._manager.select_keys = {
                 tier: manager_updates[tier]
                 for tier in HIERARCHY_SELECT_KEYS
                 if tier in manager_updates
             }
-            self._manager.select_keys = ordered_updates
 
-        self._normalize_data_mode(
-            "data" if requested_data is not None else
-            "dataseries" if requested_dataseries is not None else None
-        )
-
-        current_scope = self._scope_key()
-        if current_scope != previous_scope:
-            self._restore_selectors(current_scope)
-
-        for key, attribute in (
-            ("set", "_set"),
-            ("group", "_group"),
-            ("group_operator", "_group_operator"),
-        ):
+        self._restore_context(previous_scopes)
+        for key in ("data_set",) + self._EPOCH_KEYS:
             if key in updates:
-                setattr(self, attribute, updates[key])
-
+                setattr(self, f"_{key}", updates[key])
         if (
-            ("set" in updates and updates["set"] is None)
+            ("epoch_set" in updates and updates["epoch_set"] is None)
             or ("group" in updates and updates["group"] is None)
         ) and "group_operator" not in updates:
             self._group_operator = None
 
-        self._remember_selectors(current_scope)
-
+        if "source" in updates:
+            self._source = updates["source"]
+        else:
+            # The last section the user chose an item in becomes the source
+            for key, source in self._SOURCE_FOR_KEY.items():
+                if key in updates and updates[key] is not None:
+                    self._source = source
+        self._normalize_source()
+        self._remember_context()
         self._emit_if_changed(previous)
 
-    def _normalize_data_mode(self, preferred: str | None = None) -> None:
-        current = self._manager.select_values
-        if current["data"] is None or current["dataseries"] is None:
-            return
-        inactive_tier = "dataseries" if preferred == "data" else "data"
-        self._manager.select_keys = {inactive_tier: None}
+    def _normalize_source(self) -> None:
+        """Keep ``source`` pointing at a selected data array or data series."""
+        values = self._manager.select_values
+        available = [tier for tier in self.SOURCES if values.get(tier) is not None]
+        if self._source not in available:
+            # Prefer the data series, as the analysis default
+            self._source = available[-1] if available else None
 
     def clear(self, *tiers: str) -> None:
         """Clear all selection, or the requested tiers and their descendants."""
@@ -178,22 +192,23 @@ class SelectionModel(QtCore.QObject):
             raise KeyError(f"unknown selection tier(s): {sorted(unknown)}")
 
         previous = self.selection
-        previous_scope = self._scope_key()
-        clear_selector_keys = set(tiers).intersection(self._GUI_KEYS)
-        if "set" in clear_selector_keys:
-            self._set = None
-        if "group" in clear_selector_keys:
+        previous_scopes = self._data_scope(), self._epoch_scope()
+        if "data_set" in tiers:
+            self._data_set = None
+            self._data_set_memory.pop(previous_scopes[0], None)
+        cleared_epoch_keys = set(tiers).intersection(self._EPOCH_KEYS)
+        if "epoch_set" in cleared_epoch_keys:
+            self._epoch_set = None
+        if "group" in cleared_epoch_keys:
             self._group = None
-        if "group_operator" in clear_selector_keys or clear_selector_keys.intersection(
-            ("set", "group")
-        ):
+        if cleared_epoch_keys:
             self._group_operator = None
-        if clear_selector_keys:
-            self._selector_memory.pop(previous_scope, None)
+            self._epoch_memory.pop(previous_scopes[1], None)
 
         if "folder" in tiers:
             self._clear_all_folder_selections()
-            self._selector_memory.clear()
+            self._data_set_memory.clear()
+            self._epoch_memory.clear()
         else:
             descendants = set()
             for tier in tiers:
@@ -206,28 +221,38 @@ class SelectionModel(QtCore.QObject):
                     tier: None for tier in HIERARCHY_SELECT_KEYS if tier in clear_keys
                 }
 
-        current_scope = self._scope_key()
-        if not clear_selector_keys and current_scope != previous_scope:
-            self._restore_selectors(current_scope)
-
+        self._restore_context(previous_scopes)
+        self._normalize_source()
         self._emit_if_changed(previous)
 
-    def _scope_key(self) -> tuple[str | None, ...]:
+    # --- remembered context -------------------------------------------------
+
+    def _data_scope(self) -> tuple[str | None, ...]:
         keys = self._manager.select_keys
-        return tuple(
-            keys.get(tier)
-            for tier in ("folder", "toolfolder", "data", "dataseries")
-        )
+        return keys.get("folder"), keys.get("toolfolder")
 
-    def _remember_selectors(self, scope: tuple[str | None, ...]) -> None:
-        state = (self._set, self._group, self._group_operator)
-        if any(value is not None for value in state):
-            self._selector_memory[scope] = state
+    def _epoch_scope(self) -> tuple[str | None, ...]:
+        keys = self._manager.select_keys
+        return keys.get("folder"), keys.get("toolfolder"), keys.get("dataseries")
 
-    def _restore_selectors(self, scope: tuple[str | None, ...]) -> None:
-        self._set, self._group, self._group_operator = self._selector_memory.get(
-            scope, (None, None, None)
-        )
+    def _remember_context(self) -> None:
+        if self._data_set is not None:
+            self._data_set_memory[self._data_scope()] = self._data_set
+        epoch_state = (self._epoch_set, self._group, self._group_operator)
+        if any(value is not None for value in epoch_state):
+            self._epoch_memory[self._epoch_scope()] = epoch_state
+
+    def _restore_context(self, previous_scopes: tuple[tuple, tuple]) -> None:
+        """Restore remembered context for any scope that changed."""
+        data_scope, epoch_scope = self._data_scope(), self._epoch_scope()
+        if data_scope != previous_scopes[0]:
+            self._data_set = self._data_set_memory.get(data_scope)
+        if epoch_scope != previous_scopes[1]:
+            # A data series starts with All epochs
+            default_set = ALL_EPOCHS if epoch_scope[2] is not None else None
+            self._epoch_set, self._group, self._group_operator = (
+                self._epoch_memory.get(epoch_scope, (default_set, None, None))
+            )
 
     def _clear_all_folder_selections(self) -> None:
         for folder in self._manager.folders.values():
@@ -244,18 +269,17 @@ class SelectionModel(QtCore.QObject):
     def refresh(self) -> None:
         """Notify subscribers if selection was changed directly on the manager."""
         previous = self._last_emitted_selection()
-        previous_scope = tuple(
-            value.name if isinstance(value, NMObject) else value
-            for value in (
-                previous.get(tier)
-                for tier in ("folder", "toolfolder", "data", "dataseries")
-            )
+
+        def name(tier):
+            value = previous.get(tier)
+            return value.name if isinstance(value, NMObject) else value
+
+        previous_scopes = (
+            (name("folder"), name("toolfolder")),
+            (name("folder"), name("toolfolder"), name("dataseries")),
         )
-        self._remember_selectors(previous_scope)
-        current = self.selection
-        current_scope = self._scope_key()
-        if current_scope != previous_scope:
-            self._restore_selectors(current_scope)
+        self._restore_context(previous_scopes)
+        self._normalize_source()
         self._emit_if_changed(previous)
 
     @staticmethod
@@ -271,9 +295,12 @@ class SelectionModel(QtCore.QObject):
         for tier, value in updates.items():
             if value is None:
                 continue
-            if tier == "set":
+            if tier in ("data_set", "epoch_set"):
                 if not isinstance(value, str):
-                    raise TypeError("set must be a string or None")
+                    raise TypeError(f"{tier} must be a string or None")
+            elif tier == "source":
+                if value not in self.SOURCES:
+                    raise ValueError("source must be 'data', 'dataseries', or None")
             elif tier == "group":
                 if isinstance(value, bool) or not isinstance(value, int):
                     raise TypeError("group must be an integer or None")
@@ -311,14 +338,14 @@ def combine_scope_names(
     group_names: list[str] | None,
     operator: str | None,
 ) -> list[str]:
-    """Names from *all_names* allowed by a Set and/or Group selection.
+    """Names from *all_names* allowed by a set and/or group selection.
 
     ``None`` means that tier is not selected. When both are selected,
     *operator* (``"AND"`` or ``"OR"``) combines them.
     """
     if set_names is not None and group_names is not None:
         if operator not in ("AND", "OR"):
-            raise RuntimeError("Choose AND or OR to combine the selected Set and Group")
+            raise RuntimeError("Choose AND or OR to combine the selected Epoch Set and Group")
         allowed = (
             set(set_names).intersection(group_names)
             if operator == "AND"
@@ -333,30 +360,96 @@ def combine_scope_names(
     return [name for name in all_names if name in allowed]
 
 
-def scoped_epoch_names(
-    dataseries: NMDataSeries, selection: Mapping[str, Any]
-) -> list[str] | None:
-    """Epoch names of *dataseries* in the selected Set/Group, in epoch order.
+def is_stored_epoch_set(name: str | None) -> bool:
+    """True for a real epoch set (Set1, SetX...), not All or Current Epoch."""
+    return name is not None and name not in BUILTIN_EPOCH_SETS
 
-    Returns None when neither a Set nor a Group is selected, so callers can
-    choose their own default (the current epoch, or all epochs).
+
+def scoped_epoch_names(
+    dataseries: NMDataSeries,
+    selection: Mapping[str, Any],
+    exclude: bool = True,
+) -> list[str] | None:
+    """Epoch names of *dataseries* in the selected Epoch Set/Group, in order.
+
+    "All" means every epoch. Returns None for "Current Epoch" (or no Epoch
+    Set and no Group), so callers choose their default, usually the current
+    epoch. With *exclude*, epochs in the exclusion set (SetX) are left out,
+    unless SetX itself is the Epoch Set.
     """
-    selected_set = selection.get("set")
+    selected_set = selection.get("epoch_set")
     selected_group = selection.get("group")
-    if selected_set is None and selected_group is None:
+    if selected_set == CURRENT_EPOCH or (selected_set is None and selected_group is None):
         return None
     set_names = None
     group_names = None
-    if selected_set is not None:
+    if is_stored_epoch_set(selected_set):
         set_names = dataseries.epochs.sets.get_items(selected_set, get_keys=True) or []
     if selected_group is not None:
         group_names = dataseries.epochs.groups.get_items(selected_group)
-    return combine_scope_names(
+    names = combine_scope_names(
         list(dataseries.epochs.keys()),
         set_names,
         group_names,
         selection.get("group_operator"),
     )
+    if exclude and (selected_set or "").lower() != EXCLUDE_SET.lower():
+        excluded = dataseries.epochs.excluded_names()
+        names = [name for name in names if name not in excluded]
+    return names
 
 
-__all__ = ["SelectionModel", "combine_scope_names", "scoped_epoch_names"]
+def source_object(selection: Mapping[str, Any], source: str) -> Any:
+    """The selected data array or data series if it is the active *source*."""
+    return selection.get(source) if selection.get("source") == source else None
+
+
+def selection_summary(selection: Mapping[str, Any]) -> list[str]:
+    """Names describing the selection: folder, subfolder, then the source's.
+
+    For a data source: the data array and Data Set. For a data series: the
+    prefix, channel, epoch and epoch scope.
+    """
+
+    def name(key: str) -> str | None:
+        value = selection.get(key)
+        return value.name if isinstance(value, NMObject) else value
+
+    parts = [name("folder"), name("toolfolder")]
+    source = selection.get("source")
+    if source == "data":
+        parts.append(name("data"))
+        if selection.get("data_set") is not None:
+            parts.append(f"Data Set: {selection['data_set']}")
+    elif source == "dataseries":
+        parts += [name("dataseries"), name("channel"), name("epoch")]
+        parts.append(epoch_scope_label(selection) or None)
+    return [part for part in parts if part is not None]
+
+
+def epoch_scope_label(selection: Mapping[str, Any]) -> str:
+    """Short description of the epoch scope, e.g. "Epoch Set: Set1 AND Group 0"."""
+    parts = []
+    epoch_set = selection.get("epoch_set")
+    if is_stored_epoch_set(epoch_set):
+        parts.append(f"Epoch Set: {epoch_set}")
+    elif epoch_set == CURRENT_EPOCH:
+        parts.append(CURRENT_EPOCH)
+    if selection.get("group") is not None:
+        parts.append(f"Group {selection['group']}")
+    operator = selection.get("group_operator") or "+"
+    return f" {operator} ".join(parts)
+
+
+__all__ = [
+    "ALL_EPOCHS",
+    "BUILTIN_EPOCH_SETS",
+    "CURRENT_EPOCH",
+    "SelectionModel",
+    "is_stored_epoch_set",
+    "combine_scope_names",
+    "epoch_scope_label",
+    "scoped_epoch_names",
+    "selection_summary",
+    "source_object",
+]

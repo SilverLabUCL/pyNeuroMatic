@@ -28,10 +28,15 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_folder import NMFolder
 
 from pyneuromatic.core.nm_object import NMObject
-from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_object_container import NMObjectContainer, RunMode
 from pyneuromatic.core.nm_group import NMGroups
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
+
+# Epoch sets every data series starts with. Epochs in EXCLUDE_SET are left
+# out of every run (as in Igor NeuroMatic's SetX).
+EXCLUDE_SET = "SetX"
+DEFAULT_EPOCH_SETS = ("Set1", "Set2", EXCLUDE_SET)
 
 
 """
@@ -265,7 +270,8 @@ class NMEpochContainer(NMObjectContainer):
 
     @property
     def run_targets(self) -> list:
-        """Override to resolve epoch group run targets."""
+        """Override to resolve epoch group run targets, leaving out epochs in
+        the exclusion set (EXCLUDE_SET) unless that set is the target."""
         if self.__run_group is not None:
             n = self.__run_group
             if n not in self.__groups.group_numbers:
@@ -277,8 +283,23 @@ class NMEpochContainer(NMObjectContainer):
                     obj = self[key]
                     if obj is not None:
                         result.append(obj)
-            return result
-        return super().run_targets
+        else:
+            result = super().run_targets
+        target = self.run_target_name
+        targets_exclude_set = (
+            self.__run_group is None
+            and self.run_mode == RunMode.SET
+            and isinstance(target, str)
+            and target.lower() == EXCLUDE_SET.lower()
+        )
+        excluded = self.excluded_names() if not targets_exclude_set else set()
+        return [epoch for epoch in result if epoch.name not in excluded]
+
+    def excluded_names(self) -> set[str]:
+        """Names of the epochs in the exclusion set (EXCLUDE_SET)."""
+        if self.sets._getkey(EXCLUDE_SET) is None:
+            return set()
+        return set(self.sets.get_items(EXCLUDE_SET, get_keys=True) or [])
 
     # override: also remove from groups when an epoch is popped
     def pop(

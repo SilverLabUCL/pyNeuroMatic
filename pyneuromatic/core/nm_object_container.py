@@ -580,8 +580,11 @@ class NMObjectContainer(NMObject, MutableMapping):
         if not isinstance(key, str):
             e = nmu.type_error_str(key, "key", "string or None")
             raise TypeError(e)
+        if key in self.__map:  # exact match: avoids a scan (values() uses this)
+            return key
+        lower = key.lower()
         for k in self.__map.keys():
-            if k.lower() == key.lower():  # keys are case insensitive
+            if k.lower() == lower:  # keys are case insensitive
                 return k  # return key from self.__map
         return None
 
@@ -629,6 +632,12 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__map.clear()
         self.__map.update(new_map)
         self.__sets.rename_item(key, actual_newname)
+        # Keep a renamed item selected
+        if (
+            isinstance(self.__selected_name, str)
+            and self.__selected_name.lower() == key.lower()
+        ):
+            self.__selected_name = actual_newname
         nmh.history(
             "renamed '%s' as '%s'" % (key, actual_newname),
             path=self.path_str, quiet=quiet,
@@ -638,6 +647,24 @@ class NMObjectContainer(NMObject, MutableMapping):
                 '%s.rename(%r, %r)' % (self._nm_cmd_path, key, actual_newname)
             )
         return True
+
+    def _rename_locked(
+        self,
+        name: str,
+        newname: str,
+        quiet: bool = nmc.QUIET,
+    ) -> bool:
+        """Rename even when key names are locked.
+
+        For owners that keep dependent names in step, e.g.
+        NMFolder.rename_dataseries() renames a series with its data.
+        """
+        rename_on = self.__rename_on
+        self.__rename_on = True
+        try:
+            return self.rename(name, newname, quiet=quiet)
+        finally:
+            self.__rename_on = rename_on
 
     def reorder(
         self,

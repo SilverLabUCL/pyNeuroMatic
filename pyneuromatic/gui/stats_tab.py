@@ -7,8 +7,7 @@ from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
-from pyneuromatic.core.nm_dataseries import NMDataSeries
-from pyneuromatic.core.nm_epoch import NMEpoch
+from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch
 from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS, NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_stat_func import (
@@ -25,7 +24,6 @@ from pyneuromatic.tools.nm_stat_func import (
     _stat_func_from_dict,
 )
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
-import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.gui.results_view import Stats2Panel
 from pyneuromatic.gui.selection_model import (
     SelectionModel,
@@ -278,11 +276,38 @@ class StatsToolTab(ToolTabWidget):
             self.run_info_label.setText(str(error))
             return
         count = len(targets)
-        if isinstance(self.selection.get("dataseries"), NMDataSeries):
+        text = ""
+        if self.selection.get("source") == "dataseries":
             noun = "epoch" if count == 1 else "epochs"
+            excluded = self._excluded_in_scope()
+            if excluded:
+                text = f" ({excluded} excluded)"
         else:
             noun = "data array" if count == 1 else "data arrays"
-        self.run_info_label.setText(f"{count} {noun}")
+        self.run_info_label.setText(f"{count} {noun}{text}")
+
+    @staticmethod
+    def _excluded_names(dataseries, selection) -> set[str]:
+        """Epochs left out of runs (SetX), unless SetX is the Epoch Set."""
+        if (selection.get("epoch_set") or "").lower() == EXCLUDE_SET.lower():
+            return set()
+        return dataseries.epochs.excluded_names()
+
+    def _excluded_in_scope(self) -> int:
+        """How many epochs of the Epoch Set/Group scope SetX leaves out."""
+        selection = self.selection
+        dataseries = selection.get("dataseries")
+        if dataseries is None:
+            return 0
+        excluded = self._excluded_names(dataseries, selection)
+        try:
+            names = scoped_epoch_names(dataseries, selection, exclude=False)
+        except RuntimeError:
+            return 0
+        if names is None:
+            epoch = selection.get("epoch")
+            names = [epoch.name] if epoch is not None else []
+        return sum(name in excluded for name in names)
 
     def _on_run_finished(self, succeeded: bool) -> None:
         # Saved arrays are viewed in Stats2; without them there is nothing new
@@ -620,39 +645,37 @@ class StatsToolTab(ToolTabWidget):
         self._refresh_window_combo()
         self._load_selected_window()
 
-    def _related_dataseries(self, data: NMData, context):
-        dataseries = data._dataseries
-        if dataseries is not None:
-            return dataseries
-        parsed_name = nmu.parse_data_name(data.name)
-        if parsed_name is None:
-            return None
-        prefix, _, _ = parsed_name
-        return context.dataseries.get(prefix)
-
     def _selected_targets(self) -> list[dict[str, NMObject]]:
-        selection = self.selection
-        data = selection.get("data")
-        dataseries = selection.get("dataseries")
-        channel = selection.get("channel")
-        selected_set = selection.get("set")
-        selected_group = selection.get("group")
-        operator = selection.get("group_operator")
+        """Data to analyse from the selection's source (data or data series).
 
-        if isinstance(dataseries, NMDataSeries):
+        A data series uses the epochs in the Epoch Set/Group, or the current
+        epoch when neither is chosen. A data array uses the Data Set, or the
+        current data array when none is chosen.
+        """
+        selection = self.selection
+        source = selection.get("source")
+
+        if source == "dataseries":
+            dataseries = selection.get("dataseries")
+            channel = selection.get("channel")
             if not isinstance(channel, NMChannel):
                 raise RuntimeError("Select a channel before running Stats")
-            all_epochs = list(dataseries.epochs.values())
             target_names = scoped_epoch_names(dataseries, selection)
-            if target_names is None:  # no Set or Group: the current epoch
+            if target_names is None:  # Current Epoch, unless it is excluded
                 epoch = selection.get("epoch")
-                target_names = [epoch.name] if isinstance(epoch, NMEpoch) else []
-
+                target_names = (
+                    [epoch.name]
+                    if isinstance(epoch, NMEpoch)
+                    and epoch.name not in self._excluded_names(dataseries, selection)
+                    else []
+                )
             targets = []
-            for epoch in all_epochs:
-                if epoch.name not in target_names:
+            wanted = set(target_names)
+            found = dataseries.epoch_data_map(channel.name)
+            for epoch in dataseries.epochs.values():
+                if epoch.name not in wanted:
                     continue
-                item = dataseries.get_data(channel=channel.name, epoch=epoch.name)
+                item = found.get(epoch.name)
                 if isinstance(item, NMData):
                     target = self._manager_target(selection)
                     target.update(
@@ -666,44 +689,28 @@ class StatsToolTab(ToolTabWidget):
                     targets.append(target)
             return targets
 
-        if isinstance(data, NMData):
-            folder = selection.get("folder")
-            context = selection.get("toolfolder") or folder
+        if source == "data":
+            data = selection.get("data")
+            context = selection.get("toolfolder") or selection.get("folder")
             if context is None:
                 return []
-            set_names = None
-            group_names = None
-            if selected_set is not None:
-                members = context.data.sets.get_items(selected_set, get_keys=True)
-                set_names = members or []
-            if selected_group is not None:
-                series = self._related_dataseries(data, context)
-                if series is None:
-                    raise RuntimeError("The selected data has no epoch groups")
-                epoch_names = series.epochs.groups.get_items(selected_group)
-                parsed_by_data = {
-                    item.name: nmu.parse_data_name(item.name)
-                    for item in context.data.values()
-                }
-                group_names = [
-                    name
-                    for name, parsed in parsed_by_data.items()
-                    if parsed is not None
-                    and parsed[0] == series.name
-                    and f"E{parsed[2]}" in epoch_names
-                ]
-            data_names = combine_scope_names(
-                list(context.data.keys()), set_names, group_names, operator
-            )
-            if set_names is None and group_names is None:
+            data_set = selection.get("data_set")
+            if data_set is None:
                 data_names = [data.name]
-
+            else:
+                members = context.data.sets.get_items(data_set, get_keys=True) or []
+                data_names = combine_scope_names(
+                    list(context.data.keys()), members, None, None
+                )
             targets = []
             for name in data_names:
                 item = context.data.get(name)
                 if isinstance(item, NMData):
                     target = self._manager_target(selection)
                     target["data"] = item
+                    # Analyse the data array, not the selected data series
+                    for tier in ("dataseries", "channel", "epoch"):
+                        target.pop(tier, None)
                     targets.append(target)
             return targets
 
@@ -730,6 +737,11 @@ class StatsToolTab(ToolTabWidget):
         if window.bsln_xbgn == float("-inf") and window.bsln_xend == float("inf"):
             raise RuntimeError(f"{window.name}: set a baseline X range")
 
+    def _confirm(self, title: str, text: str) -> bool:
+        """Yes/No question (replaced in tests)."""
+        answer = QtWidgets.QMessageBox.question(self, title, text)
+        return answer == QtWidgets.QMessageBox.StandardButton.Yes
+
     def run_tool(self) -> Any:
         self._save_window_controls()
         windows = list(self._tool.windows)
@@ -738,6 +750,16 @@ class StatsToolTab(ToolTabWidget):
         for window in windows:
             if window.on and window.func:
                 self._check_baseline(window)
+        selection = self.selection
+        if (
+            selection.get("source") == "dataseries"
+            and (selection.get("epoch_set") or "").lower() == EXCLUDE_SET.lower()
+            and not self._confirm(
+                "Run on SetX",
+                f"{EXCLUDE_SET} lists epochs excluded from analysis. Run on them anyway?",
+            )
+        ):
+            raise RuntimeError(f"Cancelled: {EXCLUDE_SET} lists excluded epochs")
 
         targets = self._selected_targets()
         if not targets:
