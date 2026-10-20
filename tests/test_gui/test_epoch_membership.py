@@ -62,7 +62,7 @@ def test_ticking_adds_and_removes_the_current_epoch(app):
 
     # The browser and the strip follow
     app.selection_model.update(epoch_set="SetX")
-    assert app.selection_strip.epoch_count_label.text() == "1 epoch"
+    assert app.selection_strip.epoch_count_label.text() == "n=1"
     assert panel.set_checkboxes["SetX"].isChecked()  # still on E2
 
 

@@ -185,6 +185,7 @@ class SelectionStrip(QtWidgets.QWidget):
                     # How many epochs the Epoch Set/Group selects
                     self.epoch_count_label = QtWidgets.QLabel("", frame)
                     self.epoch_count_label.setObjectName("epochCount")
+                    self.epoch_count_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
                     row_layout.addWidget(self.epoch_count_label)
             row_layout.addStretch(1)
             layout.addLayout(row_layout)
@@ -250,7 +251,7 @@ class SelectionStrip(QtWidgets.QWidget):
 
     @staticmethod
     def epoch_count_text(selection: dict) -> str:
-        """e.g. "7 epochs (3 excluded)" for the Epoch Set/Group selection."""
+        """e.g. "n=12-3": 12 epochs in the Epoch Set/Group, 3 of them excluded (SetX)."""
         dataseries = selection.get("dataseries")
         if dataseries is None:
             return ""
@@ -264,10 +265,8 @@ class SelectionStrip(QtWidgets.QWidget):
             unscoped = [epoch.name] if epoch is not None else []
             excluded = dataseries.epochs.excluded_names()
             scoped = [name for name in unscoped if name not in excluded]
-        count = len(scoped)
-        text = f"{count} epoch{'s' * (count != 1)}"
-        left_out = len(unscoped) - count
-        return text + (f" ({left_out} excluded)" if left_out else "")
+        left_out = len(unscoped) - len(scoped)
+        return f"n={len(unscoped)}" + (f"-{left_out}" if left_out else "")
 
     def _update_from_selection(self, selection: dict) -> None:
         if self._selection_model is None:
@@ -276,7 +275,21 @@ class SelectionStrip(QtWidgets.QWidget):
         for key, combo in self._combos.items():
             empty_text = {"toolfolder": NO_SUBFOLDER}.get(key, "")
             self._set_combo_options(combo, options.get(key, []), selection.get(key), empty_text)
-        self.epoch_count_label.setText(self.epoch_count_text(selection))
+        text = self.epoch_count_text(selection)
+        if text.startswith("n="):
+            total, _, left_out = text[2:].partition("-")
+            # The excluded epochs (SetX) in red, as on the SetX checkbox
+            shown = f"n={total}"
+            if left_out:
+                shown += f'<span style="color: #c62828;">-{left_out}</span>'
+            self.epoch_count_label.setText(shown)
+            tip = f"{total} epoch{'s' * (total != '1')} selected"
+            if left_out:
+                tip += f", {left_out} excluded (SetX): {int(total) - int(left_out)} analysed"
+            self.epoch_count_label.setToolTip(tip)
+        else:
+            self.epoch_count_label.setText(text)
+            self.epoch_count_label.setToolTip("")
         source = selection.get("source")
         for name, button in self._source_buttons.items():
             button.setEnabled(selection.get(name) is not None)

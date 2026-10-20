@@ -94,7 +94,7 @@ def test_browser_edit_mode_for_a_set(qtbot, series):
     window.selection_model.update(epoch_set="Set1")
     model.setData(model.index(6, 0), CHECKED, CHECK_ROLE)
     assert series.epochs.sets.get_items("Set1", get_keys=True) == ["E1", "E3", "E6"]
-    assert window.selection_strip.epoch_count_label.text() == "3 epochs"
+    assert window.selection_strip.epoch_count_label.text() == "n=3"
     assert browser.is_editing and browser.membership_model is model
 
     # The tree's member rows follow
