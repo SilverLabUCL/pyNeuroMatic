@@ -15,6 +15,7 @@ from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
+from pyneuromatic.core.nm_math import array_stats
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
@@ -69,6 +70,13 @@ def _type_text(dtype: numpy.dtype) -> str:
     return dtype.name
 
 
+def _value_text(value: float, units: str) -> str:
+    """e.g. "-61.2 mV"; "—" for NaN (e.g. the SD of one point)."""
+    if value != value:
+        return "—"
+    return f"{value:g}{units}"
+
+
 def _sets_of(container, name: str) -> list[str]:
     sets = getattr(container, "sets", None)
     if sets is None:
@@ -99,7 +107,27 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.title_label.setTextInteractionFlags(
             QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
         )
+        # Data arrays: their details, or basic statistics (as in Igor's browser)
+        self.details_button = QtWidgets.QToolButton(self._body)
+        self.details_button.setText("Details")
+        self.details_button.setToolTip("Points, type, scales, data series and sets")
+        self.stats_button = QtWidgets.QToolButton(self._body)
+        self.stats_button.setText("Stats")
+        self.stats_button.setToolTip("Mean, median, SD, SEM, RMS, min and max")
+        self._view_group = QtWidgets.QButtonGroup(self)
+        for button in (self.details_button, self.stats_button):
+            button.setCheckable(True)
+            self._view_group.addButton(button)
+        self.details_button.setChecked(True)  # kept while clicking through arrays
+        self._view_group.buttonClicked.connect(lambda _button: self.show_object(self._object))
         layout.addWidget(self.title_label)
+        # On its own row, so a narrow column never has to scroll sideways
+        view_row = QtWidgets.QHBoxLayout()
+        view_row.setSpacing(0)
+        view_row.addWidget(self.details_button)
+        view_row.addWidget(self.stats_button)
+        view_row.addStretch(1)
+        layout.addLayout(view_row)
 
         self._form = QtWidgets.QFormLayout()
         self._form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
@@ -133,12 +161,20 @@ class InfoPanel(QtWidgets.QScrollArea):
     def shown_object(self) -> NMObject | None:
         return self._object
 
+    @property
+    def showing_stats(self) -> bool:
+        """True when data arrays show statistics rather than their details."""
+        return self.stats_button.isChecked()
+
     # --- showing an object --------------------------------------------------
 
     def show_object(self, obj: NMObject | None) -> None:
         self._object = obj
         while self._form.rowCount():
             self._form.removeRow(0)
+        is_data = isinstance(obj, NMData)
+        self.details_button.setVisible(is_data)
+        self.stats_button.setVisible(is_data)
         if obj is None:
             self.title_label.setText("")
             self.edit_scales_button.hide()
@@ -156,7 +192,10 @@ class InfoPanel(QtWidgets.QScrollArea):
         elif isinstance(obj, NMToolFolder):
             self._show_tool_folder(obj)
         elif isinstance(obj, NMData):
-            self._show_data(obj)
+            if self.showing_stats:
+                self._show_data_stats(obj)
+            else:
+                self._show_data(obj)
         elif isinstance(obj, NMDataSeries):
             self._show_dataseries(obj)
         elif isinstance(obj, NMChannel):
@@ -164,7 +203,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         elif isinstance(obj, NMEpoch):
             self._show_epoch(obj)
         self.edit_scales_button.setVisible(
-            isinstance(obj, NMData) and self._locked_series(obj) is None
+            is_data and not self.showing_stats and self._locked_series(obj) is None
         )
         self._show_metadata(getattr(obj, "metadata", {}) if isinstance(obj, NMFolder) else {})
         self._show_notes(getattr(obj, "notes", None))
@@ -227,9 +266,9 @@ class InfoPanel(QtWidgets.QScrollArea):
             self._add_row("Type", _type_text(array.dtype))
             real = (numpy.issubdtype(array.dtype, numpy.integer)
                     or numpy.issubdtype(array.dtype, numpy.floating))
-            if array.size and real:
-                with numpy.errstate(all="ignore"):
-                    low, high = numpy.nanmin(array), numpy.nanmax(array)
+            # No Range when every point is NaN (nanmin would warn)
+            if array.size and real and not numpy.isnan(array.astype(float)).all():
+                low, high = numpy.nanmin(array), numpy.nanmax(array)
                 if numpy.isfinite(low) or numpy.isfinite(high):
                     self._add_row("Range", f"{low:g} to {high:g}")
         self._add_scale_rows(data.xscale, data.yscale)
@@ -247,6 +286,47 @@ class InfoPanel(QtWidgets.QScrollArea):
         locked = self._locked_series(data)
         if locked is not None:
             self._add_row("Locked", f"Yes, with data series '{locked.name}'")
+
+    def _show_data_stats(self, data: NMData) -> None:
+        """Basic statistics, as Igor's WaveStats (NaNs ignored)."""
+        array = data.nparray
+        if array is None or array.size == 0:
+            self._add_row("Stats", "No data")
+            return
+        if array.dtype.kind not in "iuf":
+            kind = "text" if array.dtype.kind in "OUS" else _type_text(array.dtype).split()[0]
+            self._add_row("Stats", f"No statistics for {kind} data")
+            return
+        values = array.astype(float).ravel()
+        stats = array_stats(values, ignore_nans=True)
+        yunits = f" {data.yscale.units}" if data.yscale.units else ""
+        self._add_row("Points", f"{array.size}  (NaNs {stats['NaNs']}, INFs {stats['INFs']})")
+        if stats["N"] == 0:
+            self._add_row("Stats", "Every point is NaN")
+            return
+        with numpy.errstate(all="ignore"):
+            median = float(numpy.nanmedian(values))
+        for label, value in (("Mean", stats["mean"]), ("Median", median),
+                             ("SD", stats["std"]), ("SEM", stats["sem"]),
+                             ("RMS", stats["rms"])):
+            self._add_row(label, _value_text(value, yunits))
+        for label, value, find in (("Min", stats["min"], numpy.nanargmin),
+                                   ("Max", stats["max"], numpy.nanargmax)):
+            text = _value_text(value, yunits)
+            if array.ndim == 1:  # where it is, like Igor's V_minloc / V_maxloc
+                text += f" at {self._x_at(data, int(find(values)))}"
+            self._add_row(label, text)
+
+    @staticmethod
+    def _x_at(data: NMData, index: int) -> str:
+        """The x value of point *index* (from the x array, or the x scale)."""
+        xarray = data.xarray
+        if xarray is not None and len(xarray) > index:
+            x = float(xarray[index])
+        else:
+            x = data.xscale.start + index * data.xscale.delta
+        units = f" {data.xscale.units}" if data.xscale.units else ""
+        return f"{x:g}{units}"
 
     @staticmethod
     def _locked_series(data: NMData):
