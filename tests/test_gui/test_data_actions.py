@@ -233,13 +233,13 @@ def test_choose_sets_in_browser_shows_sets_list(app):
     node = browser.tree.currentIndex().internalPointer()
     assert isinstance(node, _SetsNode) and node.container is app.demo.data
 
-    # Without sets, the Data list is shown instead
+    # Without sets, the (empty) Sets row is chosen: new sets are made there
     app.demo.data.sets.pop("DataSet")
     app.demo.data.sets.pop("Other")
     app.browser_widget.refresh()
     app.data_actions.choose_sets_in_browser()
     node = app.browser_widget.tree.currentIndex().internalPointer()
-    assert node.kind == "data" and node.owner is app.demo
+    assert isinstance(node, _SetsNode) and node.container is app.demo.data
 
 
 def test_choose_in_browser_shows_data_list(app):

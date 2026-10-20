@@ -179,7 +179,7 @@ def _menu_for(monkeypatch, show):
                         lambda menu, *a, **k: captured.setdefault("menu", menu))
     show()
     menu = captured.get("menu")
-    return {} if menu is None else {a.text(): a for a in menu.actions()}
+    return {} if menu is None else {a.text(): a for a in menu.actions() if a.text()}
 
 
 def _child(browser, parent, label):
@@ -315,30 +315,27 @@ def test_clear_set_in_tree(qtbot, series, monkeypatch):
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
     actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
-    assert list(actions) == ["Select Set", "Rename Set...", "Delete Set", "Clear Set"]
-    actions["Clear Set"].trigger()
+    assert list(actions) == ["Select", "Rename...", "Clear...", "Delete..."]
+    actions["Clear..."].trigger()
     assert series.epochs.sets.get_items("Set1", get_keys=True) == []
     assert "Set1" in series.epochs.sets and len(series.epochs) == 10
 
 
-def test_clear_set_from_sets_row(qtbot, series, monkeypatch):
+def test_clear_sets_from_the_sets_list(qtbot, series, monkeypatch):
     series.epochs.sets.add("Set2", [series.epochs["E2"]])
     series.epochs.sets.define_or("Both", "Set1", "Set2")
     window = _app_for(qtbot, series)  # keep the window alive
     browser = window.browser_widget
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
     browser.show_data_of(series, sets=True, kind="epochs")  # the Sets row
+    # The Sets row only makes new sets; clearing is on the sets themselves
     actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
-    clear_menu = actions["Clear Set"].menu()
-    # A combined set is defined by others, so it is not offered
-    assert [a.text() for a in clear_menu.actions()] == ["Set1", "Set2", "SetX"]
-    next(a for a in clear_menu.actions() if a.text() == "Set2").trigger()
-    assert series.epochs.sets.get_items("Set2", get_keys=True) == []
+    assert list(actions) == ["New..."]
 
     # Detail pane: selected set rows
     actions = _detail_menu(browser, monkeypatch, ["Set1", "Both"])
-    assert "Clear Set" in actions
-    actions["Clear Set"].trigger()
+    assert "Clear..." in actions
+    actions["Clear..."].trigger()
     assert series.epochs.sets.get_items("Set1", get_keys=True) == []
     assert series.epochs.sets.is_equation("Both")
 
@@ -351,8 +348,8 @@ def test_clear_group_and_groups(qtbot, series, monkeypatch):
 
     browser.show_groups_of(series, 1)
     actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
-    assert list(actions) == ["Select Group", "Clear Group", "Delete Group"]
-    actions["Clear Group"].trigger()
+    assert list(actions) == ["Select", "Clear...", "Delete..."]
+    actions["Clear..."].trigger()
     assert groups.group_numbers == [0, 1] and groups.get_items(1) == []
 
     groups.assign("E5", 1, quiet=True)
@@ -372,8 +369,8 @@ def test_clear_group_in_detail_pane(qtbot, series, monkeypatch):
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
     browser.show_groups_of(series)
     actions = _detail_menu(browser, monkeypatch, ["Group 0"])
-    assert list(actions) == ["Select Group", "Clear Group", "Delete Group"]
-    actions["Clear Group"].trigger()
+    assert list(actions) == ["Select", "Clear...", "Delete..."]
+    actions["Clear..."].trigger()
     assert groups.get_items(0) == [] and groups.get_items(1) == ["E1", "E3"]
 
 
@@ -382,7 +379,7 @@ def test_clear_is_cancelled_without_confirmation(qtbot, series, monkeypatch):
     browser = window.browser_widget
     monkeypatch.setattr(browser, "_confirm", lambda *a: False)
     browser.show_groups_of(series, 0)
-    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Clear Group"].trigger()
+    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Clear..."].trigger()
     assert series.epochs.groups.get_items(0) == ["E0", "E2"]
 
 
@@ -392,7 +389,7 @@ def test_rename_set_in_tree(qtbot, series, monkeypatch):
     monkeypatch.setattr(QtWidgets.QInputDialog, "getText",
                         staticmethod(lambda *a, **k: ("Mine", True)))
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
-    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Rename Set..."].trigger()
+    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Rename..."].trigger()
     assert "Mine" in series.epochs.sets and "Set1" not in series.epochs.sets
     assert series.epochs.sets.get_items("Mine", get_keys=True) == ["E1", "E3"]
 
@@ -401,10 +398,10 @@ def test_select_group_in_detail_pane(qtbot, series, monkeypatch):
     window = _app_for(qtbot, series)
     browser = window.browser_widget
     browser.show_groups_of(series)
-    _detail_menu(browser, monkeypatch, ["Group 1"])["Select Group"].trigger()
+    _detail_menu(browser, monkeypatch, ["Group 1"])["Select"].trigger()
     assert window.selection_model.selection["group"] == 1
     # No Select Group with two groups selected
-    assert "Select Group" not in _detail_menu(browser, monkeypatch, ["Group 0"])
+    assert "Select" not in _detail_menu(browser, monkeypatch, ["Group 0"])
 
 
 def test_delete_group(qtbot, series, monkeypatch):
@@ -415,7 +412,7 @@ def test_delete_group(qtbot, series, monkeypatch):
     window.selection_model.update(group=1)
 
     browser.show_groups_of(series, 1)
-    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Delete Group"].trigger()
+    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Delete..."].trigger()
     assert groups.group_numbers == [0] and groups.get_group("E1") is None
     assert len(series.epochs) == 10
     assert window.selection_model.selection["group"] is None  # strip follows
@@ -433,27 +430,22 @@ def test_delete_group(qtbot, series, monkeypatch):
     assert groups.group_numbers == [0, 1]
 
     # Detail pane, several at once
-    _detail_menu(browser, monkeypatch, ["Group 0", "Group 1"])["Delete Group"].trigger()
+    _detail_menu(browser, monkeypatch, ["Group 0", "Group 1"])["Delete..."].trigger()
     assert groups.group_numbers == []
     assert browser.tree.model().rowCount(browser.tree.currentIndex()) == 0
 
 
-def test_epochs_rows_sets_and_groups_have_tree_menus(qtbot, series, monkeypatch):
+def test_epochs_list_shows_only_epochs(qtbot, series):
     window = _app_for(qtbot, series)  # keep the window alive
     browser = window.browser_widget
-    browser.show_data_of(series, kind="epochs")  # column 2 lists Sets, Groups, E0...
-    view = browser.detail
+    browser.show_data_of(series, kind="epochs")
+    view, model = browser.detail, browser.tree.model()
     root = view.rootIndex()
-
-    def menu_at(label):
-        index = _child(browser, root, label)
-        view.selectionModel().clearSelection()
-        monkeypatch.setattr(view, "indexAt", lambda pos: index)
-        return _menu_for(monkeypatch,
-                         lambda: browser._show_detail_context_menu(QtCore.QPoint(0, 0)))
-
-    assert list(menu_at("Sets")) == ["New Set...", "Rename Set", "Delete Set", "Clear Set"]
-    assert list(menu_at("Groups")) == ["New Groups...", "Clear Groups", "Delete Group"]
+    shown = [model.data(model.index(r, 0, root)) for r in range(model.rowCount(root))
+             if not view.isRowHidden(r)]
+    assert shown == list(series.epochs.keys())  # no Sets or Groups rows
+    tree = [model.data(model.index(r, 0, root)) for r in range(2)]
+    assert tree == ["Sets", "Groups"]  # still in the tree
 
 
 def test_empty_space_under_groups_list(qtbot, series, monkeypatch):

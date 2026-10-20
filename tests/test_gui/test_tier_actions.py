@@ -62,7 +62,7 @@ def test_actions_appear_in_strip_and_menu_bar(app):
     folder_button = strip.action_button("folder")
     assert folder_button.isEnabled()
     assert [a.text() for a in folder_button.menu().actions() if a.text()] == [
-        "New Folder…", "Open / Import…", "Save…", "Duplicate…", "Rename…", "Close…",
+        "New Folder…", "Open / Import…", "Save…", "Duplicate…", "Rename…", "Delete…",
     ]
     assert strip.action_button("toolfolder").isEnabled()
 
@@ -178,28 +178,28 @@ def test_duplicate_folder_copies_data(app):
     assert copy.data["RecordA0"] is not manager.folders["Demo"].data["RecordA0"]
 
 
-def test_close_folder_asks_then_selects_neighbour(app):
+def test_delete_folder_asks_then_selects_neighbour(app):
     manager = app.selection_model.manager
-    app.folder_actions.close_folder()  # cancelled
+    app.folder_actions.delete_folder()  # cancelled
     assert "Demo" in manager.folders
     assert app.dialogs[-1][1]["current"] == "Demo"
 
     app.answers = [("Demo", None)]
-    app.folder_actions.close_folder()
+    app.folder_actions.delete_folder()
     assert list(manager.folders.keys()) == ["Other"]
     assert manager.select_values["folder"] is manager.folders["Other"]
 
     app.answers = [("Other", None)]
-    app.folder_actions.close_folder()
+    app.folder_actions.delete_folder()
     assert len(manager.folders) == 0
     assert manager.select_values["folder"] is None
-    assert not app.folder_actions.close_action.isEnabled()
+    assert not app.folder_actions.delete_action.isEnabled()
 
 
 def test_close_a_folder_that_is_not_selected(app):
     manager = app.selection_model.manager
     app.answers = [("Other", None)]
-    app.folder_actions.close_folder()
+    app.folder_actions.delete_folder()
     assert list(manager.folders.keys()) == ["Demo"]
     assert manager.select_values["folder"] is manager.folders["Demo"]
 
