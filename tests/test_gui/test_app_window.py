@@ -155,11 +155,11 @@ def test_plot_overlay_limits_and_downsamples_traces(qtbot, nm):
         pytest.skip("pyqtgraph is not installed")
 
     assert navigator.overlay_limit.value() == 50
-    assert not navigator.overlay_checkbox.isChecked()
+    assert not navigator.overlay_action.isChecked()
     assert len(navigator.plot_widget.getPlotItem().listDataItems()) == 1
 
     navigator.overlay_limit.setValue(3)
-    navigator.overlay_checkbox.setChecked(True)
+    navigator.overlay_action.setChecked(True)
 
     curves = navigator.plot_widget.getPlotItem().listDataItems()
     assert navigator.rendered_trace_count == 3
@@ -213,14 +213,14 @@ def test_browser_selection_updates_shared_gui_state(qtbot, nm):
 
     assert win.selection_model.selection["data"] is data
     assert win.selection_strip.combo("data").currentText() == "Record"
-    assert "Record" in win.plot_widget.selection_label.text()
+    assert "Record" in win.windowTitle()
     assert "Record" in win.history_panel.toPlainText()
 
     win.selection_model.clear()
 
     assert all(value is None for value in win.selection_model.selection.values())
     assert win.selection_strip.combo("data").currentText() == ""
-    assert "No selection" in win.plot_widget.selection_label.text()
+    assert win.windowTitle() == "pyNeuroMatic"
 
 
 def test_selection_menus_follow_folder_and_series(qtbot, nm):

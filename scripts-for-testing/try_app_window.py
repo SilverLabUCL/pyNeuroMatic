@@ -4,7 +4,7 @@ import numpy as np
 from PyQt6 import QtWidgets
 
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.gui.app_window import NMAppWindow
+from pyneuromatic.gui.app_window import NMAppWindow, set_app_name
 
 
 manager = NMManager(quiet=True)
@@ -35,9 +35,9 @@ add_dataseries(demo2, "Sweep", ("A", "B", "C"), n_epochs=2, phase=1.0)
 add_dataseries(demo2, "Event", ("A", "C"), n_epochs=3, phase=1.5)
 demo2.data.sets.add("SweepSet", ["SweepA0", "SweepB1"])
 
+set_app_name()  # "pyNeuroMatic" in the macOS menu bar, not "Python"
 app = QtWidgets.QApplication(sys.argv)
 window = NMAppWindow(manager)
-window.setWindowTitle("pyNeuroMatic - App Window")
 window.resize(1400, 900)
 window.show()
 

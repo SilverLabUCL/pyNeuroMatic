@@ -144,5 +144,13 @@ def test_selection_summary_lists_the_active_source(qtbot):
     ]
     selection.update(source="dataseries")
     assert selection_summary(selection.selection) == [
-        "Folder", "Record", "A", "E0", "Epoch Set: Set1 AND Group 0",
+        "Folder", "Record", "A", "Epoch Set1 AND Group 0",
     ]
+    selection.update(group=None)
+    assert selection_summary(selection.selection)[-1] == "Epoch Set1"
+    selection.update(epoch_set="All")
+    assert selection_summary(selection.selection)[-1] == "All Epochs"
+    selection.update(epoch_set="Current Epoch")
+    assert selection_summary(selection.selection)[-1] == "E0"
+    selection.update(epoch_set=None, group=0)
+    assert selection_summary(selection.selection)[-1] == "Group 0"

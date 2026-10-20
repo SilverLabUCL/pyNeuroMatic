@@ -310,6 +310,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             self._membership_model = model
             self._membership_view.setModel(model)
             self._last_toggled_row = None
+        else:
+            model.reload()  # the set or group may have changed elsewhere
         noun = "epochs" if hasattr(container, "groups") else "items"
         text = f"Tick {noun} to add them to {model.target_label}"
         self._edit_label.setText(text)

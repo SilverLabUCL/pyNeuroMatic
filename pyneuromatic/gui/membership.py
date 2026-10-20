@@ -26,6 +26,19 @@ def unassign_from_group(groups, names, group: int) -> None:
         groups.add_group(group, quiet=True)
 
 
+def set_item_group(groups, name: str, group: int | None) -> None:
+    """Put *name* in *group* (None: no group), keeping a group it empties."""
+    old = groups.get_group(name)
+    if old == group:
+        return
+    if group is None:
+        unassign_from_group(groups, [name], old)
+        return
+    groups.assign(name, group, quiet=True)
+    if old is not None and old not in groups.group_numbers:
+        groups.add_group(old, quiet=True)
+
+
 class MembershipModel(QtCore.QAbstractTableModel):
     """Every item of *container*, with a checkbox for membership of a target.
 
@@ -77,6 +90,20 @@ class MembershipModel(QtCore.QAbstractTableModel):
             self._members = set(
                 self.container.sets.get_items(self.set_name, get_keys=True) or []
             )
+
+    def reload(self) -> None:
+        """Re-read the items and members, after a change made elsewhere."""
+        names = list(self.container.keys())
+        if names != self._names:
+            self.beginResetModel()
+            self._names = names
+            self._reload_members()
+            self.endResetModel()
+            return
+        self._reload_members()
+        if self._names:
+            self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1,
+                                                               self.columnCount() - 1))
 
     def members(self) -> list[str]:
         """Member names, in container order."""
@@ -180,4 +207,4 @@ class MembershipModel(QtCore.QAbstractTableModel):
         return changed + self.set_checked(unticked, True)
 
 
-__all__ = ["MembershipModel", "unassign_from_group"]
+__all__ = ["MembershipModel", "set_item_group", "unassign_from_group"]

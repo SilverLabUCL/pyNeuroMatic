@@ -423,9 +423,31 @@ def selection_summary(selection: Mapping[str, Any]) -> list[str]:
         if selection.get("data_set") is not None:
             parts.append(f"Data Set: {selection['data_set']}")
     elif source == "dataseries":
-        parts += [name("dataseries"), name("channel"), name("epoch")]
-        parts.append(epoch_scope_label(selection) or None)
+        parts += [name("dataseries"), name("channel"), _epochs_summary(selection, name)]
     return [part for part in parts if part is not None]
+
+
+def _epochs_summary(selection: Mapping[str, Any], name) -> str | None:
+    """The epochs part of a summary: "Epoch Set1", "All Epochs", "E1"...
+
+    A stored Epoch Set reads "Epoch Set1" (with any Group, e.g. "Epoch Set1
+    AND Group 0"); All reads "All Epochs"; Current Epoch (or no Epoch Set or
+    Group) reads the current epoch's name.
+    """
+    epoch_set = selection.get("epoch_set")
+    group = selection.get("group")
+    group_text = f"Group {group}" if group is not None else None
+    if is_stored_epoch_set(epoch_set):
+        set_text = f"Epoch {epoch_set}"
+        if group_text is None:
+            return set_text
+        operator = selection.get("group_operator") or "+"
+        return f"{set_text} {operator} {group_text}"
+    if epoch_set == ALL_EPOCHS:
+        return group_text or "All Epochs"
+    if epoch_set is None and group_text is not None:
+        return group_text
+    return name("epoch")
 
 
 def epoch_scope_label(selection: Mapping[str, Any]) -> str:
