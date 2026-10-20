@@ -63,8 +63,9 @@ def test_data_array(app):
     assert panel.title_label.text() == "Single  ·  Data Array"
     assert panel.row_text("Points") == "3"
     assert panel.row_text("Range") == "-2.5 to 4"
-    assert panel.row_text("X Scale") == "start 0, delta 0.1 ms (Time)"
-    assert panel.row_text("Y Scale") == "mV (Vm)"
+    assert [panel.row_text(label) for label in (
+        "X Start", "X Delta", "X Label", "X Units", "Y Label", "Y Units",
+    )] == ["0", "0.1", "Time", "ms", "Vm", "mV"]
     assert panel.row_text("Data Series") == "—"
     assert panel.row_text("Sets") == "Mine"
     assert panel.notes_table.isVisibleTo(panel) and panel.notes_table.rowCount() == 0
@@ -185,3 +186,72 @@ def test_add_note_to_a_data_series(app, monkeypatch):
     panel.add_note_button.click()
     assert app.series.notes.note == "20 Hz train, 10 pulses"
     assert panel.notes_table.item(0, 1).text() == "20 Hz train, 10 pulses"
+
+
+def test_edit_scales_button_only_for_data_arrays(app):
+    browser = app.browser_widget
+    panel = browser.info_panel
+    browser.show_data_of(app.folder, select="Single")
+    assert panel.edit_scales_button.isVisibleTo(panel)
+    for obj in (app.folder, app.series, app.series.epochs["E0"]):
+        browser.show_object(obj)
+        assert not panel.edit_scales_button.isVisibleTo(panel)
+
+
+def test_edit_scales_of_the_array_shown(app, monkeypatch):
+    browser = app.browser_widget
+    panel = browser.info_panel
+    # The browser shows Single, while the strip has another array selected
+    app.selection_model.update(data=app.folder.data["RecordA0"], source="data")
+    browser.show_data_of(app.folder, select="Single")
+    asked = []
+
+    def ask(x, y_rows, context, error):
+        asked.append((x, y_rows, context, error))
+        return {"xdelta": 0.05, "xunits": "s", "y": {"Y": {"label": "Im", "units": "pA"}}}
+
+    monkeypatch.setattr(app.data_actions, "_ask_scales", ask)
+    panel.edit_scales_button.click()
+    x, y_rows, context, error = asked[0]
+    assert x == {"xstart": "0", "xdelta": "0.1", "xlabel": "Time", "xunits": "ms"}
+    assert y_rows == [("Y", "Vm", "mV")]
+    assert context == ("Data", "Demo › Single")
+    assert error is None
+
+    data = app.folder.data["Single"]
+    assert (data.xscale.delta, data.xscale.units) == (0.05, "s")
+    assert (data.yscale.label, data.yscale.units) == ("Im", "pA")
+    assert app.folder.data["RecordA0"].xscale.delta == 1  # the selected array is untouched
+    # The panel shows the new scales
+    panel = browser.info_panel
+    assert [panel.row_text(label) for label in (
+        "X Start", "X Delta", "X Label", "X Units", "Y Label", "Y Units",
+    )] == ["0", "0.05", "Time", "s", "Im", "pA"]
+
+
+def test_edit_scales_cancelled(app, monkeypatch):
+    browser = app.browser_widget
+    browser.show_data_of(app.folder, select="Single")
+    monkeypatch.setattr(app.data_actions, "_ask_scales", lambda *args: None)
+    browser.info_panel.edit_scales_button.click()
+    assert app.folder.data["Single"].xscale.delta == 0.1
+
+
+def test_locked_array_has_no_edit_button(app):
+    app.series.locked = True
+    browser = app.browser_widget
+    browser.show_data_of(app.folder, select="RecordA1")
+    panel = browser.info_panel
+    assert not panel.edit_scales_button.isVisibleTo(panel)
+    assert panel.row_text("Locked") == "Yes, with data series 'Record'"
+    assert panel.row_text("X Delta") is not None  # the scales are still shown
+
+
+def test_long_x_label_has_its_own_row(app):
+    data = app.folder.data["Single"]
+    data.xscale.label = "time after peak"
+    browser = app.browser_widget
+    browser.show_data_of(app.folder, select="Single")
+    assert browser.info_panel.row_text("X Label") == "time after peak"
+    browser.show_object(app.series.channels["A"])  # channels too; empty ones read "—"
+    assert browser.info_panel.row_text("Y Units") == "—"

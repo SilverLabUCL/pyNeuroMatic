@@ -980,6 +980,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.content_changed.connect(self._on_browser_content_changed)
             self.browser_widget.data_created.connect(self._on_browser_data_created)
+            self.browser_widget.edit_scales_requested.connect(self.data_actions.edit_scales)
         # A run or a deleted folder changes the Subfolder list
         stats2.results_changed.connect(self.selection_strip.refresh_options)
         stats2.plot_requested.connect(self._show_plot_values)

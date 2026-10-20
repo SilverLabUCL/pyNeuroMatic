@@ -137,6 +137,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     content_changed = QtCore.pyqtSignal()
     # A data array was created with New…; the app shows it in the Table
     data_created = QtCore.pyqtSignal(object)
+    # The info panel's Edit Scales... was clicked for a data array
+    edit_scales_requested = QtCore.pyqtSignal(object)
 
     def __init__(
         self,
@@ -207,6 +209,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         # A single object (folder, data array, epoch...) is described here
         # rather than listed: its rows are already in the tree
         self._info_panel = InfoPanel(self)
+        self._info_panel.edit_scales_requested.connect(self.edit_scales_requested)
 
         self._detail_stack = QtWidgets.QStackedWidget(self)
         self._detail_stack.addWidget(self._detail)

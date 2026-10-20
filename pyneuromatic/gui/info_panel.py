@@ -45,13 +45,9 @@ def _names(names, limit: int = 8) -> str:
     return ", ".join(names)
 
 
-def _scale_text(scale, with_start: bool) -> str:
-    """e.g. "start 0, delta 0.1 ms (Time)"."""
-    units = f" {scale.units}" if scale.units else ""
-    text = f"start {scale.start:g}, delta {scale.delta:g}{units}" if with_start else (
-        scale.units or "—"
-    )
-    return text + (f" ({scale.label})" if scale.label else "")
+def _text(value) -> str:
+    """A label or units, or "—" when empty."""
+    return str(value) if value else "—"
 
 
 def _sets_of(container, name: str) -> list[str]:
@@ -66,6 +62,8 @@ class InfoPanel(QtWidgets.QScrollArea):
 
     # A note was added to the object shown
     notes_changed = QtCore.pyqtSignal()
+    # Edit Scales... was clicked for this data array
+    edit_scales_requested = QtCore.pyqtSignal(object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -87,6 +85,18 @@ class InfoPanel(QtWidgets.QScrollArea):
         self._form = QtWidgets.QFormLayout()
         self._form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
         layout.addLayout(self._form)
+
+        # Changes go through a dialog, as in NeuroMatic (data arrays only)
+        self.edit_scales_button = QtWidgets.QPushButton("Edit Scales...", self._body)
+        self.edit_scales_button.setToolTip("Change the X start, delta, label and units, "
+                                           "and the Y label and units")
+        self.edit_scales_button.clicked.connect(
+            lambda: self.edit_scales_requested.emit(self._object)
+        )
+        edit_row = QtWidgets.QHBoxLayout()
+        edit_row.addWidget(self.edit_scales_button)
+        edit_row.addStretch(1)
+        layout.addLayout(edit_row)
 
         # Imported metadata (folders), collapsed to one row per source folder
         self.metadata_tree = QtWidgets.QTreeWidget(self._body)
@@ -130,6 +140,7 @@ class InfoPanel(QtWidgets.QScrollArea):
             self._form.removeRow(0)
         if obj is None:
             self.title_label.setText("")
+            self.edit_scales_button.hide()
             self._show_metadata({})
             self._show_notes(None)
             return
@@ -151,6 +162,9 @@ class InfoPanel(QtWidgets.QScrollArea):
             self._show_channel(obj)
         elif isinstance(obj, NMEpoch):
             self._show_epoch(obj)
+        self.edit_scales_button.setVisible(
+            isinstance(obj, NMData) and self._locked_series(obj) is None
+        )
         self._show_metadata(getattr(obj, "metadata", {}) if isinstance(obj, NMFolder) else {})
         self._show_notes(getattr(obj, "notes", None))
 
@@ -179,6 +193,16 @@ class InfoPanel(QtWidgets.QScrollArea):
         field.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
         self._form.addRow(label, field)
 
+    def _add_scale_rows(self, xscale, yscale) -> None:
+        """One row each, in the Edit Scales dialog's order, so a long label
+        (e.g. "time after peak") is never squeezed."""
+        self._add_row("X Start", f"{xscale.start:g}")
+        self._add_row("X Delta", f"{xscale.delta:g}")
+        self._add_row("X Label", _text(xscale.label))
+        self._add_row("X Units", _text(xscale.units))
+        self._add_row("Y Label", _text(yscale.label))
+        self._add_row("Y Units", _text(yscale.units))
+
     # --- per object type ---------------------------------------------------
 
     def _show_folder(self, folder: NMFolder) -> None:
@@ -204,8 +228,7 @@ class InfoPanel(QtWidgets.QScrollArea):
                     low, high = numpy.nanmin(array), numpy.nanmax(array)
                 if numpy.isfinite(low) or numpy.isfinite(high):
                     self._add_row("Range", f"{low:g} to {high:g}")
-        self._add_row("X Scale", _scale_text(data.xscale, with_start=True))
-        self._add_row("Y Scale", _scale_text(data.yscale, with_start=False))
+        self._add_scale_rows(data.xscale, data.yscale)
         container = data._container
         if container is not None and hasattr(container, "dataseries_of"):
             places = []
@@ -217,6 +240,17 @@ class InfoPanel(QtWidgets.QScrollArea):
                 places.append(" / ".join(p for p in (series.name, channel, epoch) if p))
             self._add_row("Data Series", _names(places))
         self._add_row("Sets", _names(_sets_of(container, data.name)))
+        locked = self._locked_series(data)
+        if locked is not None:
+            self._add_row("Locked", f"Yes, with data series '{locked.name}'")
+
+    @staticmethod
+    def _locked_series(data: NMData):
+        """The locked data series holding *data* (its scales can't change)."""
+        container = data._container
+        if container is None or not hasattr(container, "dataseries_of"):
+            return None
+        return next((ds for ds in container.dataseries_of(data.name) if ds.locked), None)
 
     def _show_dataseries(self, series: NMDataSeries) -> None:
         self._add_row("Channels", _names(series.channels.keys()))
@@ -233,8 +267,7 @@ class InfoPanel(QtWidgets.QScrollArea):
 
     def _show_channel(self, channel: NMChannel) -> None:
         self._add_row("Data", _count(len(channel.data), "array"))
-        self._add_row("X Scale", _scale_text(channel.xscale, with_start=True))
-        self._add_row("Y Scale", _scale_text(channel.yscale, with_start=False))
+        self._add_scale_rows(channel.xscale, channel.yscale)
 
     def _show_epoch(self, epoch: NMEpoch) -> None:
         series = epoch._parent
