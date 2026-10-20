@@ -14,6 +14,7 @@ from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
 from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -87,6 +88,31 @@ class TestNMDataSeriesEquality(NMDataSeriesTestBase):
     def test_not_equal_to_non_dataseries(self):
         result = self.ds.__eq__("not a dataseries")
         self.assertEqual(result, NotImplemented)
+
+
+class TestNMDataSeriesNotes(NMDataSeriesTestBase):
+    """Tests for NMDataSeries notes."""
+
+    def test_starts_with_no_notes(self):
+        self.assertIsInstance(self.ds.notes, NMNotes)
+        self.assertEqual(len(self.ds.notes), 0)
+
+    def test_add_note(self):
+        self.ds.notes.add("20 Hz train, 10 pulses")
+        self.assertEqual(self.ds.notes.note, "20 Hz train, 10 pulses")
+
+    def test_not_equal_different_notes(self):
+        ds1 = NMDataSeries(parent=self.nm, name="Record")
+        ds2 = NMDataSeries(parent=self.nm, name="Record")
+        ds1.notes.add("note")
+        self.assertNotEqual(ds1, ds2)
+
+    def test_deepcopy_copies_notes(self):
+        self.ds.notes.add("note")
+        ds2 = copy.deepcopy(self.ds)
+        self.assertEqual(ds2.notes.note, "note")
+        ds2.notes.add("only in the copy")
+        self.assertEqual(len(self.ds.notes), 1)
 
 
 class TestNMDataSeriesWithData(unittest.TestCase):

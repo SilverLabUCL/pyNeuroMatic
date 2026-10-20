@@ -26,6 +26,7 @@ from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
+from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel
 from pyneuromatic.gui.membership import MembershipModel, unassign_from_group
 from pyneuromatic.gui.folder_model import (
     FolderTreeModel,
@@ -174,12 +175,6 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         # column can list every item with a checkbox for membership
         self._edit_checkbox = QtWidgets.QCheckBox("Edit", self)
         self._edit_checkbox.setToolTip("List every item with a checkbox to add or remove it")
-        self._edit_label = QtWidgets.QLabel("", self)
-        # Let the label shrink (it is also the tooltip) so the bar never
-        # forces the second column wider than the tree leaves it
-        self._edit_label.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred
-        )
         self._all_button = QtWidgets.QToolButton(self)
         self._all_button.setText("All")
         self._none_button = QtWidgets.QToolButton(self)
@@ -188,7 +183,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._invert_button.setText("Invert")
         edit_row = QtWidgets.QHBoxLayout()
         edit_row.setContentsMargins(4, 2, 4, 2)
-        edit_row.addWidget(self._edit_label, stretch=1)
+        edit_row.addStretch(1)
         for widget in (self._all_button, self._none_button, self._invert_button,
                        self._edit_checkbox):
             edit_row.addWidget(widget)
@@ -209,9 +204,14 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._press_rows: list[int] | None = None
         self._reselect_rows: list[int] = []
 
+        # A single object (folder, data array, epoch...) is described here
+        # rather than listed: its rows are already in the tree
+        self._info_panel = InfoPanel(self)
+
         self._detail_stack = QtWidgets.QStackedWidget(self)
         self._detail_stack.addWidget(self._detail)
         self._detail_stack.addWidget(self._membership_view)
+        self._detail_stack.addWidget(self._info_panel)
         right = QtWidgets.QWidget(self)
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -232,6 +232,16 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(splitter)
 
+        # Start with the top Folders row open, so the folders are listed, and
+        # the current folder open too, showing its Data and Data Series
+        folders = self._model.index(0, 0)
+        self._tree.expand(folders)
+        current = self._nm.folders.selected_value
+        for row in range(self._model.rowCount(folders)):
+            index = self._model.index(row, 0, folders)
+            if current is not None and index.internalPointer() is current:
+                self._tree.expand(index)
+
     @property
     def model(self) -> FolderTreeModel:
         return self._model
@@ -243,6 +253,14 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     @property
     def detail(self) -> QtWidgets.QTableView:
         return self._detail
+
+    @property
+    def info_panel(self) -> InfoPanel:
+        return self._info_panel
+
+    @property
+    def is_showing_info(self) -> bool:
+        return self._detail_stack.currentWidget() is self._info_panel
 
     @property
     def edit_checkbox(self) -> QtWidgets.QCheckBox:
@@ -299,7 +317,6 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             button.setVisible(editing)
         if not editing:
             self._detail_stack.setCurrentWidget(self._detail)
-            self._edit_label.setText("")
             return
         container, set_name, group, _note = target
         model = self._membership_model
@@ -313,9 +330,6 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         else:
             model.reload()  # the set or group may have changed elsewhere
         noun = "epochs" if hasattr(container, "groups") else "items"
-        text = f"Tick {noun} to add them to {model.target_label}"
-        self._edit_label.setText(text)
-        self._edit_label.setToolTip(text)
         # Groups are exclusive, so Invert (and All) would raid other groups
         self._all_button.setText("Ungrouped" if model.is_group else "All")
         self._all_button.setToolTip(
@@ -617,6 +631,19 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     ) -> None:
         self._detail.setRootIndex(current if current.isValid() else QtCore.QModelIndex())
         self._update_edit_mode()
+        self._update_info_panel(current)
+
+    def _update_info_panel(self, current: QtCore.QModelIndex) -> None:
+        """Describe a single object; group rows keep their list."""
+        node = current.internalPointer() if current.isValid() else None
+        if isinstance(node, (_SetMemberNode, _GroupMemberNode)):
+            node = node.obj  # a set or group member is the object itself
+        if isinstance(node, INFO_TYPES):
+            self._info_panel.show_object(node)
+            self._detail_stack.setCurrentWidget(self._info_panel)
+        elif self._detail_stack.currentWidget() is self._info_panel:
+            self._info_panel.show_object(None)
+            self._detail_stack.setCurrentWidget(self._detail)
 
     def _request_selection(self, index: QtCore.QModelIndex) -> None:
         self.selection_requested.emit(self._selection_for_index(index))
