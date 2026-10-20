@@ -105,27 +105,9 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.metadata_tree.setMaximumHeight(160)
         layout.addWidget(self.metadata_tree)
 
-        self.notes_header = QtWidgets.QLabel("Notes", self._body)
-        self.notes_header.setStyleSheet("font-weight: bold;")
-        layout.addWidget(self.notes_header)
-        self.notes_table = QtWidgets.QTableWidget(0, 2, self._body)
-        self.notes_table.setHorizontalHeaderLabels(["Date", "Note"])
-        self.notes_table.horizontalHeader().setStretchLastSection(True)
-        self.notes_table.verticalHeader().hide()
-        self.notes_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.notes_table.setWordWrap(True)
-        # The Note column takes whatever width the Date column leaves
-        self.notes_table.setHorizontalScrollBarPolicy(
-            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        self.notes_table.setMinimumHeight(100)
-        layout.addWidget(self.notes_table)
-        self.add_note_button = QtWidgets.QPushButton("Add Note...", self._body)
-        self.add_note_button.clicked.connect(self.add_note)
-        note_row = QtWidgets.QHBoxLayout()
-        note_row.addWidget(self.add_note_button)
-        note_row.addStretch(1)
-        layout.addLayout(note_row)
+        self.notes_view = NotesWidget(self._body)
+        self.notes_view.notes_changed.connect(self.notes_changed)
+        layout.addWidget(self.notes_view)
         layout.addStretch(1)
 
     @property
@@ -305,41 +287,89 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.metadata_tree.resizeColumnToContents(0)
 
     def _show_notes(self, notes) -> None:
-        has_notes = notes is not None
-        for widget in (self.notes_header, self.notes_table, self.add_note_button):
-            widget.setVisible(has_notes)
-        self.notes_table.setRowCount(0)
-        if not has_notes:
-            return
-        for entry in notes:
-            row = self.notes_table.rowCount()
-            self.notes_table.insertRow(row)
+        self.notes_view.setVisible(notes is not None)
+        self.notes_view.set_notes(notes, self._object.name if self._object else "")
+
+    # The notes widgets, by their old names
+    @property
+    def notes_table(self) -> QtWidgets.QTableWidget:
+        return self.notes_view.table
+
+    @property
+    def add_note_button(self) -> QtWidgets.QPushButton:
+        return self.notes_view.add_button
+
+    def add_note(self) -> None:
+        self.notes_view.add_note()
+
+
+class NotesWidget(QtWidgets.QWidget):
+    """Timestamped notes (date over time, then the note) with Add Note...
+
+    Used by the info panel and for the notes of a set or group.
+    """
+
+    # A note was added
+    notes_changed = QtCore.pyqtSignal()
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._notes = None
+        self._owner = ""
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.header = QtWidgets.QLabel("Notes", self)
+        self.header.setStyleSheet("font-weight: bold;")
+        layout.addWidget(self.header)
+        self.table = QtWidgets.QTableWidget(0, 2, self)
+        self.table.setHorizontalHeaderLabels(["Date", "Note"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().hide()
+        self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setWordWrap(True)
+        # The Note column takes whatever width the Date column leaves
+        self.table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.table.setMinimumHeight(100)
+        layout.addWidget(self.table)
+        self.add_button = QtWidgets.QPushButton("Add Note...", self)
+        self.add_button.clicked.connect(self.add_note)
+        button_row = QtWidgets.QHBoxLayout()
+        button_row.addWidget(self.add_button)
+        button_row.addStretch(1)
+        layout.addLayout(button_row)
+
+    def set_notes(self, notes, owner: str) -> None:
+        """Show *notes* (an NMNotes, or None) of *owner* (e.g. "Set1")."""
+        self._notes, self._owner = notes, owner
+        self.table.setRowCount(0)
+        for entry in notes or []:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
             date = str(entry.get("date", ""))
             # Date over time, so the column stays narrow
             date_item = QtWidgets.QTableWidgetItem(date.replace(" ", "\n", 1))
             date_item.setToolTip(date)
-            self.notes_table.setItem(row, 0, date_item)
-            self.notes_table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(entry.get("note", ""))))
-        self.notes_table.resizeColumnToContents(0)
-        self.notes_table.resizeRowsToContents()
+            self.table.setItem(row, 0, date_item)
+            self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(entry.get("note", ""))))
+        self.table.resizeColumnToContents(0)
+        self.table.resizeRowsToContents()
 
     def _ask_note(self) -> str | None:
         """The Add Note dialog (replaced in tests)."""
         text, accepted = QtWidgets.QInputDialog.getMultiLineText(
-            self, "Add Note", f"Note for {self._object.name}:"
+            self, "Add Note", f"Note for {self._owner}:"
         )
         return text if accepted else None
 
     def add_note(self) -> None:
-        notes = getattr(self._object, "notes", None)
-        if notes is None:
+        if self._notes is None:
             return
         text = self._ask_note()
         if not text or not text.strip():
             return
-        notes.add(text.strip())
-        self._show_notes(notes)
+        self._notes.add(text.strip())
+        self.set_notes(self._notes, self._owner)
         self.notes_changed.emit()
 
 
-__all__ = ["INFO_TYPES", "InfoPanel"]
+__all__ = ["INFO_TYPES", "InfoPanel", "NotesWidget"]

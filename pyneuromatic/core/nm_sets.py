@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_object import NMObject
 
 import pyneuromatic.core.nm_history as nmh
+from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -58,6 +59,8 @@ class NMSets:
         self._name = name
         self._parent = parent
         self._map: dict[str, list[str] | tuple[str, str, str]] = {}
+        # Notes describing each set (e.g. what it contains), by set name
+        self._notes: dict[str, NMNotes] = {}
         self._nmobjects: dict = {}
         self._resolve_fxn: Callable = self._nmobjects_default
 
@@ -101,6 +104,7 @@ class NMSets:
         result._name = self._name
         result._parent = None
         result._map = copy.deepcopy(self._map, memo)
+        result._notes = copy.deepcopy(self._notes, memo)
         result._nmobjects = {}
         result._resolve_fxn = result._nmobjects_default
         return result
@@ -220,11 +224,16 @@ class NMSets:
                 assert isinstance(s_value, list)
                 if not nmu.keys_are_equal(s_value, o_keys):
                     return False
+            # Compared without creating empty notes
+            o_notes = other._notes.get(other._getkey(s_key))
+            if list(self._notes.get(s_key) or []) != list(o_notes or []):
+                return False
         return True
 
     def pop(self, key: str, quiet: bool = nmc.QUIET) -> Any:  # type: ignore[override]
         key = self._getkey(key)
         value = self._map.pop(key)
+        self._notes.pop(key, None)
         nmh.history("removed set '%s'" % key, path=self.path_str, quiet=quiet)
         return value
 
@@ -233,6 +242,7 @@ class NMSets:
             return
         names = list(self._map.keys())
         self._map.clear()
+        self._notes.clear()
         nmh.history(
             "cleared all sets: %s" % names, path=self.path_str, quiet=quiet
         )
@@ -540,6 +550,8 @@ class NMSets:
         else:
             assert isinstance(value, list)
             self._map[newkey] = list(value)
+        if key in self._notes:
+            self._notes[newkey] = copy.deepcopy(self._notes[key])
         nmh.history(
             "duplicated set '%s' as '%s'" % (key, newkey),
             path=self.path_str,
@@ -566,6 +578,8 @@ class NMSets:
                 new_map[k] = (op, s1, s2)
         self._map.clear()
         self._map.update(new_map)
+        if key in self._notes:
+            self._notes[newkey] = self._notes.pop(key)
         nmh.history(
             "renamed set '%s' as '%s'" % (key, newkey),
             path=self.path_str,
@@ -590,6 +604,20 @@ class NMSets:
         self._map.update(new_map)
         if list(self._map.keys()) != old_keys:
             nmh.history("reordered sets", path=self.path_str, quiet=quiet)
+
+    def notes(self, key: str) -> NMNotes:
+        """Notes for set *key* (e.g. what it contains); kept when the set is
+        emptied, moved when it is renamed and dropped when it is removed.
+
+        Raises:
+            KeyError: If set *key* does not exist.
+        """
+        actual = self._getkey(key)
+        if actual is None:
+            raise KeyError("key name '%s' does not exist" % key)
+        if actual not in self._notes:
+            self._notes[actual] = NMNotes()
+        return self._notes[actual]
 
     def empty(self, key: str, quiet: bool = nmc.QUIET) -> None:
         """Clear the contents of a set, converting equations to empty lists."""

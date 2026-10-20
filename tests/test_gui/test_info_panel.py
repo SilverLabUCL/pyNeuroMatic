@@ -114,14 +114,14 @@ def test_add_note(app, monkeypatch):
     browser = app.browser_widget
     browser.show_data_of(app.folder, select="Single")
     panel = browser.info_panel
-    monkeypatch.setattr(panel, "_ask_note", lambda: "  Baseline drift  ")
+    monkeypatch.setattr(panel.notes_view, "_ask_note", lambda: "  Baseline drift  ")
     panel.add_note_button.click()
     data = app.folder.data["Single"]
     assert [entry["note"] for entry in data.notes] == ["Baseline drift"]
     assert panel.notes_table.rowCount() == 1
     assert panel.notes_table.item(0, 1).text() == "Baseline drift"
 
-    monkeypatch.setattr(panel, "_ask_note", lambda: None)  # cancelled
+    monkeypatch.setattr(panel.notes_view, "_ask_note", lambda: None)  # cancelled
     panel.add_note_button.click()
     assert len(data.notes) == 1
 
@@ -182,7 +182,7 @@ def test_add_note_to_a_data_series(app, monkeypatch):
     browser = app.browser_widget
     browser.show_object(app.series)
     panel = browser.info_panel
-    monkeypatch.setattr(panel, "_ask_note", lambda: "20 Hz train, 10 pulses")
+    monkeypatch.setattr(panel.notes_view, "_ask_note", lambda: "20 Hz train, 10 pulses")
     panel.add_note_button.click()
     assert app.series.notes.note == "20 Hz train, 10 pulses"
     assert panel.notes_table.item(0, 1).text() == "20 Hz train, 10 pulses"

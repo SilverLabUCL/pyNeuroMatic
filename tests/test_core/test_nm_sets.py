@@ -494,6 +494,76 @@ class TestNMSetsEquality(NMSetsTestBase):
         self.assertEqual(self.sets, sets2)
 
 
+class TestNMSetsNotes(NMSetsTestBase):
+    """Tests for notes on each set."""
+
+    def setUp(self):
+        super().setUp()
+        self.sets.add("set1", ["obj0", "obj1"], quiet=QUIET)
+        self.sets.add("set2", ["obj2"], quiet=QUIET)
+
+    def test_starts_empty(self):
+        self.assertEqual(len(self.sets.notes("set1")), 0)
+
+    def test_add_and_case_insensitive(self):
+        self.sets.notes("set1").add("stable access")
+        self.assertEqual(self.sets.notes("SET1").note, "stable access")
+
+    def test_missing_set_raises(self):
+        with self.assertRaises(KeyError):
+            self.sets.notes("nope")
+
+    def test_rename_moves_notes(self):
+        self.sets.notes("set1").add("stable access")
+        self.sets.rename("set1", "stable", quiet=QUIET)
+        self.assertEqual(self.sets.notes("stable").note, "stable access")
+
+    def test_remove_drops_notes(self):
+        self.sets.notes("set1").add("stable access")
+        del self.sets["set1"]
+        self.sets.add("set1", quiet=QUIET)
+        self.assertEqual(len(self.sets.notes("set1")), 0)
+
+    def test_clear_drops_notes(self):
+        self.sets.notes("set1").add("note")
+        self.sets.clear(quiet=QUIET)
+        self.sets.add("set1", quiet=QUIET)
+        self.assertEqual(len(self.sets.notes("set1")), 0)
+
+    def test_empty_keeps_notes(self):
+        self.sets.notes("set1").add("stable access")
+        self.sets.empty("set1", quiet=QUIET)
+        self.assertEqual(self.sets.notes("set1").note, "stable access")
+
+    def test_duplicate_copies_notes(self):
+        self.sets.notes("set1").add("stable access")
+        self.sets.duplicate("set1", "set3", quiet=QUIET)
+        self.sets.notes("set3").add("only in the copy")
+        self.assertEqual(len(self.sets.notes("set1")), 1)
+        self.assertEqual(len(self.sets.notes("set3")), 2)
+
+    def test_deepcopy_copies_notes(self):
+        self.sets.notes("set1").add("stable access")
+        other = copy.deepcopy(self.sets)
+        self.assertEqual(other.notes("set1").note, "stable access")
+        other.notes("set1").add("only in the copy")
+        self.assertEqual(len(self.sets.notes("set1")), 1)
+
+    def test_equality_compares_notes(self):
+        other = copy.deepcopy(self.sets)
+        other._nmobjects = self.objects
+        self.assertEqual(self.sets, other)
+        self.sets.notes("set1").add("note")
+        self.assertNotEqual(self.sets, other)
+
+    def test_equality_ignores_empty_notes(self):
+        other = copy.deepcopy(self.sets)
+        other._nmobjects = self.objects
+        self.sets.notes("set1")  # looked at, nothing added
+        self.assertEqual(self.sets, other)
+        self.assertEqual(other._notes, {})  # comparing created nothing
+
+
 class TestNMSetsPathStr(unittest.TestCase):
     """Tests for NMSets.path_str property."""
 

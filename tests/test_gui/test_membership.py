@@ -464,3 +464,49 @@ def test_empty_space_under_groups_list(qtbot, series, monkeypatch):
     actions = _menu_for(monkeypatch,
                         lambda: browser._show_detail_context_menu(QtCore.QPoint(0, 0)))
     assert list(actions) == ["New Groups...", "Clear Groups", "Delete Group"]
+
+
+def test_set_notes_below_the_list(qtbot, series, monkeypatch):
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
+    notes = browser.target_notes
+    browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
+    assert notes.isVisibleTo(browser) and notes.table.rowCount() == 0
+
+    monkeypatch.setattr(notes, "_ask_note", lambda: "Cells with stable access")
+    notes.add_button.click()
+    assert series.epochs.sets.notes("Set1").note == "Cells with stable access"
+    assert notes.table.item(0, 1).text() == "Cells with stable access"
+
+    # Another set shows its own notes
+    series.epochs.sets.notes("Set2").add("After drug")
+    browser.show_data_of(series, sets=True, select="Set2", kind="epochs")
+    assert notes.table.item(0, 1).text() == "After drug"
+
+
+def test_edit_hides_the_notes(qtbot, series):
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
+    browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
+    browser.edit_checkbox.setChecked(True)
+    assert browser.is_editing and not browser.target_notes.isVisibleTo(browser)
+    browser.edit_checkbox.setChecked(False)
+    assert browser.target_notes.isVisibleTo(browser)
+
+    # Leaving edit mode for a combined set (Edit disabled) shows its notes
+    series.epochs.sets.add("Set2", [series.epochs["E2"]])
+    series.epochs.sets.define_or("Both", "Set1", "Set2")
+    browser.refresh()
+    browser.edit_checkbox.setChecked(True)
+    browser.show_data_of(series, sets=True, select="Both", kind="epochs")
+    assert not browser.edit_checkbox.isEnabled()  # can't be edited...
+    assert browser.target_notes.isVisibleTo(browser)  # ...but can be described
+
+
+def test_no_set_notes_off_sets(qtbot, series):
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
+    browser.show_object(series)  # the info panel, with its own notes
+    assert not browser.target_notes.isVisibleTo(browser)
+    browser.show_groups_of(series, 1)  # groups: not yet
+    assert not browser.target_notes.isVisibleTo(browser)

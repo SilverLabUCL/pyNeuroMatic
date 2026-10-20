@@ -26,7 +26,7 @@ from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
-from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel
+from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel, NotesWidget
 from pyneuromatic.gui.membership import MembershipModel, unassign_from_group
 from pyneuromatic.gui.folder_model import (
     FolderTreeModel,
@@ -220,7 +220,15 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         right_layout.addWidget(self._edit_bar)
-        right_layout.addWidget(self._detail_stack, stretch=1)
+        self._target_notes = NotesWidget(self)
+        self._target_notes.hide()
+        self._detail_split = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical, self)
+        self._detail_split.addWidget(self._detail_stack)
+        self._detail_split.addWidget(self._target_notes)
+        self._detail_split.setStretchFactor(0, 3)
+        self._detail_split.setStretchFactor(1, 1)
+        self._detail_split.setChildrenCollapsible(False)
+        right_layout.addWidget(self._detail_split, stretch=1)
 
         self._edit_checkbox.toggled.connect(self._on_edit_toggled)
         self._all_button.clicked.connect(lambda: self._edit_all("all"))
@@ -266,6 +274,11 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         return self._detail_stack.currentWidget() is self._info_panel
 
     @property
+    def target_notes(self) -> NotesWidget:
+        """The notes of the set chosen in the tree (shown below its list)."""
+        return self._target_notes
+
+    @property
     def edit_checkbox(self) -> QtWidgets.QCheckBox:
         return self._edit_checkbox
 
@@ -309,10 +322,31 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             self._edit_checkbox.setEnabled(target is not None and target[3] is None)
             self._edit_checkbox.setToolTip(target[3] if target else "")
             self._show_edit_list(None)
-            return
-        self._edit_checkbox.setEnabled(True)
-        self._edit_checkbox.setToolTip("List every item with a checkbox to add or remove it")
-        self._show_edit_list(target if self._edit_checkbox.isChecked() else None)
+        else:
+            self._edit_checkbox.setEnabled(True)
+            self._edit_checkbox.setToolTip("List every item with a checkbox to add or remove it")
+            self._show_edit_list(target if self._edit_checkbox.isChecked() else None)
+        self._update_target_notes()  # after Edit is settled: editing hides the notes
+
+    def _notes_target(self):
+        """(notes, owner name) of the set chosen in the tree, or None."""
+        target = self._edit_target(self._tree.currentIndex().internalPointer())
+        if target is None:
+            return None
+        container, set_name, _group, _note = target
+        if set_name is None or set_name not in container.sets:
+            return None
+        return container.sets.notes(set_name), set_name
+
+    def _update_target_notes(self, *_args) -> None:
+        """Show the chosen set's notes below its list, except while editing
+        its members (the checkbox list takes the column then)."""
+        found = self._notes_target()
+        editing = self._edit_checkbox.isChecked() and self._edit_checkbox.isEnabled()
+        show = found is not None and not editing
+        self._target_notes.setVisible(show)
+        if show:
+            self._target_notes.set_notes(*found)
 
     def _show_edit_list(self, target) -> None:
         editing = target is not None
