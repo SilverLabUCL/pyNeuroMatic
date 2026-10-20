@@ -212,7 +212,8 @@ def _detail_menu(browser, monkeypatch, labels):
 
 
 def test_remove_from_set_in_tree(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
     member = _child(browser, browser.tree.currentIndex(), "E3")
     actions = _tree_menu(browser, monkeypatch, member)
@@ -223,7 +224,8 @@ def test_remove_from_set_in_tree(qtbot, series, monkeypatch):
 
 
 def test_remove_from_group_in_tree(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     browser.show_groups_of(series, 1)
     member = _child(browser, browser.tree.currentIndex(), "E1")
     actions = _tree_menu(browser, monkeypatch, member)
@@ -246,7 +248,8 @@ def test_remove_from_group_in_detail_pane(qtbot, series, monkeypatch):
 
 
 def test_no_remove_from_group_menu_without_selection(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     browser.show_groups_of(series, 0)
     assert _detail_menu(browser, monkeypatch, []) == {}
 
@@ -261,7 +264,8 @@ def test_emptied_groups_are_kept(series):
 
 
 def test_ticking_inside_a_selection_ticks_every_selected_row(qtbot, series):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
     browser.edit_checkbox.setChecked(True)
     view, model = browser.membership_view, browser.membership_model
@@ -286,7 +290,8 @@ def test_ticking_inside_a_selection_ticks_every_selected_row(qtbot, series):
 
 
 def test_group_edit_buttons(qtbot, series):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     browser.show_groups_of(series, 1)
     browser.edit_checkbox.setChecked(True)
     assert browser._all_button.text() == "Ungrouped"
@@ -305,7 +310,8 @@ def test_group_edit_buttons(qtbot, series):
 
 
 def test_clear_set_in_tree(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
     actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
@@ -318,7 +324,8 @@ def test_clear_set_in_tree(qtbot, series, monkeypatch):
 def test_clear_set_from_sets_row(qtbot, series, monkeypatch):
     series.epochs.sets.add("Set2", [series.epochs["E2"]])
     series.epochs.sets.define_or("Both", "Set1", "Set2")
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
     browser.show_data_of(series, sets=True, kind="epochs")  # the Sets row
     actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
@@ -338,7 +345,8 @@ def test_clear_set_from_sets_row(qtbot, series, monkeypatch):
 
 def test_clear_group_and_groups(qtbot, series, monkeypatch):
     groups = series.epochs.groups
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
 
     browser.show_groups_of(series, 1)
@@ -359,7 +367,8 @@ def test_clear_group_and_groups(qtbot, series, monkeypatch):
 
 def test_clear_group_in_detail_pane(qtbot, series, monkeypatch):
     groups = series.epochs.groups
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
     browser.show_groups_of(series)
     actions = _detail_menu(browser, monkeypatch, ["Group 0"])
@@ -369,7 +378,8 @@ def test_clear_group_in_detail_pane(qtbot, series, monkeypatch):
 
 
 def test_clear_is_cancelled_without_confirmation(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     monkeypatch.setattr(browser, "_confirm", lambda *a: False)
     browser.show_groups_of(series, 0)
     _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Clear Group"].trigger()
@@ -377,7 +387,8 @@ def test_clear_is_cancelled_without_confirmation(qtbot, series, monkeypatch):
 
 
 def test_rename_set_in_tree(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     monkeypatch.setattr(QtWidgets.QInputDialog, "getText",
                         staticmethod(lambda *a, **k: ("Mine", True)))
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
@@ -428,7 +439,8 @@ def test_delete_group(qtbot, series, monkeypatch):
 
 
 def test_epochs_rows_sets_and_groups_have_tree_menus(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     browser.show_data_of(series, kind="epochs")  # column 2 lists Sets, Groups, E0...
     view = browser.detail
     root = view.rootIndex()
@@ -445,7 +457,8 @@ def test_epochs_rows_sets_and_groups_have_tree_menus(qtbot, series, monkeypatch)
 
 
 def test_empty_space_under_groups_list(qtbot, series, monkeypatch):
-    browser = _app_for(qtbot, series).browser_widget
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
     browser.show_groups_of(series)
     monkeypatch.setattr(browser.detail, "indexAt", lambda pos: QtCore.QModelIndex())
     actions = _menu_for(monkeypatch,

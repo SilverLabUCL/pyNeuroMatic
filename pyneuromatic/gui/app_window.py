@@ -7,6 +7,9 @@ right-hand context panel, and a history/results panel.
 """
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
+import sys
 from math import sin
 
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -16,6 +19,7 @@ try:
 except ImportError:  # pragma: no cover - optional GUI dependency
     pg = None
 
+from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, EXCLUDE_SET
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.context_views import (
     DATA_VIEW,
@@ -24,6 +28,7 @@ from pyneuromatic.gui.context_views import (
     ValuesPlot,
 )
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
+from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
     SelectionModel,
     selection_summary,
@@ -38,6 +43,43 @@ from pyneuromatic.gui.tier_actions import (
     SeriesActions,
 )
 from pyneuromatic.gui.stats_tab import StatsToolTab
+
+
+APP_NAME = "pyNeuroMatic"
+
+
+def set_app_name(name: str = APP_NAME) -> None:
+    """Name the application, e.g. in the macOS menu bar.
+
+    Call before creating the QApplication. On macOS the first menu is named
+    after the bundle, which for a script is "Python"; this renames it by
+    setting the main bundle's CFBundleName through the Objective-C runtime.
+    """
+    QtCore.QCoreApplication.setApplicationName(name)
+    if sys.platform != "darwin":
+        return
+    try:
+        objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
+        ctypes.cdll.LoadLibrary(ctypes.util.find_library("Foundation"))
+        objc.objc_getClass.restype = ctypes.c_void_p
+        objc.objc_getClass.argtypes = [ctypes.c_char_p]
+        objc.sel_registerName.restype = ctypes.c_void_p
+        objc.sel_registerName.argtypes = [ctypes.c_char_p]
+        send = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p).value
+        void_p = ctypes.c_void_p
+        call = ctypes.CFUNCTYPE(void_p, void_p, void_p)(send)
+        call_text = ctypes.CFUNCTYPE(void_p, void_p, void_p, ctypes.c_char_p)(send)
+        call_set = ctypes.CFUNCTYPE(None, void_p, void_p, void_p, void_p)(send)
+        sel, cls = objc.sel_registerName, objc.objc_getClass
+
+        def ns_string(text: str):
+            return call_text(cls(b"NSString"), sel(b"stringWithUTF8String:"), text.encode())
+
+        bundle = call(cls(b"NSBundle"), sel(b"mainBundle"))
+        info = call(bundle, sel(b"infoDictionary"))
+        call_set(info, sel(b"setObject:forKey:"), ns_string(name), ns_string("CFBundleName"))
+    except (OSError, AttributeError, TypeError):  # pragma: no cover - cosmetic only
+        pass
 
 
 class ToolRail(QtWidgets.QWidget):
@@ -111,12 +153,13 @@ class _PlaceholderToolWidget(QtWidgets.QWidget):
 class PlotPanel(QtWidgets.QWidget):
     """Plot panel with a trace navigator for data and dataseries modes."""
 
+    # The current epoch or data array was added to (or removed from) a set or group
+    membership_changed = QtCore.pyqtSignal()
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        self.selection_label = QtWidgets.QLabel("No selection", self)
-        layout.addWidget(self.selection_label)
 
         # Channel tabs, then tabs of tools with results (e.g. Stats)
         self.view_tabs = ChannelToolBar(self)
@@ -154,28 +197,68 @@ class PlotPanel(QtWidgets.QWidget):
         navigator_layout.addWidget(self.trace_next_button)
 
         self.trace_name_label = QtWidgets.QLabel("No trace", self)
-        navigator_layout.addWidget(self.trace_name_label, stretch=1)
-        trace_layout.addLayout(navigator_layout)
+        navigator_layout.addWidget(self.trace_name_label)
+        # e.g. "Showing 3 of 8 traces" while traces are overlaid
+        self.overlay_status_label = QtWidgets.QLabel("", self)
+        navigator_layout.addSpacing(8)
+        navigator_layout.addWidget(self.overlay_status_label, stretch=1)
 
-        overlay_layout = QtWidgets.QHBoxLayout()
-        self.overlay_checkbox = QtWidgets.QCheckBox("Overlay traces", self)
-        self.overlay_checkbox.setToolTip(
+        # Set checkboxes (and, for epochs, a Group dropdown) for the current
+        # epoch or data array, as in NeuroMatic
+        self.membership_row = QtWidgets.QWidget(self)
+        membership_layout = QtWidgets.QHBoxLayout(self.membership_row)
+        membership_layout.setContentsMargins(0, 0, 0, 0)
+        self._sets_layout = QtWidgets.QHBoxLayout()
+        self._sets_layout.setContentsMargins(0, 0, 0, 0)
+        membership_layout.addLayout(self._sets_layout)
+        self.set_checkboxes: dict[str, QtWidgets.QCheckBox] = {}
+        membership_layout.addSpacing(8)
+        self.group_label = QtWidgets.QLabel("Group", self.membership_row)
+        membership_layout.addWidget(self.group_label)
+        self.group_combo = QtWidgets.QComboBox(self.membership_row)
+        self.group_combo.setToolTip("The current epoch's group")
+        self.group_combo.setMinimumContentsLength(1)
+        self.group_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.group_combo.currentIndexChanged.connect(self._on_group_combo_changed)
+        membership_layout.addWidget(self.group_combo)
+        membership_layout.addStretch(1)
+        self._updating_membership = False
+        trace_layout.addLayout(navigator_layout)
+        # Directly beneath the trace navigator
+        trace_layout.addWidget(self.membership_row)
+
+        # Graph functions, in a ⋯ menu at the plot's upper-left corner
+        self.graph_menu = QtWidgets.QMenu("Graph", self)
+        self.overlay_action = self.graph_menu.addAction("Overlay Traces")
+        self.overlay_action.setCheckable(True)
+        self.overlay_action.setToolTip(
             "Plot nearby epochs together for the selected data series and channel"
         )
-        overlay_layout.addWidget(self.overlay_checkbox)
-        overlay_layout.addWidget(QtWidgets.QLabel("Limit", self))
-        self.overlay_limit = QtWidgets.QSpinBox(self)
+        limit_row = QtWidgets.QWidget(self.graph_menu)
+        limit_layout = QtWidgets.QHBoxLayout(limit_row)
+        limit_layout.setContentsMargins(28, 2, 8, 2)
+        limit_layout.addWidget(QtWidgets.QLabel("Limit", limit_row))
+        self.overlay_limit = QtWidgets.QSpinBox(limit_row)
         self.overlay_limit.setRange(1, 2000)
         self.overlay_limit.setValue(50)
-        self.overlay_limit.setFixedWidth(72)
-        overlay_layout.addWidget(self.overlay_limit)
-        self.overlay_status_label = QtWidgets.QLabel("", self)
-        overlay_layout.addWidget(self.overlay_status_label, stretch=1)
-        trace_layout.addLayout(overlay_layout)
+        self.overlay_limit.setToolTip("Most traces to overlay")
+        limit_layout.addWidget(self.overlay_limit)
+        limit_action = QtWidgets.QWidgetAction(self.graph_menu)
+        limit_action.setDefaultWidget(limit_row)
+        self.graph_menu.addAction(limit_action)
+        self.graph_menu.addSeparator()
+        self.grid_action = self.graph_menu.addAction("Grid")
+        self.grid_action.setCheckable(True)
+        self.rescale_action = self.graph_menu.addAction("Rescale")
+        self.rescale_action.setToolTip("Fit the axes to the data")
 
         self._selection_model: SelectionModel | None = None
         self._trace_entries: list[tuple[object, object | None]] = []
         self._trace_mode: str | None = None
+        # The data or epoch container being stepped through (for its sets)
+        self._trace_container = None
         self._updating_navigator = False
         self._updating_channel_tabs = False
         self._plot_dataseries = None
@@ -186,14 +269,30 @@ class PlotPanel(QtWidgets.QWidget):
         self.trace_index.valueChanged.connect(self._on_trace_index_changed)
         self.trace_previous_button.clicked.connect(lambda: self._step_trace(-1))
         self.trace_next_button.clicked.connect(lambda: self._step_trace(1))
-        self.overlay_checkbox.toggled.connect(self._render_current_traces)
+        self.overlay_action.toggled.connect(self._render_current_traces)
+        self.overlay_action.toggled.connect(self._sync_overlay_limit)
         self.overlay_limit.valueChanged.connect(self._render_current_traces)
+        self.grid_action.toggled.connect(self._show_grid)
+        self.rescale_action.triggered.connect(self.rescale)
 
         if pg is not None:
             self.plot_widget = pg.PlotWidget(self)
             self.plot_widget.setBackground("w")
             self.plot_widget.setTitle("Preview")
             trace_layout.addWidget(self.plot_widget)
+            self.graph_button = QtWidgets.QToolButton(self.plot_widget)
+            self.graph_button.setText("⋯")
+            self.graph_button.setToolTip("Graph functions")
+            self.graph_button.setAutoRaise(True)
+            # Like the strip's ⋯ buttons: no menu arrow
+            self.graph_button.setStyleSheet(
+                "QToolButton::menu-indicator { image: none; width: 0px; }"
+            )
+            self.graph_button.setMenu(self.graph_menu)
+            self.graph_button.setPopupMode(
+                QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup
+            )
+            self.graph_button.move(2, 2)
         else:
             self.plot_widget = None
             self.plot_fallback_label = QtWidgets.QLabel(
@@ -234,10 +333,6 @@ class PlotPanel(QtWidgets.QWidget):
 
     def update_selection(self, selection: dict) -> None:
         self._last_selection = selection.copy()
-        selected = selection_summary(selection)
-        self.selection_label.setText(
-            "Selection: " + " / ".join(selected) if selected else "No selection"
-        )
         self._update_channel_tabs(selection)
         self._update_trace_entries(selection)
 
@@ -283,6 +378,7 @@ class PlotPanel(QtWidgets.QWidget):
         entries: list[tuple[object, object | None]] = []
         mode = None
         current_item = None
+        container = None
 
         data = source_object(selection, "data")
         dataseries = source_object(selection, "dataseries")
@@ -293,6 +389,7 @@ class PlotPanel(QtWidgets.QWidget):
                 entries = [(item, item) for item in context.data.values()]
                 mode = "data"
                 current_item = data
+                container = context.data
         elif dataseries is not None:
             channel = dataseries.channels.get(self._plot_channel_name)
             if channel is None:
@@ -309,14 +406,17 @@ class PlotPanel(QtWidgets.QWidget):
                 ]
                 mode = "dataseries"
                 current_item = selection.get("epoch") or dataseries.epochs.selected_value
+                container = dataseries.epochs
 
         self._trace_entries = entries
+        self._trace_container = container
         self._trace_mode = mode
         if not entries:
             self._sync_trace_controls(0)
             self.trace_name_label.setText("No trace")
             self.current_trace = None
             self._render_current_traces()
+            self._update_membership()
             return
 
         current_index = next(
@@ -331,6 +431,7 @@ class PlotPanel(QtWidgets.QWidget):
             else f"{item.name} (no data)"
         )
         self._render_current_traces()
+        self._update_membership()
 
     def _sync_trace_controls(self, current_value: int) -> None:
         count = len(self._trace_entries)
@@ -343,9 +444,128 @@ class PlotPanel(QtWidgets.QWidget):
         self.trace_previous_button.setEnabled(current_value > 0 and count > 0)
         self.trace_next_button.setEnabled(current_value < count - 1 and count > 0)
         can_overlay = self._trace_mode == "dataseries" and self.plot_widget is not None
-        self.overlay_checkbox.setEnabled(can_overlay)
-        self.overlay_limit.setEnabled(can_overlay and self.overlay_checkbox.isChecked())
+        self.overlay_action.setEnabled(can_overlay)
+        self._sync_overlay_limit()
         self._updating_navigator = False
+
+    # --- the current item's sets and group -------------------------------
+
+    # Epochs show Set1/Set2/SetX; data has no default sets, so the first
+    # few. Either way the strip's set is added if it isn't shown.
+    MAX_DATA_SET_BOXES = 3
+
+    def current_item(self):
+        """The epoch or data array shown (the blue trace when overlaid)."""
+        if self._trace_mode is None or not self._trace_entries:
+            return None
+        index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
+        return self._trace_entries[index][0]
+
+    def current_epoch(self):
+        """The epoch shown, when stepping through a data series' epochs."""
+        return self.current_item() if self._trace_mode == "dataseries" else None
+
+    def _membership_set_names(self) -> list[str]:
+        container = self._trace_container
+        if self._trace_mode == "dataseries":
+            names = list(DEFAULT_EPOCH_SETS)
+            chosen = self._last_selection.get("epoch_set")  # may be All, Current Epoch
+        else:
+            names = list(container.sets.keys())[:self.MAX_DATA_SET_BOXES]
+            chosen = self._last_selection.get("data_set")
+        # Plus the strip's set, so any set can be ticked while stepping
+        if chosen is not None and chosen not in names and chosen in container.sets:
+            names.append(chosen)
+        return names
+
+    def _rebuild_set_checkboxes(self, names: list[str]) -> None:
+        if list(self.set_checkboxes) == names:
+            return
+        for box in self.set_checkboxes.values():
+            # Gone at once: deleteLater alone leaves them drawn until the
+            # event loop runs
+            self._sets_layout.removeWidget(box)
+            box.hide()
+            box.setParent(None)
+            box.deleteLater()
+        self.set_checkboxes = {}
+        noun = "epoch" if self._trace_mode == "dataseries" else "data array"
+        for set_name in names:
+            box = QtWidgets.QCheckBox(set_name, self.membership_row)
+            box.setToolTip(f"Add the current {noun} to {set_name}")
+            if self._trace_mode == "dataseries" and set_name == EXCLUDE_SET:
+                box.setToolTip("Exclude the current epoch from analysis (SetX)")
+                box.setStyleSheet("QCheckBox { color: #c62828; }")
+            box.toggled.connect(
+                lambda checked, name=set_name: self._on_set_box_toggled(name, checked)
+            )
+            self.set_checkboxes[set_name] = box
+            self._sets_layout.addWidget(box)
+
+    def _update_membership(self, *_args) -> None:
+        item = self.current_item()
+        container = self._trace_container
+        if item is None or container is None:
+            self.membership_row.hide()
+            return
+        names = self._membership_set_names()
+        # Shown only when there is a set (or group) to put the item in
+        has_groups = (self._trace_mode == "dataseries"
+                      and bool(container.groups.group_numbers))
+        self.membership_row.setVisible(bool(names) or has_groups)
+        if not names and not has_groups:
+            return
+        self._updating_membership = True
+        self._rebuild_set_checkboxes(names)
+        for set_name, box in self.set_checkboxes.items():
+            box.setEnabled(not container.sets.is_equation(set_name))
+            box.setChecked(container.sets.contains(set_name, item.name))
+        self.group_label.setVisible(has_groups)
+        self.group_combo.setVisible(has_groups)
+        if has_groups:
+            self.group_combo.clear()
+            self.group_combo.addItem("", None)
+            for number in container.groups.group_numbers:
+                self.group_combo.addItem(str(number), number)
+            self.group_combo.setCurrentIndex(
+                max(self.group_combo.findData(container.groups.get_group(item.name)), 0)
+            )
+        self._updating_membership = False
+
+    def _on_set_box_toggled(self, set_name: str, checked: bool) -> None:
+        item = self.current_item()
+        if self._updating_membership or item is None:
+            return
+        sets = self._trace_container.sets
+        if checked:
+            sets.add(set_name, [item])  # creates the set if it was deleted
+        else:
+            sets.remove(set_name, [item], error=False)
+        self.membership_changed.emit()
+
+    def _on_group_combo_changed(self, index: int) -> None:
+        epoch = self.current_epoch()
+        if self._updating_membership or epoch is None:
+            return
+        set_item_group(self._trace_container.groups, epoch.name,
+                       self.group_combo.itemData(index))
+        self.membership_changed.emit()
+
+    # --- graph functions ------------------------------------------------
+
+    def _sync_overlay_limit(self, *_args) -> None:
+        self.overlay_limit.setEnabled(
+            self.overlay_action.isEnabled() and self.overlay_action.isChecked()
+        )
+
+    def _show_grid(self, show: bool) -> None:
+        if self.plot_widget is not None:
+            self.plot_widget.showGrid(x=show, y=show, alpha=0.3)
+
+    def rescale(self) -> None:
+        """Fit the axes to the plotted data again (after zooming or panning)."""
+        if self.plot_widget is not None:
+            self.plot_widget.enableAutoRange()
 
     def _step_trace(self, delta: int) -> None:
         if self.trace_index.isEnabled():
@@ -376,7 +596,7 @@ class PlotPanel(QtWidgets.QWidget):
             return
 
         current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
-        overlay = self.overlay_checkbox.isChecked() and self._trace_mode == "dataseries"
+        overlay = self.overlay_action.isChecked() and self._trace_mode == "dataseries"
         if overlay:
             total = len(self._trace_entries)
             limit = min(self.overlay_limit.value(), total)
@@ -461,6 +681,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self._build_tool_shell()
         self._build_history_panel()
         self.selection_model.selection_changed.connect(self._append_selection_history)
+        # The selection is shown in the window title, saving plot space
+        self.selection_model.selection_changed.connect(self._update_window_title)
+        self._update_window_title(self.selection_model.selection)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("File")
@@ -545,10 +768,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.context_panel.setTabsClosable(False)
         self.plot_widget = PlotPanel(self.context_panel)
         self.plot_widget.bind_selection_model(self.selection_model)
+        self.plot_widget.membership_changed.connect(self._on_content_changed)
         self.context_panel.addTab(self.plot_widget, "Plot")
         self.table_panel = TablePanel(self.context_panel)
         self.table_panel.bind_selection_model(self.selection_model)
         self.context_panel.addTab(self.table_panel, "Table")
+        self._build_view_tabs_corner()
 
         # Tool views appear in both panels while the folder has their results
         stats2 = self.stats_tab.stats2
@@ -631,6 +856,41 @@ class NMAppWindow(QtWidgets.QMainWindow):
             if view is not None and not getattr(view, "closed", False):
                 view.close()
         super().closeEvent(event)
+
+    def _build_view_tabs_corner(self) -> None:
+        """Channel/tool tabs to the right of the Plot/Table tabs, saving a row.
+
+        Each panel keeps its own tab bar; only the open panel's is shown.
+        """
+        corner = QtWidgets.QWidget(self.context_panel)
+        layout = QtWidgets.QHBoxLayout(corner)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self._view_tabs_holders = {}
+        for panel in (self.plot_widget, self.table_panel):
+            # A holder, since each tab bar hides itself when it has no tabs
+            holder = QtWidgets.QWidget(corner)
+            holder_layout = QtWidgets.QHBoxLayout(holder)
+            holder_layout.setContentsMargins(0, 0, 0, 0)
+            panel.view_tabs.setDrawBase(False)
+            holder_layout.addWidget(panel.view_tabs)
+            layout.addWidget(holder)
+            self._view_tabs_holders[panel] = holder
+        self.context_panel.setCornerWidget(corner, QtCore.Qt.Corner.TopRightCorner)
+        self.context_panel.currentChanged.connect(self._show_current_view_tabs)
+        self._show_current_view_tabs()
+
+    def _show_current_view_tabs(self, *_args) -> None:
+        current = self.context_panel.currentWidget()
+        for panel, holder in self._view_tabs_holders.items():
+            holder.setVisible(panel is current)
+
+    def _update_window_title(self, selection: dict) -> None:
+        """e.g. "pyNeuroMatic — Demo1 / Record / A / E0"."""
+        selected = selection_summary(selection)
+        self.setWindowTitle(
+            "pyNeuroMatic — " + " / ".join(selected) if selected else "pyNeuroMatic"
+        )
 
     def _on_content_changed(self) -> None:
         """Reload views after folders, subfolders, data or sets change."""
