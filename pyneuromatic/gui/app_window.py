@@ -388,7 +388,9 @@ class PlotPanel(QtWidgets.QWidget):
         if pg is not None:
             self.plot_widget = pg.PlotWidget(self)
             self.plot_widget.setBackground("w")
-            self.plot_widget.setTitle("Preview")
+            # No title (the navigator names the trace); a small top margin
+            # keeps the corner ⋯ button clear of the axis labels
+            self.plot_widget.getPlotItem().setContentsMargins(0, 22, 4, 0)
             trace_layout.addWidget(self.plot_widget)
             self.graph_button = QtWidgets.QToolButton(self.plot_widget)
             self.graph_button.setText("⋯")
@@ -777,7 +779,6 @@ class PlotPanel(QtWidgets.QWidget):
         if not self._trace_entries:
             self.trace_count_label.setText("of 0")
             self.overlay_status_label.setText("")
-            self.plot_widget.setTitle("Preview")
             return
 
         current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
@@ -818,9 +819,6 @@ class PlotPanel(QtWidgets.QWidget):
             curve.setClipToView(True)
             self.rendered_trace_count += 1
 
-        selected_item = self._trace_entries[current_index][0]
-        suffix = " (overlay)" if overlay else ""
-        self.plot_widget.setTitle(f"{selected_item.name}{suffix}")
 
     @staticmethod
     def _x_values(data):
@@ -980,6 +978,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.content_changed.connect(self._on_browser_content_changed)
             self.browser_widget.data_created.connect(self._on_browser_data_created)
+            self.browser_widget.edit_scales_requested.connect(self.data_actions.edit_scales)
         # A run or a deleted folder changes the Subfolder list
         stats2.results_changed.connect(self.selection_strip.refresh_options)
         stats2.plot_requested.connect(self._show_plot_values)

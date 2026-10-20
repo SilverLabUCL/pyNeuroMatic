@@ -1182,16 +1182,28 @@ class DataActions(TierActions):
         container.rename(answer[0], answer[1])
         self._changed()
 
-    def edit_scales(self) -> None:
-        data = self._selection.selection.get("data")
-        container = self._data_container()
+    def edit_scales(self, data=None) -> None:
+        """Edit the scales of *data* (e.g. the array the browser shows), or
+        of the selected data array."""
+        if data is None:
+            data = self._selection.selection.get("data")
+            container = self._data_container()
+            context = self._context_text()
+        else:
+            container = data._container
+            owner = getattr(container, "_parent", None)
+            folder = data._folder
+            context = " / ".join(
+                obj.name for obj in (folder, owner if owner is not folder else None)
+                if obj is not None
+            )
         if data is None or container is None:
             return
         lock_error = self._lock_error(container, data.name)
         changes = self._ask_scales(
             scale_fields([data]),
             [("Y", data.yscale.label, data.yscale.units)],
-            ("Data", f"{self._context_text()} › {data.name}"),
+            ("Data", f"{context} › {data.name}"),
             lock_error,
         )
         if not changes or lock_error:  # the dialog only shows a locked array

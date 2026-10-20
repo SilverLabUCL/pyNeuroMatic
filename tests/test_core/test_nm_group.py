@@ -319,6 +319,64 @@ class TestNMGroupsDeleteGroup(unittest.TestCase):
             g.delete_group("1", quiet=QUIET)
 
 
+class TestNMGroupsNotes(unittest.TestCase):
+
+    def setUp(self):
+        self.g, self.names = _make_groups(n=6)  # groups 0, 1, 2
+
+    def test_starts_empty(self):
+        self.assertEqual(len(self.g.notes(1)), 0)
+
+    def test_add_note(self):
+        self.g.notes(1).add("-80 mV steps")
+        self.assertEqual(self.g.notes(1).note, "-80 mV steps")
+
+    def test_missing_group_raises(self):
+        with self.assertRaises(KeyError):
+            self.g.notes(7)
+        with self.assertRaises(TypeError):
+            self.g.notes("1")
+
+    def test_a_described_group_survives_losing_its_items(self):
+        self.g.notes(1).add("-80 mV steps")
+        for name in self.g.get_items(1):
+            self.g.unassign(name, quiet=QUIET)
+        self.assertEqual(self.g.group_numbers, [0, 1, 2])
+        self.assertEqual(self.g.notes(1).note, "-80 mV steps")
+
+    def test_an_undescribed_group_still_vanishes(self):
+        self.g.notes(1)  # looked at, nothing added
+        for name in self.g.get_items(1):
+            self.g.unassign(name, quiet=QUIET)
+        self.assertEqual(self.g.group_numbers, [0, 2])
+
+    def test_delete_group_drops_notes(self):
+        self.g.notes(1).add("note")
+        self.g.delete_group(1, quiet=QUIET)
+        self.assertNotIn(1, self.g.group_numbers)
+        self.g.add_group(1, quiet=QUIET)
+        self.assertEqual(len(self.g.notes(1)), 0)
+
+    def test_clear_drops_notes(self):
+        self.g.notes(1).add("note")
+        self.g.clear(quiet=QUIET)
+        self.assertEqual(self.g.group_numbers, [])
+
+    def test_deepcopy_copies_notes(self):
+        self.g.notes(1).add("note")
+        other = copy.deepcopy(self.g)
+        self.assertEqual(other.notes(1).note, "note")
+        other.notes(1).add("only in the copy")
+        self.assertEqual(len(self.g.notes(1)), 1)
+
+    def test_equality_compares_notes_but_not_empty_ones(self):
+        other = copy.deepcopy(self.g)
+        self.g.notes(0)  # looked at only
+        self.assertEqual(self.g, other)
+        self.g.notes(0).add("note")
+        self.assertNotEqual(self.g, other)
+
+
 # =========================================================================
 # NMGroups — rename_item
 # =========================================================================

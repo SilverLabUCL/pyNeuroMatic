@@ -34,6 +34,7 @@ from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, NMEpoch, NMEpochContainer
+from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
@@ -88,6 +89,7 @@ class NMDataSeries(NMObject):
         self.__channel_container: NMChannelContainer = NMChannelContainer(parent=self)
         self.__epoch_container: NMEpochContainer = NMEpochContainer(parent=self)
         self.__locked = False
+        self.__notes = NMNotes()  # e.g. what the series recorded
         # Empty epoch sets to start with; SetX excludes its epochs from runs
         for set_name in DEFAULT_EPOCH_SETS:
             self.__epoch_container.sets.add(set_name, quiet=True)
@@ -104,6 +106,8 @@ class NMDataSeries(NMObject):
         if self.__channel_container != other.__channel_container:
             return False
         if self.__epoch_container != other.__epoch_container:
+            return False
+        if self.__notes != other.__notes:
             return False
         return True
 
@@ -193,6 +197,11 @@ class NMDataSeries(NMObject):
         k.update(self.channels.content)
         k.update(self.epochs.content)
         return k
+
+    @property
+    def notes(self) -> NMNotes:
+        """Return notes for this data series."""
+        return self.__notes
 
     @property
     def channels(self) -> NMChannelContainer:
