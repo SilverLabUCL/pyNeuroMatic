@@ -503,14 +503,15 @@ def test_run_info_counts_epochs_and_data_arrays(qtbot):
     qtbot.addWidget(window)
     tab = window.stats_tab
 
-    assert tab.run_info_label.text() == "3 epochs"  # All epochs by default
+    assert tab.run_info_label.text() == "n=3"  # All epochs by default
     window.selection_model.update(epoch_set="Current Epoch")
-    assert tab.run_info_label.text() == "1 epoch"
+    assert tab.run_info_label.text() == "n=1"
     window.selection_model.update(epoch_set="Pair")
-    assert tab.run_info_label.text() == "2 epochs"
+    assert tab.run_info_label.text() == "n=2"
 
     window.selection_model.update(data=folder.data["RecordA1"])
-    assert tab.run_info_label.text() == "1 data array"
+    assert tab.run_info_label.text() == "n=1"
+    assert tab.run_info_label.toolTip() == "Run analyses 1 data array"
 
 
 def test_run_info_explains_missing_selection(qtbot):

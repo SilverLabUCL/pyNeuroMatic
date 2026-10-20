@@ -7,6 +7,7 @@ right-hand context panel, and a history/results panel.
 """
 from __future__ import annotations
 
+import bisect
 import ctypes
 import ctypes.util
 import sys
@@ -30,7 +31,10 @@ from pyneuromatic.gui.context_views import (
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
+    ALL_EPOCHS,
     SelectionModel,
+    is_stored_epoch_set,
+    scoped_epoch_names,
     selection_summary,
     source_object,
 )
@@ -80,6 +84,54 @@ def set_app_name(name: str = APP_NAME) -> None:
         call_set(info, sel(b"setObject:forKey:"), ns_string(name), ns_string("CFBundleName"))
     except (OSError, AttributeError, TypeError):  # pragma: no cover - cosmetic only
         pass
+
+
+def _navigator_icon(kind: str, palette: QtGui.QPalette) -> QtGui.QIcon:
+    """A chevron (< >), or a chevron with a bar (|< >|), all in one style.
+
+    *kind* is "first", "previous", "next" or "last".
+    """
+    size, scale = 18, 3  # drawn large, so it stays crisp on Retina screens
+    icon = QtGui.QIcon()
+    for mode, role_group in ((QtGui.QIcon.Mode.Normal, QtGui.QPalette.ColorGroup.Active),
+                             (QtGui.QIcon.Mode.Disabled, QtGui.QPalette.ColorGroup.Disabled)):
+        pixmap = QtGui.QPixmap(size * scale, size * scale)
+        pixmap.setDevicePixelRatio(scale)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        pen = QtGui.QPen(palette.color(role_group, QtGui.QPalette.ColorRole.ButtonText), 2.4)
+        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        forward = kind in ("next", "last")
+        jump = kind in ("first", "last")
+        # Chevron, nudged away from the bar on jump buttons
+        tip, back = (12.0, 7.0) if forward else (6.0, 11.0)
+        if jump:
+            shift = -1.5 if forward else 1.5
+            tip, back = tip + shift, back + shift
+        painter.drawPolyline(QtGui.QPolygonF([
+            QtCore.QPointF(back, 3.5), QtCore.QPointF(tip, 9.0), QtCore.QPointF(back, 14.5),
+        ]))
+        if jump:
+            bar = 14.0 if forward else 4.0
+            painter.drawLine(QtCore.QPointF(bar, 3.5), QtCore.QPointF(bar, 14.5))
+        painter.end()
+        icon.addPixmap(pixmap, mode)
+    return icon
+
+
+def _scope_text(selection: dict) -> str:
+    """A short name for the epochs selected, e.g. "Set1", "Set1 AND Group 0"."""
+    epoch_set = selection.get("epoch_set")
+    parts = []
+    if is_stored_epoch_set(epoch_set) or epoch_set == ALL_EPOCHS:
+        parts.append(epoch_set)
+    if selection.get("group") is not None:
+        parts.append(f"Group {selection['group']}")
+    operator = selection.get("group_operator") or "+"
+    return f" {operator} ".join(parts)
 
 
 class ToolRail(QtWidgets.QWidget):
@@ -175,10 +227,18 @@ class PlotPanel(QtWidgets.QWidget):
         self._tools: list[str] = []
 
         navigator_layout = QtWidgets.QHBoxLayout()
+        self.trace_first_button = QtWidgets.QToolButton(self)
+        self.trace_first_button.setIcon(_navigator_icon("first", self.palette()))
+        self.trace_first_button.setToolTip("First trace")
+        self.trace_first_button.setFixedSize(28, 28)
+        self.trace_first_button.setIconSize(QtCore.QSize(22, 22))
+        navigator_layout.addWidget(self.trace_first_button)
+
         self.trace_previous_button = QtWidgets.QToolButton(self)
-        self.trace_previous_button.setArrowType(QtCore.Qt.ArrowType.LeftArrow)
+        self.trace_previous_button.setIcon(_navigator_icon("previous", self.palette()))
         self.trace_previous_button.setToolTip("Previous trace")
         self.trace_previous_button.setFixedSize(28, 28)
+        self.trace_previous_button.setIconSize(QtCore.QSize(22, 22))
         navigator_layout.addWidget(self.trace_previous_button)
 
         self.trace_index = QtWidgets.QSpinBox(self)
@@ -191,13 +251,56 @@ class PlotPanel(QtWidgets.QWidget):
         navigator_layout.addWidget(self.trace_count_label)
 
         self.trace_next_button = QtWidgets.QToolButton(self)
-        self.trace_next_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        self.trace_next_button.setIcon(_navigator_icon("next", self.palette()))
         self.trace_next_button.setToolTip("Next trace")
         self.trace_next_button.setFixedSize(28, 28)
+        self.trace_next_button.setIconSize(QtCore.QSize(22, 22))
         navigator_layout.addWidget(self.trace_next_button)
+
+        self.trace_last_button = QtWidgets.QToolButton(self)
+        self.trace_last_button.setIcon(_navigator_icon("last", self.palette()))
+        self.trace_last_button.setToolTip("Last trace")
+        self.trace_last_button.setFixedSize(28, 28)
+        self.trace_last_button.setIconSize(QtCore.QSize(22, 22))
+        navigator_layout.addWidget(self.trace_last_button)
+
+        # Stepping options, in a ⋯ menu beside the buttons: how far < > move,
+        # and whether they visit only the selected traces
+        self.step_menu = QtWidgets.QMenu("Stepping", self)
+        step_row = QtWidgets.QWidget(self.step_menu)
+        step_layout = QtWidgets.QHBoxLayout(step_row)
+        step_layout.setContentsMargins(28, 2, 8, 2)
+        step_layout.addWidget(QtWidgets.QLabel("Step", step_row))
+        self.step_size = QtWidgets.QSpinBox(step_row)
+        self.step_size.setRange(1, 9999)
+        self.step_size.setToolTip("How many traces < > move")
+        step_layout.addWidget(self.step_size)
+        step_action = QtWidgets.QWidgetAction(self.step_menu)
+        step_action.setDefaultWidget(step_row)
+        self.step_menu.addAction(step_action)
+        self.selection_only_action = self.step_menu.addAction("Selection Only")
+        self.selection_only_action.setCheckable(True)
+        self.selection_only_action.setToolTip(
+            "Step only through the traces in the strip's Epoch Set / Group or Data Set"
+        )
+        self.step_button = QtWidgets.QToolButton(self)
+        self.step_button.setText("⋯")
+        self.step_button.setToolTip("Stepping options")
+        self.step_button.setMenu(self.step_menu)
+        self.step_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        # Like the strip's ⋯ buttons: no menu arrow
+        self.step_button.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0px; }")
+        self.step_button.setFixedHeight(28)
+        navigator_layout.addWidget(self.step_button)
 
         self.trace_name_label = QtWidgets.QLabel("No trace", self)
         navigator_layout.addWidget(self.trace_name_label)
+
+        # While stepping through the selection only, e.g. "(Set1: 250)"
+        navigator_layout.addSpacing(8)
+        self.selection_scope_label = QtWidgets.QLabel("", self)
+        self.selection_scope_label.setToolTip("◀ ▶ step through these traces only")
+        navigator_layout.addWidget(self.selection_scope_label)
         # e.g. "Showing 3 of 8 traces" while traces are overlaid
         self.overlay_status_label = QtWidgets.QLabel("", self)
         navigator_layout.addSpacing(8)
@@ -267,8 +370,15 @@ class PlotPanel(QtWidgets.QWidget):
         self.current_trace = None
         self.rendered_trace_count = 0
         self.trace_index.valueChanged.connect(self._on_trace_index_changed)
-        self.trace_previous_button.clicked.connect(lambda: self._step_trace(-1))
-        self.trace_next_button.clicked.connect(lambda: self._step_trace(1))
+        self.trace_first_button.clicked.connect(lambda: self._go_to("first"))
+        self.trace_previous_button.clicked.connect(lambda: self._go_to("previous"))
+        self.trace_next_button.clicked.connect(lambda: self._go_to("next"))
+        self.trace_last_button.clicked.connect(lambda: self._go_to("last"))
+        self.step_size.valueChanged.connect(self._update_step_buttons)
+        self.selection_only_action.toggled.connect(self._update_step_buttons)
+        # Rows of the traces in the strip's selection (None: no selection)
+        self._scope_rows: list[int] | None = None
+        self._scope_text = ""
         self.overlay_action.toggled.connect(self._render_current_traces)
         self.overlay_action.toggled.connect(self._sync_overlay_limit)
         self.overlay_limit.valueChanged.connect(self._render_current_traces)
@@ -441,8 +551,8 @@ class PlotPanel(QtWidgets.QWidget):
             self.trace_index.setValue(current_value)
         self.trace_index.setEnabled(count > 0)
         self.trace_count_label.setText(f"of {count}")
-        self.trace_previous_button.setEnabled(current_value > 0 and count > 0)
-        self.trace_next_button.setEnabled(current_value < count - 1 and count > 0)
+        self._update_scope()
+        self._update_step_buttons()
         can_overlay = self._trace_mode == "dataseries" and self.plot_widget is not None
         self.overlay_action.setEnabled(can_overlay)
         self._sync_overlay_limit()
@@ -566,6 +676,81 @@ class PlotPanel(QtWidgets.QWidget):
         """Fit the axes to the plotted data again (after zooming or panning)."""
         if self.plot_widget is not None:
             self.plot_widget.enableAutoRange()
+
+    # --- stepping -------------------------------------------------------
+
+    def _update_scope(self) -> None:
+        """Find the traces in the strip's selection, for "Selection only"."""
+        selection = self._last_selection
+        names, label = None, ""
+        if self._trace_mode == "dataseries" and self._plot_dataseries is not None:
+            # The epochs an analysis would use (SetX left out)
+            try:
+                names = scoped_epoch_names(self._plot_dataseries, selection)
+            except (RuntimeError, KeyError):  # e.g. Set and Group without AND/OR
+                names = None
+            label = _scope_text(selection)
+        elif self._trace_mode == "data" and self._trace_container is not None:
+            data_set = selection.get("data_set")
+            if data_set is not None and data_set in self._trace_container.sets:
+                names = self._trace_container.sets.get_items(data_set, get_keys=True) or []
+                label = data_set
+        if names is None:
+            self._scope_rows = None
+            self._scope_text = ""
+        else:
+            wanted = set(names)
+            self._scope_rows = [
+                row for row, (item, _) in enumerate(self._trace_entries) if item.name in wanted
+            ]
+            self._scope_text = f"({label}: {len(self._scope_rows)})"
+        self.selection_only_action.setEnabled(self._scope_rows is not None)
+
+    def _step_rows(self) -> list[int]:
+        """The rows ◀ ▶ |◀ ▶| visit, in order."""
+        if self.selection_only_action.isChecked() and self._scope_rows is not None:
+            return self._scope_rows
+        return list(range(len(self._trace_entries)))
+
+    def _target_row(self, where: str) -> int | None:
+        """The row to go to, or None if there is nowhere to go."""
+        rows = self._step_rows()
+        if not rows or not self._trace_entries:
+            return None
+        current = self.trace_index.value()
+        step = self.step_size.value()
+        if where == "first":
+            target = rows[0]
+        elif where == "last":
+            target = rows[-1]
+        elif where == "next":
+            after = bisect.bisect_right(rows, current)  # first row after current
+            if after >= len(rows):
+                return None
+            target = rows[min(after + step - 1, len(rows) - 1)]
+        else:
+            before = bisect.bisect_left(rows, current) - 1  # last row before current
+            if before < 0:
+                return None
+            target = rows[max(before - step + 1, 0)]
+        return None if target == current else target
+
+    def _update_step_buttons(self, *_args) -> None:
+        # The scope shows beside the trace name only while stepping through it
+        stepping_scope = (self.selection_only_action.isChecked()
+                          and self._scope_rows is not None)
+        self.selection_scope_label.setText(self._scope_text if stepping_scope else "")
+        for where, button in (("first", self.trace_first_button),
+                              ("previous", self.trace_previous_button),
+                              ("next", self.trace_next_button),
+                              ("last", self.trace_last_button)):
+            button.setEnabled(self._target_row(where) is not None)
+
+    def _go_to(self, where: str) -> None:
+        """Go to the first, previous, next or last trace (see :meth:`_target_row`)."""
+        target = self._target_row(where)
+        if target is not None and self.trace_index.isEnabled():
+            self.trace_index.setValue(target)
 
     def _step_trace(self, delta: int) -> None:
         if self.trace_index.isEnabled():
@@ -877,6 +1062,14 @@ class NMAppWindow(QtWidgets.QMainWindow):
             layout.addWidget(holder)
             self._view_tabs_holders[panel] = holder
         self.context_panel.setCornerWidget(corner, QtCore.Qt.Corner.TopRightCorner)
+        # Plot/Table at the far left (macOS centres them), so the channel and
+        # tool tabs have room to grow leftwards. A plain pane frame, since the
+        # native one keeps a gap in its edge for centred tabs.
+        self.context_panel.setStyleSheet(
+            "QTabWidget::tab-bar { alignment: left; }"
+            " QTabWidget::pane { border: 1px solid palette(mid); border-radius: 4px;"
+            " top: -1px; }"
+        )
         self.context_panel.currentChanged.connect(self._show_current_view_tabs)
         self._show_current_view_tabs()
 

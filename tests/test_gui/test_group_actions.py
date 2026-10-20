@@ -1,5 +1,7 @@
 """Tests for the Group actions."""
 
+import re
+
 import pytest
 
 pytest.importorskip("PyQt6")
@@ -132,7 +134,7 @@ def test_run_uses_group_minus_setx(app):
     app.series.epochs.sets.add("SetX", [app.series.epochs["E0"]])
     app.selection_model.refresh()
     app.selection_model.update(group=0)
-    assert app.stats_tab.run_info_label.text() == "4 epochs (1 excluded)"
+    assert app.stats_tab.run_info_label.text() == "n=4"
 
 
 def test_choose_in_browser_selects_epochs(app):
@@ -194,24 +196,32 @@ def test_choosing_a_group_row_selects_the_group(app):
     assert app.selection_strip.combo("group").currentText() == "0"
 
 
+def _shown(label):
+    """A rich-text label's text as it reads on screen."""
+    return re.sub(r"<[^>]+>", "", label.text())
+
+
 def test_strip_shows_epoch_count_beside_group(app):
     label = app.selection_strip.epoch_count_label
-    assert label.text() == "15 epochs"  # All
+    assert _shown(label) == "n=15"  # All
     app.groups.assign_cyclic([f"E{i}" for i in range(15)], n_groups=3)
     app.series.epochs.sets.add("SetX", [app.series.epochs["E0"]])
     app.selection_strip.refresh_options()
-    assert label.text() == "14 epochs (1 excluded)"
+    assert _shown(label) == "n=15-1"
+    assert 'color: #c62828;">-1</span>' in label.text()  # the excluded in red
+    assert label.toolTip() == "15 epochs selected, 1 excluded (SetX): 14 analysed"
 
     app.selection_model.update(group=0)
-    assert label.text() == "4 epochs (1 excluded)"
+    assert _shown(label) == "n=5-1"
     app.selection_model.update(epoch_set="Set1", group_operator=None)
-    assert label.text() == "Choose AND or OR"
+    assert _shown(label) == "Choose AND or OR"
     app.selection_model.update(group_operator="OR")
-    assert label.text() == "4 epochs (1 excluded)"  # Set1 is empty
+    assert _shown(label) == "n=5-1"  # Set1 is empty
     app.selection_model.update(epoch_set="Current Epoch")
-    assert label.text() == "1 epoch"  # E3
+    assert _shown(label) == "n=1"  # E3
+    assert label.toolTip() == "1 epoch selected"
     app.selection_model.update(epoch=app.series.epochs["E0"])
-    assert label.text() == "0 epochs (1 excluded)"
+    assert _shown(label) == "n=1-1"
 
 
 def test_new_groups_creates_empty_groups(app):

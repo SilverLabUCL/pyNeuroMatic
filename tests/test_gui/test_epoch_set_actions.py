@@ -199,14 +199,15 @@ def test_setx_is_protected_and_builtin_names_reserved(app):
 
 def test_run_leaves_out_setx_and_reports_it(app, monkeypatch):
     tab = app.stats_tab
-    assert tab.run_info_label.text() == "10 epochs"
+    assert tab.run_info_label.text() == "n=10"
     app.sets.add("SetX", [app.series.epochs[e] for e in ("E7", "E8", "E9")])
     app.selection_model.refresh()
     tab._update_run_info()
-    assert tab.run_info_label.text() == "7 epochs (3 excluded)"
+    assert tab.run_info_label.text() == "n=7"
+    assert tab.run_info_label.toolTip() == "Run analyses 7 epochs (3 excluded by SetX)"
 
     app.selection_model.update(epoch_set="Current Epoch", epoch=app.series.epochs["E8"])
-    assert tab.run_info_label.text() == "0 epochs (1 excluded)"
+    assert tab.run_info_label.text() == "n=0"
 
     # The Table still shows every epoch, excluded ones too
     app.selection_model.update(epoch_set="All")

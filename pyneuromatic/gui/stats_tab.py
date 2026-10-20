@@ -269,22 +269,24 @@ class StatsToolTab(ToolTabWidget):
         self._update_run_info()
 
     def _update_run_info(self) -> None:
-        """Show beside Run how many epochs or data arrays it will analyse."""
+        """Show beside Run how many epochs or data arrays it will analyse, e.g. "n=9"."""
         try:
             targets = self._selected_targets()
         except RuntimeError as error:
             self.run_info_label.setText(str(error))
             return
         count = len(targets)
-        text = ""
         if self.selection.get("source") == "dataseries":
             noun = "epoch" if count == 1 else "epochs"
+            tip = f"Run analyses {count} {noun}"
             excluded = self._excluded_in_scope()
             if excluded:
-                text = f" ({excluded} excluded)"
+                tip += f" ({excluded} excluded by SetX)"
         else:
             noun = "data array" if count == 1 else "data arrays"
-        self.run_info_label.setText(f"{count} {noun}{text}")
+            tip = f"Run analyses {count} {noun}"
+        self.run_info_label.setText(f"n={count}")
+        self.run_info_label.setToolTip(tip)
 
     @staticmethod
     def _excluded_names(dataseries, selection) -> set[str]:
