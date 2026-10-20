@@ -662,8 +662,8 @@ class FolderActions(TierActions):
                                        tip="Copy the folder with its data")
         self.rename_action = action("Rename…", self.rename_folder,
                                     tip="Rename the folder")
-        self.close_action = action("Close…", self.close_folder,
-                                   tip="Remove the folder from the session")
+        self.delete_action = action("Delete…", self.delete_folder,
+                                    tip="Delete the folder and its data")
         self.subfolder_rename_action = action("Rename…", self.rename_subfolder,
                                               tip="Rename the subfolder")
         self.subfolder_duplicate_action = action("Duplicate…", self.duplicate_subfolder,
@@ -685,7 +685,7 @@ class FolderActions(TierActions):
         menu.addAction(self.duplicate_action)
         menu.addAction(self.rename_action)
         menu.addSeparator()
-        menu.addAction(self.close_action)
+        menu.addAction(self.delete_action)
         return menu
 
     def subfolder_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
@@ -701,7 +701,7 @@ class FolderActions(TierActions):
         folder = self._folder()
         has_folders = len(self._folders) > 0
         has_subfolders = folder is not None and len(folder.toolfolders) > 0
-        for item in (self.duplicate_action, self.rename_action, self.close_action):
+        for item in (self.duplicate_action, self.rename_action, self.delete_action):
             item.setEnabled(has_folders)
         self.save_action.setEnabled(folder is not None)
         for item in (self.subfolder_rename_action, self.subfolder_duplicate_action,
@@ -790,10 +790,13 @@ class FolderActions(TierActions):
     def save_folder(self) -> None:
         self._show_message("Save", "Save is under construction.")
 
-    def duplicate_folder(self) -> None:
+    # Each folder action works on the selected folder, or on *name* (e.g. a
+    # folder right-clicked in the browser), which its dialog starts on
+
+    def duplicate_folder(self, name: str | None = None) -> None:
         folders = self._folders
         answer = self._choose_and_name(
-            folders, "Duplicate Folder", "Folder", self._current_name("folder"),
+            folders, "Duplicate Folder", "Folder", name or self._current_name("folder"),
             lambda item: unique_name(folders, f"{item}_copy"),
         )
         if answer is None:
@@ -802,10 +805,10 @@ class FolderActions(TierActions):
         self._selection.update(folder=copy)
         self._changed()
 
-    def rename_folder(self) -> None:
+    def rename_folder(self, name: str | None = None) -> None:
         folders = self._folders
         answer = self._choose_and_name(
-            folders, "Rename Folder", "Folder", self._current_name("folder"),
+            folders, "Rename Folder", "Folder", name or self._current_name("folder"),
             lambda item: item,
         )
         if answer is None or answer[0] == answer[1]:
@@ -813,16 +816,16 @@ class FolderActions(TierActions):
         folders.rename(answer[0], answer[1])
         self._changed()
 
-    def close_folder(self) -> None:
+    def delete_folder(self, name: str | None = None) -> None:
         folders = self._folders
         if len(folders) == 0:
             return
         answer = self._choose(
-            "Close Folder",
+            "Delete Folder",
             item_label="Folder",
             items=list(folders.keys()),
-            current=self._current_name("folder"),
-            message="The folder and its data will be removed from this session.",
+            current=name or self._current_name("folder"),
+            message="The folder and all its data will be deleted.",
         )
         if answer is None:
             return
@@ -841,51 +844,60 @@ class FolderActions(TierActions):
 
     # --- subfolder actions --------------------------------------------------
 
-    def duplicate_subfolder(self) -> None:
-        folder = self._folder()
+    # Each subfolder action works on the selected folder's subfolders, or on
+    # *subfolder* (e.g. one right-clicked in the browser), which its dialog
+    # starts on
+
+    def _subfolder_target(self, subfolder) -> tuple:
+        """(folder, current subfolder name) for a subfolder action."""
+        if subfolder is not None:
+            return subfolder._folder, subfolder.name
+        return self._folder(), self._current_name("toolfolder")
+
+    def duplicate_subfolder(self, subfolder=None) -> None:
+        folder, current = self._subfolder_target(subfolder)
         if folder is None:
             return
         container = folder.toolfolders
         answer = self._choose_and_name(
-            container, "Duplicate Subfolder", "Subfolder",
-            self._current_name("toolfolder"),
+            container, "Duplicate Subfolder", "Subfolder", current,
             lambda item: unique_name(container, f"{item}_copy"),
         )
         if answer is None:
             return
         copy = container.duplicate(answer[0], answer[1])
-        self._selection.update(toolfolder=copy)
+        if folder is self._folder():
+            self._selection.update(toolfolder=copy)
         self._changed()
 
-    def rename_subfolder(self) -> None:
-        folder = self._folder()
+    def rename_subfolder(self, subfolder=None) -> None:
+        folder, current = self._subfolder_target(subfolder)
         if folder is None:
             return
         container = folder.toolfolders
         answer = self._choose_and_name(
-            container, "Rename Subfolder", "Subfolder",
-            self._current_name("toolfolder"), lambda item: item,
+            container, "Rename Subfolder", "Subfolder", current, lambda item: item,
         )
         if answer is None or answer[0] == answer[1]:
             return
         container.rename(answer[0], answer[1])
         self._changed()
 
-    def delete_subfolder(self) -> None:
-        folder = self._folder()
+    def delete_subfolder(self, subfolder=None) -> None:
+        folder, current = self._subfolder_target(subfolder)
         if folder is None or len(folder.toolfolders) == 0:
             return
         answer = self._choose(
             "Delete Subfolder",
             item_label="Subfolder",
             items=list(folder.toolfolders.keys()),
-            current=self._current_name("toolfolder"),
+            current=current,
             message="The subfolder and all its data will be deleted.",
         )
         if answer is None:
             return
         name = answer[0]
-        if name == self._current_name("toolfolder"):
+        if folder is self._folder() and name == self._current_name("toolfolder"):
             self._selection.update(toolfolder=None)
         folder.toolfolders.pop(name)
         self._changed()
@@ -1613,8 +1625,11 @@ class SeriesActions(TierActions):
             parent=self._parent_widget, series=True,
         )
 
-    def new_series(self) -> None:
-        owner = self._owner()
+    def new_series(self, owner=None) -> None:
+        """New data series in the selected folder, or in *owner* (e.g. the
+        folder whose Data Series row was right-clicked in the browser)."""
+        selected_owner = self._owner()
+        owner = owner if owner is not None else selected_owner
         if owner is None:
             return
 
@@ -1644,7 +1659,8 @@ class SeriesActions(TierActions):
             x_label=values["xlabel"], x_units=values["xunits"],
             y_label=values["ylabel"], y_units=values["yunits"], fill=fill,
         )
-        self._selection.update(dataseries=series)
+        if owner is selected_owner:  # a series elsewhere isn't selectable here
+            self._selection.update(dataseries=series)
         self._changed()
 
     def series_from_data(self) -> None:

@@ -109,15 +109,16 @@ class TestGroups:
         labels = {model.data(model.index(r, 0, root)) for r in range(model.rowCount(root))}
         assert labels == {"Data", "Data Series"}
 
-    def test_empty_data_and_dataseries_groups_have_no_children(self, nm):
-        # No sets defined either, so "Sets" stays hidden too - these
-        # groups are genuinely empty, not just "empty except Sets".
+    def test_empty_data_and_dataseries_groups(self, nm):
+        # Data always shows its (empty) Sets row, where data sets are made;
+        # an empty Data Series row has nothing
         nm.folders.new("empty_folder")
         model = FolderTreeModel(nm)
         root = _find_child(model, _folders_group(model), "empty_folder")
         data_group = _find_child(model, root, "Data")
         ds_group = _find_child(model, root, "Data Series")
-        assert model.rowCount(data_group) == 0
+        assert [model.data(model.index(r, 0, data_group))
+                for r in range(model.rowCount(data_group))] == ["Sets"]
         assert model.rowCount(ds_group) == 0
 
     def test_empty_toolfolders_group_is_hidden(self, nm):
@@ -129,12 +130,12 @@ class TestGroups:
         assert _find_child(model, root, "Tool Folders") is None
 
     def test_data_group_children(self, model):
-        # No sets defined on folder.data - "Sets" stays hidden.
+        # Data's Sets row is always shown (no sets defined yet)
         root = _folder0(model)
         data_group = _find_child(model, root, "Data")
         names = {model.data(model.index(r, 0, data_group))
                   for r in range(model.rowCount(data_group))}
-        assert names == {"RecordA0", "RecordA1", "RecordA2",
+        assert names == {"Sets", "RecordA0", "RecordA1", "RecordA2",
                           "RecordB0", "RecordB1", "RecordB2", "Standalone0"}
 
     def test_dataseries_group_children(self, model):
@@ -202,13 +203,22 @@ class TestGroups:
 
 
 class TestSets:
-    def test_sets_hidden_when_no_sets_defined(self, model):
-        # Unlike Data/Data Series/Folders, "Sets" is hidden (not shown
-        # empty) until the container actually has >=1 set - it appears
-        # under every group, so always-showing it was too much clutter.
+    def test_data_sets_row_shown_without_sets(self, model):
+        # Data (like Epochs) always shows its Sets row, where sets are made
         root = _folder0(model)
         data_group = _find_child(model, root, "Data")
-        assert _find_child(model, data_group, "Sets") is None
+        sets_row = _find_child(model, data_group, "Sets")
+        assert sets_row is not None and model.rowCount(sets_row) == 0
+
+    def test_other_kinds_hide_sets_until_they_have_some(self, nm, folder, model):
+        # Folder / data series sets aren't used yet: no Sets row for them
+        root = _folder0(model)
+        ds_group = _find_child(model, root, "Data Series")
+        assert _find_child(model, ds_group, "Sets") is None
+        folder.dataseries.sets.add("Mine")
+        model.refresh()
+        ds_group = _find_child(model, _folder0(model), "Data Series")
+        assert _find_child(model, ds_group, "Sets") is not None
 
     def test_sets_appears_once_a_set_is_defined(self, nm, folder, model):
         folder.data.sets.add("Set1", ["RecordA0", "RecordA1"])
@@ -257,18 +267,14 @@ class TestSets:
         names = [model.data(model.index(r, 0, sets_node)) for r in range(model.rowCount(sets_node))]
         assert names == ["SetOfFolders"]
 
-    def test_sets_hidden_again_after_last_set_deleted(self, nm, folder, model):
+    def test_data_sets_row_stays_after_last_set_deleted(self, nm, folder, model):
         folder.data.sets.add("Set1")
         model.refresh()
-        root = _folder0(model)
-        data_group = _find_child(model, root, "Data")
-        assert _find_child(model, data_group, "Sets") is not None
-
         del folder.data.sets["Set1"]
         model.refresh()
-        root = _folder0(model)
-        data_group = _find_child(model, root, "Data")
-        assert _find_child(model, data_group, "Sets") is None
+        data_group = _find_child(model, _folder0(model), "Data")
+        sets_row = _find_child(model, data_group, "Sets")
+        assert sets_row is not None and model.rowCount(sets_row) == 0
 
 
 class TestParentRoundTrip:

@@ -408,7 +408,10 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
             groups = getattr(container, "groups", None) if node.kind == "epochs" else None
             if groups is not None:
                 children = [self._groups_node(node)] + children
-            if container is not None and len(container.sets) > 0:
+            # Data and Epochs always show their Sets row (where new sets are
+            # made); other kinds only once they have sets
+            sets = getattr(container, "sets", None)
+            if sets is not None and (len(sets) > 0 or node.kind in ("data", "epochs")):
                 children = [self._sets_node(node)] + children
             return children
         if isinstance(node, _GroupsNode):

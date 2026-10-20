@@ -22,10 +22,13 @@ from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
+from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMDataContainer
-from pyneuromatic.core.nm_epoch import NMEpoch
+from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
+from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
+from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel, NotesWidget
 from pyneuromatic.gui.membership import MembershipModel, unassign_from_group
 from pyneuromatic.gui.folder_model import (
@@ -148,6 +151,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self._nm = manager
         self._model = FolderTreeModel(manager, parent=self)
+        self._folder_actions = None  # set by the app (see set_folder_actions)
+        self._series_actions = None  # set by the app (see set_series_actions)
 
         self._tree = QtWidgets.QTreeView(self)
         self._tree.setModel(self._model)
@@ -252,6 +257,15 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             index = self._model.index(row, 0, folders)
             if current is not None and index.internalPointer() is current:
                 self._tree.expand(index)
+
+    def set_folder_actions(self, actions) -> None:
+        """Use the strip's Folder actions (Duplicate, Rename, Delete...) for
+        folders and subfolders, so they behave the same everywhere."""
+        self._folder_actions = actions
+
+    def set_series_actions(self, actions) -> None:
+        """Use the strip's Data Series actions (the New Series dialog)."""
+        self._series_actions = actions
 
     @property
     def model(self) -> FolderTreeModel:
@@ -540,24 +554,13 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         return paths
 
     def _show_tree_context_menu(self, pos: QtCore.QPoint) -> None:
-        """Right-click a group or "Sets" row in the tree.
+        """Right-click any row in the tree.
 
-        Group rows (Data / Data Series / Tool Folders / Channels /
-        Epochs / Folders) get "New..." and "New Set...". "Sets" rows
-        (only present once a group has >=1 set — see FolderTreeModel's
-        docstring) get the same "New Set..." plus Rename/Delete
-        submenus over existing set names. Right-clicking a real object
-        (e.g. an NMFolder) or empty area shows nothing, same as the
-        detail pane's context menu. Extension point for future
-        group-specific actions, e.g.::
-
-            if node.kind == "folders":
-                menu.addAction("Import...", self._import_into_folders)
-
-        "Tool Folders" gets no "New...": tool folders are created by NM
-        Tools when they run, not manually by users through this browser
-        ("New Set..." is still offered there — grouping *existing*
-        tool folders into a set is unrelated to who creates them).
+        - Group rows (Folders, Data, Data Series, Channels, Epochs): New...
+          ("Tool Folders" has none: tools create them when they run).
+        - Sets / set / Groups / group rows: see :meth:`_populate_node_menu`.
+        - Objects (folder, data array, epoch...): the same menu as in the
+          second column (see :meth:`_populate_object_menu`).
         """
         index = self._tree.indexAt(pos)
         if not index.isValid():
@@ -568,14 +571,14 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             container = getattr(node.owner, node.kind, None)
             if container is None:
                 return
-            if node.kind != "toolfolders":
+            # New sets and groups are made on the Sets and Groups rows
+            if node.kind == "folders" and self._folder_actions is not None:
+                menu.addAction("New...", self._folder_actions.new_folder)
+            elif node.kind == "dataseries" and self._series_actions is not None:
+                # The New Series dialog (prefix, channels, epochs, points...)
+                menu.addAction("New...", lambda: self._series_actions.new_series(node.owner))
+            elif node.kind != "toolfolders":
                 menu.addAction("New...", lambda: self._add_item(container))
-            menu.addAction("New Set...", lambda: self._add_set(self._model._sets_node(node)))
-            if node.kind == "epochs":
-                menu.addAction(
-                    "New Groups...",
-                    lambda: self._new_group(container),
-                )
         elif isinstance(node, _SET_GROUP_NODES):
             self._populate_node_menu(menu, index)
         elif isinstance(node, _SetMemberNode):
@@ -587,12 +590,71 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             menu.addAction("Remove from Group",
                            lambda: self._remove_from_group(node.group_number_node, [node.obj]))
         elif isinstance(node, NMObject):
-            menu.addAction("Select", lambda: self._request_selection(index))
+            self._populate_object_menu(menu, [node], node._container, index)
         else:
             return
         if not menu.actions():
             return
         menu.exec(self._tree.viewport().mapToGlobal(pos))
+
+    def _populate_object_menu(self, menu: QtWidgets.QMenu, objects: list[NMObject],
+                              container, index: QtCore.QModelIndex | None = None) -> None:
+        """Actions for folders, data arrays, epochs... — the same in both
+        columns (*index* is the row, for Select, when there is one object)."""
+        if not objects or container is None:
+            return
+        single = objects[0] if len(objects) == 1 else None
+        if single is not None and index is not None:
+            menu.addAction("Select", lambda: self._request_selection(index))
+        first = objects[0]
+        actions = self._folder_actions
+        # Folders and subfolders: the strip's Folder actions, as in its ⋯ menu
+        if single is not None and actions is not None:
+            if isinstance(first, NMFolder):
+                menu.addAction("Duplicate...", lambda: actions.duplicate_folder(first.name))
+                menu.addAction("Rename...", lambda: actions.rename_folder(first.name))
+                menu.addAction("Delete...", lambda: actions.delete_folder(first.name))
+                return
+            if isinstance(first, NMToolFolder):
+                menu.addAction("Duplicate...", lambda: actions.duplicate_subfolder(first))
+                menu.addAction("Rename...", lambda: actions.rename_subfolder(first))
+                menu.addAction("Delete...", lambda: actions.delete_subfolder(first))
+                return
+        # Channels and epochs are named by the data series: no Rename
+        if single is not None and not isinstance(first, (NMChannel, NMEpoch)):
+            menu.addAction("Rename...", lambda: self._rename_object(container, first))
+        if isinstance(container, NMDataContainer):
+            menu.addAction("Duplicate", lambda: self._duplicate_selected(container, objects))
+            folders = [folder for folder in self._nm.folders.values()
+                       if folder.data is not container]
+            if folders:
+                copy_menu = menu.addMenu("Copy to Folder")
+                for folder in folders:
+                    copy_menu.addAction(
+                        folder.name,
+                        lambda checked=False, f=folder: self._copy_selected_to(container, objects, f),
+                    )
+        # Sets are for data arrays and epochs (others may come later)
+        if isinstance(container, (NMDataContainer, NMEpochContainer)):
+            set_menu = menu.addMenu("Add to Set")
+            for set_name in container.sets.keys():
+                set_menu.addAction(
+                    set_name,
+                    lambda checked=False, name=set_name: self._add_to_set(container, objects, name),
+                )
+            if container.sets.keys():
+                set_menu.addSeparator()
+            set_menu.addAction("New...", lambda: self._add_to_new_set(container, objects))
+        epochs = [obj for obj in objects if isinstance(obj, NMEpoch)]
+        if epochs and hasattr(container, "groups") and container.groups.group_numbers:
+            group_menu = menu.addMenu("Add to Group")
+            for number in container.groups.group_numbers:
+                group_menu.addAction(
+                    f"Group {number}",
+                    lambda checked=False, n=number:
+                    self._assign_selected_to_group(container, epochs, n),
+                )
+        menu.addAction("Delete...", lambda: self._delete_objects(container, objects))  # last
 
     def _populate_node_menu(self, menu: QtWidgets.QMenu, index: QtCore.QModelIndex) -> None:
         """Actions for a Sets, set, Groups or group row — shared by both panes."""
@@ -612,48 +674,25 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                 delete_menu.addSeparator()
                 delete_menu.addAction("All Groups", lambda: self._delete_groups(every))
         elif isinstance(node, _GroupNumberNode):
-            menu.addAction("Select Group", lambda: self._request_selection(index))
-            menu.addAction("Clear Group", lambda: self._clear_groups([node]))
-            menu.addAction("Delete Group", lambda: self._delete_groups([node]))
+            menu.addAction("Select", lambda: self._request_selection(index))
+            menu.addAction("Clear...", lambda: self._clear_groups([node]))
+            menu.addAction("Delete...", lambda: self._delete_groups([node]))
         elif isinstance(node, _SetsNode):
             self._populate_sets_menu(menu, node)
         elif isinstance(node, _SetNode):
-            menu.addAction("Select Set", lambda: self._request_selection(index))
-            menu.addAction("Rename Set...",
+            menu.addAction("Select", lambda: self._request_selection(index))
+            menu.addAction("Rename...",
                            lambda: self._rename_set(node.sets_node, node.name))
-            menu.addAction("Delete Set",
-                           lambda: self._delete_sets(node.sets_node, [node.name]))
             if not self._is_combined_set(node):
-                menu.addAction("Clear Set",
+                menu.addAction("Clear...",
                                lambda: self._clear_sets(node.sets_node, [node.name]))
+            menu.addAction("Delete...",
+                           lambda: self._delete_sets(node.sets_node, [node.name]))
 
     def _populate_sets_menu(self, menu: QtWidgets.QMenu, sets_node: _SetsNode) -> None:
-        """New Set... / Rename Set / Delete Set actions for *sets_node*.
-
-        Shared by the tree's "Sets" row context menu and the detail
-        pane's context menu when its root is a "Sets" row.
-        """
-        menu.addAction("New Set...", lambda: self._add_set(sets_node))
-        container = sets_node.container
-        existing = list(container.sets.keys()) if container is not None else []
-        if existing:
-            rename_menu = menu.addMenu("Rename Set")
-            for name in existing:
-                rename_menu.addAction(
-                    name, lambda checked=False, n=name: self._rename_set(sets_node, n)
-                )
-            delete_menu = menu.addMenu("Delete Set")
-            for name in existing:
-                delete_menu.addAction(
-                    name, lambda checked=False, n=name: self._delete_sets(sets_node, [n])
-                )
-            clearable = [name for name in existing if not container.sets.is_equation(name)]
-            if clearable:
-                clear_menu = menu.addMenu("Clear Set")
-                for name in clearable:
-                    clear_menu.addAction(
-                        name, lambda checked=False, n=name: self._clear_sets(sets_node, [n])
-                    )
+        """New... for a "Sets" row (renaming, deleting and clearing are on
+        each set's own row)."""
+        menu.addAction("New...", lambda: self._add_set(sets_node))
 
     def _on_activated(self, index: QtCore.QModelIndex) -> None:
         """Placeholder for a future "open" action (e.g. quick-plot a leaf).
@@ -669,8 +708,20 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         previous: QtCore.QModelIndex,
     ) -> None:
         self._detail.setRootIndex(current if current.isValid() else QtCore.QModelIndex())
+        self._hide_set_and_group_rows(current)
         self._update_edit_mode()
         self._update_info_panel(current)
+
+    def _hide_set_and_group_rows(self, root: QtCore.QModelIndex) -> None:
+        """List only the items for Data and Epochs: their Sets (and Groups)
+        rows are in the tree."""
+        node = root.internalPointer() if root.isValid() else None
+        items_only = isinstance(node, _GroupNode) and node.kind in ("data", "epochs")
+        for row in range(self._model.rowCount(root)):
+            child = self._model.index(row, 0, root).internalPointer()
+            self._detail.setRowHidden(
+                row, items_only and isinstance(child, (_SetsNode, _GroupsNode))
+            )
 
     def _update_info_panel(self, current: QtCore.QModelIndex) -> None:
         """Describe a single object; group rows keep their list."""
@@ -786,17 +837,16 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     def _show_detail_context_menu(self, pos: QtCore.QPoint) -> None:
         """Context menu for the detail pane, dispatched by its root's kind.
 
-        - Group root: Rename/Delete/Add to Set for selected item(s) (see
-          :meth:`_show_detail_context_menu` body below).
-        - "Sets" root: Rename Set / Delete Set for selected set name(s).
+        - Group root: the selected object(s)' menu, the same as in the tree
+          (see :meth:`_populate_object_menu`).
+        - "Sets" root: Rename Set / Delete Set / Clear Set for selected sets.
         - A specific set's root: Remove from Set for selected member(s) —
           removes membership only, never deletes the underlying object.
         - A group's root: Remove from Group for selected epoch(s).
         - "Groups" root: Select / Clear / Delete Group for selected group(s).
 
-        "New..." / "New Set..." live in the tree's context menu instead
-        (see :meth:`_show_tree_context_menu`) — nothing here to act on
-        without a selection, so this shows nothing when empty.
+        A single set or group row (or empty space under a Sets or Groups
+        list) gets the same menu as that row has in the tree.
         """
         root = self._detail.rootIndex()
         root_node = root.internalPointer() if root.isValid() else None
@@ -842,45 +892,11 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         selected = self._selected_objects()
         if not selected:
             return
-
         menu = QtWidgets.QMenu(self)
-        if len(selected) == 1:
-            menu.addAction("Rename...", self._rename_selected)
-        if isinstance(container, NMDataContainer):
-            menu.addAction("Duplicate", lambda: self._duplicate_selected(container, selected))
-            folders = [
-                folder for folder in self._nm.folders.values()
-                if folder.data is not container
-            ]
-            if folders:
-                copy_menu = menu.addMenu("Copy to Folder")
-                for folder in folders:
-                    copy_menu.addAction(
-                        folder.name,
-                        lambda checked=False, f=folder:
-                        self._copy_selected_to(container, selected, f),
-                    )
-        menu.addAction("Delete", self._delete_selected)
-        if hasattr(container, "sets"):
-            set_menu = menu.addMenu("Add to Set")
-            for set_name in container.sets.keys():
-                set_menu.addAction(
-                    set_name,
-                    lambda checked=False, sn=set_name: self._add_selected_to_set(sn),
-                )
-            if container.sets.keys():
-                set_menu.addSeparator()
-            set_menu.addAction("New Set...", self._add_selected_to_new_set)
-        selected_epochs = [obj for obj in selected if isinstance(obj, NMEpoch)]
-        if selected_epochs and hasattr(container, "groups"):
-            group_menu = menu.addMenu("Add to Group")
-            for group_number in container.groups.group_numbers:
-                group_menu.addAction(
-                    f"Group {group_number}",
-                    lambda checked=False, number=group_number:
-                    self._assign_selected_to_group(container, selected_epochs, number),
-                )
-        menu.exec(self._detail.viewport().mapToGlobal(pos))
+        row = clicked if clicked.isValid() and len(selected) == 1 else None
+        self._populate_object_menu(menu, selected, container, row)
+        if menu.actions():
+            menu.exec(self._detail.viewport().mapToGlobal(pos))
 
     def _show_sets_list_context_menu(self, pos: QtCore.QPoint, sets_node: _SetsNode) -> None:
         """Rename Set / Delete Set for whichever set-name row(s) are selected.
@@ -895,18 +911,18 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         menu = QtWidgets.QMenu(self)
         if len(selected) == 1:
             name = selected[0].name
-            menu.addAction("Rename Set...", lambda: self._rename_set(sets_node, name))
-        menu.addAction(
-            "Delete Set",
-            lambda: self._delete_sets(sets_node, [n.name for n in selected]),
-        )
+            menu.addAction("Rename...", lambda: self._rename_set(sets_node, name))
         clearable = [n.name for n in selected if not self._is_combined_set(n)]
         if clearable:
-            menu.addAction("Clear Set", lambda: self._clear_sets(sets_node, clearable))
+            menu.addAction("Clear...", lambda: self._clear_sets(sets_node, clearable))
+        menu.addAction(
+            "Delete...",
+            lambda: self._delete_sets(sets_node, [n.name for n in selected]),
+        )
         menu.exec(self._detail.viewport().mapToGlobal(pos))
 
     def _show_groups_list_context_menu(self, pos: QtCore.QPoint) -> None:
-        """Select / Clear / Delete Group for whichever group row(s) are selected."""
+        """Select / Clear... / Delete... for whichever group row(s) are selected."""
         sel_model = self._detail.selectionModel()
         rows = [] if sel_model is None else [
             index for index in sel_model.selectedRows()
@@ -917,9 +933,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         selected = [index.internalPointer() for index in rows]
         menu = QtWidgets.QMenu(self)
         if len(rows) == 1:
-            menu.addAction("Select Group", lambda: self._request_selection(rows[0]))
-        menu.addAction("Clear Group", lambda: self._clear_groups(selected))
-        menu.addAction("Delete Group", lambda: self._delete_groups(selected))
+            menu.addAction("Select", lambda: self._request_selection(rows[0]))
+        menu.addAction("Clear...", lambda: self._clear_groups(selected))
+        menu.addAction("Delete...", lambda: self._delete_groups(selected))
         menu.exec(self._detail.viewport().mapToGlobal(pos))
 
     def _show_set_members_context_menu(self, pos: QtCore.QPoint, set_node: _SetNode) -> None:
@@ -974,13 +990,13 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._changed()
 
     def _rename_selected(self) -> None:
-        container = self._current_container()
+        selected = self._selected_objects()
+        if len(selected) == 1:
+            self._rename_object(self._current_container(), selected[0])
+
+    def _rename_object(self, container, obj: NMObject) -> None:
         if container is None:
             return
-        selected = self._selected_objects()
-        if len(selected) != 1:
-            return
-        obj = selected[0]
         newname, ok = QtWidgets.QInputDialog.getText(
             self, "Rename", "New name:", text=obj.name
         )
@@ -1003,11 +1019,10 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._changed()
 
     def _delete_selected(self) -> None:
-        container = self._current_container()
-        if container is None:
-            return
-        selected = self._selected_objects()
-        if not selected:
+        self._delete_objects(self._current_container(), self._selected_objects())
+
+    def _delete_objects(self, container, selected: list[NMObject]) -> None:
+        if container is None or not selected:
             return
         names = ", ".join(o.name for o in selected)
         text = "Delete %s?" % names
@@ -1207,11 +1222,10 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._tree.setFocus()
 
     def _add_selected_to_set(self, set_name: str) -> None:
-        container = self._current_container()
-        if container is None:
-            return
-        selected = self._selected_objects()
-        if not selected:
+        self._add_to_set(self._current_container(), self._selected_objects(), set_name)
+
+    def _add_to_set(self, container, selected: list[NMObject], set_name: str) -> None:
+        if container is None or not selected:
             return
         try:
             container.sets.add(set_name, selected)
@@ -1221,17 +1235,28 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._changed()
 
     def _add_selected_to_new_set(self) -> None:
-        name, ok = QtWidgets.QInputDialog.getText(self, "New Set", "Set name:")
+        self._add_to_new_set(self._current_container(), self._selected_objects())
+
+    def _ask_set_name(self, container) -> tuple[str, bool]:
+        """The New Set prompt, filled with the next free name (e.g. "Set3")."""
+        return QtWidgets.QInputDialog.getText(
+            self, "New Set", "Set name:", text=container.sets.auto_name_next()
+        )
+
+    def _add_to_new_set(self, container, selected: list[NMObject]) -> None:
+        if container is None:
+            return
+        name, ok = self._ask_set_name(container)
         if not ok or not name:
             return
-        self._add_selected_to_set(name)
+        self._add_to_set(container, selected, name)
 
     def _add_set(self, sets_node: _SetsNode) -> None:
-        """Create a new, empty named set (tree's "Sets" row -> New Set...)."""
+        """Create a new, empty named set (a "Sets" row's New...)."""
         container = sets_node.container
         if container is None:
             return
-        name, ok = QtWidgets.QInputDialog.getText(self, "New Set", "Set name:")
+        name, ok = self._ask_set_name(container)
         if not ok or not name:
             return
         try:

@@ -273,7 +273,8 @@ class NMSets:
                 raise KeyError("key '%s' already exists" % newkey)
         return newkey
 
-    def auto_name_next(self, prefix: str = "set", trials: int = 100) -> str:
+    def auto_name_next(self, prefix: str = "Set", trials: int = 100) -> str:
+        """The first unused name *prefix* + 0, 1, 2... (e.g. "Set0")."""
         for i in range(trials):
             newkey = prefix + str(i)
             if self._getkey(newkey) is None:

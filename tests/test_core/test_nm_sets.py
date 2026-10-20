@@ -366,8 +366,8 @@ class TestNMSetsNew(NMSetsTestBase):
     def test_new_auto_name(self):
         key1, _ = self.sets.new()
         key2, _ = self.sets.new()
-        self.assertEqual(key1, "set0")
-        self.assertEqual(key2, "set1")
+        self.assertEqual(key1, "Set0")
+        self.assertEqual(key2, "Set1")
 
     def test_duplicate(self):
         self.sets.add("set0", ["obj0", "obj1"])

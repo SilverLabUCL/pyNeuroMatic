@@ -390,7 +390,7 @@ class TestTreeContextMenu:
         widget._show_tree_context_menu(pos)
 
         menu = captured["menu"]
-        assert [a.text() for a in menu.actions()] == ["New...", "New Set..."]
+        assert [a.text() for a in menu.actions()] == ["New..."]  # sets: on the Sets row
 
     def test_new_action_adds_item_to_correct_container(self, widget, folder, monkeypatch):
         model = widget.model
@@ -407,23 +407,22 @@ class TestTreeContextMenu:
 
         assert "FromMenu" in folder.data
 
-    def test_new_set_action_bootstraps_first_set_on_group(self, widget, folder, monkeypatch):
-        # The whole point of offering "New Set..." on the group itself:
-        # creating the *first* set works even though "Sets" isn't a
-        # visible row yet (there's nothing to right-click otherwise).
+    def test_first_data_set_from_the_sets_row(self, widget, folder, monkeypatch):
+        # Data always shows its Sets row, so the first set is made there
         model = widget.model
         data_group = _find(model, _folder0(model), "Data")
-        assert _find(model, data_group, "Sets") is None
-        pos = widget.tree.visualRect(data_group).center()
+        sets_row = _find(model, data_group, "Sets")
+        assert sets_row is not None and model.rowCount(sets_row) == 0
+        monkeypatch.setattr(widget.tree, "indexAt", lambda pos: sets_row)
         captured = self._captured_menu(monkeypatch)
         monkeypatch.setattr(
             QtWidgets.QInputDialog, "getText",
             staticmethod(lambda *a, **k: ("FirstSet", True)),
         )
 
-        widget._show_tree_context_menu(pos)
-        new_set_action = next(a for a in captured["menu"].actions() if a.text() == "New Set...")
-        new_set_action.trigger()
+        widget._show_tree_context_menu(QtCore.QPoint(0, 0))
+        assert [a.text() for a in captured["menu"].actions()] == ["New..."]
+        captured["menu"].actions()[0].trigger()
 
         assert "FirstSet" in folder.data.sets.keys()
 
@@ -431,8 +430,9 @@ class TestTreeContextMenu:
         dataseries_group = _find(widget.model, _folder0(widget.model), "Data Series")
         record = _find(widget.model, dataseries_group, "Record")
         epochs_group = _find(widget.model, record, "Epochs")
-        widget.tree.setCurrentIndex(epochs_group)
-        pos = widget.tree.visualRect(epochs_group).center()
+        groups_row = _find(widget.model, epochs_group, "Groups")
+        monkeypatch.setattr(widget.tree, "indexAt", lambda pos: groups_row)
+        pos = QtCore.QPoint(0, 0)
         captured = self._captured_menu(monkeypatch)
         content_changes = []
         widget.content_changed.connect(lambda: content_changes.append(True))
@@ -451,12 +451,8 @@ class TestTreeContextMenu:
         widget._show_tree_context_menu(pos)
 
         actions = captured["menu"].actions()
-        assert [action.text() for action in actions] == [
-            "New...",
-            "New Set...",
-            "New Groups...",
-        ]
-        actions[-1].trigger()
+        assert actions[0].text() == "New Groups..."  # on Groups, not Epochs
+        actions[0].trigger()
 
         groups = folder.dataseries["Record"].epochs.groups
         assert dialog_arguments["min"] == 1
@@ -511,14 +507,16 @@ class TestTreeContextMenu:
         assert epoch_container.groups.get_items(0) == []
         assert epoch_container.groups.get_items(1) == ["E0"]
 
-    def test_select_menu_for_object_row(self, widget, monkeypatch):
-        # NMFolder rows aren't editable groups, but can be explicitly selected.
+    def test_folder_row_menu_without_the_apps_folder_actions(self, widget, monkeypatch):
+        # A browser on its own (no app): folders get its own Rename / Delete
         pos = widget.tree.visualRect(_folder0(widget.model)).center()
         captured = self._captured_menu(monkeypatch)
 
         widget._show_tree_context_menu(pos)
 
-        assert [action.text() for action in captured["menu"].actions()] == ["Select"]
+        assert [action.text() for action in captured["menu"].actions() if action.text()] == [
+            "Select", "Rename...", "Delete...",
+        ]
 
     def test_select_action_for_object_row(self, widget, monkeypatch):
         model = widget.model
@@ -531,7 +529,10 @@ class TestTreeContextMenu:
 
         widget._show_tree_context_menu(pos)
 
-        assert [action.text() for action in captured["menu"].actions()] == ["Select"]
+        # The same options as in the second column; Delete... last
+        assert [action.text() for action in captured["menu"].actions() if action.text()] == [
+            "Select", "Rename...", "Duplicate", "Add to Set", "Delete...",
+        ]
         captured["menu"].actions()[0].trigger()
         assert requests == [{"object": record.internalPointer(), "set": None}]
 
@@ -542,11 +543,9 @@ class TestTreeContextMenu:
 
         assert "menu" not in captured
 
-    def test_no_new_action_for_toolfolders_group(self, widget, folder, monkeypatch):
+    def test_no_menu_for_toolfolders_group(self, widget, folder, monkeypatch):
         # Tool folders are created by NM Tools when they run, not by
-        # users - no "New...". "New Set..." is still offered though:
-        # grouping *existing* tool folders into a set is unrelated to
-        # who creates them.
+        # users - no "New...", and no sets for them (yet)
         folder.toolfolders.get_or_create("Spike_0")
         widget.refresh()
         widget.tree.expandAll()
@@ -556,7 +555,7 @@ class TestTreeContextMenu:
 
         widget._show_tree_context_menu(pos)
 
-        assert [a.text() for a in captured["menu"].actions()] == ["New Set..."]
+        assert "menu" not in captured
 
     def test_context_menu_signal_is_wired(self, widget, monkeypatch):
         # Verifies customContextMenuRequested is actually connected to
@@ -603,25 +602,18 @@ class TestSetsTreeContextMenu:
         )
         widget._show_tree_context_menu(self._sets_node_pos(widget))
         menu = captured["menu"]
-        new_set_action = next(a for a in menu.actions() if a.text() == "New Set...")
+        new_set_action = next(a for a in menu.actions() if a.text() == "New...")
         new_set_action.trigger()
         assert "Set1" in folder.data.sets.keys()
         assert folder.data.sets.get_items("Set1", get_keys=True) == []
 
-    def test_rename_and_delete_submenus_appear_once_a_set_exists(
-        self, widget, folder, monkeypatch
-    ):
+    def test_sets_row_has_only_new(self, widget, folder, monkeypatch):
+        # Rename / Delete / Clear Set are on each set's own row
         folder.data.sets.add("Set1")
         widget.refresh()
         captured = self._captured_menu(monkeypatch)
         widget._show_tree_context_menu(self._sets_node_pos(widget))
-        menu = captured["menu"]
-        titles = [a.text() for a in menu.actions()]
-        assert "New Set..." in titles
-        rename_menu = next(a.menu() for a in menu.actions() if a.text() == "Rename Set")
-        delete_menu = next(a.menu() for a in menu.actions() if a.text() == "Delete Set")
-        assert [a.text() for a in rename_menu.actions()] == ["Set1"]
-        assert [a.text() for a in delete_menu.actions()] == ["Set1"]
+        assert [a.text() for a in captured["menu"].actions()] == ["New..."]
 
     def test_select_menu_for_leaf_row(self, widget, monkeypatch):
         data_group = _find(widget.model, _folder0(widget.model), "Data")
@@ -629,7 +621,7 @@ class TestSetsTreeContextMenu:
         pos = widget.tree.visualRect(rec_a0).center()
         captured = self._captured_menu(monkeypatch)
         widget._show_tree_context_menu(pos)
-        assert [action.text() for action in captured["menu"].actions()] == ["Select"]
+        assert captured["menu"].actions()[0].text() == "Select"
 
 
 class TestSetActions:
@@ -764,9 +756,9 @@ class TestSetsDetailPaneContextMenu:
         )
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
-        titles = [a.text() for a in captured["menu"].actions()]
+        titles = [a.text() for a in captured["menu"].actions() if a.text()]
         assert "New Set..." not in titles
-        assert titles == ["Select Set", "Rename Set...", "Delete Set", "Clear Set"]
+        assert titles == ["Select", "Rename...", "Clear...", "Delete..."]
 
     def test_empty_space_under_sets_list_has_sets_row_menu(self, widget, folder, monkeypatch):
         folder.data.sets.add("Set1")
@@ -776,7 +768,7 @@ class TestSetsDetailPaneContextMenu:
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
         titles = [a.text() for a in captured["menu"].actions()]
-        assert titles == ["New Set...", "Rename Set", "Delete Set", "Clear Set"]
+        assert titles == ["New..."]
 
     def test_rename_set_from_detail_pane(self, widget, folder, monkeypatch):
         folder.data.sets.add("Set1")
@@ -794,7 +786,7 @@ class TestSetsDetailPaneContextMenu:
         )
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
-        next(a for a in captured["menu"].actions() if a.text() == "Rename Set...").trigger()
+        next(a for a in captured["menu"].actions() if a.text() == "Rename...").trigger()
         assert "Renamed" in folder.data.sets.keys()
 
     def test_delete_sets_from_detail_pane_multi_select(self, widget, folder, monkeypatch):
@@ -815,9 +807,9 @@ class TestSetsDetailPaneContextMenu:
         )
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
-        titles = [a.text() for a in captured["menu"].actions()]
-        assert titles == ["Delete Set", "Clear Set"]  # no Rename... with 2 selected
-        captured["menu"].actions()[0].trigger()
+        titles = [a.text() for a in captured["menu"].actions() if a.text()]
+        assert titles == ["Clear...", "Delete..."]  # no Rename... with 2 selected
+        next(a for a in captured["menu"].actions() if a.text() == "Delete...").trigger()
         assert list(folder.data.sets.keys()) == []
 
     def test_remove_from_set_via_detail_pane(self, widget, folder, monkeypatch):
