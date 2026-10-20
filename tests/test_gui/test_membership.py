@@ -508,5 +508,25 @@ def test_no_set_notes_off_sets(qtbot, series):
     browser = window.browser_widget
     browser.show_object(series)  # the info panel, with its own notes
     assert not browser.target_notes.isVisibleTo(browser)
-    browser.show_groups_of(series, 1)  # groups: not yet
+    browser.show_groups_of(series)  # the Groups row itself
     assert not browser.target_notes.isVisibleTo(browser)
+
+
+def test_group_notes_below_the_list(qtbot, series, monkeypatch):
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
+    notes = browser.target_notes
+    browser.show_groups_of(series, 1)
+    assert notes.isVisibleTo(browser) and notes.table.rowCount() == 0
+    monkeypatch.setattr(notes, "_ask_note", lambda: "-80 mV steps")
+    notes.add_button.click()
+    assert series.epochs.groups.notes(1).note == "-80 mV steps"
+    assert notes.table.item(0, 1).text() == "-80 mV steps"
+
+    browser.edit_checkbox.setChecked(True)  # editing hides them
+    assert not notes.isVisibleTo(browser)
+    browser.edit_checkbox.setChecked(False)
+    assert notes.isVisibleTo(browser)
+
+    browser.show_groups_of(series, 0)  # another group, its own notes
+    assert notes.table.rowCount() == 0

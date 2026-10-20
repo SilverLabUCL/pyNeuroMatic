@@ -62,6 +62,7 @@ def test_data_array(app):
     panel = browser.info_panel
     assert panel.title_label.text() == "Single  ·  Data Array"
     assert panel.row_text("Points") == "3"
+    assert panel.row_text("Type") == "float64 (double)"
     assert panel.row_text("Range") == "-2.5 to 4"
     assert [panel.row_text(label) for label in (
         "X Start", "X Delta", "X Label", "X Units", "Y Label", "Y Units",
@@ -255,3 +256,30 @@ def test_long_x_label_has_its_own_row(app):
     assert browser.info_panel.row_text("X Label") == "time after peak"
     browser.show_object(app.series.channels["A"])  # channels too; empty ones read "—"
     assert browser.info_panel.row_text("Y Units") == "—"
+
+
+@pytest.mark.parametrize("array, text", [
+    (np.array([1, 2], dtype=np.int16), "int16 (16-bit integer)"),
+    (np.array([1, 2], dtype=np.uint8), "uint8 (8-bit unsigned integer)"),
+    (np.array([1.0], dtype=np.float32), "float32 (single)"),
+    (np.array([1 + 2j]), "complex128 (complex, double)"),
+    (np.array([True]), "bool (true/false)"),
+    (np.array(["a", "b"]), "text"),
+])
+def test_data_array_type(app, array, text):
+    app.folder.data.new("Typed", nparray=array)
+    browser = app.browser_widget
+    browser.refresh()
+    browser.show_data_of(app.folder, select="Typed")
+    panel = browser.info_panel
+    assert panel.row_text("Type") == text
+    if array.dtype.kind in "cOUSb":
+        assert panel.row_text("Range") is None  # only for real numbers
+
+
+def test_two_dimensional_points(app):
+    app.folder.data.new("Matrix", nparray=np.zeros((100, 4)))
+    browser = app.browser_widget
+    browser.refresh()
+    browser.show_data_of(app.folder, select="Matrix")
+    assert browser.info_panel.row_text("Points") == "100 × 4"

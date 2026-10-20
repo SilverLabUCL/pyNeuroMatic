@@ -50,6 +50,25 @@ def _text(value) -> str:
     return str(value) if value else "—"
 
 
+def _type_text(dtype: numpy.dtype) -> str:
+    """e.g. "float64 (double)", "int16 (16-bit integer)", "text"."""
+    if dtype.kind in "OUS":
+        return "text"
+    if dtype.kind == "b":
+        return "bool (true/false)"
+    bits = dtype.itemsize * 8
+    if dtype.kind == "f":
+        precision = {32: "single", 64: "double"}.get(bits, f"{bits}-bit float")
+        return f"{dtype.name} ({precision})"
+    if dtype.kind == "c":
+        precision = {64: "single", 128: "double"}.get(bits, f"{bits}-bit")
+        return f"{dtype.name} (complex, {precision})"
+    if dtype.kind in "iu":
+        signed = "" if dtype.kind == "i" else "unsigned "
+        return f"{dtype.name} ({bits}-bit {signed}integer)"
+    return dtype.name
+
+
 def _sets_of(container, name: str) -> list[str]:
     sets = getattr(container, "sets", None)
     if sets is None:
@@ -204,8 +223,11 @@ class InfoPanel(QtWidgets.QScrollArea):
         if array is None:
             self._add_row("Points", "—")
         else:
-            self._add_row("Points", str(len(array)))
-            if len(array) and numpy.issubdtype(array.dtype, numpy.number):
+            self._add_row("Points", " × ".join(str(n) for n in array.shape))
+            self._add_row("Type", _type_text(array.dtype))
+            real = (numpy.issubdtype(array.dtype, numpy.integer)
+                    or numpy.issubdtype(array.dtype, numpy.floating))
+            if array.size and real:
                 with numpy.errstate(all="ignore"):
                     low, high = numpy.nanmin(array), numpy.nanmax(array)
                 if numpy.isfinite(low) or numpy.isfinite(high):

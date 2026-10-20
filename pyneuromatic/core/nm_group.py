@@ -23,6 +23,7 @@ from __future__ import annotations
 import copy
 
 import pyneuromatic.core.nm_history as nmh
+from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -59,6 +60,8 @@ class NMGroups:
         self._parent = parent
         self._map: dict[str, int] = {}  # item_name → group_number
         self._declared_groups: set[int] = set()
+        # Notes describing each group (e.g. "-80 mV steps"), by group number
+        self._notes: dict[int, NMNotes] = {}
 
     # ------------------------------------------------------------------
     # Identity / dunder
@@ -102,7 +105,12 @@ class NMGroups:
         return (
             self._map == other._map
             and self._declared_groups == other._declared_groups
+            and self._noted() == other._noted()
         )
+
+    def _noted(self) -> dict[int, list]:
+        """Notes of each group that has any (empty notes don't count)."""
+        return {group: list(notes) for group, notes in self._notes.items() if len(notes)}
 
     def __repr__(self) -> str:
         return "%s(%r, groups=%r)" % (
@@ -119,6 +127,7 @@ class NMGroups:
         result._parent = None   # parent reference not copied (same pattern as NMSets)
         result._map = dict(self._map)   # str→int: shallow copy is sufficient
         result._declared_groups = set(self._declared_groups)
+        result._notes = copy.deepcopy(self._notes, memo)
         return result
 
     def copy(self) -> "NMGroups":
@@ -302,10 +311,11 @@ class NMGroups:
         Args:
             quiet: Suppress history output.
         """
-        if not self._map and not self._declared_groups:
+        if not self._map and not self._declared_groups and not self._noted():
             return
         self._map.clear()
         self._declared_groups.clear()
+        self._notes.clear()
         nmh.history(
             "groups: cleared all assignments",
             path=self.path_str,
@@ -332,7 +342,26 @@ class NMGroups:
         for name in [n for n, g in self._map.items() if g == group]:
             del self._map[name]
         self._declared_groups.discard(group)
+        self._notes.pop(group, None)
         nmh.history("groups: deleted group %d" % group, path=self.path_str, quiet=quiet)
+
+    def notes(self, group: int) -> NMNotes:
+        """Notes for *group* (e.g. what its epochs are). A group with notes
+        is kept even when it has no items; deleting it drops them.
+
+        Raises:
+            TypeError: If *group* is not an int.
+            KeyError: If *group* does not exist.
+        """
+        self._check_group(group)
+        if group not in self.group_numbers:
+            raise KeyError(
+                "group %d does not exist; existing groups: %s"
+                % (group, self.group_numbers)
+            )
+        if group not in self._notes:
+            self._notes[group] = NMNotes()
+        return self._notes[group]
 
     def rename_item(self, old_name: str, new_name: str) -> None:
         """Rename an item across all group assignments.
@@ -352,8 +381,9 @@ class NMGroups:
 
     @property
     def group_numbers(self) -> list[int]:
-        """Sorted group numbers, including empty groups created explicitly."""
-        return sorted(set(self._map.values()).union(self._declared_groups))
+        """Sorted group numbers, including empty groups created explicitly
+        or described with notes."""
+        return sorted(set(self._map.values()).union(self._declared_groups, self._noted()))
 
     @property
     def n_groups(self) -> int:

@@ -275,7 +275,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
 
     @property
     def target_notes(self) -> NotesWidget:
-        """The notes of the set chosen in the tree (shown below its list)."""
+        """The notes of the set or group chosen in the tree (below its list)."""
         return self._target_notes
 
     @property
@@ -329,18 +329,20 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._update_target_notes()  # after Edit is settled: editing hides the notes
 
     def _notes_target(self):
-        """(notes, owner name) of the set chosen in the tree, or None."""
+        """(notes, owner name) of the set or group chosen in the tree, or None."""
         target = self._edit_target(self._tree.currentIndex().internalPointer())
         if target is None:
             return None
-        container, set_name, _group, _note = target
-        if set_name is None or set_name not in container.sets:
-            return None
-        return container.sets.notes(set_name), set_name
+        container, set_name, group, _note = target
+        if set_name is not None and set_name in container.sets:
+            return container.sets.notes(set_name), set_name
+        if group is not None and group in container.groups.group_numbers:
+            return container.groups.notes(group), f"Group {group}"
+        return None
 
     def _update_target_notes(self, *_args) -> None:
-        """Show the chosen set's notes below its list, except while editing
-        its members (the checkbox list takes the column then)."""
+        """Show the chosen set's or group's notes below its list, except while
+        editing its members (the checkbox list takes the column then)."""
         found = self._notes_target()
         editing = self._edit_checkbox.isChecked() and self._edit_checkbox.isEnabled()
         show = found is not None and not editing
