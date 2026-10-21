@@ -256,3 +256,15 @@ def test_new_groups_then_fill_in_browser_edit_mode(app):
     model.setData(model.index(4, 0), QtCore.Qt.CheckState.Checked.value,
                   QtCore.Qt.ItemDataRole.CheckStateRole)
     assert app.groups.get_items(1) == ["E4"]
+
+
+def test_assign_cyclic_starts_at_the_groups_made(app):
+    for number in range(3):  # New Groups... with 3
+        app.groups.add_group(number)
+    app.group_actions.assign_cyclic()  # cancelled; check the options
+    extras = dict((label, spin.value) for label, spin in app.dialogs[-1][1]["extras"])
+    assert extras["Groups"] == 3
+    app.answers = [(None, None, "3", "1", "E0", "E5")]
+    app.group_actions.assign_cyclic()
+    assert app.groups.group_numbers == [0, 1, 2]
+    assert [app.groups.get_group(f"E{i}") for i in range(6)] == [0, 1, 2, 0, 1, 2]

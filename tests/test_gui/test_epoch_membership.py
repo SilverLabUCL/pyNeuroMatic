@@ -268,3 +268,9 @@ def test_the_strip_epoch_set_gets_a_box_too(app):
     for chosen in ("All", "Current Epoch", "Set2"):  # nothing extra
         app.selection_model.update(epoch_set=chosen)
         assert list(panel.set_checkboxes) == ["Set1", "Set2", "SetX"]
+
+
+def test_narrow_group_and_channel_dropdowns(app):
+    strip = app.selection_strip
+    assert strip.combo("group").width() == 56 and strip.combo("channel").width() == 56
+    assert app.plot_widget.group_combo.width() == 56

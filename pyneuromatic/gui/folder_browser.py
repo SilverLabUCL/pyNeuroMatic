@@ -20,17 +20,20 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
+import fnmatch
+
 from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMDataContainer
+from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel, NotesWidget
-from pyneuromatic.gui.membership import MembershipModel, unassign_from_group
+from pyneuromatic.gui.membership import ChoiceModel, MembershipModel, unassign_from_group
 from pyneuromatic.gui.folder_model import (
     FolderTreeModel,
     _GroupMemberNode,
@@ -55,6 +58,39 @@ from pyneuromatic.gui.tier_actions import (
 
 # Rows with Set / Group actions (the same in the tree and the detail pane)
 _SET_GROUP_NODES = (_SetsNode, _SetNode, _GroupsNode, _GroupNumberNode)
+
+# Lists whose items can be ticked in Edit mode to choose several (e.g. to
+# delete them): Folders, Data, Data Series and Subfolders
+_CHOOSABLE_KINDS = ("folders", "data", "dataseries", "toolfolders")
+
+
+_NOUNS = {NMFolder: "folder", NMToolFolder: "subfolder", NMChannel: "channel",
+          NMEpoch: "epoch"}
+
+
+def _count_and_names(objects, shown: int = 5) -> str:
+    """e.g. "214 data arrays: RecordB0, RecordB1, ..." or just "RecordA0"."""
+    if len(objects) == 1:
+        return objects[0].name
+    first = objects[0]
+    noun = next((n for cls, n in _NOUNS.items() if isinstance(first, cls)), None)
+    if noun is None:
+        noun = "data series" if isinstance(first, NMDataSeries) else "data array"
+    plural = noun if noun.endswith("series") else noun + "s"
+    names = ", ".join(o.name for o in objects[:shown])
+    more = ", ..." if len(objects) > shown else ""
+    return f"{len(objects)} {plural}: {names}{more}"
+
+
+def name_matches(name: str, pattern: str) -> bool:
+    """True if *name* fits the filter *pattern* (case-insensitive): wildcards
+    (``RecordB*``, ``*_copy``, ``E?``) or, without any, part of the name."""
+    pattern = pattern.strip().lower()
+    if not pattern:
+        return True
+    if any(char in pattern for char in "*?["):
+        return fnmatch.fnmatchcase(name.lower(), pattern)
+    return pattern in name.lower()
 
 
 class FolderBrowserWidget(QtWidgets.QWidget):
@@ -159,6 +195,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._tree.setHeaderHidden(True)
         self._tree.activated.connect(self._on_activated)
         self._tree.selectionModel().currentChanged.connect(self._on_tree_current_changed)
+        # Epochs show only their Sets and Groups rows in the tree; clicking
+        # Epochs lists the epochs (E0, E1...) in the second column
+        self._tree.expanded.connect(self._hide_epoch_rows)
         self._tree.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self._tree.customContextMenuRequested.connect(self._show_tree_context_menu)
 
@@ -188,14 +227,24 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._none_button.setText("Clear")
         self._invert_button = QtWidgets.QToolButton(self)
         self._invert_button.setText("Invert")
+        # A name filter (wildcards): All / Clear / Invert act on what it shows
+        self._filter_edit = QtWidgets.QLineEdit(self)
+        self._filter_edit.setPlaceholderText("Filter, e.g. RecordB*")
+        self._filter_edit.setClearButtonEnabled(True)
+        self._filter_edit.setToolTip("Show only names that match (* and ? are wildcards)")
         edit_row = QtWidgets.QHBoxLayout()
-        edit_row.setContentsMargins(4, 2, 4, 2)
         edit_row.addStretch(1)
         for widget in (self._all_button, self._none_button, self._invert_button,
                        self._edit_checkbox):
             edit_row.addWidget(widget)
+        # The filter gets a row of its own, so a narrow column doesn't squeeze it
+        bar_layout = QtWidgets.QVBoxLayout()
+        bar_layout.setContentsMargins(4, 2, 4, 2)
+        bar_layout.setSpacing(2)
+        bar_layout.addLayout(edit_row)
+        bar_layout.addWidget(self._filter_edit)
         self._edit_bar = QtWidgets.QWidget(self)
-        self._edit_bar.setLayout(edit_row)
+        self._edit_bar.setLayout(bar_layout)
         self._edit_bar.hide()
 
         self._membership_view = QtWidgets.QTableView(self)
@@ -205,6 +254,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
         )
         self._membership_view.viewport().installEventFilter(self)
+        # Right-click: the usual menu for the ticked items (Edit on a list)
+        self._membership_view.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self._membership_view.customContextMenuRequested.connect(self._show_chosen_context_menu)
         self._membership_model: MembershipModel | None = None
         self._last_toggled_row: int | None = None
         # Rows selected when the mouse went down (a click changes the selection)
@@ -239,6 +291,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._all_button.clicked.connect(lambda: self._edit_all("all"))
         self._none_button.clicked.connect(lambda: self._edit_all("none"))
         self._invert_button.clicked.connect(lambda: self._edit_all("invert"))
+        self._filter_edit.textChanged.connect(self._apply_filter)
 
         splitter = QtWidgets.QSplitter(self)
         splitter.addWidget(self._tree)
@@ -293,6 +346,10 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         return self._target_notes
 
     @property
+    def filter_edit(self) -> QtWidgets.QLineEdit:
+        return self._filter_edit
+
+    @property
     def edit_checkbox(self) -> QtWidgets.QCheckBox:
         return self._edit_checkbox
 
@@ -324,10 +381,30 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             return node.container, None, node.number, None
         return None
 
+    @staticmethod
+    def _choice_target(node):
+        """The container of a Folders / Data / Data Series / Subfolders row,
+        whose items can be ticked to choose several, or None."""
+        if isinstance(node, _GroupNode) and node.kind in _CHOOSABLE_KINDS:
+            return getattr(node.owner, node.kind, None)
+        return None
+
     def _update_edit_mode(self) -> None:
-        """Show the Edit bar for a set or group row, and keep edit mode on
-        while moving between sets and groups."""
-        target = self._edit_target(self._tree.currentIndex().internalPointer())
+        """Show the Edit bar for a set, group or item list row, and keep edit
+        mode on while moving between them."""
+        node = self._tree.currentIndex().internalPointer()
+        choice = self._choice_target(node)
+        if choice is not None:
+            self._edit_bar.show()
+            self._edit_checkbox.setEnabled(True)
+            self._edit_checkbox.setToolTip(
+                "List every item with a checkbox, to choose several; right-click "
+            "for what to do with them (e.g. Delete...)"
+            )
+            self._show_choice_list(choice if self._edit_checkbox.isChecked() else None)
+            self._update_target_notes()
+            return
+        target = self._edit_target(node)
         self._edit_bar.setVisible(target is not None)
         if target is None or target[3] is not None:
             self._edit_checkbox.blockSignals(True)
@@ -364,9 +441,69 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         if show:
             self._target_notes.set_notes(*found)
 
+    def _show_choice_list(self, container) -> None:
+        """Every item of *container* with a checkbox, to choose several."""
+        editing = container is not None
+        for widget in (self._all_button, self._none_button, self._invert_button,
+                       self._filter_edit):
+            widget.setVisible(editing)
+        if not editing:
+            self._detail_stack.setCurrentWidget(self._detail)
+            return
+        model = self._membership_model
+        if not isinstance(model, ChoiceModel) or not model.same_target(container):
+            self._clear_filter()  # a new list: start unfiltered
+            model = ChoiceModel(container, parent=self)
+            model.toggled.connect(self._on_member_toggled)
+            self._membership_model = model
+            self._membership_view.setModel(model)
+            self._last_toggled_row = None
+        else:
+            model.reload()  # items may have been added or deleted
+        self._all_button.setText("All")
+        self._all_button.setToolTip("Tick every item shown")
+        self._apply_filter()
+        self._detail_stack.setCurrentWidget(self._membership_view)
+
+    def _clear_filter(self) -> None:
+        self._filter_edit.blockSignals(True)
+        self._filter_edit.clear()
+        self._filter_edit.blockSignals(False)
+
+    def _apply_filter(self, *_args) -> None:
+        """Hide the rows of the checkbox list whose names don't match."""
+        model = self._membership_model
+        if model is None:
+            return
+        pattern = self._filter_edit.text()
+        for row in range(model.rowCount()):
+            self._membership_view.setRowHidden(row, not name_matches(model.name_at(row), pattern))
+
+    def _shown_rows(self) -> list[int]:
+        model = self._membership_model
+        if model is None:
+            return []
+        return [row for row in range(model.rowCount())
+                if not self._membership_view.isRowHidden(row)]
+
+    def _show_chosen_context_menu(self, pos: QtCore.QPoint) -> None:
+        """The usual menu (Delete..., Add to Set...) for the ticked items."""
+        model = self._membership_model
+        if not isinstance(model, ChoiceModel) or not model.chosen():
+            return
+        menu = QtWidgets.QMenu(self)
+        chosen = model.chosen()
+        if len(chosen) == 1 or not isinstance(chosen[0], (NMFolder, NMToolFolder)):
+            self._populate_object_menu(menu, chosen, model.container)
+        else:  # several folders: their Duplicate / Rename take one at a time
+            menu.addAction("Delete...", lambda: self._delete_objects(model.container, chosen))
+        if menu.actions():
+            menu.exec(self._membership_view.viewport().mapToGlobal(pos))
+
     def _show_edit_list(self, target) -> None:
         editing = target is not None
-        for button in (self._all_button, self._none_button, self._invert_button):
+        for button in (self._all_button, self._none_button, self._invert_button,
+                       self._filter_edit):
             button.setVisible(editing)
         if not editing:
             self._detail_stack.setCurrentWidget(self._detail)
@@ -374,6 +511,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         container, set_name, group, _note = target
         model = self._membership_model
         if model is None or not model.same_target(container, set_name, group):
+            self._clear_filter()  # a new list: start unfiltered
             model = MembershipModel(container, set_name=set_name, group=group, parent=self)
             model.membership_changed.connect(self._on_membership_changed)
             model.toggled.connect(self._on_member_toggled)
@@ -390,6 +528,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             else f"Tick every {noun[:-1]}"
         )
         self._invert_button.setVisible(not model.is_group)
+        self._apply_filter()
         self._detail_stack.setCurrentWidget(self._membership_view)
 
     def _on_edit_toggled(self, _checked: bool) -> None:
@@ -443,18 +582,22 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         shift = QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
         if shift and last is not None and last != row:
             low, high = sorted((last, row))
-            self._membership_model.set_checked(range(low, high + 1), checked)
+            shown = set(self._shown_rows())  # not rows the filter hides
+            self._membership_model.set_checked(
+                [r for r in range(low, high + 1) if r in shown], checked
+            )
         self._last_toggled_row = row
 
     def _edit_all(self, how: str) -> None:
         model = self._membership_model
         if model is None:
             return
+        rows = self._shown_rows()  # the filter's rows
         if how == "all":
             # A group takes only ungrouped epochs: All would empty other groups
-            (model.check_ungrouped if model.is_group else model.check_all)()
+            (model.check_ungrouped if model.is_group else model.check_all)(rows)
         else:
-            {"none": model.check_none, "invert": model.invert}[how]()
+            {"none": model.check_none, "invert": model.invert}[how](rows)
 
     def _on_membership_changed(self, _count: int) -> None:
         # Reload the tree (its set/group member rows) and tell the app
@@ -711,6 +854,15 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._hide_set_and_group_rows(current)
         self._update_edit_mode()
         self._update_info_panel(current)
+
+    def _hide_epoch_rows(self, index: QtCore.QModelIndex) -> None:
+        """Hide an Epochs row's epochs in the tree (there can be thousands)."""
+        node = index.internalPointer() if index.isValid() else None
+        if not (isinstance(node, _GroupNode) and node.kind == "epochs"):
+            return
+        for row in range(self._model.rowCount(index)):
+            child = self._model.index(row, 0, index).internalPointer()
+            self._tree.setRowHidden(row, index, isinstance(child, NMEpoch))
 
     def _hide_set_and_group_rows(self, root: QtCore.QModelIndex) -> None:
         """List only the items for Data and Epochs: their Sets (and Groups)
@@ -1024,8 +1176,17 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     def _delete_objects(self, container, selected: list[NMObject]) -> None:
         if container is None or not selected:
             return
-        names = ", ".join(o.name for o in selected)
-        text = "Delete %s?" % names
+        # Data series: the strip's Delete Series dialog (keep or delete their
+        # arrays), for one or several
+        if self._series_actions is not None and isinstance(selected[0], NMDataSeries):
+            if len(selected) == 1:
+                self._series_actions.delete_series(selected[0])
+            else:
+                self._series_actions.delete_series_list(
+                    container._parent, [obj.name for obj in selected]
+                )
+            return
+        text = f"Delete {_count_and_names(selected)}?"
         if isinstance(container, NMDataContainer):
             in_series = [o.name for o in selected if container.dataseries_of(o.name)]
             if in_series:
@@ -1034,6 +1195,16 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                     "(data in a locked series is kept)." % len(in_series)
                 )
         if not self._confirm("Delete", text):
+            return
+        # Folders and subfolders: the strip's actions, which keep its
+        # selection on a folder that remains
+        actions = self._folder_actions
+        names = [obj.name for obj in selected]
+        if actions is not None and isinstance(selected[0], NMFolder):
+            actions.delete_folders(names)
+            return
+        if actions is not None and isinstance(selected[0], NMToolFolder):
+            actions.delete_subfolders(selected[0]._folder, names)
             return
         problems = []
         for obj in selected:

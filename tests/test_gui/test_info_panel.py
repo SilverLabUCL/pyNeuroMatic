@@ -283,3 +283,73 @@ def test_two_dimensional_points(app):
     browser.refresh()
     browser.show_data_of(app.folder, select="Matrix")
     assert browser.info_panel.row_text("Points") == "100 × 4"
+
+
+def test_epochs_are_hidden_in_the_tree(app):
+    browser = app.browser_widget
+    browser.show_data_of(app.series, kind="epochs")  # the Epochs row, expanded
+    tree, model = browser.tree, browser.tree.model()
+    epochs_row = tree.currentIndex()
+    tree.expand(epochs_row)
+    shown = [model.data(model.index(r, 0, epochs_row)) for r in range(model.rowCount(epochs_row))
+             if not tree.isRowHidden(r, epochs_row)]
+    assert shown == ["Sets", "Groups"]
+    # The second column still lists them
+    view = browser.detail
+    listed = [model.data(model.index(r, 0, epochs_row)) for r in range(model.rowCount(epochs_row))
+              if not view.isRowHidden(r)]
+    assert listed == ["E0", "E1", "E2"]
+    # Still hidden after a refresh
+    browser.refresh()
+    epochs_row = tree.currentIndex()
+    assert all(tree.isRowHidden(r, epochs_row) for r in range(2, model.rowCount(epochs_row)))
+
+
+def test_channels_still_listed_in_the_tree(app):
+    browser = app.browser_widget
+    browser.show_object(app.series.channels["B"])
+    tree = browser.tree
+    channel_row = tree.currentIndex()
+    assert not tree.isRowHidden(channel_row.row(), channel_row.parent())
+
+
+def test_edit_scales_of_a_channel(app, monkeypatch):
+    browser = app.browser_widget
+    browser.show_object(app.series.channels["B"])
+    panel = browser.info_panel
+    assert panel.edit_scales_button.isVisibleTo(panel)
+    asked = []
+
+    def ask(x, y_rows, context, error):
+        asked.append((y_rows, context, error))
+        return {"xunits": "ms", "y": {"Y": {"label": "Im", "units": "pA"}}}
+
+    monkeypatch.setattr(app.series_actions, "_ask_scales", ask)
+    panel.edit_scales_button.click()
+    y_rows, context, error = asked[0]
+    assert context == ("Channel", "Demo › Record › B") and error is None
+    assert len(y_rows) == 1
+    for name in ("RecordB0", "RecordB2"):  # its arrays follow
+        data = app.folder.data[name]
+        assert (data.xscale.units, data.yscale.label, data.yscale.units) == ("ms", "Im", "pA")
+    assert app.folder.data["RecordA0"].yscale.units != "pA"  # channel A untouched
+    assert browser.info_panel.row_text("Y Units") == "pA"
+    channel = app.series.channels["B"]  # its template for new arrays too
+    assert (channel.xscale.units, channel.yscale.label, channel.yscale.units) == ("ms", "Im", "pA")
+
+
+def test_channel_shows_mixed_scales(app):
+    app.folder.data["RecordA1"].xscale.delta = 0.5
+    browser = app.browser_widget
+    browser.show_object(app.series.channels["A"])
+    assert browser.info_panel.row_text("X Delta") == "(mixed)"
+    assert browser.info_panel.row_text("X Start") == "0"
+
+
+def test_locked_channel_has_no_edit_button(app):
+    app.series.locked = True
+    browser = app.browser_widget
+    browser.show_object(app.series.channels["A"])
+    panel = browser.info_panel
+    assert not panel.edit_scales_button.isVisibleTo(panel)
+    assert panel.row_text("Locked") == "Yes, with data series 'Record'"

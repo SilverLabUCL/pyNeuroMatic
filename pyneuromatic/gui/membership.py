@@ -105,6 +105,9 @@ class MembershipModel(QtCore.QAbstractTableModel):
             self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1,
                                                                self.columnCount() - 1))
 
+    def name_at(self, row: int) -> str:
+        return self._names[row]
+
     def members(self) -> list[str]:
         """Member names, in container order."""
         return [name for name in self._names if name in self._members]
@@ -183,28 +186,142 @@ class MembershipModel(QtCore.QAbstractTableModel):
         self.membership_changed.emit(len(change))
         return len(change)
 
-    def check_all(self) -> int:
-        return self.set_checked(range(len(self._names)), True)
+    # The bulk ticks work on *rows* (e.g. those a filter shows), or every row
 
-    def check_ungrouped(self) -> int:
+    def _rows(self, rows) -> list[int]:
+        return list(range(len(self._names))) if rows is None else list(rows)
+
+    def check_all(self, rows=None) -> int:
+        return self.set_checked(self._rows(rows), True)
+
+    def check_ungrouped(self, rows=None) -> int:
         """Tick every item that is in no group (other groups are kept)."""
         groups = self.container.groups
         return self.set_checked(
-            [row for row, name in enumerate(self._names)
-             if groups.get_group(name) is None],
+            [row for row in self._rows(rows) if groups.get_group(self._names[row]) is None],
             True,
         )
 
-    def check_none(self) -> int:
-        return self.set_checked(range(len(self._names)), False)
+    def check_none(self, rows=None) -> int:
+        return self.set_checked(self._rows(rows), False)
 
-    def invert(self) -> int:
+    def invert(self, rows=None) -> int:
         """Tick every unticked item and untick every ticked one."""
-        ticked = [row for row, name in enumerate(self._names) if name in self._members]
-        unticked = [row for row, name in enumerate(self._names) if name not in self._members]
+        rows = self._rows(rows)
+        ticked = [row for row in rows if self._names[row] in self._members]
+        unticked = [row for row in rows if self._names[row] not in self._members]
         # Remove first: for groups, adding never moves items out of this group
         changed = self.set_checked(ticked, False)
         return changed + self.set_checked(unticked, True)
 
 
-__all__ = ["MembershipModel", "set_item_group", "unassign_from_group"]
+class ChoiceModel(QtCore.QAbstractTableModel):
+    """Every item of *container* with a checkbox, to choose several at once
+    (e.g. to delete them). Unlike :class:`MembershipModel`, a tick changes
+    nothing in the container; :meth:`chosen` lists the ticked items.
+    """
+
+    # The ticked items changed (how many changed)
+    membership_changed = QtCore.pyqtSignal(int)
+    # A row's checkbox was clicked: row, now checked
+    toggled = QtCore.pyqtSignal(int, bool)
+
+    is_group = False
+
+    def __init__(self, container, parent: QtCore.QObject | None = None) -> None:
+        super().__init__(parent)
+        self.container = container
+        self._names = list(container.keys())
+        self._chosen: set[str] = set()
+
+    @property
+    def target_label(self) -> str:
+        return ""
+
+    def same_target(self, container, set_name=None, group=None) -> bool:
+        return container is self.container and set_name is None and group is None
+
+    def chosen(self) -> list:
+        """The ticked items, in container order."""
+        return [self.container[name] for name in self._names if name in self._chosen]
+
+    def name_at(self, row: int) -> str:
+        return self._names[row]
+
+    def reload(self) -> None:
+        """Re-read the items (e.g. after a delete); ticks of gone items go."""
+        self.beginResetModel()
+        self._names = list(self.container.keys())
+        self._chosen &= set(self._names)
+        self.endResetModel()
+
+    def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        return 0 if parent.isValid() else len(self._names)
+
+    def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        return 0 if parent.isValid() else 1
+
+    def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):
+        if role == QtCore.Qt.ItemDataRole.DisplayRole and \
+                orientation == QtCore.Qt.Orientation.Horizontal:
+            return "Name"
+        return None
+
+    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.ItemDataRole.DisplayRole) -> Any:
+        if not index.isValid():
+            return None
+        name = self._names[index.row()]
+        if role == QtCore.Qt.ItemDataRole.DisplayRole:
+            return name
+        if role == QtCore.Qt.ItemDataRole.CheckStateRole:
+            return (QtCore.Qt.CheckState.Checked if name in self._chosen
+                    else QtCore.Qt.CheckState.Unchecked)
+        return None
+
+    def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlag:
+        flags = super().flags(index)
+        if index.isValid():
+            flags |= QtCore.Qt.ItemFlag.ItemIsUserCheckable
+        return flags
+
+    def setData(self, index: QtCore.QModelIndex, value: Any,
+                role: int = QtCore.Qt.ItemDataRole.EditRole) -> bool:
+        if role != QtCore.Qt.ItemDataRole.CheckStateRole:
+            return False
+        checked = QtCore.Qt.CheckState(value) == QtCore.Qt.CheckState.Checked
+        self.set_checked([index.row()], checked)
+        self.toggled.emit(index.row(), checked)
+        return True
+
+    def set_checked(self, rows, checked: bool) -> int:
+        names = [self._names[row] for row in rows if 0 <= row < len(self._names)]
+        change = [n for n in names if (n in self._chosen) != checked]
+        if not change:
+            return 0
+        if checked:
+            self._chosen.update(change)
+        else:
+            self._chosen.difference_update(change)
+        self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1, 0))
+        self.membership_changed.emit(len(change))
+        return len(change)
+
+    def _rows(self, rows) -> list[int]:
+        return list(range(len(self._names))) if rows is None else list(rows)
+
+    def check_all(self, rows=None) -> int:
+        return self.set_checked(self._rows(rows), True)
+
+    def check_none(self, rows=None) -> int:
+        return self.set_checked(self._rows(rows), False)
+
+    def invert(self, rows=None) -> int:
+        rows = self._rows(rows)
+        ticked = [row for row in rows if self._names[row] in self._chosen]
+        changed = self.set_checked(ticked, False)
+        return changed + self.set_checked(
+            [row for row in rows if row not in ticked], True
+        )
+
+
+__all__ = ["ChoiceModel", "MembershipModel", "set_item_group", "unassign_from_group"]
