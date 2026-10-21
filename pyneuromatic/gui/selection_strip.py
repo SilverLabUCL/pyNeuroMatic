@@ -114,6 +114,9 @@ class SelectionStrip(QtWidgets.QWidget):
         "group": 1,
     }
 
+    # Narrower than the style's smallest dropdown: they hold "A" or "12"
+    _FIXED_WIDTH = {"channel": 56, "group": 56}
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._selection_model: SelectionModel | None = None
@@ -168,6 +171,8 @@ class SelectionStrip(QtWidgets.QWidget):
                 combo.setSizeAdjustPolicy(
                     QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
                 )
+                if key in self._FIXED_WIDTH:
+                    combo.setFixedWidth(self._FIXED_WIDTH[key])
                 if key == "group_operator":
                     combo.setToolTip("Combine the Epoch Set and Group with AND or OR")
                 self._combos[key] = combo

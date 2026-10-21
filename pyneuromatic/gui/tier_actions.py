@@ -829,15 +829,24 @@ class FolderActions(TierActions):
         )
         if answer is None:
             return
-        name = answer[0]
-        was_selected = name == self._current_name("folder")
-        names = list(folders.keys())
-        index = names.index(name)
-        neighbour = (names[index + 1:] + names[:index][::-1])[:1]
-        folders.pop(name)
-        if was_selected:
-            if neighbour:
-                self._selection.update(folder=folders[neighbour[0]])
+        self.delete_folders([answer[0]])
+
+    def delete_folders(self, names: list[str]) -> None:
+        """Delete folders *names* (no questions asked); if the selected one
+        goes, select its neighbour."""
+        folders = self._folders
+        current = self._current_name("folder")
+        order = list(folders.keys())
+        neighbour = None
+        if current in names:
+            index = order.index(current)
+            neighbour = next((n for n in order[index + 1:] + order[:index][::-1]
+                              if n not in names), None)
+        for name in names:
+            folders.pop(name)
+        if current in names:
+            if neighbour is not None:
+                self._selection.update(folder=folders[neighbour])
             else:
                 self._selection.clear()
         self._changed()
@@ -896,11 +905,22 @@ class FolderActions(TierActions):
         )
         if answer is None:
             return
-        name = answer[0]
-        if folder is self._folder() and name == self._current_name("toolfolder"):
+        self.delete_subfolders(folder, [answer[0]])
+
+    def delete_subfolders(self, folder, names: list[str]) -> None:
+        """Delete *folder*'s subfolders *names* (no questions asked)."""
+        if folder is self._folder() and self._current_name("toolfolder") in names:
             self._selection.update(toolfolder=None)
-        folder.toolfolders.pop(name)
+        for name in names:
+            folder.toolfolders.pop(name)
         self._changed()
+
+
+def _owner_text(owner) -> str:
+    """e.g. "Demo" or "Demo / Stats0" for a folder or subfolder."""
+    folder = owner._folder
+    return " / ".join(o.name for o in (folder, owner if owner is not folder else None)
+                      if o is not None)
 
 
 def series_name_hint(owner, name: str | None, joins_now: bool = False) -> str:
@@ -1605,15 +1625,22 @@ class SeriesActions(TierActions):
                     "to change it.")
         return None
 
-    def _choose_series(self, title: str, **options):
-        owner = self._owner()
+    def _choose_series(self, title: str, owner=None, current: str | None = None, **options):
+        """Choose a series of the selected folder, or of *owner* (starting at
+        *current*, e.g. a series right-clicked in the browser)."""
+        if owner is None:
+            owner = self._owner()
+            series = self._series()
+            current = series.name if series is not None else None
+            context = self._context_text()
+        else:
+            context = _owner_text(owner)
         if owner is None or len(owner.dataseries) == 0:
             return None
-        current = self._series()
-        options.setdefault("context", ("Folder", self._context_text()))
+        options.setdefault("context", ("Folder", context))
         return self._choose(
             title, item_label="Series", items=list(owner.dataseries.keys()),
-            current=current.name if current is not None else None, **options,
+            current=current, **options,
         )
 
     # --- actions ------------------------------------------------------------
@@ -1814,6 +1841,43 @@ class SeriesActions(TierActions):
                 series.set_yunits(fields["units"], channel=channel)
         self._changed()
 
+    def edit_channel_scales(self, channel) -> None:
+        """Edit the scales of one channel of a series (e.g. right from the
+        browser): its arrays take their scales from the channel."""
+        series = channel._parent
+        owner = series._container._parent
+        y_row = ("Y", common_value(d.yscale.label for d in channel.data),
+                 common_value(d.yscale.units for d in channel.data))
+        lock_error = self._lock_error(owner, series.name)
+        changes = self._ask_scales(
+            scale_fields(channel.data) if channel.data else {
+                "xstart": f"{channel.xscale.start:g}", "xdelta": f"{channel.xscale.delta:g}",
+                "xlabel": channel.xscale.label, "xunits": channel.xscale.units,
+            },
+            [y_row],
+            ("Channel", f"{_owner_text(owner)} › {series.name} › {channel.name}"),
+            lock_error,
+        )
+        if not changes or lock_error:  # the dialog only shows a locked series
+            return
+        for key, setter in (("xstart", series.set_xstart), ("xdelta", series.set_xdelta),
+                            ("xlabel", series.set_xlabel), ("xunits", series.set_xunits)):
+            if key in changes:
+                setter(changes[key], channel=channel.name)
+        fields = changes.get("y", {}).get("Y", {})
+        if "label" in fields:
+            series.set_ylabel(fields["label"], channel=channel.name)
+        if "units" in fields:
+            series.set_yunits(fields["units"], channel=channel.name)
+        # The channel's own scale too: the template for its new arrays
+        for key, attribute in (("xstart", "start"), ("xdelta", "delta"),
+                               ("xlabel", "label"), ("xunits", "units")):
+            if key in changes:
+                setattr(channel.xscale, attribute, changes[key])
+        for field, value in fields.items():
+            setattr(channel.yscale, field, value)
+        self._changed()
+
     def toggle_lock(self) -> None:
         series = self._series()
         if series is not None:
@@ -1874,10 +1938,14 @@ class SeriesActions(TierActions):
         )
         self._changed()
 
-    def delete_series(self) -> None:
-        owner = self._owner()
+    def delete_series(self, series=None) -> None:
+        """Delete the selected series, or *series* (e.g. one right-clicked in
+        the browser); its arrays are kept in the folder, or deleted too."""
+        owner = series._container._parent if series is not None else self._owner()
         answer = self._choose_series(
             "Delete Series",
+            owner=owner if series is not None else None,
+            current=series.name if series is not None else None,
             extras=[("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
             message="Keep the series' arrays in the folder, or delete them too.",
             validate=lambda item, name, arrays: self._lock_error(owner, item),
@@ -1886,6 +1954,29 @@ class SeriesActions(TierActions):
             return
         item, _name, arrays = answer
         owner.remove_dataseries(item, delete_data=arrays == self.DELETE)
+        self._changed()
+
+    def delete_series_list(self, owner, names: list[str]) -> None:
+        """Delete several series of *owner* (e.g. ticked in the browser),
+        with the same Keep / Delete arrays choice as Delete Series."""
+        if not names:
+            return
+        shown = ", ".join(names[:5]) + (", ..." if len(names) > 5 else "")
+        answer = self._choose(
+            "Delete Series",
+            context=("Folder", _owner_text(owner)),
+            extras=[("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
+            message=f"Delete {len(names)} data series: {shown}?\n"
+                    "Keep their arrays in the folder, or delete them too.",
+            validate=lambda _item, _name, _arrays: next(
+                (error for name in names if (error := self._lock_error(owner, name))), None
+            ),
+        )
+        if answer is None:
+            return
+        delete_data = answer[-1] == self.DELETE
+        for name in names:
+            owner.remove_dataseries(name, delete_data=delete_data)
         self._changed()
 
     def choose_in_browser(self) -> None:
@@ -2388,9 +2479,11 @@ class GroupActions(TierActions):
             return (f"{shown}{more} ({groups} group{'s' * (groups != '1')}, "
                     f"block {block}, {len(epochs)} {noun})")
 
+        # Start at the groups already made (e.g. 3 after New Groups...)
+        n_groups = max(len(series.epochs.groups.group_numbers), 2)
         answer = self._choose(
             "Assign Cyclic", context=self._series_context(series),
-            extras=[("Groups", Spin(1, 1000, 2)), ("Block", Spin(1, 100_000, 1))]
+            extras=[("Groups", Spin(1, 1000, n_groups)), ("Block", Spin(1, 100_000, 1))]
             + epoch_spins(names, names[0], names[-1]),
             message=preview,
             validate=lambda _item, _name, _groups, _block, first, last: (

@@ -20,6 +20,7 @@ try:
 except ImportError:  # pragma: no cover - optional GUI dependency
     pg = None
 
+from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, EXCLUDE_SET
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.context_views import (
@@ -324,6 +325,7 @@ class PlotPanel(QtWidgets.QWidget):
         self.group_combo.setSizeAdjustPolicy(
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
+        self.group_combo.setFixedWidth(56)  # holds a group number
         self.group_combo.currentIndexChanged.connect(self._on_group_combo_changed)
         membership_layout.addWidget(self.group_combo)
         membership_layout.addStretch(1)
@@ -978,7 +980,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.content_changed.connect(self._on_browser_content_changed)
             self.browser_widget.data_created.connect(self._on_browser_data_created)
-            self.browser_widget.edit_scales_requested.connect(self.data_actions.edit_scales)
+            self.browser_widget.edit_scales_requested.connect(self._edit_scales_of)
             self.browser_widget.set_folder_actions(self.folder_actions)
             self.browser_widget.set_series_actions(self.series_actions)
         # A run or a deleted folder changes the Subfolder list
@@ -1008,15 +1010,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def _build_history_panel(self) -> None:
         history_widget = QtWidgets.QWidget(self)
         history_layout = QtWidgets.QVBoxLayout(history_widget)
-        history_layout.setContentsMargins(6, 4, 6, 4)
-
-        label = QtWidgets.QLabel("History")
-        label.setStyleSheet("font-weight: bold;")
-        history_layout.addWidget(label)
+        history_layout.setContentsMargins(6, 0, 6, 4)  # the dock's title names it
 
         self.history_panel = QtWidgets.QPlainTextEdit(history_widget)
         self.history_panel.setReadOnly(True)
         self.history_panel.setPlainText("Welcome to pyNeuroMatic\n")
+        self.history_panel.setMinimumHeight(40)
         history_layout.addWidget(self.history_panel)
 
         dock = QtWidgets.QDockWidget("History", self)
@@ -1026,6 +1025,10 @@ class NMAppWindow(QtWidgets.QMainWindow):
             | QtCore.Qt.DockWidgetArea.TopDockWidgetArea
         )
         self.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, dock)
+        # Short to start with (a few lines), so the tools and plot get the
+        # height; drag its edge to see more
+        self.resizeDocks([dock], [110], QtCore.Qt.Orientation.Vertical)
+        self.history_dock = dock
 
     def _on_tool_selected(self, tool_name: str) -> None:
         self.current_tool_name = tool_name
@@ -1078,6 +1081,13 @@ class NMAppWindow(QtWidgets.QMainWindow):
         current = self.context_panel.currentWidget()
         for panel, holder in self._view_tabs_holders.items():
             holder.setVisible(panel is current)
+
+    def _edit_scales_of(self, obj) -> None:
+        """The browser's Edit Scales...: a data array's, or a channel's."""
+        if isinstance(obj, NMChannel):
+            self.series_actions.edit_channel_scales(obj)
+        else:
+            self.data_actions.edit_scales(obj)
 
     def _update_window_title(self, selection: dict) -> None:
         """e.g. "pyNeuroMatic — Demo1 / Record / A / E0"."""

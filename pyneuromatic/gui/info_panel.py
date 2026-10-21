@@ -70,6 +70,17 @@ def _type_text(dtype: numpy.dtype) -> str:
     return dtype.name
 
 
+def _common_text(values, number: bool) -> str:
+    """The value all *values* share, "(mixed)" if they differ, "—" if empty."""
+    distinct = set(values)
+    if len(distinct) > 1:
+        return "(mixed)"
+    value = distinct.pop() if distinct else None
+    if number and value is not None:
+        return f"{value:g}"
+    return _text(value)
+
+
 def _value_text(value: float, units: str) -> str:
     """e.g. "-61.2 mV"; "—" for NaN (e.g. the SD of one point)."""
     if value != value:
@@ -89,7 +100,7 @@ class InfoPanel(QtWidgets.QScrollArea):
 
     # A note was added to the object shown
     notes_changed = QtCore.pyqtSignal()
-    # Edit Scales... was clicked for this data array
+    # Edit Scales... was clicked for this data array or channel
     edit_scales_requested = QtCore.pyqtSignal(object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -133,7 +144,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         self._form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
         layout.addLayout(self._form)
 
-        # Changes go through a dialog, as in NeuroMatic (data arrays only)
+        # Changes go through a dialog, as in NeuroMatic (data arrays, channels)
         self.edit_scales_button = QtWidgets.QPushButton("Edit Scales...", self._body)
         self.edit_scales_button.setToolTip("Change the X start, delta, label and units, "
                                            "and the Y label and units")
@@ -202,9 +213,11 @@ class InfoPanel(QtWidgets.QScrollArea):
             self._show_channel(obj)
         elif isinstance(obj, NMEpoch):
             self._show_epoch(obj)
-        self.edit_scales_button.setVisible(
-            is_data and not self.showing_stats and self._locked_series(obj) is None
+        can_edit = (
+            (is_data and not self.showing_stats and self._locked_series(obj) is None)
+            or (isinstance(obj, NMChannel) and not obj._parent.locked)
         )
+        self.edit_scales_button.setVisible(can_edit)
         self._show_metadata(getattr(obj, "metadata", {}) if isinstance(obj, NMFolder) else {})
         self._show_notes(getattr(obj, "notes", None))
 
@@ -351,7 +364,22 @@ class InfoPanel(QtWidgets.QScrollArea):
 
     def _show_channel(self, channel: NMChannel) -> None:
         self._add_row("Data", _count(len(channel.data), "array"))
-        self._add_scale_rows(channel.xscale, channel.yscale)
+        if not channel.data:
+            self._add_scale_rows(channel.xscale, channel.yscale)
+        else:  # what its arrays have (the channel's own scale is a template)
+            arrays = channel.data
+            for label, values, number in (
+                ("X Start", [d.xscale.start for d in arrays], True),
+                ("X Delta", [d.xscale.delta for d in arrays], True),
+                ("X Label", [d.xscale.label for d in arrays], False),
+                ("X Units", [d.xscale.units for d in arrays], False),
+                ("Y Label", [d.yscale.label for d in arrays], False),
+                ("Y Units", [d.yscale.units for d in arrays], False),
+            ):
+                self._add_row(label, _common_text(values, number))
+        series = channel._parent
+        if isinstance(series, NMDataSeries) and series.locked:
+            self._add_row("Locked", f"Yes, with data series '{series.name}'")
 
     def _show_epoch(self, epoch: NMEpoch) -> None:
         series = epoch._parent
