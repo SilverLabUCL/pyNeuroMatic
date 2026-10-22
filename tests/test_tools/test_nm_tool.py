@@ -840,7 +840,7 @@ class TestNMToolMakeToolfolder(unittest.TestCase):
         self.tool._select["channel"] = NMChannel(name="A")
         self.tool._run_meta = {"run_keys": {"epoch": "Set1"}}
         tf = self.tool._make_toolfolder("Stats")
-        self.assertEqual(tf.name, "Stats_Record_A_Set1_0")
+        self.assertEqual(tf.name, "Stats_Record_A_S1_0")
 
     def test_epoch_set_all_included(self):
         self.tool._run_meta = {"run_keys": {"epoch": "All"}}
@@ -856,6 +856,54 @@ class TestNMToolMakeToolfolder(unittest.TestCase):
         self.tool._run_meta = {"run_keys": {}}
         tf = self.tool._make_toolfolder("Stats")
         self.assertEqual(tf.name, "Stats_0")
+
+    def _named(self, run_keys, epochs=None):
+        """The subfolder name for a Record / A run with *run_keys*."""
+        from pyneuromatic.core.nm_dataseries import NMDataSeries
+        ds = self.folder.dataseries.new("Record") if "Record" not in self.folder.dataseries \
+            else self.folder.dataseries["Record"]
+        self.tool._select["dataseries"] = ds
+        self.tool._select["channel"] = NMChannel(name="A")
+        self.tool._run_meta = {"run_keys": run_keys, "epochs": epochs or []}
+        return self.tool._make_toolfolder("Stats").name
+
+    def test_epoch_selection_codes(self):
+        self.assertEqual(self._named({"epoch": "all"}), "Stats_Record_A_All_0")
+        self.assertEqual(self._named({"epoch": "Set1"}), "Stats_Record_A_S1_0")
+        self.assertEqual(self._named({"epoch": "SetX"}), "Stats_Record_A_SX_0")
+        self.assertEqual(self._named({"epoch": "Set12"}), "Stats_Record_A_S12_0")
+        self.assertEqual(self._named({"epoch": "group0"}), "Stats_Record_A_G0_0")
+        self.assertEqual(self._named({"epoch": None, "group": 2}), "Stats_Record_A_G2_0")
+        self.assertEqual(self._named({"epoch": "all", "group": 1}), "Stats_Record_A_G1_0")
+        self.assertEqual(self._named({"epoch": "Set1", "group": 0, "group_operator": "AND"}),
+                         "Stats_Record_A_S1andG0_0")
+        self.assertEqual(self._named({"epoch": "Set1", "group": 0, "group_operator": "OR"}),
+                         "Stats_Record_A_S1orG0_0")
+
+    def test_current_epoch_code(self):
+        ds = self.folder.dataseries.new("Record")
+        ds.epochs.new("E3")
+        self.assertEqual(self._named({"epoch": "E3"}), "Stats_Record_A_E3_0")
+        self.assertEqual(self._named({"epoch": "selected"}, epochs=["E3"]),
+                         "Stats_Record_A_E3_1")
+
+    def test_named_set_is_cut_to_8_characters(self):
+        self.assertEqual(self._named({"epoch": "StableAccessCells"}),
+                         "Stats_Record_A_StableAc_0")
+
+    def test_data_set_code(self):
+        self.folder.data.sets.add("Set2")
+        self.tool._run_meta = {"run_keys": {"data": "Set2"}}
+        self.assertEqual(self.tool._make_toolfolder("Stats").name, "Stats_S2_0")
+        # A data array's name (not a set) adds nothing
+        self.tool._run_meta = {"run_keys": {"data": "RecordA0"}}
+        self.assertEqual(self.tool._make_toolfolder("Stats").name, "Stats_0")
+
+    def test_set_code(self):
+        from pyneuromatic.tools.nm_tool import set_code
+        names = ("Set0", "set3", "SetX", "Set12", "Settle", "Mine", "Set")
+        self.assertEqual([set_code(n) for n in names],
+                         ["S0", "S3", "SX", "S12", "Settle", "Mine", "Set"])
 
     def test_second_call_increments_n(self):
         self.tool._make_toolfolder("Stats")

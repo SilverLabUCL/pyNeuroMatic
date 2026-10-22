@@ -26,6 +26,8 @@ from pyneuromatic.tools.nm_stat_func import (
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
 from pyneuromatic.gui.results_view import Stats2Panel
 from pyneuromatic.gui.selection_model import (
+    ALL_EPOCHS,
+    CURRENT_EPOCH,
     SelectionModel,
     combine_scope_names,
     scoped_epoch_names,
@@ -660,6 +662,28 @@ class StatsToolTab(ToolTabWidget):
         self._refresh_window_combo()
         self._load_selected_window()
 
+    def _run_keys(self, targets: list[dict]) -> dict:
+        """What the run analyses, for the tool's subfolder name: the Epoch
+        Set ("all", "Set1"...) or the current epoch, with any Group and
+        AND / OR; or a data array run's Data Set."""
+        selection = self.selection
+        if selection.get("source") != "dataseries":
+            data_set = selection.get("data_set")
+            return {"data": data_set} if data_set else {}
+        epoch_set = selection.get("epoch_set")
+        group = selection.get("group")
+        if epoch_set is None or epoch_set == CURRENT_EPOCH:
+            # Current Epoch (or a Group alone): name the epoch if just one
+            epoch_set = None
+            if group is None and len(targets) == 1 and targets[0].get("epoch") is not None:
+                epoch_set = targets[0]["epoch"].name
+        keys: dict = {"epoch": epoch_set.lower() if epoch_set == ALL_EPOCHS else epoch_set}
+        if group is not None:
+            keys["group"] = group
+            if selection.get("group_operator"):
+                keys["group_operator"] = selection["group_operator"]
+        return keys
+
     def _selected_targets(self) -> list[dict[str, NMObject]]:
         """Data to analyse from the selection's source (data or data series).
 
@@ -723,9 +747,11 @@ class StatsToolTab(ToolTabWidget):
                 if isinstance(item, NMData):
                     target = self._manager_target(selection)
                     target["data"] = item
-                    # Analyse the data array, not the selected data series
+                    # Analyse the data array, not the selected data series:
+                    # None (not left out), so an earlier series run's
+                    # selection doesn't stay in the tool (or its folder name)
                     for tier in ("dataseries", "channel", "epoch"):
-                        target.pop(tier, None)
+                        target[tier] = None
                     targets.append(target)
             return targets
 
@@ -780,7 +806,8 @@ class StatsToolTab(ToolTabWidget):
         if not targets:
             raise RuntimeError("The current selection has no data to analyze")
         selected_window = self._tool.windows.selected_name
-        succeeded = self._tool.run_all(targets)
+        # The selection, so the subfolder is named after it (e.g. _S1_)
+        succeeded = self._tool.run_all(targets, run_keys=self._run_keys(targets))
         self._tool.windows.selected_name = selected_window
         if not succeeded:
             raise RuntimeError("Stats analysis did not complete")

@@ -555,3 +555,36 @@ def test_st_arrays_one_point_per_epoch(qtbot):
     assert len(values) == 4  # every epoch of the series
     assert np.isnan(values[0]) and np.isnan(values[2])
     assert (values[1], values[3]) == (20.0, 40.0)
+
+
+def test_subfolder_named_after_the_epoch_selection(qtbot):
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=False)
+    for epoch in range(4):
+        folder.data.new(f"RecordA{epoch}", nparray=np.array([1.0, 2.0]),
+                        xscale={"start": 0.0, "delta": 1.0})
+    dataseries = folder.sync_dataseries("Record", select=True)
+    dataseries.epochs.sets.add("Set1", ["E1", "E3"])
+    dataseries.epochs.groups.assign_cyclic(list(dataseries.epochs.keys()), n_groups=2)
+    manager.select_keys = {"folder": folder.name, "dataseries": dataseries.name,
+                           "channel": "A", "epoch": "E2"}
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    tab = window.stats_tab
+    tab.measurement_combo.setCurrentText("mean")
+
+    def run(**selection):
+        window.selection_model.update(**selection)
+        tab.run_button.click()
+        return tab.stats_tool.toolfolder.name
+
+    assert run(epoch_set="All") == "Stats_Record_A_All_0"
+    assert run(epoch_set="Set1") == "Stats_Record_A_S1_0"
+    assert run(epoch_set=None, group=0) == "Stats_Record_A_G0_0"
+    assert run(epoch_set="Set1", group=1, group_operator="AND") == "Stats_Record_A_S1andG1_0"
+    assert run(epoch_set="Set1", group=1, group_operator="OR") == "Stats_Record_A_S1orG1_0"
+    assert run(epoch_set="Current Epoch", group=None) == "Stats_Record_A_E2_0"
+
+    # Data arrays: the Data Set's code
+    folder.data.sets.add("Set2", ["RecordA0", "RecordA1"])
+    assert run(data=folder.data["RecordA0"], source="data", data_set="Set2") == "Stats_S2_0"
