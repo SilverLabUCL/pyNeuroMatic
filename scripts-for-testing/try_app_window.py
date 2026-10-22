@@ -8,6 +8,7 @@ from pyneuromatic.gui.app_window import NMAppWindow, set_app_name
 
 
 manager = NMManager(quiet=True)
+manager.settings.load_user()  # ~/.pyneuromatic/settings.toml, saved as it changes
 
 
 def add_dataseries(folder, prefix, channels, n_epochs, phase):

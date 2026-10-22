@@ -173,6 +173,12 @@ class NMManager(NMObject):
             enabled=command_history, quiet=quiet, nm_name=nm_name
         )
         nmch.set_command_history(self.__command_history)
+
+        # General settings (e.g. how tables show NaN); defaults until the app
+        # loads the user's file (NMSettings.load_user). Imported here for the
+        # same core<->tools reason as NMToolFolder above.
+        from pyneuromatic.core.nm_settings import NMSettings
+        self.__settings = NMSettings()
         nmch.add_command(nm_name + " = NMManager()")
 
         # NMManager is the root NMObject (name = nm_name)
@@ -1112,6 +1118,11 @@ class NMManager(NMObject):
     def main(self) -> "NMTool | None":
         """Access the Main tool."""
         return self.__toolkit.get("main")
+
+    @property
+    def settings(self):
+        """General pyNeuroMatic settings (an NMSettings), e.g. ``table_nan``."""
+        return self.__settings
 
     @property
     def stats(self) -> "NMTool | None":

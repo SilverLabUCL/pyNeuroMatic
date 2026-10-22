@@ -9,6 +9,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.gui import table_format
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.tools.nm_tool_stats import NMToolStats2
 
@@ -84,8 +85,10 @@ class StatsTables(QtWidgets.QWidget):
     def _make_table(self) -> QtWidgets.QTableWidget:
         table = QtWidgets.QTableWidget(self)
         table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        # One cell is highlighted, not its whole column; the current cell's
+        # column is the chosen ST_ array (its header is bold)
         table.setSelectionBehavior(
-            QtWidgets.QAbstractItemView.SelectionBehavior.SelectColumns
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems
         )
         table.setSelectionMode(
             QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
@@ -104,13 +107,25 @@ class StatsTables(QtWidgets.QWidget):
         if self._syncing:
             return
         self._syncing = True
+        # The other table follows the column (current, without a highlight)
         columns = {index.column() for index in table.selectedIndexes()}
-        if len(columns) == 1:
-            other.selectColumn(columns.pop())
-        else:
-            other.clearSelection()
+        column = columns.pop() if len(columns) == 1 else table.currentColumn()
+        if table is self.summary_table and column >= 0:  # the arrays table names it
+            self._set_current_column(self.arrays_table, column)
+        other.clearSelection()
+        self._set_current_column(other, column)
         self._syncing = False
         self.column_selected.emit()
+
+    @staticmethod
+    def _set_current_column(table: QtWidgets.QTableWidget, column: int) -> None:
+        """Make *column* current in *table* without highlighting a cell."""
+        if 0 <= column < table.columnCount() and table.rowCount():
+            row = min(max(table.currentRow(), 0), table.rowCount() - 1)
+            table.selectionModel().setCurrentIndex(
+                table.model().index(row, column),
+                QtCore.QItemSelectionModel.SelectionFlag.NoUpdate,
+            )
 
     # --- content ----------------------------------------------------------
 
@@ -219,31 +234,56 @@ class StatsTables(QtWidgets.QWidget):
         return [str(path).rsplit(".", 1)[-1] for path in data.nparray]
 
     @staticmethod
-    def _value_item(value) -> QtWidgets.QTableWidgetItem:
+    def _value_text(value) -> str:
+        """Plain text for a value (NaN always as "NaN")."""
         try:
             number = float(value)
         except (TypeError, ValueError):
-            text = str(value)
-        else:
-            text = "NaN" if math.isnan(number) else f"{number:.6g}"
-        item = QtWidgets.QTableWidgetItem(text)
+            return str(value)
+        return "NaN" if math.isnan(number) else f"{number:.6g}"
+
+    @staticmethod
+    def _value_item(value) -> QtWidgets.QTableWidgetItem:
+        """A table cell; NaN as the Settings say (NaN, grey or blank)."""
+        item = QtWidgets.QTableWidgetItem()
+        item.setData(QtCore.Qt.ItemDataRole.UserRole, value)  # for refresh()
+        StatsTables._style_item(item, value)
         item.setTextAlignment(
             QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
         return item
 
+    @staticmethod
+    def _style_item(item: QtWidgets.QTableWidgetItem, value) -> None:
+        text, is_nan = table_format.cell(value)
+        item.setText(text)
+        color = table_format.nan_foreground() if is_nan else None
+        item.setForeground(QtGui.QBrush(color) if color is not None else QtGui.QBrush())
+        item.setToolTip((table_format.nan_tooltip() or "") if is_nan else "")
+
+    def refresh(self) -> None:
+        """Restyle the cells (e.g. after the NaN setting changes)."""
+        for table in (self.arrays_table, self.summary_table):
+            for row in range(table.rowCount()):
+                for column in range(table.columnCount()):
+                    item = table.item(row, column)
+                    if item is not None:
+                        value = item.data(QtCore.Qt.ItemDataRole.UserRole)
+                        self._style_item(item, value)
+
     # --- selection and export ---------------------------------------------
 
     def selected_array(self) -> str | None:
-        """ST_ array name of the selected column, if any."""
-        columns = {index.column() for index in self.arrays_table.selectedIndexes()}
-        if len(columns) != 1:
+        """ST_ array name of the current cell's column, if any."""
+        column = self.arrays_table.currentColumn()
+        if not 0 <= column < len(self._columns):
             return None
-        return self._columns[columns.pop()]
+        return self._columns[column]
 
     def select_array(self, name: str) -> None:
         if name in self._columns:
-            self.arrays_table.selectColumn(self._columns.index(name))
+            row = max(self.arrays_table.currentRow(), 0)
+            self.arrays_table.setCurrentCell(row, self._columns.index(name))
 
     @property
     def columns(self) -> list[str]:
@@ -518,7 +558,7 @@ class Stats2Panel(QtWidgets.QWidget):
         summary = NMToolStats2.stats(toolfolder, select=name).get(name, {})
         for key, label in StatsTables.SUMMARY_ROWS:
             value = summary.get(key, math.nan)
-            lines.append(f"{label:<6}{StatsTables._value_item(value).text()}")
+            lines.append(f"{label:<6}{StatsTables._value_text(value)}")
         rows = StatsTables._row_labels(toolfolder, window)
         missing = [
             rows[index] if index < len(rows) else str(index)

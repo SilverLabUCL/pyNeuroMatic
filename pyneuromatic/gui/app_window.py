@@ -29,7 +29,10 @@ from pyneuromatic.gui.context_views import (
     TablePanel,
     ValuesPlot,
 )
+from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
+from pyneuromatic.gui.results_view import StatsTables
+from pyneuromatic.gui.settings_dialog import SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
@@ -848,6 +851,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def __init__(self, manager: NMManager | None = None, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._manager = manager or NMManager(quiet=True)
+        # Tables show NaN as the general settings say
+        table_format.set_nan_mode(self._manager.settings.table_nan)
         self.selection_model = SelectionModel(self._manager, self)
         self.current_tool_name = "Browser"
 
@@ -875,6 +880,13 @@ class NMAppWindow(QtWidgets.QMainWindow):
         file_menu.addAction(self.folder_actions.open_action)
         file_menu.addAction(self.folder_actions.save_action)
         file_menu.addSeparator()
+        # Settings... (⌘, ; Qt moves it to the pyNeuroMatic menu on macOS)
+        self.settings_action = file_menu.addAction("Settings…")
+        self.settings_action.setShortcut(
+            QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Preferences)
+        )
+        self.settings_action.setMenuRole(QtGui.QAction.MenuRole.PreferencesRole)
+        self.settings_action.triggered.connect(self.open_settings)
         quit_action = file_menu.addAction("Quit")
         quit_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Quit))
         quit_action.triggered.connect(self.close)
@@ -1081,6 +1093,24 @@ class NMAppWindow(QtWidgets.QMainWindow):
         current = self.context_panel.currentWidget()
         for panel, holder in self._view_tabs_holders.items():
             holder.setVisible(panel is current)
+
+    def settings_dialog(self) -> SettingsDialog:
+        """A Settings window: General, then the tools' Config options."""
+        dialog = SettingsDialog(
+            self._manager.settings, [("Stats", self.stats_tab)], parent=self
+        )
+        dialog.settings_changed.connect(self._apply_settings)
+        return dialog
+
+    def open_settings(self) -> None:
+        self.settings_dialog().exec()
+
+    def _apply_settings(self) -> None:
+        """Show the general settings, e.g. redraw tables after the NaN one."""
+        table_format.set_nan_mode(self._manager.settings.table_nan)
+        self.table_panel.channel_table.model.refresh()
+        for tables in self.findChildren(StatsTables):
+            tables.refresh()
 
     def _edit_scales_of(self, obj) -> None:
         """The browser's Edit Scales...: a data array's, or a channel's."""
