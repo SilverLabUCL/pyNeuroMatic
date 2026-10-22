@@ -52,6 +52,10 @@ class NMToolStatsConfig(NMToolConfig):
             Defaults to True.
         results_to_numpy: If True, write results as ST_ NMData arrays.
             Defaults to True.
+        results_all_epochs: If True, ST_ arrays of a data series run have one
+            point per epoch of the series (NaN where an epoch wasn't
+            analysed), so they line up with the series. Defaults to False:
+            one point per analysed epoch.
     """
 
     _TOML_TYPE = "stats_config"
@@ -61,6 +65,7 @@ class NMToolStatsConfig(NMToolConfig):
         "results_to_history": {"type": bool, "default": False},
         "results_to_cache":   {"type": bool, "default": True},
         "results_to_numpy":   {"type": bool, "default": True},
+        "results_all_epochs": {"type": bool, "default": False},
     }
 
 
@@ -80,6 +85,8 @@ class NMToolStats(NMTool):
         results_to_history: If True, print results to history log after run.
         results_to_cache: If True, save results to NMFolder tool-results cache.
         results_to_numpy: If True, write results as ST_ NMData arrays.
+        results_all_epochs: If True, ST_ arrays of a data series run have one
+            point per epoch of the series (NaN where not analysed).
     """
 
     def __init__(self) -> None:
@@ -92,12 +99,33 @@ class NMToolStats(NMTool):
         self._results_to_history = self._config.results_to_history
         self._results_to_cache = self._config.results_to_cache
         self._results_to_numpy = self._config.results_to_numpy
+        self._results_all_epochs = self._config.results_all_epochs
 
         self.__win_container = NMStatWinContainer(nm_path="%s.windows" % self._name)
         self.__win_container.new()
 
         self.__results: dict[str, list[Any]] = {}
+        # Each result's epoch position in its data series (None outside a
+        # data series), by window, and the series' epoch count
+        self.__positions: dict[str, list[int | None]] = {}
+        self.__n_epochs: int | None = None
+        self.__run_series: NMDataSeries | None = None  # and its channel run on
+        self.__run_channel = None
         self.__toolfolder: NMToolFolder | None = None
+
+    @property
+    def results_all_epochs(self) -> bool:
+        """If True, ST_ arrays of a data series run have one point per epoch
+        of the series (NaN where an epoch wasn't analysed)."""
+        return self._results_all_epochs
+
+    @results_all_epochs.setter
+    def results_all_epochs(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "results_all_epochs", "boolean"))
+        self._results_all_epochs = value
+        nmh.history("set results_all_epochs=%s" % value, quiet=nmc.QUIET)
+        nmch.add_nm_command("%s.results_all_epochs = %r" % (self._name, value))
 
     @property
     def windows(self) -> NMStatWinContainer:
@@ -132,6 +160,9 @@ class NMToolStats(NMTool):
         """
         if isinstance(self.__results, dict):
             self.__results.clear()
+        self.__positions.clear()
+        self.__n_epochs = None
+        self.__run_series = self.__run_channel = None
         return True  # ok
 
     # override, no super
@@ -147,6 +178,7 @@ class NMToolStats(NMTool):
         """
         if not isinstance(self.data, NMData):
             raise RuntimeError("no data selected")
+        position = self._epoch_position()
         for w in self.windows:
             self.windows.selected_name = w.name
             if not w.on:
@@ -159,7 +191,21 @@ class NMToolStats(NMTool):
                 self.__results[w.name].append(w.results)
             else:
                 self.__results[w.name] = [w.results]
+            self.__positions.setdefault(w.name, []).append(position)
         return True  # ok
+
+    def _epoch_position(self) -> int | None:
+        """The current epoch's position in its data series (E0 is 0), or None
+        when not running on a data series."""
+        series, epoch = self.dataseries, self.epoch
+        if series is None or epoch is None:
+            return None
+        names = list(series.epochs.keys())
+        if epoch.name not in names:
+            return None
+        self.__n_epochs = len(names)
+        self.__run_series, self.__run_channel = series, self.channel
+        return names.index(epoch.name)
 
     # override, no super
     def run_finish(self) -> bool:
@@ -355,6 +401,28 @@ class NMToolStats(NMTool):
             safe = "%s_%s" % (safe, step)
         return "ST_%s_%s_%s" % (wname, safe, suffix)
 
+    def _result_slots(self, wname: str, n_results: int) -> list[int] | None:
+        """Each result's slot in the ST_ arrays when they have one point per
+        epoch (results_all_epochs, on a data series), else None."""
+        if not self._results_all_epochs or not self.__n_epochs:
+            return None
+        positions = self.__positions.get(wname, [])
+        if len(positions) != n_results or any(p is None for p in positions):
+            return None  # not (only) epochs of one data series
+        return positions
+
+    def _fill_epoch_paths(self, data_paths: list[str]) -> None:
+        """Fill the blank entries of a per-epoch ST_{w}_data with the names of
+        the epochs' arrays (in the channel run on) that weren't analysed."""
+        series, channel = self.__run_series, self.__run_channel
+        if series is None or channel is None:
+            return
+        arrays = series.epoch_data_map(channel.name)
+        for index, name in enumerate(series.epochs.keys()):
+            data = arrays.get(name)
+            if index < len(data_paths) and not data_paths[index] and data is not None:
+                data_paths[index] = data.path_str
+
     def _write_results_to_numpy(self) -> NMToolFolder | None:
         """Write results as ST_ NMData arrays in a new NMToolFolder.
 
@@ -393,20 +461,26 @@ class NMToolStats(NMTool):
             # Each inner list contains result dicts for that array
 
             # Collect data path strings (one per array, from first rdict)
-            data_paths: list[str] = []
             # Result dicts grouped by (id, step), one slot per data array so
             # every ST_ array lines up with ST_{w}_data; a step a data array
-            # did not reach (e.g. no peak found) stays None and becomes NaN
+            # did not reach (e.g. no peak found) stays None and becomes NaN.
+            # With results_all_epochs, one slot per epoch of the series.
+            slots_of = self._result_slots(wname, len(vlist))
+            n_arrays = (self.__n_epochs if slots_of is not None and self.__n_epochs
+                        else len(vlist))
+            data_paths: list[str] = [""] * n_arrays
             step_rdicts: dict[tuple[str, str], list[dict | None]] = {}
-            n_arrays = len(vlist)
 
-            for index, ilist in enumerate(vlist):
-                data_paths.append(ilist[0].get("data", "") if ilist else "")
+            for result_index, ilist in enumerate(vlist):
+                index = slots_of[result_index] if slots_of is not None else result_index
+                data_paths[index] = ilist[0].get("data", "") if ilist else ""
                 for rdict in ilist:
                     key = (rdict.get("id", "main"), self._result_step(rdict))
                     if key not in step_rdicts:
                         step_rdicts[key] = [None] * n_arrays
                     step_rdicts[key][index] = rdict
+            if slots_of is not None:  # name every epoch's array, analysed or not
+                self._fill_epoch_paths(data_paths)
 
             # Save data path strings
             if data_paths and f.data is not None:
@@ -449,11 +523,12 @@ class NMToolStats(NMTool):
                             # (max, level+, ...); name the window's func
                             note_func = func_name if id_str == "main" else id_str
                         step_str = ", step=%s" % step if step else ""
+                        per_epoch = ", per epoch" if slots_of is not None else ""
                         self._add_note(
                             d,
-                            "NMStats(win=%s, func=%s, id=%s%s, xbgn=%s, xend=%s, n=%d)"
+                            "NMStats(win=%s, func=%s, id=%s%s, xbgn=%s, xend=%s, n=%d%s)"
                             % (wname, note_func, id_str, step_str, xbgn, xend,
-                               len(present)),
+                               len(present), per_epoch),
                         )
 
                 # Save warnings if any occurred

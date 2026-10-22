@@ -1403,3 +1403,97 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestNMToolStatsAllEpochs(unittest.TestCase):
+    """results_all_epochs: ST_ arrays with one point per epoch of the series."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_epochs=10, n_points=4)
+        for i, epoch in enumerate(self.series.epochs.values()):
+            epoch.data[0].nparray = np.full(4, float(i * 10))  # mean = 10 * epoch
+        self.tool = nms.NMToolStats()
+        list(self.tool.windows)[0].func = "mean"
+        self.tool.results_to_cache = False
+
+    def _run(self, epochs):
+        channel = self.series.channels["A"]
+        targets = [
+            {"folder": self.folder, "dataseries": self.series, "channel": channel,
+             "epoch": self.series.epochs[name], "data": self.series.epochs[name].data[0]}
+            for name in epochs
+        ]
+        self.tool.run_all(targets)
+        return self.tool.toolfolder
+
+    def test_default_off(self):
+        self.assertFalse(self.tool.results_all_epochs)
+        self.assertFalse(nms.NMToolStatsConfig().results_all_epochs)
+
+    def test_off_one_point_per_analysed_epoch(self):
+        f = self._run(["E1", "E3", "E7"])
+        self.assertEqual(list(f.data["ST_w0_mean_y"].nparray), [10.0, 30.0, 70.0])
+
+    def test_on_one_point_per_epoch(self):
+        self.tool.results_all_epochs = True
+        f = self._run(["E1", "E3", "E7"])
+        values = f.data["ST_w0_mean_y"].nparray
+        self.assertEqual(len(values), 10)
+        self.assertEqual([values[i] for i in (1, 3, 7)], [10.0, 30.0, 70.0])
+        self.assertTrue(all(math.isnan(values[i]) for i in (0, 2, 4, 5, 6, 8, 9)))
+        # Every epoch's array is named, analysed or not
+        paths = list(f.data["ST_w0_data"].nparray)
+        self.assertEqual([p.rsplit(".", 1)[-1] for p in paths],
+                         [f"RecordA{i}" for i in range(10)])
+        self.assertIn("per epoch", f.data["ST_w0_mean_y"].notes.note)
+
+    def test_on_with_every_epoch_is_unchanged(self):
+        self.tool.results_all_epochs = True
+        f = self._run(list(self.series.epochs.keys()))
+        self.assertEqual(list(f.data["ST_w0_mean_y"].nparray), [10.0 * i for i in range(10)])
+
+    def test_on_without_a_data_series_is_unchanged(self):
+        self.tool.results_all_epochs = True
+        data = [self.folder.data.new(f"W{i}", nparray=np.full(3, float(i))) for i in range(3)]
+        self.tool.run_all([{"folder": self.folder, "data": d} for d in data])
+        values = self.tool.toolfolder.data["ST_w0_mean_y"].nparray
+        self.assertEqual(list(values), [0.0, 1.0, 2.0])
+
+    def test_type_checked(self):
+        with self.assertRaises(TypeError):
+            self.tool.results_all_epochs = 1
+
+    def test_config_round_trip(self):
+        config = nms.NMToolStatsConfig()
+        config.results_all_epochs = True
+        self.assertTrue(config.to_dict()["results_all_epochs"])
+
+
+    def test_stats2_ignores_unanalysed_epochs(self):
+        # Stats2 summaries of per-epoch ST_ arrays skip the NaN epochs
+        self.tool.results_all_epochs = True
+        f = self._run(["E1", "E3", "E7"])
+        summary = nms.NMToolStats2.stats(f, select="ST_w0_mean_y")["ST_w0_mean_y"]
+        self.assertEqual(summary["N"], 3)
+        self.assertAlmostEqual(summary["mean"], (10 + 30 + 70) / 3)
+
+
+    def test_off_names_only_the_analysed_arrays(self):
+        f = self._run(["E1", "E3"])
+        paths = list(f.data["ST_w0_data"].nparray)
+        self.assertEqual([p.rsplit(".", 1)[-1] for p in paths], ["RecordA1", "RecordA3"])
+
+    def test_names_follow_the_channel_run_on(self):
+        series = self.folder.new_dataseries("Two", n_channels=2, n_epochs=3, n_points=2)
+        channel = series.channels["B"]
+        self.tool.results_all_epochs = True
+        self.tool.run_all([
+            {"folder": self.folder, "dataseries": series, "channel": channel,
+             "epoch": series.epochs["E1"], "data": series.epochs["E1"].data[1]},
+        ])
+        paths = list(self.tool.toolfolder.data["ST_w0_data"].nparray)
+        self.assertEqual([p.rsplit(".", 1)[-1] for p in paths], ["TwoB0", "TwoB1", "TwoB2"])
