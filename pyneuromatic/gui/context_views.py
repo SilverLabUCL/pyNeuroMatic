@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover - optional GUI dependency
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
+from pyneuromatic.gui import table_format
 from pyneuromatic.gui.selection_model import (
     epoch_scope_label,
     scoped_epoch_names,
@@ -235,7 +236,8 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
             return int(
                 QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
             )
-        if role not in (QtCore.Qt.ItemDataRole.DisplayRole, QtCore.Qt.ItemDataRole.EditRole):
+        Role = QtCore.Qt.ItemDataRole
+        if role not in (Role.DisplayRole, Role.EditRole, Role.ForegroundRole, Role.ToolTipRole):
             return None
         row, column = index.row(), index.column()
         if column == 0:
@@ -243,9 +245,15 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         else:
             values = self._columns[column - 1].nparray
             value = values[row] if row < values.size else None
-        if role == QtCore.Qt.ItemDataRole.EditRole and value is not None:
+        if role == Role.EditRole and value is not None:
             return repr(float(value))  # full precision while editing
-        return self.format_value(value)
+        text, is_nan = table_format.cell(value)
+        if role == Role.ForegroundRole:  # NaN in grey (Settings > Tables)
+            color = table_format.nan_foreground() if is_nan else None
+            return QtGui.QBrush(color) if color is not None else None
+        if role == Role.ToolTipRole:
+            return table_format.nan_tooltip() if is_nan else None
+        return text
 
     @staticmethod
     def is_locked(data: NMData) -> bool:
@@ -289,13 +297,14 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
 
     @staticmethod
     def format_value(value) -> str:
-        if value is None:
-            return ""
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            return str(value)
-        return "NaN" if math.isnan(number) else f"{number:.6g}"
+        """A cell's text (NaN as the Settings say)."""
+        return table_format.cell(value)[0]
+
+    def refresh(self) -> None:
+        """Redraw every cell (e.g. after the NaN setting changes)."""
+        if self._rows and self._columns:
+            self.dataChanged.emit(self.index(0, 0),
+                                  self.index(self._rows - 1, len(self._columns)))
 
     def headerData(
         self,
@@ -327,8 +336,10 @@ class ChannelTable(QtWidgets.QWidget):
         self.model = ChannelTableModel(self)
         self.view = QtWidgets.QTableView(self)
         self.view.setModel(self.model)
+        # One cell is highlighted, not its whole column; the current cell's
+        # column is the current array (its header is bold)
         self.view.setSelectionBehavior(
-            QtWidgets.QAbstractItemView.SelectionBehavior.SelectColumns
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems
         )
         self.view.setSelectionMode(
             QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
@@ -350,19 +361,23 @@ class ChannelTable(QtWidgets.QWidget):
         self.select_array(current)
 
     def select_array(self, data: NMData | None) -> None:
+        """Make *data*'s column current, keeping the row (one cell shown)."""
         for column, item in enumerate(self.model.arrays, start=1):
             if item is data:
-                self.view.selectColumn(column)
-                self.view.scrollTo(self.model.index(0, column))
+                row = max(self.view.currentIndex().row(), 0)
+                index = self.model.index(min(row, max(self.model.rowCount() - 1, 0)), column)
+                self.view.setCurrentIndex(index)
+                self.view.scrollTo(index)
                 return
         self.view.clearSelection()
+        self.view.setCurrentIndex(QtCore.QModelIndex())
 
     def selected_array(self) -> NMData | None:
-        columns = {index.column() for index in self.view.selectedIndexes()}
-        if len(columns) != 1:
+        """The array of the current cell's column."""
+        index = self.view.currentIndex()
+        if not index.isValid() or index.column() == 0:
             return None
-        column = columns.pop()
-        return self.model.arrays[column - 1] if column > 0 else None
+        return self.model.arrays[index.column() - 1]
 
 
 class TablePanel(QtWidgets.QWidget):

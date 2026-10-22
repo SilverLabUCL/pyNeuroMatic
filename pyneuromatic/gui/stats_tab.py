@@ -436,6 +436,17 @@ class StatsToolTab(ToolTabWidget):
         checked = item.checkState() == QtCore.Qt.CheckState.Checked
         self._set_tool_option(key, checked)
 
+    # --- the Config options, also listed in the Settings window -------------
+
+    def config_options(self) -> list[tuple[str, str, bool]]:
+        """(key, label, value) of each Config option."""
+        return [(key, self._config_labels[key], bool(getattr(self._tool, key)))
+                for key in self._config_keys]
+
+    def set_config_option(self, key: str, value: bool) -> None:
+        """Set a Config option (the Config list follows)."""
+        self._set_tool_option(key, value)
+
     def _set_tool_option(self, key: str, value: bool) -> None:
         setattr(self._tool, key, value)
         config = self._tool.config

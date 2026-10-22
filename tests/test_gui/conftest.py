@@ -44,3 +44,13 @@ def _close_app_windows(monkeypatch):
     QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
     QtWidgets.QApplication.processEvents()
     gc.collect()
+
+
+
+@pytest.fixture(autouse=True)
+def _reset_table_nan():
+    """Each test starts with tables showing NaN as "NaN"."""
+    from pyneuromatic.gui import table_format
+
+    yield
+    table_format.set_nan_mode("NaN")

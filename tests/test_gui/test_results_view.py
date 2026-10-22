@@ -184,9 +184,12 @@ def test_column_selection_is_shared_between_tables(qtbot):
     stats2 = window.stats_tab.stats2
     tables = stats2.tables
 
-    tables.summary_table.selectColumn(3)
+    tables.summary_table.setCurrentCell(1, 3)  # a click on one summary cell
     assert tables.selected_array() == "ST_w0_max_ds"
-    assert {i.column() for i in tables.arrays_table.selectedIndexes()} == {3}
+    assert tables.arrays_table.currentColumn() == 3
+    # Only the clicked cell is highlighted, not its column
+    assert [(i.row(), i.column()) for i in tables.summary_table.selectedIndexes()] == [(1, 3)]
+    assert tables.arrays_table.selectedIndexes() == []
     assert stats2.plot_button.isEnabled()
     assert stats2.array_combo.currentText() == "ST_w0_max_ds"
 

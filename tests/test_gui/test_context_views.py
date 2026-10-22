@@ -67,6 +67,12 @@ def test_channel_table_shows_every_epoch_as_a_column(two_channel_window):
 
     window.selection_model.update(epoch=dataseries.epochs["E3"])
     assert table.channel_table.selected_array() is dataseries.get_data("A", "E3")
+    # One cell is highlighted, not the whole column
+    view = table.channel_table.view
+    assert [i.column() for i in view.selectedIndexes()] == [4]
+    view.setCurrentIndex(model.index(3, 2))  # click a cell: the row is kept next time
+    window.selection_model.update(epoch=dataseries.epochs["E0"])
+    assert [(i.row(), i.column()) for i in view.selectedIndexes()] == [(3, 1)]
 
 
 def test_channel_table_follows_set_and_channel_tab(two_channel_window):
