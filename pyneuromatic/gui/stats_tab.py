@@ -218,10 +218,12 @@ class StatsToolTab(ToolTabWidget):
 
         self.tool_config_list = QtWidgets.QListWidget(self)
         self.tool_config_list.setObjectName("statsToolConfigurationList")
-        self._config_keys = ("ignore_nans", "overwrite")
+        self._config_keys = ("ignore_nans", "overwrite", "results_all_epochs")
         self._config_labels = {
             "ignore_nans": "Ignore NaNs",
             "overwrite": "Overwrite Stats tool folder",
+            # NaN where an epoch wasn't analysed, so they line up with the series
+            "results_all_epochs": "ST_ arrays: one point per epoch",
         }
         self._populate_config_list()
         self.settings_stack.addWidget(self.stats1_page)

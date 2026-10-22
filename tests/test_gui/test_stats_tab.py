@@ -521,3 +521,37 @@ def test_run_info_explains_missing_selection(qtbot):
     assert window.stats_tab.run_info_label.text() == (
         "Select a data array or a Data Series channel and epoch first"
     )
+
+
+def test_st_arrays_one_point_per_epoch(qtbot):
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=False)
+    for epoch, value in enumerate((10.0, 20.0, 30.0, 40.0)):
+        folder.data.new(f"RecordA{epoch}", nparray=np.array([value, value]),
+                        xscale={"start": 0.0, "delta": 1.0})
+    dataseries = folder.sync_dataseries("Record", select=True)
+    dataseries.epochs.sets.add("Chosen", ["E1", "E3"])
+    manager.select_keys = {"folder": folder.name, "dataseries": dataseries.name,
+                           "channel": "A", "epoch": "E0"}
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    tab = window.stats_tab
+    window.selection_model.update(epoch_set="Chosen")
+    tab.measurement_combo.setCurrentText("mean")
+
+    # The Config list's new item
+    tab.config_checkbox.setChecked(True)
+    item = next(tab.tool_config_list.item(i) for i in range(tab.tool_config_list.count())
+                if tab.tool_config_list.item(i).data(QtCore.Qt.ItemDataRole.UserRole)
+                == "results_all_epochs")
+    assert item.text() == "ST_ arrays: one point per epoch"
+    assert item.checkState() == QtCore.Qt.CheckState.Unchecked  # off by default
+    item.setCheckState(QtCore.Qt.CheckState.Checked)
+    assert manager.stats.results_all_epochs and manager.stats.config.results_all_epochs
+    tab.config_checkbox.setChecked(False)
+
+    tab.run_button.click()
+    values = tab.stats_tool.toolfolder.data["ST_w0_mean_y"].nparray
+    assert len(values) == 4  # every epoch of the series
+    assert np.isnan(values[0]) and np.isnan(values[2])
+    assert (values[1], values[3]) == (20.0, 40.0)
