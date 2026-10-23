@@ -27,6 +27,9 @@ BUILTIN_EPOCH_SETS = (ALL_EPOCHS, CURRENT_EPOCH)
 # (SetX left out) or of the groups.
 ALL_SETS = "All Sets"
 ALL_GROUPS = "All Groups"
+# Run once per channel. The current channel stays selected (Plot and Table
+# show it); only runs go over every channel.
+ALL_CHANNELS = "All Channels"
 
 
 class SelectionModel(QtCore.QObject):
@@ -47,7 +50,7 @@ class SelectionModel(QtCore.QObject):
 
     SOURCES = ("data", "dataseries")
     _EPOCH_KEYS = ("epoch_set", "group", "group_operator")
-    _GUI_KEYS = ("source", "data_set") + _EPOCH_KEYS
+    _GUI_KEYS = ("source", "data_set", "all_channels") + _EPOCH_KEYS
     _KEYS = HIERARCHY_SELECT_KEYS + _GUI_KEYS
     # Tiers whose selection makes that section the source
     _SOURCE_FOR_KEY = {
@@ -55,6 +58,7 @@ class SelectionModel(QtCore.QObject):
         "data_set": "data",
         "dataseries": "dataseries",
         "channel": "dataseries",
+        "all_channels": "dataseries",
         "epoch": "dataseries",
         "epoch_set": "dataseries",
         "group": "dataseries",
@@ -74,6 +78,7 @@ class SelectionModel(QtCore.QObject):
         self._epoch_set: str | None = None
         self._group: int | None = None
         self._group_operator: str | None = None
+        self._all_channels = False  # runs go over every channel
         # Remembered GUI context, restored when returning to a scope
         self._data_set_memory: dict[tuple[str | None, ...], str] = {}
         self._epoch_memory: dict[
@@ -99,6 +104,7 @@ class SelectionModel(QtCore.QObject):
                 "epoch_set": self._epoch_set,
                 "group": self._group,
                 "group_operator": self._group_operator,
+                "all_channels": True if self._all_channels else None,  # None: off
             }
         )
         return values
@@ -164,6 +170,10 @@ class SelectionModel(QtCore.QObject):
         for key in ("data_set",) + self._EPOCH_KEYS:
             if key in updates:
                 setattr(self, f"_{key}", updates[key])
+        if "all_channels" in updates:
+            self._all_channels = bool(updates["all_channels"])  # None or False: off
+        elif updates.get("channel") is not None:
+            self._all_channels = False  # one channel chosen
         if (
             ("epoch_set" in updates and updates["epoch_set"] is None)
             or ("group" in updates and updates["group"] is None)
@@ -199,6 +209,8 @@ class SelectionModel(QtCore.QObject):
 
         previous = self.selection
         previous_scopes = self._data_scope(), self._epoch_scope()
+        if {"all_channels", "channel", "dataseries"} & set(tiers):
+            self._all_channels = False
         if "data_set" in tiers:
             self._data_set = None
             self._data_set_memory.pop(previous_scopes[0], None)
@@ -255,6 +267,7 @@ class SelectionModel(QtCore.QObject):
         if data_scope != previous_scopes[0]:
             self._data_set = self._data_set_memory.get(data_scope)
         if epoch_scope != previous_scopes[1]:
+            self._all_channels = False  # another data series: its own choice
             # A data series starts with All epochs
             default_set = ALL_EPOCHS if epoch_scope[2] is not None else None
             self._epoch_set, self._group, self._group_operator = (
@@ -311,6 +324,9 @@ class SelectionModel(QtCore.QObject):
             elif tier == "group":
                 if value != ALL_GROUPS and (isinstance(value, bool) or not isinstance(value, int)):
                     raise TypeError("group must be an integer, ALL_GROUPS or None")
+            elif tier == "all_channels":
+                if not isinstance(value, bool):  # (None, like False, turns it off)
+                    raise TypeError("all_channels must be True or False")
             elif tier == "group_operator":
                 if value not in ("AND", "OR"):
                     raise ValueError("group_operator must be 'AND', 'OR', or None")
@@ -462,7 +478,8 @@ def selection_summary(selection: Mapping[str, Any]) -> list[str]:
         if selection.get("data_set") is not None:
             parts.append(f"Data Set: {selection['data_set']}")
     elif source == "dataseries":
-        parts += [name("dataseries"), name("channel"), _epochs_summary(selection, name)]
+        channel = ALL_CHANNELS if selection.get("all_channels") else name("channel")
+        parts += [name("dataseries"), channel, _epochs_summary(selection, name)]
     return [part for part in parts if part is not None]
 
 
@@ -508,6 +525,7 @@ def epoch_scope_label(selection: Mapping[str, Any]) -> str:
 
 
 __all__ = [
+    "ALL_CHANNELS",
     "ALL_EPOCHS",
     "ALL_GROUPS",
     "ALL_SETS",

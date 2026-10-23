@@ -716,13 +716,24 @@ class StatsToolTab(ToolTabWidget):
         return keys
 
     def _scope_runs(self) -> list[tuple[str, dict]] | None:
-        """For All Sets / All Groups: (label, selection) per set or group;
-        None for a single run. Raises RuntimeError for both together."""
+        """For All Channels / All Sets / All Groups: (label, selection) per
+        run, each naming one channel, set or group; None for a single run.
+        Channels combine with sets or groups (channel x set). Raises
+        RuntimeError for All Sets with All Groups."""
         selection = self.selection
         series = selection.get("dataseries")
         if selection.get("source") != "dataseries" or series is None:
             return None
-        return scope_runs(series, selection)
+        runs = scope_runs(series, selection)
+        if not selection.get("all_channels"):
+            return runs
+        per_channel = runs if runs is not None else [("", selection)]
+        return [
+            (f"{channel.name} {label}".strip(),
+             {**run_selection, "channel": channel, "all_channels": None})
+            for channel in series.channels.values()
+            for label, run_selection in per_channel
+        ]
 
     def _run_batches(self) -> tuple[list[tuple[str, list, dict]], list[str]] | None:
         """For All Sets / All Groups: the runs with epochs to analyse, as
