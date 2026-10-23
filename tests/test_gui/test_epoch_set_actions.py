@@ -53,7 +53,7 @@ def test_epoch_set_menu_in_strip_and_series_menu(app):
     texts = [
         "New Set…", "Add Epochs…", "Remove Epochs…", "Exclude Epochs…",
         "Include Epochs…", "Invert…", "Combine Sets…",
-        "Clear Set…", "Renumber Set…", "Delete Set…", "Choose in Browser…",
+        "Clear Set…", "Renumber Set…", "Delete Set…", "Show in Browser…",
     ]
     button = app.selection_strip.action_button("epoch_set")
     assert button.isEnabled()

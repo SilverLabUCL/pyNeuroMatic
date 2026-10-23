@@ -295,6 +295,13 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         self.data_edited.emit(data)
         return True
 
+    def raw_value(self, row: int, column: int):
+        """A cell's value (x for column 0), or None past an array's end."""
+        if column == 0:
+            return self._x_value(row)
+        values = self._columns[column - 1].nparray
+        return values[row] if row < values.size else None
+
     @staticmethod
     def format_value(value) -> str:
         """A cell's text (NaN as the Settings say)."""
@@ -341,8 +348,9 @@ class ChannelTable(QtWidgets.QWidget):
         self.view.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems
         )
+        # Cells, a header's column, or several (Shift / ⌘); ⌘C copies them
         self.view.setSelectionMode(
-            QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
+            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
         )
         self.view.verticalHeader().setDefaultSectionSize(22)
         self.view.setEditTriggers(
@@ -372,6 +380,30 @@ class ChannelTable(QtWidgets.QWidget):
         self.view.clearSelection()
         self.view.setCurrentIndex(QtCore.QModelIndex())
 
+    def copy_text(self, names: bool = True, x_values: bool = True) -> str:
+        """The selection as tab-separated text: whole columns with their
+        names first (*names*) and the x column (*x_values*); full precision."""
+        model = self.model
+
+        def value(row, column):
+            return table_format.copy_value(model.raw_value(row, column))
+
+        def header(column):
+            return str(model.headerData(column, QtCore.Qt.Orientation.Horizontal))
+
+        selection = self.view.selectionModel()
+        columns = {i.column() for i in selection.selectedIndexes()}
+        whole = bool(columns) and all(
+            selection.isColumnSelected(c, QtCore.QModelIndex()) for c in columns
+        )
+        # The x column with whole columns (a block of cells copies just itself)
+        with_x = x_values and whole and 0 not in columns and model.columnCount() > 0
+        return table_format.selection_text(
+            self.view, value, header,
+            row_label=(lambda row: value(row, 0)) if with_x else None,
+            row_label_header=header(0) if with_x else "", names=names,
+        )
+
     def selected_array(self) -> NMData | None:
         """The array of the current cell's column."""
         index = self.view.currentIndex()
@@ -384,6 +416,8 @@ class TablePanel(QtWidgets.QWidget):
     """Table context panel: channel tables and the tables of tools with results."""
 
     data_edited = QtCore.pyqtSignal(object)  # an NMData value was edited
+    # Show in Browser: the current array, or the tool's results folder
+    show_in_browser_requested = QtCore.pyqtSignal(object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -392,11 +426,44 @@ class TablePanel(QtWidgets.QWidget):
         self.view_tabs = ChannelToolBar(self)
         self.view_tabs.view_changed.connect(self._on_view_changed)
         layout.addWidget(self.view_tabs)
+
+        # Table functions, in a ⋯ menu at the upper-left corner (as the Plot's)
+        self.table_menu = QtWidgets.QMenu("Table", self)
+        self.copy_action = self.table_menu.addAction("Copy")
+        self.copy_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Copy))
+        self.copy_action.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.copy_action.setToolTip("Copy the selected cells or columns (tab-separated)")
+        self.copy_action.triggered.connect(self.copy_selection)
+        self.addAction(self.copy_action)  # ⌘C while the table has focus
+        self.copy_all_action = self.table_menu.addAction("Copy All")
+        self.copy_all_action.triggered.connect(self.copy_all)
+        self.table_menu.addSeparator()
+        self.browser_action = self.table_menu.addAction("Show in Browser")
+        self.browser_action.setToolTip("Show the current array (or results folder) in the browser")
+        self.browser_action.triggered.connect(self.show_in_browser)
+        self.table_menu.addSeparator()
+        self.names_action = self.table_menu.addAction("Include Column Names")
+        self.x_action = self.table_menu.addAction("Include x Values / Row Names")
+        for option in (self.names_action, self.x_action):
+            option.setCheckable(True)
+            option.setChecked(True)
+        self.menu_button = QtWidgets.QToolButton(self)
+        self.menu_button.setText("⋯")
+        self.menu_button.setToolTip("Table functions")
+        self.menu_button.setMenu(self.table_menu)
+        self.menu_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.menu_button.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0px; }")
+        menu_row = QtWidgets.QHBoxLayout()
+        menu_row.addWidget(self.menu_button)
+        menu_row.addStretch(1)
+        layout.addLayout(menu_row)
+
         self.stack = QtWidgets.QStackedWidget(self)
         layout.addWidget(self.stack, stretch=1)
         self.channel_table = ChannelTable(self.stack)
         self.stack.addWidget(self.channel_table)
         self.channel_table.model.data_edited.connect(self.data_edited)
+        self._add_context_menu(self.channel_table)
 
         self._selection_model: Any = None
         self._last_selection: dict = {}
@@ -405,11 +472,88 @@ class TablePanel(QtWidgets.QWidget):
         self._tools: list[str] = []
         self._updating = False
 
+    # --- copying -----------------------------------------------------------
+
+    def selection_text(self) -> str:
+        """The current table's selection as tab-separated text."""
+        page = self.stack.currentWidget()
+        names, extra = self.names_action.isChecked(), self.x_action.isChecked()
+        if page is self.channel_table:
+            return self.channel_table.copy_text(names=names, x_values=extra)
+        if hasattr(page, "copy_text"):  # e.g. the Stats tables
+            return page.copy_text(names=names, row_names=extra)
+        return ""
+
+    def copy_selection(self) -> None:
+        text = self.selection_text()
+        if text:
+            QtWidgets.QApplication.clipboard().setText(text)
+
+    def shown_object(self):
+        """What the table shows: the current array (Data table), or the
+        results folder (a tool's tables)."""
+        page = self.stack.currentWidget()
+        if page is self.channel_table:
+            arrays = self.channel_table.model.arrays
+            return self.channel_table.selected_array() or (arrays[0] if arrays else None)
+        return getattr(page, "toolfolder", None)
+
+    def show_in_browser(self) -> None:
+        shown = self.shown_object()
+        if shown is not None:
+            self.show_in_browser_requested.emit(shown)
+
+    def copy_all(self) -> None:
+        """Copy the whole table (the Stats tables: results and summary)."""
+        page = self.stack.currentWidget()
+        if page is self.channel_table:
+            self.channel_table.view.selectAll()
+            self.copy_selection()
+        elif hasattr(page, "table_text"):
+            QtWidgets.QApplication.clipboard().setText(page.table_text())
+
+    # --- right-click: the ⋯ menu ------------------------------------------
+
+    def _add_context_menu(self, page: QtWidgets.QWidget) -> None:
+        """Right-click a cell or column header of *page*'s tables for the
+        Table menu."""
+        custom = QtCore.Qt.ContextMenuPolicy.CustomContextMenu
+        for view in page.findChildren(QtWidgets.QTableView):
+            view.setContextMenuPolicy(custom)
+            view.customContextMenuRequested.connect(
+                lambda pos, v=view: self._show_cell_menu(v, pos)
+            )
+            header = view.horizontalHeader()
+            header.setContextMenuPolicy(custom)
+            header.customContextMenuRequested.connect(
+                lambda pos, v=view: self._show_header_menu(v, pos)
+            )
+
+    def _show_cell_menu(self, view: QtWidgets.QTableView, pos: QtCore.QPoint) -> None:
+        # A cell outside the selection becomes the selection (as in a
+        # spreadsheet); inside it, the selection is kept for Copy
+        index = view.indexAt(pos)
+        selection = view.selectionModel()
+        if index.isValid() and not selection.isSelected(index):
+            selection.setCurrentIndex(
+                index, QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
+            )
+        self.table_menu.exec(view.viewport().mapToGlobal(pos))
+
+    def _show_header_menu(self, view: QtWidgets.QTableView, pos: QtCore.QPoint) -> None:
+        header = view.horizontalHeader()
+        column = header.logicalIndexAt(pos)
+        selection = view.selectionModel()
+        if column >= 0 and not selection.isColumnSelected(column, QtCore.QModelIndex()):
+            view.selectColumn(column)
+        self.table_menu.exec(header.mapToGlobal(pos))
+
     # --- tools ------------------------------------------------------------
 
     def register_tool(self, name: str, page: QtWidgets.QWidget) -> None:
         self._tool_pages[name] = page
         self.stack.addWidget(page)
+        self._add_context_menu(page)
 
     def tool_page(self, name: str) -> QtWidgets.QWidget | None:
         return self._tool_pages.get(name)

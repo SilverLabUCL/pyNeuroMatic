@@ -1056,7 +1056,7 @@ class DataActions(TierActions):
                                   tip="Copy a data array into another folder")
         self.delete_action = action("Delete…", self.delete_data, tip="Delete a data array")
         self.browse_action = action(
-            "Choose in Browser…", self.choose_in_browser,
+            "Show in Browser…", self.choose_in_browser,
             tip="Select several data arrays in the browser (Shift/Cmd-click)",
         )
         self.set_new_action = action("New Set…", self.new_set, tip="Create an empty data set")
@@ -1072,7 +1072,7 @@ class DataActions(TierActions):
                                         tip="Give a data set another number")
         self.set_delete_action = action("Delete Set…", self.delete_set, tip="Delete a data set")
         self.set_browse_action = action(
-            "Choose in Browser…", self.choose_sets_in_browser,
+            "Show in Browser…", self.choose_sets_in_browser,
             tip="Show the data sets in the browser",
         )
 
@@ -1583,7 +1583,7 @@ class SeriesActions(TierActions):
                                           tip="Remove an epoch, or a range of epochs")
         self.delete_action = action("Delete Series…", self.delete_series,
                                     tip="Delete the series, optionally with its arrays")
-        self.browse_action = action("Choose in Browser…", self.choose_in_browser,
+        self.browse_action = action("Show in Browser…", self.choose_in_browser,
                                     tip="Select the series in the browser")
 
         selection_model.selection_changed.connect(self.update_enabled)
@@ -2146,7 +2146,7 @@ class EpochSetActions(TierActions):
         self.rename_action = action("Renumber Set…", self.rename_set,
                                     tip="Give an epoch set another number")
         self.delete_action = action("Delete Set…", self.delete_set, tip="Delete an epoch set")
-        self.browse_action = action("Choose in Browser…", self.choose_in_browser,
+        self.browse_action = action("Show in Browser…", self.choose_in_browser,
                                     tip="Show the epoch sets in the browser")
         selection_model.selection_changed.connect(self.update_enabled)
         self.update_enabled()
@@ -2440,7 +2440,7 @@ class GroupActions(TierActions):
                                       tip="Take an epoch, or a range of epochs, out of groups")
         self.clear_action = action("Clear Groups…", self.clear_groups,
                                    tip="Remove every group assignment")
-        self.browse_action = action("Choose in Browser…", self.choose_in_browser,
+        self.browse_action = action("Show in Browser…", self.choose_in_browser,
                                     tip="Show the series' epochs in the browser")
         selection_model.selection_changed.connect(self.update_enabled)
         self.update_enabled()
