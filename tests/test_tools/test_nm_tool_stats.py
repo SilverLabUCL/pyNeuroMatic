@@ -1497,3 +1497,69 @@ class TestNMToolStatsAllEpochs(unittest.TestCase):
         ])
         paths = list(self.tool.toolfolder.data["ST_w0_data"].nparray)
         self.assertEqual([p.rsplit(".", 1)[-1] for p in paths], ["TwoB0", "TwoB1", "TwoB2"])
+
+
+class TestNMToolRunEach(unittest.TestCase):
+    """run_each: one run, and one subfolder, per epoch set or group."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_epochs=6, n_points=3)
+        for i, epoch in enumerate(self.series.epochs.values()):
+            epoch.data[0].nparray = np.full(3, float(i))  # mean = epoch number
+        sets = self.series.epochs.sets
+        sets.add("Set0", [self.series.epochs["E0"], self.series.epochs["E1"]])
+        sets.add("Set1", [self.series.epochs[e] for e in ("E2", "E3", "E4")])
+        sets.add("Set2")  # empty
+        self.series.epochs.groups.assign_cyclic(list(self.series.epochs.keys()), n_groups=2)
+        self.tool = nms.NMToolStats()
+        list(self.tool.windows)[0].func = "mean"
+        self.tool.results_to_cache = False
+
+    def _targets(self, names):
+        channel = self.series.channels["A"]
+        return [{"folder": self.folder, "dataseries": self.series, "channel": channel,
+                 "epoch": self.series.epochs[n], "data": self.series.epochs[n].data[0]}
+                for n in names]
+
+    def _means(self, folder):
+        return list(folder.data["ST_w0_mean_y"].nparray)
+
+    def test_one_run_per_set(self):
+        sets = self.series.epochs.sets
+        batches = [(self._targets(sets.get_items(name, get_keys=True) or []), {"epoch": name})
+                   for name in ("Set0", "Set1", "Set2")]
+        done = self.tool.run_each(batches)
+        self.assertEqual([keys["epoch"] for keys, _ in done], ["Set0", "Set1"])  # Set2 empty
+        names = [folder.name for _, folder in done]
+        self.assertEqual(names, ["Stats_Record_A_S0_0", "Stats_Record_A_S1_0"])
+        self.assertEqual(self._means(done[0][1]), [0.0, 1.0])
+        self.assertEqual(self._means(done[1][1]), [2.0, 3.0, 4.0])
+        self.assertIs(self.tool.toolfolder, done[-1][1])  # the last run's
+
+    def test_one_run_per_group(self):
+        groups = self.series.epochs.groups
+        batches = [(self._targets(groups.get_items(n)), {"epoch": None, "group": n})
+                   for n in groups.group_numbers]
+        done = self.tool.run_each(batches)
+        self.assertEqual([f.name for _, f in done],
+                         ["Stats_Record_A_G0_0", "Stats_Record_A_G1_0"])
+        self.assertEqual(self._means(done[0][1]), [0.0, 2.0, 4.0])
+        self.assertEqual(self._means(done[1][1]), [1.0, 3.0, 5.0])
+
+    def test_per_epoch_arrays_in_each_run(self):
+        self.tool.results_all_epochs = True
+        sets = self.series.epochs.sets
+        done = self.tool.run_each([
+            (self._targets(sets.get_items("Set0", get_keys=True)), {"epoch": "Set0"}),
+        ])
+        values = done[0][1].data["ST_w0_mean_y"].nparray
+        self.assertEqual(len(values), 6)  # one point per epoch
+        self.assertEqual(list(values[:2]), [0.0, 1.0])
+        self.assertTrue(all(math.isnan(v) for v in values[2:]))
+
+    def test_nothing_to_run(self):
+        self.assertEqual(self.tool.run_each([([], {"epoch": "Set2"})]), [])

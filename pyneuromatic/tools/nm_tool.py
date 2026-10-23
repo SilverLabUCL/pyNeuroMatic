@@ -362,7 +362,12 @@ class NMTool:
         if code:
             parts.append(code)
         base = "_".join(parts)
-        return self.folder.toolfolders.get_or_create(base, overwrite=overwrite)
+        folder = self.folder.toolfolders.get_or_create(base, overwrite=overwrite)
+        # Noted, so run_each() can say which subfolder each run wrote
+        made = getattr(self, "_made_toolfolders", None)
+        if made is not None and folder not in made:
+            made.append(folder)
+        return folder
 
     def _selection_code(self) -> str | None:
         """A short code for what the run analysed, from its ``run_keys``.
@@ -404,6 +409,37 @@ class NMTool:
             return code + operator + group_code
         return code
 
+    def run_each(
+        self,
+        batches: list[tuple[list[dict[str, NMObject]], dict | None]],
+    ) -> list[tuple[dict, NMToolFolder | None]]:
+        """Run the tool once per batch, in turn (e.g. once per epoch set or
+        group, as Igor NeuroMatic's "All Sets" / "All Groups").
+
+        Each batch is ``(targets, run_keys)``; each run is a full
+        :meth:`run_all`, so it saves its results under its own subfolder,
+        named from its run keys (e.g. ``Stats_Record_A_S0_0`` then
+        ``Stats_Record_A_S1_0``). Batches without targets (e.g. an empty
+        set) are skipped; a run that fails stops the rest.
+
+        Args:
+            batches: ``(targets, run_keys)`` pairs, as for :meth:`run_all`.
+
+        Returns:
+            ``(run_keys, subfolder)`` for each batch that ran, in order; the
+            subfolder is the last one the run wrote, or None.
+        """
+        done: list[tuple[dict, NMToolFolder | None]] = []
+        for targets, run_keys in batches:
+            if not targets:
+                continue
+            succeeded = self.run_all(targets, run_keys=run_keys)
+            made = getattr(self, "_made_toolfolders", [])
+            done.append((dict(run_keys or {}), made[-1] if made else None))
+            if not succeeded:
+                break
+        return done
+
     def run_all(
         self,
         targets: list[dict[str, NMObject]],
@@ -444,6 +480,7 @@ class NMTool:
             "channels": [],
             "epochs": [],
         }
+        self._made_toolfolders: list[NMToolFolder] = []
         if not self.run_init():
             return False
         for target in targets:
