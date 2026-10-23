@@ -315,7 +315,7 @@ def test_clear_set_in_tree(qtbot, series, monkeypatch):
     monkeypatch.setattr(browser, "_confirm", lambda *a: True)
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
     actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
-    assert list(actions) == ["Select", "Rename...", "Clear...", "Delete..."]
+    assert list(actions) == ["Select", "Renumber...", "Clear...", "Delete..."]
     actions["Clear..."].trigger()
     assert series.epochs.sets.get_items("Set1", get_keys=True) == []
     assert "Set1" in series.epochs.sets and len(series.epochs) == 10
@@ -386,12 +386,22 @@ def test_clear_is_cancelled_without_confirmation(qtbot, series, monkeypatch):
 def test_rename_set_in_tree(qtbot, series, monkeypatch):
     window = _app_for(qtbot, series)  # keep the window alive
     browser = window.browser_widget
-    monkeypatch.setattr(QtWidgets.QInputDialog, "getText",
-                        staticmethod(lambda *a, **k: ("Mine", True)))
+    asked = []
+    monkeypatch.setattr(browser, "_ask_set_number",
+                        lambda title, label, value: asked.append(value) or (5, True))
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
-    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Rename..."].trigger()
-    assert "Mine" in series.epochs.sets and "Set1" not in series.epochs.sets
-    assert series.epochs.sets.get_items("Mine", get_keys=True) == ["E1", "E3"]
+    _tree_menu(browser, monkeypatch, browser.tree.currentIndex())["Renumber..."].trigger()
+    assert asked == [1]  # starts at its own number
+    assert "Set5" in series.epochs.sets and "Set1" not in series.epochs.sets
+    assert series.epochs.sets.get_items("Set5", get_keys=True) == ["E1", "E3"]
+
+
+def test_setx_has_no_renumber(qtbot, series, monkeypatch):
+    window = _app_for(qtbot, series)  # keep the window alive
+    browser = window.browser_widget
+    browser.show_data_of(series, sets=True, select="SetX", kind="epochs")
+    actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
+    assert "Renumber..." not in actions
 
 
 def test_select_group_in_detail_pane(qtbot, series, monkeypatch):
@@ -471,8 +481,8 @@ def test_set_notes_below_the_list(qtbot, series, monkeypatch):
     assert notes.table.item(0, 1).text() == "Cells with stable access"
 
     # Another set shows its own notes
-    series.epochs.sets.notes("Set2").add("After drug")
-    browser.show_data_of(series, sets=True, select="Set2", kind="epochs")
+    series.epochs.sets.notes("Set0").add("After drug")
+    browser.show_data_of(series, sets=True, select="Set0", kind="epochs")
     assert notes.table.item(0, 1).text() == "After drug"
 
 

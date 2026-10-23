@@ -588,3 +588,15 @@ def test_subfolder_named_after_the_epoch_selection(qtbot):
     # Data arrays: the Data Set's code
     folder.data.sets.add("Set2", ["RecordA0", "RecordA1"])
     assert run(data=folder.data["RecordA0"], source="data", data_set="Set2") == "Stats_S2_0"
+
+
+def test_choose_measurement_is_red(qtbot):
+    window = NMAppWindow(NMManager(quiet=True))
+    qtbot.addWidget(window)
+    combo = window.stats_tab.measurement_combo
+    brush = combo.itemData(0, QtCore.Qt.ItemDataRole.ForegroundRole)
+    assert combo.itemText(0) == "Choose measurement" and brush.color().name() == "#c62828"
+    combo.setCurrentIndex(0)
+    assert "#c62828" in combo.styleSheet()  # the closed combo too
+    combo.setCurrentText("mean")
+    assert combo.styleSheet() == ""

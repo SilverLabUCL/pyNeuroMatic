@@ -284,7 +284,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert series_menu.currentText() == "Alpha"
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "AlphaA0"
-    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "Set1", "Set2", "SetX", "Demo1Set"]
+    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "Set0", "Set1", "SetX", "Demo1Set"]
     assert _combo_values(group_menu) == ["", "0", "1"]
     assert _combo_values(operator_menu) == [""]
 
@@ -301,7 +301,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert _combo_values(series_menu) == ["", "Gamma"]
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA0"
-    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "Set1", "Set2", "SetX", "Demo2Set"]
+    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "Set0", "Set1", "SetX", "Demo2Set"]
     assert set_menu.currentText() == "All"
     assert _combo_values(group_menu) == ["", "0", "1"]
     assert group_menu.currentText() == ""
@@ -431,7 +431,7 @@ def test_data_and_dataseries_sections_are_independent(qtbot, nm):
     assert strip.is_active_section("dataseries")
     assert strip.source_button("data").isEnabled()  # a data array is selected too
     assert _combo_values(data_set_menu) == ["", "FlatSet", "DataSet"]
-    assert _combo_values(epoch_set_menu) == ["", "All", "Current Epoch", "Set1", "Set2", "SetX", "EpochSet"]
+    assert _combo_values(epoch_set_menu) == ["", "All", "Current Epoch", "Set0", "Set1", "SetX", "EpochSet"]
     assert _combo_values(group_menu) == ["", "0", "1"]
 
     channel_menu.setCurrentText("B")
@@ -535,3 +535,52 @@ def test_tool_rail_switches_active_tool(qtbot, nm):
 
     assert win.current_tool_name == "Stats"
     assert win.tool_workspace.currentIndex() == win.tool_rail.index_for_name("Stats")
+
+
+def test_data_dropdown_lists_only_numeric_arrays(qtbot):
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=True)
+    folder.data.new("Wave", nparray=np.array([1.0, 2.0]))
+    folder.data.new("Counts", nparray=np.array([1, 2], dtype=np.int16))
+    folder.data.new("Paths", nparray=np.array(["nm.Demo.A0", "nm.Demo.A1"], dtype=object))
+    folder.data.new("Labels", nparray=np.array(["a", "b"]))
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.selection_model.refresh()
+    window.selection_strip.refresh_options()
+    combo = window.selection_strip.combo("data")
+    names = [combo.itemText(i) for i in range(combo.count())]
+    assert names == ["", "Wave", "Counts"]
+
+
+def test_plot_steps_over_text_arrays(qtbot):
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=True)
+    folder.data.new("A0", nparray=np.array([1.0, 2.0]))
+    folder.data.new("Names", nparray=np.array(["x", "y"], dtype=object))
+    folder.data.new("A1", nparray=np.array([3.0, 4.0]))
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.selection_model.update(data=folder.data["A0"], source="data")
+    panel = window.plot_widget
+    assert panel.trace_count_label.text() == "of 2"
+    panel.trace_next_button.click()
+    assert panel.current_item().name == "A1"  # Names is skipped
+
+
+def test_data_set_count_beside_the_dropdown(qtbot):
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=True)
+    for name in ("A0", "A1", "A2"):
+        folder.data.new(name, nparray=np.array([1.0]))
+    folder.data.sets.add("Set0", [folder.data["A0"], folder.data["A2"]])
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    label = window.selection_strip.data_count_label
+    window.selection_model.update(data=folder.data["A1"], source="data")
+    assert label.text() == "n=1"  # the current array, without a Data Set
+    window.selection_model.update(data_set="Set0")
+    assert label.text() == "n=2" and label.toolTip() == "2 data arrays selected"
+    folder.data.sets.add("Set1")
+    window.selection_model.update(data_set="Set1")
+    assert label.text() == "n=0"

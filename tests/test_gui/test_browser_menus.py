@@ -117,14 +117,13 @@ def test_data_series_channel_and_epoch_menus(app, monkeypatch):
 
 
 def test_add_to_set_new(app, monkeypatch):
-    monkeypatch.setattr(QtWidgets.QInputDialog, "getText",
-                        staticmethod(lambda *a, **k: ("Mine", True)))
+    monkeypatch.setattr(app.browser_widget, "_ask_set_number", lambda *a: (4, True))
     epoch = app.series.epochs["E1"]
     actions = _tree_menu(app, monkeypatch, _find(app.browser_widget, epoch))
     submenu = actions["Add to Set"].menu()
     assert [a.text() for a in submenu.actions() if a.text()][-1] == "New..."
     next(a for a in submenu.actions() if a.text() == "New...").trigger()
-    assert app.series.epochs.sets.get_items("Mine", get_keys=True) == ["E1"]
+    assert app.series.epochs.sets.get_items("Set4", get_keys=True) == ["E1"]
 
 
 def test_group_rows_have_only_new(app, monkeypatch):
@@ -179,22 +178,33 @@ def test_data_list_shows_only_arrays(app):
 def test_new_set_prompt_starts_with_the_next_free_name(app, monkeypatch):
     seen = []
 
-    def get_text(*args, **kwargs):
-        seen.append(kwargs.get("text"))
-        return "", False  # cancelled
+    def ask(_title, _label, value):
+        seen.append(value)
+        return value, False  # cancelled
 
-    monkeypatch.setattr(QtWidgets.QInputDialog, "getText", staticmethod(get_text))
     browser = app.browser_widget
-    browser.show_data_of(app.series, sets=True, kind="epochs")  # Set1, Set2, SetX
+    monkeypatch.setattr(browser, "_ask_set_number", ask)
+    browser.show_data_of(app.series, sets=True, kind="epochs")  # Set0, Set1, SetX
     _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New..."].trigger()
     browser.show_data_of(app.folder, sets=True)  # no data sets yet
     _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New..."].trigger()
     epoch = app.series.epochs["E1"]
     actions = _tree_menu(app, monkeypatch, _find(browser, epoch))
     next(a for a in actions["Add to Set"].menu().actions() if a.text() == "New...").trigger()
-    assert seen == ["Set0", "Set0", "Set0"]
-    app.series.epochs.sets.add("Set0")
-    assert app.series.epochs.sets.auto_name_next() == "Set3"
+    # The next free set number: 2 for epochs (Set0, Set1 exist), 0 for data
+    assert seen == [2, 0, 2]
+
+
+def test_new_set_refuses_a_number_in_use(app, monkeypatch):
+    browser = app.browser_widget
+    monkeypatch.setattr(browser, "_ask_set_number", lambda *a: (1, True))  # Set1 exists
+    warnings = []
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning",
+                        staticmethod(lambda *a, **k: warnings.append(a[2])))
+    browser.show_data_of(app.series, sets=True, kind="epochs")
+    _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New..."].trigger()
+    assert warnings == ["'Set1' already exists"]
+    assert list(app.series.epochs.sets.keys()) == ["Set0", "Set1", "SetX"]
 
 
 def test_data_series_row_new_opens_the_new_series_dialog(app, monkeypatch):

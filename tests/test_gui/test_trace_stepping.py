@@ -170,6 +170,7 @@ def test_selection_only_for_data_arrays(qtbot):
     assert not panel.selection_only_action.isEnabled()  # no Data Set chosen
 
     window.selection_model.update(data_set="Mine")
+    assert panel.selection_only_action.text() == "Selected Data Only"  # data arrays
     panel.selection_only_action.setChecked(True)
     assert panel.selection_scope_label.text() == "(Mine: 2)"
     panel.trace_next_button.click()
@@ -183,7 +184,7 @@ def test_stepping_options_are_in_a_menu_beside_the_buttons(app):
     panel = app.plot_widget
     assert panel.step_button.menu() is panel.step_menu
     texts = [a.text() for a in panel.step_menu.actions() if a.text()]
-    assert texts == ["Selection Only"]
+    assert texts == ["Selected Epochs Only"]
     assert panel.step_size.window() is panel.step_menu
     # Turning Selection only off hides the reminder
     panel.selection_only_action.setChecked(True)

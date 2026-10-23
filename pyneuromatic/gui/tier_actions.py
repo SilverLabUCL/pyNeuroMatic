@@ -977,6 +977,43 @@ def series_name_error(owner, name: str | None) -> str | None:
     )
 
 
+# Sets are numbered, like groups: Set0, Set1, Set2... (SetX excludes epochs).
+# Their notes say what they are; short names keep tool subfolders short.
+
+def set_name(number) -> str:
+    return f"Set{int(number)}"
+
+
+def next_set_number(sets) -> int:
+    """The first unused set number."""
+    number = 0
+    while set_name(number) in sets:
+        number += 1
+    return number
+
+
+def set_number_spin(sets, value: int | None = None) -> tuple:
+    """The "Set number" box for a dialog, starting at the next free number."""
+    return ("Set number", Spin(0, 9999, next_set_number(sets) if value is None else value))
+
+
+def set_number_error(sets, number, keep: str | None = None) -> str | None:
+    """Why Set<number> can't be made (it exists), or None; *keep* is a set
+    being renumbered, which may keep its number."""
+    name = set_name(number)
+    if keep is not None and name.lower() == keep.lower():
+        return None
+    if name in sets:
+        return f"'{name}' already exists"
+    return None
+
+
+def set_number_of(name: str) -> int | None:
+    """3 for "Set3"; None for other names (e.g. SetX or imported names)."""
+    suffix = name[3:]
+    return int(suffix) if name[:3].lower() == "set" and suffix.isdigit() else None
+
+
 def set_name_error(sets, name: str | None) -> str | None:
     """Why *name* cannot be a new set in *sets*, or None if it can."""
     if not name:
@@ -1031,7 +1068,8 @@ class DataActions(TierActions):
                                          tip="Make a set from two sets with AND or OR")
         self.set_clear_action = action("Clear Set…", self.clear_set,
                                        tip="Remove all data from a set, keeping the set")
-        self.set_rename_action = action("Rename Set…", self.rename_set, tip="Rename a data set")
+        self.set_rename_action = action("Renumber Set…", self.rename_set,
+                                        tip="Give a data set another number")
         self.set_delete_action = action("Delete Set…", self.delete_set, tip="Delete a data set")
         self.set_browse_action = action(
             "Choose in Browser…", self.choose_sets_in_browser,
@@ -1328,14 +1366,14 @@ class DataActions(TierActions):
         sets = container.sets
         answer = self._choose(
             "New Data Set",
-            name_label="Set name",
-            default_name=lambda _item: sets.auto_name_next(),
-            validate=lambda _item, name: set_name_error(sets, name),
+            extras=[set_number_spin(sets)],
+            validate=lambda _item, _name, number: set_number_error(sets, number),
         )
         if answer is None:
             return
-        sets.add(answer[1])
-        self._selection.update(data_set=answer[1])
+        name = set_name(answer[-1])
+        sets.add(name)
+        self._selection.update(data_set=name)
         self._changed()
 
     def add_to_set(self) -> None:
@@ -1386,17 +1424,16 @@ class DataActions(TierActions):
         answer = self._choose_set(
             "Combine Sets",
             extras=[("Operator", ["AND", "OR"], "OR"),
-                    ("With Set", names, second)],
-            name_label="New Set",
-            default_name=lambda _item, *_extras: sets.auto_name_next(),
-            validate=lambda item, name, _operator, other: (
+                    ("With Set", names, second), set_number_spin(sets)],
+            validate=lambda item, _name, _operator, other, number: (
                 "Choose two different sets" if item == other
-                else set_name_error(sets, name)
+                else set_number_error(sets, number)
             ),
         )
         if answer is None:
             return
-        first, name, operator, second = answer
+        first, _name, operator, second, number = answer
+        name = set_name(number)
         define = sets.define_and if operator == "AND" else sets.define_or
         define(name, first, second)
         self._selection.update(data_set=name)
@@ -1415,17 +1452,17 @@ class DataActions(TierActions):
         container = self._data_container()
         sets = container.sets if container is not None else None
         answer = self._choose_set(
-            "Rename Set",
-            name_label="New name",
-            default_name=lambda item: item,
-            validate=lambda item, name: None if name == item else set_name_error(sets, name),
+            "Renumber Set",
+            extras=[set_number_spin(sets) if sets is not None else ("Set number", Spin(0, 9999, 0))],
+            validate=lambda item, _name, number: set_number_error(sets, number, keep=item),
         )
-        if answer is None or answer[0] == answer[1]:
+        if answer is None or set_name(answer[-1]).lower() == answer[0].lower():
             return
-        was_current = answer[0] == self._current_name("data_set")
-        sets.rename(answer[0], answer[1])
+        old, new = answer[0], set_name(answer[-1])
+        was_current = old == self._current_name("data_set")
+        sets.rename(old, new)
         if was_current:
-            self._selection.update(data_set=answer[1])
+            self._selection.update(data_set=new)
         self._changed()
 
     def delete_set(self) -> None:
@@ -2081,7 +2118,8 @@ class EpochSetActions(TierActions):
                                      tip="Make a set from two sets with AND or OR")
         self.clear_action = action("Clear Set…", self.clear_set,
                                    tip="Remove all epochs from a set, keeping the set")
-        self.rename_action = action("Rename Set…", self.rename_set, tip="Rename an epoch set")
+        self.rename_action = action("Renumber Set…", self.rename_set,
+                                    tip="Give an epoch set another number")
         self.delete_action = action("Delete Set…", self.delete_set, tip="Delete an epoch set")
         self.browse_action = action("Choose in Browser…", self.choose_in_browser,
                                     tip="Show the epoch sets in the browser")
@@ -2165,13 +2203,14 @@ class EpochSetActions(TierActions):
         sets = series.epochs.sets
         answer = self._choose(
             "New Epoch Set", context=self._series_context(series),
-            name_label="Set name", default_name=lambda _item: sets.auto_name_next(),
-            validate=lambda _item, name: epoch_set_name_error(sets, name),
+            extras=[set_number_spin(sets)],
+            validate=lambda _item, _name, number: set_number_error(sets, number),
         )
         if answer is None:
             return
-        sets.add(answer[1])
-        self._selection.update(epoch_set=answer[1])
+        name = set_name(answer[-1])
+        sets.add(name)
+        self._selection.update(epoch_set=name)
         self._changed()
 
     def _edit_range(self, title: str, verb: str, adding: bool, fixed: str | None = None) -> None:
@@ -2250,18 +2289,17 @@ class EpochSetActions(TierActions):
             return [e for e in names if e not in members]
 
         answer = self._choose_set(
-            "Invert Epoch Set", name_label="New set",
-            default_name=lambda _item: sets.auto_name_next(),
-            message=lambda set_name, *_: (
-                f"The new set has the {len(complement(set_name))} epochs not in "
-                f"'{set_name}'."
+            "Invert Epoch Set", extras=[set_number_spin(sets)],
+            message=lambda chosen, *_: (
+                f"The new set has the {len(complement(chosen))} epochs not in "
+                f"'{chosen}'."
             ),
-            validate=lambda _item, name: epoch_set_name_error(sets, name),
+            validate=lambda _item, _name, number: set_number_error(sets, number),
         )
         if answer is None:
             return
-        set_name, name = answer[0], answer[1]
-        sets.add(name, [series.epochs[e] for e in complement(set_name)])
+        chosen, name = answer[0], set_name(answer[-1])
+        sets.add(name, [series.epochs[e] for e in complement(chosen)])
         self._selection.update(epoch_set=name)
         self._changed()
 
@@ -2276,17 +2314,17 @@ class EpochSetActions(TierActions):
         second = next((n for n in names if n != first), first)
         answer = self._choose_set(
             "Combine Sets",
-            extras=[("Operator", ["AND", "OR"], "OR"), ("With Set", names, second)],
-            name_label="New Set",
-            default_name=lambda _item, *_extras: sets.auto_name_next(),
-            validate=lambda item, name, _operator, other: (
+            extras=[("Operator", ["AND", "OR"], "OR"), ("With Set", names, second),
+                    set_number_spin(sets)],
+            validate=lambda item, _name, _operator, other, number: (
                 "Choose two different sets" if item == other
-                else epoch_set_name_error(sets, name)
+                else set_number_error(sets, number)
             ),
         )
         if answer is None:
             return
-        first, name, operator, second = answer
+        first, _name, operator, second, number = answer
+        name = set_name(number)
         (sets.define_and if operator == "AND" else sets.define_or)(name, first, second)
         self._selection.update(epoch_set=name)
         self._changed()
@@ -2305,18 +2343,20 @@ class EpochSetActions(TierActions):
         series = self._series()
         sets = series.epochs.sets if series is not None else None
         answer = self._choose_set(
-            "Rename Epoch Set", name_label="New name", default_name=lambda item: item,
-            validate=lambda item, name: (
-                self._exclude_set_error(item, "renamed")
-                or (None if name == item else epoch_set_name_error(sets, name))
+            "Renumber Epoch Set",
+            extras=[set_number_spin(sets) if sets is not None else ("Set number", Spin(0, 9999, 0))],
+            validate=lambda item, _name, number: (
+                self._exclude_set_error(item, "renumbered")
+                or set_number_error(sets, number, keep=item)
             ),
         )
-        if answer is None or answer[0] == answer[1]:
+        if answer is None or set_name(answer[-1]).lower() == answer[0].lower():
             return
-        was_current = answer[0] == self._selection.selection.get("epoch_set")
-        sets.rename(answer[0], answer[1])
+        old, new = answer[0], set_name(answer[-1])
+        was_current = old == self._selection.selection.get("epoch_set")
+        sets.rename(old, new)
         if was_current:
-            self._selection.update(epoch_set=answer[1])
+            self._selection.update(epoch_set=new)
         self._changed()
 
     def delete_set(self) -> None:
@@ -2617,6 +2657,10 @@ __all__ = [
     "epoch_set_name_error",
     "epoch_ranges",
     "range_summary",
+    "next_set_number",
+    "set_name",
     "set_name_error",
+    "set_number_error",
+    "set_number_of",
     "unique_name",
 ]

@@ -64,7 +64,7 @@ def test_data_menus_in_strip_and_menu_bar(app):
     ]
     assert _menu_texts(strip.action_button("data_set").menu()) == [
         "New Set…", "Add Data to Set…", "Remove Data from Set…", "Combine Sets…",
-        "Clear Set…", "Rename Set…", "Delete Set…", "Choose in Browser…",
+        "Clear Set…", "Renumber Set…", "Delete Set…", "Choose in Browser…",
     ]
     menus = {action.text(): action.menu() for action in app.menuBar().actions()}
     assert "Data" in menus
@@ -141,49 +141,53 @@ def test_copy_to_folder(app):
 
 def test_new_add_remove_and_combine_sets(app):
     actions, data = app.data_actions, app.demo.data
-    app.answers = [(None, "Picked")]
+    actions.new_set()  # cancelled; sets are numbered
+    label, spin = app.dialogs[-1][1]["extras"][0]
+    assert label == "Set number" and spin.value == 0
+    app.answers = [(None, None, "0")]
     actions.new_set()
-    assert "Picked" in data.sets.keys()
-    assert app.selection_model.selection["data_set"] == "Picked"
+    assert "Set0" in data.sets.keys()
+    assert app.selection_model.selection["data_set"] == "Set0"
 
-    app.answers = [("Picked", None, "RecordA0")]
+    app.answers = [("Set0", None, "RecordA0")]
     actions.add_to_set()
-    assert data.sets.get_items("Picked", get_keys=True) == ["RecordA0"]
+    assert data.sets.get_items("Set0", get_keys=True) == ["RecordA0"]
 
     actions.remove_from_set()  # cancelled; check the validation
     validate = app.dialogs[-1][1]["validate"]
-    assert validate("Picked", None, "Loose0") == "'Loose0' is not in 'Picked'"
-    assert validate("Picked", None, "RecordA0") is None
+    assert validate("Set0", None, "Loose0") == "'Loose0' is not in 'Set0'"
+    assert validate("Set0", None, "RecordA0") is None
 
-    app.answers = [("Picked", "Both", "OR", "DataSet")]
+    app.answers = [("Set0", None, "OR", "DataSet", "1")]
     actions.combine_sets()
     assert app.dialogs[-1][1]["extras"][0] == ("Operator", ["AND", "OR"], "OR")
-    assert sorted(data.sets.get_items("Both", get_keys=True)) == ["Loose0", "RecordA0"]
-    assert app.selection_model.selection["data_set"] == "Both"
+    assert sorted(data.sets.get_items("Set1", get_keys=True)) == ["Loose0", "RecordA0"]
+    assert app.selection_model.selection["data_set"] == "Set1"
 
-    app.answers = [("Picked", None, "RecordA0")]
+    app.answers = [("Set0", None, "RecordA0")]
     actions.remove_from_set()
-    assert data.sets.get_items("Picked", get_keys=True) == []
+    assert data.sets.get_items("Set0", get_keys=True) == []
 
 
 def test_clear_rename_and_delete_sets(app):
     actions, data = app.data_actions, app.demo.data
     app.selection_model.update(data_set="DataSet")
 
-    app.answers = [("DataSet", "Renamed")]
+    app.answers = [("DataSet", None, "4")]  # a named (e.g. imported) set renumbered
     actions.rename_set()
-    assert "Renamed" in data.sets.keys()
-    assert app.selection_model.selection["data_set"] == "Renamed"
-    assert app.selection_strip.combo("data_set").currentText() == "Renamed"
+    assert app.dialogs[-1][0] == "Renumber Set"
+    assert "Set4" in data.sets.keys() and "DataSet" not in data.sets.keys()
+    assert app.selection_model.selection["data_set"] == "Set4"
+    assert app.selection_strip.combo("data_set").currentText() == "Set4"
 
-    app.answers = [("Renamed", None)]
+    app.answers = [("Set4", None)]
     actions.clear_set()
-    assert data.sets.get_items("Renamed", get_keys=True) == []
-    assert "Renamed" in data.sets.keys()
+    assert data.sets.get_items("Set4", get_keys=True) == []
+    assert "Set4" in data.sets.keys()
 
-    app.answers = [("Renamed", None)]
+    app.answers = [("Set4", None)]
     actions.delete_set()
-    assert "Renamed" not in data.sets.keys()
+    assert "Set4" not in data.sets.keys()
     assert app.selection_model.selection["data_set"] is None
     assert "Loose0" in data  # the data is kept
 
@@ -197,13 +201,15 @@ def test_combine_sets_starts_with_two_different_sets(app):
     app.data_actions.combine_sets()  # cancelled; check the options
     options = app.dialogs[-1][1]
     assert options["current"] == "Set1"
-    assert options["extras"] == [
+    assert options["extras"][:2] == [
         ("Operator", ["AND", "OR"], "OR"),
         ("With Set", ["DataSet", "Set1"], "DataSet"),
     ]
-    assert options["name_label"] == "New Set"
-    assert options["validate"]("Set1", "Both", "OR", "Set1") == "Choose two different sets"
-    assert options["validate"]("Set1", "Both", "OR", "DataSet") is None
+    label, spin = options["extras"][2]
+    assert label == "Set number" and spin.value == 0
+    assert options["validate"]("Set1", None, "OR", "Set1", "0") == "Choose two different sets"
+    assert options["validate"]("Set1", None, "OR", "DataSet", "0") is None
+    assert options["validate"]("Set1", None, "OR", "DataSet", "1") == "'Set1' already exists"
 
 
 def test_choose_sets_in_browser_shows_sets_list(app):
@@ -514,11 +520,10 @@ def test_browser_add_to_set_updates_browser_and_strip(app, monkeypatch):
     assert sorted(_tree_children(browser, set_index)) == ["Loose0", "RecordA0", "RecordA1"]
 
     # A new set from the browser appears in the strip's Data Set list
-    monkeypatch.setattr(QtWidgets.QInputDialog, "getText",
-                        staticmethod(lambda *a, **k: ("Fresh", True)))
+    monkeypatch.setattr(browser, "_ask_set_number", lambda *a: (5, True))
     browser._add_selected_to_new_set()
     combo = app.selection_strip.combo("data_set")
-    assert "Fresh" in [combo.itemText(i) for i in range(combo.count())]
+    assert "Set5" in [combo.itemText(i) for i in range(combo.count())]
 
 
 

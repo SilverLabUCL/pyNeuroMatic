@@ -86,7 +86,7 @@ def test_data_series_channel_and_epoch(app):
     assert panel.row_text("Epochs") == "3"
     assert panel.row_text("Points") == "4"
     assert panel.row_text("Locked") == "No"
-    assert panel.row_text("Epoch Sets") == "Set1, Set2, SetX"
+    assert panel.row_text("Epoch Sets") == "Set0, Set1, SetX"
     assert panel.row_text("Groups") == "0"
     assert panel.notes_table.isVisibleTo(panel)  # notes for a series, e.g. "Stim"
 

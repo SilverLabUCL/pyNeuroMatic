@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
@@ -37,6 +37,9 @@ from pyneuromatic.gui.tool_tab import ToolTabWidget
 
 class StatsToolTab(ToolTabWidget):
     """Single-window Stats1 editor and runner using the project's Stats tool."""
+
+    # "Choose measurement" (no measurement yet), as SetX's red
+    CHOOSE_COLOR = "#c62828"
 
     NEW_WINDOW_ACTION = "__new_stats_window__"
     # Dropdown groups, separated in the measurement menu
@@ -137,12 +140,19 @@ class StatsToolTab(ToolTabWidget):
         window_row.addWidget(self.window_combo)
         self.measurement_combo = QtWidgets.QComboBox(self)
         self.measurement_combo.addItem("Choose measurement", None)
+        # In red until a measurement is chosen (the list item and the combo)
+        self.measurement_combo.setItemData(
+            0, QtGui.QBrush(QtGui.QColor(self.CHOOSE_COLOR)),
+            QtCore.Qt.ItemDataRole.ForegroundRole,
+        )
         for group in self._MEASUREMENT_GROUPS:
             if self.measurement_combo.count() > 1:
                 self.measurement_combo.insertSeparator(self.measurement_combo.count())
             for name in group:
                 self.measurement_combo.addItem(name, name)
         window_row.addWidget(self.measurement_combo, stretch=1)
+        self.measurement_combo.currentIndexChanged.connect(self._style_measurement_combo)
+        self._style_measurement_combo()
         self.window_enabled = QtWidgets.QCheckBox("On", self)
         window_row.addWidget(self.window_enabled)
         stats1_layout.addLayout(window_row)
@@ -408,6 +418,13 @@ class StatsToolTab(ToolTabWidget):
             self.bsln_xend_edit,
             *self.param_edits.values(),
         ]
+
+    def _style_measurement_combo(self, *_args) -> None:
+        """Red while "Choose measurement" shows, so a missing choice stands out."""
+        choosing = self.measurement_combo.currentData() is None
+        self.measurement_combo.setStyleSheet(
+            f"QComboBox {{ color: {self.CHOOSE_COLOR}; }}" if choosing else ""
+        )
 
     def _show_configuration(self, enabled: bool) -> None:
         self.settings_stack.setCurrentWidget(

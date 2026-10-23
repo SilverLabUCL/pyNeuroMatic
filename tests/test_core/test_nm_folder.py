@@ -1430,7 +1430,7 @@ class TestDefaultEpochSetsAndExclusion(unittest.TestCase):
         return [epoch.name for epoch in self.epochs.run_targets]
 
     def test_default_sets(self):
-        self.assertEqual(list(self.epochs.sets.keys()), ["Set1", "Set2", "SetX"])
+        self.assertEqual(list(self.epochs.sets.keys()), ["Set0", "Set1", "SetX"])
         self.assertEqual(self.epochs.excluded_names(), set())
 
     def test_setx_epochs_are_left_out_of_runs(self):

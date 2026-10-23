@@ -42,7 +42,7 @@ from pyneuromatic.gui.selection_model import (
     selection_summary,
     source_object,
 )
-from pyneuromatic.gui.selection_strip import SelectionStrip
+from pyneuromatic.gui.selection_strip import SelectionStrip, is_text_array
 from pyneuromatic.gui.tier_actions import (
     DataActions,
     EpochSetActions,
@@ -282,7 +282,7 @@ class PlotPanel(QtWidgets.QWidget):
         step_action = QtWidgets.QWidgetAction(self.step_menu)
         step_action.setDefaultWidget(step_row)
         self.step_menu.addAction(step_action)
-        self.selection_only_action = self.step_menu.addAction("Selection Only")
+        self.selection_only_action = self.step_menu.addAction("Selected Epochs Only")
         self.selection_only_action.setCheckable(True)
         self.selection_only_action.setToolTip(
             "Step only through the traces in the strip's Epoch Set / Group or Data Set"
@@ -503,7 +503,9 @@ class PlotPanel(QtWidgets.QWidget):
             folder = selection.get("folder")
             context = selection.get("toolfolder") or folder
             if context is not None:
-                entries = [(item, item) for item in context.data.values()]
+                # Numeric arrays only: text arrays (e.g. ST_w0_data) can't be plotted
+                entries = [(item, item) for item in context.data.values()
+                           if not is_text_array(item)]
                 mode = "data"
                 current_item = data
                 container = context.data
@@ -712,6 +714,10 @@ class PlotPanel(QtWidgets.QWidget):
             ]
             self._scope_text = f"({label}: {len(self._scope_rows)})"
         self.selection_only_action.setEnabled(self._scope_rows is not None)
+        # Epochs of a data series, or the arrays of a Data Set
+        self.selection_only_action.setText(
+            "Selected Data Only" if self._trace_mode == "data" else "Selected Epochs Only"
+        )
 
     def _step_rows(self) -> list[int]:
         """The rows ◀ ▶ |◀ ▶| visit, in order."""
