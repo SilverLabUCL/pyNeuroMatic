@@ -48,16 +48,11 @@ from pyneuromatic.tools.nm_stat_utilities import stat
 from pyneuromatic.core.nm_data import NMData
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
-from pyneuromatic.core.nm_transform import (
-    NMTransform,
-    apply_transforms,
-    _transform_from_dict,
-)
 import pyneuromatic.core.nm_utilities as nmu
 
 
 class NMStatWin:
-    """Stat measurement window: x-range, function, baseline, and transforms.
+    """Stat measurement window: x-range, function and baseline.
 
     Lightweight class (does not inherit NMObject) following the NMScaleY
     pattern. Each window defines one stat measurement pipeline:
@@ -67,15 +62,16 @@ class NMStatWin:
     - ``xbgn`` / ``xend`` — x-boundaries of the main stat region
     - ``bsln_on`` / ``bsln_func`` / ``bsln_xbgn`` / ``bsln_xend`` — optional
       baseline stat subtracted from (or required by) the main stat
-    - ``transform`` — optional list of NMTransform operations applied to a
-      copy of the data before computing
+
+    Filters and transforms are set on the channel (``NMChannel.transform``),
+    not the window: Stats measures the channel as the plot shows it.
 
     Call ``compute(data)`` to run the pipeline and retrieve result dicts.
 
     Args:
         name: Window name (alphanumeric + underscores, default ``"NMStatWin0"``).
         win: Optional dict to initialise window parameters via ``_win_set()``.
-            Accepted keys: ``on``, ``func``, ``xbgn``, ``xend``, ``transform``,
+            Accepted keys: ``on``, ``func``, ``xbgn``, ``xend``,
             ``bsln_on``, ``bsln_func``, ``bsln_xbgn``, ``bsln_xend``.
     """
 
@@ -96,7 +92,6 @@ class NMStatWin:
         self.__func: NMStatFunc | None = None
         self.__xbgn = -math.inf
         self.__xend = math.inf
-        self.__transform: list[NMTransform] | None = None
         self.__results: list[dict[str, Any]] = []  # [ {}, {} ...] list of dictionaries
 
         # baseline
@@ -126,17 +121,12 @@ class NMStatWin:
 
     def to_dict(self) -> dict:
         """Serialize this stat window to a dict."""
-        if self.__transform is not None:
-            transform_dicts = [t.to_dict() for t in self.__transform]
-        else:
-            transform_dicts = None
         return {
             "name": self._name,
             "on": self.__on,
             "func": self.__func.to_dict() if self.__func else {},
             "xbgn": self.__xbgn,
             "xend": self.__xend,
-            "transform": transform_dicts,
             "bsln_on": self.__bsln_on,
             "bsln_func": self.__bsln_func,
             "bsln_xbgn": self.__bsln_xbgn,
@@ -150,9 +140,11 @@ class NMStatWin:
     ) -> None:
         """Set multiple window parameters from a dict.
 
-        Accepted keys: ``on``, ``func``, ``xbgn``, ``xend``, ``transform``,
+        Accepted keys: ``on``, ``func``, ``xbgn``, ``xend``,
         ``bsln_on``, ``bsln_func``, ``bsln_xbgn``, ``bsln_xend``.
         The key ``"name"`` is silently ignored (name is set via constructor).
+        The old key ``"transform"`` is ignored with a warning: filters and
+        transforms are now set on the channel.
         """
         if not isinstance(win, dict):
             e = nmu.type_error_str(win, "win", "dictionary")
@@ -173,7 +165,12 @@ class NMStatWin:
             elif k == "xend":
                 self._x_set("xend", v, quiet=True)  # type: ignore[arg-type]
             elif k == "transform":
-                self._transform_set(v, quiet=True)  # type: ignore[arg-type]
+                if v:  # saved by an older version
+                    nmh.history(
+                        "window transforms are no longer supported and were "
+                        "ignored; set them on the channel (NMChannel.transform)",
+                        title="WARNING", path=self._name, red=True,
+                    )
             elif k == "bsln_on":
                 self._bsln_on_set(v, quiet=True)  # type: ignore[arg-type]
             elif k == "bsln_func":
@@ -304,47 +301,6 @@ class NMStatWin:
     def xend(self, xend: float) -> None:
         self._x_set("xend", xend)
         add_nm_command("%s[%r].xend = %r" % (self._nm_path, self._name, self.__xend))
-        return None
-
-    @property
-    def transform(self) -> list[NMTransform] | None:
-        """List of NMTransform objects applied before computing, or None."""
-        return self.__transform
-
-    @transform.setter
-    def transform(self, transform_list: list) -> None:
-        return self._transform_set(transform_list)
-
-    def _transform_set(
-        self,
-        transform_list: list[NMTransform] | list[dict] | None,
-        quiet: bool = nmc.QUIET
-    ) -> None:
-        """Set the transform list from NMTransform objects, dicts, or None."""
-        if transform_list is None:
-            self.__transform = None
-            nmh.history("set transform=None", path=self._name, quiet=quiet)
-            return None
-        if not isinstance(transform_list, list):
-            e = nmu.type_error_str(transform_list, "transform_list", "list")
-            raise TypeError(e)
-        result = []
-        for item in transform_list:
-            if isinstance(item, NMTransform):
-                result.append(item)
-            elif isinstance(item, dict):
-                result.append(_transform_from_dict(item))
-            else:
-                e = nmu.type_error_str(
-                    item, "transform item", "NMTransform or dict"
-                )
-                raise TypeError(e)
-        self.__transform = result
-        nmh.history(
-            "set transform=[%s]" % ", ".join(t.type_str for t in result),
-            path=self._name,
-            quiet=quiet,
-        )
         return None
 
     @property
@@ -493,9 +449,9 @@ class NMStatWin:
     ) -> list:
         """Run the stat computation on data.
 
-        Applies any transforms to a copy of the data (original is never
-        mutated), runs the baseline stat if ``bsln_on`` is True, then
-        delegates to ``self.__func.compute()``.
+        Runs the baseline stat if ``bsln_on`` is True, then delegates to
+        ``self.__func.compute()``. *data* is measured as it is (the tools
+        pass the channel's transformed copy, ``NMChannel.transformed``).
 
         Args:
             data: NMData object to analyse.
@@ -506,19 +462,6 @@ class NMStatWin:
             List of result dicts from each stat call in the pipeline.
             Returns an empty list if ``data`` is None or no func is set.
         """
-        # Apply transforms to a copy of the data (original never mutated)
-        if self.__transform and len(self.__transform) > 0:
-            if data is not None and data.nparray is not None:
-                transformed = apply_transforms(
-                    data.nparray, self.__transform, xscale=data.xscale
-                )
-                data = NMData(
-                    name=data.name,
-                    nparray=transformed,
-                    xscale=data.xscale.to_dict(),
-                    yscale=data.yscale.to_dict(),
-                )
-
         self.__results = []
 
         if data is None or self.__func is None:

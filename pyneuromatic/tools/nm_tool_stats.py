@@ -111,6 +111,7 @@ class NMToolStats(NMTool):
         self.__n_epochs: int | None = None
         self.__run_series: NMDataSeries | None = None  # and its channel run on
         self.__run_channel = None
+        self.__transforms: list[str] = []  # channel filters/transforms used
         self.__toolfolder: NMToolFolder | None = None
 
     @property
@@ -163,6 +164,7 @@ class NMToolStats(NMTool):
         self.__positions.clear()
         self.__n_epochs = None
         self.__run_series = self.__run_channel = None
+        self.__transforms = []
         return True  # ok
 
     # override, no super
@@ -178,12 +180,18 @@ class NMToolStats(NMTool):
         """
         if not isinstance(self.data, NMData):
             raise RuntimeError("no data selected")
+        # The channel's filters and transforms (a copy, as the plot shows)
+        data = self.transformed_data()
+        if data is not self.data and self.channel is not None:
+            steps = self.channel.transform_str()
+            if steps not in self.__transforms:
+                self.__transforms.append(steps)
         position = self._epoch_position()
         for w in self.windows:
             self.windows.selected_name = w.name
             if not w.on:
                 continue
-            w.compute(self.data, ignore_nans=self._ignore_nans)
+            w.compute(data, ignore_nans=self._ignore_nans)
             # results saved to w.results
             if not w.results:
                 continue
@@ -224,7 +232,14 @@ class NMToolStats(NMTool):
         self.__toolfolder = None
         if self._results_to_numpy:
             self.__toolfolder = self._write_results_to_numpy()
+        if self.__transforms:
+            nmh.history("channel transform: %s" % self._transform_note(),
+                        quiet=nmc.QUIET)
         return True  # ok
+
+    def _transform_note(self) -> str:
+        """The channel filters and transforms the run used ("" if none)."""
+        return "; ".join(self.__transforms)
 
     def _write_results_to_history(self, quiet: bool = False) -> None:
         """Print all results to the history log.
@@ -455,6 +470,8 @@ class NMToolStats(NMTool):
             raise RuntimeError("there are no results to save")
 
         f = self._make_toolfolder("Stats", overwrite=self._overwrite)
+        transform = self._transform_note()  # recorded in each array's note
+        transform_str = ", transform=%s" % transform if transform else ""
 
         for wname, vlist in self.__results.items():
             # vlist: list of lists, one inner list per data array
@@ -526,9 +543,9 @@ class NMToolStats(NMTool):
                         per_epoch = ", per epoch" if slots_of is not None else ""
                         self._add_note(
                             d,
-                            "NMStats(win=%s, func=%s, id=%s%s, xbgn=%s, xend=%s, n=%d%s)"
+                            "NMStats(win=%s, func=%s, id=%s%s, xbgn=%s, xend=%s, n=%d%s%s)"
                             % (wname, note_func, id_str, step_str, xbgn, xend,
-                               len(present), per_epoch),
+                               len(present), per_epoch, transform_str),
                         )
 
                 # Save warnings if any occurred

@@ -51,7 +51,6 @@ class TestNMStatWin(unittest.TestCase):
             "func": {"name": "mean"},
             "xbgn": 0,
             "xend": math.inf,
-            "transform": None,
             "bsln_on": True,
             "bsln_func": {"name": "mean"},
             "bsln_xbgn": 0,
@@ -62,7 +61,6 @@ class TestNMStatWin(unittest.TestCase):
             "func": {"name": "max"},
             "xbgn": 0,
             "xend": math.inf,
-            "transform": None,
             "bsln_on": True,
             "bsln_func": {"name": "mean"},
             "bsln_xbgn": 0,
@@ -102,7 +100,7 @@ class TestNMStatWin(unittest.TestCase):
             w.name = "w1"
 
     def test_to_dict_keys(self):
-        keys = ["name", "on", "func", "xbgn", "xend", "transform",
+        keys = ["name", "on", "func", "xbgn", "xend",
                 "bsln_on", "bsln_func", "bsln_xbgn", "bsln_xend"]
         d = self.w0.to_dict()
         self.assertIsInstance(d, dict)
@@ -260,39 +258,14 @@ class TestNMStatWin(unittest.TestCase):
         self.assertTrue(math.isinf(self.w0.xend))
         self.assertGreater(self.w0.xend, 0)  # xend → +inf
 
-    def test_transform_set_and_roundtrip(self):
-        from pyneuromatic.core.nm_transform import (
-            NMTransformInvert, NMTransformLog, NMTransformLn,
-        )
-        self.assertIsNone(self.w0.transform)
-
-        self.w0.transform = [NMTransformInvert(), NMTransformLog()]
-        self.assertEqual(len(self.w0.transform), 2)
-        self.assertIsInstance(self.w0.transform[0], NMTransformInvert)
-        self.assertIsInstance(self.w0.transform[1], NMTransformLog)
-
-        # to_dict serialises to list of dicts
-        win = self.w0.to_dict()
-        self.assertIsInstance(win["transform"], list)
-        self.assertEqual(win["transform"][0], {"type": "NMTransformInvert"})
-
-        # round-trip via NMStatWin constructor
-        w2 = nmsw.NMStatWin(win=win)
-        self.assertEqual(len(w2.transform), 2)
-        self.assertIsInstance(w2.transform[0], NMTransformInvert)
-
-        # set via dicts
-        self.w0.transform = [{"type": "NMTransformInvert"},
-                              {"type": "NMTransformLn"}]
-        self.assertIsInstance(self.w0.transform[1], NMTransformLn)
-
-        self.w0.transform = None
-        self.assertIsNone(self.w0.transform)
-        self.assertIsNone(self.w0.to_dict()["transform"])
-
-        for b in nmu.badtypes(ok=[None, []]):
-            with self.assertRaises(TypeError):
-                self.w0.transform = b
+    def test_old_transform_key_is_ignored(self):
+        # Filters and transforms are now set on the channel
+        self.assertFalse(hasattr(self.w0, "transform"))
+        self.assertNotIn("transform", self.w0.to_dict())
+        win = dict(self.win0, transform=[{"type": "NMTransformInvert"}])
+        w2 = nmsw.NMStatWin(name="w2", win=win)  # older settings still load
+        self.assertNotIn("transform", w2.to_dict())
+        self.assertEqual(w2.func, self.w0.func)
 
     def test_bsln_func_set(self):
         self.assertIsInstance(self.w1.bsln_func, dict)

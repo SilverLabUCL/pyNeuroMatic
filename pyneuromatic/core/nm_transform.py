@@ -43,6 +43,9 @@ class NMTransform:
 
     Transforms operate on numpy ndarrays (y-data) and optionally receive
     NMScaleX for xscale information. Simple transforms ignore xscale.
+
+    A transform can be turned off (``on = False``) and kept in its list:
+    :func:`apply_transforms` skips it.
     """
 
     _path_suffix: str = "transform"
@@ -52,6 +55,7 @@ class NMTransform:
         parent: object | None = None,
     ) -> None:
         self._parent = parent
+        self._on = True
 
     def __repr__(self) -> str:
         return "%s()" % self.__class__.__name__
@@ -87,6 +91,17 @@ class NMTransform:
         return self._path_suffix
 
     @property
+    def on(self) -> bool:
+        """If False, the transform is kept but not applied."""
+        return getattr(self, "_on", True)
+
+    @on.setter
+    def on(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "on", "boolean"))
+        self._on = value
+
+    @property
     def type_str(self) -> str:
         """Return the transform type string used for serialization."""
         return self.__class__.__name__
@@ -94,10 +109,14 @@ class NMTransform:
     def to_dict(self) -> dict:
         """Serialize this transform to a dict.
 
-        Returns {"type": "ClassName"}. Subclasses with parameters
-        should call super().to_dict() and add their keys.
+        Returns {"type": "ClassName"}, with ``"on": False`` when turned
+        off. Subclasses with parameters should call super().to_dict() and
+        add their keys.
         """
-        return {"type": self.type_str}
+        d: dict = {"type": self.type_str}
+        if not self.on:
+            d["on"] = False
+        return d
 
     def apply(
         self,
@@ -1121,8 +1140,10 @@ def _transform_from_dict(
     if type_str not in _TRANSFORM_REGISTRY:
         raise ValueError("unknown transform type: '%s'" % type_str)
     cls = _TRANSFORM_REGISTRY[type_str]
-    kwargs = {k: v for k, v in d.items() if k != "type"}
-    return cls(parent=parent, **kwargs)
+    kwargs = {k: v for k, v in d.items() if k not in ("type", "on")}
+    t = cls(parent=parent, **kwargs)
+    t.on = d.get("on", True)
+    return t
 
 
 def _transforms_from_list(
@@ -1161,6 +1182,7 @@ def apply_transforms(
 
     Returns:
         Transformed numpy ndarray (copy; original is never modified).
+        Transforms that are turned off are skipped.
     """
     if not isinstance(ydata, np.ndarray):
         raise TypeError(nmu.type_error_str(ydata, "ydata", "numpy.ndarray"))
@@ -1170,5 +1192,6 @@ def apply_transforms(
     for t in transforms:
         if not isinstance(t, NMTransform):
             raise TypeError(nmu.type_error_str(t, "transform", "NMTransform"))
-        result = t.apply(result, xscale=xscale)
+        if t.on:
+            result = t.apply(result, xscale=xscale)
     return result
