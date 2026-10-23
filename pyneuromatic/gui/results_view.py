@@ -82,6 +82,8 @@ class StatsTables(QtWidgets.QWidget):
                 lambda table=table, other=other: self._sync_selection(table, other)
             )
 
+    toolfolder = None  # the results folder shown (set by show_window)
+
     def _make_table(self) -> QtWidgets.QTableWidget:
         table = QtWidgets.QTableWidget(self)
         table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -90,8 +92,9 @@ class StatsTables(QtWidgets.QWidget):
         table.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems
         )
+        # Cells, a header's column, or several (Shift / ⌘); ⌘C copies them
         table.setSelectionMode(
-            QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
+            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
         )
         return table
 
@@ -137,6 +140,7 @@ class StatsTables(QtWidgets.QWidget):
         message: str = "",
     ) -> None:
         """Fill both tables from *window*'s ST_ arrays in *toolfolder*."""
+        self.toolfolder = toolfolder  # what the tables show (Show in Browser)
         for table in (self.arrays_table, self.summary_table):
             table.clear()
             table.setRowCount(0)
@@ -300,6 +304,40 @@ class StatsTables(QtWidgets.QWidget):
             lines.append("\t".join([table.verticalHeaderItem(row).text()] + cells))
         return lines
 
+    def copy_text(self, names: bool = True, row_names: bool = True) -> str:
+        """The selected cells (of the results or the summary table) as
+        tab-separated text: whole columns with their names first (*names*),
+        each row's name first (*row_names*: the data, or the statistic)."""
+        table = self.arrays_table
+        if not table.selectedIndexes() and self.summary_table.selectedIndexes():
+            table = self.summary_table
+
+        def value(row, column):
+            item = table.item(row, column)
+            if item is None:
+                return ""
+            raw = item.data(QtCore.Qt.ItemDataRole.UserRole)
+            return table_format.copy_value(raw) if raw is not None else item.text()
+
+        def header(column):
+            item = table.horizontalHeaderItem(column)
+            return item.text() if item is not None else ""
+
+        def row_label(row):
+            item = table.verticalHeaderItem(row)
+            return item.text() if item is not None else ""
+
+        # Row names with whole columns (a block of cells copies just itself)
+        selection = table.selectionModel()
+        columns = {i.column() for i in selection.selectedIndexes()}
+        whole = bool(columns) and all(
+            selection.isColumnSelected(c, QtCore.QModelIndex()) for c in columns
+        )
+        return table_format.selection_text(
+            table, value, header, row_label=row_label if row_names and whole else None,
+            names=names,
+        )
+
     def table_text(self) -> str:
         """Both tables, with labels, as tab-separated text (blank line between)."""
         return "\n".join(
@@ -361,9 +399,6 @@ class Stats2Panel(QtWidgets.QWidget):
         )
         window_row.addWidget(self.all_columns_checkbox)
         window_row.addStretch(1)
-        self.copy_button = QtWidgets.QPushButton("Copy tables", self)
-        self.copy_button.setToolTip("Copy both tables as tab-separated text")
-        window_row.addWidget(self.copy_button)
         form.addRow("Window", window_row)
 
         array_row = QtWidgets.QHBoxLayout()
@@ -398,7 +433,6 @@ class Stats2Panel(QtWidgets.QWidget):
         self.tables.column_selected.connect(self._on_table_column_selected)
         self.plot_button.clicked.connect(self.plot_selected)
         self.histogram_button.clicked.connect(self.histogram_selected)
-        self.copy_button.clicked.connect(self.copy_tables)
         self.delete_button.clicked.connect(self.delete_folder)
 
         self.refresh()
@@ -574,7 +608,6 @@ class Stats2Panel(QtWidgets.QWidget):
         name = self.selected_array()
         self.plot_button.setEnabled(name is not None)
         self.histogram_button.setEnabled(name is not None)
-        self.copy_button.setEnabled(bool(self.tables.columns))
         self.delete_button.setEnabled(self.toolfolder() is not None)
 
     def _axis_label(self, name: str) -> str:
@@ -619,9 +652,6 @@ class Stats2Panel(QtWidgets.QWidget):
             "count",
             "histogram",
         )
-
-    def copy_tables(self) -> None:
-        QtWidgets.QApplication.clipboard().setText(self.tables.table_text())
 
     def _confirm_delete(self, name: str) -> bool:
         answer = QtWidgets.QMessageBox.question(

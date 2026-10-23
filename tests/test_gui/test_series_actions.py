@@ -65,7 +65,7 @@ def test_prefix_menu_in_strip_and_menu_bar(app):
         "New Series…", "Series from Data…", "Update from Data", "Copy Series…",
         "Rename Series…", "Edit Scales…", "Lock Series", "Remove Channel…",
         "Remove Epochs…",
-        "Delete Series…", "Choose in Browser…",
+        "Delete Series…", "Show in Browser…",
     ]
     button = app.selection_strip.action_button("dataseries")
     assert button.isEnabled()

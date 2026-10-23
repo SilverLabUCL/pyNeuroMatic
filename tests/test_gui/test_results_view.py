@@ -277,11 +277,13 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     assert len(edges) == len(counts) + 1
 
 
-def test_copy_tables_as_tab_separated_text(qtbot):
+def test_copy_all_stats_tables_from_the_table_panel(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
     window.stats_tab.run_button.click()
+    assert not hasattr(window.stats_tab.stats2, "copy_button")  # moved to the Table panel
 
-    window.stats_tab.stats2.copy_button.click()
+    window.table_panel.show_tool("Stats")
+    window.table_panel.copy_all_action.trigger()
     lines = QtWidgets.QApplication.clipboard().text().splitlines()
     assert lines[0] == "\tbsln_y\tmax_y\tmax_x\tmax_ds"
     assert lines[1] == "RecordA0\t-70\t-50\t10\t20"

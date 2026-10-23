@@ -980,6 +980,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.context_panel.addTab(self.plot_widget, "Plot")
         self.table_panel = TablePanel(self.context_panel)
         self.table_panel.bind_selection_model(self.selection_model)
+        self.table_panel.show_in_browser_requested.connect(self._show_object_in_browser)
         self.context_panel.addTab(self.table_panel, "Table")
         self._build_view_tabs_corner()
 
