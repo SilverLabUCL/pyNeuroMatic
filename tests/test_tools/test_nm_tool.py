@@ -1193,3 +1193,49 @@ class TestRunToolPerChannelGrouping(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestNMToolRunEach(unittest.TestCase):
+    """NMTool.run_each(): a run_all() per batch, each with its subfolder."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=QUIET)
+        self.folder = self.nm.folders.new("folder0")
+        class Tool(NMTool):
+            """Writes a subfolder at the end of each run; a run with 'Bad'
+            fails (run_all returns run_finish's result)."""
+
+            def run_init(self):
+                self.bad = False
+                return True
+
+            def run(self):
+                self.bad = self.bad or self.data.name == "Bad"
+                return True
+
+            def run_finish(self):
+                self._make_toolfolder("Test")
+                return not self.bad
+
+        self.tool = Tool()
+        self.data = {name: self.folder.data.new(name) for name in ("A", "B", "Bad")}
+
+    def _batch(self, *names, epoch=None):
+        return ([{"folder": self.folder, "data": self.data[n]} for n in names],
+                {"data": epoch} if epoch else {})
+
+    def test_each_batch_gets_its_folder(self):
+        self.folder.data.sets.add("Set0", [self.data["A"]])
+        self.folder.data.sets.add("Set1", [self.data["B"]])
+        done = self.tool.run_each([self._batch("A", epoch="Set0"),
+                                   self._batch("B", epoch="Set1")])
+        self.assertEqual([f.name for _, f in done], ["Test_S0_0", "Test_S1_0"])
+        self.assertEqual([keys for keys, _ in done], [{"data": "Set0"}, {"data": "Set1"}])
+
+    def test_empty_batches_are_skipped(self):
+        done = self.tool.run_each([([], {"data": "Set5"}), self._batch("A")])
+        self.assertEqual(len(done), 1)
+
+    def test_a_failed_run_stops_the_rest(self):
+        done = self.tool.run_each([self._batch("A"), self._batch("Bad"), self._batch("B")])
+        self.assertEqual(len(done), 2)  # A, then Bad (failed); B not run

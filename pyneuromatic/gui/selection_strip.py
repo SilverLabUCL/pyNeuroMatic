@@ -6,9 +6,13 @@ from typing import Any
 from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.gui.selection_model import (
+    ALL_GROUPS,
+    ALL_SETS,
     BUILTIN_EPOCH_SETS,
     SelectionModel,
+    all_set_names,
     is_stored_epoch_set,
+    scope_runs,
     scoped_epoch_names,
 )
 
@@ -121,7 +125,7 @@ class SelectionStrip(QtWidgets.QWidget):
     }
 
     # Narrower than the style's smallest dropdown: they hold "A" or "12"
-    _FIXED_WIDTH = {"channel": 56, "group": 56}
+    _FIXED_WIDTH = {"channel": 56, "group": 66}
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -181,6 +185,8 @@ class SelectionStrip(QtWidgets.QWidget):
                     combo.setFixedWidth(self._FIXED_WIDTH[key])
                 if key == "group_operator":
                     combo.setToolTip("Combine the Epoch Set and Group with AND or OR")
+                if key == "group":
+                    combo.setToolTip("A group, or All (All Groups): Run goes once per group")
                 self._combos[key] = combo
                 self._labels[key] = label or "Operator"
                 row_layout.addWidget(combo)
@@ -266,6 +272,28 @@ class SelectionStrip(QtWidgets.QWidget):
             self._update_from_selection(self._selection_model.selection)
 
     @staticmethod
+    def runs_breakdown(selection: dict) -> str:
+        """For All Sets / All Groups, the epochs each run analyses, e.g.
+        "Set0: 5, Set1: 4"; "" otherwise."""
+        series = selection.get("dataseries")
+        if series is None:
+            return ""
+        try:
+            runs = scope_runs(series, selection)
+        except RuntimeError as error:
+            return str(error)
+        if not runs:
+            return ""
+        parts = []
+        for label, run_selection in runs:
+            try:
+                names = scoped_epoch_names(series, run_selection) or []
+            except RuntimeError:
+                names = []
+            parts.append(f"{label}: {len(names)}")
+        return ", ".join(parts)
+
+    @staticmethod
     def data_count(selection: dict) -> int | None:
         """How many data arrays the Data Set selects (1, the current array,
         without one); None with no data array or Data Set."""
@@ -321,6 +349,9 @@ class SelectionStrip(QtWidgets.QWidget):
             tip = f"{total} epoch{'s' * (total != '1')} selected"
             if left_out:
                 tip += f", {left_out} excluded (SetX): {int(total) - int(left_out)} analysed"
+            runs = self.runs_breakdown(selection)
+            if runs:
+                tip += f"\nRun goes once per set or group: {runs}"
             self.epoch_count_label.setToolTip(tip)
         else:
             self.epoch_count_label.setText(text)
@@ -359,14 +390,21 @@ class SelectionStrip(QtWidgets.QWidget):
         dataseries = selection.get("dataseries")
         if dataseries is not None:
             options["channel"] = [(name, name) for name in dataseries.channels.keys()]
-            options["epoch_set"] = [(name, name) for name in BUILTIN_EPOCH_SETS] + [
+            # All Sets runs once per set (there must be one besides SetX)
+            all_sets = [(ALL_SETS, ALL_SETS)] if all_set_names(dataseries) else []
+            options["epoch_set"] = [(name, name) for name in BUILTIN_EPOCH_SETS] + all_sets + [
                 (name, name) for name in dataseries.epochs.sets.keys()
             ]
-            options["group"] = [
-                (str(number), number) for number in dataseries.epochs.groups.group_numbers
+            numbers = dataseries.epochs.groups.group_numbers
+            # "All" here is All Groups: once per group (fits the narrow box)
+            options["group"] = ([("All", ALL_GROUPS)] if numbers else []) + [
+                (str(number), number) for number in numbers
             ]
-        # AND/OR combines a stored Epoch Set with a Group (All needs neither)
-        if is_stored_epoch_set(selection.get("epoch_set")) and selection.get("group") is not None:
+        # AND/OR combines a stored Epoch Set (or All Sets) with a Group (or
+        # All Groups); All needs neither
+        epoch_set = selection.get("epoch_set")
+        if ((is_stored_epoch_set(epoch_set) or epoch_set == ALL_SETS)
+                and selection.get("group") is not None):
             options["group_operator"] = [("AND", "AND"), ("OR", "OR")]
         return options
 

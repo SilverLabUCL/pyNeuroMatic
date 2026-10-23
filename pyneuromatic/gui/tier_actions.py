@@ -2461,8 +2461,11 @@ class GroupActions(TierActions):
     def _changed(self) -> None:
         series = self._series()
         group = self._selection.selection.get("group")
-        if series is not None and group is not None and group not in series.epochs.groups.group_numbers:
-            self._selection.update(group=None)  # the chosen group no longer exists
+        numbers = series.epochs.groups.group_numbers if series is not None else []
+        if series is not None and group is not None and (
+            group not in numbers if group != "All Groups" else not numbers
+        ):
+            self._selection.update(group=None)  # the chosen group(s) no longer exist
         super()._changed()
 
     # --- actions ------------------------------------------------------------
@@ -2550,7 +2553,7 @@ class GroupActions(TierActions):
         names = list(series.epochs.keys())
         numbers = series.epochs.groups.group_numbers
         current = self._selection.selection.get("group")
-        default = current if current is not None else (numbers[0] if numbers else 0)
+        default = current if isinstance(current, int) else (numbers[0] if numbers else 0)
 
         def chosen(first, last, every):
             return epoch_range(names, first, last, int(every))

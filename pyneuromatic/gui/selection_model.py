@@ -22,6 +22,12 @@ ALL_EPOCHS = "All"
 CURRENT_EPOCH = "Current Epoch"
 BUILTIN_EPOCH_SETS = (ALL_EPOCHS, CURRENT_EPOCH)
 
+# Run once per set or per group (Igor NeuroMatic's "All Sets" / "All Groups").
+# Elsewhere (Table, stepping, counts) they mean the union of the sets
+# (SetX left out) or of the groups.
+ALL_SETS = "All Sets"
+ALL_GROUPS = "All Groups"
+
 
 class SelectionModel(QtCore.QObject):
     """Expose shared selection state and notify GUI subscribers on changes.
@@ -303,8 +309,8 @@ class SelectionModel(QtCore.QObject):
                 if value not in self.SOURCES:
                     raise ValueError("source must be 'data', 'dataseries', or None")
             elif tier == "group":
-                if isinstance(value, bool) or not isinstance(value, int):
-                    raise TypeError("group must be an integer or None")
+                if value != ALL_GROUPS and (isinstance(value, bool) or not isinstance(value, int)):
+                    raise TypeError("group must be an integer, ALL_GROUPS or None")
             elif tier == "group_operator":
                 if value not in ("AND", "OR"):
                     raise ValueError("group_operator must be 'AND', 'OR', or None")
@@ -362,8 +368,35 @@ def combine_scope_names(
 
 
 def is_stored_epoch_set(name: str | None) -> bool:
-    """True for a real epoch set (Set1, SetX...), not All or Current Epoch."""
-    return name is not None and name not in BUILTIN_EPOCH_SETS
+    """True for a real epoch set (Set1, SetX...), not All, Current Epoch or
+    All Sets."""
+    return name is not None and name not in BUILTIN_EPOCH_SETS and name != ALL_SETS
+
+
+def all_set_names(dataseries: NMDataSeries) -> list[str]:
+    """The sets "All Sets" runs over: every stored set except SetX."""
+    return [name for name in dataseries.epochs.sets.keys()
+            if name.lower() != EXCLUDE_SET.lower()]
+
+
+def scope_runs(dataseries: NMDataSeries, selection: Mapping[str, Any]) -> list[tuple[str, dict]] | None:
+    """For "All Sets" / "All Groups": one (label, selection) per set or group,
+    each selection naming that one set or group; None otherwise.
+
+    Raises:
+        RuntimeError: For All Sets with All Groups (not supported yet).
+    """
+    all_sets = selection.get("epoch_set") == ALL_SETS
+    all_groups = selection.get("group") == ALL_GROUPS
+    if all_sets and all_groups:
+        raise RuntimeError("All Sets with All Groups isn't supported yet: "
+                           "choose one set or one group")
+    if all_sets:
+        return [(name, {**selection, "epoch_set": name}) for name in all_set_names(dataseries)]
+    if all_groups:
+        return [(f"Group {n}", {**selection, "group": n})
+                for n in dataseries.epochs.groups.group_numbers]
+    return None
 
 
 def scoped_epoch_names(
@@ -384,10 +417,16 @@ def scoped_epoch_names(
         return None
     set_names = None
     group_names = None
-    if is_stored_epoch_set(selected_set):
-        set_names = dataseries.epochs.sets.get_items(selected_set, get_keys=True) or []
-    if selected_group is not None:
-        group_names = dataseries.epochs.groups.get_items(selected_group)
+    sets, groups = dataseries.epochs.sets, dataseries.epochs.groups
+    if selected_set == ALL_SETS:  # the union of the sets (SetX left out)
+        set_names = list({name: None for set_name in all_set_names(dataseries)
+                          for name in (sets.get_items(set_name, get_keys=True) or [])})
+    elif is_stored_epoch_set(selected_set):
+        set_names = sets.get_items(selected_set, get_keys=True) or []
+    if selected_group == ALL_GROUPS:  # the union of the groups
+        group_names = [name for n in groups.group_numbers for name in groups.get_items(n)]
+    elif selected_group is not None:
+        group_names = groups.get_items(selected_group)
     names = combine_scope_names(
         list(dataseries.epochs.keys()),
         set_names,
@@ -436,9 +475,10 @@ def _epochs_summary(selection: Mapping[str, Any], name) -> str | None:
     """
     epoch_set = selection.get("epoch_set")
     group = selection.get("group")
-    group_text = f"Group {group}" if group is not None else None
-    if is_stored_epoch_set(epoch_set):
-        set_text = f"Epoch {epoch_set}"
+    group_text = (ALL_GROUPS if group == ALL_GROUPS
+                  else f"Group {group}" if group is not None else None)
+    if is_stored_epoch_set(epoch_set) or epoch_set == ALL_SETS:
+        set_text = ALL_SETS if epoch_set == ALL_SETS else f"Epoch {epoch_set}"
         if group_text is None:
             return set_text
         operator = selection.get("group_operator") or "+"
@@ -454,18 +494,25 @@ def epoch_scope_label(selection: Mapping[str, Any]) -> str:
     """Short description of the epoch scope, e.g. "Epoch Set: Set1 AND Group 0"."""
     parts = []
     epoch_set = selection.get("epoch_set")
-    if is_stored_epoch_set(epoch_set):
+    if is_stored_epoch_set(epoch_set) or epoch_set == ALL_SETS:
         parts.append(f"Epoch Set: {epoch_set}")
     elif epoch_set == CURRENT_EPOCH:
         parts.append(CURRENT_EPOCH)
-    if selection.get("group") is not None:
-        parts.append(f"Group {selection['group']}")
+    group = selection.get("group")
+    if group == ALL_GROUPS:
+        parts.append(ALL_GROUPS)
+    elif group is not None:
+        parts.append(f"Group {group}")
     operator = selection.get("group_operator") or "+"
     return f" {operator} ".join(parts)
 
 
 __all__ = [
     "ALL_EPOCHS",
+    "ALL_GROUPS",
+    "ALL_SETS",
+    "all_set_names",
+    "scope_runs",
     "BUILTIN_EPOCH_SETS",
     "CURRENT_EPOCH",
     "SelectionModel",

@@ -164,7 +164,7 @@ def test_epoch_set_list_starts_with_all_and_current(app):
     combo = app.selection_strip.combo("epoch_set")
     texts = [combo.itemText(i) for i in range(combo.count())]
     assert texts[:3] == ["", "All", "Current Epoch"]  # blank, like Data Set
-    assert texts[3:] == ["Set0", "Set1", "SetX"]  # in order, from 0
+    assert texts[3:] == ["All Sets", "Set0", "Set1", "SetX"]  # in order, from 0
     assert combo.currentText() == "All"  # the default for a series
     # AND/OR only combines a stored set with a group
     app.series.epochs.groups.assign_cyclic(list(app.series.epochs.keys()), n_groups=2)

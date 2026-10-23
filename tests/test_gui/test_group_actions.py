@@ -79,7 +79,7 @@ def test_assign_cyclic_with_block(app):
     actions.cyclic_action.trigger()
     assert _assignment(app) == [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 0, 0, 0]
     combo = app.selection_strip.combo("group")
-    assert [combo.itemText(i) for i in range(combo.count())] == ["", "0", "1", "2", "3"]
+    assert [combo.itemText(i) for i in range(combo.count())] == ["", "All", "0", "1", "2", "3"]
     assert actions.clear_action.isEnabled() and actions.unassign_action.isEnabled()
 
 
@@ -236,7 +236,7 @@ def test_new_groups_creates_empty_groups(app):
     assert app.groups.group_numbers == [0, 1, 2]
     assert all(app.groups.get_items(n) == [] for n in range(3))
     combo = app.selection_strip.combo("group")
-    assert [combo.itemText(i) for i in range(combo.count())] == ["", "0", "1", "2"]
+    assert [combo.itemText(i) for i in range(combo.count())] == ["", "All", "0", "1", "2"]
 
     actions.new_groups()
     options = app.dialogs[-1][1]
