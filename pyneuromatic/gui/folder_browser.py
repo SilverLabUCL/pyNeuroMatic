@@ -64,8 +64,8 @@ from pyneuromatic.gui.tier_actions import (
 _SET_GROUP_NODES = (_SetsNode, _SetNode, _GroupsNode, _GroupNumberNode)
 
 # Lists whose items can be ticked in Edit mode to choose several (e.g. to
-# delete them): Folders, Data, Data Series and Subfolders
-_CHOOSABLE_KINDS = ("folders", "data", "dataseries", "toolfolders")
+# delete them): Folders, Data, Data Series, Subfolders and Epochs
+_CHOOSABLE_KINDS = ("folders", "data", "dataseries", "toolfolders", "epochs")
 
 
 _NOUNS = {NMFolder: "folder", NMToolFolder: "subfolder", NMChannel: "channel",
@@ -197,6 +197,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._tree = QtWidgets.QTreeView(self)
         self._tree.setModel(self._model)
         self._tree.setHeaderHidden(True)
+        self._tree.setColumnHidden(1, True)  # Data: shown in the second column
         self._tree.activated.connect(self._on_activated)
         self._tree.selectionModel().currentChanged.connect(self._on_tree_current_changed)
         # Epochs show only their Sets and Groups rows in the tree; clicking
@@ -466,8 +467,14 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             model.reload()  # items may have been added or deleted
         self._all_button.setText("All")
         self._all_button.setToolTip("Tick every item shown")
+        self._set_filter_hint(container)
         self._apply_filter()
         self._detail_stack.setCurrentWidget(self._membership_view)
+
+    def _set_filter_hint(self, container) -> None:
+        """An example filter for the names listed (epochs: E1*)."""
+        example = "E1*" if isinstance(container, NMEpochContainer) else "RecordB*"
+        self._filter_edit.setPlaceholderText(f"Filter, e.g. {example}")
 
     def _clear_filter(self) -> None:
         self._filter_edit.blockSignals(True)
@@ -532,6 +539,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             else f"Tick every {noun[:-1]}"
         )
         self._invert_button.setVisible(not model.is_group)
+        self._set_filter_hint(container)
         self._apply_filter()
         self._detail_stack.setCurrentWidget(self._membership_view)
 
@@ -857,6 +865,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     ) -> None:
         self._detail.setRootIndex(current if current.isValid() else QtCore.QModelIndex())
         self._hide_set_and_group_rows(current)
+        # The Data column (each epoch's arrays) only when listing epochs
+        self._detail.setColumnHidden(1, not self._lists_epochs(current))
         self._update_edit_mode()
         self._update_info_panel(current)
 
@@ -868,6 +878,15 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         for row in range(self._model.rowCount(index)):
             child = self._model.index(row, 0, index).internalPointer()
             self._tree.setRowHidden(row, index, isinstance(child, NMEpoch))
+
+    def _lists_epochs(self, root: QtCore.QModelIndex) -> bool:
+        """True if *root*'s rows are epochs: Epochs, or an epoch set or group."""
+        node = root.internalPointer() if root.isValid() else None
+        if isinstance(node, _GroupNode):
+            return node.kind == "epochs"
+        if isinstance(node, _SetNode):
+            return isinstance(node.container, NMEpochContainer)
+        return isinstance(node, _GroupNumberNode)
 
     def _hide_set_and_group_rows(self, root: QtCore.QModelIndex) -> None:
         """List only the items for Data and Epochs: their Sets (and Groups)
@@ -1181,6 +1200,14 @@ class FolderBrowserWidget(QtWidgets.QWidget):
 
     def _delete_objects(self, container, selected: list[NMObject]) -> None:
         if container is None or not selected:
+            return
+        # Epochs and channels: the strip's Remove dialog (keep or delete their
+        # arrays), which keeps the series in step and respects its lock
+        if self._series_actions is not None and isinstance(selected[0], (NMEpoch, NMChannel)):
+            label = "Epoch" if isinstance(selected[0], NMEpoch) else "Channel"
+            self._series_actions.remove_parts(
+                selected[0]._parent, label, [obj.name for obj in selected]
+            )
             return
         # Data series: the strip's Delete Series dialog (keep or delete their
         # arrays), for one or several

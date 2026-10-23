@@ -512,14 +512,35 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         return len(self._children_of(parent_node))
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        return 1
+        # Name, then Data: an epoch's arrays (the tree hides it; the second
+        # column shows it when listing epochs)
+        return 2
+
+    @staticmethod
+    def epoch_of(node: object) -> NMEpoch | None:
+        """The epoch a row shows (also as a set or group member), or None."""
+        if isinstance(node, (_SetMemberNode, _GroupMemberNode)):
+            node = node.obj
+        return node if isinstance(node, NMEpoch) else None
+
+    @staticmethod
+    def epoch_arrays_text(epoch: NMEpoch) -> str:
+        """An epoch's data arrays, every channel: "RecordA0, RecordB0"."""
+        return ", ".join(data.name for data in epoch.data)
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
+        node = index.internalPointer()
+        epoch = self.epoch_of(node)
+        if index.column() == 1:
+            if role == QtCore.Qt.ItemDataRole.DisplayRole and epoch is not None:
+                return self.epoch_arrays_text(epoch)
+            return None
+        if role == QtCore.Qt.ItemDataRole.ToolTipRole:
+            return self.epoch_arrays_text(epoch) if epoch is not None else None
         if role != QtCore.Qt.ItemDataRole.DisplayRole:
             return None
-        node = index.internalPointer()
         if isinstance(node, (_GroupNode, _SetsNode, _SetNode, _SetMemberNode,
                              _GroupsNode, _GroupNumberNode, _GroupMemberNode)):
             return node.label
@@ -533,12 +554,9 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
         orientation: QtCore.Qt.Orientation,
         role: int = QtCore.Qt.ItemDataRole.DisplayRole,
     ):
-        if (
-            orientation == QtCore.Qt.Orientation.Horizontal
-            and role == QtCore.Qt.ItemDataRole.DisplayRole
-            and section == 0
-        ):
-            return "Name"
+        if orientation == QtCore.Qt.Orientation.Horizontal \
+                and role == QtCore.Qt.ItemDataRole.DisplayRole:
+            return {0: "Name", 1: "Data"}.get(section)
         return None
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlag:

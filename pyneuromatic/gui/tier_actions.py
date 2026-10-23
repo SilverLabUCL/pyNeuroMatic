@@ -1937,6 +1937,31 @@ class SeriesActions(TierActions):
         remove(series.name, item, delete_data=arrays == self.DELETE)
         self._changed()
 
+    def remove_parts(self, series, label: str, names: list[str]) -> None:
+        """Remove several epochs or channels of *series* (e.g. ticked in the
+        browser): one dialog, keeping or deleting their arrays, as Remove
+        Epoch / Remove Channel do. *label* is "Epoch" or "Channel"."""
+        if not names:
+            return
+        owner = series._container._parent
+        noun = label.lower() + ("s" if len(names) != 1 else "")
+        shown = ", ".join(names[:5]) + (", ..." if len(names) > 5 else "")
+        answer = self._choose(
+            f"Remove {label}" + ("s" if len(names) != 1 else ""),
+            context=("Series", f"{_owner_text(owner)} › {series.name}"),
+            extras=[("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
+            message=f"Remove {len(names)} {noun}: {shown}?\n"
+                    "Keep their arrays in the folder, or delete them.",
+            validate=lambda _item, _name, _arrays: self._lock_error(owner, series.name),
+        )
+        if answer is None:
+            return
+        remove = (owner.remove_dataseries_epoch if label == "Epoch"
+                  else owner.remove_dataseries_channel)
+        remove(series.name, names if len(names) > 1 else names[0],
+               delete_data=answer[-1] == self.DELETE)
+        self._changed()
+
     def remove_channel(self) -> None:
         series, owner = self._series(), self._owner()
         if series is not None:
