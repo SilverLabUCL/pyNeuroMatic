@@ -36,7 +36,10 @@ def _checked(model):
 def test_set_membership_model(series):
     epochs = series.epochs
     model = MembershipModel(epochs, set_name="Set1")
-    assert model.rowCount() == 10 and model.columnCount() == 1
+    assert model.rowCount() == 10 and model.columnCount() == 2  # Name, Data
+    assert model.headerData(1, QtCore.Qt.Orientation.Horizontal) == "Data"
+    assert model.data(model.index(3, 1)) == "RecordA3"  # the epoch's arrays
+    assert not model.flags(model.index(0, 1)) & QtCore.Qt.ItemFlag.ItemIsUserCheckable
     assert _checked(model) == [1, 3]
     assert model.flags(model.index(0, 0)) & QtCore.Qt.ItemFlag.ItemIsUserCheckable
 
@@ -58,14 +61,15 @@ def test_set_membership_model(series):
 def test_group_membership_model_moves_epochs(series):
     groups = series.epochs.groups
     model = MembershipModel(series.epochs, group=1)
-    assert model.columnCount() == 2 and model.target_label == "Group 1"
+    assert model.columnCount() == 3 and model.target_label == "Group 1"  # Name, Data, Group
     assert _checked(model) == [1, 3]
-    assert model.data(model.index(0, 1)) == "0"
-    assert model.data(model.index(5, 1)) == ""
+    assert model.data(model.index(0, 1)) == "RecordA0"
+    assert model.data(model.index(0, 2)) == "0"
+    assert model.data(model.index(5, 2)) == ""
 
     model.setData(model.index(0, 0), CHECKED, CHECK_ROLE)  # E0: group 0 -> 1
     assert groups.get_group("E0") == 1
-    assert model.data(model.index(0, 1)) == "1"
+    assert model.data(model.index(0, 2)) == "1"
     model.setData(model.index(3, 0), UNCHECKED, CHECK_ROLE)  # E3: out of groups
     assert groups.get_group("E3") is None
     assert groups.get_items(1) == ["E0", "E1"]

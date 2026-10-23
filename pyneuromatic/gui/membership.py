@@ -26,6 +26,20 @@ def unassign_from_group(groups, names, group: int) -> None:
         groups.add_group(group, quiet=True)
 
 
+_HEADERS = {"name": "Name", "data": "Data", "group": "Group"}
+
+
+def _is_epochs(container) -> bool:
+    """True for a data series' epochs (they get a Data column)."""
+    return hasattr(container, "groups")
+
+
+def _arrays_text(container, name: str) -> str:
+    """An epoch's data arrays, every channel: "RecordA0, RecordB0"."""
+    epoch = container.get(name)
+    return ", ".join(data.name for data in getattr(epoch, "data", []))
+
+
 def set_item_group(groups, name: str, group: int | None) -> None:
     """Put *name* in *group* (None: no group), keeping a group it empties."""
     old = groups.get_group(name)
@@ -117,27 +131,40 @@ class MembershipModel(QtCore.QAbstractTableModel):
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._names)
 
+    @property
+    def _column_keys(self) -> list[str]:
+        """Name, then Data for epochs (their arrays), then Group for groups."""
+        keys = ["name"]
+        if _is_epochs(self.container):
+            keys.append("data")
+        if self.is_group:
+            keys.append("group")
+        return keys
+
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        return 0 if parent.isValid() else (2 if self.is_group else 1)
+        return 0 if parent.isValid() else len(self._column_keys)
 
     def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):
         if role != QtCore.Qt.ItemDataRole.DisplayRole:
             return None
         if orientation == QtCore.Qt.Orientation.Horizontal:
-            return ["Name", "Group"][section]
+            return _HEADERS[self._column_keys[section]]
         return None
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
             return None
         name = self._names[index.row()]
-        if index.column() == 0:
+        key = self._column_keys[index.column()]
+        if key == "name":
             if role == QtCore.Qt.ItemDataRole.DisplayRole:
                 return name
             if role == QtCore.Qt.ItemDataRole.CheckStateRole:
                 return (QtCore.Qt.CheckState.Checked if name in self._members
                         else QtCore.Qt.CheckState.Unchecked)
         elif role == QtCore.Qt.ItemDataRole.DisplayRole:
+            if key == "data":
+                return _arrays_text(self.container, name)
             group = self.container.groups.get_group(name)
             return "" if group is None else str(group)
         return None
@@ -259,18 +286,23 @@ class ChoiceModel(QtCore.QAbstractTableModel):
         return 0 if parent.isValid() else len(self._names)
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        return 0 if parent.isValid() else 1
+        # Name, then Data for epochs (their arrays)
+        return 0 if parent.isValid() else (2 if _is_epochs(self.container) else 1)
 
     def headerData(self, section, orientation, role=QtCore.Qt.ItemDataRole.DisplayRole):
         if role == QtCore.Qt.ItemDataRole.DisplayRole and \
                 orientation == QtCore.Qt.Orientation.Horizontal:
-            return "Name"
+            return ["Name", "Data"][section]
         return None
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
             return None
         name = self._names[index.row()]
+        if index.column() == 1:
+            if role == QtCore.Qt.ItemDataRole.DisplayRole:
+                return _arrays_text(self.container, name)
+            return None
         if role == QtCore.Qt.ItemDataRole.DisplayRole:
             return name
         if role == QtCore.Qt.ItemDataRole.CheckStateRole:
@@ -280,13 +312,13 @@ class ChoiceModel(QtCore.QAbstractTableModel):
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlag:
         flags = super().flags(index)
-        if index.isValid():
+        if index.isValid() and index.column() == 0:  # not the Data column
             flags |= QtCore.Qt.ItemFlag.ItemIsUserCheckable
         return flags
 
     def setData(self, index: QtCore.QModelIndex, value: Any,
                 role: int = QtCore.Qt.ItemDataRole.EditRole) -> bool:
-        if role != QtCore.Qt.ItemDataRole.CheckStateRole:
+        if role != QtCore.Qt.ItemDataRole.CheckStateRole or index.column() != 0:
             return False
         checked = QtCore.Qt.CheckState(value) == QtCore.Qt.CheckState.Checked
         self.set_checked([index.row()], checked)
@@ -302,7 +334,8 @@ class ChoiceModel(QtCore.QAbstractTableModel):
             self._chosen.update(change)
         else:
             self._chosen.difference_update(change)
-        self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1, 0))
+        self.dataChanged.emit(self.index(0, 0),
+                              self.index(self.rowCount() - 1, self.columnCount() - 1))
         self.membership_changed.emit(len(change))
         return len(change)
 
