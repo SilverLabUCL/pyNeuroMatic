@@ -272,5 +272,5 @@ def test_the_strip_epoch_set_gets_a_box_too(app):
 
 def test_narrow_group_and_channel_dropdowns(app):
     strip = app.selection_strip
-    assert strip.combo("group").width() == 66 and strip.combo("channel").width() == 56
+    assert strip.combo("group").width() == 66 and strip.combo("channel").width() == 66
     assert app.plot_widget.group_combo.width() == 56

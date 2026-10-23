@@ -6,6 +6,7 @@ from typing import Any
 from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.gui.selection_model import (
+    ALL_CHANNELS,
     ALL_GROUPS,
     ALL_SETS,
     BUILTIN_EPOCH_SETS,
@@ -125,7 +126,7 @@ class SelectionStrip(QtWidgets.QWidget):
     }
 
     # Narrower than the style's smallest dropdown: they hold "A" or "12"
-    _FIXED_WIDTH = {"channel": 56, "group": 66}
+    _FIXED_WIDTH = {"channel": 66, "group": 66}  # room for "All"
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -260,7 +261,14 @@ class SelectionStrip(QtWidgets.QWidget):
         self._update_from_selection(model.selection)
 
     def _on_selector_changed(self, key: str, value: Any) -> None:
-        if self._selection_model is not None:
+        if self._selection_model is None:
+            return
+        if key == "channel" and value == ALL_CHANNELS:
+            # Every channel for runs; the current channel stays selected
+            self._selection_model.update(all_channels=True)
+        elif key == "channel" and value is not None:
+            self._selection_model.update(channel=value, all_channels=False)
+        else:
             self._selection_model.update(**{key: value})
 
     def _on_source_clicked(self, source: str) -> None:
@@ -331,7 +339,10 @@ class SelectionStrip(QtWidgets.QWidget):
         options = self._options_for_selection(selection)
         for key, combo in self._combos.items():
             empty_text = {"toolfolder": NO_SUBFOLDER}.get(key, "")
-            self._set_combo_options(combo, options.get(key, []), selection.get(key), empty_text)
+            selected = selection.get(key)
+            if key == "channel" and selection.get("all_channels"):
+                selected = ALL_CHANNELS
+            self._set_combo_options(combo, options.get(key, []), selected, empty_text)
         count = self.data_count(selection)
         self.data_count_label.setText("" if count is None else f"n={count}")
         self.data_count_label.setToolTip(
@@ -389,7 +400,11 @@ class SelectionStrip(QtWidgets.QWidget):
 
         dataseries = selection.get("dataseries")
         if dataseries is not None:
-            options["channel"] = [(name, name) for name in dataseries.channels.keys()]
+            # "All" runs once per channel (when there is more than one)
+            channels = list(dataseries.channels.keys())
+            options["channel"] = ([("All", ALL_CHANNELS)] if len(channels) > 1 else []) + [
+                (name, name) for name in channels
+            ]
             # All Sets runs once per set (there must be one besides SetX)
             all_sets = [(ALL_SETS, ALL_SETS)] if all_set_names(dataseries) else []
             options["epoch_set"] = [(name, name) for name in BUILTIN_EPOCH_SETS] + all_sets + [
