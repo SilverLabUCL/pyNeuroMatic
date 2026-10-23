@@ -342,22 +342,16 @@ class TestAddToSet:
         data_group = _find(model, _folder0(model), "Data")
         widget.tree.setCurrentIndex(data_group)
         _select_row(widget, data_group, "RecordA0")
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("MySet", True)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (3, True))
         widget._add_selected_to_new_set()
-        assert "RecordA0" in folder.data.sets.get_items("MySet", get_keys=True)
+        assert "RecordA0" in folder.data.sets.get_items("Set3", get_keys=True)
 
     def test_add_to_new_set_cancelled_does_nothing(self, widget, folder, monkeypatch):
         model = widget.model
         data_group = _find(model, _folder0(model), "Data")
         widget.tree.setCurrentIndex(data_group)
         _select_row(widget, data_group, "RecordA0")
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("", False)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (0, False))
         widget._add_selected_to_new_set()
         assert list(folder.data.sets.keys()) == []
 
@@ -415,16 +409,13 @@ class TestTreeContextMenu:
         assert sets_row is not None and model.rowCount(sets_row) == 0
         monkeypatch.setattr(widget.tree, "indexAt", lambda pos: sets_row)
         captured = self._captured_menu(monkeypatch)
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("FirstSet", True)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (0, True))
 
         widget._show_tree_context_menu(QtCore.QPoint(0, 0))
         assert [a.text() for a in captured["menu"].actions()] == ["New..."]
         captured["menu"].actions()[0].trigger()
 
-        assert "FirstSet" in folder.data.sets.keys()
+        assert "Set0" in folder.data.sets.keys()
 
     def test_new_group_creates_empty_numbered_group(self, widget, folder, monkeypatch):
         dataseries_group = _find(widget.model, _folder0(widget.model), "Data Series")
@@ -596,10 +587,7 @@ class TestSetsTreeContextMenu:
         folder.data.sets.add("Existing")
         widget.refresh()
         captured = self._captured_menu(monkeypatch)
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("Set1", True)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (1, True))
         widget._show_tree_context_menu(self._sets_node_pos(widget))
         menu = captured["menu"]
         new_set_action = next(a for a in menu.actions() if a.text() == "New...")
@@ -637,32 +625,23 @@ class TestSetActions:
         return widget.model._sets_node(data_group.internalPointer())
 
     def test_add_set_creates_empty_set(self, widget, folder, monkeypatch):
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("Set1", True)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (1, True))
         widget._add_set(self._sets_node(widget))
         assert "Set1" in folder.data.sets.keys()
 
     def test_add_set_cancelled_does_nothing(self, widget, folder, monkeypatch):
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("", False)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (0, False))
         widget._add_set(self._sets_node(widget))
         assert list(folder.data.sets.keys()) == []
 
     def test_rename_set(self, widget, folder, monkeypatch):
         folder.data.sets.add("Set1", ["RecordA0"])
         widget.refresh()
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("Renamed", True)),
-        )
-        widget._rename_set(self._sets_node(widget), "Set1")
-        assert "Renamed" in folder.data.sets.keys()
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (5, True))
+        widget._rename_set(self._sets_node(widget), "Set1")  # renumbered to 5
+        assert "Set5" in folder.data.sets.keys()
         assert "Set1" not in folder.data.sets.keys()
-        assert folder.data.sets.get_items("Renamed", get_keys=True) == ["RecordA0"]
+        assert folder.data.sets.get_items("Set5", get_keys=True) == ["RecordA0"]
 
     def test_rename_set_missing_name_shows_warning_not_hang(
         self, widget, folder, monkeypatch
@@ -674,10 +653,7 @@ class TestSetActions:
         # so the AttributeError (on `None.lower()`) never triggers -
         # the bug only shows up once there's something to iterate over.
         folder.data.sets.add("Set1")
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("New", True)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (7, True))
         warnings = []
         monkeypatch.setattr(
             QtWidgets.QMessageBox, "warning",
@@ -758,7 +734,7 @@ class TestSetsDetailPaneContextMenu:
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
         titles = [a.text() for a in captured["menu"].actions() if a.text()]
         assert "New Set..." not in titles
-        assert titles == ["Select", "Rename...", "Clear...", "Delete..."]
+        assert titles == ["Select", "Renumber...", "Clear...", "Delete..."]
 
     def test_empty_space_under_sets_list_has_sets_row_menu(self, widget, folder, monkeypatch):
         folder.data.sets.add("Set1")
@@ -780,14 +756,11 @@ class TestSetsDetailPaneContextMenu:
             QtCore.QItemSelectionModel.SelectionFlag.Select
             | QtCore.QItemSelectionModel.SelectionFlag.Rows,
         )
-        monkeypatch.setattr(
-            QtWidgets.QInputDialog, "getText",
-            staticmethod(lambda *a, **k: ("Renamed", True)),
-        )
+        monkeypatch.setattr(widget, "_ask_set_number", lambda *a: (5, True))
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
-        next(a for a in captured["menu"].actions() if a.text() == "Rename...").trigger()
-        assert "Renamed" in folder.data.sets.keys()
+        next(a for a in captured["menu"].actions() if a.text() == "Renumber...").trigger()
+        assert "Set5" in folder.data.sets.keys()
 
     def test_delete_sets_from_detail_pane_multi_select(self, widget, folder, monkeypatch):
         folder.data.sets.add("Set1")

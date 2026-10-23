@@ -119,7 +119,7 @@ def test_run_selects_stats2_when_arrays_saved(qtbot):
     assert tab.mode_tabs.currentIndex() == 0
     tab.run_button.click()
     assert tab.mode_tabs.currentWidget() is tab.stats2
-    assert tab.stats2.folder_combo.currentText() == "Stats_Record_A_0"
+    assert tab.stats2.folder_combo.currentText() == "Stats_Record_A_S1_0"
 
 
 def test_run_adds_subfolder_to_selection_strip(qtbot):
@@ -128,7 +128,7 @@ def test_run_adds_subfolder_to_selection_strip(qtbot):
     assert [sub_menu.itemText(i) for i in range(sub_menu.count())] == ["—"]
     window.stats_tab.run_button.click()
     assert [sub_menu.itemText(i) for i in range(sub_menu.count())] == [
-        "—", "Stats_Record_A_0",
+        "—", "Stats_Record_A_S1_0",
     ]
     assert sub_menu.isEnabled()
 
@@ -147,9 +147,9 @@ def test_run_fills_arrays_and_summary_tables(qtbot):
     tables = stats2.tables
 
     assert window.context_panel.currentWidget() is window.table_panel
-    assert stats2.folder_combo.currentText() == "Stats_Record_A_0"
+    assert stats2.folder_combo.currentText() == "Stats_Record_A_S1_0"
     assert stats2.window_combo.currentText() == "w0"
-    assert tables.title_label.text() == "Stats_Record_A_0  w0"
+    assert tables.title_label.text() == "Stats_Record_A_S1_0  w0"
 
     labels = ["bsln_y", "max_y", "max_x", "max_ds"]
     assert _headers(tables.arrays_table) == labels
@@ -175,7 +175,7 @@ def test_run_fills_arrays_and_summary_tables(qtbot):
 
     # A second run is shown as the newest folder
     window.stats_tab.run_button.click()
-    assert stats2.folder_combo.currentText() == "Stats_Record_A_1"
+    assert stats2.folder_combo.currentText() == "Stats_Record_A_S1_1"
 
 
 def test_column_selection_is_shared_between_tables(qtbot):
@@ -259,7 +259,7 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     stats2.plot_requested.connect(lambda *args: plots.append(args))
     stats2.plot_button.click()
     title, y, x, _xlabel, ylabel, style = plots[-1]
-    assert title == "Stats_Record_A_0: ST_w0_max_ds"
+    assert title == "Stats_Record_A_S1_0: ST_w0_max_ds"
     assert list(y) == list(PEAKS) and x is None and style == "points"
     assert ylabel == "ST_w0_max_ds (mV)"
     assert window.context_panel.currentWidget() is window.plot_widget
@@ -297,11 +297,11 @@ def test_delete_folder_after_confirmation(qtbot, monkeypatch):
 
     monkeypatch.setattr(stats2, "_confirm_delete", lambda name: False)
     stats2.delete_button.click()
-    assert "Stats_Record_A_0" in folder.toolfolders
+    assert "Stats_Record_A_S1_0" in folder.toolfolders
 
     monkeypatch.setattr(stats2, "_confirm_delete", lambda name: True)
     stats2.delete_button.click()
-    assert "Stats_Record_A_0" not in folder.toolfolders
+    assert "Stats_Record_A_S1_0" not in folder.toolfolders
     assert stats2.folder_combo.count() == 0
     assert stats2.tables.arrays_table.columnCount() == 0
     assert "No saved Stats results in Demo" in stats2.tables.message_label.text()
@@ -335,4 +335,4 @@ def test_browser_shows_new_results_folder_after_run(qtbot):
 
     assert tool_folders() == []
     window.stats_tab.run_button.click()
-    assert tool_folders() == ["Stats_Record_A_0"]
+    assert tool_folders() == ["Stats_Record_A_S1_0"]

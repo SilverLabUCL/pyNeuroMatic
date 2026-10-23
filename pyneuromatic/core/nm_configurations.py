@@ -22,7 +22,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 # Global behaviour flags used as default parameter values throughout the
 # codebase.
 
-DATASERIES_SET_LIST = ["all", "set1", "set2", "setX"]
+DATASERIES_SET_LIST = ["all", "set0", "set1", "setX"]
 QUIET = False       # suppress history/log output
 GUI = False         # GUI mode active
 NAN_EQ_NAN = True  # treat NaN == NaN (Python default is NaN != NaN)

@@ -38,6 +38,15 @@ from pyneuromatic.tools.nm_tool_config import NMToolConfig
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 
+def set_code(name: str) -> str:
+    """A set's short code for subfolder names: ``Set1`` -> ``S1``, ``SetX``
+    -> ``SX``; other names are cut to 8 characters (e.g. imported sets)."""
+    suffix = name[3:]
+    if name[:3].lower() == "set" and (suffix.isdigit() or suffix.upper() == "X"):
+        return "S" + suffix
+    return name[:8]
+
+
 class NMTool:
     """
     NM Tool - Base class for analysis tools.
@@ -333,10 +342,11 @@ class NMTool:
         prefix: str,
         overwrite: bool = False,
     ) -> NMToolFolder:
-        """Return the target ``{prefix}_{dataseries}_{channel}_{epoch_set}_N`` subfolder.
+        """Return the target ``{prefix}_{dataseries}_{channel}_{epochs}_N`` subfolder.
 
-        Assembles the name from ``self.dataseries``, ``self.channel``, and
-        ``run_keys["epoch"]`` (when present).
+        Assembles the name from ``self.dataseries``, ``self.channel`` and a
+        short code for the epochs or data analysed (see :meth:`_selection_code`),
+        e.g. ``Stats_Record_A_S1_0`` or ``Stats_S2_0`` for a Data Set.
 
         Args:
             prefix: Tool-specific prefix, e.g. ``"Spike"`` or ``"Stats"``.
@@ -348,11 +358,51 @@ class NMTool:
             parts.append(self.dataseries.name)
         if self.channel is not None:
             parts.append(self.channel.name)
-        epoch_set = self._run_meta.get("run_keys", {}).get("epoch")
-        if epoch_set:
-            parts.append(epoch_set)
+        code = self._selection_code()
+        if code:
+            parts.append(code)
         base = "_".join(parts)
         return self.folder.toolfolders.get_or_create(base, overwrite=overwrite)
+
+    def _selection_code(self) -> str | None:
+        """A short code for what the run analysed, from its ``run_keys``.
+
+        Epochs of a data series (``"epoch"``, plus ``"group"`` and
+        ``"group_operator"`` when both are chosen): ``All``, ``S1`` (Set1),
+        ``G0`` (Group 0, or ``"group0"``), ``S1andG0`` / ``S1orG0``, or an
+        epoch's name (e.g. ``E3``). Data arrays: the Data Set's code
+        (``"data"``), e.g. ``S2``. None when there is nothing to add.
+        """
+        keys = self._run_meta.get("run_keys", {})
+        if self.dataseries is None and "epoch" not in keys:
+            data_set = keys.get("data")
+            sets = getattr(getattr(self.folder, "data", None), "sets", None)
+            if data_set and sets is not None and data_set in sets:
+                return set_code(data_set)
+            return None
+        value = keys.get("epoch")
+        group = keys.get("group")
+        code = None
+        if value:
+            lower = str(value).lower()
+            if lower == "all":
+                code = "All"
+            elif lower.startswith("group") and lower[5:].isdigit():
+                code = "G%d" % int(lower[5:])
+            elif lower == "selected":
+                epochs = self._run_meta.get("epochs", [])
+                code = epochs[0] if len(epochs) == 1 else None
+            elif self.dataseries is not None and value in self.dataseries.epochs:  # e.g. E3
+                code = str(value)
+            else:
+                code = set_code(str(value))
+        if group is not None:
+            group_code = "G%d" % int(group)
+            if code is None or code == "All":
+                return group_code  # the group alone
+            operator = "or" if str(keys.get("group_operator", "")).upper() == "OR" else "and"
+            return code + operator + group_code
+        return code
 
     def run_all(
         self,

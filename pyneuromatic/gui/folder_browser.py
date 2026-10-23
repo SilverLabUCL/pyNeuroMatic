@@ -27,7 +27,7 @@ from PyQt6 import QtCore, QtWidgets
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries
-from pyneuromatic.core.nm_epoch import NMEpoch, NMEpochContainer
+from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch, NMEpochContainer
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
@@ -45,6 +45,10 @@ from pyneuromatic.gui.folder_model import (
     _SetsNode,
 )
 from pyneuromatic.gui.tier_actions import (
+    next_set_number,
+    set_name,
+    set_number_error,
+    set_number_of,
     ask_new_data,
     copy_name,
     copy_target_name,
@@ -824,8 +828,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             self._populate_sets_menu(menu, node)
         elif isinstance(node, _SetNode):
             menu.addAction("Select", lambda: self._request_selection(index))
-            menu.addAction("Rename...",
-                           lambda: self._rename_set(node.sets_node, node.name))
+            if not self._is_exclude_set(node):  # SetX stays SetX
+                menu.addAction("Renumber...",
+                               lambda: self._rename_set(node.sets_node, node.name))
             if not self._is_combined_set(node):
                 menu.addAction("Clear...",
                                lambda: self._clear_sets(node.sets_node, [node.name]))
@@ -1063,7 +1068,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         menu = QtWidgets.QMenu(self)
         if len(selected) == 1:
             name = selected[0].name
-            menu.addAction("Rename...", lambda: self._rename_set(sets_node, name))
+            if not self._is_exclude_set(selected[0]):
+                menu.addAction("Renumber...", lambda: self._rename_set(sets_node, name))
         clearable = [n.name for n in selected if not self._is_combined_set(n)]
         if clearable:
             menu.addAction("Clear...", lambda: self._clear_sets(sets_node, clearable))
@@ -1408,11 +1414,24 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     def _add_selected_to_new_set(self) -> None:
         self._add_to_new_set(self._current_container(), self._selected_objects())
 
+    def _ask_set_number(self, title: str, label: str, value: int) -> tuple[int, bool]:
+        """A set number prompt (replaced in tests)."""
+        return QtWidgets.QInputDialog.getInt(self, title, label, value=value, min=0, max=9999)
+
     def _ask_set_name(self, container) -> tuple[str, bool]:
-        """The New Set prompt, filled with the next free name (e.g. "Set3")."""
-        return QtWidgets.QInputDialog.getText(
-            self, "New Set", "Set name:", text=container.sets.auto_name_next()
+        """The New Set prompt: sets are numbered (Set0, Set1...), starting at
+        the next free number; an existing set's number is refused."""
+        sets = container.sets
+        number, ok = self._ask_set_number(
+            "New Set", "Set number (Set0, Set1, ...):", next_set_number(sets)
         )
+        if not ok:
+            return "", False
+        error = set_number_error(sets, number)
+        if error:
+            QtWidgets.QMessageBox.warning(self, "New Set", error)
+            return "", False
+        return set_name(number), True
 
     def _add_to_new_set(self, container, selected: list[NMObject]) -> None:
         if container is None:
@@ -1423,7 +1442,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._add_to_set(container, selected, name)
 
     def _add_set(self, sets_node: _SetsNode) -> None:
-        """Create a new, empty named set (a "Sets" row's New...)."""
+        """Create a new, empty numbered set (a "Sets" row's New...)."""
         container = sets_node.container
         if container is None:
             return
@@ -1472,13 +1491,23 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._changed()
 
     def _rename_set(self, sets_node: _SetsNode, old_name: str) -> None:
+        """Renumber a set (e.g. Set3 -> Set5); sets are numbered."""
         container = sets_node.container
         if container is None:
             return
-        newname, ok = QtWidgets.QInputDialog.getText(
-            self, "Rename Set", "New name:", text=old_name
+        current = set_number_of(old_name)
+        number, ok = self._ask_set_number(
+            "Renumber Set", f"New number for {old_name}:",
+            current if current is not None else next_set_number(container.sets),
         )
-        if not ok or not newname:
+        if not ok:
+            return
+        newname = set_name(number)
+        if newname.lower() == old_name.lower():
+            return
+        error = set_number_error(container.sets, number)
+        if error:
+            QtWidgets.QMessageBox.warning(self, "Renumber Set", error)
             return
         try:
             # NMSets.rename() renames the set itself; rename_item() is a
@@ -1512,6 +1541,12 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         except (KeyError, ValueError, TypeError) as e:
             QtWidgets.QMessageBox.warning(self, "Delete Set Failed", str(e))
         self._changed()
+
+    @staticmethod
+    def _is_exclude_set(set_node: _SetNode) -> bool:
+        """SetX of a data series' epochs (excludes them; not renumbered)."""
+        return (set_node.name.lower() == EXCLUDE_SET.lower()
+                and isinstance(set_node.container, NMEpochContainer))
 
     @staticmethod
     def _is_combined_set(set_node: _SetNode) -> bool:

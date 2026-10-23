@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
@@ -26,6 +26,8 @@ from pyneuromatic.tools.nm_stat_func import (
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
 from pyneuromatic.gui.results_view import Stats2Panel
 from pyneuromatic.gui.selection_model import (
+    ALL_EPOCHS,
+    CURRENT_EPOCH,
     SelectionModel,
     combine_scope_names,
     scoped_epoch_names,
@@ -35,6 +37,9 @@ from pyneuromatic.gui.tool_tab import ToolTabWidget
 
 class StatsToolTab(ToolTabWidget):
     """Single-window Stats1 editor and runner using the project's Stats tool."""
+
+    # "Choose measurement" (no measurement yet), as SetX's red
+    CHOOSE_COLOR = "#c62828"
 
     NEW_WINDOW_ACTION = "__new_stats_window__"
     # Dropdown groups, separated in the measurement menu
@@ -135,12 +140,19 @@ class StatsToolTab(ToolTabWidget):
         window_row.addWidget(self.window_combo)
         self.measurement_combo = QtWidgets.QComboBox(self)
         self.measurement_combo.addItem("Choose measurement", None)
+        # In red until a measurement is chosen (the list item and the combo)
+        self.measurement_combo.setItemData(
+            0, QtGui.QBrush(QtGui.QColor(self.CHOOSE_COLOR)),
+            QtCore.Qt.ItemDataRole.ForegroundRole,
+        )
         for group in self._MEASUREMENT_GROUPS:
             if self.measurement_combo.count() > 1:
                 self.measurement_combo.insertSeparator(self.measurement_combo.count())
             for name in group:
                 self.measurement_combo.addItem(name, name)
         window_row.addWidget(self.measurement_combo, stretch=1)
+        self.measurement_combo.currentIndexChanged.connect(self._style_measurement_combo)
+        self._style_measurement_combo()
         self.window_enabled = QtWidgets.QCheckBox("On", self)
         window_row.addWidget(self.window_enabled)
         stats1_layout.addLayout(window_row)
@@ -407,6 +419,13 @@ class StatsToolTab(ToolTabWidget):
             *self.param_edits.values(),
         ]
 
+    def _style_measurement_combo(self, *_args) -> None:
+        """Red while "Choose measurement" shows, so a missing choice stands out."""
+        choosing = self.measurement_combo.currentData() is None
+        self.measurement_combo.setStyleSheet(
+            f"QComboBox {{ color: {self.CHOOSE_COLOR}; }}" if choosing else ""
+        )
+
     def _show_configuration(self, enabled: bool) -> None:
         self.settings_stack.setCurrentWidget(
             self.tool_config_list if enabled else self.stats1_page
@@ -660,6 +679,28 @@ class StatsToolTab(ToolTabWidget):
         self._refresh_window_combo()
         self._load_selected_window()
 
+    def _run_keys(self, targets: list[dict]) -> dict:
+        """What the run analyses, for the tool's subfolder name: the Epoch
+        Set ("all", "Set1"...) or the current epoch, with any Group and
+        AND / OR; or a data array run's Data Set."""
+        selection = self.selection
+        if selection.get("source") != "dataseries":
+            data_set = selection.get("data_set")
+            return {"data": data_set} if data_set else {}
+        epoch_set = selection.get("epoch_set")
+        group = selection.get("group")
+        if epoch_set is None or epoch_set == CURRENT_EPOCH:
+            # Current Epoch (or a Group alone): name the epoch if just one
+            epoch_set = None
+            if group is None and len(targets) == 1 and targets[0].get("epoch") is not None:
+                epoch_set = targets[0]["epoch"].name
+        keys: dict = {"epoch": epoch_set.lower() if epoch_set == ALL_EPOCHS else epoch_set}
+        if group is not None:
+            keys["group"] = group
+            if selection.get("group_operator"):
+                keys["group_operator"] = selection["group_operator"]
+        return keys
+
     def _selected_targets(self) -> list[dict[str, NMObject]]:
         """Data to analyse from the selection's source (data or data series).
 
@@ -723,9 +764,11 @@ class StatsToolTab(ToolTabWidget):
                 if isinstance(item, NMData):
                     target = self._manager_target(selection)
                     target["data"] = item
-                    # Analyse the data array, not the selected data series
+                    # Analyse the data array, not the selected data series:
+                    # None (not left out), so an earlier series run's
+                    # selection doesn't stay in the tool (or its folder name)
                     for tier in ("dataseries", "channel", "epoch"):
-                        target.pop(tier, None)
+                        target[tier] = None
                     targets.append(target)
             return targets
 
@@ -780,7 +823,8 @@ class StatsToolTab(ToolTabWidget):
         if not targets:
             raise RuntimeError("The current selection has no data to analyze")
         selected_window = self._tool.windows.selected_name
-        succeeded = self._tool.run_all(targets)
+        # The selection, so the subfolder is named after it (e.g. _S1_)
+        succeeded = self._tool.run_all(targets, run_keys=self._run_keys(targets))
         self._tool.windows.selected_name = selected_window
         if not succeeded:
             raise RuntimeError("Stats analysis did not complete")

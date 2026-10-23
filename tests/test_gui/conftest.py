@@ -54,3 +54,14 @@ def _reset_table_nan():
 
     yield
     table_format.set_nan_mode("NaN")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_input_dialogs(monkeypatch):
+    """A test that opens an input dialog without stubbing it fails at once,
+    instead of hanging on a real dialog (its own stubs still apply)."""
+    def unstubbed(*_args, **_kwargs):
+        raise RuntimeError("QInputDialog opened in a test without being stubbed")
+
+    for name in ("getText", "getInt", "getDouble", "getItem", "getMultiLineText"):
+        monkeypatch.setattr(QtWidgets.QInputDialog, name, staticmethod(unstubbed))

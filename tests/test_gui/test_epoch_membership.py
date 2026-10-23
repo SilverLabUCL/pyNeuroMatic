@@ -35,7 +35,7 @@ def _checked(panel):
 def test_boxes_follow_the_current_epoch(app):
     panel = app.plot_widget
     assert panel.membership_row.isVisibleTo(panel)
-    assert list(panel.set_checkboxes) == ["Set1", "Set2", "SetX"]
+    assert list(panel.set_checkboxes) == ["Set0", "Set1", "SetX"]
     assert panel.current_epoch().name == "E0"
     assert _checked(panel) == [] and panel.group_combo.currentText() == "0"
     assert [panel.group_combo.itemText(i) for i in range(panel.group_combo.count())] == [
@@ -53,12 +53,12 @@ def test_boxes_follow_the_current_epoch(app):
 def test_ticking_adds_and_removes_the_current_epoch(app):
     panel, series = app.plot_widget, app.series
     panel._step_trace(2)  # E2
-    panel.set_checkboxes["Set2"].setChecked(True)
-    assert series.epochs.sets.get_items("Set2", get_keys=True) == ["E2"]
+    panel.set_checkboxes["Set0"].setChecked(True)
+    assert series.epochs.sets.get_items("Set0", get_keys=True) == ["E2"]
     panel.set_checkboxes["SetX"].setChecked(True)
     assert "E2" in series.epochs.excluded_names()
-    panel.set_checkboxes["Set2"].setChecked(False)
-    assert series.epochs.sets.get_items("Set2", get_keys=True) == []
+    panel.set_checkboxes["Set0"].setChecked(False)
+    assert series.epochs.sets.get_items("Set0", get_keys=True) == []
 
     # The browser and the strip follow
     app.selection_model.update(epoch_set="SetX")
@@ -95,8 +95,8 @@ def test_usable_with_overlay_hidden_for_data_without_sets(app):
     panel.overlay_action.setChecked(True)  # still the current (blue) epoch
     assert panel.membership_row.isVisibleTo(panel)
     assert panel.membership_row.isEnabled()
-    panel.set_checkboxes["Set2"].setChecked(True)
-    assert app.series.epochs.sets.get_items("Set2", get_keys=True) == ["E0"]
+    panel.set_checkboxes["Set0"].setChecked(True)
+    assert app.series.epochs.sets.get_items("Set0", get_keys=True) == ["E0"]
 
     folder = app.selection_model.selection["folder"]
     folder.data.new("Single", nparray=np.array([1.0, 2.0]))
@@ -106,17 +106,17 @@ def test_usable_with_overlay_hidden_for_data_without_sets(app):
 
 def test_combined_set_box_is_disabled(app):
     epochs = app.series.epochs
-    del epochs.sets["Set2"]
-    epochs.sets.define_or("Set2", "Set1", "SetX")
+    del epochs.sets["Set0"]
+    epochs.sets.define_or("Set0", "Set1", "SetX")
     app.plot_widget.update_selection(app.selection_model.selection)
-    assert not app.plot_widget.set_checkboxes["Set2"].isEnabled()
+    assert not app.plot_widget.set_checkboxes["Set0"].isEnabled()
 
 
 def test_a_deleted_default_set_is_made_again(app):
     epochs = app.series.epochs
-    del epochs.sets["Set2"]
-    app.plot_widget.set_checkboxes["Set2"].setChecked(True)
-    assert epochs.sets.get_items("Set2", get_keys=True) == ["E0"]
+    del epochs.sets["Set0"]
+    app.plot_widget.set_checkboxes["Set0"].setChecked(True)
+    assert epochs.sets.get_items("Set0", get_keys=True) == ["E0"]
 
 
 def test_browser_edit_mode_follows_the_plot(app):
@@ -250,7 +250,7 @@ def test_switching_between_data_and_epochs(data_app):
     panel, folder = data_app.plot_widget, data_app.folder
     series = folder.new_dataseries("Record", n_epochs=3, n_points=3)
     data_app.selection_model.update(dataseries=series, source="dataseries")
-    assert list(panel.set_checkboxes) == ["Set1", "Set2", "SetX"]
+    assert list(panel.set_checkboxes) == ["Set0", "Set1", "SetX"]
     data_app.selection_model.update(source="data")
     assert list(panel.set_checkboxes) == ["Control", "Drug", "Washout"]
 
@@ -259,15 +259,15 @@ def test_the_strip_epoch_set_gets_a_box_too(app):
     panel, epochs = app.plot_widget, app.series.epochs
     epochs.sets.add("Mine", [epochs["E0"]])
     app.selection_model.update(epoch_set="Mine")
-    assert list(panel.set_checkboxes) == ["Set1", "Set2", "SetX", "Mine"]
+    assert list(panel.set_checkboxes) == ["Set0", "Set1", "SetX", "Mine"]
     assert panel.set_checkboxes["Mine"].isChecked()  # E0
     panel._step_trace(1)
     panel.set_checkboxes["Mine"].setChecked(True)
     assert epochs.sets.get_items("Mine", get_keys=True) == ["E0", "E1"]
 
-    for chosen in ("All", "Current Epoch", "Set2"):  # nothing extra
+    for chosen in ("All", "Current Epoch", "Set0"):  # nothing extra
         app.selection_model.update(epoch_set=chosen)
-        assert list(panel.set_checkboxes) == ["Set1", "Set2", "SetX"]
+        assert list(panel.set_checkboxes) == ["Set0", "Set1", "SetX"]
 
 
 def test_narrow_group_and_channel_dropdowns(app):

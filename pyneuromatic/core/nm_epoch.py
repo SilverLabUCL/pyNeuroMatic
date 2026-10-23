@@ -36,7 +36,7 @@ import pyneuromatic.core.nm_utilities as nmu
 # Epoch sets every data series starts with. Epochs in EXCLUDE_SET are left
 # out of every run (as in Igor NeuroMatic's SetX).
 EXCLUDE_SET = "SetX"
-DEFAULT_EPOCH_SETS = ("Set1", "Set2", EXCLUDE_SET)
+DEFAULT_EPOCH_SETS = ("Set0", "Set1", EXCLUDE_SET)  # numbered from 0, like groups
 
 
 """

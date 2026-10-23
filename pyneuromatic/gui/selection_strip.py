@@ -78,6 +78,12 @@ class FlowLayout(QtWidgets.QLayout):
         return y + line_height - rect.y() + margins.bottom()
 
 
+def is_text_array(data) -> bool:
+    """True for a text (string / object) array."""
+    array = getattr(data, "nparray", None)
+    return array is not None and array.dtype.kind in "OUS"
+
+
 class SelectionStrip(QtWidgets.QWidget):
     """Folder, Data and Data Series sections, each two rows of selectors.
 
@@ -186,6 +192,11 @@ class SelectionStrip(QtWidgets.QWidget):
                     button.setToolTip(f"{self._labels[key]} actions (coming soon)")
                     self._action_buttons[key] = button
                     row_layout.addWidget(button)
+                if key == "data_set":
+                    # How many data arrays the Data Set selects (as for epochs)
+                    self.data_count_label = QtWidgets.QLabel("", frame)
+                    self.data_count_label.setObjectName("dataCount")
+                    row_layout.addWidget(self.data_count_label)
                 if key == "group":
                     # How many epochs the Epoch Set/Group selects
                     self.epoch_count_label = QtWidgets.QLabel("", frame)
@@ -255,6 +266,19 @@ class SelectionStrip(QtWidgets.QWidget):
             self._update_from_selection(self._selection_model.selection)
 
     @staticmethod
+    def data_count(selection: dict) -> int | None:
+        """How many data arrays the Data Set selects (1, the current array,
+        without one); None with no data array or Data Set."""
+        context = selection.get("toolfolder") or selection.get("folder")
+        data_set = selection.get("data_set")
+        if context is None:
+            return None
+        if data_set is not None and data_set in context.data.sets:
+            members = context.data.sets.get_items(data_set, get_keys=True) or []
+            return sum(1 for name in members if name in context.data)
+        return 1 if selection.get("data") is not None else None
+
+    @staticmethod
     def epoch_count_text(selection: dict) -> str:
         """e.g. "n=12-3": 12 epochs in the Epoch Set/Group, 3 of them excluded (SetX)."""
         dataseries = selection.get("dataseries")
@@ -280,6 +304,12 @@ class SelectionStrip(QtWidgets.QWidget):
         for key, combo in self._combos.items():
             empty_text = {"toolfolder": NO_SUBFOLDER}.get(key, "")
             self._set_combo_options(combo, options.get(key, []), selection.get(key), empty_text)
+        count = self.data_count(selection)
+        self.data_count_label.setText("" if count is None else f"n={count}")
+        self.data_count_label.setToolTip(
+            "" if count is None
+            else f"{count} data array{'s' * (count != 1)} selected"
+        )
         text = self.epoch_count_text(selection)
         if text.startswith("n="):
             total, _, left_out = text[2:].partition("-")
@@ -316,7 +346,9 @@ class SelectionStrip(QtWidgets.QWidget):
             return options
         options["toolfolder"] = [(name, name) for name in folder.toolfolders.keys()]
         context = selection.get("toolfolder") or folder
-        options["data"] = [(name, name) for name in context.data.keys()]
+        # Numeric arrays only: text arrays (e.g. ST_w0_data) can't be analysed
+        options["data"] = [(name, name) for name, data in context.data.items()
+                           if not is_text_array(data)]
         options["data_set"] = [(name, name) for name in context.data.sets.keys()]
         # A lock marks series whose arrays cannot be changed
         options["dataseries"] = [
@@ -359,4 +391,4 @@ class SelectionStrip(QtWidgets.QWidget):
         combo.blockSignals(False)
 
 
-__all__ = ["FlowLayout", "NO_SUBFOLDER", "SelectionStrip"]
+__all__ = ["FlowLayout", "NO_SUBFOLDER", "SelectionStrip", "is_text_array"]

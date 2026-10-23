@@ -53,7 +53,7 @@ def test_epoch_set_menu_in_strip_and_series_menu(app):
     texts = [
         "New Set…", "Add Epochs…", "Remove Epochs…", "Exclude Epochs…",
         "Include Epochs…", "Invert…", "Combine Sets…",
-        "Clear Set…", "Rename Set…", "Delete Set…", "Choose in Browser…",
+        "Clear Set…", "Renumber Set…", "Delete Set…", "Choose in Browser…",
     ]
     button = app.selection_strip.action_button("epoch_set")
     assert button.isEnabled()
@@ -63,13 +63,19 @@ def test_epoch_set_menu_in_strip_and_series_menu(app):
     assert [a.text() for a in submenu.actions() if a.text()] == texts
 
 
-def test_new_set_is_selected(app):
-    app.answers = [(None, "Odd")]
+def test_new_set_is_numbered_and_selected(app):
+    app.epoch_set_actions.new_set()  # cancelled; check the options
+    options = app.dialogs[-1][1]
+    assert options["context"] == ("Series", "Demo › Record")
+    label, spin = options["extras"][0]
+    assert label == "Set number" and spin.value == 2  # Set0, Set1 (and SetX) exist
+    assert options["validate"](None, None, "1") == "'Set1' already exists"
+    assert options["validate"](None, None, "2") is None
+    app.answers = [(None, None, "2")]
     app.epoch_set_actions.new_set()
-    assert app.dialogs[-1][1]["context"] == ("Series", "Demo › Record")
-    assert "Odd" in app.sets.keys()
-    assert app.selection_model.selection["epoch_set"] == "Odd"
-    assert app.selection_strip.combo("epoch_set").currentText() == "Odd"
+    assert "Set2" in app.sets.keys()
+    assert app.selection_model.selection["epoch_set"] == "Set2"
+    assert app.selection_strip.combo("epoch_set").currentText() == "Set2"
 
 
 def test_add_and_remove_a_range(app):
@@ -103,33 +109,36 @@ def test_add_and_remove_a_range(app):
 
 def test_invert_and_combine(app):
     actions = app.epoch_set_actions
-    app.answers = [("Set0", "Rest")]
+    app.answers = [("Set0", None, "3")]
     actions.invert_set()
-    assert _members(app, "Rest") == [f"E{i}" for i in range(2, 10)]
-    assert app.selection_model.selection["epoch_set"] == "Rest"
+    assert _members(app, "Set3") == [f"E{i}" for i in range(2, 10)]
+    assert app.selection_model.selection["epoch_set"] == "Set3"
 
-    app.answers = [("Set0", "All", "OR", "Rest")]
+    app.answers = [("Set0", None, "OR", "Set3", "4")]
     actions.combine_sets()
     options = app.dialogs[-1][1]
     assert options["extras"][0] == ("Operator", ["AND", "OR"], "OR")
-    assert len(_members(app, "All")) == 10
-    assert options["validate"]("Rest", "X", "OR", "Rest") == "Choose two different sets"
+    assert options["extras"][2][0] == "Set number"
+    assert len(_members(app, "Set4")) == 10
+    assert options["validate"]("Set3", None, "OR", "Set3", "5") == "Choose two different sets"
+    assert options["validate"]("Set0", None, "OR", "Set3", "4") == "'Set4' already exists"
 
 
 def test_clear_rename_delete(app):
     actions = app.epoch_set_actions
     app.selection_model.update(epoch_set="Set0")
-    app.answers = [("Set0", "First")]
+    app.answers = [("Set0", None, "7")]  # Renumber Set0 -> Set7
     actions.rename_set()
-    assert app.selection_model.selection["epoch_set"] == "First"
-    app.answers = [("First", None)]
+    assert app.selection_model.selection["epoch_set"] == "Set7"
+    assert app.dialogs[-1][0] == "Renumber Epoch Set"
+    app.answers = [("Set7", None)]
     actions.clear_set()
-    assert _members(app, "First") == []
-    app.answers = [("First", None)]
+    assert _members(app, "Set7") == []
+    app.answers = [("Set7", None)]
     actions.delete_set()
-    assert "First" not in app.sets.keys()
+    assert "Set7" not in app.sets.keys()
     assert app.selection_model.selection["epoch_set"] is None
-    assert list(app.sets.keys()) == ["Set1", "Set2", "SetX"]  # the defaults stay
+    assert list(app.sets.keys()) == ["Set1", "SetX"]  # Set0 was renumbered, then deleted
 
 
 def test_epoch_sets_work_on_a_locked_series(app):
@@ -155,7 +164,7 @@ def test_epoch_set_list_starts_with_all_and_current(app):
     combo = app.selection_strip.combo("epoch_set")
     texts = [combo.itemText(i) for i in range(combo.count())]
     assert texts[:3] == ["", "All", "Current Epoch"]  # blank, like Data Set
-    assert texts[3:] == ["Set1", "Set2", "SetX", "Set0"]  # creation order
+    assert texts[3:] == ["Set0", "Set1", "SetX"]  # in order, from 0
     assert combo.currentText() == "All"  # the default for a series
     # AND/OR only combines a stored set with a group
     app.series.epochs.groups.assign_cyclic(list(app.series.epochs.keys()), n_groups=2)
@@ -183,18 +192,15 @@ def test_exclude_and_include_epochs(app):
     assert _members(app, "SetX") == ["E7", "E9"]
 
 
-def test_setx_is_protected_and_builtin_names_reserved(app):
+def test_setx_is_protected(app):
     actions = app.epoch_set_actions
     actions.rename_set()
-    assert "cannot be renamed" in app.dialogs[-1][1]["validate"]("SetX", "Other")
+    assert "cannot be renumbered" in app.dialogs[-1][1]["validate"]("SetX", None, "5")
+    # Keeping a set's own number is fine; taking another set's isn't
+    assert app.dialogs[-1][1]["validate"]("Set1", None, "1") is None
+    assert app.dialogs[-1][1]["validate"]("Set1", None, "0") == "'Set0' already exists"
     actions.delete_set()
     assert "cannot be deleted" in app.dialogs[-1][1]["validate"]("SetX", None)
-    actions.new_set()
-    validate = app.dialogs[-1][1]["validate"]
-    assert validate(None, "All") == "'All' is a built-in Epoch Set choice"
-    assert validate(None, "current epoch") == (
-        "'current epoch' is a built-in Epoch Set choice"
-    )
 
 
 def test_run_leaves_out_setx_and_reports_it(app, monkeypatch):
