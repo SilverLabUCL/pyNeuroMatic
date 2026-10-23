@@ -284,8 +284,8 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert series_menu.currentText() == "Alpha"
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "AlphaA0"
-    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "Set0", "Set1", "SetX", "Demo1Set"]
-    assert _combo_values(group_menu) == ["", "0", "1"]
+    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "All Sets", "Set0", "Set1", "SetX", "Demo1Set"]
+    assert _combo_values(group_menu) == ["", "All", "0", "1"]
     assert _combo_values(operator_menu) == [""]
 
     set_menu.setCurrentText("Demo1Set")
@@ -301,9 +301,9 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert _combo_values(series_menu) == ["", "Gamma"]
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA0"
-    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "Set0", "Set1", "SetX", "Demo2Set"]
+    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "All Sets", "Set0", "Set1", "SetX", "Demo2Set"]
     assert set_menu.currentText() == "All"
-    assert _combo_values(group_menu) == ["", "0", "1"]
+    assert _combo_values(group_menu) == ["", "All", "0", "1"]
     assert group_menu.currentText() == ""
     assert _combo_values(operator_menu) == [""]
     set_menu.setCurrentText("Demo2Set")
@@ -431,8 +431,8 @@ def test_data_and_dataseries_sections_are_independent(qtbot, nm):
     assert strip.is_active_section("dataseries")
     assert strip.source_button("data").isEnabled()  # a data array is selected too
     assert _combo_values(data_set_menu) == ["", "FlatSet", "DataSet"]
-    assert _combo_values(epoch_set_menu) == ["", "All", "Current Epoch", "Set0", "Set1", "SetX", "EpochSet"]
-    assert _combo_values(group_menu) == ["", "0", "1"]
+    assert _combo_values(epoch_set_menu) == ["", "All", "Current Epoch", "All Sets", "Set0", "Set1", "SetX", "EpochSet"]
+    assert _combo_values(group_menu) == ["", "All", "0", "1"]
 
     channel_menu.setCurrentText("B")
     epoch_set_menu.setCurrentText("EpochSet")
@@ -510,7 +510,7 @@ def test_new_group_refreshes_group_selector(qtbot, nm, monkeypatch):
     )
     win.browser_widget._new_group(dataseries.epochs)
 
-    assert _combo_values(group_menu) == ["", "0", "1"]
+    assert _combo_values(group_menu) == ["", "All", "0", "1"]
     assert dataseries.epochs.groups.get_items(0) == []
     assert dataseries.epochs.groups.get_items(1) == []
 

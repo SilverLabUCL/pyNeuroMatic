@@ -36,6 +36,8 @@ from pyneuromatic.gui.settings_dialog import SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
+    ALL_GROUPS,
+    ALL_SETS,
     SelectionModel,
     is_stored_epoch_set,
     scoped_epoch_names,
@@ -130,10 +132,13 @@ def _scope_text(selection: dict) -> str:
     """A short name for the epochs selected, e.g. "Set1", "Set1 AND Group 0"."""
     epoch_set = selection.get("epoch_set")
     parts = []
-    if is_stored_epoch_set(epoch_set) or epoch_set == ALL_EPOCHS:
+    if is_stored_epoch_set(epoch_set) or epoch_set in (ALL_EPOCHS, ALL_SETS):
         parts.append(epoch_set)
-    if selection.get("group") is not None:
-        parts.append(f"Group {selection['group']}")
+    group = selection.get("group")
+    if group == ALL_GROUPS:
+        parts.append(ALL_GROUPS)
+    elif group is not None:
+        parts.append(f"Group {group}")
     operator = selection.get("group_operator") or "+"
     return f" {operator} ".join(parts)
 
@@ -1141,9 +1146,11 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def _on_browser_content_changed(self) -> None:
         selection = self.selection_model.selection
         series, group = selection.get("dataseries"), selection.get("group")
-        if (series is not None and group is not None
-                and group not in series.epochs.groups.group_numbers):
-            self.selection_model.update(group=None)  # the group was deleted
+        groups = series.epochs.groups.group_numbers if series is not None else []
+        if series is not None and group is not None and (
+            group not in groups if group != ALL_GROUPS else not groups
+        ):
+            self.selection_model.update(group=None)  # the group(s) were deleted
         self.selection_model.refresh()
         self.selection_strip.refresh_options()
         self.stats_tab.stats2.refresh()

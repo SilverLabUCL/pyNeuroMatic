@@ -29,6 +29,7 @@ from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
     CURRENT_EPOCH,
     SelectionModel,
+    scope_runs,
     combine_scope_names,
     scoped_epoch_names,
 )
@@ -285,9 +286,21 @@ class StatsToolTab(ToolTabWidget):
     def _update_run_info(self) -> None:
         """Show beside Run how many epochs or data arrays it will analyse, e.g. "n=9"."""
         try:
-            targets = self._selected_targets()
+            planned = self._run_batches()
+            targets = self._selected_targets() if planned is None else []
         except RuntimeError as error:
             self.run_info_label.setText(str(error))
+            return
+        if planned is not None:  # All Sets / All Groups
+            batches, skipped = planned
+            runs = len(batches)
+            self.run_info_label.setText(f"n={runs} run{'s' * (runs != 1)}")
+            tip = "Run goes once per set or group: " + ", ".join(
+                f"{label}: {len(targets)}" for label, targets, _keys in batches
+            ) if batches else "No set or group has epochs to analyze"
+            if skipped:
+                tip += f"\nSkipped (no epochs): {', '.join(skipped)}"
+            self.run_info_label.setToolTip(tip)
             return
         count = len(targets)
         if self.selection.get("source") == "dataseries":
@@ -679,11 +692,12 @@ class StatsToolTab(ToolTabWidget):
         self._refresh_window_combo()
         self._load_selected_window()
 
-    def _run_keys(self, targets: list[dict]) -> dict:
+    def _run_keys(self, targets: list[dict], selection: dict | None = None) -> dict:
         """What the run analyses, for the tool's subfolder name: the Epoch
         Set ("all", "Set1"...) or the current epoch, with any Group and
-        AND / OR; or a data array run's Data Set."""
-        selection = self.selection
+        AND / OR; or a data array run's Data Set. *selection* defaults to
+        the strip's (one per set or group for All Sets / All Groups)."""
+        selection = self.selection if selection is None else selection
         if selection.get("source") != "dataseries":
             data_set = selection.get("data_set")
             return {"data": data_set} if data_set else {}
@@ -701,14 +715,40 @@ class StatsToolTab(ToolTabWidget):
                 keys["group_operator"] = selection["group_operator"]
         return keys
 
-    def _selected_targets(self) -> list[dict[str, NMObject]]:
+    def _scope_runs(self) -> list[tuple[str, dict]] | None:
+        """For All Sets / All Groups: (label, selection) per set or group;
+        None for a single run. Raises RuntimeError for both together."""
+        selection = self.selection
+        series = selection.get("dataseries")
+        if selection.get("source") != "dataseries" or series is None:
+            return None
+        return scope_runs(series, selection)
+
+    def _run_batches(self) -> tuple[list[tuple[str, list, dict]], list[str]] | None:
+        """For All Sets / All Groups: the runs with epochs to analyse, as
+        (label, targets, run keys), and the labels of empty ones (skipped);
+        None for a single run."""
+        runs = self._scope_runs()
+        if runs is None:
+            return None
+        batches, skipped = [], []
+        for label, run_selection in runs:
+            targets = self._selected_targets(run_selection)
+            if targets:
+                batches.append((label, targets, self._run_keys(targets, run_selection)))
+            else:
+                skipped.append(label)
+        return batches, skipped
+
+    def _selected_targets(self, selection: dict | None = None) -> list[dict[str, NMObject]]:
         """Data to analyse from the selection's source (data or data series).
 
         A data series uses the epochs in the Epoch Set/Group, or the current
         epoch when neither is chosen. A data array uses the Data Set, or the
-        current data array when none is chosen.
+        current data array when none is chosen. *selection* defaults to the
+        strip's.
         """
-        selection = self.selection
+        selection = self.selection if selection is None else selection
         source = selection.get("source")
 
         if source == "dataseries":
@@ -819,6 +859,9 @@ class StatsToolTab(ToolTabWidget):
         ):
             raise RuntimeError(f"Cancelled: {EXCLUDE_SET} lists excluded epochs")
 
+        planned = self._run_batches()
+        if planned is not None:  # All Sets / All Groups: once per set or group
+            return self._run_each(*planned)
         targets = self._selected_targets()
         if not targets:
             raise RuntimeError("The current selection has no data to analyze")
@@ -833,6 +876,20 @@ class StatsToolTab(ToolTabWidget):
         if not records:
             self.show_warning("No results were produced")
         self.stats2.show_toolfolder(self._tool.toolfolder)
+        return None
+
+    def _run_each(self, batches: list[tuple[str, list, dict]], skipped: list[str]) -> None:
+        """Run once per set or group, each saved in its own subfolder."""
+        if not batches:
+            raise RuntimeError("None of the sets or groups has epochs to analyze")
+        selected_window = self._tool.windows.selected_name
+        done = self._tool.run_each([(targets, keys) for _label, targets, keys in batches])
+        self._tool.windows.selected_name = selected_window
+        if len(done) < len(batches):
+            raise RuntimeError("Stats analysis did not complete")
+        if skipped:
+            self.show_warning(f"Skipped (no epochs to analyze): {', '.join(skipped)}")
+        self.stats2.show_toolfolder(self._tool.toolfolder)  # the last run's
         return None
 
 
