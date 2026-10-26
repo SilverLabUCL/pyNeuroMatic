@@ -1156,6 +1156,204 @@ class NMFolder(NMObject):
             % (_p, prefix, epoch, delete_data)
         )
 
+    @staticmethod
+    def _fill_array(fill, n_points: int):
+        """An array of *n_points* from *fill* (a number, or f(n) -> array)."""
+        import numpy as np
+
+        if callable(fill):
+            return np.asarray(fill(n_points), dtype=float)
+        if isinstance(fill, bool) or not isinstance(fill, (int, float)):
+            raise TypeError(
+                "fill must be a numeric scalar or callable, got %r" % type(fill).__name__
+            )
+        return np.full(n_points, float(fill))
+
+    @staticmethod
+    def _check_count(name: str, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(nmu.type_error_str(value, name, "int"))
+        if value < 1:
+            raise ValueError("%s must be >= 1, got %d" % (name, value))
+
+    @staticmethod
+    def _epoch_number(ds: NMDataSeries, epoch) -> int | None:
+        """The number of an epoch named e.g. 'E5', or None."""
+        text = epoch.name[len(ds.epochs.auto_name_prefix):]
+        return int(text) if text.isdigit() else None
+
+    def add_dataseries_channels(
+        self,
+        prefix: str,
+        n_channels: int = 1,
+        fill=0.0,
+        y_label: str = "",
+        y_units: str = "",
+        quiet: bool = nmc.QUIET,
+    ) -> list:
+        """Add channels to a dataseries: one new array per epoch.
+
+        New channels take the letters after the last channel (e.g. C, D
+        after A, B); their arrays are named ``{prefix}{channel}{epoch}``
+        (e.g. RecordC0) and take the points and x scale of the epoch's
+        existing arrays.
+
+        Args:
+            prefix: Name of the dataseries.
+            n_channels: How many channels to add.
+            fill: Initial values: a number (e.g. 0 or NaN) or a function
+                ``f(n_points) -> array`` (e.g. noise).
+            y_label: Y label of the new arrays (e.g. ``"Im"``).
+            y_units: Y units of the new arrays (e.g. ``"pA"``).
+            quiet: Suppress history messages.
+
+        Returns:
+            The new NMChannels.
+
+        Raises:
+            RuntimeError: If the dataseries is locked.
+            ValueError: If the dataseries is missing, has no epochs, there
+                are no letters left, or an array name exists.
+        """
+        from pyneuromatic.core.nm_channel import NMChannel
+
+        ds = self._get_unlocked_dataseries(prefix)
+        self._check_count("n_channels", n_channels)
+        epochs = list(ds.epochs.values())
+        if not epochs:
+            raise ValueError("dataseries '%s' has no epochs" % prefix)
+        used = [nmu.CHANNEL_CHARS.index(c) for c in ds.channels.keys()
+                if c in nmu.CHANNEL_CHARS]
+        first = max(used) + 1 if used else 0
+        if first + n_channels > len(nmu.CHANNEL_CHARS):
+            raise ValueError(
+                "dataseries '%s' can have at most %d channels (A to Z)"
+                % (prefix, len(nmu.CHANNEL_CHARS))
+            )
+        letters = [nmu.channel_char(i) for i in range(first, first + n_channels)]
+        # Each epoch's new arrays copy the size and x scale of one it has
+        templates = {}
+        for epoch in epochs:
+            if not epoch.data:
+                raise ValueError("epoch '%s' has no arrays to copy the size of" % epoch.name)
+            templates[epoch.name] = epoch.data[0]
+        number = {e.name: e.name[len(ds.epochs.auto_name_prefix):] for e in epochs}
+        names = ["%s%s%s" % (prefix, c, number[e.name]) for c in letters for e in epochs]
+        for name in names:  # before changing anything
+            if name in self.data:
+                raise ValueError("data %r already exists" % name)
+
+        yscale = {"label": y_label, "units": y_units}
+        added = []
+        for letter in letters:
+            first_template = templates[epochs[0].name]
+            channel = NMChannel(parent=ds, name=letter,
+                                xscale=first_template.xscale.to_dict(), yscale=yscale)
+            ds.channels._add(channel, quiet=True)
+            for epoch in epochs:
+                template = templates[epoch.name]
+                n_points = template.nparray.size if template.nparray is not None else 0
+                data = self.data.new(
+                    name="%s%s%s" % (prefix, letter, number[epoch.name]),
+                    nparray=self._fill_array(fill, n_points),
+                    xscale=template.xscale.to_dict(), yscale=yscale, quiet=True,
+                )
+                channel.data.append(data)
+                epoch.data.append(data)
+            added.append(channel)
+
+        nmh.history(
+            "added channel(s) %s to dataseries '%s' (%d arrays)"
+            % (", ".join(letters), prefix, len(names)),
+            path=self.path_str, quiet=quiet,
+        )
+        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        nmch.add_nm_command(
+            '%s.add_dataseries_channels(%r, n_channels=%r, fill=%r, y_label=%r, y_units=%r)'
+            % (_p, prefix, n_channels, fill, y_label, y_units)
+        )
+        return added
+
+    def add_dataseries_epochs(
+        self,
+        prefix: str,
+        n_epochs: int = 1,
+        fill=0.0,
+        quiet: bool = nmc.QUIET,
+    ) -> list:
+        """Add epochs to a dataseries: one new array per channel.
+
+        New epochs are numbered after the last epoch (e.g. E10, E11 after
+        E9); their arrays are named ``{prefix}{channel}{epoch}`` (e.g.
+        RecordA10) and take the points and scales of the channel's last
+        array.
+
+        Args:
+            prefix: Name of the dataseries.
+            n_epochs: How many epochs to add.
+            fill: Initial values: a number (e.g. 0 or NaN) or a function
+                ``f(n_points) -> array`` (e.g. noise).
+            quiet: Suppress history messages.
+
+        Returns:
+            The new NMEpochs.
+
+        Raises:
+            RuntimeError: If the dataseries is locked.
+            ValueError: If the dataseries is missing, has no channels (or a
+                channel has no arrays), or an array name exists.
+        """
+        from pyneuromatic.core.nm_epoch import NMEpoch
+
+        ds = self._get_unlocked_dataseries(prefix)
+        self._check_count("n_epochs", n_epochs)
+        channels = list(ds.channels.values())
+        if not channels:
+            raise ValueError("dataseries '%s' has no channels" % prefix)
+        for channel in channels:
+            if not channel.data:
+                raise ValueError("channel '%s' has no arrays to copy the size of"
+                                 % channel.name)
+        numbers = [n for n in (self._epoch_number(ds, e) for e in ds.epochs.values())
+                   if n is not None]
+        first = max(numbers) + 1 if numbers else 0
+        new_numbers = list(range(first, first + n_epochs))
+        names = ["%s%s%d" % (prefix, c.name, n) for n in new_numbers for c in channels]
+        for name in names:  # before changing anything
+            if name in self.data:
+                raise ValueError("data %r already exists" % name)
+
+        epoch_prefix = ds.epochs.auto_name_prefix
+        added = []
+        for number in new_numbers:
+            epoch = NMEpoch(parent=ds, name="%s%d" % (epoch_prefix, number), number=number)
+            ds.epochs._add(epoch, quiet=True)
+            for channel in channels:
+                template = channel.data[-1]
+                n_points = template.nparray.size if template.nparray is not None else 0
+                data = self.data.new(
+                    name="%s%s%d" % (prefix, channel.name, number),
+                    nparray=self._fill_array(fill, n_points),
+                    xscale=template.xscale.to_dict(), yscale=template.yscale.to_dict(),
+                    quiet=True,
+                )
+                channel.data.append(data)
+                epoch.data.append(data)
+            added.append(epoch)
+
+        ep_str = ("%s%d" % (epoch_prefix, first) if n_epochs == 1 else
+                  "%s%d..%s%d" % (epoch_prefix, first, epoch_prefix, new_numbers[-1]))
+        nmh.history(
+            "added epoch(s) %s to dataseries '%s' (%d arrays)" % (ep_str, prefix, len(names)),
+            path=self.path_str, quiet=quiet,
+        )
+        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        nmch.add_nm_command(
+            '%s.add_dataseries_epochs(%r, n_epochs=%r, fill=%r)'
+            % (_p, prefix, n_epochs, fill)
+        )
+        return added
+
 
 class NMFolderContainer(NMObjectContainer):
     """
