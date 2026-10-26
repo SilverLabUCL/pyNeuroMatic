@@ -376,6 +376,117 @@ class NewDataDialog(QtWidgets.QDialog):
         super().accept()
 
 
+class AddToSeriesDialog(QtWidgets.QDialog):
+    """How many channels or epochs to add to a data series, and the new
+    arrays' values (a number, e.g. 0 or NaN, plus optional noise) and, for
+    channels, y label and units.
+
+    *preview(count)* describes the new arrays; *validate(values)* returns an
+    error, shown inline while the dialog stays open.
+    """
+
+    def __init__(
+        self,
+        kind: str,  # "channels" or "epochs"
+        context: tuple[str, str],
+        preview: Callable[[int], str],
+        validate: Callable[[dict], str | None] | None = None,
+        maximum: int = 1_000_000,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._kind, self._preview, self._validate = kind, preview, validate
+        self.setWindowTitle(f"Add {kind.capitalize()}")
+        layout = QtWidgets.QVBoxLayout(self)
+        form = QtWidgets.QFormLayout()
+        layout.addLayout(form)
+        context_label = QtWidgets.QLabel(context[1], self)
+        context_label.setStyleSheet("font-weight: bold;")
+        form.addRow(context[0], context_label)
+        self.count_spin = QtWidgets.QSpinBox(self)
+        self.count_spin.setRange(1, max(1, maximum))
+        self.count_spin.valueChanged.connect(self._update_preview)
+        form.addRow(kind.capitalize(), self.count_spin)
+        self.value_edit = QtWidgets.QLineEdit("0", self)
+        self.value_edit.setToolTip("Initial value of every point, e.g. 0 or NaN")
+        self.noise_edit = QtWidgets.QLineEdit("0", self)
+        self.noise_edit.setToolTip(
+            "Standard deviation of Gaussian noise added to every point (0: none)")
+        fill = QtWidgets.QHBoxLayout()
+        fill.addWidget(self.value_edit)
+        fill.addWidget(QtWidgets.QLabel("Noise SD", self))
+        fill.addWidget(self.noise_edit)
+        form.addRow("Value", fill)
+        self.ylabel_edit = self.yunits_edit = None
+        if kind == "channels":  # a new channel records something else
+            self.ylabel_edit = QtWidgets.QLineEdit("", self)
+            self.yunits_edit = QtWidgets.QLineEdit("", self)
+            y_row = QtWidgets.QHBoxLayout()
+            y_row.addWidget(QtWidgets.QLabel("Label", self))
+            y_row.addWidget(self.ylabel_edit)
+            y_row.addWidget(QtWidgets.QLabel("Units", self))
+            y_row.addWidget(self.yunits_edit)
+            form.addRow("Y", y_row)
+        self.preview_label = QtWidgets.QLabel("", self)
+        self.preview_label.setWordWrap(True)
+        layout.addWidget(self.preview_label)
+        self.error_label = QtWidgets.QLabel("", self)
+        self.error_label.setStyleSheet("color: #b91c1c;")
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel, self)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self._update_preview()
+
+    def _update_preview(self, *_args) -> None:
+        self.preview_label.setText(self._preview(self.count_spin.value()))
+        self.error_label.hide()
+
+    def values(self) -> dict:
+        """The fields, with numbers converted (raises ValueError if invalid)."""
+        return {
+            "count": self.count_spin.value(),
+            "value": float(self.value_edit.text().strip() or 0),  # also "NaN"
+            "noise": float(self.noise_edit.text().strip() or 0),
+            "ylabel": self.ylabel_edit.text().strip() if self.ylabel_edit else "",
+            "yunits": self.yunits_edit.text().strip() if self.yunits_edit else "",
+        }
+
+    def accept(self) -> None:
+        try:
+            values = self.values()
+        except ValueError:
+            error = "Value and Noise SD must be numbers (Value may be NaN)"
+        else:
+            error = ("Noise SD must not be negative" if values["noise"] < 0
+                     else self._validate(values) if self._validate else None)
+        if error:
+            self.error_label.setText(error)
+            self.error_label.show()
+            return
+        super().accept()
+
+
+def fill_values(value: float, noise: float):
+    """The fill for new arrays: *value*, plus Gaussian noise of SD *noise*."""
+    if noise > 0:
+        rng = np.random.default_rng()
+        return lambda n: value + rng.normal(0.0, noise, n)
+    return value
+
+
+def array_names_text(names: list[str], limit: int = 2) -> str:
+    """e.g. "RecordC0, RecordC1, ... RecordD9" for a preview."""
+    if len(names) <= limit + 1:
+        return ", ".join(names)
+    return f"{', '.join(names[:limit])}, ... {names[-1]}"
+
+
 def common_value(values) -> str | None:
     """The shared value of *values* as text, or None if they differ ("mixed")."""
     values = set(values)
@@ -1065,13 +1176,13 @@ class DataActions(TierActions):
                                      tip="Add a data array to a data set")
         self.set_remove_action = action("Remove Data from Set…", self.remove_from_set,
                                         tip="Remove a data array from a data set")
-        self.set_combine_action = action("Combine Sets…", self.combine_sets,
+        self.set_combine_action = action("Combine…", self.combine_sets,
                                          tip="Make a set from two sets with AND or OR")
-        self.set_clear_action = action("Clear Set…", self.clear_set,
+        self.set_clear_action = action("Clear…", self.clear_set,
                                        tip="Remove all data from a set, keeping the set")
-        self.set_rename_action = action("Renumber Set…", self.rename_set,
+        self.set_rename_action = action("Renumber…", self.rename_set,
                                         tip="Give a data set another number")
-        self.set_delete_action = action("Delete Set…", self.delete_set, tip="Delete a data set")
+        self.set_delete_action = action("Delete…", self.delete_set, tip="Delete a data set")
         self.set_browse_action = action(
             "Show in Browser…", self.choose_sets_in_browser,
             tip="Show the data sets in the browser",
@@ -1569,20 +1680,23 @@ class SeriesActions(TierActions):
         )
         self.update_action = action("Update from Data", self.update_series,
                                     tip="Add newly named or imported arrays to the series")
-        self.copy_action = action("Copy Series…", self.copy_series,
+        self.copy_action = action("Copy…", self.copy_series,
                                   tip="Copy the series under a new prefix (the copy is unlocked)")
-        self.rename_action = action("Rename Series…", self.rename_series,
+        self.rename_action = action("Rename…", self.rename_series,
                                     tip="Rename the series prefix and its arrays")
         self.scales_action = action("Edit Scales…", self.edit_scales,
                                     tip="Edit the series' x and y labels, units, start and delta")
-        self.lock_action = action("Lock Series", self.toggle_lock,
+        self.lock_action = action("Lock", self.toggle_lock,
                                   tip="A locked series' arrays cannot be changed")
         self.lock_action.setCheckable(True)
+        self.add_epochs_action = action(
+            "Add Epochs…", self.add_epochs,
+            tip="Add epochs after the last one: a new array for each channel")
         self.remove_channel_action = action("Remove Channel…", self.remove_channel,
                                             tip="Remove a channel from the series")
         self.remove_epoch_action = action("Remove Epochs…", self.remove_epoch,
                                           tip="Remove an epoch, or a range of epochs")
-        self.delete_action = action("Delete Series…", self.delete_series,
+        self.delete_action = action("Delete…", self.delete_series,
                                     tip="Delete the series, optionally with its arrays")
         self.browse_action = action("Show in Browser…", self.choose_in_browser,
                                     tip="Select the series in the browser")
@@ -1593,10 +1707,10 @@ class SeriesActions(TierActions):
     def series_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Series", parent)
         for item in (self.new_action, self.from_data_action, self.update_action, None,
-                     self.copy_action, self.rename_action, self.scales_action, None,
-                     self.lock_action, None,
-                     self.remove_channel_action, self.remove_epoch_action,
-                     self.delete_action, None, self.browse_action):
+                     self.copy_action, self.rename_action, self.delete_action, None,
+                     self.scales_action, None, self.lock_action, None,
+                     self.add_epochs_action, self.remove_epoch_action, None,
+                     self.browse_action):
             if item is None:
                 menu.addSeparator()
             else:
@@ -1627,7 +1741,8 @@ class SeriesActions(TierActions):
         """Actions that change the *current* series, greyed out while it is
         locked. Actions whose dialog chooses the series (Update, Rename,
         Delete) check the lock of the chosen series in the dialog instead."""
-        return (self.scales_action, self.remove_channel_action, self.remove_epoch_action)
+        return (self.scales_action, self.add_epochs_action, self.remove_channel_action,
+                self.remove_epoch_action)
 
     def update_enabled(self, *_args) -> None:
         owner = self._owner()
@@ -1640,7 +1755,7 @@ class SeriesActions(TierActions):
                      self.browse_action):
             item.setEnabled(has_series)
         for item in (self.update_action, self.lock_action, self.remove_channel_action,
-                     self.remove_epoch_action, self.scales_action):
+                     self.remove_epoch_action, self.scales_action, self.add_epochs_action):
             item.setEnabled(series is not None)
         self.lock_action.setChecked(locked)
         if not hasattr(self, "_tips"):
@@ -1659,7 +1774,7 @@ class SeriesActions(TierActions):
     def _lock_error(owner, name: str | None) -> str | None:
         series = owner.dataseries.get(name) if name else None
         if series is not None and series.locked:
-            return (f"Data series '{name}' is locked. Untick Lock Series "
+            return (f"Data series '{name}' is locked. Untick Lock (Prefix ⋯ menu) "
                     "to change it.")
         return None
 
@@ -1711,12 +1826,7 @@ class SeriesActions(TierActions):
         values = self._ask_new_series(defaults, error)
         if values is None:
             return
-        value, noise = values["value"], values["noise"]
-        if noise > 0:
-            rng = np.random.default_rng()
-            fill = lambda n: value + rng.normal(0.0, noise, n)  # noqa: E731
-        else:
-            fill = value
+        fill = fill_values(values["value"], values["noise"])
         series = owner.new_dataseries(
             values["name"],
             n_channels=values["n_channels"], n_epochs=values["n_epochs"],
@@ -1922,13 +2032,14 @@ class SeriesActions(TierActions):
             series.locked = not series.locked
         self._changed()
 
-    def _remove_part(self, title: str, label: str, names: list[str], remove) -> None:
+    def _remove_part(self, title: str, label: str, names: list[str], remove,
+                     current: str | None = None) -> None:
         series, owner = self._series(), self._owner()
         if series is None or not names:
             return
         answer = self._choose(
             title, context=self._series_context(series), item_label=label,
-            items=names, extras=[("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
+            items=names, current=current, extras=[("Arrays", [self.KEEP, self.DELETE], self.KEEP)],
             message=f"Keep the {label.lower()}'s arrays in the folder, or delete them.",
             validate=lambda item, name, arrays: self._lock_error(owner, series.name),
         )
@@ -1966,8 +2077,48 @@ class SeriesActions(TierActions):
     def remove_channel(self) -> None:
         series, owner = self._series(), self._owner()
         if series is not None:
+            channel = self._selection.selection.get("channel")
             self._remove_part("Remove Channel", "Channel", list(series.channels.keys()),
-                              owner.remove_dataseries_channel)
+                              owner.remove_dataseries_channel,
+                              current=channel.name if channel is not None else None)
+
+    def _ask_add(self, kind, context, preview, validate, maximum=1_000_000) -> dict | None:
+        """The Add Channels / Add Epochs dialog (replaced in tests)."""
+        dialog = AddToSeriesDialog(kind, context, preview, validate, maximum,
+                                   parent=self._parent_widget)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return None
+        return dialog.values()
+
+    def add_epochs(self) -> None:
+        """Add epochs after the last one, with a new array for each channel."""
+        series, owner = self._series(), self._owner()
+        if series is None or owner is None or len(series.channels) == 0:
+            return
+        numbers = [int(e[1:]) for e in series.epochs.keys() if e[1:].isdigit()]
+        first = max(numbers) + 1 if numbers else 0
+        channels = list(series.channels.keys())
+
+        def names(count: int) -> list[str]:
+            return [f"{series.name}{c}{n}" for n in range(first, first + count)
+                    for c in channels]
+
+        def preview(count: int) -> str:
+            last = f" to E{first + count - 1}" if count > 1 else ""
+            return (f"Adds E{first}{last}: {len(names(count))} new arrays "
+                    f"({array_names_text(names(count))}), sized as each channel's last.")
+
+        def validate(values: dict) -> str | None:
+            clash = next((n for n in names(values["count"]) if n in owner.data), None)
+            return self._lock_error(owner, series.name) or (
+                f"Data '{clash}' already exists." if clash else None)
+
+        values = self._ask_add("epochs", self._series_context(series), preview, validate)
+        if values is None:
+            return
+        owner.add_dataseries_epochs(series.name, values["count"],
+                                    fill=fill_values(values["value"], values["noise"]))
+        self._changed()
 
     def remove_epoch(self) -> None:
         """Remove a range of epochs, From..To inclusive (one if they match)."""
@@ -2126,27 +2277,24 @@ class EpochSetActions(TierActions):
         super().__init__(selection_model, parent)
         action = self._action
         self.new_action = action("New Set…", self.new_set, tip="Create an empty epoch set")
-        self.add_action = action("Add Epochs…", self.add_epochs,
-                                 tip="Add an epoch, or a range of epochs, to a set")
-        self.remove_action = action("Remove Epochs…", self.remove_epochs,
-                                    tip="Remove an epoch, or a range of epochs, from a set")
-        self.exclude_action = action(
-            "Exclude Epochs…", self.exclude_epochs,
-            tip=f"Add epochs to {EXCLUDE_SET}, leaving them out of every Run",
-        )
-        self.include_action = action(
-            "Include Epochs…", self.include_epochs,
-            tip=f"Remove epochs from {EXCLUDE_SET}, so Run uses them again",
-        )
+        # SetX is one of the sets: adding epochs to it leaves them out of
+        # every Run, and removing them uses them again
+        self.add_action = action(
+            "Add to Set…", self.add_epochs,
+            tip=f"Add an epoch, or a range of epochs, to a set (or to {EXCLUDE_SET}, "
+                "leaving them out of every Run)")
+        self.remove_action = action(
+            "Remove from Set…", self.remove_epochs,
+            tip=f"Remove an epoch, or a range of epochs, from a set (or from {EXCLUDE_SET})")
         self.invert_action = action("Invert…", self.invert_set,
                                     tip="Make a set of the epochs not in a set")
-        self.combine_action = action("Combine Sets…", self.combine_sets,
+        self.combine_action = action("Combine…", self.combine_sets,
                                      tip="Make a set from two sets with AND or OR")
-        self.clear_action = action("Clear Set…", self.clear_set,
+        self.clear_action = action("Clear…", self.clear_set,
                                    tip="Remove all epochs from a set, keeping the set")
-        self.rename_action = action("Renumber Set…", self.rename_set,
+        self.rename_action = action("Renumber…", self.rename_set,
                                     tip="Give an epoch set another number")
-        self.delete_action = action("Delete Set…", self.delete_set, tip="Delete an epoch set")
+        self.delete_action = action("Delete…", self.delete_set, tip="Delete an epoch set")
         self.browse_action = action("Show in Browser…", self.choose_in_browser,
                                     tip="Show the epoch sets in the browser")
         selection_model.selection_changed.connect(self.update_enabled)
@@ -2154,8 +2302,7 @@ class EpochSetActions(TierActions):
 
     def epoch_set_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Epoch Set", parent)
-        for item in (self.new_action, self.add_action, self.remove_action, None,
-                     self.exclude_action, self.include_action, None,
+        for item in (self.new_action, None, self.add_action, self.remove_action, None,
                      self.invert_action, self.combine_action, None, self.clear_action,
                      self.rename_action, self.delete_action, None, self.browse_action):
             if item is None:
@@ -2183,13 +2330,10 @@ class EpochSetActions(TierActions):
         has_epochs = series is not None and len(series.epochs) > 0
         self.new_action.setEnabled(series is not None)
         self.browse_action.setEnabled(series is not None)
-        self.exclude_action.setEnabled(has_epochs)
-        self.include_action.setEnabled(
-            series is not None and bool(series.epochs.excluded_names())
-        )
         for item in (self.clear_action, self.rename_action, self.delete_action):
             item.setEnabled(bool(sets))
-        for item in (self.add_action, self.remove_action, self.invert_action):
+        self.add_action.setEnabled(has_epochs)  # SetX is made if missing
+        for item in (self.remove_action, self.invert_action):
             item.setEnabled(bool(sets) and has_epochs)
         self.combine_action.setEnabled(len(sets) > 1)
 
@@ -2239,21 +2383,20 @@ class EpochSetActions(TierActions):
         self._selection.update(epoch_set=name)
         self._changed()
 
-    def _edit_range(self, title: str, verb: str, adding: bool, fixed: str | None = None) -> None:
-        """Add or remove a range of epochs to a chosen set, or to *fixed*."""
+    def _edit_range(self, title: str, verb: str, adding: bool) -> None:
+        """Add or remove a range of epochs to a chosen set (SetX included)."""
         series = self._series()
         if series is None or len(series.epochs) == 0:
             return
         names = list(series.epochs.keys())
         sets = series.epochs.sets
-        if fixed is not None and sets._getkey(fixed) is None:
-            sets.add(fixed, quiet=True)  # e.g. SetX of an older series
+        if adding and sets._getkey(EXCLUDE_SET) is None:
+            sets.add(EXCLUDE_SET, quiet=True)  # e.g. an older series: SetX to add to
 
         def chosen(first, last, every):
             return epoch_range(names, first, last, int(every))
 
         def targets(set_name, first, last, every):
-            set_name = fixed or set_name
             epochs = chosen(first, last, every)
             if adding:
                 return epochs
@@ -2261,7 +2404,6 @@ class EpochSetActions(TierActions):
             return [e for e in epochs if e in members]
 
         def error(set_name, _name, first, last, every):
-            set_name = fixed or set_name
             if range_error(names, first, last, int(every)):
                 return range_error(names, first, last, int(every))
             if not adding and not targets(set_name, first, last, every):
@@ -2274,14 +2416,10 @@ class EpochSetActions(TierActions):
                 verb, targets(set_name, first, last, every), int(every)),
             validate=error,
         )
-        if fixed is None:
-            answer = self._choose_set(title, **options)
-        else:
-            answer = self._choose(title, context=self._series_context(series), **options)
+        answer = self._choose_set(title, **options)
         if answer is None:
             return
         set_name, _name, first, last, every = answer
-        set_name = fixed or set_name
         epochs = [series.epochs[e] for e in targets(set_name, first, last, every)]
         if adding:
             sets.add(set_name, epochs)
@@ -2295,13 +2433,6 @@ class EpochSetActions(TierActions):
     def remove_epochs(self) -> None:
         self._edit_range("Remove Epochs from Set", "Removes", adding=False)
 
-    def exclude_epochs(self) -> None:
-        """Add a range of epochs to SetX, leaving them out of every run."""
-        self._edit_range("Exclude Epochs", "Excludes", adding=True, fixed=EXCLUDE_SET)
-
-    def include_epochs(self) -> None:
-        """Remove a range of epochs from SetX, so runs use them again."""
-        self._edit_range("Include Epochs", "Includes", adding=False, fixed=EXCLUDE_SET)
 
     def invert_set(self) -> None:
         series = self._series()
@@ -2673,9 +2804,16 @@ class ChannelActions(TierActions):
         self,
         selection_model: SelectionModel,
         parent: QtWidgets.QWidget | None = None,
+        remove_action: QtGui.QAction | None = None,
     ) -> None:
         super().__init__(selection_model, parent)
         action = self._action
+        # Remove Channel… is the data series' action (shared with Remove
+        # Epochs and the browser), shown in this menu
+        self.remove_action = remove_action
+        self.add_action = action(
+            "Add Channels…", self.add_channels,
+            tip="Add channels after the last one: a new array for each epoch")
         self.transform_action = action(
             MENU_TEXT, self.edit_transforms,
             tip="The channel's filters and transforms, as plotted and analysed",
@@ -2687,6 +2825,10 @@ class ChannelActions(TierActions):
 
     def channel_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Channel", parent)
+        menu.addAction(self.add_action)
+        if self.remove_action is not None:
+            menu.addAction(self.remove_action)
+        menu.addSeparator()
         menu.addAction(self.transform_action)
         menu.addSeparator()
         menu.addAction(self.browse_action)
@@ -2704,6 +2846,64 @@ class ChannelActions(TierActions):
         has_channel = self._channel() is not None
         self.transform_action.setEnabled(has_channel)
         self.browse_action.setEnabled(has_channel)
+        # Adding channels changes the series: not while it is locked
+        series = self._selection.selection.get("dataseries")
+        locked = series is not None and series.locked
+        self.add_action.setEnabled(series is not None and not locked)
+        self.add_action.setToolTip(
+            f"Data series '{series.name}' is locked." if locked
+            else "Add channels after the last one: a new array for each epoch")
+
+    def _ask_add(self, kind, context, preview, validate, maximum=1_000_000) -> dict | None:
+        """The Add Channels dialog (replaced in tests)."""
+        dialog = AddToSeriesDialog(kind, context, preview, validate, maximum,
+                                   parent=self._parent_widget)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return None
+        return dialog.values()
+
+    def add_channels(self) -> None:
+        """Add channels after the last one, with a new array for each epoch."""
+        series = self._selection.selection.get("dataseries")
+        owner = self._context()
+        if series is None or owner is None or len(series.epochs) == 0:
+            return
+        letters = [c for c in series.channels.keys() if c in nmu.CHANNEL_CHARS]
+        first = max(nmu.CHANNEL_CHARS.index(c) for c in letters) + 1 if letters else 0
+        room = len(nmu.CHANNEL_CHARS) - first
+        epochs = [e[1:] for e in series.epochs.keys()]
+
+        def new_letters(count: int) -> list[str]:
+            return [nmu.channel_char(i) for i in range(first, first + count)]
+
+        def names(count: int) -> list[str]:
+            return [f"{series.name}{c}{e}" for c in new_letters(count) for e in epochs]
+
+        def preview(count: int) -> str:
+            if count > room:
+                return ""
+            letters_text = ", ".join(new_letters(count))
+            return (f"Adds channel{'s' * (count > 1)} {letters_text}: {len(names(count))} "
+                    f"new arrays ({array_names_text(names(count))}), sized as each epoch's.")
+
+        def validate(values: dict) -> str | None:
+            if series.locked:
+                return f"Data series '{series.name}' is locked. Untick Lock (Prefix ⋯ menu) to change it."
+            clash = next((n for n in names(values["count"]) if n in owner.data), None)
+            return f"Data '{clash}' already exists." if clash else None
+
+        if room < 1:
+            self._show_message("Add Channels", "The series already has channels A to Z.")
+            return
+        context = ("Series", f"{self._context_text()} › {series.name}")
+        values = self._ask_add("channels", context, preview, validate, maximum=room)
+        if values is None:
+            return
+        added = owner.add_dataseries_channels(
+            series.name, values["count"], fill=fill_values(values["value"], values["noise"]),
+            y_label=values["ylabel"], y_units=values["yunits"])
+        self._selection.update(channel=added[0])  # shown in the Plot and Table
+        self._changed()
 
     def edit_transforms(self) -> None:
         channel = self._channel()
@@ -2717,6 +2917,7 @@ class ChannelActions(TierActions):
 
 
 __all__ = [
+    "AddToSeriesDialog",
     "ChannelActions",
     "ChooseItemDialog",
     "DataActions",

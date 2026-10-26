@@ -51,9 +51,8 @@ def test_range_helpers():
 
 def test_epoch_set_menu_in_strip_and_series_menu(app):
     texts = [
-        "New Set…", "Add Epochs…", "Remove Epochs…", "Exclude Epochs…",
-        "Include Epochs…", "Invert…", "Combine Sets…",
-        "Clear Set…", "Renumber Set…", "Delete Set…", "Show in Browser…",
+        "New Set…", "Add to Set…", "Remove from Set…", "Invert…", "Combine…",
+        "Clear…", "Renumber…", "Delete…", "Show in Browser…",
     ]
     button = app.selection_strip.action_button("epoch_set")
     assert button.isEnabled()
@@ -174,22 +173,25 @@ def test_epoch_set_list_starts_with_all_and_current(app):
     assert app.selection_strip.combo("group_operator").isEnabled()
 
 
-def test_exclude_and_include_epochs(app):
+def test_exclude_and_include_with_add_to_set(app):
+    # SetX is one of the sets: Add to Set / Remove from Set exclude and include
     actions = app.epoch_set_actions
-    assert not actions.include_action.isEnabled()  # nothing excluded yet
-    app.answers = [(None, None, "E7", "E9", "1")]
-    actions.exclude_epochs()
+    app.answers = [("SetX", None, "E7", "E9", "1")]
+    actions.add_action.trigger()
     title, options = app.dialogs[-1]
-    assert title == "Exclude Epochs" and "items" not in options  # always SetX
+    assert title == "Add Epochs to Set" and "SetX" in options["items"]
     assert _members(app, "SetX") == ["E7", "E8", "E9"]
-    assert actions.include_action.isEnabled()
-
-    actions.include_epochs()  # cancelled; only excluded epochs count
-    options = app.dialogs[-1][1]
-    assert options["message"](None, "E0", "E8", "1") == "Includes 2 epochs (E7–E8)."
-    app.answers = [(None, None, "E8", "E8", "1")]
-    actions.include_epochs()
+    app.answers = [("SetX", None, "E8", "E8", "1")]
+    actions.remove_action.trigger()
     assert _members(app, "SetX") == ["E7", "E9"]
+
+
+def test_add_to_set_makes_setx_for_an_older_series(app):
+    app.sets.pop("SetX", quiet=True)  # e.g. a series from before SetX
+    actions = app.epoch_set_actions
+    app.answers = [None]
+    actions.add_action.trigger()
+    assert "SetX" in app.dialogs[-1][1]["items"]
 
 
 def test_setx_is_protected(app):

@@ -62,10 +62,9 @@ def _series_values(**changes):
 
 def test_prefix_menu_in_strip_and_menu_bar(app):
     expected = [
-        "New Series…", "Series from Data…", "Update from Data", "Copy Series…",
-        "Rename Series…", "Edit Scales…", "Lock Series", "Remove Channel…",
-        "Remove Epochs…",
-        "Delete Series…", "Show in Browser…",
+        "New Series…", "Series from Data…", "Update from Data", "Copy…",
+        "Rename…", "Delete…", "Edit Scales…", "Lock", "Add Epochs…",
+        "Remove Epochs…", "Show in Browser…",
     ]
     button = app.selection_strip.action_button("dataseries")
     assert button.isEnabled()

@@ -353,3 +353,32 @@ def test_locked_channel_has_no_edit_button(app):
     panel = browser.info_panel
     assert not panel.edit_scales_button.isVisibleTo(panel)
     assert panel.row_text("Locked") == "Yes, with data series 'Record'"
+
+
+def _row_style(panel, label):
+    """The style sheet of *label*'s value."""
+    from PyQt6 import QtWidgets
+
+    form = panel._form
+    for row in range(form.rowCount()):
+        name = form.itemAt(row, QtWidgets.QFormLayout.ItemRole.LabelRole)
+        if name is not None and name.widget().text() == label:
+            return form.itemAt(row, QtWidgets.QFormLayout.ItemRole.FieldRole).widget().styleSheet()
+    return None
+
+
+def test_locked_is_red(app):
+    from pyneuromatic.gui.info_panel import LOCKED_COLOR
+
+    browser = app.browser_widget
+    panel = browser.info_panel
+    browser.show_object(app.series)
+    assert _row_style(panel, "Locked") == ""  # "No"
+    app.series.locked = True
+    browser.refresh_info()
+    assert panel.row_text("Locked") == "Yes"
+    assert _row_style(panel, "Locked") == f"color: {LOCKED_COLOR};"
+    browser.show_object(app.series.channels["A"])  # its channels and arrays too
+    assert _row_style(panel, "Locked") == f"color: {LOCKED_COLOR};"
+    browser.show_data_of(app.folder, select="RecordA1")
+    assert _row_style(panel, "Locked") == f"color: {LOCKED_COLOR};"

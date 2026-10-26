@@ -427,10 +427,10 @@ def _texts(menu):
 def test_channel_menu_in_strip_and_menu_bar(app):
     button = app.selection_strip.action_button("channel")
     assert button.isEnabled()
-    assert _texts(button.menu()) == ["Filter && Transform...", "Show in Browser…"]
+    assert _texts(button.menu()) == ["Add Channels…", "Remove Channel…", "Filter && Transform...", "Show in Browser…"]
     series_menu = {a.text(): a.menu() for a in app.menuBar().actions()}["Series"]
     channel_menu = {a.text(): a.menu() for a in series_menu.actions()}["Channel"]
-    assert _texts(channel_menu) == ["Filter && Transform...", "Show in Browser…"]
+    assert _texts(channel_menu) == ["Add Channels…", "Remove Channel…", "Filter && Transform...", "Show in Browser…"]
 
 
 def test_channel_menu_opens_the_window_for_the_strip_channel(app):

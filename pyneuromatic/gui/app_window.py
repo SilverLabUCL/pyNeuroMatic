@@ -948,7 +948,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.folder_actions = FolderActions(self.selection_model, self)
         self.data_actions = DataActions(self.selection_model, self)
         self.series_actions = SeriesActions(self.selection_model, self)
-        self.channel_actions = ChannelActions(self.selection_model, self)
+        self.channel_actions = ChannelActions(
+            self.selection_model, self, remove_action=self.series_actions.remove_channel_action)
         self.epoch_set_actions = EpochSetActions(self.selection_model, self)
         self.group_actions = GroupActions(self.selection_model, self)
 
@@ -1077,6 +1078,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.group_actions.content_changed.connect(self._on_content_changed)
         self.group_actions.browse_requested.connect(self._show_epochs_in_browser)
         self.channel_actions.browse_requested.connect(self._show_object_in_browser)
+        self.channel_actions.content_changed.connect(self._on_content_changed)
         self.channel_actions.transforms_requested.connect(self._edit_channel_transforms)
         self.data_actions.browse_requested.connect(self._show_in_browser)
         self.data_actions.table_requested.connect(self._show_data_table)

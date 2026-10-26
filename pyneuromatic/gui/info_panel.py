@@ -18,7 +18,9 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_math import array_stats
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
-from pyneuromatic.gui.transform_dialog import MENU_TEXT, step_text
+from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT, step_text
+
+LOCKED_COLOR = MARK_COLOR  # the app's red (as SetX and the ƒ mark)
 
 # The objects that get an info panel (group rows keep the list instead)
 INFO_TYPES = (NMFolder, NMToolFolder, NMData, NMDataSeries, NMChannel, NMEpoch)
@@ -252,8 +254,10 @@ class InfoPanel(QtWidgets.QScrollArea):
                 labels.append(item.widget().text())
         return labels
 
-    def _add_row(self, label: str, value: str) -> None:
+    def _add_row(self, label: str, value: str, color: str | None = None) -> None:
         field = QtWidgets.QLabel(value, self._body)
+        if color is not None:  # e.g. red: a locked data series
+            field.setStyleSheet(f"color: {color};")
         # Only long values (e.g. lists of names) wrap: a wrapped label in a
         # form can lose its second line
         field.setWordWrap(len(value) > 40)
@@ -313,7 +317,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         self._add_row("Sets", _names(_sets_of(container, data.name)))
         locked = self._locked_series(data)
         if locked is not None:
-            self._add_row("Locked", f"Yes, with data series '{locked.name}'")
+            self._add_row("Locked", f"Yes, with data series '{locked.name}'", LOCKED_COLOR)
 
     def _show_data_stats(self, data: NMData) -> None:
         """Basic statistics, as Igor's WaveStats (NaNs ignored)."""
@@ -372,8 +376,10 @@ class InfoPanel(QtWidgets.QScrollArea):
         if lengths:
             low, high = min(lengths), max(lengths)
             self._add_row("Points", str(low) if low == high else f"{low} to {high}")
-        self._add_row("Locked", "Yes (its data arrays can't be changed)"
-                      if series.locked else "No")
+        if series.locked:
+            self._add_row("Locked", "Yes", LOCKED_COLOR)
+        else:
+            self._add_row("Locked", "No")
         self._add_row("Filter & Transform", _names(
             name for name, channel in series.channels.items() if channel.transform_on))
         self._add_row("Epoch Sets", _names(series.epochs.sets.keys()))
@@ -399,7 +405,7 @@ class InfoPanel(QtWidgets.QScrollArea):
             f"{i}. {s}" for i, s in enumerate(steps, 1)) if steps else "—")
         series = channel._parent
         if isinstance(series, NMDataSeries) and series.locked:
-            self._add_row("Locked", f"Yes, with data series '{series.name}'")
+            self._add_row("Locked", f"Yes, with data series '{series.name}'", LOCKED_COLOR)
 
     def _show_epoch(self, epoch: NMEpoch) -> None:
         series = epoch._parent
