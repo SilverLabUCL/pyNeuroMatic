@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import copy
 import math
+import warnings
 
 import numpy as np
 
@@ -43,6 +44,9 @@ class NMTransform:
 
     Transforms operate on numpy ndarrays (y-data) and optionally receive
     NMScaleX for xscale information. Simple transforms ignore xscale.
+
+    A transform can be turned off (``on = False``) and kept in its list:
+    :func:`apply_transforms` skips it.
     """
 
     _path_suffix: str = "transform"
@@ -52,6 +56,7 @@ class NMTransform:
         parent: object | None = None,
     ) -> None:
         self._parent = parent
+        self._on = True
 
     def __repr__(self) -> str:
         return "%s()" % self.__class__.__name__
@@ -87,6 +92,17 @@ class NMTransform:
         return self._path_suffix
 
     @property
+    def on(self) -> bool:
+        """If False, the transform is kept but not applied."""
+        return getattr(self, "_on", True)
+
+    @on.setter
+    def on(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "on", "boolean"))
+        self._on = value
+
+    @property
     def type_str(self) -> str:
         """Return the transform type string used for serialization."""
         return self.__class__.__name__
@@ -94,10 +110,14 @@ class NMTransform:
     def to_dict(self) -> dict:
         """Serialize this transform to a dict.
 
-        Returns {"type": "ClassName"}. Subclasses with parameters
-        should call super().to_dict() and add their keys.
+        Returns {"type": "ClassName"}, with ``"on": False`` when turned
+        off. Subclasses with parameters should call super().to_dict() and
+        add their keys.
         """
-        return {"type": self.type_str}
+        d: dict = {"type": self.type_str}
+        if not self.on:
+            d["on"] = False
+        return d
 
     def apply(
         self,
@@ -976,10 +996,10 @@ class NMTransformDFOF(NMTransform):
     Calls :func:`pyneuromatic.core.nm_math.dfof`.
 
     Args:
-        xbgn:        Baseline window start in xscale units.  Default ``-inf``
-                     (start of array).
-        xend:        Baseline window end in xscale units.  Default ``+inf``
-                     (end of array).
+        xbgn:        Baseline window start in xscale units.  Default 0.0
+                     (as Baseline); ``-inf`` is the start of the array.
+        xend:        Baseline window end in xscale units.  Default 0.0;
+                     ``+inf`` is the end of the array.
         ignore_nans: If True (default) use ``np.nanmean``; otherwise
                      ``np.mean``.
     """
@@ -987,8 +1007,8 @@ class NMTransformDFOF(NMTransform):
     def __init__(
         self,
         parent: object | None = None,
-        xbgn: float = -math.inf,
-        xend: float = math.inf,
+        xbgn: float = 0.0,
+        xend: float = 0.0,
         ignore_nans: bool = True,
     ) -> None:
         super().__init__(parent=parent)
@@ -1054,16 +1074,35 @@ class NMTransformDFOF(NMTransform):
         ydata: np.ndarray,
         xscale: NMScaleX | None = None,
     ) -> np.ndarray:
-        """Compute dF/F₀ from *ydata* and return the result."""
+        """Compute dF/F₀ from *ydata* and return the result.
+
+        Raises ValueError if F₀ is 0 or NaN (e.g. the window has no points,
+        or the signal is 0 there), rather than returning all NaN.
+        """
         if self._xend < self._xbgn:
             raise ValueError(
                 "xend (%g) must be >= xbgn (%g)" % (self._xend, self._xbgn)
             )
         import pyneuromatic.core.nm_math as nm_math
         xscale_dict = xscale.to_dict() if xscale is not None else {}
-        return nm_math.dfof(
-            ydata, xscale_dict, self._xbgn, self._xend, self._ignore_nans,
-        )
+        sl = nm_math.xscale_window_to_slice(ydata, xscale_dict, self._xbgn, self._xend)
+        segment = ydata.astype(float)[sl]
+        window = "x %g to %g" % (self._xbgn, self._xend)
+        if len(segment) == 0:
+            raise ValueError(
+                "dF/F: the baseline window (%s) has no points; choose x begin "
+                "and x end within the data" % window
+            )
+        with np.errstate(all="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # all NaN: said below
+            f0 = float(np.nanmean(segment) if self._ignore_nans else np.mean(segment))
+        if f0 == 0.0 or math.isnan(f0):
+            raise ValueError(
+                "dF/F: F0 (the mean over %s) is %s, so dF/F can't be computed; "
+                "choose a baseline window where the signal isn't 0"
+                % (window, "NaN" if math.isnan(f0) else "0")
+            )
+        return nm_math.apply_dfof(ydata.astype(float), f0)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -1121,8 +1160,10 @@ def _transform_from_dict(
     if type_str not in _TRANSFORM_REGISTRY:
         raise ValueError("unknown transform type: '%s'" % type_str)
     cls = _TRANSFORM_REGISTRY[type_str]
-    kwargs = {k: v for k, v in d.items() if k != "type"}
-    return cls(parent=parent, **kwargs)
+    kwargs = {k: v for k, v in d.items() if k not in ("type", "on")}
+    t = cls(parent=parent, **kwargs)
+    t.on = d.get("on", True)
+    return t
 
 
 def _transforms_from_list(
@@ -1161,6 +1202,7 @@ def apply_transforms(
 
     Returns:
         Transformed numpy ndarray (copy; original is never modified).
+        Transforms that are turned off are skipped.
     """
     if not isinstance(ydata, np.ndarray):
         raise TypeError(nmu.type_error_str(ydata, "ydata", "numpy.ndarray"))
@@ -1170,5 +1212,6 @@ def apply_transforms(
     for t in transforms:
         if not isinstance(t, NMTransform):
             raise TypeError(nmu.type_error_str(t, "transform", "NMTransform"))
-        result = t.apply(result, xscale=xscale)
+        if t.on:
+            result = t.apply(result, xscale=xscale)
     return result

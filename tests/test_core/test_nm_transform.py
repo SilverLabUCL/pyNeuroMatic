@@ -831,12 +831,13 @@ class TestNMTransformDFOF(unittest.TestCase):
     def test_default_params(self):
         import math
         t = NMTransformDFOF()
-        self.assertEqual(t.xbgn, -math.inf)
-        self.assertEqual(t.xend, math.inf)
+        self.assertEqual(t.xbgn, 0.0)  # as Baseline
+        self.assertEqual(t.xend, 0.0)
         self.assertTrue(t.ignore_nans)
 
     def test_whole_array_baseline(self):
-        t = NMTransformDFOF()
+        import math
+        t = NMTransformDFOF(xbgn=-math.inf, xend=math.inf)
         arr = np.array([1.0, 2.0, 3.0])    # mean=2, dF/F = (arr-2)/2
         result = t.apply(arr, self.XD)
         np.testing.assert_array_almost_equal(result, [-0.5, 0.0, 0.5])
@@ -846,6 +847,18 @@ class TestNMTransformDFOF(unittest.TestCase):
         arr = np.array([2.0, 2.0, 4.0, 6.0])   # f0=mean([2,2])=2
         result = t.apply(arr, self.XD)
         np.testing.assert_array_almost_equal(result, [0.0, 0.0, 1.0, 2.0])
+
+    def test_f0_of_zero_or_nan_raises(self):
+        # F0 = the value at x = 0 (the default window); 0 or NaN can't divide
+        t = NMTransformDFOF()
+        with self.assertRaisesRegex(ValueError, r"F0 \(the mean over x 0 to 0\) is 0"):
+            t.apply(np.array([0.0, 1.0, 2.0]), self.XD)
+        with self.assertRaisesRegex(ValueError, "is NaN"):
+            t.apply(np.array([np.nan, 1.0, 2.0]), self.XD)
+        with self.assertRaisesRegex(ValueError, "has no points"):
+            NMTransformDFOF(xbgn=10.0, xend=20.0).apply(np.array([1.0, 2.0]), self.XD)
+        np.testing.assert_array_almost_equal(
+            t.apply(np.array([2.0, 4.0]), self.XD), [0.0, 1.0])
 
     def test_xend_lt_xbgn_raises(self):
         t = NMTransformDFOF(xbgn=5.0, xend=1.0)

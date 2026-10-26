@@ -49,10 +49,18 @@ from pyneuromatic.gui.tier_actions import (
     DataActions,
     EpochSetActions,
     FolderActions,
+    ChannelActions,
     GroupActions,
     SeriesActions,
 )
 from pyneuromatic.gui.stats_tab import StatsToolTab
+from pyneuromatic.gui.transform_dialog import (
+    MARK,
+    MENU_TEXT,
+    TransformDialog,
+    mark_html,
+    steps_tooltip,
+)
 
 
 APP_NAME = "pyNeuroMatic"
@@ -216,6 +224,8 @@ class PlotPanel(QtWidgets.QWidget):
 
     # The current epoch or data array was added to (or removed from) a set or group
     membership_changed = QtCore.pyqtSignal()
+    # A channel's filters or transforms changed (Filter & Transform...)
+    transforms_changed = QtCore.pyqtSignal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -366,19 +376,31 @@ class PlotPanel(QtWidgets.QWidget):
         self.grid_action.setCheckable(True)
         self.rescale_action = self.graph_menu.addAction("Rescale")
         self.rescale_action.setToolTip("Fit the axes to the data")
+        self.graph_menu.addSeparator()
+        self.transform_action = self.graph_menu.addAction(MENU_TEXT)
+        self.transform_action.setToolTip(
+            "Filters and transforms of the channel, as plotted and analysed "
+            "(e.g. by Stats); the data arrays are not changed"
+        )
+        self.transform_action.setEnabled(False)
 
         self._selection_model: SelectionModel | None = None
         self._trace_entries: list[tuple[object, object | None]] = []
         self._trace_mode: str | None = None
         # The data or epoch container being stepped through (for its sets)
         self._trace_container = None
+        # The channel plotted (data series mode), and its Filter & Transform window
+        self._trace_channel: NMChannel | None = None
+        self._transform_dialog: TransformDialog | None = None
         self._updating_navigator = False
         self._updating_channel_tabs = False
         self._plot_dataseries = None
         self._plot_channel_name: str | None = None
+        self._strip_channel_name: str | None = None  # the strip's channel, last seen
         self._last_selection: dict = {}
         self.current_trace = None
         self.rendered_trace_count = 0
+        self.transform_error = ""  # why the plotted traces aren't transformed
         self.trace_index.valueChanged.connect(self._on_trace_index_changed)
         self.trace_first_button.clicked.connect(lambda: self._go_to("first"))
         self.trace_previous_button.clicked.connect(lambda: self._go_to("previous"))
@@ -394,6 +416,7 @@ class PlotPanel(QtWidgets.QWidget):
         self.overlay_limit.valueChanged.connect(self._render_current_traces)
         self.grid_action.toggled.connect(self._show_grid)
         self.rescale_action.triggered.connect(self.rescale)
+        self.transform_action.triggered.connect(self.edit_transforms)
 
         if pg is not None:
             self.plot_widget = pg.PlotWidget(self)
@@ -469,9 +492,14 @@ class PlotPanel(QtWidgets.QWidget):
 
         channel_names = list(dataseries.channels.keys())
         previous_channel = self._plot_channel_name
+        selected_channel = selection.get("channel")
+        selected_name = selected_channel.name if selected_channel is not None else None
+        # A channel chosen in the strip is shown (a tab shows another until then)
+        strip_changed = selected_name != self._strip_channel_name
+        self._strip_channel_name = selected_name
+        if strip_changed and selected_name in channel_names:
+            previous_channel = selected_name
         if previous_channel not in channel_names:
-            selected_channel = selection.get("channel")
-            selected_name = selected_channel.name if selected_channel is not None else None
             previous_channel = (
                 selected_name if selected_name in channel_names
                 else channel_names[0] if channel_names else None
@@ -480,6 +508,9 @@ class PlotPanel(QtWidgets.QWidget):
         self._plot_dataseries = dataseries
         self._plot_channel_name = previous_channel
         self._set_views(channel_names, previous_channel)
+        self.view_tabs.mark_channels(
+            {name: steps_tooltip(channel) for name, channel in dataseries.channels.items()}
+        )
 
     def _set_views(self, channels: list[str], current_channel: str | None) -> None:
         self._updating_channel_tabs = True
@@ -501,6 +532,7 @@ class PlotPanel(QtWidgets.QWidget):
         mode = None
         current_item = None
         container = None
+        plotted_channel = None
 
         data = source_object(selection, "data")
         dataseries = source_object(selection, "dataseries")
@@ -531,13 +563,19 @@ class PlotPanel(QtWidgets.QWidget):
                 mode = "dataseries"
                 current_item = selection.get("epoch") or dataseries.epochs.selected_value
                 container = dataseries.epochs
+                plotted_channel = channel
 
         self._trace_entries = entries
+        self._trace_channel = plotted_channel
+        self.transform_action.setEnabled(plotted_channel is not None)
+        if self._transform_dialog is not None and self._transform_dialog.isVisible():
+            self._transform_dialog.set_channel(plotted_channel)
         self._trace_container = container
         self._trace_mode = mode
         if not entries:
             self._sync_trace_controls(0)
             self.trace_name_label.setText("No trace")
+            self.trace_name_label.setToolTip("")
             self.current_trace = None
             self._render_current_traces()
             self._update_membership()
@@ -549,11 +587,12 @@ class PlotPanel(QtWidgets.QWidget):
         )
         self._sync_trace_controls(current_index)
         item, self.current_trace = entries[current_index]
-        self.trace_name_label.setText(
-            self.current_trace.name
-            if self.current_trace is not None
-            else f"{item.name} (no data)"
-        )
+        name = (self.current_trace.name if self.current_trace is not None
+                else f"{item.name} (no data)")
+        # ƒ: plotted with the channel's filters or transforms
+        tip = steps_tooltip(plotted_channel)
+        self.trace_name_label.setText(mark_html(name) if tip else name)  # red ƒ
+        self.trace_name_label.setToolTip(tip)
         self._render_current_traces()
         self._update_membership()
 
@@ -819,9 +858,18 @@ class PlotPanel(QtWidgets.QWidget):
                 "left", current_data.yscale.label, units=current_data.yscale.units
             )
 
+        # The channel's filters and transforms (copies; the arrays don't change)
+        channel = self._trace_channel
+        transform = channel if channel is not None and channel.transform_on else None
+        error = ""
         for item, data in entries:
             if data is None or data.nparray is None:
                 continue
+            if transform is not None:
+                try:
+                    data = transform.transformed(data)
+                except Exception as e:  # shown raw, with the reason
+                    error = error or f"{data.name}: {e}"
             x_values = self._x_values(data)
             is_current = item is self._trace_entries[current_index][0]
             color = "#2563eb" if is_current else "#78909c"
@@ -834,6 +882,32 @@ class PlotPanel(QtWidgets.QWidget):
             curve.setDownsampling(auto=True, method="peak")
             curve.setClipToView(True)
             self.rendered_trace_count += 1
+        self.transform_error = error
+        if error:
+            shown = self.overlay_status_label.text()
+            self.overlay_status_label.setText(
+                (shown + "  " if shown else "") + f"{MARK} not applied (see Filter & Transform)"
+            )
+            self.overlay_status_label.setToolTip(error)
+        else:
+            self.overlay_status_label.setToolTip("")
+        if self._transform_dialog is not None:
+            self._transform_dialog.set_status(f"Can't apply to {error}" if error else "")
+
+    def edit_transforms(self) -> None:
+        """Open Filter & Transform for the channel plotted."""
+        channel = self._trace_channel
+        if channel is None:
+            return
+        if self._transform_dialog is None:
+            self._transform_dialog = TransformDialog(channel, self)
+            self._transform_dialog.changed.connect(self.transforms_changed)
+        else:  # opened again: Undo Changes goes back to the steps now
+            self._transform_dialog.set_channel(
+                channel, reopened=not self._transform_dialog.isVisible())
+        self._transform_dialog.show()
+        self._transform_dialog.raise_()
+        self._transform_dialog.activateWindow()
 
 
     @staticmethod
@@ -874,6 +948,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.folder_actions = FolderActions(self.selection_model, self)
         self.data_actions = DataActions(self.selection_model, self)
         self.series_actions = SeriesActions(self.selection_model, self)
+        self.channel_actions = ChannelActions(self.selection_model, self)
         self.epoch_set_actions = EpochSetActions(self.selection_model, self)
         self.group_actions = GroupActions(self.selection_model, self)
 
@@ -914,6 +989,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
         series_menu = self.series_actions.series_menu(self)
         series_menu.addSeparator()
+        series_menu.addMenu(self.channel_actions.channel_menu(series_menu))
         series_menu.addMenu(self.epoch_set_actions.epoch_set_menu(series_menu))
         series_menu.addMenu(self.group_actions.group_menu(series_menu))
         self.menuBar().addMenu(series_menu)
@@ -943,6 +1019,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         strip.set_actions_menu("data", self.data_actions.data_menu(strip))
         strip.set_actions_menu("data_set", self.data_actions.data_set_menu(strip))
         strip.set_actions_menu("dataseries", self.series_actions.series_menu(strip))
+        strip.set_actions_menu("channel", self.channel_actions.channel_menu(strip))
         strip.set_actions_menu("epoch_set", self.epoch_set_actions.epoch_set_menu(strip))
         strip.set_actions_menu("group", self.group_actions.group_menu(strip))
 
@@ -977,6 +1054,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.plot_widget = PlotPanel(self.context_panel)
         self.plot_widget.bind_selection_model(self.selection_model)
         self.plot_widget.membership_changed.connect(self._on_content_changed)
+        self.plot_widget.transforms_changed.connect(self._on_transforms_changed)
         self.context_panel.addTab(self.plot_widget, "Plot")
         self.table_panel = TablePanel(self.context_panel)
         self.table_panel.bind_selection_model(self.selection_model)
@@ -998,6 +1076,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.epoch_set_actions.browse_requested.connect(self._show_epoch_sets_in_browser)
         self.group_actions.content_changed.connect(self._on_content_changed)
         self.group_actions.browse_requested.connect(self._show_epochs_in_browser)
+        self.channel_actions.browse_requested.connect(self._show_object_in_browser)
+        self.channel_actions.transforms_requested.connect(self._edit_channel_transforms)
         self.data_actions.browse_requested.connect(self._show_in_browser)
         self.data_actions.table_requested.connect(self._show_data_table)
         self.table_panel.data_edited.connect(self._on_data_edited)
@@ -1005,6 +1085,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self.browser_widget.content_changed.connect(self._on_browser_content_changed)
             self.browser_widget.data_created.connect(self._on_browser_data_created)
             self.browser_widget.edit_scales_requested.connect(self._edit_scales_of)
+            self.browser_widget.edit_transforms_requested.connect(
+                self._edit_channel_transforms)
             self.browser_widget.set_folder_actions(self.folder_actions)
             self.browser_widget.set_series_actions(self.series_actions)
         # A run or a deleted folder changes the Subfolder list
@@ -1138,6 +1220,23 @@ class NMAppWindow(QtWidgets.QMainWindow):
             "pyNeuroMatic — " + " / ".join(selected) if selected else "pyNeuroMatic"
         )
 
+    def _edit_channel_transforms(self, channel) -> None:
+        """Filter & Transform for *channel* (from the Browser): plotted, so the
+        window and the plot show the same channel."""
+        self.selection_model.update({"channel": channel})
+        self.plot_widget.view_tabs.select_channel(channel.name)
+        self.context_panel.setCurrentWidget(self.plot_widget)
+        self.plot_widget.edit_transforms()
+
+    def _on_transforms_changed(self) -> None:
+        """Redraw with a channel's new filters or transforms (ƒ marks too)."""
+        if isinstance(self.browser_widget, FolderBrowserWidget):
+            self.browser_widget.refresh_info()  # its Filter & Transform rows
+        self.selection_strip.refresh_options()
+        selection = self.selection_model.selection
+        self.plot_widget.update_selection(selection)
+        self.table_panel.update_selection(selection)
+
     def _on_content_changed(self) -> None:
         """Reload views after folders, subfolders, data or sets change."""
         if isinstance(self.browser_widget, FolderBrowserWidget):
@@ -1160,6 +1259,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.series_actions.update_enabled()
         self.epoch_set_actions.update_enabled()
         self.group_actions.update_enabled()
+        self.channel_actions.update_enabled()
         # Names or data series membership may have changed
         selection = self.selection_model.selection
         self.plot_widget.update_selection(selection)

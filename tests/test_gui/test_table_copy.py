@@ -40,7 +40,7 @@ def _copied(app):
 def test_menu(app):
     panel = app.table_panel
     texts = [a.text() for a in panel.table_menu.actions() if a.text()]
-    assert texts == ["Copy", "Copy All", "Show in Browser",
+    assert texts == ["Copy", "Copy All", "Show in Browser", "Show Transformed",
                      "Include Column Names", "Include x Values / Row Names"]
     assert panel.copy_action.shortcut() == QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Copy)
     assert panel.names_action.isChecked() and panel.x_action.isChecked()

@@ -248,6 +248,21 @@ class NMTool:
         v = self._select.get("epoch")
         return v if isinstance(v, NMEpoch) else None
 
+    def transformed_data(self) -> NMData | None:
+        """The current data as tools analyse it: with its channel's filters
+        and transforms (a copy; the array is never changed).
+
+        The data itself when it isn't in the selected channel or the channel
+        has no transforms turned on (e.g. tools that change arrays, such as
+        Main ops, use :attr:`data`).
+        """
+        data, channel = self.data, self.channel
+        if data is None or channel is None:
+            return data
+        if not any(d is data for d in channel.data):
+            return data
+        return channel.transformed(data)
+
     @property
     def toolfolder(self) -> NMToolFolder | None:
         """Get the currently selected toolfolder (set when running in toolfolder mode)."""

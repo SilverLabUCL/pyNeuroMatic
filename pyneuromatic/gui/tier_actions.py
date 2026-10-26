@@ -18,6 +18,7 @@ import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET
 from pyneuromatic.gui.selection_model import BUILTIN_EPOCH_SETS, SelectionModel
+from pyneuromatic.gui.transform_dialog import MENU_TEXT
 
 
 def _read_abf(path, folder):
@@ -2655,7 +2656,68 @@ class GroupActions(TierActions):
             self.browse_requested.emit(series)
 
 
+class ChannelActions(TierActions):
+    """Actions for the current data series' channel (Add and Delete may
+    follow).
+
+    Filters and transforms don't change the arrays, so they can be edited on
+    a locked series too.
+    """
+
+    # Ask the app to show the channel in the browser
+    browse_requested = QtCore.pyqtSignal(object)
+    # Ask the app to open Filter & Transform for the channel
+    transforms_requested = QtCore.pyqtSignal(object)
+
+    def __init__(
+        self,
+        selection_model: SelectionModel,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(selection_model, parent)
+        action = self._action
+        self.transform_action = action(
+            MENU_TEXT, self.edit_transforms,
+            tip="The channel's filters and transforms, as plotted and analysed",
+        )
+        self.browse_action = action("Show in Browser…", self.choose_in_browser,
+                                    tip="Show the channel in the browser")
+        selection_model.selection_changed.connect(self.update_enabled)
+        self.update_enabled()
+
+    def channel_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu("Channel", parent)
+        menu.addAction(self.transform_action)
+        menu.addSeparator()
+        menu.addAction(self.browse_action)
+        return menu
+
+    def _channel(self):
+        """The selected channel of the selected data series, or None."""
+        series = self._selection.selection.get("dataseries")
+        channel = self._selection.selection.get("channel")
+        if series is None or channel is None:
+            return None
+        return channel if any(c is channel for c in series.channels.values()) else None
+
+    def update_enabled(self, *_args) -> None:
+        has_channel = self._channel() is not None
+        self.transform_action.setEnabled(has_channel)
+        self.browse_action.setEnabled(has_channel)
+
+    def edit_transforms(self) -> None:
+        channel = self._channel()
+        if channel is not None:
+            self.transforms_requested.emit(channel)
+
+    def choose_in_browser(self) -> None:
+        channel = self._channel()
+        if channel is not None:
+            self.browse_requested.emit(channel)
+
+
 __all__ = [
+    "ChannelActions",
     "ChooseItemDialog",
     "DataActions",
     "EditScalesDialog",

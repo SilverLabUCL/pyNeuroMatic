@@ -5,6 +5,7 @@ No NM object dependencies — only numpy/math and nm_utilities.
 from __future__ import annotations
 
 import math
+import re
 
 import numpy as np
 
@@ -1353,6 +1354,78 @@ _VALID_FILTER_TYPES: frozenset[str] = frozenset({"butterworth", "bessel", "notch
 _VALID_FILTER_BTYPES: frozenset[str] = frozenset({"low", "high", "bandpass"})
 
 
+def round_down_125(value: float) -> float:
+    """*value* rounded down to 1, 2 or 5 x 10^n (e.g. 3700 -> 2000)."""
+    if value <= 0:
+        return value
+    power = 10 ** math.floor(math.log10(value))
+    return float(max(m for m in (1, 2, 5) if m * power <= value * (1 + 1e-12)) * power)
+
+
+def bandpass_example(sample_rate: float | None) -> list[float]:
+    """Band-pass cutoffs (Hz) for an example: 300, 3000 if they fit below the
+    Nyquist frequency, else round numbers that do."""
+    if sample_rate is None or sample_rate <= 0 or 3000 < sample_rate / 2:
+        return [300.0, 3000.0]
+    high = round_down_125(sample_rate / 2 / 5)
+    return [round_down_125(high / 10), high]
+
+
+def _sosfiltfilt(sos: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """``scipy.signal.sosfiltfilt`` on *y*, with a plain message when *y* has
+    too few points for the filter (rather than SciPy's "padlen")."""
+    from scipy.signal import sosfiltfilt
+    try:
+        return sosfiltfilt(sos, y.astype(float))
+    except ValueError as error:
+        found = re.search(r"padlen, which is (\d+)", str(error))
+        if found is None:
+            raise
+        raise ValueError(
+            "the array has %d points, too few for this filter (it needs more "
+            "than %s); a lower order needs fewer" % (y.size, found.group(1))
+        ) from error
+
+
+def _filter_cutoff_norm(
+    cutoff: float | list[float],
+    sample_rate: float,
+    btype: str,
+) -> float | list[float]:
+    """*cutoff* as a fraction of the Nyquist frequency, checked.
+
+    Raises ValueError with the frequencies in Hz (rather than SciPy's
+    normalised ``Wn``) if a cutoff is not between 0 and the Nyquist
+    frequency (half the sample rate), or the band doesn't fit *btype*.
+    """
+    nyq = sample_rate / 2.0
+    if btype == "bandpass":
+        if not isinstance(cutoff, list) or len(cutoff) != 2:
+            raise ValueError(
+                "a band-pass filter needs two cutoffs, low and high (e.g. %g, %g)"
+                % tuple(bandpass_example(sample_rate))
+            )
+        if not cutoff[0] < cutoff[1]:
+            raise ValueError(
+                "band-pass cutoffs must be low < high, got %g, %g" % tuple(cutoff)
+            )
+    elif isinstance(cutoff, list):
+        raise ValueError(
+            "a %s-pass filter needs one cutoff, got %d" % (btype, len(cutoff))
+        )
+    for c in cutoff if isinstance(cutoff, list) else [cutoff]:
+        if isinstance(c, bool) or not isinstance(c, (int, float)):
+            raise TypeError(nmu.type_error_str(c, "cutoff", "float"))
+        if not 0 < c < nyq:
+            raise ValueError(
+                "cutoff %g Hz must be above 0 and below the Nyquist frequency, "
+                "%g Hz (half the sample rate, %g Hz)" % (c, nyq, sample_rate)
+            )
+    if isinstance(cutoff, list):
+        return [c / nyq for c in cutoff]
+    return cutoff / nyq
+
+
 def filter_butterworth(
     y: np.ndarray,
     cutoff: float | list[float],
@@ -1404,14 +1477,10 @@ def filter_butterworth(
             raise ValueError("cutoff must be > 0, got %g" % cutoff)
     elif not isinstance(cutoff, list):
         raise TypeError(nmu.type_error_str(cutoff, "cutoff", "float or list"))
-    from scipy.signal import butter, sosfiltfilt
-    nyq = sample_rate / 2.0
-    if isinstance(cutoff, (list, np.ndarray)):
-        norm = [c / nyq for c in cutoff]
-    else:
-        norm = cutoff / nyq
+    from scipy.signal import butter
+    norm = _filter_cutoff_norm(cutoff, sample_rate, btype)
     sos = butter(order, norm, btype=btype, output="sos")
-    return sosfiltfilt(sos, y.astype(float))
+    return _sosfiltfilt(sos, y)
 
 
 def filter_bessel(
@@ -1466,14 +1535,10 @@ def filter_bessel(
             raise ValueError("cutoff must be > 0, got %g" % cutoff)
     elif not isinstance(cutoff, list):
         raise TypeError(nmu.type_error_str(cutoff, "cutoff", "float or list"))
-    from scipy.signal import bessel, sosfiltfilt
-    nyq = sample_rate / 2.0
-    if isinstance(cutoff, (list, np.ndarray)):
-        norm = [c / nyq for c in cutoff]
-    else:
-        norm = cutoff / nyq
+    from scipy.signal import bessel
+    norm = _filter_cutoff_norm(cutoff, sample_rate, btype)
     sos = bessel(order, norm, btype=btype, output="sos", norm="phase")
-    return sosfiltfilt(sos, y.astype(float))
+    return _sosfiltfilt(sos, y)
 
 
 def filter_notch(
@@ -1509,21 +1574,27 @@ def filter_notch(
         raise TypeError(nmu.type_error_str(sample_rate, "sample_rate", "float"))
     if sample_rate <= 0:
         raise ValueError("sample_rate must be > 0, got %g" % sample_rate)
+    if isinstance(freq, (list, tuple)):
+        raise ValueError(
+            "a notch filter removes one frequency: give one cutoff "
+            "(e.g. 50 for mains), not %d" % len(freq)
+        )
     if isinstance(freq, bool) or not isinstance(freq, (int, float)):
         raise TypeError(nmu.type_error_str(freq, "freq", "float"))
     nyq = sample_rate / 2.0
     if freq <= 0 or freq >= nyq:
         raise ValueError(
-            "freq must be > 0 and < Nyquist (%.6g Hz), got %g" % (nyq, freq)
+            "notch frequency %g Hz must be above 0 and below the Nyquist "
+            "frequency, %g Hz (half the sample rate, %g Hz)" % (freq, nyq, sample_rate)
         )
     if isinstance(q, bool) or not isinstance(q, (int, float)):
         raise TypeError(nmu.type_error_str(q, "q", "float"))
     if q <= 0:
         raise ValueError("q must be > 0, got %g" % q)
-    from scipy.signal import iirnotch, sosfiltfilt, tf2sos
+    from scipy.signal import iirnotch, tf2sos
     b, a = iirnotch(freq / nyq, q)
     sos = tf2sos(b, a)
-    return sosfiltfilt(sos, y.astype(float))
+    return _sosfiltfilt(sos, y)
 
 
 # =========================================================================

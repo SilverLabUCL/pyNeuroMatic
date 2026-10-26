@@ -80,11 +80,12 @@ class NMChannelTest(unittest.TestCase):
 
     def test01_parameters(self):
         klist = ["name", "created", "copy of"]  # NMObject
-        klist += ["xscale", "yscale"]
+        klist += ["xscale", "yscale", "transform"]
         plist = self.c0.parameters
         self.assertEqual(klist, list(plist.keys()))
         self.assertEqual(plist["xscale"], XSCALE0)
         self.assertEqual(plist["yscale"], YSCALE0)
+        self.assertEqual(plist["transform"], [])
 
     def test02_eq(self):
         # args; other
