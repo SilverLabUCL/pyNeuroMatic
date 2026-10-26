@@ -110,7 +110,8 @@ def test_data_array_menu(app, monkeypatch):
 def test_data_series_channel_and_epoch_menus(app, monkeypatch):
     # No sets for data series or channels; channels and epochs can't be renamed
     assert _both(app, monkeypatch, app.series) == ["Select", "Rename...", "Delete..."]
-    assert _both(app, monkeypatch, app.series.channels["A"]) == ["Select", "Delete..."]
+    assert _both(app, monkeypatch, app.series.channels["A"]) == [
+        "Select", "Filter && Transform...", "Delete..."]  # shows "&"
     assert _both(app, monkeypatch, app.series.epochs["E1"]) == [
         "Select", "Add to Set", "Add to Group", "Delete...",
     ]

@@ -34,6 +34,7 @@ from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel, NotesWidget
 from pyneuromatic.gui.membership import ChoiceModel, MembershipModel, unassign_from_group
+from pyneuromatic.gui.transform_dialog import MENU_TEXT
 from pyneuromatic.gui.folder_model import (
     FolderTreeModel,
     _GroupMemberNode,
@@ -182,6 +183,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     data_created = QtCore.pyqtSignal(object)
     # The info panel's Edit Scales... was clicked for a data array
     edit_scales_requested = QtCore.pyqtSignal(object)
+    # Filter & Transform... for a channel (Info panel or right-click)
+    edit_transforms_requested = QtCore.pyqtSignal(object)
 
     def __init__(
         self,
@@ -272,6 +275,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         # rather than listed: its rows are already in the tree
         self._info_panel = InfoPanel(self)
         self._info_panel.edit_scales_requested.connect(self.edit_scales_requested)
+        self._info_panel.edit_transforms_requested.connect(self.edit_transforms_requested)
 
         self._detail_stack = QtWidgets.QStackedWidget(self)
         self._detail_stack.addWidget(self._detail)
@@ -775,6 +779,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                 menu.addAction("Rename...", lambda: actions.rename_subfolder(first))
                 menu.addAction("Delete...", lambda: actions.delete_subfolder(first))
                 return
+        if isinstance(single, NMChannel):
+            menu.addAction(MENU_TEXT,
+                           lambda: self.edit_transforms_requested.emit(single))
         # Channels and epochs are named by the data series: no Rename
         if single is not None and not isinstance(first, (NMChannel, NMEpoch)):
             menu.addAction("Rename...", lambda: self._rename_object(container, first))
@@ -898,6 +905,14 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             self._detail.setRowHidden(
                 row, items_only and isinstance(child, (_SetsNode, _GroupsNode))
             )
+
+    def refresh_info(self) -> None:
+        """Redraw what is shown without re-reading the hierarchy (e.g. a
+        channel's filters changed: its Info rows and red name)."""
+        if self._detail_stack.currentWidget() is self._info_panel:
+            self._info_panel.show_object(self._info_panel.shown_object)
+        self._tree.viewport().update()
+        self._detail.viewport().update()
 
     def _update_info_panel(self, current: QtCore.QModelIndex) -> None:
         """Describe a single object; group rows keep their list."""

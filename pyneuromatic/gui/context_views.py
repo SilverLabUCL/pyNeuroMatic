@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover - optional GUI dependency
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.gui import table_format
+from pyneuromatic.gui.transform_dialog import MARK, MARK_COLOR, steps_tooltip
 from pyneuromatic.gui.selection_model import (
     epoch_scope_label,
     scoped_epoch_names,
@@ -100,6 +101,18 @@ class ChannelToolBar(QtWidgets.QTabBar):
             self.setCurrentIndex(self._index_of(target))
         self.blockSignals(False)
         self.setVisible(self.count() > 0)
+
+    def mark_channels(self, tips: dict[str, str]) -> None:
+        """Mark channels shown with filters or transforms ("A ƒ"); *tips*
+        (by channel name) lists their steps, "" for none."""
+        for index in range(self.count()):
+            kind, name = self.tabData(index)
+            if kind == "channel":
+                tip = tips.get(name, "")
+                self.setTabText(index, f"{name} {MARK}" if tip else name)
+                # Red: one or more steps are on (a tab's text has one colour)
+                self.setTabTextColor(index, QtGui.QColor(MARK_COLOR) if tip else QtGui.QColor())
+                self.setTabToolTip(index, tip)
 
     def select_tool(self, name: str) -> bool:
         index = self._index_of(("tool", name))
@@ -195,6 +208,10 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
     Cells are formatted only when Qt asks for them, so long recordings with
     many epochs stay responsive. Values can be edited, except the x column
     and arrays in a locked data series.
+
+    With a channel set (:meth:`set_transform`), the arrays are shown with its
+    filters and transforms, read-only; each array is transformed when first
+    shown.
     """
 
     data_edited = QtCore.pyqtSignal(object)  # the NMData that changed
@@ -203,6 +220,8 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         super().__init__(parent)
         self._columns: list[NMData] = []
         self._rows = 0
+        self._channel = None  # shown with this channel's filters and transforms
+        self._transformed: dict[tuple[int, str], Any] = {}  # (array, steps): values
 
     @property
     def arrays(self) -> list[NMData]:
@@ -212,7 +231,36 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         self.beginResetModel()
         self._columns = [d for d in arrays if d.nparray is not None]
         self._rows = max((d.nparray.size for d in self._columns), default=0)
+        self._transformed.clear()
         self.endResetModel()
+
+    @property
+    def transform_channel(self):
+        return self._channel
+
+    def set_transform(self, channel) -> None:
+        """Show the arrays with *channel*'s filters and transforms (None: as
+        they are)."""
+        if channel is self._channel:
+            self.refresh()  # its steps may have changed
+            return
+        self._channel = channel
+        self._transformed.clear()
+        self.refresh()
+
+    def _values(self, column: int):
+        """The values shown in *column* (1 or more)."""
+        data = self._columns[column - 1]
+        channel = self._channel
+        if channel is None or not channel.transform_on:
+            return data.nparray
+        key = (id(data), repr([t.to_dict() for t in channel.transform]))
+        if key not in self._transformed:
+            try:
+                self._transformed[key] = channel.transformed(data).nparray
+            except Exception:  # the panel says why; show the values as they are
+                self._transformed[key] = data.nparray
+        return self._transformed[key]
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return 0 if parent.isValid() else self._rows
@@ -243,7 +291,7 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         if column == 0:
             value = self._x_value(row)
         else:
-            values = self._columns[column - 1].nparray
+            values = self._values(column)
             value = values[row] if row < values.size else None
         if role == Role.EditRole and value is not None:
             return repr(float(value))  # full precision while editing
@@ -264,8 +312,8 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         return any(ds.locked for ds in container.dataseries_of(data.name))
 
     def _editable(self, index: QtCore.QModelIndex) -> bool:
-        if not index.isValid() or index.column() == 0:
-            return False
+        if not index.isValid() or index.column() == 0 or self._channel is not None:
+            return False  # transformed values can't be edited
         data = self._columns[index.column() - 1]
         return index.row() < data.nparray.size and not self.is_locked(data)
 
@@ -299,7 +347,7 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         """A cell's value (x for column 0), or None past an array's end."""
         if column == 0:
             return self._x_value(row)
-        values = self._columns[column - 1].nparray
+        values = self._values(column)
         return values[row] if row < values.size else None
 
     @staticmethod
@@ -442,6 +490,13 @@ class TablePanel(QtWidgets.QWidget):
         self.browser_action.setToolTip("Show the current array (or results folder) in the browser")
         self.browser_action.triggered.connect(self.show_in_browser)
         self.table_menu.addSeparator()
+        self.transformed_action = self.table_menu.addAction("Show Transformed")
+        self.transformed_action.setCheckable(True)
+        self.transformed_action.setToolTip(
+            "Show the channel's values with its filters and transforms (as plotted "
+            "and analysed); they can't be edited"
+        )
+        self.transformed_action.toggled.connect(self._refresh_channel_table)
         self.names_action = self.table_menu.addAction("Include Column Names")
         self.x_action = self.table_menu.addAction("Include x Values / Row Names")
         for option in (self.names_action, self.x_action):
@@ -468,6 +523,7 @@ class TablePanel(QtWidgets.QWidget):
         self._selection_model: Any = None
         self._last_selection: dict = {}
         self._channel_name: str | None = None
+        self._strip_channel_name: str | None = None  # the strip's channel, last seen
         self._tool_pages: dict[str, QtWidgets.QWidget] = {}
         self._tools: list[str] = []
         self._updating = False
@@ -583,9 +639,14 @@ class TablePanel(QtWidgets.QWidget):
         dataseries = source_object(selection, "dataseries")
         if isinstance(dataseries, NMDataSeries):
             names = list(dataseries.channels.keys())
+            channel = selection.get("channel")
+            selected = channel.name if channel is not None else None
+            # A channel chosen in the strip is shown (a tab shows another until then)
+            strip_changed = selected != self._strip_channel_name
+            self._strip_channel_name = selected
+            if strip_changed and selected in names:
+                self._channel_name = selected
             if self._channel_name not in names:
-                channel = selection.get("channel")
-                selected = channel.name if channel is not None else None
                 self._channel_name = (
                     selected if selected in names else names[0] if names else None
                 )
@@ -602,6 +663,11 @@ class TablePanel(QtWidgets.QWidget):
         self.view_tabs.set_views(
             channels, self._tools, current_channel=self._channel_name or DATA_VIEW
         )
+        dataseries = source_object(selection, "dataseries")
+        if isinstance(dataseries, NMDataSeries):
+            self.view_tabs.mark_channels(
+                {name: steps_tooltip(c) for name, c in dataseries.channels.items()}
+            )
         self._updating = False
         self._show_current_page()
         self._refresh_channel_table()
@@ -643,6 +709,8 @@ class TablePanel(QtWidgets.QWidget):
             title = f"{dataseries.name}  channel {self._channel_name}: {len(arrays)} {noun}"
             if scope:
                 title += f" ({scope})"
+            title += self._set_transform(dataseries.channels.get(self._channel_name),
+                                         current or (arrays[0] if arrays else None))
             self.channel_table.show_arrays(arrays, title, current)
         elif isinstance(data, NMData):
             context = selection.get("toolfolder") or selection.get("folder")
@@ -651,6 +719,7 @@ class TablePanel(QtWidgets.QWidget):
                 set(context.data.sets.get_items(data_set, get_keys=True) or [])
                 if data_set is not None and context is not None else set()
             )
+            self._set_transform(None, None)
             if data.name not in members:  # e.g. a new array, in no set yet
                 self.channel_table.show_arrays([data], data.name, data)
                 return
@@ -659,7 +728,28 @@ class TablePanel(QtWidgets.QWidget):
             title = f"{len(arrays)} {noun} (Data Set: {data_set})"
             self.channel_table.show_arrays(arrays, title, data)
         else:
+            self._set_transform(None, None)
             self.channel_table.show_arrays([], "No selection")
+
+    def _set_transform(self, channel, sample: NMData | None) -> str:
+        """Show the table with *channel*'s filters and transforms if Show
+        Transformed is on; text for the title (e.g. "  ƒ transformed")."""
+        on = channel is not None and channel.transform_on
+        self.transformed_action.setEnabled(on)
+        shown = None
+        note = ""
+        if on and self.transformed_action.isChecked():
+            try:
+                if sample is not None:
+                    channel.transformed(sample)  # a step may not apply
+                shown, note = channel, f"  {MARK} transformed"
+            except Exception as e:
+                note = f"  ({MARK} not applied: {e})"
+        elif on:
+            note = f"  ({MARK} not shown)"
+        self.channel_table.model.set_transform(shown)
+        self.channel_table.title_label.setToolTip(steps_tooltip(channel) if on else "")
+        return note
 
 
 __all__ = [

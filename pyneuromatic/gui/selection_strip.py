@@ -5,6 +5,7 @@ from typing import Any
 
 from PyQt6 import QtCore, QtWidgets
 
+from pyneuromatic.gui.transform_dialog import MARK, MARK_STYLE, steps_tooltip
 from pyneuromatic.gui.selection_model import (
     ALL_CHANNELS,
     ALL_GROUPS,
@@ -108,7 +109,7 @@ class SelectionStrip(QtWidgets.QWidget):
             (("data_set", "Data Set", True),),
         )),
         ("Data Series", "dataseries", (
-            (("dataseries", "Prefix", True), ("channel", "Channel", False)),
+            (("dataseries", "Prefix", True), ("channel", "Channel", True)),
             (("epoch_set", "Epoch Set", True), ("group_operator", "", False),
              ("group", "Group", True)),
         )),
@@ -199,6 +200,13 @@ class SelectionStrip(QtWidgets.QWidget):
                     button.setToolTip(f"{self._labels[key]} actions (coming soon)")
                     self._action_buttons[key] = button
                     row_layout.addWidget(button)
+                if key == "channel":
+                    # A red ƒ: the channel has one or more filters or transforms on
+                    self.transform_mark_label = QtWidgets.QLabel(MARK, frame)
+                    self.transform_mark_label.setObjectName("transformMark")
+                    self.transform_mark_label.setStyleSheet(MARK_STYLE)
+                    self.transform_mark_label.hide()
+                    row_layout.addWidget(self.transform_mark_label)
                 if key == "data_set":
                     # How many data arrays the Data Set selects (as for epochs)
                     self.data_count_label = QtWidgets.QLabel("", frame)
@@ -343,6 +351,14 @@ class SelectionStrip(QtWidgets.QWidget):
             if key == "channel" and selection.get("all_channels"):
                 selected = ALL_CHANNELS
             self._set_combo_options(combo, options.get(key, []), selected, empty_text)
+        # ƒ beside the channel: its steps in the tooltip
+        channel = selection.get("channel") if selection.get("dataseries") else None
+        tip = steps_tooltip(channel)
+        self.transform_mark_label.setVisible(bool(tip))
+        self.transform_mark_label.setToolTip(tip)
+        channel_combo = self._combos.get("channel")
+        if channel_combo is not None:
+            channel_combo.setToolTip(tip)
         count = self.data_count(selection)
         self.data_count_label.setText("" if count is None else f"n={count}")
         self.data_count_label.setToolTip(

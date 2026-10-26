@@ -339,8 +339,10 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     folder_menu.setCurrentText("Demo2")
     assert win.selection_model.selection["source"] == "dataseries"
     assert series_menu.currentText() == "Gamma"
-    assert win.plot_widget.view_tabs.tabText(win.plot_widget.view_tabs.currentIndex()) == "A"
-    assert win.plot_widget.trace_name_label.text() == "GammaA1"
+    # The plot shows the strip's channel (B, remembered for Gamma)
+    assert channel_menu.currentText() == "B"
+    assert win.plot_widget.view_tabs.tabText(win.plot_widget.view_tabs.currentIndex()) == "B"
+    assert win.plot_widget.trace_name_label.text() == "GammaB1"
     assert set_menu.currentText() == "Demo2Set"
     assert group_menu.currentText() == "0"
     assert operator_menu.currentText() == "OR"

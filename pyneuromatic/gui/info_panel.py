@@ -18,6 +18,7 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_math import array_stats
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+from pyneuromatic.gui.transform_dialog import MENU_TEXT, step_text
 
 # The objects that get an info panel (group rows keep the list instead)
 INFO_TYPES = (NMFolder, NMToolFolder, NMData, NMDataSeries, NMChannel, NMEpoch)
@@ -102,6 +103,8 @@ class InfoPanel(QtWidgets.QScrollArea):
     notes_changed = QtCore.pyqtSignal()
     # Edit Scales... was clicked for this data array or channel
     edit_scales_requested = QtCore.pyqtSignal(object)
+    # Filter & Transform... was clicked for this channel
+    edit_transforms_requested = QtCore.pyqtSignal(object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -151,8 +154,17 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.edit_scales_button.clicked.connect(
             lambda: self.edit_scales_requested.emit(self._object)
         )
+        # A channel's filters and transforms (they don't change its arrays,
+        # so also for a locked data series)
+        self.transforms_button = QtWidgets.QPushButton(MENU_TEXT, self._body)
+        self.transforms_button.setToolTip(
+            "The channel's filters and transforms, as plotted and analysed")
+        self.transforms_button.clicked.connect(
+            lambda: self.edit_transforms_requested.emit(self._object)
+        )
         edit_row = QtWidgets.QHBoxLayout()
         edit_row.addWidget(self.edit_scales_button)
+        edit_row.addWidget(self.transforms_button)
         edit_row.addStretch(1)
         layout.addLayout(edit_row)
 
@@ -189,6 +201,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         if obj is None:
             self.title_label.setText("")
             self.edit_scales_button.hide()
+            self.transforms_button.hide()
             self._show_metadata({})
             self._show_notes(None)
             return
@@ -218,6 +231,7 @@ class InfoPanel(QtWidgets.QScrollArea):
             or (isinstance(obj, NMChannel) and not obj._parent.locked)
         )
         self.edit_scales_button.setVisible(can_edit)
+        self.transforms_button.setVisible(isinstance(obj, NMChannel))
         self._show_metadata(getattr(obj, "metadata", {}) if isinstance(obj, NMFolder) else {})
         self._show_notes(getattr(obj, "notes", None))
 
@@ -244,7 +258,8 @@ class InfoPanel(QtWidgets.QScrollArea):
         # form can lose its second line
         field.setWordWrap(len(value) > 40)
         field.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._form.addRow(label, field)
+        # A label of its own: addRow(text) would take "&" as a shortcut key
+        self._form.addRow(QtWidgets.QLabel(label, self._body), field)
 
     def _add_scale_rows(self, xscale, yscale) -> None:
         """One row each, in the Edit Scales dialog's order, so a long label
@@ -359,6 +374,8 @@ class InfoPanel(QtWidgets.QScrollArea):
             self._add_row("Points", str(low) if low == high else f"{low} to {high}")
         self._add_row("Locked", "Yes (its data arrays can't be changed)"
                       if series.locked else "No")
+        self._add_row("Filter & Transform", _names(
+            name for name, channel in series.channels.items() if channel.transform_on))
         self._add_row("Epoch Sets", _names(series.epochs.sets.keys()))
         self._add_row("Groups", _names(str(n) for n in series.epochs.groups.group_numbers))
 
@@ -377,6 +394,9 @@ class InfoPanel(QtWidgets.QScrollArea):
                 ("Y Units", [d.yscale.units for d in arrays], False),
             ):
                 self._add_row(label, _common_text(values, number))
+        steps = [step_text(t) for t in channel.transform if t.on]
+        self._add_row("Filter & Transform", "\n".join(
+            f"{i}. {s}" for i, s in enumerate(steps, 1)) if steps else "—")
         series = channel._parent
         if isinstance(series, NMDataSeries) and series.locked:
             self._add_row("Locked", f"Yes, with data series '{series.name}'")

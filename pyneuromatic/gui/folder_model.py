@@ -20,7 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
-from PyQt6 import QtCore
+from PyQt6 import QtCore, QtGui
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
@@ -30,6 +30,7 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+from pyneuromatic.gui.transform_dialog import MARK_COLOR, steps_tooltip
 
 
 class _GroupNode:
@@ -537,8 +538,14 @@ class FolderTreeModel(QtCore.QAbstractItemModel):
             if role == QtCore.Qt.ItemDataRole.DisplayRole and epoch is not None:
                 return self.epoch_arrays_text(epoch)
             return None
+        # A channel with filters or transforms on: red, its steps in the tooltip
+        transformed = isinstance(node, NMChannel) and node.transform_on
         if role == QtCore.Qt.ItemDataRole.ToolTipRole:
+            if transformed:
+                return steps_tooltip(node)
             return self.epoch_arrays_text(epoch) if epoch is not None else None
+        if role == QtCore.Qt.ItemDataRole.ForegroundRole:
+            return QtGui.QBrush(QtGui.QColor(MARK_COLOR)) if transformed else None
         if role != QtCore.Qt.ItemDataRole.DisplayRole:
             return None
         if isinstance(node, (_GroupNode, _SetsNode, _SetNode, _SetMemberNode,
