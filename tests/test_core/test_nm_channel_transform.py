@@ -144,3 +144,35 @@ def test_other_channels_unchanged(series):
     series.channels["A"].transform = [NMTransformInvert()]
     b = series.channels["B"]
     assert b.transformed(b.data[0]) is b.data[0]
+
+
+# --- filter cutoffs: messages in Hz -------------------------------------------
+
+def test_filter_cutoff_messages():
+    import pyneuromatic.core.nm_math as nm_math
+
+    y = np.zeros(50)
+    with pytest.raises(ValueError, match="below the Nyquist frequency, 500 Hz"):
+        nm_math.filter_butterworth(y, 600.0, 1000.0)
+    with pytest.raises(ValueError, match="needs two cutoffs"):
+        nm_math.filter_bessel(y, 100.0, 1000.0, btype="bandpass")
+    with pytest.raises(ValueError, match="low < high"):
+        nm_math.filter_butterworth(y, [300.0, 100.0], 1000.0, btype="bandpass")
+    with pytest.raises(ValueError, match="needs one cutoff"):
+        nm_math.filter_butterworth(y, [100.0, 300.0], 1000.0, btype="low")
+    with pytest.raises(ValueError, match="notch frequency 600 Hz"):
+        nm_math.filter_notch(y, 600.0, 1000.0)
+    assert nm_math.filter_butterworth(y, [100.0, 300.0], 1000.0, btype="bandpass").shape == (50,)
+
+
+def test_cutoff_examples_fit_the_sample_rate():
+    import pyneuromatic.core.nm_math as nm_math
+
+    assert nm_math.bandpass_example(20000) == [300.0, 3000.0]
+    assert nm_math.bandpass_example(2000) == [20.0, 200.0]
+    assert nm_math.round_down_125(3700) == 2000.0
+    y = np.zeros(50)
+    with pytest.raises(ValueError, match=r"e\.g\. 20, 200"):
+        nm_math.filter_butterworth(y, 100.0, 2000.0, btype="bandpass")
+    with pytest.raises(ValueError, match="a notch filter removes one frequency"):
+        nm_math.filter_notch(y, [300.0, 3000.0], 20000.0)
