@@ -385,3 +385,14 @@ def test_locked_is_red(app):
     assert _row_style(panel, "Locked") == f"color: {LOCKED_COLOR};"
     browser.show_data_of(app.folder, select="RecordA1")
     assert _row_style(panel, "Locked") == f"color: {LOCKED_COLOR};"
+
+
+def test_tool_folder_shows_its_notes(app):
+    toolfolder = app.folder.toolfolders.new("Stats_0")
+    toolfolder.notes.add("channel transform: Invert()")
+    browser = app.browser_widget
+    browser.show_object(toolfolder)
+    panel = browser.info_panel
+    assert panel.notes_table.isVisibleTo(panel)
+    assert panel.notes_table.item(0, 1).text() == "channel transform: Invert()"
+    assert panel.notes_view.add_button.isVisibleTo(panel)  # Add Note...

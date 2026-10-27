@@ -74,7 +74,8 @@ def test_folder_menus_match_the_strip(app, monkeypatch):
     ]
     menu = app.folder_actions.folder_menu(app)  # kept, so its actions live
     strip = [a.text() for a in menu.actions() if a.text()]
-    assert strip[-3:] == ["Duplicate…", "Rename…", "Delete…"]  # Delete, not Close
+    assert strip[-4:] == ["Duplicate…", "Rename…", "Delete…",  # Delete, not Close
+                          "Show in Browser"]
 
 
 def test_folder_menu_uses_the_strip_actions_on_that_folder(app, monkeypatch):

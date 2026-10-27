@@ -23,6 +23,7 @@ import copy
 
 from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
+from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 import pyneuromatic.core.nm_configurations as nmc
@@ -50,6 +51,8 @@ class NMToolFolder(NMObject):
 
         self.__data_container: NMDataContainer = NMDataContainer(parent=self)
         self.__dataseries: NMDataSeriesContainer = NMDataSeriesContainer(parent=self)
+        # How the results were made (e.g. a tool's settings), as on a folder
+        self.__notes = NMNotes()
 
     # override
     def __eq__(
@@ -61,6 +64,8 @@ class NMToolFolder(NMObject):
         if not super().__eq__(other):
             return False
         if self.__data_container != other.data:
+            return False
+        if self.notes != other.notes:
             return False
         return True
 
@@ -118,6 +123,14 @@ class NMToolFolder(NMObject):
             result._NMToolFolder__dataseries = NMDataSeriesContainer(parent=result)
 
         return result
+
+    @property
+    def notes(self) -> NMNotes:
+        """Notes for this results folder (e.g. how a tool's run was made)."""
+        notes = getattr(self, "_NMToolFolder__notes", None)
+        if notes is None:  # e.g. made before tool folders kept notes
+            notes = self.__notes = NMNotes()
+        return notes
 
     # override
     @property

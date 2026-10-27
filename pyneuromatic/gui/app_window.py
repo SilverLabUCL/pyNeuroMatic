@@ -1079,6 +1079,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.group_actions.content_changed.connect(self._on_content_changed)
         self.group_actions.browse_requested.connect(self._show_epochs_in_browser)
         self.channel_actions.browse_requested.connect(self._show_object_in_browser)
+        self.folder_actions.browse_requested.connect(self._show_object_in_browser)
         self.channel_actions.content_changed.connect(self._on_content_changed)
         self.channel_actions.transforms_requested.connect(self._edit_channel_transforms)
         self.data_actions.browse_requested.connect(self._show_in_browser)

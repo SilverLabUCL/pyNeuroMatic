@@ -54,12 +54,14 @@ def test_steps_recorded_in_notes(setup):
     steps = "Invert() > Baseline(xbgn=0.0, xend=0.0, ignore_nans=True)"
     assert list(f.data["ST_w0_mean_y"].nparray) == [-1.0, -1.0, -1.0]
     assert ("transform=%s)" % steps) in _text(f.data["ST_w0_mean_y"].notes)
+    assert ("channel transform: %s" % steps) in _text(f.notes)  # the results folder
 
 
 def test_no_transform_no_note(setup):
     f = _run(setup, "B")
     assert list(f.data["ST_w0_mean_y"].nparray) == [1.0, 11.0, 21.0]
     assert "transform" not in _text(f.data["ST_w0_mean_y"].notes)
+    assert "transform" not in _text(f.notes)
 
 
 def test_each_channel_uses_its_own(setup):
@@ -85,3 +87,33 @@ def test_data_outside_a_series_is_measured_as_it_is(setup):
     d = series.channels["A"].data[1]
     tool.run_all([{"folder": folder, "data": d}])  # no channel selected
     assert list(tool.toolfolder.data["ST_w0_mean_y"].nparray) == [11.0]
+
+
+# --- the results folder's note: how the run was made ------------------------
+
+def test_results_folder_note_describes_the_run(setup):
+    folder, series, tool = setup
+    w0 = list(tool.windows)[0]
+    w0.xbgn, w0.xend = 0.0, 3.0
+    w0.bsln_func = {"name": "mean"}
+    w0.bsln_xbgn, w0.bsln_xend = 0.0, 1.0
+    w0.bsln_on = True
+    f = _run(setup, "A")
+    assert _text(f.notes) == ("NMStats: Record, channel A, epochs selected (n=3); "
+                              "w0: mean, x 0 to 3, baseline mean x 0 to 1")
+
+
+def test_results_folder_note_with_a_transform(setup):
+    _folder, series, _tool = setup
+    series.channels["A"].transform = [NMTransformInvert()]
+    f = _run(setup, "A")
+    assert _text(f.notes) == ("NMStats: Record, channel A, epochs selected (n=3); "
+                              "w0: mean, x -inf to inf; channel transform: Invert()")
+
+
+def test_results_folder_note_for_data_arrays(setup):
+    folder, series, tool = setup
+    arrays = series.channels["A"].data[:2]
+    tool.run_all([{"folder": folder, "data": d} for d in arrays], run_keys={"data": "Set1"})
+    assert _text(tool.toolfolder.notes) == (
+        "NMStats: 2 data arrays (data set Set1); w0: mean, x -inf to inf")

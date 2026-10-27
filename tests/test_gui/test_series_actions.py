@@ -64,7 +64,7 @@ def test_prefix_menu_in_strip_and_menu_bar(app):
     expected = [
         "New Series…", "Series from Data…", "Update from Data", "Copy…",
         "Rename…", "Delete…", "Edit Scales…", "Lock", "Add Epochs…",
-        "Remove Epochs…", "Show in Browser…",
+        "Remove Epochs…", "Show in Browser",
     ]
     button = app.selection_strip.action_button("dataseries")
     assert button.isEnabled()

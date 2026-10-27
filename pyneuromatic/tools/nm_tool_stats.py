@@ -112,6 +112,7 @@ class NMToolStats(NMTool):
         self.__run_series: NMDataSeries | None = None  # and its channel run on
         self.__run_channel = None
         self.__transforms: list[str] = []  # channel filters/transforms used
+        self.__n_analysed = 0  # data arrays the run measured
         self.__toolfolder: NMToolFolder | None = None
 
     @property
@@ -165,6 +166,7 @@ class NMToolStats(NMTool):
         self.__n_epochs = None
         self.__run_series = self.__run_channel = None
         self.__transforms = []
+        self.__n_analysed = 0
         return True  # ok
 
     # override, no super
@@ -186,6 +188,7 @@ class NMToolStats(NMTool):
             steps = self.channel.transform_str()
             if steps not in self.__transforms:
                 self.__transforms.append(steps)
+        self.__n_analysed += 1
         position = self._epoch_position()
         for w in self.windows:
             self.windows.selected_name = w.name
@@ -236,6 +239,46 @@ class NMToolStats(NMTool):
             nmh.history("channel transform: %s" % self._transform_note(),
                         quiet=nmc.QUIET)
         return True  # ok
+
+    def _run_note(self) -> str:
+        """How the run was made, for its results folder, e.g. "NMStats:
+        Record, channel A, epochs all (n=3); w0: mean, x 0 to inf, baseline
+        mean x 0 to 10; channel transform: Invert()"."""
+        meta = self._run_meta if isinstance(getattr(self, "_run_meta", None), dict) else {}
+        keys = meta.get("run_keys") or {}
+        n = self.__n_analysed
+        series, channels = meta.get("dataseries") or [], meta.get("channels") or []
+        if series:
+            what = ", ".join(series)
+            if channels:
+                what += ", channel%s %s" % ("s" * (len(channels) > 1), ", ".join(channels))
+            epochs = keys.get("epoch")
+            if keys.get("group") is not None:
+                group = "group %s" % keys["group"]
+                epochs = ("%s %s %s" % (epochs, keys.get("group_operator") or "AND", group)
+                          if epochs else group)
+            what += ", epochs %s (n=%d)" % (epochs or "selected", n)
+        else:
+            what = "%d data array%s" % (n, "s" * (n != 1))
+            if keys.get("data"):
+                what += " (data set %s)" % keys["data"]
+        parts = ["NMStats: " + what]
+
+        def x_range(xbgn, xend) -> str:
+            return "x %g to %g" % (xbgn, xend)
+
+        for w in self.windows:
+            if not w.on:
+                continue
+            text = "%s: %s, %s" % (w.name, w.func.get("name", "?"), x_range(w.xbgn, w.xend))
+            if w.bsln_on:
+                text += ", baseline %s %s" % (w.bsln_func.get("name", "?"),
+                                              x_range(w.bsln_xbgn, w.bsln_xend))
+            parts.append(text)
+        transform = self._transform_note()
+        if transform:
+            parts.append("channel transform: %s" % transform)
+        return "; ".join(parts)
 
     def _transform_note(self) -> str:
         """The channel filters and transforms the run used ("" if none)."""
@@ -470,7 +513,8 @@ class NMToolStats(NMTool):
             raise RuntimeError("there are no results to save")
 
         f = self._make_toolfolder("Stats", overwrite=self._overwrite)
-        transform = self._transform_note()  # recorded in each array's note
+        transform = self._transform_note()  # on the folder and each array's note
+        f.notes.add(self._run_note())  # how the results were made
         transform_str = ", transform=%s" % transform if transform else ""
 
         for wname, vlist in self.__results.items():

@@ -911,6 +911,9 @@ class TierActions(QtCore.QObject):
 class FolderActions(TierActions):
     """Folder and subfolder (toolfolder) actions."""
 
+    # Ask the app to show a folder or subfolder in the browser
+    browse_requested = QtCore.pyqtSignal(object)
+
     def __init__(
         self,
         selection_model: SelectionModel,
@@ -937,6 +940,10 @@ class FolderActions(TierActions):
                                                  tip="Copy the subfolder")
         self.subfolder_delete_action = action("Delete…", self.delete_subfolder,
                                               tip="Delete the subfolder and its data")
+        self.browse_action = action("Show in Browser", self.folder_in_browser,
+                                    tip="Show the folder in the browser")
+        self.subfolder_browse_action = action("Show in Browser", self.subfolder_in_browser,
+                                              tip="Show the subfolder in the browser")
 
         selection_model.selection_changed.connect(self.update_enabled)
         self.update_enabled()
@@ -953,6 +960,8 @@ class FolderActions(TierActions):
         menu.addAction(self.rename_action)
         menu.addSeparator()
         menu.addAction(self.delete_action)
+        menu.addSeparator()
+        menu.addAction(self.browse_action)
         return menu
 
     def subfolder_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
@@ -961,6 +970,8 @@ class FolderActions(TierActions):
         menu.addAction(self.subfolder_rename_action)
         menu.addSeparator()
         menu.addAction(self.subfolder_delete_action)
+        menu.addSeparator()
+        menu.addAction(self.subfolder_browse_action)
         return menu
 
     def update_enabled(self, *_args) -> None:
@@ -974,6 +985,19 @@ class FolderActions(TierActions):
         for item in (self.subfolder_rename_action, self.subfolder_duplicate_action,
                      self.subfolder_delete_action):
             item.setEnabled(has_subfolders)
+        self.browse_action.setEnabled(folder is not None)
+        self.subfolder_browse_action.setEnabled(
+            self._selection.selection.get("toolfolder") is not None)
+
+    def folder_in_browser(self) -> None:
+        folder = self._folder()
+        if folder is not None:
+            self.browse_requested.emit(folder)
+
+    def subfolder_in_browser(self) -> None:
+        subfolder = self._selection.selection.get("toolfolder")
+        if subfolder is not None:
+            self.browse_requested.emit(subfolder)
 
     # --- dialogs (replaced in tests) ----------------------------------------
 
@@ -1323,7 +1347,7 @@ class DataActions(TierActions):
                                   tip="Copy a data array into another folder")
         self.delete_action = action("Delete…", self.delete_data, tip="Delete a data array")
         self.browse_action = action(
-            "Show in Browser…", self.choose_in_browser,
+            "Show in Browser", self.choose_in_browser,
             tip="Select several data arrays in the browser (Shift/Cmd-click)",
         )
         self.set_new_action = action("New Set…", self.new_set, tip="Create an empty data set")
@@ -1339,7 +1363,7 @@ class DataActions(TierActions):
                                         tip="Give a data set another number")
         self.set_delete_action = action("Delete…", self.delete_set, tip="Delete a data set")
         self.set_browse_action = action(
-            "Show in Browser…", self.choose_sets_in_browser,
+            "Show in Browser", self.choose_sets_in_browser,
             tip="Show the data sets in the browser",
         )
 
@@ -1878,7 +1902,7 @@ class SeriesActions(TierActions):
                                           tip="Remove an epoch, or a range of epochs")
         self.delete_action = action("Delete…", self.delete_series,
                                     tip="Delete the series, optionally with its arrays")
-        self.browse_action = action("Show in Browser…", self.choose_in_browser,
+        self.browse_action = action("Show in Browser", self.choose_in_browser,
                                     tip="Select the series in the browser")
 
         selection_model.selection_changed.connect(self.update_enabled)
@@ -2502,7 +2526,7 @@ class EpochSetActions(TierActions):
         self.rename_action = action("Renumber…", self.rename_set,
                                     tip="Give an epoch set another number")
         self.delete_action = action("Delete…", self.delete_set, tip="Delete an epoch set")
-        self.browse_action = action("Show in Browser…", self.choose_in_browser,
+        self.browse_action = action("Show in Browser", self.choose_in_browser,
                                     tip="Show the epoch sets in the browser")
         selection_model.selection_changed.connect(self.update_enabled)
         self.update_enabled()
@@ -2779,7 +2803,7 @@ class GroupActions(TierActions):
                                       tip="Take an epoch, or a range of epochs, out of groups")
         self.clear_action = action("Clear Groups…", self.clear_groups,
                                    tip="Remove every group assignment")
-        self.browse_action = action("Show in Browser…", self.choose_in_browser,
+        self.browse_action = action("Show in Browser", self.choose_in_browser,
                                     tip="Show the series' epochs in the browser")
         selection_model.selection_changed.connect(self.update_enabled)
         self.update_enabled()
@@ -3025,7 +3049,7 @@ class ChannelActions(TierActions):
             MENU_TEXT, self.edit_transforms,
             tip="The channel's filters and transforms, as plotted and analysed",
         )
-        self.browse_action = action("Show in Browser…", self.choose_in_browser,
+        self.browse_action = action("Show in Browser", self.choose_in_browser,
                                     tip="Show the channel in the browser")
         selection_model.selection_changed.connect(self.update_enabled)
         self.update_enabled()
