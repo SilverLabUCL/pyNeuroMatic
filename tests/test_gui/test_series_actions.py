@@ -312,8 +312,8 @@ def test_series_edit_scales(app, monkeypatch):
     app.demo.data["RecordA1"].xscale.delta = 2.0
     seen = {}
 
-    def ask(x, y_rows, context, error):
-        seen.update(x=x, y_rows=y_rows, context=context, error=error)
+    def ask(x, y_rows, context, error, **x_options):
+        seen.update(x=x, y_rows=y_rows, context=context, error=error, x_options=x_options)
         return {"xdelta": 0.5, "xunits": "ms", "y": {"A": {"label": "Vm"}, "B": {"units": "nA"}}}
 
     monkeypatch.setattr(app.series_actions, "_ask_scales", ask)
@@ -332,7 +332,7 @@ def test_series_edit_scales(app, monkeypatch):
     # A locked series: the dialog reports it, and the engine refuses too
     app.series.locked = True
     monkeypatch.setattr(app.series_actions, "_ask_scales",
-                        lambda x, y_rows, context, error: seen.update(error=error))
+                        lambda x, y_rows, context, error, **_: seen.update(error=error))
     app.series_actions.edit_scales()
     assert "is locked" in seen["error"]
     with pytest.raises(RuntimeError, match="locked"):
@@ -344,7 +344,7 @@ def test_data_edit_scales(app, monkeypatch):
     app.selection_model.update(data=data)
     seen = {}
 
-    def ask(x, y_rows, context, error):
+    def ask(x, y_rows, context, error, **_x_options):
         seen.update(y_rows=y_rows, context=context, error=error)
         return {"xstart": 5.0, "y": {"Y": {"label": "Stim", "units": "pA"}}}
 

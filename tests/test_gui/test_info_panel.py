@@ -189,12 +189,15 @@ def test_add_note_to_a_data_series(app, monkeypatch):
     assert panel.notes_table.item(0, 1).text() == "20 Hz train, 10 pulses"
 
 
-def test_edit_scales_button_only_for_data_arrays(app):
+def test_edit_scales_button_for_arrays_channels_and_series(app):
     browser = app.browser_widget
     panel = browser.info_panel
     browser.show_data_of(app.folder, select="Single")
     assert panel.edit_scales_button.isVisibleTo(panel)
-    for obj in (app.folder, app.series, app.series.epochs["E0"]):
+    for obj in (app.series, app.series.channels["A"]):
+        browser.show_object(obj)
+        assert panel.edit_scales_button.isVisibleTo(panel)
+    for obj in (app.folder, app.series.epochs["E0"]):
         browser.show_object(obj)
         assert not panel.edit_scales_button.isVisibleTo(panel)
 
@@ -207,7 +210,7 @@ def test_edit_scales_of_the_array_shown(app, monkeypatch):
     browser.show_data_of(app.folder, select="Single")
     asked = []
 
-    def ask(x, y_rows, context, error):
+    def ask(x, y_rows, context, error, **_x_options):
         asked.append((x, y_rows, context, error))
         return {"xdelta": 0.05, "xunits": "s", "y": {"Y": {"label": "Im", "units": "pA"}}}
 
@@ -233,7 +236,7 @@ def test_edit_scales_of_the_array_shown(app, monkeypatch):
 def test_edit_scales_cancelled(app, monkeypatch):
     browser = app.browser_widget
     browser.show_data_of(app.folder, select="Single")
-    monkeypatch.setattr(app.data_actions, "_ask_scales", lambda *args: None)
+    monkeypatch.setattr(app.data_actions, "_ask_scales", lambda *args, **kwargs: None)
     browser.info_panel.edit_scales_button.click()
     assert app.folder.data["Single"].xscale.delta == 0.1
 
@@ -320,7 +323,7 @@ def test_edit_scales_of_a_channel(app, monkeypatch):
     assert panel.edit_scales_button.isVisibleTo(panel)
     asked = []
 
-    def ask(x, y_rows, context, error):
+    def ask(x, y_rows, context, error, **_x_options):
         asked.append((y_rows, context, error))
         return {"xunits": "ms", "y": {"Y": {"label": "Im", "units": "pA"}}}
 

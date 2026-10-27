@@ -379,6 +379,47 @@ class NMDataSeries(NMObject):
             )
         return count
 
+    def set_xarray(
+        self,
+        source,
+        channel: str | None = None,
+        quiet: bool = nmc.QUIET,
+    ) -> int:
+        """Use *source*'s values (an NMData) as the x values of this series'
+        arrays, or of one *channel*; None goes back to x start and delta.
+
+        A reference, not a copy: changing *source* changes the x values (no
+        extra memory), and deleting it is refused while in use. Every array
+        is checked before any is changed.
+
+        Returns:
+            Number of data objects modified.
+
+        Raises:
+            ValueError: If *source* has no numeric values, values that don't
+                increase, or a different number of points than an array.
+        """
+        from pyneuromatic.core.nm_data import check_xarray
+
+        self._check_unlocked()
+        arrays = [d for ch in self._iter_channels(channel) for d in ch.data]
+        if source is not None:
+            for data in arrays:  # all or nothing
+                if data is source:
+                    raise ValueError("'%s' can't be its own x array" % data.name)
+                check_xarray(source, data)
+        for data in arrays:
+            data.set_xarray_from(source)
+        if arrays:
+            ch_str = channel if channel else "all"
+            name = source.name if source is not None else None
+            nmh.history(
+                "set xarray=%s, channel=%s, n=%d" % (name, ch_str, len(arrays)),
+                path=self.path_str,
+                quiet=quiet,
+            )
+        return len(arrays)
+
     def set_xdelta(
         self,
         value: float | int,

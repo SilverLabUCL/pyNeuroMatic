@@ -515,7 +515,19 @@ class EditScalesDialog(QtWidgets.QDialog):
     Fields start at the current values; a field whose arrays differ is
     blank, marked "(mixed)". Only fields you change are applied.
     *error* (e.g. a locked series) is shown when OK is pressed.
+
+    With *x_arrays* (names of arrays that fit), "X Array" chooses an array
+    whose values are the x values, or None (start and delta); *x_array* is
+    the current choice ("" for none, None for mixed) and *validate_x(name)* returns why an
+    array can't be used, or None. *x_array_scales* gives each array's
+    (label, units): choosing an array fills X Label and Units from them
+    (where set), and a note says when X Units differ from the array's.
+    *x_array_fixed* (e.g. "Set by data series 'Record'") shows the choice
+    without allowing a change, with that note.
     """
+
+    START_DELTA = "None"  # no x array: x from start and delta
+    MIXED = "(mixed)"
 
     def __init__(
         self,
@@ -524,10 +536,17 @@ class EditScalesDialog(QtWidgets.QDialog):
         context: tuple[str, str] | None = None,
         error: str | None = None,
         parent: QtWidgets.QWidget | None = None,
+        x_arrays: list[str] | None = None,
+        x_array: str | None = "",
+        validate_x: Callable[[str], str | None] | None = None,
+        x_array_scales: dict[str, tuple[str, str]] | None = None,
+        x_array_fixed: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Edit Scales")
         self._error = error
+        self._validate_x = validate_x
+        self._x_array_scales = x_array_scales or {}
         self._initial: dict = {}
         layout = QtWidgets.QVBoxLayout(self)
         if context is not None:
@@ -549,17 +568,60 @@ class EditScalesDialog(QtWidgets.QDialog):
         grid.addWidget(QtWidgets.QLabel("<b>X</b>", self), 0, 0)
         self.x_edits = {key: edit(key, x.get(key)) for key in
                         ("xstart", "xdelta", "xlabel", "xunits")}
-        for row, (first, second) in enumerate((("xstart", "xdelta"), ("xlabel", "xunits")), 1):
+        # X Array: None (start and delta), or an array whose values are x
+        self.x_from_combo: QtWidgets.QComboBox | None = None
+        x_row = 1
+        if x_arrays is not None:
+            combo = QtWidgets.QComboBox(self)
+            combo.setObjectName("xfrom")
+            if x_array is None:
+                combo.addItem(self.MIXED)
+            combo.addItem(self.START_DELTA)
+            names = list(x_arrays)
+            if x_array and x_array not in names:
+                names.insert(0, x_array)  # e.g. an x array in another folder
+            combo.addItems(names)
+            combo.setCurrentText(self.MIXED if x_array is None else (x_array or self.START_DELTA))
+            combo.setToolTip("An array whose values are the x values (same number of "
+                             "points, increasing): changing it changes the x values. "
+                             "None: x from Start and Delta")
+            combo.currentTextChanged.connect(self._update_x_from)
+            combo.currentTextChanged.connect(self._fill_x_from_array)
+            self._initial["xfrom"] = combo.currentText()
+            self.x_from_combo = combo
+            grid.addWidget(QtWidgets.QLabel("X Array", self), 1, 0)
+            grid.addWidget(combo, 1, 1, 1, 3)
+            x_row = 2
+        # e.g. an array of a data series: the series sets its x array
+        self.x_array_fixed_note: QtWidgets.QLabel | None = None
+        if x_array_fixed and self.x_from_combo is not None:
+            self.x_from_combo.setEnabled(False)
+            self.x_from_combo.setToolTip(x_array_fixed)
+            note = QtWidgets.QLabel(x_array_fixed, self)
+            note.setStyleSheet("color: gray;")
+            note.setWordWrap(True)
+            grid.addWidget(note, 2, 1, 1, 3)
+            self.x_array_fixed_note = note
+            x_row = 3
+        for row, (first, second) in enumerate((("xstart", "xdelta"), ("xlabel", "xunits")), x_row):
             for col, key in ((0, first), (2, second)):
                 grid.addWidget(QtWidgets.QLabel(key[1:].capitalize(), self), row, col)
                 grid.addWidget(self.x_edits[key], row, col + 1)
-        grid.addWidget(QtWidgets.QLabel("<b>Y</b>", self), 3, 0)
+        # e.g. "Times is in s": the x array's units differ from X Units
+        self.x_units_note = QtWidgets.QLabel("", self)
+        self.x_units_note.setStyleSheet("color: #b45309;")
+        self.x_units_note.setWordWrap(True)
+        self.x_units_note.hide()
+        grid.addWidget(self.x_units_note, x_row + 2, 0, 1, 4)
+        self.x_edits["xunits"].textChanged.connect(self._update_units_note)
+        y_header = x_row + 3
+        grid.addWidget(QtWidgets.QLabel("<b>Y</b>", self), y_header, 0)
         self.y_edits: dict[str, dict[str, QtWidgets.QLineEdit]] = {}
         multi = len(y_rows) > 1
         if multi:
-            grid.addWidget(QtWidgets.QLabel("Channel", self), 4, 0)
-            grid.addWidget(QtWidgets.QLabel("Label", self), 4, 1)
-        for offset, (name, label, units) in enumerate(y_rows, 5 if multi else 4):
+            grid.addWidget(QtWidgets.QLabel("Channel", self), y_header + 1, 0)
+            grid.addWidget(QtWidgets.QLabel("Label", self), y_header + 1, 1)
+        for offset, (name, label, units) in enumerate(y_rows, y_header + (2 if multi else 1)):
             self.y_edits[name] = {
                 "label": edit((name, "label"), label),
                 "units": edit((name, "units"), units),
@@ -585,13 +647,54 @@ class EditScalesDialog(QtWidgets.QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._update_x_from()
+
+    def x_from(self) -> str | None:
+        """The array chosen for x values, "" for start and delta, or None
+        (mixed, unchanged)."""
+        if self.x_from_combo is None:
+            return ""
+        text = self.x_from_combo.currentText()
+        return None if text == self.MIXED else ("" if text == self.START_DELTA else text)
+
+    def _update_x_from(self, *_args) -> None:
+        # Start and delta aren't used while x comes from an array
+        from_array = bool(self.x_from())
+        for key in ("xstart", "xdelta"):
+            self.x_edits[key].setEnabled(not from_array)
+        self._update_units_note()
+
+    def _fill_x_from_array(self, *_args) -> None:
+        """X Label and Units from the chosen array's (where it has them);
+        they stay the series' own, and can still be edited."""
+        label, units = self._x_array_scales.get(self.x_from() or "", ("", ""))
+        if label:
+            self.x_edits["xlabel"].setText(label)
+        if units:
+            self.x_edits["xunits"].setText(units)
+
+    def _update_units_note(self, *_args) -> None:
+        name = self.x_from()
+        units = self._x_array_scales.get(name or "", ("", ""))[1]
+        shown = self.x_edits["xunits"].text().strip()
+        differ = bool(name) and bool(units) and units != shown
+        self.x_units_note.setText(
+            f"{name} is in {units}; X Units say {shown or '(none)'}." if differ else "")
+        self.x_units_note.setVisible(differ)
 
     def changes(self) -> dict:
-        """Changed fields: ``xstart``... (numbers converted) and ``y`` as
+        """Changed fields: ``xstart``... (numbers converted), ``xarray`` (an
+        array name, or "" for start and delta) and ``y`` as
         ``{row: {"label": ..., "units": ...}}``. Raises ValueError if a
         changed Start or Delta is not a number."""
         changed: dict = {}
+        if self.x_from_combo is not None \
+                and self.x_from_combo.currentText() != self._initial["xfrom"] \
+                and self.x_from() is not None:
+            changed["xarray"] = self.x_from()
         for key, line in self.x_edits.items():
+            if key in ("xstart", "xdelta") and not line.isEnabled():
+                continue  # x comes from an array
             if line.text() != self._initial[key]:
                 text = line.text().strip()
                 changed[key] = float(text) if key in ("xstart", "xdelta") else text
@@ -613,11 +716,60 @@ class EditScalesDialog(QtWidgets.QDialog):
             error = self._error
             if error is None and changed.get("xdelta", 1) == 0:
                 error = "Delta must not be 0"
+            if error is None and changed.get("xarray") and self._validate_x is not None:
+                error = self._validate_x(changed["xarray"])
         if error:
             self.error_label.setText(error)
             self.error_label.show()
             return
         super().accept()
+
+
+def x_array_choices(folder, arrays) -> list[str]:
+    """Arrays of *folder* that can give x values to *arrays*: numeric, one
+    dimension, as many points as each of *arrays*, and not one of them."""
+    sizes = {d.nparray.size for d in arrays if d.nparray is not None}
+    if len(sizes) != 1:
+        return []
+    size = sizes.pop()
+    own = {id(d) for d in arrays}
+    return [
+        name for name, data in folder.data.items()
+        if id(data) not in own and isinstance(data.nparray, np.ndarray)
+        and data.nparray.ndim == 1 and data.nparray.size == size
+        and data.nparray.dtype.kind in "biuf"
+    ]
+
+
+def x_array_scales(folder, names: list[str]) -> dict[str, tuple[str, str]]:
+    """Each array's (y label, y units): what its values are, e.g. ("Time", "ms")."""
+    return {name: (folder.data[name].yscale.label, folder.data[name].yscale.units)
+            for name in names if name in folder.data}
+
+
+def x_array_current(arrays) -> str | None:
+    """The shared x choice of *arrays*: an array name, "" for start and
+    delta, or None if they differ."""
+    names = {d.xarray_name or ("(x values)" if d.xarray is not None else "")
+             for d in arrays}
+    return names.pop() if len(names) == 1 else None
+
+
+def x_array_error(folder, arrays, name: str) -> str | None:
+    """Why array *name* can't give x values to *arrays*, or None."""
+    from pyneuromatic.core.nm_data import check_xarray
+
+    source = folder.data.get(name)
+    if source is None:
+        return None  # e.g. an x array in another folder: unchanged
+    try:
+        for data in arrays:
+            if data is source:
+                return f"'{name}' can't be its own x array"
+            check_xarray(source, data)
+    except (TypeError, ValueError) as error:
+        return str(error)[0].upper() + str(error)[1:]
+    return None
 
 
 def new_data_defaults(container, points: int = 100) -> dict:
@@ -711,9 +863,12 @@ class TierActions(QtCore.QObject):
         show = QtWidgets.QMessageBox.warning if warning else QtWidgets.QMessageBox.information
         show(self._parent_widget, title, text)
 
-    def _ask_scales(self, x, y_rows, context, error) -> dict | None:
-        """The Edit Scales dialog (replaced in tests); returns the changes."""
-        dialog = EditScalesDialog(x, y_rows, context, error, parent=self._parent_widget)
+    def _ask_scales(self, x, y_rows, context, error, **x_options) -> dict | None:
+        """The Edit Scales dialog (replaced in tests); returns the changes.
+        *x_options*: ``x_arrays``, ``x_array`` and ``validate_x`` (see
+        :class:`EditScalesDialog`)."""
+        dialog = EditScalesDialog(x, y_rows, context, error, parent=self._parent_widget,
+                                  **x_options)
         if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return None
         return dialog.changes()
@@ -1267,6 +1422,14 @@ class DataActions(TierActions):
         return f"Part of data series {names}; it will be removed from the series."
 
     @staticmethod
+    def _xarray_error(container, name: str | None) -> str | None:
+        """Why *name* can't be deleted: other arrays take their x values from it."""
+        if name is None or name not in container:
+            return None
+        text = container.xarray_in_use_text(name)
+        return text[0].upper() + text[1:] + "." if text else None
+
+    @staticmethod
     def _lock_error(container, name: str | None) -> str | None:
         if name is None or name not in container:
             return None
@@ -1382,14 +1545,30 @@ class DataActions(TierActions):
         if data is None or container is None:
             return
         lock_error = self._lock_error(container, data.name)
+        # X Array: chosen here for a plain array; an array of a data series
+        # shows its series' (set in the series' Edit Scales)
+        owner = container._parent
+        series = container.dataseries_of(data.name) if data.name in container else []
+        choices = [] if series else x_array_choices(owner, [data])
+        fixed = (f"Set by data series '{series[0].name}' (its Edit Scales)"
+                 if series else None)
         changes = self._ask_scales(
             scale_fields([data]),
             [("Y", data.yscale.label, data.yscale.units)],
             ("Data", f"{context} › {data.name}"),
             lock_error,
+            x_arrays=choices, x_array=x_array_current([data]),
+            validate_x=lambda name: x_array_error(owner, [data], name),
+            x_array_scales=x_array_scales(owner, choices),
+            x_array_fixed=fixed,
         )
         if not changes or lock_error:  # the dialog only shows a locked array
             return
+        if "xarray" in changes and not series:
+            name = changes["xarray"]
+            source = container.get(name) if name else None
+            if not name or source is not None:  # e.g. one in another folder: kept
+                data.set_xarray_from(source)
         for key, attribute in (("xstart", "start"), ("xdelta", "delta"),
                                ("xlabel", "label"), ("xunits", "units")):
             if key in changes:
@@ -1440,7 +1619,8 @@ class DataActions(TierActions):
             current=self._current_name("data"),
             message=lambda item, *_: self._series_note(container, item)
             or "The data array will be deleted.",
-            validate=lambda item, name: self._lock_error(container, item),
+            validate=lambda item, name: self._lock_error(container, item)
+            or self._xarray_error(container, item),
         )
         if answer is None:
             return
@@ -1962,10 +2142,17 @@ class SeriesActions(TierActions):
         owner.rename_dataseries(answer[0], answer[1])
         self._changed()
 
-    def edit_scales(self) -> None:
-        series, owner = self._series(), self._owner()
+    def edit_scales(self, series=None) -> None:
+        """Edit the selected series' scales, or *series*' (e.g. selected in
+        the browser)."""
         if series is None:
-            return
+            series, owner = self._series(), self._owner()
+            if series is None:
+                return
+            context = self._series_context(series)
+        else:
+            owner = series._container._parent
+            context = ("Series", f"{_owner_text(owner)} › {series.name}")
         arrays = [d for ch in series.channels.values() for d in ch.data]
         y_rows = [
             (name, common_value(d.yscale.label for d in channel.data),
@@ -1973,11 +2160,16 @@ class SeriesActions(TierActions):
             for name, channel in series.channels.items()
         ]
         lock_error = self._lock_error(owner, series.name)
+        choices = x_array_choices(owner, arrays)
         changes = self._ask_scales(
-            scale_fields(arrays), y_rows, self._series_context(series), lock_error,
+            scale_fields(arrays), y_rows, context, lock_error,
+            x_arrays=choices, x_array=x_array_current(arrays),
+            validate_x=lambda name: x_array_error(owner, arrays, name),
+            x_array_scales=x_array_scales(owner, choices),
         )
         if not changes or lock_error:  # the dialog only shows a locked series
             return
+        self._apply_x_array(owner, series, changes)
         for key, setter in (("xstart", series.set_xstart), ("xdelta", series.set_xdelta),
                             ("xlabel", series.set_xlabel), ("xunits", series.set_xunits)):
             if key in changes:
@@ -1988,6 +2180,17 @@ class SeriesActions(TierActions):
             if "units" in fields:
                 series.set_yunits(fields["units"], channel=channel)
         self._changed()
+
+    @staticmethod
+    def _apply_x_array(owner, series, changes: dict, channel: str | None = None) -> None:
+        """Set or clear the x array chosen in Edit Scales."""
+        if "xarray" not in changes:
+            return
+        name = changes["xarray"]
+        source = owner.data.get(name) if name else None
+        if name and source is None:
+            return  # e.g. an x array in another folder: unchanged
+        series.set_xarray(source, channel=channel)
 
     def edit_channel_scales(self, channel) -> None:
         """Edit the scales of one channel of a series (e.g. right from the
@@ -2005,9 +2208,13 @@ class SeriesActions(TierActions):
             [y_row],
             ("Channel", f"{_owner_text(owner)} › {series.name} › {channel.name}"),
             lock_error,
+            x_arrays=x_array_choices(owner, channel.data), x_array=x_array_current(channel.data),
+            validate_x=lambda name: x_array_error(owner, channel.data, name),
+            x_array_scales=x_array_scales(owner, x_array_choices(owner, channel.data)),
         )
         if not changes or lock_error:  # the dialog only shows a locked series
             return
+        self._apply_x_array(owner, series, changes, channel=channel.name)
         for key, setter in (("xstart", series.set_xstart), ("xdelta", series.set_xdelta),
                             ("xlabel", series.set_xlabel), ("xunits", series.set_xunits)):
             if key in changes:

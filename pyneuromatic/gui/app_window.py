@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover - optional GUI dependency
     pg = None
 
 from pyneuromatic.core.nm_channel import NMChannel
+from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, EXCLUDE_SET
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.context_views import (
@@ -1209,9 +1210,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
             tables.refresh()
 
     def _edit_scales_of(self, obj) -> None:
-        """The browser's Edit Scales...: a data array's, or a channel's."""
+        """The browser's Edit Scales...: a data array's, a channel's or a
+        data series'."""
         if isinstance(obj, NMChannel):
             self.series_actions.edit_channel_scales(obj)
+        elif isinstance(obj, NMDataSeries):
+            self.series_actions.edit_scales(obj)
         else:
             self.data_actions.edit_scales(obj)
 

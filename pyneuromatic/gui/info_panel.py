@@ -103,7 +103,7 @@ class InfoPanel(QtWidgets.QScrollArea):
 
     # A note was added to the object shown
     notes_changed = QtCore.pyqtSignal()
-    # Edit Scales... was clicked for this data array or channel
+    # Edit Scales... was clicked for this data array, channel or data series
     edit_scales_requested = QtCore.pyqtSignal(object)
     # Filter & Transform... was clicked for this channel
     edit_transforms_requested = QtCore.pyqtSignal(object)
@@ -230,7 +230,8 @@ class InfoPanel(QtWidgets.QScrollArea):
             self._show_epoch(obj)
         can_edit = (
             (is_data and not self.showing_stats and self._locked_series(obj) is None)
-            or (isinstance(obj, NMChannel) and not obj._parent.locked)
+            or (isinstance(obj, (NMChannel, NMDataSeries))
+                and not (obj._parent.locked if isinstance(obj, NMChannel) else obj.locked))
         )
         self.edit_scales_button.setVisible(can_edit)
         self.transforms_button.setVisible(isinstance(obj, NMChannel))
@@ -304,6 +305,7 @@ class InfoPanel(QtWidgets.QScrollArea):
                 if numpy.isfinite(low) or numpy.isfinite(high):
                     self._add_row("Range", f"{low:g} to {high:g}")
         self._add_scale_rows(data.xscale, data.yscale)
+        self._add_x_array_row([data])
         container = data._container
         if container is not None and hasattr(container, "dataseries_of"):
             places = []
@@ -313,11 +315,33 @@ class InfoPanel(QtWidgets.QScrollArea):
                 epoch = next((e.name for e in series.epochs.values()
                               if any(d is data for d in e.data)), None)
                 places.append(" / ".join(p for p in (series.name, channel, epoch) if p))
+            # Series whose x values are this array's (why it can't be deleted)
+            if hasattr(container, "xarray_series"):
+                places += [f"{series.name} (x array)"
+                           for series in container.xarray_series(data.name)]
             self._add_row("Data Series", _names(places))
         self._add_row("Sets", _names(_sets_of(container, data.name)))
         locked = self._locked_series(data)
         if locked is not None:
             self._add_row("Locked", f"Yes, with data series '{locked.name}'", LOCKED_COLOR)
+
+    def _add_x_array_row(self, arrays) -> None:
+        """"X Array": the array whose values are the x values, when they
+        don't come from start and delta ("mixed" if the arrays differ), and
+        why, if it no longer fits (start and delta are used meanwhile)."""
+        names = {d.xarray_name or ("(x values)" if d.xarray is not None else "")
+                 for d in arrays}
+        if names == {""} or not names:
+            return
+        if len(names) > 1:
+            self._add_row("X Array", "(mixed)")
+            return
+        problem = next((d.xarray_problem() for d in arrays if d.xarray_problem()), None)
+        if problem:  # e.g. its points changed: start and delta meanwhile
+            self._add_row("X Array", f"{names.pop()}: doesn't fit ({problem}); "
+                          "using start and delta", LOCKED_COLOR)
+        else:
+            self._add_row("X Array", names.pop())
 
     def _show_data_stats(self, data: NMData) -> None:
         """Basic statistics, as Igor's WaveStats (NaNs ignored)."""
@@ -376,6 +400,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         if lengths:
             low, high = min(lengths), max(lengths)
             self._add_row("Points", str(low) if low == high else f"{low} to {high}")
+        self._add_x_array_row([d for c in series.channels.values() for d in c.data])
         if series.locked:
             self._add_row("Locked", "Yes", LOCKED_COLOR)
         else:
@@ -400,6 +425,7 @@ class InfoPanel(QtWidgets.QScrollArea):
                 ("Y Units", [d.yscale.units for d in arrays], False),
             ):
                 self._add_row(label, _common_text(values, number))
+        self._add_x_array_row(channel.data)
         steps = [step_text(t) for t in channel.transform if t.on]
         self._add_row("Filter & Transform", "\n".join(
             f"{i}. {s}" for i, s in enumerate(steps, 1)) if steps else "—")

@@ -67,10 +67,14 @@ class NMData(NMObject):
     _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
         "_NMData__nparray",
         "_NMData__xarray",
+        "_NMData__xarray_source",
         "_NMData__xscale",
         "_NMData__yscale",
         "_NMData__dataseries_channel",
         "_NMData__dataseries_epoch",
+        # Set to None on a copy (its container links it): never copied, which
+        # would copy every array of the folder to duplicate one
+        "_container",
     })
 
     def __init__(
@@ -102,6 +106,8 @@ class NMData(NMObject):
                 e = nmu.type_error_str(xarray, "xarray", "numpy.ndarray")
                 raise TypeError(e)
         self.__xarray = xarray
+        # The array whose values are the x values (a reference, not a copy)
+        self.__xarray_source: NMData | None = None
 
         # X-scale and Y-scale
         self.__xscale: NMScaleX = _xscale_from_dict(xscale, parent=self)
@@ -127,7 +133,7 @@ class NMData(NMObject):
             return False
         if not _eq_arrays(self.__nparray, other.nparray):
             return False
-        if not _eq_arrays(self.__xarray, other.xarray):
+        if not _eq_arrays(self.xarray, other.xarray):
             return False
         if self._dataseries_channel != other._dataseries_channel:
             return False
@@ -180,6 +186,14 @@ class NMData(NMObject):
             result._NMData__xarray = self._NMData__xarray.copy()
         else:
             result._NMData__xarray = None
+
+        # __xarray_source: the copied source if it is copied too (e.g. the
+        # whole folder: fixed up by NMFolder once all its data is copied),
+        # else the same array
+        source = getattr(self, "_NMData__xarray_source", None)
+        result._NMData__xarray_source = memo.get(id(source), source)
+        if source is not None and id(source) not in memo:
+            memo.setdefault(XARRAY_LINKS, []).append((result, source))
 
         # __dataseries_channel and __dataseries_epoch: copy references
         # If copying within a folder context, try to resolve to copied objects
@@ -256,6 +270,19 @@ class NMData(NMObject):
 
     @property
     def xarray(self) -> numpy.ndarray | None:
+        """The x values, if not from the x scale's start and delta: the
+        values of the x array (:attr:`xarray_source`), or values set
+        directly. None if the x array no longer fits (e.g. its number of
+        points changed): start and delta are used (see :meth:`xarray_problem`)."""
+        source = getattr(self, "_NMData__xarray_source", None)
+        if source is not None:
+            values = source.nparray
+            if (isinstance(values, numpy.ndarray) and values.ndim == 1
+                    and values.dtype.kind in "biuf"
+                    and (not isinstance(self.__nparray, numpy.ndarray)
+                         or values.size == self.__nparray.size)):
+                return values
+            return None
         return self.__xarray
 
     @xarray.setter
@@ -265,6 +292,51 @@ class NMData(NMObject):
                 e = nmu.type_error_str(xarray, "xarray", "numpy.ndarray")
                 raise TypeError(e)
         self.__xarray = xarray
+        self.__xarray_source = None  # values set directly
+
+    @property
+    def xarray_source(self) -> NMData | None:
+        """The array whose values are the x values (see :meth:`set_xarray_from`),
+        or None."""
+        return getattr(self, "_NMData__xarray_source", None)
+
+    @property
+    def xarray_name(self) -> str | None:
+        """The name of :attr:`xarray_source`, or None."""
+        source = self.xarray_source
+        return source.name if source is not None else None
+
+    def set_xarray_from(self, source: NMData | None) -> None:
+        """Use *source*'s values as the x values: a reference, so changing
+        *source* changes them (deleting it is refused while in use, see
+        :meth:`NMDataContainer.pop`). None goes back to the x scale's start
+        and delta.
+
+        Raises:
+            TypeError: If *source* is not an NMData.
+            ValueError: If *source* is this array, has no numeric values, a
+                different number of points, or values that don't increase.
+        """
+        if source is None:
+            self.xarray = None
+            return
+        if source is self:
+            raise ValueError("'%s' can't be its own x array" % self.name)
+        check_xarray(source, self)
+        self.__xarray = None
+        self.__xarray_source = source
+
+    def xarray_problem(self) -> str | None:
+        """Why the x array doesn't give the x values (e.g. it no longer has
+        as many points), or None."""
+        source = self.xarray_source
+        if source is None:
+            return None
+        try:
+            check_xarray(source, self)
+        except (TypeError, ValueError) as error:
+            return str(error)
+        return None
 
     # =========================================================================
     # Scale properties (delegate to channel when dataseries-linked)
@@ -304,13 +376,14 @@ class NMData(NMObject):
             e = nmu.type_error_str(xvalue, "xvalue", "float")
             raise TypeError(e)
 
-        if isinstance(self.__xarray, numpy.ndarray):
+        xarray = self.xarray  # an x array's values, or values set directly
+        if isinstance(xarray, numpy.ndarray):
             if math.isinf(xvalue):
                 if xvalue < 0:
                     return 0
                 else:
-                    return self.__xarray.size - 1
-            indexes = numpy.argwhere(self.__xarray >= xvalue)
+                    return xarray.size - 1
+            indexes = numpy.argwhere(xarray >= xvalue)
             shape = indexes.shape  # (N, 1)
             if len(shape) != 2:
                 return None
@@ -376,8 +449,9 @@ class NMData(NMObject):
                 raise ValueError("negative index: %s" % index)
 
         # Determine points
-        if isinstance(self.__xarray, numpy.ndarray):
-            points = self.__xarray.size
+        xarray = self.xarray  # an x array's values, or values set directly
+        if isinstance(xarray, numpy.ndarray):
+            points = xarray.size
         elif self.__nparray is not None:
             points = self.__nparray.size
         else:
@@ -393,8 +467,8 @@ class NMData(NMObject):
                 e = "index out of range: %s >= %s" % (index, points)
                 raise ValueError(e)
 
-        if isinstance(self.__xarray, numpy.ndarray):
-            return self.__xarray[i]
+        if isinstance(xarray, numpy.ndarray):
+            return xarray[i]
 
         xscale = self.xscale
         start = xscale.start
@@ -478,6 +552,40 @@ def _eq_arrays(a1, a2) -> bool:
     return False
 
 
+# Deep copies: (copied data, its x array) still to point to the copied x array
+XARRAY_LINKS = "nm_xarray_links"
+
+
+def check_xarray(source: NMData, data: NMData | None = None) -> numpy.ndarray:
+    """Check *source*'s values can be x values: numeric, one dimension,
+    no NaN, increasing, and (with *data*) as many points as *data*. Returns
+    them (not a copy).
+
+    Raises:
+        TypeError: If *source* is not an NMData.
+        ValueError: Saying what is wrong.
+    """
+    if not isinstance(source, NMData):
+        raise TypeError(nmu.type_error_str(source, "source", "NMData"))
+    values = source.nparray
+    if not isinstance(values, numpy.ndarray) or values.ndim != 1 or values.size == 0:
+        raise ValueError("x array '%s' has no values" % source.name)
+    if values.dtype.kind not in "biuf":
+        raise ValueError("x array '%s' is not numeric" % source.name)
+    if data is not None and isinstance(data.nparray, numpy.ndarray) \
+            and data.nparray.size != values.size:
+        raise ValueError(
+            "x array '%s' has %d points, but '%s' has %d"
+            % (source.name, values.size, data.name, data.nparray.size)
+        )
+    as_float = values.astype(float, copy=False)
+    if numpy.isnan(as_float).any():
+        raise ValueError("x array '%s' has NaN values" % source.name)
+    if values.size > 1 and not (numpy.diff(as_float) > 0).all():
+        raise ValueError("x array '%s' must increase from point to point" % source.name)
+    return values
+
+
 class NMDataContainer(NMObjectContainer):
     """
     Container of NMData
@@ -542,6 +650,58 @@ class NMDataContainer(NMObjectContainer):
             return None
         return container[key]
 
+    def _folders(self) -> list:
+        """This folder, and the others of its manager (x arrays may be used
+        across folders, e.g. after Copy to Folder)."""
+        folder = self._parent
+        folders = getattr(getattr(folder, "_container", None), "values", None)
+        return list(folders()) if folders is not None else [folder]
+
+    def xarray_users(self, name: str) -> list[NMData]:
+        """Arrays whose x values are data *name*'s (its x array users)."""
+        key = self._getkey(name)
+        if key is None:
+            raise KeyError("key name '%s' does not exist" % name)
+        source = self[key]
+        users = []
+        for folder in self._folders():
+            container = getattr(folder, "data", None)
+            if container is None:
+                continue
+            users += [d for d in container.values()
+                      if d is not source and d.xarray_source is source]
+        return users
+
+    def xarray_series(self, name: str) -> list[NMDataSeries]:
+        """Data series whose arrays take their x values from data *name*."""
+        users = {id(d) for d in self.xarray_users(name)}
+        found = []
+        for folder in self._folders():
+            container = getattr(folder, "dataseries", None)
+            if not isinstance(container, NMDataSeriesContainer):
+                continue
+            found += [ds for ds in container.values()
+                      if any(id(d) in users for c in ds.channels.values() for d in c.data)]
+        return found
+
+    def xarray_in_use_text(self, name: str) -> str | None:
+        """Why data *name* can't be deleted (it gives x values), or None."""
+        users = self.xarray_users(name)
+        if not users:
+            return None
+        series = self.xarray_series(name)
+        if series:
+            names = ", ".join("'%s'" % ds.name for ds in series)
+            return ("'%s' is the x array of data series %s and cannot be deleted "
+                    "while in use" % (name, names))
+        names = ", ".join("'%s'" % d.name for d in users[:5])
+        return "'%s' is the x array of %s and cannot be deleted while in use" % (name, names)
+
+    def locked_xarray_series(self, name: str) -> NMDataSeries | None:
+        """A locked data series whose x array is data *name*: its values
+        are then protected, as the series' own are."""
+        return next((ds for ds in self.xarray_series(name) if ds.locked), None)
+
     def _check_unlocked(self, key: str) -> None:
         for ds in self.dataseries_of(key):
             if ds.locked:
@@ -571,11 +731,15 @@ class NMDataContainer(NMObjectContainer):
         """Remove data *key*, also unlinking it from its data series.
 
         Raises:
-            RuntimeError: If the data is part of a locked data series.
+            RuntimeError: If the data is part of a locked data series, or
+                other arrays take their x values from it.
         """
         actual_key = self._getkey(key)
         if actual_key is not None:
             self._check_unlocked(actual_key)
+            in_use = self.xarray_in_use_text(actual_key)
+            if in_use:
+                raise RuntimeError(in_use)
             self._unlink_from_dataseries(actual_key)
         return super().pop(key, default, quiet=quiet)
 
