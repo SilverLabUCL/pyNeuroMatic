@@ -967,6 +967,7 @@ class NMFolder(NMObject):
         # Copy data into target folder and build matches dict directly
         from pyneuromatic.io.base import make_data_name
         new_matches: dict[tuple[str, int], NMData] = {}
+        brought: dict = {}  # x arrays copied into the target folder, once each
 
         for ch_name in ch_names:
             ch_idx = ch_indices[ch_name]
@@ -993,8 +994,16 @@ class NMFolder(NMObject):
                 )
                 if new_data is not None:
                     new_matches[(new_ch_char, ep_num)] = new_data
+                    # x values: the same x array, in the target folder
+                    if src_data is not None and src_data.xarray_source is not None:
+                        new_data.set_xarray_from(
+                            target.data.bring_xarray(src_data.xarray_source, brought))
+                    elif src_data is not None and src_data.xarray is not None:
+                        new_data.xarray = src_data.xarray.copy()
 
         ds = target.build_dataseries(new_prefix, new_matches, quiet=True)
+        if ds is not None:
+            self._copy_series_settings(src_ds, ds, ch_names, ep_names)
 
         n_ch = len(ch_names)
         n_ep = len(ep_nums)
@@ -1358,6 +1367,472 @@ class NMFolder(NMObject):
             % (_p, prefix, n_epochs, fill)
         )
         return added
+
+    # --- moving and appending data series -------------------------------------
+
+    @staticmethod
+    def _series_arrays(ds: NMDataSeries) -> list:
+        """(epoch, channel, data) for each array of *ds*, epoch by epoch."""
+        found = []
+        for epoch in ds.epochs.values():
+            for channel in ds.channels.values():
+                data = next((d for d in channel.data if any(d is e for e in epoch.data)), None)
+                if data is not None:
+                    found.append((epoch, channel, data))
+        return found
+
+    def _check_free_to_move(self, arrays: list) -> None:
+        """Refuse arrays that others take their x values from (they'd leave
+        those behind)."""
+        moving = {id(d) for d in arrays}
+        for data in arrays:
+            users = [u for u in self.data.xarray_users(data.name) if id(u) not in moving]
+            if users:
+                raise RuntimeError(
+                    "'%s' is the x array of '%s', which stays in folder '%s'"
+                    % (data.name, users[0].name, self.name)
+                )
+
+    def _move_array(self, data: NMData, target: NMFolder, name: str) -> NMData:
+        """Take *data* out of this folder into *target*, named *name*."""
+        self.data.pop(data.name, quiet=True)
+        data._name_set(newname=name, quiet=True)
+        data._parent = target
+        target.data._add(data, quiet=True)
+        return data
+
+    @staticmethod
+    def _copy_sets(source_sets, target_sets, rename: dict[str, str]) -> None:
+        """Copy *source_sets* into *target_sets*: each set's members, by their
+        new names (*rename*); equation sets once their two sets exist."""
+        equations = []
+        for key in source_sets.keys():
+            value = source_sets._map[key]
+            if source_sets.tuple_is_equation(value):
+                equations.append((key, value))
+                continue
+            members = [rename[m] for m in value if m in rename]
+            target_sets.add(key, members, quiet=True)
+        for key, value in equations:
+            if target_sets._getkey(key) is None and all(
+                target_sets._getkey(name) is not None for name in value[1:]
+            ):
+                target_sets._setitem(key, value)
+
+    def _move_xarray_plan(self, ds: NMDataSeries, arrays: list) -> list:
+        """The x arrays of the arrays of *ds* (not themselves in *ds*), each
+        as (x array, "move" or "copy", names of other arrays using it): it
+        moves with the series unless arrays staying here use it too."""
+        moving = {id(d) for d in arrays}
+        sources: dict = {}
+        for data in arrays:
+            source = data.xarray_source
+            if source is not None and id(source) not in moving:
+                sources[id(source)] = source
+        plan = []
+        for source in sources.values():
+            others = []
+            if source._parent is self and source.name in self.data:
+                others = [u.name for u in self.data.xarray_users(source.name)
+                          if id(u) not in moving]
+            here = source._parent is self and source.name in self.data
+            plan.append((source, "move" if here and not others else "copy", others))
+        return plan
+
+    def move_dataseries_note(self, prefix: str) -> str:
+        """What happens to the series' x array(s) when it moves, e.g.
+        "X array 'Times' moves too", or "" if it has none."""
+        ds = self.dataseries.get(prefix)
+        if ds is None:
+            return ""
+        notes = []
+        for source, action, others in self._move_xarray_plan(ds, [
+                d for _e, _c, d in self._series_arrays(ds)]):
+            if action == "move":
+                notes.append("X array '%s' moves too." % source.name)
+            else:
+                notes.append("A copy of x array '%s' goes too (it stays here for %s)."
+                             % (source.name, ", ".join("'%s'" % n for n in others[:3])))
+        return " ".join(notes)
+
+    def _copy_series_settings(self, src: NMDataSeries, ds: NMDataSeries,
+                              ch_names: list[str], ep_names: list[str]) -> None:
+        """Give copy *ds* the epoch sets, groups, channel transforms and notes
+        of *src*, for the channels and epochs copied (matched in order: the
+        copy numbers them afresh)."""
+        by_number = sorted(ep_names, key=lambda name: int(name[1:]))
+        epoch_name = dict(zip(by_number, ds.epochs.keys()))
+        self._copy_sets(src.epochs.sets, ds.epochs.sets, epoch_name)
+        for old, new in epoch_name.items():
+            group = src.epochs.groups.get_group(old)
+            if group is not None:
+                ds.epochs.groups.assign(new, group, quiet=True)
+        for index, old in enumerate(ch_names):
+            channel = ds.channels.get(nmu.channel_char(index))
+            source = src.channels.get(old)
+            if channel is not None and source is not None and source.transform:
+                channel.transform = [t.to_dict() for t in source.transform]
+        for entry in src.notes:
+            ds.notes._entries.append(dict(entry))
+
+    def move_data_plan(self, name: str, target: NMFolder) -> tuple:
+        """Check moving data *name* to *target* (see :meth:`move_data`)
+        without changing anything; returns (data, x array or None, "move",
+        "copy" or "reuse").
+
+        Raises the errors :meth:`move_data` describes (except a name clash)."""
+        if not isinstance(target, NMFolder):
+            raise TypeError(nmu.type_error_str(target, "target", "NMFolder"))
+        if target is self:
+            raise ValueError("'%s' is already in folder '%s'" % (name, self.name))
+        key = self.data._getkey(name)
+        if key is None:
+            raise KeyError("data '%s' not found" % name)
+        data = self.data[key]
+        series = self.data.dataseries_of(key)
+        if series:
+            raise RuntimeError(
+                "'%s' is part of data series '%s'; move the whole series with "
+                "Prefix ⋯ › Move to Folder" % (key, series[0].name))
+        in_use = self.data.xarray_in_use_text(key)
+        if in_use:
+            raise RuntimeError(in_use.replace("cannot be deleted", "cannot be moved"))
+        source = data.xarray_source
+        if source is None:
+            return data, None, None
+        here = source._parent is self and source.name in self.data
+        others = [u for u in self.data.xarray_users(source.name) if u is not data] \
+            if here else []
+        there = target.data.get(source.name) if source.name in target.data else None
+        if there is not None:
+            from pyneuromatic.core.nm_data import _eq_arrays
+            if not _eq_arrays(there.nparray, source.nparray):
+                raise ValueError(
+                    "folder '%s' already has a different '%s' (the x array of '%s')"
+                    % (target.name, source.name, key))
+            return data, source, "reuse"
+        return data, source, "move" if here and not others else "copy"
+
+    def move_data_note(self, name: str, target: NMFolder) -> str:
+        """What happens to the array's x array when it moves, or ""."""
+        try:
+            _data, source, action = self.move_data_plan(name, target)
+        except (KeyError, ValueError, RuntimeError, TypeError):
+            return ""
+        if source is None:
+            return ""
+        return {"move": "X array '%s' moves too.",
+                "copy": "A copy of x array '%s' goes too (others here still use it).",
+                "reuse": "It uses the '%s' already in that folder."}[action] % source.name
+
+    def move_data(
+        self,
+        name: str,
+        target: NMFolder,
+        new_name: str | None = None,
+        quiet: bool = nmc.QUIET,
+    ) -> NMData:
+        """Move data *name* (the same array, not a copy) to folder *target*,
+        named *new_name* or as before. Its x array goes too (moved if
+        nothing else here uses it, else copied; an identical one already in
+        *target* is used instead).
+
+        Raises:
+            RuntimeError: If the array is part of a data series (move the
+                series), or other arrays take their x values from it.
+            ValueError: If *target* is this folder, the name is taken there,
+                or *target* has a different array named as its x array.
+        """
+        data, source, action = self.move_data_plan(name, target)
+        new_name = new_name or data.name
+        if new_name in target.data:
+            raise ValueError("folder '%s' already has data '%s'" % (target.name, new_name))
+        if not nmu.name_ok(new_name):
+            raise ValueError("name: %r" % new_name)
+        if source is not None:
+            data._NMData__xarray_source = None  # let go while it moves
+            if action == "move":
+                self._move_array(source, target, source.name)
+                new_source = source
+            elif action == "reuse":
+                new_source = target.data[source.name]
+            else:
+                new_source = target.data.bring_xarray(source)
+        old_name = data.name
+        self._move_array(data, target, new_name)
+        if source is not None:
+            data._NMData__xarray_source = new_source
+        nmh.history(
+            "moved data '%s' to folder '%s'%s" % (
+                old_name, target.name, " as '%s'" % new_name if new_name != old_name else ""),
+            path=self.path_str, quiet=quiet,
+        )
+        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        nmch.add_nm_command('%s.move_data(%r, nm.folders[%r], new_name=%r)'
+                            % (_p, old_name, target.name, new_name))
+        return data
+
+    def move_dataseries(
+        self,
+        prefix: str,
+        target: NMFolder,
+        new_prefix: str | None = None,
+        quiet: bool = nmc.QUIET,
+    ) -> NMDataSeries:
+        """Move data series *prefix*, with its arrays, epoch sets, groups,
+        channel scales and transforms and notes, to folder *target*.
+
+        With *new_prefix*, the series and its arrays are renamed on the way
+        (e.g. RecordA0 -> Record2A0), e.g. when names clash in *target*.
+        Arrays stay the same objects (no copy). An x array outside the
+        series stays where it is, still used by the moved arrays.
+
+        Raises:
+            RuntimeError: If the series is locked, or one of its arrays is the
+                x array of an array that stays behind.
+            ValueError: If *target* is this folder, or a name already exists
+                in *target*.
+        """
+        from pyneuromatic.core.nm_channel import NMChannel
+        from pyneuromatic.core.nm_epoch import NMEpoch
+
+        ds = self._get_unlocked_dataseries(prefix)
+        if not isinstance(target, NMFolder):
+            raise TypeError(nmu.type_error_str(target, "target", "NMFolder"))
+        if target is self:
+            raise ValueError("data series '%s' is already in folder '%s'" % (prefix, self.name))
+        name = new_prefix or prefix
+        if not nmu.name_ok(name):
+            raise ValueError("prefix: %r" % name)
+        if name in target.dataseries:
+            raise ValueError("folder '%s' already has a data series '%s'" % (target.name, name))
+        arrays = self._series_arrays(ds)
+        renamed = {d.name: name + d.name[len(prefix):] if d.name.startswith(prefix) else d.name
+                   for _e, _c, d in arrays}
+        clash = next((n for n in renamed.values() if n in target.data), None)
+        if clash is not None:
+            raise ValueError("folder '%s' already has data '%s'" % (target.name, clash))
+        self._check_free_to_move([d for _e, _c, d in arrays])
+        # x arrays go with the series (moved, or copied if used here too):
+        # a folder keeps its own x arrays
+        xplan = self._move_xarray_plan(ds, [d for _e, _c, d in arrays])
+        for source, _action, _others in xplan:
+            if source.name in target.data or source.name in renamed.values():
+                raise ValueError(
+                    "folder '%s' already has data '%s' (the series' x array)"
+                    % (target.name, source.name))
+
+        # The series in its new folder: channels, epochs, sets, groups, notes
+        moved = target.dataseries.new(name=name, quiet=True)
+        for channel in ds.channels.values():
+            moved.channels._add(NMChannel(
+                parent=moved, name=channel.name, xscale=channel.xscale.to_dict(),
+                yscale=channel.yscale.to_dict(),
+                transform=[t.to_dict() for t in channel.transform]), quiet=True)
+        for epoch in ds.epochs.values():
+            moved.epochs._add(NMEpoch(parent=moved, name=epoch.name, number=epoch.number),
+                              quiet=True)
+        epoch_names = {e: e for e in ds.epochs.keys()}
+        self._copy_sets(ds.epochs.sets, moved.epochs.sets, epoch_names)
+        for epoch_name in ds.epochs.keys():
+            group = ds.epochs.groups.get_group(epoch_name)
+            if group is not None:
+                moved.epochs.groups.assign(epoch_name, group, quiet=True)
+        for entry in ds.notes:
+            moved.notes._entries.append(dict(entry))
+
+        # The arrays themselves, then the old series. The series' arrays let
+        # go of their x arrays while those move (or are copied), then use
+        # the ones in the new folder
+        self.dataseries.pop(prefix, quiet=True)
+        old_xarray = {id(d): d.xarray_source for _e, _c, d in arrays}
+        for _e, _c, data in arrays:
+            if old_xarray[id(data)] is not None:
+                data._NMData__xarray_source = None
+        new_xarray = {}
+        for source, action, _others in xplan:
+            if action == "move":
+                self._move_array(source, target, source.name)
+                new_xarray[id(source)] = source
+            else:
+                new_xarray[id(source)] = target.data.bring_xarray(source)
+        for epoch, channel, data in arrays:
+            self._move_array(data, target, renamed[data.name])
+            source = old_xarray[id(data)]
+            if source is not None:
+                data._NMData__xarray_source = new_xarray.get(id(source), source)
+            moved.channels[channel.name].data.append(data)
+            moved.epochs[epoch.name].data.append(data)
+
+        nmh.history(
+            "moved dataseries '%s' (%d arrays) to folder '%s'%s"
+            % (prefix, len(arrays), target.name,
+               " as '%s'" % name if name != prefix else ""),
+            path=self.path_str, quiet=quiet,
+        )
+        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        nmch.add_nm_command(
+            '%s.move_dataseries(%r, nm.folders[%r], new_prefix=%r)'
+            % (_p, prefix, target.name, new_prefix)
+        )
+        return moved
+
+    def _append_plan(self, prefix: str, source_prefix: str, source_folder: NMFolder,
+                     delete_source: bool) -> tuple:
+        """Check an append (see :meth:`append_dataseries`) without changing
+        anything; returns (series, source, first epoch number, new epoch
+        names by source epoch, source arrays, new array names by id).
+
+        Raises the errors :meth:`append_dataseries` describes."""
+        ds = self._get_unlocked_dataseries(prefix)
+        if delete_source:
+            src = source_folder._get_unlocked_dataseries(source_prefix)
+        else:
+            src = source_folder.dataseries.get(source_prefix)
+            if src is None:
+                raise ValueError("data series '%s' not found" % source_prefix)
+        if src is ds:
+            raise ValueError("can't append data series '%s' to itself" % prefix)
+        channels, src_channels = list(ds.channels.keys()), list(src.channels.keys())
+        if sorted(channels) != sorted(src_channels):
+            raise ValueError(
+                "the channels differ: '%s' has %s, '%s' has %s"
+                % (prefix, ", ".join(channels) or "none",
+                   source_prefix, ", ".join(src_channels) or "none")
+            )
+        numbers = [n for n in (self._epoch_number(ds, e) for e in ds.epochs.values())
+                   if n is not None]
+        first = max(numbers) + 1 if numbers else 0
+        epoch_prefix = ds.epochs.auto_name_prefix
+        new_epoch = {e: "%s%d" % (epoch_prefix, first + i)
+                     for i, e in enumerate(src.epochs.keys())}
+        arrays = self._series_arrays(src)
+        new_name = {id(d): "%s%s%s" % (prefix, c.name, new_epoch[e.name][len(epoch_prefix):])
+                    for e, c, d in arrays}
+        clash = next((n for n in new_name.values() if n in self.data), None)
+        if clash is not None:
+            raise ValueError("data '%s' already exists" % clash)
+        if delete_source:
+            source_folder._check_free_to_move([d for _e, _c, d in arrays])
+        # The appended arrays take this series' x array (one setting per
+        # series, in this folder); they must fit it
+        xarray = self._series_xarray(ds)
+        if xarray is not None:
+            for _e, _c, data in arrays:
+                if data.nparray is not None and data.nparray.size != xarray.nparray.size:
+                    raise ValueError(
+                        "'%s' has %d points, but the x array of '%s', '%s', has %d"
+                        % (data.name, data.nparray.size, prefix, xarray.name,
+                           xarray.nparray.size))
+        return ds, src, first, new_epoch, arrays, new_name
+
+    @staticmethod
+    def _series_xarray(ds: NMDataSeries):
+        """The x array all the arrays of *ds* share, or None (none, or mixed)."""
+        sources = {id(d.xarray_source): d.xarray_source
+                   for c in ds.channels.values() for d in c.data}
+        return next(iter(sources.values())) if len(sources) == 1 else None
+
+    def append_dataseries_note(self, prefix: str, source_prefix: str,
+                               source_folder: NMFolder | None = None) -> str:
+        """How the appended arrays get their x values, when the two series
+        differ (e.g. "The appended arrays use Start and Delta, as 'Record'
+        does ('Stim' used x array 'T2')"), else ""."""
+        source_folder = source_folder if source_folder is not None else self
+        ds, src = self.dataseries.get(prefix), source_folder.dataseries.get(source_prefix)
+        if ds is None or src is None:
+            return ""
+        mine, theirs = self._series_xarray(ds), self._series_xarray(src)
+        mine_name = mine.name if mine is not None else None
+        theirs_name = theirs.name if theirs is not None else None
+        if mine_name == theirs_name and (mine is None or source_folder is self):
+            return ""
+        how = "x array '%s'" % mine_name if mine_name else "Start and Delta"
+        was = "x array '%s'" % theirs_name if theirs_name else "Start and Delta"
+        return ("The appended arrays use %s, as '%s' does ('%s' used %s)."
+                % (how, prefix, source_prefix, was))
+
+    def append_dataseries(
+        self,
+        prefix: str,
+        source_prefix: str,
+        source_folder: NMFolder | None = None,
+        delete_source: bool = False,
+        quiet: bool = nmc.QUIET,
+    ) -> list:
+        """Add the epochs of data series *source_prefix* (in *source_folder*,
+        default this folder) to the end of data series *prefix*.
+
+        The appended epochs are numbered after the last epoch of *prefix*
+        and their arrays renamed to match (e.g. StimA0 -> RecordA10); their
+        epoch sets and groups come along. With *delete_source*, the source
+        series' arrays are moved and the series removed; otherwise they are
+        copied and the source is kept.
+
+        Returns:
+            The new NMEpochs.
+
+        Raises:
+            RuntimeError: If *prefix* is locked, or *delete_source* and the
+                source is locked.
+            ValueError: If the channels differ, the source is the same series,
+                or a new array name already exists.
+        """
+        from pyneuromatic.core.nm_epoch import NMEpoch
+
+        source_folder = source_folder if source_folder is not None else self
+        ds, src, first, new_epoch, arrays, new_name = self._append_plan(
+            prefix, source_prefix, source_folder, delete_source)
+        xarray = self._series_xarray(ds)
+
+        added = []
+        for src_epoch in src.epochs.values():
+            name = new_epoch[src_epoch.name]
+            epoch = NMEpoch(parent=ds, name=name, number=first + len(added))
+            ds.epochs._add(epoch, quiet=True)
+            added.append(epoch)
+        if delete_source:
+            source_folder.dataseries.pop(source_prefix, quiet=True)
+        for src_epoch, channel, data in arrays:
+            name = new_name[id(data)]
+            if delete_source:
+                data = source_folder._move_array(data, self, name)
+            else:
+                data = self._add_array_copy(data, name)
+            # x values: this series' x array (in this folder), or none
+            data._NMData__xarray_source = None
+            data.set_xarray_from(xarray)
+            ds.channels[channel.name].data.append(data)
+            ds.epochs[new_epoch[src_epoch.name]].data.append(data)
+        # Epoch sets and groups of the appended epochs
+        self._copy_sets(src.epochs.sets, ds.epochs.sets, new_epoch)
+        for src_name, name in new_epoch.items():
+            group = src.epochs.groups.get_group(src_name)
+            if group is not None:
+                ds.epochs.groups.assign(name, group, quiet=True)
+
+        last = new_epoch[list(new_epoch)[-1]] if new_epoch else ""
+        nmh.history(
+            "appended dataseries '%s' (%d epochs, %s to %s) to '%s'%s"
+            % (source_prefix, len(added), new_epoch[list(new_epoch)[0]] if new_epoch else "",
+               last, prefix, " (source removed)" if delete_source else ""),
+            path=self.path_str, quiet=quiet,
+        )
+        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        nmch.add_nm_command(
+            '%s.append_dataseries(%r, %r, delete_source=%r)'
+            % (_p, prefix, source_prefix, delete_source)
+        )
+        return added
+
+    def _add_array_copy(self, data: NMData, name: str) -> NMData:
+        """A copy of *data* in this folder, named *name* (it keeps any x
+        array, as Duplicate does)."""
+        result = copy.deepcopy(data)
+        result._name_set(newname=name, quiet=True)
+        result._parent = self
+        self.data._add(result, quiet=True)
+        return result
 
 
 class NMFolderContainer(NMObjectContainer):

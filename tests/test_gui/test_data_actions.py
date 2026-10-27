@@ -59,7 +59,7 @@ def _menu_texts(menu):
 def test_data_menus_in_strip_and_menu_bar(app):
     strip = app.selection_strip
     assert _menu_texts(strip.action_button("data").menu()) == [
-        "New…", "Duplicate…", "Rename…", "Edit Scales…", "Copy to Folder…",
+        "New…", "Rename…", "Edit Scales…", "Duplicate…", "Copy to Folder…", "Move to Folder…",
         "Delete…", "Show in Browser",
     ]
     assert _menu_texts(strip.action_button("data_set").menu()) == [

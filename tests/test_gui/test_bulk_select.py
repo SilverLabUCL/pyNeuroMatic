@@ -135,7 +135,7 @@ def test_right_click_menu_for_the_ticked_items(app, monkeypatch):
                         lambda menu, *a, **k: captured.setdefault("menu", menu))
     browser._show_chosen_context_menu(QtCore.QPoint(0, 0))
     texts = [a.text() for a in captured["menu"].actions() if a.text()]
-    assert texts == ["Duplicate", "Copy to Folder", "Add to Set", "Delete..."]
+    assert texts == ["Duplicate", "Copy to Folder", "Move to Folder", "Add to Set", "Delete..."]
     monkeypatch.setattr(browser, "_ask_set_number", lambda *a: (0, True))
     add = next(a for a in captured["menu"].actions() if a.text() == "Add to Set").menu()
     next(a for a in add.actions() if a.text() == "New...").trigger()

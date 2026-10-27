@@ -62,9 +62,10 @@ def _series_values(**changes):
 
 def test_prefix_menu_in_strip_and_menu_bar(app):
     expected = [
-        "New Series…", "Series from Data…", "Update from Data", "Copy…",
-        "Rename…", "Delete…", "Edit Scales…", "Lock", "Add Epochs…",
-        "Remove Epochs…", "Show in Browser",
+        "New Series…", "Series from Data…", "Update from Data",
+        "Rename…", "Edit Scales…", "Duplicate…", "Copy to Folder…", "Move to Folder…", "Delete…",
+        "Append Series…", "Add Epochs…", "Remove Epochs…",
+        "Lock", "Show in Browser",
     ]
     button = app.selection_strip.action_button("dataseries")
     assert button.isEnabled()
@@ -163,24 +164,39 @@ def test_update_from_data_previews_changes(app):
     assert options["message"]("Record").endswith("Up to date: no new arrays.")
 
 
-def test_copy_series_here_and_to_another_folder(app):
+def test_duplicate_series(app):
     app.series.locked = True
-    app.series_actions.copy_series()  # cancelled; check the options
-    options = app.dialogs[-1][1]
-    assert options["extras"] == [("To folder", ["Demo", "Other"], "Demo")]
-    assert options["default_name"]("Record", "Demo") == "C_Record"
-    assert options["validate"]("Record", "Stim", "Demo") == "Data 'StimA0' already exists"
+    app.series_actions.duplicate_action.trigger()  # cancelled; check the options
+    title, options = app.dialogs[-1]
+    assert title == "Duplicate Series" and "extras" not in options  # this folder
+    assert options["default_name"]("Record") == "C_Record"
+    assert options["validate"]("Record", "Stim") == "Data 'StimA0' already exists"
 
-    app.answers = [("Record", "C_Record", "Demo")]
-    app.series_actions.copy_series()
+    app.answers = [("Record", "C_Record")]
+    app.series_actions.duplicate_series()
     copy = app.demo.dataseries["C_Record"]
     assert not copy.locked  # the copy can be edited
     assert copy.get_data("B", "E0").name == "C_RecordB0"
     assert app.selection_model.selection["dataseries"] is copy
 
+
+def test_copy_series_to_folder(app):
+    actions = app.series_actions
+    actions.copy_action.trigger()  # cancelled; check the options
+    title, options = app.dialogs[-1]
+    assert title == "Copy Series to Folder"
+    assert options["extras"] == [("To folder", ["Other"], "Other")]  # not this folder
+    assert options["default_name"]("Record", "Other") == "Record"  # the prefix is kept
+    assert options["validate_live"] is True
+    app.other.data.new("RecordA0", nparray=np.array([1.0, 2.0]))
+    assert options["validate"]("Record", "Record", "Other") == (
+        "Data 'RecordA0' already exists. Enter a new prefix.")
+    app.other.data.pop("RecordA0", quiet=True)
+
     app.answers = [("Record", "Record", "Other")]
-    app.series_actions.copy_series()
+    actions.copy_series_to_folder()
     assert "RecordA1" in app.other.data and "Record" in app.other.dataseries
+    assert "Record" in app.demo.dataseries  # the original stays
 
 
 def test_rename_series(app):
@@ -388,3 +404,13 @@ def test_locked_current_series_greys_out_only_its_own_actions(app):
     actions.lock_action.trigger()  # unlock
     assert all(item.isEnabled() for item in current_only)
     assert [item.toolTip() for item in current_only] == tips
+
+
+def test_copied_series_keeps_its_sets_and_groups(app):
+    app.series.epochs.sets.add("Set1", ["E1"])
+    app.series.epochs.groups.assign("E0", 2)
+    app.answers = [("Record", "Record", "Other")]
+    app.series_actions.copy_series_to_folder()
+    copy = app.other.dataseries["Record"]
+    assert copy.epochs.sets.get_items("Set1", get_keys=True) == ["E1"]
+    assert copy.epochs.groups.get_group("E0") == 2

@@ -104,7 +104,8 @@ def test_subfolder_menu(app, monkeypatch):
 
 def test_data_array_menu(app, monkeypatch):
     assert _both(app, monkeypatch, app.folder.data["RecordA0"]) == [
-        "Select", "Rename...", "Duplicate", "Copy to Folder", "Add to Set", "Delete...",
+        "Select", "Rename...", "Duplicate", "Copy to Folder", "Move to Folder", "Add to Set",
+        "Delete...",
     ]
 
 
