@@ -558,8 +558,8 @@ XARRAY_LINKS = "nm_xarray_links"
 
 def check_xarray(source: NMData, data: NMData | None = None) -> numpy.ndarray:
     """Check *source*'s values can be x values: numeric, one dimension,
-    no NaN, increasing, and (with *data*) as many points as *data*. Returns
-    them (not a copy).
+    no NaN, increasing, and (with *data*) in the same folder as *data*, with
+    as many points. Returns them (not a copy).
 
     Raises:
         TypeError: If *source* is not an NMData.
@@ -567,6 +567,12 @@ def check_xarray(source: NMData, data: NMData | None = None) -> numpy.ndarray:
     """
     if not isinstance(source, NMData):
         raise TypeError(nmu.type_error_str(source, "source", "NMData"))
+    if data is not None and data._parent is not None and source._parent is not None \
+            and source._parent is not data._parent:
+        # A folder is self-contained: saving, copying or deleting it never
+        # leaves an x array behind or hidden
+        raise ValueError(
+            "x array '%s' must be in the same folder as '%s'" % (source.name, data.name))
     values = source.nparray
     if not isinstance(values, numpy.ndarray) or values.ndim != 1 or values.size == 0:
         raise ValueError("x array '%s' has no values" % source.name)
@@ -806,6 +812,35 @@ class NMDataContainer(NMObjectContainer):
         copy._parent = container._parent
         copy._name_set(newname=container._newkey(newname or key), quiet=True)
         container._add(copy, quiet=quiet)
+        source = copy.xarray_source
+        if source is not None:  # an x array of its new folder (copied if needed)
+            copy.set_xarray_from(container.bring_xarray(source))
+        return copy
+
+    def bring_xarray(self, source: NMData, brought: dict | None = None) -> NMData:
+        """The array of this container to use as x array in place of
+        *source*: *source* itself if it is here, else a copy of it added here
+        (named as *source*, or with a suffix if taken), made once per
+        *brought* (a dict shared by the arrays of one copy or move). An array
+        here with the same name and values is used instead of a new copy."""
+        if source._parent is self._parent and self._getkey(source.name) is not None:
+            return source
+        if brought is not None and id(source) in brought:
+            return brought[id(source)]
+        same = self.get(source.name) if self._getkey(source.name) is not None else None
+        if isinstance(same, NMData) and _eq_arrays(same.nparray, source.nparray):
+            return same  # e.g. a copy of it made before: used again
+        name, number = source.name, 1
+        while self._getkey(name) is not None:
+            name, number = "%s_%d" % (source.name, number), number + 1
+        copy = source.copy()
+        copy._dataseries_set(None, None)
+        copy._NMData__xarray_source = None  # an x array has no x array of its own here
+        copy._parent = self._parent
+        copy._name_set(newname=name, quiet=True)
+        self._add(copy, quiet=True)
+        if brought is not None:
+            brought[id(source)] = copy
         return copy
 
     # override

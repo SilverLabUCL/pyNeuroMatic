@@ -796,6 +796,14 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                         folder.name,
                         lambda checked=False, f=folder: self._copy_selected_to(container, objects, f),
                     )
+                if isinstance(container._parent, NMFolder):  # not a subfolder's
+                    move_menu = menu.addMenu("Move to Folder")
+                    for folder in folders:
+                        move_menu.addAction(
+                            folder.name,
+                            lambda checked=False, f=folder:
+                            self._move_selected_to(container, objects, f),
+                        )
         # Sets are for data arrays and epochs (others may come later)
         if isinstance(container, (NMDataContainer, NMEpochContainer)):
             set_menu = menu.addMenu("Add to Set")
@@ -1324,8 +1332,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._tree.scrollTo(index)
         self._tree.setFocus()
 
-    def show_object(self, obj) -> None:
-        """Select *obj* (e.g. a data series) in the tree, expanding its parents."""
+    def show_object(self, obj, expand: bool = False) -> None:
+        """Select *obj* (e.g. a data series) in the tree, expanding its
+        parents, and with *expand* its own node (e.g. a folder's contents)."""
         model = self._model
 
         def find(parent: QtCore.QModelIndex):
@@ -1345,6 +1354,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         while parent.isValid():
             self._tree.expand(parent)
             parent = parent.parent()
+        if expand:
+            self._tree.expand(index)
         self._tree.setCurrentIndex(index)
         self._tree.scrollTo(index)
         self._tree.setFocus()
@@ -1367,6 +1378,20 @@ class FolderBrowserWidget(QtWidgets.QWidget):
     def _duplicate_selected(self, container, selected: list[NMObject]) -> None:
         for obj in selected:
             container.duplicate(obj.name, copy_name(container, obj.name))
+        self._changed()
+
+    def _move_selected_to(self, container, selected: list[NMObject], folder) -> None:
+        """Move data arrays to *folder* (keeping their names); those that can't
+        move (e.g. part of a data series, or a name taken there) are listed."""
+        owner = container._parent
+        problems = []
+        for obj in selected:
+            try:
+                owner.move_data(obj.name, folder)
+            except (KeyError, ValueError, RuntimeError, TypeError) as e:
+                problems.append(str(e.args[0]) if e.args else str(e))
+        if problems:
+            QtWidgets.QMessageBox.warning(self, "Move to Folder", "\n".join(problems))
         self._changed()
 
     def _copy_selected_to(self, container, selected: list[NMObject], folder) -> None:

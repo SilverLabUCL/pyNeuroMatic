@@ -289,12 +289,15 @@ def test_folder_and_subfolder_show_in_browser(app):
     folder = app.selection_model.selection["folder"]
     actions.browse_action.trigger()
     assert app.tool_rail.current_tool_name == "Browser"
-    assert app.browser_widget.tree.currentIndex().internalPointer() is folder
+    tree = app.browser_widget.tree
+    assert tree.currentIndex().internalPointer() is folder
+    assert tree.isExpanded(tree.currentIndex())  # open, showing its contents
     assert not actions.subfolder_browse_action.isEnabled()  # no subfolder selected
     subfolder = next(iter(folder.toolfolders.values()))
     app.selection_model.update(toolfolder=subfolder)
     assert actions.subfolder_browse_action.isEnabled()
     actions.subfolder_browse_action.trigger()
-    assert app.browser_widget.tree.currentIndex().internalPointer() is subfolder
+    assert tree.currentIndex().internalPointer() is subfolder
+    assert tree.isExpanded(tree.currentIndex())
     menu = app.selection_strip.action_button("toolfolder").menu()
     assert [a.text() for a in menu.actions() if a.text()][-1] == "Show in Browser"

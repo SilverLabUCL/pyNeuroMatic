@@ -22,6 +22,8 @@ except ImportError:  # pragma: no cover - optional GUI dependency
 
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_dataseries import NMDataSeries
+from pyneuromatic.core.nm_folder import NMFolder
+from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, EXCLUDE_SET
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.context_views import (
@@ -1290,7 +1292,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         """Switch to the Browser with *obj* (e.g. a data series) selected."""
         self.tool_rail.select_tool("Browser")
         if isinstance(self.browser_widget, FolderBrowserWidget):
-            self.browser_widget.show_object(obj)
+            # A folder or subfolder opens, showing its contents
+            self.browser_widget.show_object(
+                obj, expand=isinstance(obj, (NMFolder, NMToolFolder)))
 
     def _show_epoch_sets_in_browser(self, series, set_name) -> None:
         """Switch to the Browser with *series*' epoch set (or Sets) selected."""
