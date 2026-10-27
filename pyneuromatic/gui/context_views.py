@@ -309,7 +309,9 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         container = getattr(data._parent, "data", None)
         if container is None or data.name not in container:
             return False
-        return any(ds.locked for ds in container.dataseries_of(data.name))
+        # The x array of a locked series is protected as the series' arrays are
+        return (any(ds.locked for ds in container.dataseries_of(data.name))
+                or container.locked_xarray_series(data.name) is not None)
 
     def _editable(self, index: QtCore.QModelIndex) -> bool:
         if not index.isValid() or index.column() == 0 or self._channel is not None:

@@ -30,6 +30,15 @@ demo1 = manager.folders.new("Demo1")
 add_dataseries(demo1, "Record", ("A", "B"), n_epochs=3, phase=0.0)
 add_dataseries(demo1, "Stim", ("A", "B", "C"), n_epochs=2, phase=0.5)
 demo1.data.sets.add("RecordSet", ["RecordA0", "RecordB1"])
+# An x array for Record (200 points): time stamps 0.05-0.15 ms apart, so the
+# trace is visibly stretched and squeezed when used (Prefix ⋯ › Edit Scales…,
+# X › From: Times)
+intervals = 0.1 + 0.05 * np.sin(np.arange(199) / 10.0)
+demo1.data.new(
+    "Times",
+    nparray=np.concatenate(([0.0], np.cumsum(intervals))),
+    yscale={"label": "Time", "units": "ms"},
+)
 
 demo2 = manager.folders.new("Demo2")
 add_dataseries(demo2, "Sweep", ("A", "B", "C"), n_epochs=2, phase=1.0)

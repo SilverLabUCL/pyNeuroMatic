@@ -191,6 +191,11 @@ class NMFolder(NMObject):
             self._NMFolder__metadata, memo
         )
 
+        # Copied arrays whose x array was copied later point to that copy
+        from pyneuromatic.core.nm_data import XARRAY_LINKS
+        for data, source in memo.pop(XARRAY_LINKS, []):
+            data._NMData__xarray_source = memo.get(id(source), source)
+
         return result
 
     # override

@@ -1255,7 +1255,10 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             actions.delete_subfolders(selected[0]._folder, names)
             return
         problems = []
-        for obj in selected:
+        # Arrays taking their x values from another go first, so deleting
+        # both (e.g. a series' arrays and their x array) works
+        ordered = sorted(selected, key=lambda o: getattr(o, "xarray_source", None) is None)
+        for obj in ordered:
             try:
                 del container[obj.name]
             except (KeyError, ValueError, TypeError, RuntimeError) as e:

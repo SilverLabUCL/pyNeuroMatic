@@ -189,12 +189,15 @@ def test_add_note_to_a_data_series(app, monkeypatch):
     assert panel.notes_table.item(0, 1).text() == "20 Hz train, 10 pulses"
 
 
-def test_edit_scales_button_only_for_data_arrays(app):
+def test_edit_scales_button_for_arrays_channels_and_series(app):
     browser = app.browser_widget
     panel = browser.info_panel
     browser.show_data_of(app.folder, select="Single")
     assert panel.edit_scales_button.isVisibleTo(panel)
-    for obj in (app.folder, app.series, app.series.epochs["E0"]):
+    for obj in (app.series, app.series.channels["A"]):
+        browser.show_object(obj)
+        assert panel.edit_scales_button.isVisibleTo(panel)
+    for obj in (app.folder, app.series.epochs["E0"]):
         browser.show_object(obj)
         assert not panel.edit_scales_button.isVisibleTo(panel)
 
@@ -320,7 +323,7 @@ def test_edit_scales_of_a_channel(app, monkeypatch):
     assert panel.edit_scales_button.isVisibleTo(panel)
     asked = []
 
-    def ask(x, y_rows, context, error):
+    def ask(x, y_rows, context, error, **_x_options):
         asked.append((y_rows, context, error))
         return {"xunits": "ms", "y": {"Y": {"label": "Im", "units": "pA"}}}
 
