@@ -522,6 +522,8 @@ class EditScalesDialog(QtWidgets.QDialog):
     array can't be used, or None. *x_array_scales* gives each array's
     (label, units): choosing an array fills X Label and Units from them
     (where set), and a note says when X Units differ from the array's.
+    *x_array_fixed* (e.g. "Set by data series 'Record'") shows the choice
+    without allowing a change, with that note.
     """
 
     START_DELTA = "None"  # no x array: x from start and delta
@@ -538,6 +540,7 @@ class EditScalesDialog(QtWidgets.QDialog):
         x_array: str | None = "",
         validate_x: Callable[[str], str | None] | None = None,
         x_array_scales: dict[str, tuple[str, str]] | None = None,
+        x_array_fixed: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Edit Scales")
@@ -589,6 +592,17 @@ class EditScalesDialog(QtWidgets.QDialog):
             grid.addWidget(QtWidgets.QLabel("X Array", self), 1, 0)
             grid.addWidget(combo, 1, 1, 1, 3)
             x_row = 2
+        # e.g. an array of a data series: the series sets its x array
+        self.x_array_fixed_note: QtWidgets.QLabel | None = None
+        if x_array_fixed and self.x_from_combo is not None:
+            self.x_from_combo.setEnabled(False)
+            self.x_from_combo.setToolTip(x_array_fixed)
+            note = QtWidgets.QLabel(x_array_fixed, self)
+            note.setStyleSheet("color: gray;")
+            note.setWordWrap(True)
+            grid.addWidget(note, 2, 1, 1, 3)
+            self.x_array_fixed_note = note
+            x_row = 3
         for row, (first, second) in enumerate((("xstart", "xdelta"), ("xlabel", "xunits")), x_row):
             for col, key in ((0, first), (2, second)):
                 grid.addWidget(QtWidgets.QLabel(key[1:].capitalize(), self), row, col)
@@ -1531,14 +1545,30 @@ class DataActions(TierActions):
         if data is None or container is None:
             return
         lock_error = self._lock_error(container, data.name)
+        # X Array: chosen here for a plain array; an array of a data series
+        # shows its series' (set in the series' Edit Scales)
+        owner = container._parent
+        series = container.dataseries_of(data.name) if data.name in container else []
+        choices = [] if series else x_array_choices(owner, [data])
+        fixed = (f"Set by data series '{series[0].name}' (its Edit Scales)"
+                 if series else None)
         changes = self._ask_scales(
             scale_fields([data]),
             [("Y", data.yscale.label, data.yscale.units)],
             ("Data", f"{context} › {data.name}"),
             lock_error,
+            x_arrays=choices, x_array=x_array_current([data]),
+            validate_x=lambda name: x_array_error(owner, [data], name),
+            x_array_scales=x_array_scales(owner, choices),
+            x_array_fixed=fixed,
         )
         if not changes or lock_error:  # the dialog only shows a locked array
             return
+        if "xarray" in changes and not series:
+            name = changes["xarray"]
+            source = container.get(name) if name else None
+            if not name or source is not None:  # e.g. one in another folder: kept
+                data.set_xarray_from(source)
         for key, attribute in (("xstart", "start"), ("xdelta", "delta"),
                                ("xlabel", "label"), ("xunits", "units")):
             if key in changes:

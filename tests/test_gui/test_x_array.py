@@ -222,3 +222,50 @@ def test_series_dialog_gets_the_arrays_scales(app, monkeypatch):
     seen = _ask(app, monkeypatch, app.series_actions, None)
     app.series_actions.scales_action.trigger()
     assert seen["x_array_scales"] == {"Times": ("Time", "ms"), "Back": ("", "")}
+
+
+# --- Data ⋯ › Edit Scales: one array ---------------------------------------------
+
+def test_data_edit_scales_x_array_for_a_plain_array(app, monkeypatch):
+    single = app.folder.data.new("Single", nparray=np.array([5.0, 6.0, 7.0, 8.0]))
+    actions = app.data_actions
+    seen = _ask(app, monkeypatch, actions, {"xarray": "Times"})
+    actions.edit_scales(single)
+    assert "Times" in seen["x_arrays"] and "Single" not in seen["x_arrays"]
+    assert seen["x_array"] == "" and seen["x_array_fixed"] is None
+    assert single.xarray_source is app.folder.data["Times"]
+    assert ("'Times' is the x array of 'Single' and cannot be deleted while in use"
+            == app.folder.data.xarray_in_use_text("Times"))
+    seen = _ask(app, monkeypatch, actions, {"xarray": ""})  # back to None
+    actions.edit_scales(single)
+    assert seen["x_array"] == "Times"
+    assert single.xarray_source is None
+
+
+def test_data_edit_scales_of_a_series_array_shows_the_series_choice(app, monkeypatch):
+    app.series.set_xarray(app.folder.data["Times"])
+    data = app.folder.data["RecordA0"]
+    actions = app.data_actions
+    seen = _ask(app, monkeypatch, actions, {"xarray": ""})  # ignored
+    actions.edit_scales(data)
+    assert seen["x_array"] == "Times" and seen["x_arrays"] == []
+    assert seen["x_array_fixed"] == "Set by data series 'Record' (its Edit Scales)"
+    assert data.xarray_source is app.folder.data["Times"]  # unchanged
+
+
+def test_dialog_fixed_x_array(qtbot):
+    dialog = _dialog(qtbot, x_arrays=[], x_array="Times",
+                     x_array_fixed="Set by data series 'Record' (its Edit Scales)")
+    assert not dialog.x_from_combo.isEnabled()
+    assert dialog.x_from_combo.currentText() == "Times"
+    assert dialog.x_array_fixed_note.text() == "Set by data series 'Record' (its Edit Scales)"
+    assert not dialog.x_edits["xstart"].isEnabled()  # x from the array
+    assert dialog.changes() == {}
+
+
+def test_browser_info_for_a_plain_array_with_an_x_array(app):
+    single = app.folder.data.new("Single", nparray=np.zeros(4))
+    single.set_xarray_from(app.folder.data["Times"])
+    browser = app.browser_widget
+    browser.show_data_of(app.folder, select="Single")
+    assert browser.info_panel.row_text("X Array") == "Times"

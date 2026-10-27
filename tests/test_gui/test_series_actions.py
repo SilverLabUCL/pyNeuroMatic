@@ -344,7 +344,7 @@ def test_data_edit_scales(app, monkeypatch):
     app.selection_model.update(data=data)
     seen = {}
 
-    def ask(x, y_rows, context, error):
+    def ask(x, y_rows, context, error, **_x_options):
         seen.update(y_rows=y_rows, context=context, error=error)
         return {"xstart": 5.0, "y": {"Y": {"label": "Stim", "units": "pA"}}}
 

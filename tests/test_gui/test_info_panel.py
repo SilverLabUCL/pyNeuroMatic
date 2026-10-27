@@ -210,7 +210,7 @@ def test_edit_scales_of_the_array_shown(app, monkeypatch):
     browser.show_data_of(app.folder, select="Single")
     asked = []
 
-    def ask(x, y_rows, context, error):
+    def ask(x, y_rows, context, error, **_x_options):
         asked.append((x, y_rows, context, error))
         return {"xdelta": 0.05, "xunits": "s", "y": {"Y": {"label": "Im", "units": "pA"}}}
 
@@ -236,7 +236,7 @@ def test_edit_scales_of_the_array_shown(app, monkeypatch):
 def test_edit_scales_cancelled(app, monkeypatch):
     browser = app.browser_widget
     browser.show_data_of(app.folder, select="Single")
-    monkeypatch.setattr(app.data_actions, "_ask_scales", lambda *args: None)
+    monkeypatch.setattr(app.data_actions, "_ask_scales", lambda *args, **kwargs: None)
     browser.info_panel.edit_scales_button.click()
     assert app.folder.data["Single"].xscale.delta == 0.1
 
