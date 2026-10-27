@@ -63,6 +63,7 @@ def test_actions_appear_in_strip_and_menu_bar(app):
     assert folder_button.isEnabled()
     assert [a.text() for a in folder_button.menu().actions() if a.text()] == [
         "New Folder…", "Open / Import…", "Save…", "Duplicate…", "Rename…", "Delete…",
+        "Show in Browser",
     ]
     assert strip.action_button("toolfolder").isEnabled()
 
@@ -281,3 +282,19 @@ def test_copy_name_uses_prefix_and_numbers_it():
     data.new("C1_RecordA0", nparray=np.array([1.0]))
     assert copy_name(data, "RecordA0") == "C2_RecordA0"
     assert copy_name(data, "RecordA0", prefix="Avg") == "Avg_RecordA0"
+
+
+def test_folder_and_subfolder_show_in_browser(app):
+    actions = app.folder_actions
+    folder = app.selection_model.selection["folder"]
+    actions.browse_action.trigger()
+    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.browser_widget.tree.currentIndex().internalPointer() is folder
+    assert not actions.subfolder_browse_action.isEnabled()  # no subfolder selected
+    subfolder = next(iter(folder.toolfolders.values()))
+    app.selection_model.update(toolfolder=subfolder)
+    assert actions.subfolder_browse_action.isEnabled()
+    actions.subfolder_browse_action.trigger()
+    assert app.browser_widget.tree.currentIndex().internalPointer() is subfolder
+    menu = app.selection_strip.action_button("toolfolder").menu()
+    assert [a.text() for a in menu.actions() if a.text()][-1] == "Show in Browser"
