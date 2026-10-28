@@ -59,7 +59,7 @@ def _menu_texts(menu):
 def test_data_menus_in_strip_and_menu_bar(app):
     strip = app.selection_strip
     assert _menu_texts(strip.action_button("data").menu()) == [
-        "New…", "Rename…", "Edit Scales…", "Duplicate…", "Copy to Folder…", "Move to Folder…",
+        "New…", "Edit Scales…", "Rename…", "Copy…", "Move…",
         "Delete…", "Show in Browser",
     ]
     assert _menu_texts(strip.action_button("data_set").menu()) == [
@@ -81,12 +81,14 @@ def test_set_actions_need_a_set(app):
     assert not actions.set_combine_action.isEnabled()
 
 
-def test_duplicate_data_selects_copy(app):
-    app.answers = [("Loose0", "C_Loose0")]
-    app.data_actions.duplicate_data()
-    default_name = app.dialogs[-1][1]["default_name"]
-    assert default_name("RecordA1") == "C_RecordA1"
-    assert default_name("Loose0") == "C1_Loose0"  # C_Loose0 now exists
+def test_copy_data_here_selects_copy(app):
+    app.answers = [("Loose0", "C_Loose0", "Demo")]
+    app.data_actions.copy_data()
+    title, options = app.dialogs[-1]
+    assert title == "Copy Data" and options["extras"] == [("To folder", ["Demo", "Other"], "Demo")]
+    default_name = options["default_name"]
+    assert default_name("RecordA1", "Demo") == "C_RecordA1"
+    assert default_name("Loose0", "Demo") == "C1_Loose0"  # C_Loose0 now exists
     assert app.selection_model.selection["data"] is app.demo.data["C_Loose0"]
     assert app.selection_strip.combo("data").currentText() == "C_Loose0"
 
@@ -94,9 +96,9 @@ def test_duplicate_data_selects_copy(app):
 def test_rename_member_leaves_series_with_note(app):
     app.data_actions.rename_data()  # cancelled; check the note
     options = app.dialogs[-1][1]
-    assert options["message"]("RecordA1") == (
-        "Part of data series 'Record'; it will be removed from the series."
-    )
+    message = options["message"]("RecordA1")  # in red
+    assert 'color: #c62828' in message
+    assert "Part of data series &#x27;Record&#x27;; it will be removed from the series." in message
     assert options["message"]("Loose0") == ""
 
     app.answers = [("RecordA1", "Renamed")]
@@ -111,7 +113,7 @@ def test_locked_series_data_cannot_be_renamed_or_deleted(app):
     app.series.locked = True
     app.data_actions.rename_data()
     options = app.dialogs[-1][1]
-    assert options["message"]("RecordA0") == "Part of locked data series 'Record'."
+    assert "Part of locked data series &#x27;Record&#x27;." in options["message"]("RecordA0")
     assert "locked data series 'Record'" in options["validate"]("RecordA0", "X")
     assert options["validate"]("Loose0", "Free0") is None
 
@@ -130,13 +132,15 @@ def test_delete_member_unlinks_it_from_series(app):
 def test_copy_to_folder(app):
     other = app.selection_model.manager.folders["Other"]
     app.answers = [("RecordA0", "RecordA0", "Other")]
-    app.data_actions.copy_data_to_folder()
+    app.data_actions.copy_data()
     options = app.dialogs[-1][1]
-    assert options["extras"] == [("To folder", ["Other"], "Other")]
+    assert options["default_name"]("RecordA0", "Other") == "RecordA0"  # kept
     assert "RecordA0" in other.data
     assert other.data.dataseries_of("RecordA0") == []
-    # The target folder's names are checked
-    assert options["validate"]("RecordA0", "RecordA0", "Other") == "'RecordA0' already exists"
+    # The target folder's names are checked, shown at once
+    assert options["validate_live"] is True
+    assert options["validate"]("RecordA0", "RecordA0", "Other") == (
+        "'RecordA0' already exists. Enter a new name.")
 
 
 def test_new_add_remove_and_combine_sets(app):
@@ -345,18 +349,18 @@ def test_actions_ask_when_name_fits_a_series(app):
     actions, data = app.data_actions, app.demo.data
 
     # A plain name: no question
-    app.answers = [("Loose0", "C_Loose0")]
-    actions.duplicate_data()
+    app.answers = [("Loose0", "C_Loose0", "Demo")]
+    actions.copy_data()
     assert app.confirms == [] and "C_Loose0" in data
 
     # Declined: nothing happens
     app.confirm_answer = False
-    app.answers = [("Loose0", "RecordA7")]
-    actions.duplicate_data()
+    app.answers = [("Loose0", "RecordA7", "Demo")]
+    actions.copy_data()
     title, text = app.confirms[-1]
-    assert title == "Duplicate Data"
+    assert title == "Copy Data"
     assert text.startswith("'RecordA7' fits data series 'Record'")
-    assert text.endswith("Duplicate anyway?")
+    assert text.endswith("Copy anyway?")
     assert "RecordA7" not in data
 
     # Accepted: the action goes ahead
@@ -372,9 +376,9 @@ def test_actions_ask_when_name_fits_a_series(app):
     other.data.new("CellA0", nparray=np.array([1.0]))
     other.sync_dataseries("Cell")
     app.answers = [("C_Loose0", "CellA4", "Other")]
-    actions.copy_data_to_folder()
+    actions.copy_data()
     title, text = app.confirms[-1]
-    assert title == "Copy Data to Folder" and "data series 'Cell'" in text
+    assert title == "Copy Data" and "data series 'Cell'" in text
     assert "CellA4" in other.data
 
 
@@ -409,8 +413,8 @@ def test_names_fitting_a_locked_series_are_blocked(app):
     assert series_name_error(app.demo, "C_RecordA7") is None
 
     actions = app.data_actions
-    actions.duplicate_data()
-    assert "locked data series" in app.dialogs[-1][1]["validate"]("Loose0", "RecordA7")
+    actions.copy_data()
+    assert "locked data series" in app.dialogs[-1][1]["validate"]("Loose0", "RecordA7", "Demo")
     actions.rename_data()
     assert "locked data series" in app.dialogs[-1][1]["validate"]("Loose0", "RecordA7")
     assert app.dialogs[-1][1]["validate"]("Loose0", "Free0") is None
@@ -437,29 +441,31 @@ def test_browser_rename_into_locked_series_reports(app, monkeypatch):
     assert "fits locked data series 'Record'" in warnings[0]
 
 
-def test_copy_to_folder_suggests_prefix_on_name_clash(qtbot, app):
-    from pyneuromatic.gui.tier_actions import ChooseItemDialog, copy_target_name
+def test_copy_to_folder_keeps_the_name_and_shows_a_clash(qtbot, app):
+    from pyneuromatic.gui.tier_actions import ChooseItemDialog
 
     manager = app.selection_model.manager
     other = manager.folders["Other"]
-    third = manager.folders.new("Third")
+    manager.folders.new("Third")
     other.data.new("Loose0", nparray=np.array([1.0]))
-    assert copy_target_name(third.data, "Loose0") == "Loose0"
-    assert copy_target_name(other.data, "Loose0") == "C_Loose0"
 
-    app.data_actions.copy_data_to_folder()  # cancelled; check the default name
+    app.data_actions.copy_data()  # cancelled; check the default name
     options = app.dialogs[-1][1]
-    assert options["default_name"]("Loose0", "Other") == "C_Loose0"
+    assert options["default_name"]("Loose0", "Demo") == "C_Loose0"  # this folder
+    assert options["default_name"]("Loose0", "Other") == "Loose0"  # kept, though taken
     assert options["default_name"]("Loose0", "Third") == "Loose0"
 
-    # In the dialog, the name follows the chosen target folder
-    dialog = ChooseItemDialog("Copy Data to Folder", **options)
+    # In the dialog, the name follows the chosen folder, and a clash shows at once
+    dialog = ChooseItemDialog("Copy Data", **options)
     qtbot.addWidget(dialog)
     dialog.item_combo.setCurrentText("Loose0")
     dialog.extra_combos[0].setCurrentText("Other")
-    assert dialog.name() == "C_Loose0"
-    dialog.extra_combos[0].setCurrentText("Third")
     assert dialog.name() == "Loose0"
+    assert dialog.error_label.text() == "'Loose0' already exists. Enter a new name."
+    dialog.extra_combos[0].setCurrentText("Third")
+    assert dialog.name() == "Loose0" and dialog.error_label.isHidden()
+    dialog.extra_combos[0].setCurrentText("Demo")
+    assert dialog.name() == "C_Loose0"
 
 
 def test_data_dialogs_show_the_folder(qtbot, monkeypatch):
@@ -482,7 +488,7 @@ def test_data_dialogs_show_the_folder(qtbot, monkeypatch):
     actions = window.data_actions
     actions.rename_data()
     assert seen[-1]["context"] == ("Folder", "Demo")
-    actions.copy_data_to_folder()
+    actions.copy_data()
     assert seen[-1]["context"] == ("From folder", "Demo")
 
     window.selection_model.update(toolfolder=stats)
@@ -642,3 +648,18 @@ def test_browser_new_data_opens_in_table(app, monkeypatch):
     assert app.selection_model.selection["data"] is made
     assert app.context_panel.currentWidget() is app.table_panel
     assert app.table_panel.channel_table.model.arrays == [made]
+
+
+def test_delete_warns_in_red_for_a_series_member(app, qtbot):
+    from pyneuromatic.gui.tier_actions import ChooseItemDialog
+
+    app.data_actions.delete_data()  # cancelled; check the message
+    options = app.dialogs[-1][1]
+    message = options["message"]("RecordA1")
+    assert 'color: #c62828' in message
+    assert "Part of data series &#x27;Record&#x27;; it will be removed" in message
+    assert options["message"]("Loose0") == "The data array will be deleted."
+    dialog = ChooseItemDialog("Delete Data", **options)
+    qtbot.addWidget(dialog)
+    dialog.item_combo.setCurrentText("RecordA1")
+    assert dialog.message_label.textFormat() != dialog.message_label.textFormat().PlainText
