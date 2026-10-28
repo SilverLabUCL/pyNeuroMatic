@@ -104,7 +104,7 @@ def test_subfolder_menu(app, monkeypatch):
 
 def test_data_array_menu(app, monkeypatch):
     assert _both(app, monkeypatch, app.folder.data["RecordA0"]) == [
-        "Select", "Rename...", "Duplicate", "Copy to Folder", "Move to Folder", "Add to Set",
+        "Select", "Edit Scales...", "Rename...", "Copy...", "Move...", "Add to Set",
         "Delete...",
     ]
 
@@ -246,3 +246,42 @@ def test_delete_is_last(app, monkeypatch):
     actions = captured["menu"].actions()
     assert actions[-1].text() == "Delete..."
     assert not any(action.isSeparator() for action in actions)
+
+
+def test_one_array_uses_the_data_prompts(app, monkeypatch):
+    asked = []
+    monkeypatch.setattr(app.data_actions, "_choose",
+                        lambda title, **options: asked.append((title, options)) or None)
+    actions = _tree_menu(app, monkeypatch, _find(app.browser_widget, app.folder.data["RecordA0"]))
+    for text, title in (("Rename...", "Rename Data"), ("Copy...", "Copy Data"),
+                        ("Move...", "Move Data to Folder"), ("Delete...", "Delete Data")):
+        actions[text].trigger()
+        got_title, options = asked[-1]
+        assert got_title == title  # the same prompt as Data ⋯
+        assert options["current"] == "RecordA0"  # starting on the array clicked
+
+
+def test_an_array_of_another_folder_uses_its_folder(app, monkeypatch):
+    folders = app.browser_widget._nm.folders
+    elsewhere = folders["Other"].data.new("Far", nparray=np.zeros(2))
+    asked = []
+    monkeypatch.setattr(app.data_actions, "_choose",
+                        lambda title, **options: asked.append(options) or None)
+    app.data_actions.copy_data(elsewhere)
+    options = asked[-1]
+    assert options["context"] == ("From folder", "Other")
+    assert options["items"] == ["Far"] and options["current"] == "Far"
+    assert options["extras"][0][1][0] == "Other"  # this folder first: the array's own
+
+
+def test_several_arrays_keep_the_quick_submenus(app, monkeypatch):
+    browser = app.browser_widget
+    data = app.folder.data
+    menu = QtWidgets.QMenu()
+    browser._populate_object_menu(menu, [data["RecordA0"], data["RecordA1"]], data)
+    actions = {a.text(): a for a in menu.actions() if a.text()}
+    assert list(actions) == ["Copy", "Move", "Add to Set", "Delete..."]
+    copy_items = [a.text() for a in actions["Copy"].menu().actions() if a.text()]
+    assert copy_items == ["Demo (this folder)", "Other"]
+    actions["Copy"].menu().actions()[0].trigger()
+    assert {"C_RecordA0", "C_RecordA1"} <= set(data.keys())
