@@ -94,12 +94,13 @@ def test_append_series(app):
     actions = app.series_actions
     actions.append_action.trigger()  # cancelled: look at the dialog
     title, options = app.dialogs[0]
-    assert title == "Append Series" and options["items"] == ["Stim"]
-    assert options["message"]("Stim", "Keep") == (
+    assert title == "Append Series" and options["items"] == ["A"]  # B has no series
+    assert options["current"] == "A" and options["extras"][0] == ("Append", ["Stim"], None)
+    assert options["message"]("A", "Stim", "Keep") == (
         "Adds 2 epochs (E3 to E4) from 'Stim': 4 arrays copied and renamed "
         "(e.g. StimA0 → RecordA3).")
-    assert "moved" in options["message"]("Stim", "Delete")
-    app.answers = [("Stim", None, "Delete")]
+    assert "moved" in options["message"]("A", "Stim", "Delete")
+    app.answers = [("A", None, "Stim", "Delete")]
     actions.append_action.trigger()
     record = app.a.dataseries["Record"]
     assert list(record.epochs.keys()) == ["E0", "E1", "E2", "E3", "E4"]
@@ -112,9 +113,9 @@ def test_append_explains_a_problem(app):
     actions = app.series_actions
     actions.append_action.trigger()
     validate = app.dialogs[0][1]["validate"]
-    assert validate("Odd", None, "Keep") == (
+    assert validate("A", None, "Odd", "Keep") == (
         "The channels differ: 'Record' has A, B, 'Odd' has A, B, C")
-    assert validate("Stim", None, "Keep") is None
+    assert validate("A", None, "Stim", "Keep") is None
 
 
 def test_move_dialog_says_the_x_array_goes_too(app):
@@ -134,7 +135,7 @@ def test_append_summary_notes_the_x_array(app):
     times = app.a.data.new("Times", nparray=np.array([0.0, 1.0, 2.0, 5.0]))
     app.a.dataseries["Record"].set_xarray(times)
     app.series_actions.append_action.trigger()
-    message = app.dialogs[0][1]["message"]("Stim", "Keep")
+    message = app.dialogs[0][1]["message"]("A", "Stim", "Keep")
     assert message.endswith("The appended arrays use x array 'Times', as 'Record' does "
                             "('Stim' used Start and Delta).")
 
@@ -172,3 +173,61 @@ def test_browser_move_to_folder(app, monkeypatch):
     browser._move_selected_to(app.a.data, [single, app.a.data["RecordA0"]], app.b)
     assert app.b.data["Single"] is single
     assert "RecordA0" in app.a.data and "part of data series 'Record'" in warned[0]
+
+
+# --- Append Series from another folder (#420) ---------------------------------
+
+def test_append_from_another_folder(app):
+    other = app.b.new_dataseries("Record", n_channels=2, n_epochs=2, n_points=4)
+    for d in other.channels["A"].data:
+        d.nparray = np.full(4, 7.0)
+    actions = app.series_actions
+    actions.append_action.trigger()  # cancelled: look at the dialog
+    options = app.dialogs[0][1]
+    assert options["items"] == ["A", "B"]
+    assert options["extra_items"][0]("B") == ["Record"]  # the series of the folder chosen
+    assert options["extra_items"][0]("A") == ["Stim"]  # not the target itself
+    assert options["message"]("B", "Record", "Delete") == (
+        "Adds 2 epochs (E3 to E4) from 'Record' in 'B': 4 arrays moved and renamed "
+        "(e.g. RecordA0 → RecordA3).")
+    app.answers = [("B", None, "Record", "Delete")]
+    actions.append_action.trigger()
+    record = app.a.dataseries["Record"]
+    assert list(record.epochs.keys()) == ["E0", "E1", "E2", "E3", "E4"]
+    assert list(app.a.data["RecordA3"].nparray) == [7.0] * 4
+    assert app.a.data["RecordA3"]._parent is app.a
+    assert "Record" not in app.b.dataseries and len(app.b.data) == 0  # moved over
+
+
+def test_append_from_another_folder_keeps_the_source(app):
+    app.b.new_dataseries("Late", n_channels=2, n_epochs=1, n_points=4)
+    app.answers = [("B", None, "Late", "Keep")]
+    app.series_actions.append_action.trigger()
+    assert "RecordA3" in app.a.data
+    assert "Late" in app.b.dataseries and "LateA0" in app.b.data  # copied
+
+
+def test_append_enabled_by_a_series_in_another_folder(app):
+    actions = app.series_actions
+    app.a.remove_dataseries("Stim")
+    app._on_content_changed()
+    assert not actions.append_action.isEnabled()  # nothing anywhere
+    app.b.new_dataseries("Late", n_channels=2, n_epochs=1, n_points=4)
+    app._on_content_changed()
+    assert actions.append_action.isEnabled()
+
+
+def test_dialog_refills_the_series_for_the_folder(qtbot):
+    from pyneuromatic.gui.tier_actions import ChooseItemDialog
+
+    series = {"A": ["Stim"], "B": ["Record", "Late"]}
+    dialog = ChooseItemDialog(
+        "Append Series", item_label="From folder", items=["A", "B"], current="A",
+        extras=[("Append", series["A"], None), ("Source series", ["Keep", "Delete"], "Keep")],
+        extra_items={0: lambda folder: series.get(folder, [])})
+    qtbot.addWidget(dialog)
+    combo = dialog.extra_widgets[0]
+    assert [combo.itemText(i) for i in range(combo.count())] == ["Stim"]
+    dialog.item_combo.setCurrentText("B")
+    assert [combo.itemText(i) for i in range(combo.count())] == ["Record", "Late"]
+    assert dialog.extras() == ["Record", "Keep"]

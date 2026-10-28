@@ -113,6 +113,9 @@ class ChooseItemDialog(QtWidgets.QDialog):
     while the dialog stays open, or None to accept. With *validate_live*,
     it is also shown as the fields change (e.g. a name taken in the folder
     chosen), not only when OK is pressed.
+    *extra_items* maps an extra dropdown's position to *f(item)*, giving its
+    choices for the chosen item (e.g. the data series of the folder chosen);
+    they are refilled when the item changes.
     """
 
     def __init__(
@@ -129,12 +132,14 @@ class ChooseItemDialog(QtWidgets.QDialog):
         context: tuple[str, str] | None = None,
         parent: QtWidgets.QWidget | None = None,
         validate_live: bool = False,
+        extra_items: dict[int, Callable[[str | None], list[str]]] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self._default_name = default_name
         self._validate = validate
         self._validate_live = validate_live
+        self._extra_items = extra_items or {}
         self._message = message
         layout = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
@@ -194,7 +199,9 @@ class ChooseItemDialog(QtWidgets.QDialog):
         layout.addWidget(buttons)
 
         if self.item_combo is not None:
+            self.item_combo.currentTextChanged.connect(self._refill_extras)
             self.item_combo.currentTextChanged.connect(self._fill_default_name)
+        self._refill_extras()
         for widget in self.extra_widgets:
             if isinstance(widget, QtWidgets.QSpinBox):
                 widget.valueChanged.connect(self._fill_default_name)
@@ -223,6 +230,21 @@ class ChooseItemDialog(QtWidgets.QDialog):
             f"{w.prefix()}{w.value()}" if isinstance(w, QtWidgets.QSpinBox) else w.currentText()
             for w in self.extra_widgets
         ]
+
+    def _refill_extras(self, *_args) -> None:
+        """Choices of dependent extra dropdowns, for the item chosen (keeping
+        the current choice where it is still offered)."""
+        for index, choices_for in self._extra_items.items():
+            combo = self.extra_widgets[index]
+            current = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            choices = choices_for(self.item())
+            combo.addItems(choices)
+            if current in choices:
+                combo.setCurrentText(current)
+            combo.setEnabled(bool(choices))
+            combo.blockSignals(False)
 
     def _fill_default_name(self, *_args) -> None:
         if self.name_edit is not None and self._default_name is not None:
@@ -1088,6 +1110,8 @@ class FolderActions(TierActions):
         if imported is not None:
             self._selection.update(folder=imported)
             self._changed()
+            # Shown in the Browser, opened: its Info lists the imported metadata
+            self.browse_requested.emit(imported)
         if problems:
             self._show_message("Open / Import", "\n".join(problems), warning=True)
 
@@ -1944,12 +1968,9 @@ class SeriesActions(TierActions):
         )
         self.update_action = action("Update from Data", self.update_series,
                                     tip="Add newly named or imported arrays to the series")
-        self.duplicate_action = action(
-            "Duplicate…", self.duplicate_series,
-            tip="Copy the series in this folder under a new prefix (the copy is unlocked)")
         self.copy_action = action(
-            "Copy to Folder…", self.copy_series_to_folder,
-            tip="Copy the series to another folder (the copy is unlocked)")
+            "Copy…", self.copy_series,
+            tip="Copy the series, in this folder or to another (the copy is unlocked)")
         self.rename_action = action("Rename…", self.rename_series,
                                     tip="Rename the series prefix and its arrays")
         self.scales_action = action("Edit Scales…", self.edit_scales,
@@ -1958,11 +1979,12 @@ class SeriesActions(TierActions):
                                   tip="A locked series' arrays cannot be changed")
         self.lock_action.setCheckable(True)
         self.move_action = action(
-            "Move to Folder…", self.move_series,
+            "Move…", self.move_series,
             tip="Move the series, with its arrays, sets and groups, to another folder")
         self.append_action = action(
-            "Append Series…", self.append_series,
-            tip="Add another series' epochs after this series' last epoch")
+            "Append…", self.append_series,
+            tip="Add another series' epochs (from this or another folder) after this "
+                "series' last epoch")
         self.add_epochs_action = action(
             "Add Epochs…", self.add_epochs,
             tip="Add epochs after the last one: a new array for each channel")
@@ -1985,9 +2007,10 @@ class SeriesActions(TierActions):
     def series_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Series", parent)
         for item in (self.new_action, self.from_data_action, self.update_action, None,
-                     self.rename_action, self.scales_action, self.duplicate_action,
-                     self.copy_action, self.move_action, self.delete_action, None,
-                     self.append_action, self.add_epochs_action, self.remove_epoch_action,
+                     self.scales_action, None,
+                     self.rename_action, self.copy_action,
+                     self.move_action, self.append_action, self.delete_action, None,
+                     self.add_epochs_action, self.remove_epoch_action,
                      self.renumber_action, None,
                      self.lock_action, None, self.browse_action):
             if item is None:
@@ -2031,8 +2054,7 @@ class SeriesActions(TierActions):
         locked = series is not None and series.locked
         self.new_action.setEnabled(owner is not None)
         self.from_data_action.setEnabled(bool(self._candidate_prefixes()))
-        self.copy_action.setEnabled(has_series and len(self._selection.manager.folders) > 1)
-        for item in (self.duplicate_action, self.rename_action, self.delete_action,
+        for item in (self.copy_action, self.rename_action, self.delete_action,
                      self.browse_action):
             item.setEnabled(has_series)
         for item in (self.update_action, self.lock_action, self.remove_channel_action,
@@ -2044,7 +2066,8 @@ class SeriesActions(TierActions):
         others = [n for n in self._selection.manager.folders.keys()
                   if not at_folder or n != owner.name]
         self.move_action.setEnabled(at_folder and bool(others))
-        self.append_action.setEnabled(at_folder and len(owner.dataseries) > 1)
+        self.append_action.setEnabled(at_folder and any(
+            self._append_sources(folder) for folder in self._selection.manager.folders.values()))
         self.lock_action.setChecked(locked)
         if not hasattr(self, "_tips"):
             self._tips = {item: item.toolTip() for item in self._locked_actions()}
@@ -2193,59 +2216,52 @@ class SeriesActions(TierActions):
         owner.sync_dataseries(answer[0])
         self._changed()
 
-    def duplicate_series(self) -> None:
-        """Copy a series in its own folder, under a new prefix (as Data's
-        Duplicate); the copy is unlocked."""
-        owner = self._owner()
-        if owner is None:
-            return
-
-        def default_prefix(item):
-            suffixes = series_suffixes(owner.dataseries[item])
-            candidate, number = f"{COPY_PREFIX}_{item}", 1
-            while prefix_error(owner, candidate, suffixes) is not None:
-                candidate, number = f"{COPY_PREFIX}{number}_{item}", number + 1
-            return candidate
-
-        answer = self._choose_series(
-            "Duplicate Series",
-            name_label="New prefix",
-            default_name=default_prefix,
-            validate=lambda item, name: prefix_error(
-                owner, name, series_suffixes(owner.dataseries[item])),
-        )
-        if answer is None:
-            return
-        item, name = answer
-        copy = owner.copy_dataseries(item, name)
-        self._selection.update(dataseries=copy)
-        self._changed()
-
-    def copy_series_to_folder(self) -> None:
-        """Copy a series to another folder, keeping its prefix (a clash there
-        is shown at once); the copy is unlocked, and its x array comes too."""
+    def copy_series(self) -> None:
+        """Copy a series in this folder (under a new prefix, C_Record by
+        default) or to another folder (keeping its prefix; a clash there is
+        shown at once). The copy is unlocked, with its sets, groups and x
+        array."""
         owner = self._owner()
         folders = self._selection.manager.folders
         here = self._folder()
-        targets = [name for name in folders.keys() if here is None or name != here.name]
-        if owner is None or not targets:
+        if owner is None:
             return
+        targets = ([here.name] if here is not None else []) + [
+            name for name in folders.keys() if here is None or name != here.name]
+
+        def target_owner(target):
+            return owner if here is not None and target == here.name else folders[target]
+
+        def default_prefix(item, target):
+            destination = target_owner(target)
+            if destination is not owner:
+                return item  # another folder: the same prefix
+            suffixes = series_suffixes(owner.dataseries[item])
+            candidate, number = f"{COPY_PREFIX}_{item}", 1
+            while prefix_error(destination, candidate, suffixes) is not None:
+                candidate, number = f"{COPY_PREFIX}{number}_{item}", number + 1
+            return candidate
 
         def error(item, name, target):
-            problem = prefix_error(folders[target], name, series_suffixes(owner.dataseries[item]))
+            problem = prefix_error(target_owner(target), name,
+                                   series_suffixes(owner.dataseries[item]))
             return f"{problem}. Enter a new prefix." if problem and name else problem
 
         answer = self._choose_series(
-            "Copy Series to Folder",
-            extras=[("To folder", targets, targets[0])],
+            "Copy Series",
+            extras=[("To folder", targets, targets[0] if targets else None)],
             name_label="Prefix",
-            default_name=lambda item, _target: item,
+            default_name=default_prefix,
             validate=error, validate_live=True,
         )
         if answer is None:
             return
         item, name, target = answer
-        owner.copy_dataseries(item, name, folder=folders[target])
+        destination = target_owner(target)
+        copy = owner.copy_dataseries(
+            item, name, folder=None if destination is owner else destination)
+        if destination is owner:
+            self._selection.update(dataseries=copy)
         self._changed()
 
     def rename_series(self) -> None:
@@ -2523,50 +2539,68 @@ class SeriesActions(TierActions):
         self._selection.update(dataseries=moved)
         self._changed()
 
+    def _append_sources(self, folder) -> list[str]:
+        """Series of *folder* that can be appended to the selected series."""
+        series = self._series()
+        return [name for name, ds in folder.dataseries.items() if ds is not series]
+
     def append_series(self) -> None:
-        """Add another series' epochs after this series' last epoch."""
+        """Add another series' epochs, from this or another folder, after this
+        series' last epoch."""
         series, owner = self._series(), self._owner()
         if series is None or not isinstance(owner, NMFolder):
             return
-        sources = [name for name in owner.dataseries.keys() if name != series.name]
-        if not sources:
+        folders = self._selection.manager.folders
+        names = [name for name, folder in folders.items() if self._append_sources(folder)]
+        if not names:
             return
 
-        def plan(source, keep):
-            return owner._append_plan(series.name, source, owner, keep == self.DELETE)
+        def sources(folder_name):
+            return self._append_sources(folders[folder_name]) if folder_name in folders else []
 
-        def summary(source, keep):
+        def plan(folder_name, source, keep):
+            return owner._append_plan(series.name, source, folders[folder_name],
+                                      keep == self.DELETE)
+
+        def summary(folder_name, source, keep):
             try:
-                _ds, _src, first, new_epoch, arrays, new_names = plan(source, keep)
-            except (ValueError, RuntimeError):
+                _ds, _src, first, new_epoch, arrays, new_names = plan(folder_name, source, keep)
+            except (ValueError, RuntimeError, KeyError):
                 return ""
             last = first + len(new_epoch) - 1
             epochs = f"E{first}" if last == first else f"E{first} to E{last}"
             what = "moved" if keep == self.DELETE else "copied"
-            note = owner.append_dataseries_note(series.name, source)
+            where = "" if folders[folder_name] is owner else f" in '{folder_name}'"
+            note = owner.append_dataseries_note(series.name, source, folders[folder_name])
             return (f"Adds {len(new_epoch)} epoch{'s' * (len(new_epoch) != 1)} ({epochs}) "
-                    f"from '{source}': {len(arrays)} arrays {what} and renamed "
+                    f"from '{source}'{where}: {len(arrays)} arrays {what} and renamed "
                     f"(e.g. {arrays[0][2].name} → {new_names[id(arrays[0][2])]})."
                     + (f" {note}" if note else "") if arrays else "")
 
-        def error(source, _name, keep):
+        def error(folder_name, _name, source, keep):
+            if not source:
+                return f"Folder '{folder_name}' has no data series to append."
             try:
-                plan(source, keep)
+                plan(folder_name, source, keep)
             except (ValueError, RuntimeError) as problem:
-                text = str(problem)
+                text = str(problem.args[0]) if problem.args else str(problem)
                 return text[0].upper() + text[1:]
             return None
 
+        here = owner.name if owner.name in names else names[0]
         answer = self._choose(
             "Append Series", context=self._series_context(series),
-            item_label="Append", items=sources, current=sources[0],
-            extras=[("Source series", [self.KEEP, self.DELETE], self.KEEP)],
+            item_label="From folder", items=names, current=here,
+            extras=[("Append", sources(here), None),
+                    ("Source series", [self.KEEP, self.DELETE], self.KEEP)],
+            extra_items={0: sources},
             message=summary, validate=error,
         )
         if answer is None:
             return
-        source, _name, keep = answer
-        owner.append_dataseries(series.name, source, delete_source=keep == self.DELETE)
+        folder_name, _name, source, keep = answer
+        owner.append_dataseries(series.name, source, source_folder=folders[folder_name],
+                                delete_source=keep == self.DELETE)
         self._changed()
 
     def _ask_add(self, kind, context, preview, validate, maximum=1_000_000) -> dict | None:
