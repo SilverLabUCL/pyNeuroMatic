@@ -1968,6 +1968,10 @@ class SeriesActions(TierActions):
             tip="Add epochs after the last one: a new array for each channel")
         self.remove_channel_action = action("Remove Channel…", self.remove_channel,
                                             tip="Remove a channel from the series")
+        self.renumber_action = action(
+            "Renumber Epochs…", self.renumber_epochs,
+            tip="Number the epochs E0, E1, … in order, closing gaps, and rename "
+                "their arrays to match")
         self.remove_epoch_action = action("Remove Epochs…", self.remove_epoch,
                                           tip="Remove an epoch, or a range of epochs")
         self.delete_action = action("Delete…", self.delete_series,
@@ -1983,7 +1987,8 @@ class SeriesActions(TierActions):
         for item in (self.new_action, self.from_data_action, self.update_action, None,
                      self.rename_action, self.scales_action, self.duplicate_action,
                      self.copy_action, self.move_action, self.delete_action, None,
-                     self.append_action, self.add_epochs_action, self.remove_epoch_action, None,
+                     self.append_action, self.add_epochs_action, self.remove_epoch_action,
+                     self.renumber_action, None,
                      self.lock_action, None, self.browse_action):
             if item is None:
                 menu.addSeparator()
@@ -2016,7 +2021,8 @@ class SeriesActions(TierActions):
         locked. Actions whose dialog chooses the series (Update, Rename,
         Delete) check the lock of the chosen series in the dialog instead."""
         return (self.scales_action, self.add_epochs_action, self.remove_channel_action,
-                self.remove_epoch_action, self.move_action, self.append_action)
+                self.remove_epoch_action, self.move_action, self.append_action,
+                self.renumber_action)
 
     def update_enabled(self, *_args) -> None:
         owner = self._owner()
@@ -2030,7 +2036,8 @@ class SeriesActions(TierActions):
                      self.browse_action):
             item.setEnabled(has_series)
         for item in (self.update_action, self.lock_action, self.remove_channel_action,
-                     self.remove_epoch_action, self.scales_action, self.add_epochs_action):
+                     self.remove_epoch_action, self.scales_action, self.add_epochs_action,
+                     self.renumber_action):
             item.setEnabled(series is not None)
         # Folder-level series only (not those of a results subfolder)
         at_folder = series is not None and isinstance(owner, NMFolder)
@@ -2405,6 +2412,66 @@ class SeriesActions(TierActions):
             self._remove_part("Remove Channel", "Channel", list(series.channels.keys()),
                               owner.remove_dataseries_channel,
                               current=channel.name if channel is not None else None)
+
+    REMOVE = "Remove"
+
+    def renumber_epochs(self) -> None:
+        """Number the selected series' epochs E0, E1, … in order (closing
+        gaps; empty epochs can be removed first), renaming their arrays to
+        match; a preview shows the changes."""
+        series, owner = self._series(), self._owner()
+        if series is None or not isinstance(owner, NMFolder):
+            return
+        has_empty = any(not e.data for e in series.epochs.values())
+
+        def plan(choice):
+            try:
+                return owner.renumber_epochs_plan(series.name, choice == self.REMOVE), None
+            except (ValueError, RuntimeError) as error:
+                text = str(error.args[0]) if error.args else str(error)
+                return ({}, {}, []), text[0].upper() + text[1:] + "."
+
+        def message(_item=None, choice=None):
+            (epochs, arrays, empty), problem = plan(choice)
+            if problem:
+                return problem
+            parts = []
+            if empty:
+                parts.append(f"Removes empty epoch{'s' * (len(empty) != 1)} "
+                             f"{', '.join(empty[:6])}{', …' if len(empty) > 6 else ''}.")
+            if epochs:
+                shown = list(epochs.items())
+                changes = ", ".join(f"{old} → {new}" for old, new in shown[:6])
+                if len(shown) > 6:
+                    changes += f", … ({len(shown)} epochs)"
+                first = next(iter(arrays.items()), None)
+                example = f" (e.g. {first[0]} → {first[1]})" if first else ""
+                parts.append(f"Renames {changes}, and {len(arrays)} array"
+                             f"{'s' * (len(arrays) != 1)}{example}. Epoch sets and groups "
+                             "follow; notes record the old names.")
+            if not parts:
+                kept = len(series.epochs) - len(empty)
+                parts.append(f"The epochs are already numbered E0 to E{kept - 1}; "
+                             "nothing to renumber." if kept else "There are no epochs.")
+            return " ".join(parts)
+
+        def error(_item, _name, choice=None):
+            (epochs, _arrays, empty), problem = plan(choice)
+            return problem or (None if epochs or empty else "Nothing to renumber.")
+
+        # Empty epochs (e.g. their arrays deleted in the Data list): removed
+        # first, by default, so the numbering closes over them
+        extras = [("Empty epochs", [self.REMOVE, self.KEEP], self.REMOVE)] if has_empty else []
+        answer = self._choose(
+            "Renumber Epochs", context=self._series_context(series),
+            extras=extras, message=message if has_empty else message(),
+            validate=error,
+        )
+        if answer is None:
+            return
+        choice = answer[2] if has_empty else None
+        owner.renumber_dataseries_epochs(series.name, remove_empty=choice == self.REMOVE)
+        self._changed()
 
     def move_series(self) -> None:
         """Move the selected series, with its arrays, to another folder."""
