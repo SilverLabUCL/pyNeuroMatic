@@ -230,6 +230,14 @@ def test_open_imports_each_file_into_a_new_folder(app, monkeypatch, tmp_path):
     assert list(manager.folders.keys()) == ["Demo", "Other", "my_rec_1"]
     assert manager.select_values["folder"] is manager.folders["my_rec_1"]
     assert app.selection_strip.combo("data").currentText() == "RecordA0"
+    # The Browser shows the imported folder, opened, with its Info (metadata)
+    assert app.tool_rail.current_tool_name == "Browser"
+    browser = app.browser_widget
+    tree = browser.tree
+    assert tree.currentIndex().internalPointer() is manager.folders["my_rec_1"]
+    assert tree.isExpanded(tree.currentIndex())
+    assert browser.is_showing_info
+    assert browser.info_panel.title_label.text() == "my_rec_1  ·  Folder"
     message = app.messages[0].splitlines()
     assert message == [
         "cell.abf: pyabf is required to read ABF files",
