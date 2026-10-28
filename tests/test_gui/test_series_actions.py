@@ -64,7 +64,7 @@ def test_prefix_menu_in_strip_and_menu_bar(app):
     expected = [
         "New Series…", "Series from Data…", "Update from Data",
         "Rename…", "Edit Scales…", "Duplicate…", "Copy to Folder…", "Move to Folder…", "Delete…",
-        "Append Series…", "Add Epochs…", "Remove Epochs…",
+        "Append Series…", "Add Epochs…", "Remove Epochs…", "Renumber Epochs…",
         "Lock", "Show in Browser",
     ]
     button = app.selection_strip.action_button("dataseries")
@@ -414,3 +414,48 @@ def test_copied_series_keeps_its_sets_and_groups(app):
     copy = app.other.dataseries["Record"]
     assert copy.epochs.sets.get_items("Set1", get_keys=True) == ["E1"]
     assert copy.epochs.groups.get_group("E0") == 2
+
+
+def test_renumber_epochs(app):
+    app.series.epochs.sets.add("Set1", ["E1"])
+    app.demo.remove_dataseries_epoch("Record", "E0", delete_data=True)  # E1 left
+    actions = app.series_actions
+    actions.renumber_action.trigger()  # cancelled; check the preview
+    title, options = app.dialogs[-1]
+    assert title == "Renumber Epochs"
+    assert options["message"] == (
+        "Renames E1 → E0, and 1 array (e.g. RecordA1 → RecordA0). Epoch sets and "
+        "groups follow; notes record the old names.")
+    assert options["validate"](None, None) is None
+    app.answers = [(None, None)]
+    actions.renumber_epochs()
+    assert list(app.series.epochs.keys()) == ["E0"]
+    assert "RecordA0" in app.demo.data and "RecordA1" not in app.demo.data
+    assert app.series.epochs.sets.get_items("Set1", get_keys=True) == ["E0"]
+
+
+def test_renumber_epochs_nothing_to_do_or_locked(app):
+    actions = app.series_actions
+    actions.renumber_epochs()
+    options = app.dialogs[-1][1]
+    assert options["message"].startswith("The epochs are already numbered E0 to E1")
+    assert options["validate"](None, None) == "Nothing to renumber."
+    actions.lock_action.trigger()
+    assert not actions.renumber_action.isEnabled()
+
+
+def test_renumber_epochs_removes_empty_epochs(app):
+    app.demo.data.pop("RecordA0")
+    app.demo.data.pop("RecordB0")  # E0 now empty: Record has E0 (empty), E1
+    actions = app.series_actions
+    actions.renumber_epochs()
+    options = app.dialogs[-1][1]
+    assert options["extras"] == [("Empty epochs", ["Remove", "Keep"], "Remove")]
+    assert options["message"](None, "Remove") == (
+        "Removes empty epoch E0. Renames E1 → E0, and 1 array (e.g. RecordA1 → "
+        "RecordA0). Epoch sets and groups follow; notes record the old names.")
+    assert options["validate"](None, None, "Keep") == "Nothing to renumber."
+    app.answers = [(None, None, "Remove")]
+    actions.renumber_epochs()
+    assert list(app.series.epochs.keys()) == ["E0"]
+    assert "RecordA0" in app.demo.data

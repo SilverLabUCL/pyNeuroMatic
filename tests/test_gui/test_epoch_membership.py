@@ -140,7 +140,7 @@ def test_graph_menu(app):
     assert panel.overlay_action.isEnabled() and not panel.overlay_limit.isEnabled()
     panel.overlay_action.setChecked(True)
     assert panel.overlay_limit.isEnabled()
-    assert panel.overlay_status_label.text() == "Showing 6 of 6 traces"
+    assert panel.overlay_status_label.text() == "Showing 3 of 6 traces"  # limit 3
 
     panel.grid_action.setChecked(True)
     assert panel.plot_widget.getAxis("bottom").grid

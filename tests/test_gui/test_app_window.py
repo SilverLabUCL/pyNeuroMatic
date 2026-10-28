@@ -154,7 +154,7 @@ def test_plot_overlay_limits_and_downsamples_traces(qtbot, nm):
     if navigator.plot_widget is None:
         pytest.skip("pyqtgraph is not installed")
 
-    assert navigator.overlay_limit.value() == 50
+    assert navigator.overlay_limit.value() == 3
     assert not navigator.overlay_action.isChecked()
     assert len(navigator.plot_widget.getPlotItem().listDataItems()) == 1
 

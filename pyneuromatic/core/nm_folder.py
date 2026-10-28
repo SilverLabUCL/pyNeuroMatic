@@ -393,6 +393,97 @@ class NMFolder(NMObject):
         nmch.add_nm_command('%s.rename_dataseries(%r, %r)' % (_p, old, new_prefix))
         return ds
 
+    def renumber_epochs_plan(self, prefix: str, remove_empty: bool = False) -> tuple:
+        """What :meth:`renumber_dataseries_epochs` would do, without changing
+        anything: ({old epoch: new epoch}, {old array: new array}, [empty
+        epochs removed]), only those that change. With *remove_empty*,
+        epochs with no arrays (e.g. their arrays were deleted in the Data
+        list) are removed first.
+
+        Raises:
+            RuntimeError: If the series is locked.
+            ValueError: If a new array name is taken by an array outside the
+                series.
+        """
+        ds = self._get_unlocked_dataseries(prefix)
+        epoch_prefix = ds.epochs.auto_name_prefix
+        empty = [e.name for e in ds.epochs.values() if not e.data] if remove_empty else []
+        epochs = {}
+        kept = [name for name in ds.epochs.keys() if name not in empty]
+        for index, name in enumerate(kept):
+            new = "%s%d" % (epoch_prefix, index)
+            if new != name:
+                epochs[name] = new
+        arrays = {}
+        for old, new in epochs.items():
+            old_num, new_num = old[len(epoch_prefix):], new[len(epoch_prefix):]
+            for channel in ds.channels.values():
+                for data in ds.epochs[old].data:
+                    expected = "%s%s%s" % (ds.name, channel.name, old_num)
+                    if data.name == expected and any(d is data for d in channel.data):
+                        arrays[data.name] = "%s%s%s" % (ds.name, channel.name, new_num)
+        renamed = {name.lower() for name in arrays}
+        for new in arrays.values():
+            key = self.data._getkey(new)
+            if key is not None and key.lower() not in renamed:
+                raise ValueError(
+                    "data '%s' already exists (not part of data series '%s')"
+                    % (new, ds.name))
+        return epochs, arrays, empty
+
+    def renumber_dataseries_epochs(self, prefix: str, remove_empty: bool = False,
+                                   quiet: bool = nmc.QUIET) -> dict:
+        """Number the epochs of data series *prefix* E0, E1, ... in order,
+        closing gaps (e.g. E0, E2, E5 -> E0, E1, E2), and rename their arrays
+        to match (RecordA2 -> RecordA1). With *remove_empty*, epochs with no
+        arrays are removed first. Epoch sets and groups follow; the series'
+        note and each renamed array's note record the old names.
+
+        Returns:
+            {old epoch name: new epoch name} for the epochs renamed.
+
+        Raises:
+            RuntimeError: If the series is locked.
+            ValueError: If a new array name is taken outside the series.
+        """
+        epochs, arrays, empty = self.renumber_epochs_plan(prefix, remove_empty)
+        ds = self.dataseries[prefix]
+        if empty:
+            self.remove_dataseries_epoch(prefix, empty, quiet=True)
+            ds.notes.add("removed empty epochs: %s" % ", ".join(empty))
+        if not epochs:
+            return {}
+        groups = ds.epochs.groups
+        # Two passes (via temporary names), so renames never collide; the
+        # arrays are renamed directly, keeping them in the series
+        temp = {old: "%s_renumber_%d" % (old, i) for i, old in enumerate(arrays)}
+        for old, tmp in temp.items():
+            NMObjectContainer.rename(self.data, old, tmp, quiet=True)
+        for old, tmp in temp.items():
+            NMObjectContainer.rename(self.data, tmp, arrays[old], quiet=True)
+            self.data[arrays[old]].notes.add(
+                "renamed from '%s' (Renumber Epochs)" % old)
+        temp_epochs = {old: "%s_renumber" % old for old in epochs}
+        for old, tmp in temp_epochs.items():
+            ds.epochs._rename_locked(old, tmp, quiet=True)  # sets follow
+            groups.rename_item(old, tmp)
+        epoch_prefix = ds.epochs.auto_name_prefix
+        for old, tmp in temp_epochs.items():
+            ds.epochs._rename_locked(tmp, epochs[old], quiet=True)
+            groups.rename_item(tmp, epochs[old])
+            ds.epochs[epochs[old]].number = int(epochs[old][len(epoch_prefix):])
+        changes = ", ".join("%s → %s" % item for item in epochs.items())
+        ds.notes.add("renumbered epochs: %s" % changes)
+        nmh.history(
+            "renumbered epochs of dataseries '%s': %s (%d arrays renamed)"
+            % (prefix, changes, len(arrays)),
+            path=self.path_str, quiet=quiet,
+        )
+        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        nmch.add_nm_command('%s.renumber_dataseries_epochs(%r, remove_empty=%r)'
+                            % (_p, prefix, remove_empty))
+        return epochs
+
     def _resolve_channel_names(self, ds, channel) -> list[str]:
         """Resolve *channel* (str | int | list | range) to a list of channel chars.
 

@@ -368,7 +368,7 @@ class PlotPanel(QtWidgets.QWidget):
         limit_layout.addWidget(QtWidgets.QLabel("Limit", limit_row))
         self.overlay_limit = QtWidgets.QSpinBox(limit_row)
         self.overlay_limit.setRange(1, 2000)
-        self.overlay_limit.setValue(50)
+        self.overlay_limit.setValue(3)
         self.overlay_limit.setToolTip("Most traces to overlay")
         limit_layout.addWidget(self.overlay_limit)
         limit_action = QtWidgets.QWidgetAction(self.graph_menu)
