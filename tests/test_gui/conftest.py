@@ -65,3 +65,9 @@ def _no_real_input_dialogs(monkeypatch):
 
     for name in ("getText", "getInt", "getDouble", "getItem", "getMultiLineText"):
         monkeypatch.setattr(QtWidgets.QInputDialog, name, staticmethod(unstubbed))
+
+    # Any other dialog (e.g. the strip's choose dialogs) shown for real
+    def unstubbed_exec(self, *_args, **_kwargs):
+        raise RuntimeError(f"{type(self).__name__} opened in a test without being stubbed")
+
+    monkeypatch.setattr(QtWidgets.QDialog, "exec", unstubbed_exec)
