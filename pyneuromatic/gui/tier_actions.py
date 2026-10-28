@@ -19,7 +19,7 @@ from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.gui.selection_model import BUILTIN_EPOCH_SETS, SelectionModel
-from pyneuromatic.gui.transform_dialog import MENU_TEXT
+from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
 
 
 def _read_abf(path, folder):
@@ -77,6 +77,12 @@ def copy_name(container: NMObjectContainer, name: str, prefix: str = COPY_PREFIX
         candidate = f"{prefix}{number}_{name}"
         number += 1
     return candidate
+
+
+def warning_html(text: str) -> str:
+    """*text* in the app's red, for a dialog's message (rich text)."""
+    from html import escape
+    return f'<span style="color: {MARK_COLOR};">{escape(text)}</span>'
 
 
 def copy_target_name(container: NMObjectContainer, name: str) -> str:
@@ -1375,16 +1381,15 @@ class DataActions(TierActions):
         action = self._action
         self.new_action = action("New…", self.new_data,
                                  tip="Create a data array and open it in the Table")
-        self.duplicate_action = action("Duplicate…", self.duplicate_data,
-                                       tip="Copy a data array in this folder")
         self.rename_action = action("Rename…", self.rename_data, tip="Rename a data array")
         self.scales_action = action("Edit Scales…", self.edit_scales,
                                     tip="Edit the x and y labels, units, start and delta")
+        self.copy_action = action(
+            "Copy…", self.copy_data,
+            tip="Copy a data array, in this folder or to another")
         self.move_action = action(
-            "Move to Folder…", self.move_data_to_folder,
+            "Move…", self.move_data_to_folder,
             tip="Move a data array (not part of a data series) to another folder")
-        self.copy_action = action("Copy to Folder…", self.copy_data_to_folder,
-                                  tip="Copy a data array into another folder")
         self.delete_action = action("Delete…", self.delete_data, tip="Delete a data array")
         self.browse_action = action(
             "Show in Browser", self.choose_in_browser,
@@ -1416,8 +1421,10 @@ class DataActions(TierActions):
         menu = QtWidgets.QMenu("Data", parent)
         menu.addAction(self.new_action)
         menu.addSeparator()
-        for item in (self.rename_action, self.scales_action, self.duplicate_action,
-                     self.copy_action, self.move_action, self.delete_action):
+        menu.addAction(self.scales_action)
+        menu.addSeparator()
+        for item in (self.rename_action, self.copy_action, self.move_action,
+                     self.delete_action):
             menu.addAction(item)
         menu.addSeparator()
         menu.addAction(self.browse_action)
@@ -1441,9 +1448,8 @@ class DataActions(TierActions):
         data = self._data_container()
         has_data = data is not None and len(data) > 0
         has_sets = data is not None and len(list(data.sets.keys())) > 0
-        for item in (self.duplicate_action, self.rename_action, self.delete_action):
+        for item in (self.copy_action, self.rename_action, self.delete_action):
             item.setEnabled(has_data)
-        self.copy_action.setEnabled(has_data and len(self._selection.manager.folders) > 1)
         container = self._data_container()
         in_folder = container is not None and isinstance(container._parent, NMFolder)
         self.move_action.setEnabled(
@@ -1473,6 +1479,24 @@ class DataActions(TierActions):
     def _data_container(self):
         context = self._context()
         return context.data if context is not None else None
+
+    def _data_target(self, data=None) -> tuple:
+        """(container, owner, folder text, current name) for a data prompt:
+        *data*'s (e.g. an array right-clicked in the browser), or the strip's
+        selected folder and array."""
+        if data is None:
+            return (self._data_container(), self._context(), self._context_text(),
+                    self._current_name("data"))
+        container = data._container
+        owner = getattr(container, "_parent", None)
+        folder = data._folder
+        text = " / ".join(obj.name for obj in (folder, owner if owner is not folder else None)
+                          if obj is not None)
+        return container, owner, text, data.name
+
+    def _selects_here(self, container) -> bool:
+        """True if *container* is the strip's (so a new array can be selected)."""
+        return container is self._data_container()
 
     @staticmethod
     def _series_note(container, name: str | None) -> str:
@@ -1536,48 +1560,78 @@ class DataActions(TierActions):
         self._changed()
         self.table_requested.emit()
 
-    def duplicate_data(self) -> None:
-        container = self._data_container()
+    def copy_data(self, data=None) -> None:
+        """Copy a data array in this folder (named C_name by default) or to
+        another folder (keeping its name; a clash there is shown at once).
+        Its x array comes too. Starts on *data* (e.g. from the browser), or
+        the strip's array."""
+        container, context_owner, here, current = self._data_target(data)
         if container is None or len(container) == 0:
             return
+        folders = self._selection.manager.folders
+        here_folder = data._folder if data is not None else self._folder()
+        targets = {here: (container, context_owner)}
+        for name, folder in folders.items():
+            if folder is not here_folder:
+                targets[name] = (folder.data, folder)
+
+        def default_name(item, target):
+            destination = targets[target][0]
+            return copy_name(destination, item) if destination is container else item
+
+        def error(item, name, target):
+            destination, owner = targets[target]
+            problem = name_error(destination, name) or series_name_error(owner, name)
+            if problem and name and destination is not container:
+                return f"{problem}. Enter a new name."
+            return problem
+
         answer = self._choose(
-            "Duplicate Data",
+            "Copy Data",
+            context=("From folder", here),
             item_label="Data",
             items=list(container.keys()),
-            current=self._current_name("data"),
-            name_label="New name",
-            default_name=lambda item: copy_name(container, item),
-            validate=lambda item, name: (
-                name_error(container, name) or series_name_error(self._context(), name)
-            ),
+            current=current,
+            extras=[("To folder", list(targets), here)],
+            name_label="Name",
+            default_name=default_name,
+            validate=error, validate_live=True,
         )
         if answer is None:
             return
-        if not self._confirm_series_name(
-            "Duplicate Data", series_name_hint(self._context(), answer[1]), "Duplicate"
-        ):
+        item, name, target = answer
+        destination, owner = targets[target]
+        if not self._confirm_series_name("Copy Data", series_name_hint(owner, name), "Copy"):
             return
-        copy = container.duplicate(answer[0], answer[1])
-        self._selection.update(data=copy)
+        if destination is container:
+            copy = container.duplicate(item, name)
+            if self._selects_here(container):
+                self._selection.update(data=copy)
+        else:
+            container.copy_to(item, destination, name)
         self._changed()
 
-    def rename_data(self) -> None:
-        container = self._data_container()
+    def rename_data(self, data=None) -> None:
+        """Rename a data array: *data* (e.g. from the browser), or the strip's."""
+        container, owner, _text, current = self._data_target(data)
         if container is None or len(container) == 0:
             return
         answer = self._choose(
             "Rename Data",
             item_label="Data",
             items=list(container.keys()),
-            current=self._current_name("data"),
+            current=current,
             name_label="New name",
             default_name=lambda item: item,
-            message=lambda item, *_: self._series_note(container, item),
+            # A series member is a warning: red
+            message=lambda item, *_: (
+                warning_html(self._series_note(container, item))
+                if self._series_note(container, item) else ""),
             validate=lambda item, name: (
                 self._lock_error(container, item)
                 or (None if name == item else (
                     name_error(container, name)
-                    or series_name_error(self._context(), name)
+                    or series_name_error(owner, name)
                 ))
             ),
         )
@@ -1585,7 +1639,7 @@ class DataActions(TierActions):
             return
         if not self._confirm_series_name(
             "Rename Data",
-            series_name_hint(self._context(), answer[1], joins_now=True),
+            series_name_hint(owner, answer[1], joins_now=True),
             "Rename",
         ):
             return
@@ -1642,42 +1696,11 @@ class DataActions(TierActions):
             setattr(data.yscale, field, value)
         self._changed()
 
-    def copy_data_to_folder(self) -> None:
-        container = self._data_container()
-        folders = self._selection.manager.folders
-        here = self._folder()
-        targets = [name for name in folders.keys() if here is None or name != here.name]
-        if container is None or len(container) == 0 or not targets:
-            return
-        answer = self._choose(
-            "Copy Data to Folder",
-            context=("From folder", self._context_text()),
-            item_label="Data",
-            items=list(container.keys()),
-            current=self._current_name("data"),
-            extras=[("To folder", targets, targets[0])],
-            name_label="Name",
-            default_name=lambda item, target: copy_target_name(folders[target].data, item),
-            validate=lambda item, name, target: (
-                name_error(folders[target].data, name)
-                or series_name_error(folders[target], name)
-            ),
-        )
-        if answer is None:
-            return
-        item, name, target = answer
-        if not self._confirm_series_name(
-            "Copy Data to Folder", series_name_hint(folders[target], name), "Copy"
-        ):
-            return
-        container.copy_to(item, folders[target].data, name)
-        self._changed()
-
-    def move_data_to_folder(self) -> None:
+    def move_data_to_folder(self, data=None) -> None:
         """Move a data array (the same array) to another folder; arrays of a
-        data series are refused (move the whole series)."""
-        container = self._data_container()
-        owner = container._parent if container is not None else None
+        data series are refused (move the whole series). Starts on *data*
+        (e.g. from the browser), or the strip's array."""
+        container, owner, here, current = self._data_target(data)
         folders = self._selection.manager.folders
         if not isinstance(owner, NMFolder) or len(container) == 0:
             return
@@ -1701,10 +1724,10 @@ class DataActions(TierActions):
 
         answer = self._choose(
             "Move Data to Folder",
-            context=("From folder", self._context_text()),
+            context=("From folder", here),
             item_label="Data",
             items=list(container.keys()),
-            current=self._current_name("data"),
+            current=current,
             extras=[("To folder", targets, targets[0])],
             name_label="Name",
             default_name=lambda item, _target: item,
@@ -1716,17 +1739,20 @@ class DataActions(TierActions):
         owner.move_data(item, folders[target], new_name=name)
         self._changed()
 
-    def delete_data(self) -> None:
-        container = self._data_container()
+    def delete_data(self, data=None) -> None:
+        """Delete a data array: *data* (e.g. from the browser), or the strip's."""
+        container, _owner, _text, current = self._data_target(data)
         if container is None or len(container) == 0:
             return
         answer = self._choose(
             "Delete Data",
             item_label="Data",
             items=list(container.keys()),
-            current=self._current_name("data"),
-            message=lambda item, *_: self._series_note(container, item)
-            or "The data array will be deleted.",
+            current=current,
+            # A series member is a warning: red
+            message=lambda item, *_: (
+                warning_html(self._series_note(container, item))
+                if self._series_note(container, item) else "The data array will be deleted."),
             validate=lambda item, name: self._lock_error(container, item)
             or self._xarray_error(container, item),
         )

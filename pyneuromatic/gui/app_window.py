@@ -1095,6 +1095,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
                 self._edit_channel_transforms)
             self.browser_widget.set_folder_actions(self.folder_actions)
             self.browser_widget.set_series_actions(self.series_actions)
+            self.browser_widget.set_data_actions(self.data_actions)
         # A run or a deleted folder changes the Subfolder list
         stats2.results_changed.connect(self.selection_strip.refresh_options)
         stats2.plot_requested.connect(self._show_plot_values)

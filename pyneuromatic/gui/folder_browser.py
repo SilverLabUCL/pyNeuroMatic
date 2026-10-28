@@ -25,7 +25,7 @@ import fnmatch
 from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.core.nm_channel import NMChannel
-from pyneuromatic.core.nm_data import NMDataContainer
+from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch, NMEpochContainer
 from pyneuromatic.core.nm_folder import NMFolder
@@ -196,6 +196,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._model = FolderTreeModel(manager, parent=self)
         self._folder_actions = None  # set by the app (see set_folder_actions)
         self._series_actions = None  # set by the app (see set_series_actions)
+        self._data_actions = None  # set by the app (see set_data_actions)
 
         self._tree = QtWidgets.QTreeView(self)
         self._tree.setModel(self._model)
@@ -324,6 +325,11 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         """Use the strip's Folder actions (Duplicate, Rename, Delete...) for
         folders and subfolders, so they behave the same everywhere."""
         self._folder_actions = actions
+
+    def set_data_actions(self, actions) -> None:
+        """Use the strip's Data actions (the same Rename, Copy, Move and
+        Delete prompts as Data ⋯) for a data array right-clicked here."""
+        self._data_actions = actions
 
     def set_series_actions(self, actions) -> None:
         """Use the strip's Data Series actions (the New Series dialog)."""
@@ -782,22 +788,40 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         if isinstance(single, NMChannel):
             menu.addAction(MENU_TEXT,
                            lambda: self.edit_transforms_requested.emit(single))
+        # One data array: the same prompts as Data ⋯ (they start on it)
+        data_actions = self._data_actions
+        one_array = isinstance(single, NMData) and data_actions is not None
+        if isinstance(single, NMData):
+            menu.addAction("Edit Scales...", lambda: self.edit_scales_requested.emit(single))
         # Channels and epochs are named by the data series: no Rename
-        if single is not None and not isinstance(first, (NMChannel, NMEpoch)):
+        if one_array:
+            menu.addAction("Rename...", lambda: data_actions.rename_data(single))
+        elif single is not None and not isinstance(first, (NMChannel, NMEpoch)):
             menu.addAction("Rename...", lambda: self._rename_object(container, first))
         if isinstance(container, NMDataContainer):
-            menu.addAction("Duplicate", lambda: self._duplicate_selected(container, objects))
             folders = [folder for folder in self._nm.folders.values()
                        if folder.data is not container]
-            if folders:
-                copy_menu = menu.addMenu("Copy to Folder")
+            movable = bool(folders) and isinstance(container._parent, NMFolder)
+            if one_array:
+                menu.addAction("Copy...", lambda: data_actions.copy_data(single))
+                if movable:
+                    menu.addAction("Move...", lambda: data_actions.move_data_to_folder(single))
+            else:
+                # Several arrays: quick submenus (a prompt each would be tedious).
+                # Copy: in this folder (named C_…), or to another; Move: to another
+                copy_menu = menu.addMenu("Copy")
+                copy_menu.addAction(
+                    f"{container._parent.name} (this folder)",
+                    lambda: self._duplicate_selected(container, objects))
+                if folders:
+                    copy_menu.addSeparator()
                 for folder in folders:
                     copy_menu.addAction(
                         folder.name,
                         lambda checked=False, f=folder: self._copy_selected_to(container, objects, f),
                     )
-                if isinstance(container._parent, NMFolder):  # not a subfolder's
-                    move_menu = menu.addMenu("Move to Folder")
+                if movable:
+                    move_menu = menu.addMenu("Move")
                     for folder in folders:
                         move_menu.addAction(
                             folder.name,
@@ -824,7 +848,10 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                     lambda checked=False, n=number:
                     self._assign_selected_to_group(container, epochs, n),
                 )
-        menu.addAction("Delete...", lambda: self._delete_objects(container, objects))  # last
+        if one_array:  # the Data ⋯ prompt (its series note, lock and x array checks)
+            menu.addAction("Delete...", lambda: data_actions.delete_data(single))
+        else:
+            menu.addAction("Delete...", lambda: self._delete_objects(container, objects))  # last
 
     def _populate_node_menu(self, menu: QtWidgets.QMenu, index: QtCore.QModelIndex) -> None:
         """Actions for a Sets, set, Groups or group row — shared by both panes."""
