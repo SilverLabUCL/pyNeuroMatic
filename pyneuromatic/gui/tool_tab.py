@@ -41,6 +41,8 @@ class ToolTabWidget(QtWidgets.QWidget):
     run_finished = QtCore.pyqtSignal(bool)
     run_failed = QtCore.pyqtSignal(str)
     selection_updated = QtCore.pyqtSignal(dict)
+    # The ⋯ button: open Settings at this tool's page (its title)
+    settings_requested = QtCore.pyqtSignal(str)
 
     def __init__(
         self,
@@ -55,9 +57,18 @@ class ToolTabWidget(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
 
+        # The title, then ⋯ for the tool's settings: the same place on every tool
+        title_row = QtWidgets.QHBoxLayout()
         self.title_label = QtWidgets.QLabel(title, self)
         self.title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        layout.addWidget(self.title_label)
+        title_row.addWidget(self.title_label)
+        self.settings_button = QtWidgets.QToolButton(self)
+        self.settings_button.setText("⋯")
+        self.settings_button.setToolTip(f"{title} settings (opens Settings at {title})")
+        self.settings_button.clicked.connect(lambda: self.settings_requested.emit(title))
+        title_row.addWidget(self.settings_button)
+        title_row.addStretch(1)
+        layout.addLayout(title_row)
 
         self.parameters_group = QtWidgets.QGroupBox("Parameters", self)
         self.parameter_layout = QtWidgets.QVBoxLayout(self.parameters_group)

@@ -981,7 +981,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
             QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Preferences)
         )
         self.settings_action.setMenuRole(QtGui.QAction.MenuRole.PreferencesRole)
-        self.settings_action.triggered.connect(self.open_settings)
+        self.settings_action.triggered.connect(lambda: self.open_settings())
         quit_action = file_menu.addAction("Quit")
         quit_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Quit))
         quit_action.triggered.connect(self.close)
@@ -1021,7 +1021,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     @staticmethod
     def about_text() -> str:
-        """The About window's text: version, author, licence and website."""
+        """The About window's text: version, lab, licence and website."""
         import pyneuromatic
 
         url = "https://github.com/SilverLabUCL/pyNeuroMatic"
@@ -1029,7 +1029,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
             f"<h3>{APP_NAME} {pyneuromatic.__version__}</h3>"
             "<p>Python tools for acquiring, analysing and simulating "
             "electrophysiological data, after NeuroMatic.</p>"
-            f"<p>{pyneuromatic.__author__} · {pyneuromatic.__license__} License<br>"
+            '<p><a href="https://silverlab.org/">The Silver Lab</a> · '
+            f"{pyneuromatic.__license__} License<br>"
             f'<a href="{url}">{url}</a></p>'
             f"<p><small>Python {sys.version.split()[0]} · "
             f"Qt {QtCore.qVersion()} · PyQt {QtCore.PYQT_VERSION_STR}</small></p>"
@@ -1157,6 +1158,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         )
         self.stats_tab = StatsToolTab(self._manager, self.tool_workspace)
         self.stats_tab.bind_selection_model(self.selection_model)
+        self.stats_tab.settings_requested.connect(self.open_settings)
         self.tool_workspace.addWidget(self.stats_tab)
         self.tool_workspace.addWidget(
             _PlaceholderToolWidget("Spike", self.tool_workspace)
@@ -1309,15 +1311,19 @@ class NMAppWindow(QtWidgets.QMainWindow):
             holder.setVisible(panel is current)
 
     def settings_dialog(self) -> SettingsDialog:
-        """A Settings window: General, then the tools' Config options."""
+        """A Settings window: General, then each tool's options."""
         dialog = SettingsDialog(
             self._manager.settings, [("Stats", self.stats_tab)], parent=self
         )
         dialog.settings_changed.connect(self._apply_settings)
         return dialog
 
-    def open_settings(self) -> None:
-        self.settings_dialog().exec()
+    def open_settings(self, page: str | None = None) -> None:
+        """Open Settings, at *page* (e.g. "Stats", from the Stats tool's ⋯)."""
+        dialog = self.settings_dialog()
+        if page:
+            dialog.show_page(page)
+        dialog.exec()
 
     def _apply_settings(self) -> None:
         """Show the general settings, e.g. redraw tables after the NaN one."""

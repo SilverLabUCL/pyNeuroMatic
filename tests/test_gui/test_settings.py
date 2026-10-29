@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("PyQt6")
-from PyQt6 import QtCore, QtGui
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
@@ -72,9 +72,45 @@ def test_stats_page_edits_the_stats_config(app):
     boxes["results_all_epochs"].setChecked(True)
     stats = app.manager.stats
     assert stats.results_all_epochs and stats.config.results_all_epochs
-    # The Stats tab's Config list follows
-    options = dict((key, value) for key, _label, value in app.stats_tab.config_options())
+    options = {key: value for key, _label, value, _tip in app.stats_tab.config_options()}
     assert options["results_all_epochs"] is True
+    # Each option says what it does
+    assert all(box.toolTip() for box in boxes.values())
+
+
+def test_stats_dots_open_settings_at_its_page(app, monkeypatch):
+    from pyneuromatic.gui.settings_dialog import SettingsDialog
+
+    button = app.stats_tab.settings_button
+    assert button.text() == "⋯" and button.menu() is None  # straight to Settings
+    opened = []
+    monkeypatch.setattr(SettingsDialog, "exec", lambda dialog: opened.append(dialog.current_page()))
+    button.click()
+    app.settings_action.trigger()  # the menu bar's: General
+    assert opened == ["Stats", "General"]
+
+
+def test_one_name_settings(app):
+    """'Settings' in what users see; no Config, Configuration or Preferences."""
+    dialog = app.settings_dialog()
+    texts = [dialog.windowTitle()] + dialog.page_titles()
+    texts += [w.text() for w in dialog.findChildren(QtWidgets.QAbstractButton)]
+    texts += [w.toolTip() for w in dialog.findChildren(QtWidgets.QAbstractButton)]
+    texts += [w.text() for w in dialog.findChildren(QtWidgets.QLabel)]
+
+    def menu_texts(menu):
+        for action in menu.actions():
+            yield action.text()
+            yield action.toolTip()
+            if action.menu() is not None:
+                yield from menu_texts(action.menu())
+
+    for action in app.menuBar().actions():
+        texts += list(menu_texts(action.menu()))
+    texts.append(app.stats_tab.settings_button.toolTip())
+    texts += [w.text() for w in app.stats_tab.findChildren(QtWidgets.QAbstractButton)]
+    for word in ("config", "preferences"):
+        assert not [t for t in texts if word in t.lower()], word
 
 
 def test_changes_are_saved_once_loaded(app, tmp_path):

@@ -36,6 +36,32 @@ from pyneuromatic.gui.selection_model import (
 from pyneuromatic.gui.tool_tab import ToolTabWidget
 
 
+class _ChooseComboBox(QtWidgets.QComboBox):
+    """A dropdown whose box is in *color* while its "Choose ..." item (no
+    data) shows. Its list keeps the usual colours, so only that item is red
+    there: a style sheet would colour the whole list, so it is cleared while
+    the list is open."""
+
+    def __init__(self, color: str, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self._popup_open = False
+
+    def restyle(self) -> None:
+        choosing = self.currentData() is None and not self._popup_open
+        self.setStyleSheet(f"QComboBox {{ color: {self._color}; }}" if choosing else "")
+
+    def showPopup(self) -> None:  # noqa: N802 (Qt)
+        self._popup_open = True
+        self.restyle()
+        super().showPopup()
+
+    def hidePopup(self) -> None:  # noqa: N802 (Qt)
+        super().hidePopup()
+        self._popup_open = False
+        self.restyle()
+
+
 class StatsToolTab(ToolTabWidget):
     """Single-window Stats1 editor and runner using the project's Stats tool."""
 
@@ -119,15 +145,9 @@ class StatsToolTab(ToolTabWidget):
         self.stats2 = Stats2Panel(manager, self.mode_tabs)
         self.mode_tabs.addTab(self.stats2, "Stats2")
 
-        mode_row = QtWidgets.QHBoxLayout()
-        mode_row.addStretch(1)
-        self.config_checkbox = QtWidgets.QCheckBox("Config", self)
-        mode_row.addWidget(self.config_checkbox)
-        stats1_tab_layout.addLayout(mode_row)
-
-        self.settings_stack = QtWidgets.QStackedWidget(stats1_tab)
-        stats1_tab_layout.addWidget(self.settings_stack)
-        self.stats1_page = QtWidgets.QWidget(self.settings_stack)
+        # Its options (Ignore NaNs...) are edited in Settings (the ⋯ by the title)
+        self.stats1_page = QtWidgets.QWidget(stats1_tab)
+        stats1_tab_layout.addWidget(self.stats1_page)
         stats1_layout = QtWidgets.QVBoxLayout(self.stats1_page)
         stats1_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -139,7 +159,7 @@ class StatsToolTab(ToolTabWidget):
         )
         window_row.addWidget(QtWidgets.QLabel("Window", self))
         window_row.addWidget(self.window_combo)
-        self.measurement_combo = QtWidgets.QComboBox(self)
+        self.measurement_combo = _ChooseComboBox(self.CHOOSE_COLOR, self)
         self.measurement_combo.addItem("Choose measurement", None)
         # In red until a measurement is chosen (the list item and the combo)
         self.measurement_combo.setItemData(
@@ -229,19 +249,22 @@ class StatsToolTab(ToolTabWidget):
         # Keep the settings at the top when Stats2 makes the tabs taller
         stats1_layout.addStretch(1)
 
-        self.tool_config_list = QtWidgets.QListWidget(self)
-        self.tool_config_list.setObjectName("statsToolConfigurationList")
+        # The options listed in Settings › Stats
         self._config_keys = ("ignore_nans", "overwrite", "results_all_epochs")
         self._config_labels = {
             "ignore_nans": "Ignore NaNs",
             "overwrite": "Overwrite Stats tool folder",
-            # NaN where an epoch wasn't analysed, so they line up with the series
             "results_all_epochs": "ST_ arrays: one point per epoch",
         }
-        self._populate_config_list()
-        self.settings_stack.addWidget(self.stats1_page)
-        self.settings_stack.addWidget(self.tool_config_list)
-        self.settings_stack.setCurrentWidget(self.stats1_page)
+        self._config_tips = {
+            "ignore_nans": "Leave NaN values out of the measurements (otherwise a NaN "
+                           "in the window gives NaN)",
+            "overwrite": "Clear and reuse the run's first Stats subfolder (…_0), "
+                         "instead of making a new one each run",
+            "results_all_epochs": "For a data series, one point per epoch of the series "
+                                  "(NaN where an epoch wasn't analysed), so ST_ arrays "
+                                  "line up with the series",
+        }
 
         self.window_combo.currentIndexChanged.connect(self._on_window_changed)
         self.window_enabled.toggled.connect(self._save_window_controls)
@@ -255,8 +278,6 @@ class StatsToolTab(ToolTabWidget):
         self.bsln_combo.currentIndexChanged.connect(self._save_window_controls)
         self.bsln_xbgn_edit.editingFinished.connect(self._save_window_controls)
         self.bsln_xend_edit.editingFinished.connect(self._save_window_controls)
-        self.config_checkbox.toggled.connect(self._show_configuration)
-        self.tool_config_list.itemChanged.connect(self._on_config_item_changed)
         self.output_history_checkbox.toggled.connect(
             lambda checked: self._set_tool_option("results_to_history", checked)
         )
@@ -434,49 +455,17 @@ class StatsToolTab(ToolTabWidget):
 
     def _style_measurement_combo(self, *_args) -> None:
         """Red while "Choose measurement" shows, so a missing choice stands out."""
-        choosing = self.measurement_combo.currentData() is None
-        self.measurement_combo.setStyleSheet(
-            f"QComboBox {{ color: {self.CHOOSE_COLOR}; }}" if choosing else ""
-        )
+        self.measurement_combo.restyle()
 
-    def _show_configuration(self, enabled: bool) -> None:
-        self.settings_stack.setCurrentWidget(
-            self.tool_config_list if enabled else self.stats1_page
-        )
+    # --- the options edited in Settings › Stats -----------------------------
 
-    def _populate_config_list(self) -> None:
-        for key in self._config_keys:
-            item = QtWidgets.QListWidgetItem(self._config_labels[key])
-            item.setData(QtCore.Qt.ItemDataRole.UserRole, key)
-            item.setFlags(
-                item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable
-            )
-            self.tool_config_list.addItem(item)
-        self._sync_config_list()
-
-    def _sync_config_list(self) -> None:
-        self.tool_config_list.blockSignals(True)
-        for index, key in enumerate(self._config_keys):
-            checked = bool(getattr(self._tool, key))
-            self.tool_config_list.item(index).setCheckState(
-                QtCore.Qt.CheckState.Checked if checked else QtCore.Qt.CheckState.Unchecked
-            )
-        self.tool_config_list.blockSignals(False)
-
-    def _on_config_item_changed(self, item: QtWidgets.QListWidgetItem) -> None:
-        key = item.data(QtCore.Qt.ItemDataRole.UserRole)
-        checked = item.checkState() == QtCore.Qt.CheckState.Checked
-        self._set_tool_option(key, checked)
-
-    # --- the Config options, also listed in the Settings window -------------
-
-    def config_options(self) -> list[tuple[str, str, bool]]:
-        """(key, label, value) of each Config option."""
-        return [(key, self._config_labels[key], bool(getattr(self._tool, key)))
-                for key in self._config_keys]
+    def config_options(self) -> list[tuple[str, str, bool, str]]:
+        """(key, label, value, tip) of each option in Settings › Stats."""
+        return [(key, self._config_labels[key], bool(getattr(self._tool, key)),
+                 self._config_tips[key]) for key in self._config_keys]
 
     def set_config_option(self, key: str, value: bool) -> None:
-        """Set a Config option (the Config list follows)."""
+        """Set an option from Settings › Stats (used from the next run)."""
         self._set_tool_option(key, value)
 
     def _set_tool_option(self, key: str, value: bool) -> None:
@@ -484,8 +473,6 @@ class StatsToolTab(ToolTabWidget):
         config = self._tool.config
         if config is not None and key in config._schema:
             setattr(config, key, value)
-        if key in self._config_keys:
-            self._sync_config_list()
 
     def _sync_output_options(self) -> None:
         for checkbox, key in (
