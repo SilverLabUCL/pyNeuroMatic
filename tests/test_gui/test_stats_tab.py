@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("PyQt6")
-from PyQt6 import QtCore
+from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
@@ -179,24 +179,17 @@ def test_stats_output_options_control_backend_sinks(qtbot):
     assert "Stats_0" in folder.toolfolders
 
 
-def test_config_checkbox_shows_editable_tool_configuration_list(qtbot):
+def test_options_are_in_settings_not_the_panel(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
     tab = window.stats_tab
-
-    assert tab.tool_config_list.isHidden()
-    tab.config_checkbox.setChecked(True)
-    assert not tab.tool_config_list.isHidden()
-
-    ignore_item = next(
-        tab.tool_config_list.item(index)
-        for index in range(tab.tool_config_list.count())
-        if tab.tool_config_list.item(index).data(QtCore.Qt.ItemDataRole.UserRole)
-        == "ignore_nans"
-    )
-    ignore_item.setCheckState(QtCore.Qt.CheckState.Unchecked)
-
+    # No Config control in the panel (#432)
+    assert not hasattr(tab, "config_checkbox")
+    assert "Config" not in [box.text() for box in tab.findChildren(QtWidgets.QCheckBox)]
+    # Settings › Stats edits the tool
+    boxes = window.settings_dialog().tool_checkboxes["Stats"]
+    boxes["ignore_nans"].setChecked(False)
     assert manager.stats.ignore_nans is False
     assert manager.stats.config.ignore_nans is False
 
@@ -539,16 +532,12 @@ def test_st_arrays_one_point_per_epoch(qtbot):
     window.selection_model.update(epoch_set="Chosen")
     tab.measurement_combo.setCurrentText("mean")
 
-    # The Config list's new item
-    tab.config_checkbox.setChecked(True)
-    item = next(tab.tool_config_list.item(i) for i in range(tab.tool_config_list.count())
-                if tab.tool_config_list.item(i).data(QtCore.Qt.ItemDataRole.UserRole)
-                == "results_all_epochs")
-    assert item.text() == "ST_ arrays: one point per epoch"
-    assert item.checkState() == QtCore.Qt.CheckState.Unchecked  # off by default
-    item.setCheckState(QtCore.Qt.CheckState.Checked)
+    # The option, in Settings › Stats
+    box = window.settings_dialog().tool_checkboxes["Stats"]["results_all_epochs"]
+    assert box.text() == "ST_ arrays: one point per epoch"
+    assert not box.isChecked()  # off by default
+    box.setChecked(True)
     assert manager.stats.results_all_epochs and manager.stats.config.results_all_epochs
-    tab.config_checkbox.setChecked(False)
 
     tab.run_button.click()
     values = tab.stats_tool.toolfolder.data["ST_w0_mean_y"].nparray
@@ -598,5 +587,11 @@ def test_choose_measurement_is_red(qtbot):
     assert combo.itemText(0) == "Choose measurement" and brush.color().name() == "#c62828"
     combo.setCurrentIndex(0)
     assert "#c62828" in combo.styleSheet()  # the closed combo too
+    # The open list keeps the usual colours: only its first item is red
+    window.show()
+    combo.showPopup()
+    assert combo.styleSheet() == ""
+    combo.hidePopup()
+    assert "#c62828" in combo.styleSheet()
     combo.setCurrentText("mean")
     assert combo.styleSheet() == ""

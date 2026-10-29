@@ -1,8 +1,8 @@
 """The Settings window: general pyNeuroMatic settings, then one page per tool.
 
 General settings (``manager.settings``) are saved to the user's settings file
-as they change. A tool's page lists the same options as that tool tab's
-Config checkbox; both edit the tool's configuration.
+as they change. A tool's page lists its options; this is the one place they
+are edited (each tool's ⋯ button, by its title, opens its page).
 """
 from __future__ import annotations
 
@@ -26,7 +26,8 @@ class SettingsDialog(QtWidgets.QDialog):
     """Pages down the left: General, then each tool (e.g. Stats).
 
     *tool_pages* is a list of (title, tool tab) where the tab has
-    ``config_options()`` and ``set_config_option(key, value)``.
+    ``config_options()`` (key, label, value, tip) and
+    ``set_config_option(key, value)``.
     """
 
     # A general setting changed (e.g. how tables show NaN)
@@ -63,15 +64,16 @@ class SettingsDialog(QtWidgets.QDialog):
         general_layout.addStretch(1)
         self._add_page("General", general)
 
-        # One page per tool: its Config options
+        # One page per tool: its options
         self.tool_checkboxes: dict[str, dict[str, QtWidgets.QCheckBox]] = {}
         for title, tab in tool_pages or []:
             page = QtWidgets.QWidget(self)
             page_layout = QtWidgets.QVBoxLayout(page)
             boxes = {}
-            for key, label, value in tab.config_options():
+            for key, label, value, tip in tab.config_options():
                 box = QtWidgets.QCheckBox(label, page)
                 box.setChecked(value)
+                box.setToolTip(tip)
                 box.toggled.connect(
                     lambda checked, t=tab, k=key: t.set_config_option(k, checked)
                 )
@@ -93,6 +95,17 @@ class SettingsDialog(QtWidgets.QDialog):
         layout.addWidget(buttons)
         self.page_list.setCurrentRow(0)
         self.resize(460, 280)
+
+    def page_titles(self) -> list[str]:
+        return [self.page_list.item(i).text() for i in range(self.page_list.count())]
+
+    def show_page(self, title: str) -> None:
+        """Show the page called *title* (e.g. "Stats"), if there is one."""
+        if title in self.page_titles():
+            self.page_list.setCurrentRow(self.page_titles().index(title))
+
+    def current_page(self) -> str:
+        return self.page_titles()[self.page_list.currentRow()]
 
     def _add_page(self, title: str, page: QtWidgets.QWidget) -> None:
         self.page_list.addItem(title)

@@ -140,3 +140,4 @@ def test_about(app, monkeypatch):
     assert title == "About pyNeuroMatic"
     assert f"pyNeuroMatic {pyneuromatic.__version__}" in text
     assert "https://github.com/SilverLabUCL/pyNeuroMatic" in text
+    assert '<a href="https://silverlab.org/">The Silver Lab</a>' in text
