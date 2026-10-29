@@ -70,11 +70,11 @@ def _both(app, monkeypatch, obj):
 
 def test_folder_menus_match_the_strip(app, monkeypatch):
     assert _both(app, monkeypatch, app.folder) == [
-        "Select", "Duplicate...", "Rename...", "Delete...",
+        "Select", "Rename...", "Copy...", "Save...", "Delete...",
     ]
     menu = app.folder_actions.folder_menu(app)  # kept, so its actions live
     strip = [a.text() for a in menu.actions() if a.text()]
-    assert strip[-4:] == ["Duplicate…", "Rename…", "Delete…",  # Delete, not Close
+    assert strip[-5:] == ["Rename…", "Copy…", "Save…", "Delete…",  # Delete, not Close
                           "Show in Browser"]
 
 
@@ -92,7 +92,7 @@ def test_folder_menu_uses_the_strip_actions_on_that_folder(app, monkeypatch):
 def test_subfolder_menu(app, monkeypatch):
     subfolder = app.folder.toolfolders["Stats0"]
     assert _both(app, monkeypatch, subfolder) == [
-        "Select", "Duplicate...", "Rename...", "Delete...",
+        "Select", "Rename...", "Copy...", "Delete...",
     ]
     asked = []
     monkeypatch.setattr(app.folder_actions, "_choose",
@@ -104,14 +104,15 @@ def test_subfolder_menu(app, monkeypatch):
 
 def test_data_array_menu(app, monkeypatch):
     assert _both(app, monkeypatch, app.folder.data["RecordA0"]) == [
-        "Select", "Edit Scales...", "Rename...", "Copy...", "Move...", "Add to Set",
-        "Delete...",
+        "Select", "Edit Scales...", "Rename...", "Copy...", "Move...", "Delete...",
+        "Add to Set",
     ]
 
 
 def test_data_series_channel_and_epoch_menus(app, monkeypatch):
     # No sets for data series or channels; channels and epochs can't be renamed
-    assert _both(app, monkeypatch, app.series) == ["Select", "Rename...", "Delete..."]
+    assert _both(app, monkeypatch, app.series) == [
+        "Select", "Edit Scales...", "Rename...", "Copy...", "Move...", "Append...", "Delete..."]
     assert _both(app, monkeypatch, app.series.channels["A"]) == [
         "Select", "Filter && Transform...", "Delete..."]  # shows "&"
     assert _both(app, monkeypatch, app.series.epochs["E1"]) == [
@@ -178,36 +179,35 @@ def test_data_list_shows_only_arrays(app):
     assert model.data(model.index(0, 0, root)) == "Sets"  # still in the tree
 
 
-def test_new_set_prompt_starts_with_the_next_free_name(app, monkeypatch):
-    seen = []
+def test_sets_row_new_uses_the_strip_prompt(app, monkeypatch):
+    asked = []
 
-    def ask(_title, _label, value):
-        seen.append(value)
-        return value, False  # cancelled
+    def ask(title, **options):
+        asked.append((title, options))
+        return None  # cancelled
 
+    monkeypatch.setattr(app.epoch_set_actions, "_choose", ask)
+    monkeypatch.setattr(app.data_actions, "_choose", ask)
     browser = app.browser_widget
-    monkeypatch.setattr(browser, "_ask_set_number", ask)
     browser.show_data_of(app.series, sets=True, kind="epochs")  # Set0, Set1, SetX
     _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New..."].trigger()
     browser.show_data_of(app.folder, sets=True)  # no data sets yet
     _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New..."].trigger()
+    # The New Epoch Set / New Data Set prompts, at the next free number
+    assert [title for title, _o in asked] == ["New Epoch Set", "New Data Set"]
+    assert [o["extras"][0][1].value for _t, o in asked] == [2, 0]
+    assert asked[1][1]["validate"](None, None, 0) is None
+
+
+def test_epoch_quick_new_set_starts_with_the_next_free_name(app, monkeypatch):
+    seen = []
+    browser = app.browser_widget
+    monkeypatch.setattr(browser, "_ask_set_number",
+                        lambda _title, _label, value: seen.append(value) or (value, False))
     epoch = app.series.epochs["E1"]
     actions = _tree_menu(app, monkeypatch, _find(browser, epoch))
     next(a for a in actions["Add to Set"].menu().actions() if a.text() == "New...").trigger()
-    # The next free set number: 2 for epochs (Set0, Set1 exist), 0 for data
-    assert seen == [2, 0, 2]
-
-
-def test_new_set_refuses_a_number_in_use(app, monkeypatch):
-    browser = app.browser_widget
-    monkeypatch.setattr(browser, "_ask_set_number", lambda *a: (1, True))  # Set1 exists
-    warnings = []
-    monkeypatch.setattr(QtWidgets.QMessageBox, "warning",
-                        staticmethod(lambda *a, **k: warnings.append(a[2])))
-    browser.show_data_of(app.series, sets=True, kind="epochs")
-    _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New..."].trigger()
-    assert warnings == ["'Set1' already exists"]
-    assert list(app.series.epochs.sets.keys()) == ["Set0", "Set1", "SetX"]
+    assert seen == [2]  # Set0, Set1 exist
 
 
 def test_data_series_row_new_opens_the_new_series_dialog(app, monkeypatch):
@@ -235,7 +235,7 @@ def test_data_series_row_new_opens_the_new_series_dialog(app, monkeypatch):
     assert app.selection_model.selection["dataseries"] is app.series  # unchanged
 
 
-def test_delete_is_last(app, monkeypatch):
+def test_add_to_set_is_last_for_data_arrays(app, monkeypatch):
     captured = {}
     monkeypatch.setattr(QtWidgets.QMenu, "exec",
                         lambda menu, *a, **k: captured.setdefault("menu", menu))
@@ -244,7 +244,7 @@ def test_delete_is_last(app, monkeypatch):
     monkeypatch.setattr(browser.tree, "indexAt", lambda pos: index)
     browser._show_tree_context_menu(QtCore.QPoint(0, 0))
     actions = captured["menu"].actions()
-    assert actions[-1].text() == "Delete..."
+    assert [a.text() for a in actions[-2:]] == ["Delete...", "Add to Set"]
     assert not any(action.isSeparator() for action in actions)
 
 
@@ -280,8 +280,55 @@ def test_several_arrays_keep_the_quick_submenus(app, monkeypatch):
     menu = QtWidgets.QMenu()
     browser._populate_object_menu(menu, [data["RecordA0"], data["RecordA1"]], data)
     actions = {a.text(): a for a in menu.actions() if a.text()}
-    assert list(actions) == ["Copy", "Move", "Add to Set", "Delete..."]
+    assert list(actions) == ["Copy", "Move", "Delete...", "Add to Set"]
     copy_items = [a.text() for a in actions["Copy"].menu().actions() if a.text()]
     assert copy_items == ["Demo (this folder)", "Other"]
     actions["Copy"].menu().actions()[0].trigger()
     assert {"C_RecordA0", "C_RecordA1"} <= set(data.keys())
+
+
+def test_series_items_use_the_prefix_prompts(app, monkeypatch):
+    stim = app.folder.new_dataseries("Stim", n_channels=1, n_epochs=1, n_points=4)
+    app.selection_model.update(dataseries=app.series)  # the strip shows another series
+    asked = []
+    monkeypatch.setattr(app.series_actions, "_choose",
+                        lambda title, **options: asked.append((title, options)) or None)
+    actions = _tree_menu(app, monkeypatch, _find(app.browser_widget, stim))
+    for text, title in (("Rename...", "Rename Series"), ("Copy...", "Copy Series"),
+                        ("Move...", "Move Series"), ("Append...", "Append Series")):
+        actions[text].trigger()
+        got_title, options = asked[-1]
+        assert got_title == title  # the same prompt as Prefix ⋯
+        if "current" in options and text != "Append...":
+            assert options["current"] == "Stim"  # starting on the series clicked
+        else:
+            assert options["context"] == ("Series", "Demo › Stim")
+    assert app.selection_model.selection["dataseries"] is app.series  # strip unchanged
+
+
+def test_data_set_rows_use_the_data_set_prompts(app, monkeypatch):
+    app.folder.data.sets.add("Set0", [app.folder.data["RecordA0"]])
+    app.folder.data.sets.add("Set3")
+    asked = []
+    monkeypatch.setattr(app.data_actions, "_choose",
+                        lambda title, **options: asked.append((title, options)) or None)
+    browser = app.browser_widget
+    browser.refresh()
+    browser.show_data_of(app.folder, sets=True, select="Set3")
+    actions = _tree_menu(app, monkeypatch, browser.tree.currentIndex())
+    for text, title in (("Renumber...", "Renumber Set"), ("Clear...", "Clear Set"),
+                        ("Delete...", "Delete Set")):
+        actions[text].trigger()
+        got_title, options = asked[-1]
+        assert got_title == title and options["current"] == "Set3"  # Data Set ⋯'s prompt
+
+
+def test_groups_row_uses_the_group_prompts(app, monkeypatch):
+    asked = []
+    monkeypatch.setattr(app.group_actions, "_choose",
+                        lambda title, **options: asked.append((title, options)) or None)
+    browser = app.browser_widget
+    browser.show_groups_of(app.series)
+    _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New Groups..."].trigger()
+    title, options = asked[-1]
+    assert title == "New Groups" and options["context"] == ("Data Series", "Demo › Record")

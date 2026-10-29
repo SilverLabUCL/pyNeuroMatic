@@ -62,7 +62,7 @@ def test_actions_appear_in_strip_and_menu_bar(app):
     folder_button = strip.action_button("folder")
     assert folder_button.isEnabled()
     assert [a.text() for a in folder_button.menu().actions() if a.text()] == [
-        "New Folder…", "Open / Import…", "Save…", "Duplicate…", "Rename…", "Delete…",
+        "New Folder…", "Open / Import…", "Rename…", "Copy…", "Save…", "Delete…",
         "Show in Browser",
     ]
     assert strip.action_button("toolfolder").isEnabled()
@@ -309,3 +309,24 @@ def test_folder_and_subfolder_show_in_browser(app):
     assert tree.isExpanded(tree.currentIndex())
     menu = app.selection_strip.action_button("toolfolder").menu()
     assert [a.text() for a in menu.actions() if a.text()][-1] == "Show in Browser"
+
+
+def test_dialogs_share_a_minimum_width(qtbot):
+    from pyneuromatic.gui.tier_actions import (
+        DIALOG_WIDTH, AddToSeriesDialog, ChooseItemDialog, EditScalesDialog,
+    )
+
+    dialogs = [
+        ChooseItemDialog("Delete Set", item_label="Set", items=["Set0"]),
+        ChooseItemDialog("Rename Data", item_label="Data", items=["A"], name_label="New name"),
+        AddToSeriesDialog("epochs", ("Series", "Demo › Record"), lambda n: ""),
+        EditScalesDialog({"xstart": "0", "xdelta": "1", "xlabel": "", "xunits": ""},
+                         [("Y", "", "")]),
+    ]
+    for dialog in dialogs:
+        qtbot.addWidget(dialog)
+        assert dialog.minimumWidth() >= DIALOG_WIDTH  # the same, however few fields
+    long_title = ChooseItemDialog("A much longer title for a dialog that has few fields",
+                                  items=["x"])
+    qtbot.addWidget(long_title)
+    assert long_title.minimumWidth() > DIALOG_WIDTH  # wide enough for its title

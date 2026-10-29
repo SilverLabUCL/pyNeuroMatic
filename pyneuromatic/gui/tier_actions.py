@@ -5,6 +5,7 @@ bar menu both show the same objects, so enabled state and shortcuts agree.
 """
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import re
 from collections.abc import Callable
@@ -19,6 +20,7 @@ from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.gui.selection_model import BUILTIN_EPOCH_SETS, SelectionModel
+from pyneuromatic.gui.membership import unassign_from_group
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
 
 
@@ -91,16 +93,30 @@ def copy_target_name(container: NMObjectContainer, name: str) -> str:
     return name if container._getkey(name) is None else copy_name(container, name)
 
 
+# The strip's dialogs share one minimum width, so they look alike and titles
+# aren't cut short (wider when a title needs it)
+DIALOG_WIDTH = 380
+
+
+def set_dialog_width(dialog: QtWidgets.QDialog, minimum: int = DIALOG_WIDTH) -> None:
+    """Give *dialog* the shared minimum width, or more for a long title (the
+    window's title bar uses a slightly larger font than the dialog)."""
+    title = dialog.fontMetrics().horizontalAdvance(dialog.windowTitle())
+    dialog.setMinimumWidth(max(minimum, int(title * 1.3) + 140))
+
+
 @dataclasses.dataclass(frozen=True)
 class Spin:
     """An integer field with up/down arrows, for :class:`ChooseItemDialog`
     extras: ``(label, Spin(minimum, maximum, value, prefix))``. Its value is
-    returned as text with the prefix, e.g. ``"E250"``."""
+    returned as text with the prefix, e.g. ``"E250"``. *suffix* is shown
+    after the number only (e.g. ``"  (max 14)"``), not returned."""
 
     minimum: int
     maximum: int
     value: int
     prefix: str = ""
+    suffix: str = ""
 
 
 class ChooseItemDialog(QtWidgets.QDialog):
@@ -174,7 +190,9 @@ class ChooseItemDialog(QtWidgets.QDialog):
                 widget.setRange(spec.minimum, spec.maximum)
                 widget.setValue(spec.value)
                 widget.setPrefix(spec.prefix)
-                widget.setKeyboardTracking(False)  # update after typing
+                widget.setSuffix(spec.suffix)
+                # The message follows typing too, not only the arrows
+                widget.setKeyboardTracking(True)
             else:
                 widget = QtWidgets.QComboBox(self)
                 widget.addItems(extra[1])
@@ -219,6 +237,7 @@ class ChooseItemDialog(QtWidgets.QDialog):
         if self.name_edit is not None:
             self.name_edit.selectAll()
             self.name_edit.setFocus()
+        set_dialog_width(self)
 
     def item(self) -> str | None:
         return self.item_combo.currentText() if self.item_combo is not None else None
@@ -375,6 +394,7 @@ class NewDataDialog(QtWidgets.QDialog):
         layout.addWidget(buttons)
         self.edits["name"].selectAll()
         self.edits["name"].setFocus()
+        set_dialog_width(self)
 
     def values(self) -> dict:
         """The fields, with numbers converted (raises ValueError if invalid)."""
@@ -485,6 +505,7 @@ class AddToSeriesDialog(QtWidgets.QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._update_preview()
+        set_dialog_width(self)
 
     def _update_preview(self, *_args) -> None:
         self.preview_label.setText(self._preview(self.count_spin.value()))
@@ -691,6 +712,7 @@ class EditScalesDialog(QtWidgets.QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._update_x_from()
+        set_dialog_width(self)
 
     def x_from(self) -> str | None:
         """The array chosen for x values, "" for start and delta, or None
@@ -880,6 +902,7 @@ class TierActions(QtCore.QObject):
         super().__init__(parent)
         self._selection = selection_model
         self._parent_widget = parent
+        self._start: dict = {}  # see starting_on
 
     def _action(self, text, slot, shortcut=None, tip="") -> QtGui.QAction:
         item = QtGui.QAction(text, self)
@@ -926,24 +949,60 @@ class TierActions(QtCore.QObject):
 
     # --- helpers ------------------------------------------------------------
 
+    @contextlib.contextmanager
+    def starting_on(self, context=None, **items):
+        """Run actions on *context* (a folder or subfolder) with *items* as
+        their starting choices (e.g. ``dataseries=series``, ``data_set="Set1"``),
+        instead of the strip's selection: e.g. for an item right-clicked in
+        the browser, so it gets the same prompt as the strip's ⋯ menu. The
+        strip's selection is changed only if *context* is the strip's."""
+        saved = self._start
+        self._start = {"context": context, **items}
+        try:
+            yield self
+        finally:
+            self._start = saved
+
     def _folder(self):
+        context = self._start.get("context")
+        if context is not None:
+            return context._folder
         return self._selection.selection.get("folder")
 
     def _context(self):
         """The subfolder if one is selected, else the folder."""
+        context = self._start.get("context")
+        if context is not None:
+            return context
         return self._selection.selection.get("toolfolder") or self._folder()
 
     def _context_text(self) -> str:
+        context = self._start.get("context")
+        if context is not None:
+            return _owner_text(context)
         folder = self._folder()
         subfolder = self._selection.selection.get("toolfolder")
         names = [obj.name for obj in (folder, subfolder) if obj is not None]
         return " / ".join(names)
 
     def _current_name(self, key: str) -> str | None:
-        value = self._selection.selection.get(key)
+        value = self._start[key] if key in self._start else self._selection.selection.get(key)
         if isinstance(value, str) or value is None:
             return value
         return value.name
+
+    def _elsewhere(self) -> bool:
+        """True while acting (starting_on) on a folder that isn't the strip's."""
+        context = self._start.get("context")
+        if context is None:
+            return False
+        selection = self._selection.selection
+        return context is not (selection.get("toolfolder") or selection.get("folder"))
+
+    def _select(self, **changes) -> None:
+        """Change the strip's selection, unless acting on another folder."""
+        if not self._elsewhere():
+            self._selection.update(**changes)
 
     def _changed(self) -> None:
         self._selection.refresh()
@@ -971,7 +1030,7 @@ class FolderActions(TierActions):
                                   "Import ABF, AxoGraph or Igor files, one folder per file")
         self.save_action = action("Save…", self.save_folder, Key.Save,
                                   "Save the folder")
-        self.duplicate_action = action("Duplicate…", self.duplicate_folder,
+        self.duplicate_action = action("Copy…", self.duplicate_folder,
                                        tip="Copy the folder with its data")
         self.rename_action = action("Rename…", self.rename_folder,
                                     tip="Rename the folder")
@@ -979,7 +1038,7 @@ class FolderActions(TierActions):
                                     tip="Delete the folder and its data")
         self.subfolder_rename_action = action("Rename…", self.rename_subfolder,
                                               tip="Rename the subfolder")
-        self.subfolder_duplicate_action = action("Duplicate…", self.duplicate_subfolder,
+        self.subfolder_duplicate_action = action("Copy…", self.duplicate_subfolder,
                                                  tip="Copy the subfolder")
         self.subfolder_delete_action = action("Delete…", self.delete_subfolder,
                                               tip="Delete the subfolder and its data")
@@ -997,10 +1056,10 @@ class FolderActions(TierActions):
         menu = QtWidgets.QMenu("Folder", parent)
         menu.addAction(self.new_action)
         menu.addAction(self.open_action)
-        menu.addAction(self.save_action)
         menu.addSeparator()
-        menu.addAction(self.duplicate_action)
         menu.addAction(self.rename_action)
+        menu.addAction(self.duplicate_action)
+        menu.addAction(self.save_action)
         menu.addAction(self.delete_action)
         menu.addSeparator()
         menu.addAction(self.browse_action)
@@ -1008,8 +1067,8 @@ class FolderActions(TierActions):
 
     def subfolder_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Subfolder", parent)
-        menu.addAction(self.subfolder_duplicate_action)
         menu.addAction(self.subfolder_rename_action)
+        menu.addAction(self.subfolder_duplicate_action)
         menu.addAction(self.subfolder_delete_action)
         menu.addSeparator()
         menu.addAction(self.subfolder_browse_action)
@@ -1087,7 +1146,7 @@ class FolderActions(TierActions):
         if answer is None:
             return
         folder = folders.new(answer[1])
-        self._selection.update(folder=folder)
+        self._select(folder=folder)
         self._changed()
 
     def open_files(self, paths: list[str] | None = None) -> None:
@@ -1114,7 +1173,7 @@ class FolderActions(TierActions):
             else:
                 imported = folder
         if imported is not None:
-            self._selection.update(folder=imported)
+            self._select(folder=imported)
             self._changed()
             # Shown in the Browser, opened: its Info lists the imported metadata
             self.browse_requested.emit(imported)
@@ -1130,13 +1189,13 @@ class FolderActions(TierActions):
     def duplicate_folder(self, name: str | None = None) -> None:
         folders = self._folders
         answer = self._choose_and_name(
-            folders, "Duplicate Folder", "Folder", name or self._current_name("folder"),
+            folders, "Copy Folder", "Folder", name or self._current_name("folder"),
             lambda item: unique_name(folders, f"{item}_copy"),
         )
         if answer is None:
             return
         copy = folders.duplicate(answer[0], answer[1])
-        self._selection.update(folder=copy)
+        self._select(folder=copy)
         self._changed()
 
     def rename_folder(self, name: str | None = None) -> None:
@@ -1180,7 +1239,7 @@ class FolderActions(TierActions):
             folders.pop(name)
         if current in names:
             if neighbour is not None:
-                self._selection.update(folder=folders[neighbour])
+                self._select(folder=folders[neighbour])
             else:
                 self._selection.clear()
         self._changed()
@@ -1203,14 +1262,14 @@ class FolderActions(TierActions):
             return
         container = folder.toolfolders
         answer = self._choose_and_name(
-            container, "Duplicate Subfolder", "Subfolder", current,
+            container, "Copy Subfolder", "Subfolder", current,
             lambda item: unique_name(container, f"{item}_copy"),
         )
         if answer is None:
             return
         copy = container.duplicate(answer[0], answer[1])
         if folder is self._folder():
-            self._selection.update(toolfolder=copy)
+            self._select(toolfolder=copy)
         self._changed()
 
     def rename_subfolder(self, subfolder=None) -> None:
@@ -1244,7 +1303,7 @@ class FolderActions(TierActions):
     def delete_subfolders(self, folder, names: list[str]) -> None:
         """Delete *folder*'s subfolders *names* (no questions asked)."""
         if folder is self._folder() and self._current_name("toolfolder") in names:
-            self._selection.update(toolfolder=None)
+            self._select(toolfolder=None)
         for name in names:
             folder.toolfolders.pop(name)
         self._changed()
@@ -1396,9 +1455,9 @@ class DataActions(TierActions):
             tip="Select several data arrays in the browser (Shift/Cmd-click)",
         )
         self.set_new_action = action("New Set…", self.new_set, tip="Create an empty data set")
-        self.set_add_action = action("Add Data to Set…", self.add_to_set,
+        self.set_add_action = action("Add to Set…", self.add_to_set,
                                      tip="Add a data array to a data set")
-        self.set_remove_action = action("Remove Data from Set…", self.remove_from_set,
+        self.set_remove_action = action("Remove from Set…", self.remove_from_set,
                                         tip="Remove a data array from a data set")
         self.set_combine_action = action("Combine…", self.combine_sets,
                                          tip="Make a set from two sets with AND or OR")
@@ -1437,8 +1496,8 @@ class DataActions(TierActions):
         menu.addAction(self.set_remove_action)
         menu.addAction(self.set_combine_action)
         menu.addSeparator()
-        menu.addAction(self.set_clear_action)
         menu.addAction(self.set_rename_action)
+        menu.addAction(self.set_clear_action)
         menu.addAction(self.set_delete_action)
         menu.addSeparator()
         menu.addAction(self.set_browse_action)
@@ -1556,7 +1615,7 @@ class DataActions(TierActions):
         ):
             return
         data = create_data(container, values)
-        self._selection.update(data=data)
+        self._select(data=data)
         self._changed()
         self.table_requested.emit()
 
@@ -1606,7 +1665,7 @@ class DataActions(TierActions):
         if destination is container:
             copy = container.duplicate(item, name)
             if self._selects_here(container):
-                self._selection.update(data=copy)
+                self._select(data=copy)
         else:
             container.copy_to(item, destination, name)
         self._changed()
@@ -1799,7 +1858,7 @@ class DataActions(TierActions):
             return
         name = set_name(answer[-1])
         sets.add(name)
-        self._selection.update(data_set=name)
+        self._select(data_set=name)
         self._changed()
 
     def add_to_set(self) -> None:
@@ -1862,7 +1921,7 @@ class DataActions(TierActions):
         name = set_name(number)
         define = sets.define_and if operator == "AND" else sets.define_or
         define(name, first, second)
-        self._selection.update(data_set=name)
+        self._select(data_set=name)
         self._changed()
 
     def clear_set(self) -> None:
@@ -1888,7 +1947,7 @@ class DataActions(TierActions):
         was_current = old == self._current_name("data_set")
         sets.rename(old, new)
         if was_current:
-            self._selection.update(data_set=new)
+            self._select(data_set=new)
         self._changed()
 
     def delete_set(self) -> None:
@@ -1898,7 +1957,7 @@ class DataActions(TierActions):
         if answer is None:
             return
         if answer[0] == self._current_name("data_set"):
-            self._selection.update(data_set=None)
+            self._select(data_set=None)
         self._data_container().sets.pop(answer[0])
         self._changed()
 
@@ -2053,6 +2112,8 @@ class SeriesActions(TierActions):
         return context if hasattr(context, "new_dataseries") else None
 
     def _series(self):
+        if "dataseries" in self._start:  # see starting_on
+            return self._start["dataseries"]
         series = self._selection.selection.get("dataseries")
         owner = self._owner()
         if series is None or owner is None or series.name not in owner.dataseries:
@@ -2172,7 +2233,7 @@ class SeriesActions(TierActions):
             y_label=values["ylabel"], y_units=values["yunits"], fill=fill,
         )
         if owner is selected_owner:  # a series elsewhere isn't selectable here
-            self._selection.update(dataseries=series)
+            self._select(dataseries=series)
         self._changed()
 
     def series_from_data(self) -> None:
@@ -2188,7 +2249,7 @@ class SeriesActions(TierActions):
         if answer is None:
             return
         series = owner.sync_dataseries(answer[0])
-        self._selection.update(dataseries=series)
+        self._select(dataseries=series)
         self._changed()
 
     def update_summary(self, name: str, *_extras) -> str:
@@ -2287,7 +2348,7 @@ class SeriesActions(TierActions):
         copy = owner.copy_dataseries(
             item, name, folder=None if destination is owner else destination)
         if destination is owner:
-            self._selection.update(dataseries=copy)
+            self._select(dataseries=copy)
         self._changed()
 
     def rename_series(self) -> None:
@@ -2561,8 +2622,8 @@ class SeriesActions(TierActions):
             self._show_message("Move Series", str(error), warning=True)
             return
         # The strip follows the series to its new folder
-        self._selection.update(folder=folders[target])
-        self._selection.update(dataseries=moved)
+        self._select(folder=folders[target])
+        self._select(dataseries=moved)
         self._changed()
 
     def _append_sources(self, folder) -> list[str]:
@@ -2784,8 +2845,11 @@ def epoch_spins(names: list[str], first: str | None = None,
         number = epoch_number(name) if name else None
         return number if number is not None else low
 
-    return [("From Epoch", Spin(low, high, value(first))),
-            ("To Epoch", Spin(low, high, value(last if last else first)))]
+    # The last epoch number is shown in To (and the first in From, if not 0)
+    return [("From Epoch", Spin(low, high, value(first),
+                                suffix=f"  (min {low})" if low else "")),
+            ("To Epoch", Spin(low, high, value(last if last else first),
+                              suffix=f"  (max {high})"))]
 
 
 def range_summary(verb: str, epochs: list[str], every: int) -> str:
@@ -2850,8 +2914,8 @@ class EpochSetActions(TierActions):
     def epoch_set_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Epoch Set", parent)
         for item in (self.new_action, None, self.add_action, self.remove_action, None,
-                     self.invert_action, self.combine_action, None, self.clear_action,
-                     self.rename_action, self.delete_action, None, self.browse_action):
+                     self.invert_action, self.combine_action, None, self.rename_action,
+                     self.clear_action, self.delete_action, None, self.browse_action):
             if item is None:
                 menu.addSeparator()
             else:
@@ -2861,6 +2925,8 @@ class EpochSetActions(TierActions):
     # --- helpers ------------------------------------------------------------
 
     def _series(self):
+        if "dataseries" in self._start:  # see starting_on
+            return self._start["dataseries"]
         series = self._selection.selection.get("dataseries")
         context = self._context()
         if series is None or context is None or series.name not in context.dataseries:
@@ -2885,7 +2951,7 @@ class EpochSetActions(TierActions):
         self.combine_action.setEnabled(len(sets) > 1)
 
     def _series_context(self, series) -> tuple[str, str]:
-        return ("Series", f"{self._context_text()} › {series.name}")
+        return ("Data Series", f"{self._context_text()} › {series.name}")
 
     @staticmethod
     def _exclude_set_error(name: str | None, done: str) -> str | None:
@@ -2899,7 +2965,7 @@ class EpochSetActions(TierActions):
         sets = self._set_names()
         if series is None or not sets:
             return None
-        current = self._selection.selection.get("epoch_set")
+        current = self._current_name("epoch_set")
         return self._choose(
             title, context=self._series_context(series), item_label="Epoch Set",
             items=sets, current=current if current in sets else sets[0], **options,
@@ -2927,7 +2993,7 @@ class EpochSetActions(TierActions):
             return
         name = set_name(answer[-1])
         sets.add(name)
-        self._selection.update(epoch_set=name)
+        self._select(epoch_set=name)
         self._changed()
 
     def _edit_range(self, title: str, verb: str, adding: bool) -> None:
@@ -3004,7 +3070,7 @@ class EpochSetActions(TierActions):
             return
         chosen, name = answer[0], set_name(answer[-1])
         sets.add(name, [series.epochs[e] for e in complement(chosen)])
-        self._selection.update(epoch_set=name)
+        self._select(epoch_set=name)
         self._changed()
 
     def combine_sets(self) -> None:
@@ -3013,7 +3079,7 @@ class EpochSetActions(TierActions):
         if series is None or len(names) < 2:
             return
         sets = series.epochs.sets
-        current = self._selection.selection.get("epoch_set")
+        current = self._current_name("epoch_set")
         first = current if current in names else names[0]
         second = next((n for n in names if n != first), first)
         answer = self._choose_set(
@@ -3030,7 +3096,7 @@ class EpochSetActions(TierActions):
         first, _name, operator, second, number = answer
         name = set_name(number)
         (sets.define_and if operator == "AND" else sets.define_or)(name, first, second)
-        self._selection.update(epoch_set=name)
+        self._select(epoch_set=name)
         self._changed()
 
     def clear_set(self) -> None:
@@ -3060,7 +3126,7 @@ class EpochSetActions(TierActions):
         was_current = old == self._selection.selection.get("epoch_set")
         sets.rename(old, new)
         if was_current:
-            self._selection.update(epoch_set=new)
+            self._select(epoch_set=new)
         self._changed()
 
     def delete_set(self) -> None:
@@ -3071,7 +3137,7 @@ class EpochSetActions(TierActions):
         if answer is None:
             return
         if answer[0] == self._selection.selection.get("epoch_set"):
-            self._selection.update(epoch_set=None)
+            self._select(epoch_set=None)
         self._series().epochs.sets.pop(answer[0])
         self._changed()
 
@@ -3096,7 +3162,9 @@ class GroupActions(TierActions):
     # Ask the app to show a series' epochs in the browser
     browse_requested = QtCore.pyqtSignal(object)
 
-    PREVIEW = 16  # group numbers shown in the Assign Cyclic preview
+    # The Assign Cyclic preview shows the pattern: at least two full cycles,
+    # between these many group numbers
+    PREVIEW_MIN, PREVIEW_MAX = 16, 32
 
     def __init__(
         self,
@@ -3113,12 +3181,16 @@ class GroupActions(TierActions):
             "Assign Cyclic…", self.assign_cyclic,
             tip="Assign epochs to groups in turn, e.g. 0 1 0 1 or 000 111 (block 3)",
         )
-        self.assign_action = action("Assign Epochs…", self.assign_epochs,
-                                    tip="Assign an epoch, or a range of epochs, to a group")
-        self.unassign_action = action("Unassign Epochs…", self.unassign_epochs,
-                                      tip="Take an epoch, or a range of epochs, out of groups")
-        self.clear_action = action("Clear Groups…", self.clear_groups,
-                                   tip="Remove every group assignment")
+        self.assign_action = action("Add to Group…", self.assign_epochs,
+                                    tip="Add an epoch, or a range of epochs, to a group")
+        self.unassign_action = action("Remove from Group…", self.unassign_epochs,
+                                      tip="Remove an epoch, or a range of epochs, from their group")
+        self.clear_action = action(
+            "Clear Group…", self.clear_group,
+            tip="Take the epochs out of a group, or all groups (the groups are kept)")
+        self.delete_action = action(
+            "Delete Group…", self.delete_group,
+            tip="Delete a group, or all groups; their epochs are kept, with no group")
         self.browse_action = action("Show in Browser", self.choose_in_browser,
                                     tip="Show the series' epochs in the browser")
         selection_model.selection_changed.connect(self.update_enabled)
@@ -3126,8 +3198,9 @@ class GroupActions(TierActions):
 
     def group_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Group", parent)
-        for item in (self.new_action, None, self.cyclic_action, self.assign_action,
-                     self.unassign_action, None, self.clear_action, None, self.browse_action):
+        for item in (self.new_action, self.cyclic_action, None, self.assign_action,
+                     self.unassign_action, None, self.clear_action, self.delete_action, None,
+                     self.browse_action):
             if item is None:
                 menu.addSeparator()
             else:
@@ -3137,6 +3210,8 @@ class GroupActions(TierActions):
     # --- helpers ------------------------------------------------------------
 
     def _series(self):
+        if "dataseries" in self._start:  # see starting_on
+            return self._start["dataseries"]
         series = self._selection.selection.get("dataseries")
         context = self._context()
         if series is None or context is None or series.name not in context.dataseries:
@@ -3157,10 +3232,11 @@ class GroupActions(TierActions):
         self.assign_action.setEnabled(has_epochs)
         self.unassign_action.setEnabled(series is not None and bool(self._assigned(series)))
         self.clear_action.setEnabled(has_groups)
+        self.delete_action.setEnabled(has_groups)
         self.browse_action.setEnabled(series is not None)
 
     def _series_context(self, series) -> tuple[str, str]:
-        return ("Series", f"{self._context_text()} › {series.name}")
+        return ("Data Series", f"{self._context_text()} › {series.name}")
 
     def _changed(self) -> None:
         series = self._series()
@@ -3169,7 +3245,7 @@ class GroupActions(TierActions):
         if series is not None and group is not None and (
             group not in numbers if group != "All Groups" else not numbers
         ):
-            self._selection.update(group=None)  # the chosen group(s) no longer exist
+            self._select(group=None)  # the chosen group(s) no longer exist
         super()._changed()
 
     # --- actions ------------------------------------------------------------
@@ -3190,11 +3266,16 @@ class GroupActions(TierActions):
             if not new:
                 return ""
             span = f"Group {new[0]}" if len(new) == 1 else f"Groups {new[0]}–{new[-1]}"
-            return f"Creates {span}, with no epochs yet."
+            return f"Creates {span}, with no epoch assignments."
 
+        # The smallest number that creates a group: one past the first unused
+        # number (e.g. 4 when groups 0-2 exist; 2 when only 0 and 2 do)
+        first_free = next(n for n in range(len(existing) + 1) if n not in existing)
+        minimum = first_free + 1
         answer = self._choose(
             "New Groups", context=self._series_context(series),
-            extras=[("Groups", Spin(1, 1000, max(len(existing) + 1, 2)))],
+            extras=[("Number of Groups",
+                     Spin(minimum, 1000, max(minimum, len(existing) + 1, 2)))],
             message=summary,
             validate=lambda _item, _name, count: (
                 None if missing(count) else f"Groups 0–{int(count) - 1} already exist"
@@ -3219,18 +3300,20 @@ class GroupActions(TierActions):
             epochs = chosen(first, last)
             if not epochs:
                 return ""
-            numbers = cyclic_groups(len(epochs), int(groups), int(block))
-            shown = " ".join(str(n) for n in numbers[:self.PREVIEW])
-            more = " …" if len(numbers) > self.PREVIEW else ""
-            noun = "epoch" if len(epochs) == 1 else "epochs"
-            return (f"{shown}{more} ({groups} group{'s' * (groups != '1')}, "
-                    f"block {block}, {len(epochs)} {noun})")
+            # The pattern itself (whatever the range), then where it goes
+            cycle = int(groups) * int(block)
+            length = min(max(self.PREVIEW_MIN, 2 * cycle), self.PREVIEW_MAX)
+            pattern = " ".join(str(n) for n in cyclic_groups(length, int(groups), int(block)))
+            low, high = epoch_number(epochs[0]), epoch_number(epochs[-1])
+            where = f"{low}" if len(epochs) == 1 else f"{low}–{high}"
+            return f"Pattern: {pattern} …\nFor epoch {where} (n={len(epochs)})."
 
         # Start at the groups already made (e.g. 3 after New Groups...)
         n_groups = max(len(series.epochs.groups.group_numbers), 2)
         answer = self._choose(
-            "Assign Cyclic", context=self._series_context(series),
-            extras=[("Groups", Spin(1, 1000, n_groups)), ("Block", Spin(1, 100_000, 1))]
+            "Assign Epochs to Cyclic Groups", context=self._series_context(series),
+            extras=[("Number of Groups", Spin(1, 1000, n_groups)),
+                    ("Block", Spin(1, 100_000, 1))]
             + epoch_spins(names, names[0], names[-1]),
             message=preview,
             validate=lambda _item, _name, _groups, _block, first, last: (
@@ -3255,22 +3338,28 @@ class GroupActions(TierActions):
         if series is None or len(series.epochs) == 0:
             return
         names = list(series.epochs.keys())
-        numbers = series.epochs.groups.group_numbers
+        existing = series.epochs.groups.group_numbers
+        numbers = existing or [0]  # none yet: group 0
         current = self._selection.selection.get("group")
-        default = current if isinstance(current, int) else (numbers[0] if numbers else 0)
+        default = current if current in numbers else numbers[0]
 
         def chosen(first, last, every):
             return epoch_range(names, first, last, int(every))
 
+        # A number box (its arrows step through the groups), not a popup list;
+        # From / To start at the current epoch, Every at 1
+        extras = self._range_extras(series, [("Group", Spin(numbers[0], numbers[-1], default))])
         answer = self._choose(
-            "Assign Epochs to Group", context=self._series_context(series),
-            extras=self._range_extras(series, [("Group", Spin(0, 9999, default))]),
+            "Add Epochs to Group", context=self._series_context(series),
+            extras=extras,
             message=lambda _item, group, first, last, every: (
-                range_summary("Assigns", chosen(first, last, every), int(every))[:-1]
+                range_summary("Adds", chosen(first, last, every), int(every))[:-1]
                 + f" to group {group}." if chosen(first, last, every) else ""
             ),
-            validate=lambda _item, _name, _group, first, last, every: (
-                range_error(names, first, last, int(every))
+            validate=lambda _item, _name, group, first, last, every: (
+                (f"Group {group} doesn't exist; New Groups… makes it"
+                 if existing and int(group) not in existing else None)
+                or range_error(names, first, last, int(every))
             ),
         )
         if answer is None:
@@ -3299,10 +3388,11 @@ class GroupActions(TierActions):
             return None
 
         answer = self._choose(
-            "Unassign Epochs", context=self._series_context(series),
+            "Remove Epochs from Group", context=self._series_context(series),
             extras=self._range_extras(series),
-            message=lambda _item, first, last, every: range_summary(
-                "Unassigns", targets(first, last, every), int(every)),
+            message=lambda _item, first, last, every: (
+                range_summary("Removes", targets(first, last, every), int(every))[:-1]
+                + " from their group." if targets(first, last, every) else ""),
             validate=error,
         )
         if answer is None:
@@ -3313,19 +3403,81 @@ class GroupActions(TierActions):
             groups.unassign(name, quiet=True)
         self._changed()
 
-    def clear_groups(self) -> None:
+    ALL = "All"
+
+    def _choose_groups(self, title: str, describe) -> list[int] | None:
+        """The shared Clear Group / Delete Group prompt: a group number or All,
+        starting on the strip's group (or the one given with starting_on).
+        *describe(numbers)* says what will happen. Returns the numbers chosen."""
         series = self._series()
         if series is None:
-            return
-        n_groups = len(series.epochs.groups.group_numbers)
+            return None
+        groups = series.epochs.groups
+        numbers = groups.group_numbers
+        if not numbers:
+            return None
+        items = [str(n) for n in numbers] + [self.ALL]
+        start = self._start.get("group", self._selection.selection.get("group"))
+        current = str(start) if str(start) in items else self.ALL
+
+        def chosen(item):
+            if item == self.ALL:
+                return list(groups.group_numbers)
+            return [int(item)] if item.isdigit() and int(item) in groups.group_numbers else []
+
         answer = self._choose(
-            "Clear Groups", context=self._series_context(series),
-            message=f"Every group assignment ({n_groups} group"
-                    f"{'s' * (n_groups != 1)}) will be removed; the epochs are kept.",
+            title, context=self._series_context(series), item_label="Group",
+            items=items, current=current, message=lambda item: describe(chosen(item)),
         )
-        if answer is None:
+        return None if answer is None else chosen(answer[0])
+
+    def _groups_text(self, numbers: list[int]) -> tuple[str, str]:
+        groups = self._series().epochs.groups
+        count = sum(len(groups.get_items(n)) for n in numbers)
+        which = (f"group {numbers[0]}" if len(numbers) == 1
+                 else f"all {len(numbers)} groups")
+        return which, f"{count} epoch{'s' * (count != 1)}"
+
+    def clear_group(self) -> None:
+        """Take the epochs out of a group, or all groups; the (empty) groups
+        are kept."""
+        def describe(numbers):
+            if not numbers:
+                return ""
+            which, epochs = self._groups_text(numbers)
+            return (f"The {epochs} of {which} will be removed from it; the groups and "
+                    "epochs are kept.") if len(numbers) == 1 else (
+                f"The {epochs} of {which} will be removed from them; the groups and "
+                "epochs are kept.")
+
+        numbers = self._choose_groups("Clear Epoch Group", describe)
+        if not numbers:
             return
-        series.epochs.groups.clear()
+        groups = self._series().epochs.groups
+        for number in numbers:
+            unassign_from_group(groups, groups.get_items(number), number)
+        self._changed()
+
+    def delete_group(self) -> None:
+        """Delete a group, or all groups; their epochs are kept, with no group."""
+        def describe(numbers):
+            if not numbers:
+                return ""
+            which, epochs = self._groups_text(numbers)
+            return (f"{which[0].upper()}{which[1:]} will be deleted; its {epochs} are kept, "
+                    "with no group." if len(numbers) == 1 else
+                    f"{which[0].upper()}{which[1:]} will be deleted; their {epochs} are "
+                    "kept, with no group.")
+
+        numbers = self._choose_groups("Delete Epoch Group", describe)
+        if not numbers:
+            return
+        groups = self._series().epochs.groups
+        strip_group = self._selection.selection.get("group")
+        if strip_group in numbers or len(numbers) == len(groups.group_numbers):
+            self._select(group=None)  # the strip's group goes
+        for number in numbers:
+            groups.delete_group(number)
         self._changed()
 
     def choose_in_browser(self) -> None:
@@ -3449,7 +3601,7 @@ class ChannelActions(TierActions):
         added = owner.add_dataseries_channels(
             series.name, values["count"], fill=fill_values(values["value"], values["noise"]),
             y_label=values["ylabel"], y_units=values["yunits"])
-        self._selection.update(channel=added[0])  # shown in the Plot and Table
+        self._select(channel=added[0])  # shown in the Plot and Table
         self._changed()
 
     def edit_transforms(self) -> None:
@@ -3464,6 +3616,8 @@ class ChannelActions(TierActions):
 
 
 __all__ = [
+    "DIALOG_WIDTH",
+    "set_dialog_width",
     "AddToSeriesDialog",
     "ChannelActions",
     "ChooseItemDialog",

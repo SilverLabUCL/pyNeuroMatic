@@ -52,7 +52,7 @@ def test_range_helpers():
 def test_epoch_set_menu_in_strip_and_series_menu(app):
     texts = [
         "New Set…", "Add to Set…", "Remove from Set…", "Invert…", "Combine…",
-        "Clear…", "Renumber…", "Delete…", "Show in Browser",
+        "Renumber…", "Clear…", "Delete…", "Show in Browser",
     ]
     button = app.selection_strip.action_button("epoch_set")
     assert button.isEnabled()
@@ -65,7 +65,7 @@ def test_epoch_set_menu_in_strip_and_series_menu(app):
 def test_new_set_is_numbered_and_selected(app):
     app.epoch_set_actions.new_set()  # cancelled; check the options
     options = app.dialogs[-1][1]
-    assert options["context"] == ("Series", "Demo › Record")
+    assert options["context"] == ("Data Series", "Demo › Record")
     label, spin = options["extras"][0]
     assert label == "Set number" and spin.value == 2  # Set0, Set1 (and SetX) exist
     assert options["validate"](None, None, "1") == "'Set1' already exists"

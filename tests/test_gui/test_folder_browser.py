@@ -522,7 +522,7 @@ class TestTreeContextMenu:
 
         # The same options as in the second column; Delete... last
         assert [action.text() for action in captured["menu"].actions() if action.text()] == [
-            "Select", "Edit Scales...", "Rename...", "Copy", "Add to Set", "Delete...",
+            "Select", "Edit Scales...", "Rename...", "Copy", "Delete...", "Add to Set",
         ]
         captured["menu"].actions()[0].trigger()
         assert requests == [{"object": record.internalPointer(), "set": None}]

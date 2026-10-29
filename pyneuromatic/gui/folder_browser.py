@@ -197,6 +197,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._folder_actions = None  # set by the app (see set_folder_actions)
         self._series_actions = None  # set by the app (see set_series_actions)
         self._data_actions = None  # set by the app (see set_data_actions)
+        self._epoch_set_actions = None  # set by the app (see set_set_actions)
+        self._group_actions = None
 
         self._tree = QtWidgets.QTreeView(self)
         self._tree.setModel(self._model)
@@ -322,7 +324,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                 self._tree.expand(index)
 
     def set_folder_actions(self, actions) -> None:
-        """Use the strip's Folder actions (Duplicate, Rename, Delete...) for
+        """Use the strip's Folder actions (Rename, Copy, Delete...) for
         folders and subfolders, so they behave the same everywhere."""
         self._folder_actions = actions
 
@@ -330,6 +332,12 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         """Use the strip's Data actions (the same Rename, Copy, Move and
         Delete prompts as Data ⋯) for a data array right-clicked here."""
         self._data_actions = actions
+
+    def set_set_actions(self, epoch_set_actions, group_actions) -> None:
+        """Use the strip's Epoch Set and Group actions for epoch sets and
+        groups right-clicked here (the same prompts as their ⋯ menus)."""
+        self._epoch_set_actions = epoch_set_actions
+        self._group_actions = group_actions
 
     def set_series_actions(self, actions) -> None:
         """Use the strip's Data Series actions (the New Series dialog)."""
@@ -516,7 +524,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         chosen = model.chosen()
         if len(chosen) == 1 or not isinstance(chosen[0], (NMFolder, NMToolFolder)):
             self._populate_object_menu(menu, chosen, model.container)
-        else:  # several folders: their Duplicate / Rename take one at a time
+        else:  # several folders: their Copy / Rename take one at a time
             menu.addAction("Delete...", lambda: self._delete_objects(model.container, chosen))
         if menu.actions():
             menu.exec(self._membership_view.viewport().mapToGlobal(pos))
@@ -776,18 +784,44 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         # Folders and subfolders: the strip's Folder actions, as in its ⋯ menu
         if single is not None and actions is not None:
             if isinstance(first, NMFolder):
-                menu.addAction("Duplicate...", lambda: actions.duplicate_folder(first.name))
                 menu.addAction("Rename...", lambda: actions.rename_folder(first.name))
+                menu.addAction("Copy...", lambda: actions.duplicate_folder(first.name))
+
+                def save():
+                    with actions.starting_on(first):
+                        actions.save_folder()
+
+                menu.addAction("Save...", save)
                 menu.addAction("Delete...", lambda: actions.delete_folder(first.name))
                 return
             if isinstance(first, NMToolFolder):
-                menu.addAction("Duplicate...", lambda: actions.duplicate_subfolder(first))
                 menu.addAction("Rename...", lambda: actions.rename_subfolder(first))
+                menu.addAction("Copy...", lambda: actions.duplicate_subfolder(first))
                 menu.addAction("Delete...", lambda: actions.delete_subfolder(first))
                 return
         if isinstance(single, NMChannel):
             menu.addAction(MENU_TEXT,
                            lambda: self.edit_transforms_requested.emit(single))
+        # One data series: the same prompts as Prefix ⋯ (they start on it)
+        series_actions = self._series_actions
+        if isinstance(single, NMDataSeries) and series_actions is not None:
+            owner = container._parent
+
+            def on_series(method):
+                def run():
+                    with series_actions.starting_on(owner, dataseries=single):
+                        method()
+                return run
+
+            menu.addAction("Edit Scales...", lambda: self.edit_scales_requested.emit(single))
+            menu.addAction("Rename...", on_series(series_actions.rename_series))
+            menu.addAction("Copy...", on_series(series_actions.copy_series))
+            if isinstance(owner, NMFolder) and len(self._nm.folders) > 1:
+                menu.addAction("Move...", on_series(series_actions.move_series))
+            if isinstance(owner, NMFolder):
+                menu.addAction("Append...", on_series(series_actions.append_series))
+            menu.addAction("Delete...", lambda: series_actions.delete_series(single))
+            return
         # One data array: the same prompts as Data ⋯ (they start on it)
         data_actions = self._data_actions
         one_array = isinstance(single, NMData) and data_actions is not None
@@ -829,7 +863,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                             self._move_selected_to(container, objects, f),
                         )
         # Sets are for data arrays and epochs (others may come later)
-        if isinstance(container, (NMDataContainer, NMEpochContainer)):
+        def add_set_menu():
             set_menu = menu.addMenu("Add to Set")
             for set_name in container.sets.keys():
                 set_menu.addAction(
@@ -839,6 +873,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             if container.sets.keys():
                 set_menu.addSeparator()
             set_menu.addAction("New...", lambda: self._add_to_new_set(container, objects))
+
+        if isinstance(container, NMEpochContainer):
+            add_set_menu()
         epochs = [obj for obj in objects if isinstance(obj, NMEpoch)]
         if epochs and hasattr(container, "groups") and container.groups.group_numbers:
             group_menu = menu.addMenu("Add to Group")
@@ -851,33 +888,51 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         if one_array:  # the Data ⋯ prompt (its series note, lock and x array checks)
             menu.addAction("Delete...", lambda: data_actions.delete_data(single))
         else:
-            menu.addAction("Delete...", lambda: self._delete_objects(container, objects))  # last
+            menu.addAction("Delete...", lambda: self._delete_objects(container, objects))
+        if isinstance(container, NMDataContainer):  # data arrays: Add to Set last
+            add_set_menu()
 
     def _populate_node_menu(self, menu: QtWidgets.QMenu, index: QtCore.QModelIndex) -> None:
         """Actions for a Sets, set, Groups or group row — shared by both panes."""
         node = index.internalPointer()
-        if isinstance(node, _GroupsNode) and node.container is not None:
-            menu.addAction("New Groups...", lambda: self._new_group(node.container))
-            numbers = node.container.groups.group_numbers
-            if numbers:
-                every = [self._model._group_number_node(node, n) for n in numbers]
-                menu.addAction("Clear Groups", lambda: self._clear_groups(every))
-                delete_menu = menu.addMenu("Delete Group")
-                for number_node in every:
-                    delete_menu.addAction(
-                        str(number_node.number),
-                        lambda checked=False, n=number_node: self._delete_groups([n]),
-                    )
-                delete_menu.addSeparator()
-                delete_menu.addAction("All Groups", lambda: self._delete_groups(every))
-        elif isinstance(node, _GroupNumberNode):
-            menu.addAction("Select", lambda: self._request_selection(index))
-            menu.addAction("Clear...", lambda: self._clear_groups([node]))
-            menu.addAction("Delete...", lambda: self._delete_groups([node]))
+        if isinstance(node, (_GroupsNode, _GroupNumberNode)) and node.container is not None:
+            group_actions = self._group_actions
+            series = node.container._parent
+            number = node.number if isinstance(node, _GroupNumberNode) else "All"
+            has_groups = bool(node.container.groups.group_numbers)
+            if isinstance(node, _GroupNumberNode):
+                menu.addAction("Select", lambda: self._request_selection(index))
+            if group_actions is not None:
+                # The Group ⋯ prompts, starting on this group (or All)
+                def on_group(method):
+                    def run():
+                        with group_actions.starting_on(series._container._parent,
+                                                       dataseries=series, group=number):
+                            method()
+                    return run
+                if isinstance(node, _GroupsNode):
+                    menu.addAction("New Groups...", on_group(group_actions.new_groups))
+                if has_groups:
+                    menu.addAction("Clear Group...", on_group(group_actions.clear_group))
+                    menu.addAction("Delete Group...", on_group(group_actions.delete_group))
+            elif isinstance(node, _GroupsNode):
+                menu.addAction("New Groups...", lambda: self._new_group(node.container))
+            else:
+                menu.addAction("Clear...", lambda: self._clear_groups([node]))
+                menu.addAction("Delete...", lambda: self._delete_groups([node]))
         elif isinstance(node, _SetsNode):
             self._populate_sets_menu(menu, node)
         elif isinstance(node, _SetNode):
             menu.addAction("Select", lambda: self._request_selection(index))
+            on_set = self._set_prompts(node.sets_node, node.name)
+            if on_set is not None:  # the Data Set ⋯ / Epoch Set ⋯ prompts
+                actions = on_set.actions
+                if not self._is_exclude_set(node):  # SetX stays SetX
+                    menu.addAction("Renumber...", on_set(actions.rename_set))
+                if not self._is_combined_set(node):
+                    menu.addAction("Clear...", on_set(actions.clear_set))
+                menu.addAction("Delete...", on_set(actions.delete_set))
+                return
             if not self._is_exclude_set(node):  # SetX stays SetX
                 menu.addAction("Renumber...",
                                lambda: self._rename_set(node.sets_node, node.name))
@@ -887,10 +942,42 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             menu.addAction("Delete...",
                            lambda: self._delete_sets(node.sets_node, [node.name]))
 
+    def _set_prompts(self, sets_node: _SetsNode, set_name: str | None = None):
+        """A runner for the strip's set actions on *sets_node*'s sets (Data
+        Set ⋯ for data sets, Epoch Set ⋯ for epoch sets), starting on
+        *set_name*: ``run = self._set_prompts(...); run(actions.clear_set)``
+        makes a menu slot. None if those actions aren't available."""
+        container = sets_node.container
+        if isinstance(container, NMDataContainer):
+            actions, owner = self._data_actions, container._parent
+            items = {"data_set": set_name}
+        elif isinstance(container, NMEpochContainer):
+            actions = self._epoch_set_actions
+            series = container._parent
+            owner = series._container._parent if series is not None else None
+            items = {"dataseries": series, "epoch_set": set_name}
+        else:
+            return None
+        if actions is None or owner is None:
+            return None
+
+        def on_set(method):
+            def run():
+                with actions.starting_on(owner, **items):
+                    method()
+            return run
+
+        on_set.actions = actions
+        return on_set
+
     def _populate_sets_menu(self, menu: QtWidgets.QMenu, sets_node: _SetsNode) -> None:
         """New... for a "Sets" row (renaming, deleting and clearing are on
-        each set's own row)."""
-        menu.addAction("New...", lambda: self._add_set(sets_node))
+        each set's own row): the Data Set ⋯ / Epoch Set ⋯ prompt."""
+        on_sets = self._set_prompts(sets_node)
+        if on_sets is not None:
+            menu.addAction("New...", on_sets(on_sets.actions.new_set))
+        else:
+            menu.addAction("New...", lambda: self._add_set(sets_node))
 
     def _on_activated(self, index: QtCore.QModelIndex) -> None:
         """Placeholder for a future "open" action (e.g. quick-plot a leaf).
@@ -1673,7 +1760,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         groups = group_nodes[0].container.groups
         labels = ", ".join(str(node.number) for node in group_nodes)
         if not self._confirm(
-            "Clear Group",
+            "Clear Epoch Group",
             "Remove every epoch from group%s %s? The epochs themselves are kept."
             % ("s" if len(group_nodes) != 1 else "", labels),
         ):
@@ -1689,7 +1776,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         groups = group_nodes[0].container.groups
         labels = ", ".join(str(node.number) for node in group_nodes)
         if not self._confirm(
-            "Delete Group",
+            "Delete Epoch Group",
             "Delete group%s %s? Their epochs are kept, with no group."
             % ("s" if len(group_nodes) != 1 else "", labels),
         ):
