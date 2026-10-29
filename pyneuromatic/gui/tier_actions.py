@@ -119,14 +119,27 @@ class Spin:
     suffix: str = ""
 
 
+@dataclasses.dataclass(frozen=True)
+class Check:
+    """A checkbox, for :class:`ChooseItemDialog` extras: ``(label,
+    Check(text))``. Its value is returned as True or False. With
+    *enabled(item, *extras)*, it can be ticked only while that is true
+    (otherwise it is cleared)."""
+
+    text: str
+    checked: bool = False
+    enabled: Callable[..., bool] | None = None
+
+
 class ChooseItemDialog(QtWidgets.QDialog):
     """Choose an item (e.g. a folder) and/or enter a name, in one dialog.
 
     *items* adds an item dropdown, starting at *current*. *name_label* adds a
     name field; *default_name(item, *extras)* fills it whenever the item or
     an extra choice changes.
-    *extras* adds further dropdowns, as ``(label, items, current)``, or
-    number boxes, as ``(label, Spin(...))``.
+    *extras* adds further dropdowns, as ``(label, items, current)``,
+    number boxes, as ``(label, Spin(...))``, or checkboxes, as
+    ``(label, Check(...))``.
     *message* is a note below the fields, or a function of the item and
     extra choices, updated when they change.
     *context* adds a read-only first row, as ``(label, text)`` (e.g. the
@@ -179,9 +192,10 @@ class ChooseItemDialog(QtWidgets.QDialog):
             self.item_combo.addItems(items)
             if current in items:
                 self.item_combo.setCurrentText(current)
-            form.addRow(item_label or "Item", self.item_combo)
-        # Dropdowns (QComboBox) or number boxes (QSpinBox), in order
+            form.addRow("Item" if item_label is None else item_label, self.item_combo)
+        # Dropdowns (QComboBox), number boxes (QSpinBox) or checkboxes, in order
         self.extra_widgets: list[QtWidgets.QWidget] = []
+        self._checks: list[tuple[QtWidgets.QCheckBox, Check]] = []
         for extra in extras or []:
             label = extra[0]
             if isinstance(extra[1], Spin):
@@ -193,6 +207,10 @@ class ChooseItemDialog(QtWidgets.QDialog):
                 widget.setSuffix(spec.suffix)
                 # The message follows typing too, not only the arrows
                 widget.setKeyboardTracking(True)
+            elif isinstance(extra[1], Check):
+                widget = QtWidgets.QCheckBox(extra[1].text, self)
+                widget.setChecked(extra[1].checked)
+                self._checks.append((widget, extra[1]))
             else:
                 widget = QtWidgets.QComboBox(self)
                 widget.addItems(extra[1])
@@ -229,6 +247,8 @@ class ChooseItemDialog(QtWidgets.QDialog):
         for widget in self.extra_widgets:
             if isinstance(widget, QtWidgets.QSpinBox):
                 widget.valueChanged.connect(self._fill_default_name)
+            elif isinstance(widget, QtWidgets.QCheckBox):
+                widget.toggled.connect(self._fill_default_name)
             else:
                 widget.currentTextChanged.connect(self._fill_default_name)
         if self.name_edit is not None and validate_live:
@@ -250,11 +270,26 @@ class ChooseItemDialog(QtWidgets.QDialog):
         """The extra dropdowns (not number boxes)."""
         return [w for w in self.extra_widgets if isinstance(w, QtWidgets.QComboBox)]
 
-    def extras(self) -> list[str]:
+    def extras(self) -> list:
         return [
-            f"{w.prefix()}{w.value()}" if isinstance(w, QtWidgets.QSpinBox) else w.currentText()
+            f"{w.prefix()}{w.value()}" if isinstance(w, QtWidgets.QSpinBox)
+            else w.isChecked() if isinstance(w, QtWidgets.QCheckBox)
+            else w.currentText()
             for w in self.extra_widgets
         ]
+
+    def _enable_checks(self) -> None:
+        """Checkboxes that can be ticked only sometimes (e.g. Overwrite, while
+        the set chosen exists)."""
+        for widget, spec in self._checks:
+            if spec.enabled is None:
+                continue
+            on = bool(spec.enabled(self.item(), *self.extras()))
+            widget.blockSignals(True)
+            if not on:
+                widget.setChecked(False)
+            widget.setEnabled(on)
+            widget.blockSignals(False)
 
     def _refill_extras(self, *_args) -> None:
         """Choices of dependent extra dropdowns, for the item chosen (keeping
@@ -272,6 +307,7 @@ class ChooseItemDialog(QtWidgets.QDialog):
             combo.blockSignals(False)
 
     def _fill_default_name(self, *_args) -> None:
+        self._enable_checks()
         if self.name_edit is not None and self._default_name is not None:
             self.name_edit.setText(self._default_name(self.item(), *self.extras()))
         message = (
@@ -1386,8 +1422,8 @@ def next_set_number(sets) -> int:
 
 
 def set_number_spin(sets, value: int | None = None) -> tuple:
-    """The "Set number" box for a dialog, starting at the next free number."""
-    return ("Set number", Spin(0, 9999, next_set_number(sets) if value is None else value))
+    """The "New Set number" box for a dialog, starting at the next free number."""
+    return ("New Set number", Spin(0, 9999, next_set_number(sets) if value is None else value))
 
 
 def set_number_error(sets, number, keep: str | None = None) -> str | None:
@@ -1397,8 +1433,25 @@ def set_number_error(sets, number, keep: str | None = None) -> str | None:
     if keep is not None and name.lower() == keep.lower():
         return None
     if name in sets:
-        return f"'{name}' already exists"
+        return f"'{name}' already exists."
     return None
+
+
+def new_set_summary(sets, number) -> str:
+    """e.g. "Create 'Set2', an empty set." ("" if Set<number> exists)."""
+    if set_number_error(sets, number):
+        return ""
+    return f"Create '{set_name(number)}', an empty set."
+
+
+def renumber_set_summary(sets, old: str | None, number) -> str:
+    """e.g. "Renumber 'Set1' to 'Set3'." ("" if Set<number> exists)."""
+    if not old or set_number_error(sets, number, keep=old):
+        return ""
+    new = set_name(number)
+    if new.lower() == old.lower():
+        return f"Renumber '{old}' to '{new}' (no change)."
+    return f"Renumber '{old}' to '{new}'."
 
 
 def set_number_of(name: str) -> int | None:
@@ -1414,8 +1467,143 @@ def set_name_error(sets, name: str | None) -> str | None:
     if not nmu.name_ok(name):
         return f"'{name}' is not a valid name (use letters, digits and _)"
     if name.lower() in (key.lower() for key in sets.keys()):
-        return f"'{name}' already exists"
+        return f"'{name}' already exists."
     return None
+
+
+def set_invert_error(sets, name: str | None, kind: str = "data") -> str | None:
+    """Why set *name* can't be inverted, or None: a combined set follows its
+    two sets; SetX would exclude every other epoch from runs."""
+    if name is None:
+        return None
+    if sets.is_equation(name):
+        return (f"'{name}' is a combined set (AND / OR of two sets); invert one of "
+                "those sets instead")
+    if kind == "epoch" and name.lower() == EXCLUDE_SET.lower():
+        return f"{EXCLUDE_SET} can't be inverted: every other epoch would be left out of runs"
+    return None
+
+
+def invert_in_place(sets, name: str, items: list[str]) -> None:
+    """Make set *name* hold the items of *items* it didn't hold (in order)."""
+    members = set(sets.get_items(name, get_keys=True) or [])
+    others = [item for item in items if item not in members]
+    sets.empty(name)
+    if others:
+        sets.add(name, others)
+
+
+def invert_set_summary(sets, name: str, total: int, kind: str) -> str:
+    """e.g. "Invert epoch assignments of 'Set0'; 6 assigned : 24 unassigned
+    → 6 unassigned : 24 assigned" """
+    assigned = len(sets.get_items(name, get_keys=True) or [])
+    unassigned = total - assigned
+    return (f"Invert {kind} assignments of '{name}'; "
+            f"{assigned} assigned : {unassigned} unassigned → "
+            f"{assigned} unassigned : {unassigned} assigned")
+
+
+def overwrite_check(sets) -> tuple:
+    """An "Overwrite" checkbox to follow a "New Set number" box (the last two
+    extras); it can be ticked only while that number's set exists."""
+    return ("", Check("Overwrite existing set", enabled=lambda _item, *extras: (
+        set_number_error(sets, extras[-2]) is not None)))
+
+
+def set_uses(sets, name: str, target: str) -> bool:
+    """Whether set *name* is *target*, or is combined from it."""
+    if name.lower() == target.lower():
+        return True
+    value = sets.get_items(name, get_equation=True)
+    return sets.tuple_is_equation(value) and any(
+        set_uses(sets, other, target) for other in value[1:])
+
+
+def replace_set(sets, name: str, fill: Callable[[], object]) -> None:
+    """Make set *name* with *fill()*, replacing it (in its place in the list)
+    if it exists."""
+    order = sets.keys()
+    if name in sets:
+        sets.pop(name, quiet=True)
+    fill()
+    if len(order) == len(sets):
+        sets.reorder(order)
+
+
+def copy_set_options(sets) -> dict:
+    """The Copy Set prompt's fields after the set: New Set number, Overwrite."""
+
+    def error(item, _name, number, overwrite):
+        if overwrite and set_name(number).lower() == (item or "").lower():
+            return f"'{item}' can't be copied onto itself."
+        return None if overwrite else set_number_error(sets, number)
+
+    def summary(item, number, overwrite):
+        """e.g. "Copy 'Set1' to 'Set4'." ("" while there's an error)."""
+        if not item or error(item, None, number, overwrite):
+            return ""
+        kind = (" (its current members; the copy isn't combined)"
+                if sets.is_equation(item) else "")
+        if overwrite:
+            return f"Overwrite '{set_name(number)}' with a copy of '{item}'{kind}."
+        return f"Copy '{item}' to '{set_name(number)}'{kind}."
+
+    return dict(extras=[set_number_spin(sets), overwrite_check(sets)],
+                message=summary, validate=error, validate_live=True)
+
+
+def copy_set_to(sets, answer) -> str:
+    """Copy the set chosen in a Copy Set prompt; returns the new set's name."""
+    source, _name, number, _overwrite = answer
+    new = set_name(number)
+    items = list(sets.get_items(source, get_keys=True) or [])
+    replace_set(sets, new, lambda: sets.add(new, items))
+    return new
+
+
+def combine_set_options(sets, names: list[str], first: str) -> dict:
+    """The Combine Sets prompt's fields: Combine (the set), Operator, With,
+    New Set number and Overwrite, starting with two different sets."""
+    second = next((n for n in names if n != first), first)
+
+    def error(item, _name, _operator, other, number, overwrite):
+        if item == other:
+            return "Choose two different sets."
+        target = set_name(number)
+        if overwrite and (set_uses(sets, item, target) or set_uses(sets, other, target)):
+            return f"'{target}' can't be overwritten: the combination uses it."
+        return None if overwrite else set_number_error(sets, number)
+
+    def summary(item, operator, other, number, overwrite):
+        """e.g. "Set2 = Set0 OR Set1" ("" while there's an error)."""
+        if not item or error(item, None, operator, other, number, overwrite):
+            return ""
+        return (f"{set_name(number)} = {item} {operator} {other}"
+                + (" (overwrite)" if overwrite else ""))
+
+    return dict(item_label="Combine",
+                extras=[("Operator", ["AND", "OR"], "OR"), ("With", names, second),
+                        set_number_spin(sets), overwrite_check(sets)],
+                message=summary, validate=error, validate_live=True)
+
+
+def combine_sets_to(sets, answer) -> str:
+    """Make the set a Combine Sets prompt defines; returns its name."""
+    first, _name, operator, second, number, _overwrite = answer
+    name = set_name(number)
+    define = sets.define_and if operator == "AND" else sets.define_or
+    replace_set(sets, name, lambda: define(name, first, second))
+    return name
+
+
+def clear_set_summary(sets, name: str, noun: str) -> str:
+    """e.g. "Remove 3 epochs from 'Set1'." """
+    if not name:
+        return ""
+    count = len(sets.get_items(name, get_keys=True) or [])
+    if count == 1:
+        noun = noun.replace("epochs", "epoch").replace("arrays", "array")
+    return f"Remove {count} {noun} from '{name}'."
 
 
 class DataActions(TierActions):
@@ -1459,6 +1647,11 @@ class DataActions(TierActions):
                                      tip="Add a data array to a data set")
         self.set_remove_action = action("Remove from Set…", self.remove_from_set,
                                         tip="Remove a data array from a data set")
+        self.set_copy_action = action("Copy…", self.copy_set,
+                                      tip="Copy a data set to a new set")
+        self.set_invert_action = action(
+            "Invert…", self.invert_set,
+            tip="Invert a data set in place: it holds the data arrays it didn't")
         self.set_combine_action = action("Combine…", self.combine_sets,
                                          tip="Make a set from two sets with AND or OR")
         self.set_clear_action = action("Clear…", self.clear_set,
@@ -1492,11 +1685,14 @@ class DataActions(TierActions):
     def data_set_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Data Set", parent)
         menu.addAction(self.set_new_action)
+        menu.addSeparator()
         menu.addAction(self.set_add_action)
         menu.addAction(self.set_remove_action)
-        menu.addAction(self.set_combine_action)
         menu.addSeparator()
         menu.addAction(self.set_rename_action)
+        menu.addAction(self.set_copy_action)
+        menu.addAction(self.set_invert_action)
+        menu.addAction(self.set_combine_action)
         menu.addAction(self.set_clear_action)
         menu.addAction(self.set_delete_action)
         menu.addSeparator()
@@ -1519,7 +1715,8 @@ class DataActions(TierActions):
         self.set_browse_action.setEnabled(data is not None)
         self.set_new_action.setEnabled(data is not None)
         for item in (self.set_add_action, self.set_remove_action, self.set_combine_action,
-                     self.set_clear_action, self.set_rename_action, self.set_delete_action):
+                     self.set_clear_action, self.set_rename_action, self.set_delete_action,
+                     self.set_copy_action, self.set_invert_action):
             item.setEnabled(has_sets)
         self.set_add_action.setEnabled(has_sets and has_data)
         self.set_remove_action.setEnabled(has_sets and has_data)
@@ -1836,9 +2033,9 @@ class DataActions(TierActions):
         container = self._data_container()
         if container is None or not list(container.sets.keys()):
             return None
+        options.setdefault("item_label", "")  # the names say it: Set0, Set1...
         return self._choose(
             title,
-            item_label="Data Set",
             items=list(container.sets.keys()),
             current=self._current_name("data_set"),
             **options,
@@ -1852,7 +2049,9 @@ class DataActions(TierActions):
         answer = self._choose(
             "New Data Set",
             extras=[set_number_spin(sets)],
+            message=lambda _item, number: new_set_summary(sets, number),
             validate=lambda _item, _name, number: set_number_error(sets, number),
+            validate_live=True,
         )
         if answer is None:
             return
@@ -1904,29 +2103,52 @@ class DataActions(TierActions):
             return
         current = self._current_name("data_set")
         first = current if current in names else names[0]
-        # Start with a different set, as combining a set with itself does nothing
-        second = next((n for n in names if n != first), first)
         answer = self._choose_set(
-            "Combine Sets",
-            extras=[("Operator", ["AND", "OR"], "OR"),
-                    ("With Set", names, second), set_number_spin(sets)],
-            validate=lambda item, _name, _operator, other, number: (
-                "Choose two different sets" if item == other
-                else set_number_error(sets, number)
-            ),
+            "Combine Data Sets", **combine_set_options(sets, names, first))
+        if answer is None:
+            return
+        self._select(data_set=combine_sets_to(sets, answer))
+        self._changed()
+
+    def copy_set(self) -> None:
+        """Copy a data set's members to a new set (a list of its own)."""
+        container = self._data_container()
+        if container is None:
+            return
+        sets = container.sets
+        answer = self._choose_set("Copy Data Set", **copy_set_options(sets))
+        if answer is None:
+            return
+        self._select(data_set=copy_set_to(sets, answer))
+        self._changed()
+
+    def invert_set(self) -> None:
+        """Invert a data set in place: it holds the folder's data arrays it
+        didn't (inverting again restores it)."""
+        container = self._data_container()
+        if container is None:
+            return
+        sets = container.sets
+        items = list(container.keys())
+
+        def summary(name, *_):
+            if set_invert_error(sets, name):
+                return ""
+            return invert_set_summary(sets, name, len(items), "data")
+
+        answer = self._choose_set(
+            "Invert Data Set", message=summary,
+            validate=lambda name, _name: set_invert_error(sets, name),
         )
         if answer is None:
             return
-        first, _name, operator, second, number = answer
-        name = set_name(number)
-        define = sets.define_and if operator == "AND" else sets.define_or
-        define(name, first, second)
-        self._select(data_set=name)
+        invert_in_place(sets, answer[0], items)
         self._changed()
 
     def clear_set(self) -> None:
         answer = self._choose_set(
-            "Clear Set", message="All data will be removed from the set; the set is kept."
+            "Clear Data Set", message=lambda name: clear_set_summary(
+                self._data_container().sets, name, "data arrays"),
         )
         if answer is None:
             return
@@ -1937,9 +2159,11 @@ class DataActions(TierActions):
         container = self._data_container()
         sets = container.sets if container is not None else None
         answer = self._choose_set(
-            "Renumber Set",
-            extras=[set_number_spin(sets) if sets is not None else ("Set number", Spin(0, 9999, 0))],
+            "Renumber Data Set",
+            extras=[set_number_spin(sets) if sets is not None else ("New Set number", Spin(0, 9999, 0))],
+            message=lambda item, number: renumber_set_summary(sets, item, number),
             validate=lambda item, _name, number: set_number_error(sets, number, keep=item),
+            validate_live=True,
         )
         if answer is None or set_name(answer[-1]).lower() == answer[0].lower():
             return
@@ -1952,7 +2176,8 @@ class DataActions(TierActions):
 
     def delete_set(self) -> None:
         answer = self._choose_set(
-            "Delete Set", message="The set will be deleted; its data is kept."
+            "Delete Data Set", message=lambda name: (
+                f"Delete '{name}'; data assigned to this set will be unaltered.")
         )
         if answer is None:
             return
@@ -2897,8 +3122,11 @@ class EpochSetActions(TierActions):
         self.remove_action = action(
             "Remove from Set…", self.remove_epochs,
             tip=f"Remove an epoch, or a range of epochs, from a set (or from {EXCLUDE_SET})")
-        self.invert_action = action("Invert…", self.invert_set,
-                                    tip="Make a set of the epochs not in a set")
+        self.copy_action = action("Copy…", self.copy_set,
+                                  tip="Copy an epoch set to a new set")
+        self.invert_action = action(
+            "Invert…", self.invert_set,
+            tip="Invert an epoch set in place: it holds the epochs it didn't")
         self.combine_action = action("Combine…", self.combine_sets,
                                      tip="Make a set from two sets with AND or OR")
         self.clear_action = action("Clear…", self.clear_set,
@@ -2914,8 +3142,9 @@ class EpochSetActions(TierActions):
     def epoch_set_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Epoch Set", parent)
         for item in (self.new_action, None, self.add_action, self.remove_action, None,
-                     self.invert_action, self.combine_action, None, self.rename_action,
-                     self.clear_action, self.delete_action, None, self.browse_action):
+                     self.rename_action, self.copy_action, self.invert_action,
+                     self.combine_action, self.clear_action, self.delete_action, None,
+                     self.browse_action):
             if item is None:
                 menu.addSeparator()
             else:
@@ -2943,7 +3172,8 @@ class EpochSetActions(TierActions):
         has_epochs = series is not None and len(series.epochs) > 0
         self.new_action.setEnabled(series is not None)
         self.browse_action.setEnabled(series is not None)
-        for item in (self.clear_action, self.rename_action, self.delete_action):
+        for item in (self.clear_action, self.rename_action, self.delete_action,
+                     self.copy_action):
             item.setEnabled(bool(sets))
         self.add_action.setEnabled(has_epochs)  # SetX is made if missing
         for item in (self.remove_action, self.invert_action):
@@ -2966,8 +3196,9 @@ class EpochSetActions(TierActions):
         if series is None or not sets:
             return None
         current = self._current_name("epoch_set")
+        options.setdefault("item_label", "")  # the names say it: Set0, Set1...
         return self._choose(
-            title, context=self._series_context(series), item_label="Epoch Set",
+            title, context=self._series_context(series),
             items=sets, current=current if current in sets else sets[0], **options,
         )
 
@@ -2987,7 +3218,9 @@ class EpochSetActions(TierActions):
         answer = self._choose(
             "New Epoch Set", context=self._series_context(series),
             extras=[set_number_spin(sets)],
+            message=lambda _item, number: new_set_summary(sets, number),
             validate=lambda _item, _name, number: set_number_error(sets, number),
+            validate_live=True,
         )
         if answer is None:
             return
@@ -3025,8 +3258,10 @@ class EpochSetActions(TierActions):
 
         options = dict(
             extras=self._range_extras(series),
-            message=lambda set_name, first, last, every: range_summary(
-                verb, targets(set_name, first, last, every), int(every)),
+            message=lambda set_name, first, last, every: (
+                range_summary(verb, targets(set_name, first, last, every), int(every))[:-1]
+                + f" {'to' if adding else 'from'} '{set_name}'."
+                if targets(set_name, first, last, every) else ""),
             validate=error,
         )
         answer = self._choose_set(title, **options)
@@ -3041,36 +3276,45 @@ class EpochSetActions(TierActions):
         self._changed()
 
     def add_epochs(self) -> None:
-        self._edit_range("Add Epochs to Set", "Adds", adding=True)
+        self._edit_range("Add Epochs to Set", "Add", adding=True)
 
     def remove_epochs(self) -> None:
-        self._edit_range("Remove Epochs from Set", "Removes", adding=False)
+        self._edit_range("Remove Epochs from Set", "Remove", adding=False)
 
 
-    def invert_set(self) -> None:
+    def copy_set(self) -> None:
+        """Copy an epoch set's members to a new set (a list of its own)."""
         series = self._series()
         if series is None:
             return
         sets = series.epochs.sets
-        names = list(series.epochs.keys())
+        answer = self._choose_set("Copy Epoch Set", **copy_set_options(sets))
+        if answer is None:
+            return
+        self._select(epoch_set=copy_set_to(sets, answer))
+        self._changed()
 
-        def complement(set_name):
-            members = set(sets.get_items(set_name, get_keys=True) or [])
-            return [e for e in names if e not in members]
+    def invert_set(self) -> None:
+        """Invert an epoch set in place: it holds the series' epochs it didn't
+        (inverting again restores it). Combined sets and SetX are refused."""
+        series = self._series()
+        if series is None:
+            return
+        sets = series.epochs.sets
+        items = list(series.epochs.keys())
+
+        def summary(name, *_):
+            if set_invert_error(sets, name, "epoch"):
+                return ""
+            return invert_set_summary(sets, name, len(items), "epoch")
 
         answer = self._choose_set(
-            "Invert Epoch Set", extras=[set_number_spin(sets)],
-            message=lambda chosen, *_: (
-                f"The new set has the {len(complement(chosen))} epochs not in "
-                f"'{chosen}'."
-            ),
-            validate=lambda _item, _name, number: set_number_error(sets, number),
+            "Invert Epoch Set", message=summary,
+            validate=lambda name, _name: set_invert_error(sets, name, "epoch"),
         )
         if answer is None:
             return
-        chosen, name = answer[0], set_name(answer[-1])
-        sets.add(name, [series.epochs[e] for e in complement(chosen)])
-        self._select(epoch_set=name)
+        invert_in_place(sets, answer[0], items)
         self._changed()
 
     def combine_sets(self) -> None:
@@ -3081,28 +3325,17 @@ class EpochSetActions(TierActions):
         sets = series.epochs.sets
         current = self._current_name("epoch_set")
         first = current if current in names else names[0]
-        second = next((n for n in names if n != first), first)
         answer = self._choose_set(
-            "Combine Sets",
-            extras=[("Operator", ["AND", "OR"], "OR"), ("With Set", names, second),
-                    set_number_spin(sets)],
-            validate=lambda item, _name, _operator, other, number: (
-                "Choose two different sets" if item == other
-                else set_number_error(sets, number)
-            ),
-        )
+            "Combine Epoch Sets", **combine_set_options(sets, names, first))
         if answer is None:
             return
-        first, _name, operator, second, number = answer
-        name = set_name(number)
-        (sets.define_and if operator == "AND" else sets.define_or)(name, first, second)
-        self._select(epoch_set=name)
+        self._select(epoch_set=combine_sets_to(sets, answer))
         self._changed()
 
     def clear_set(self) -> None:
         answer = self._choose_set(
             "Clear Epoch Set",
-            message="All epochs will be removed from the set; the set is kept.",
+            message=lambda name: clear_set_summary(self._series().epochs.sets, name, "epochs"),
         )
         if answer is None:
             return
@@ -3114,11 +3347,15 @@ class EpochSetActions(TierActions):
         sets = series.epochs.sets if series is not None else None
         answer = self._choose_set(
             "Renumber Epoch Set",
-            extras=[set_number_spin(sets) if sets is not None else ("Set number", Spin(0, 9999, 0))],
+            extras=[set_number_spin(sets) if sets is not None else ("New Set number", Spin(0, 9999, 0))],
+            message=lambda item, number: (
+                "" if self._exclude_set_error(item, "renumbered")
+                else renumber_set_summary(sets, item, number)),
             validate=lambda item, _name, number: (
                 self._exclude_set_error(item, "renumbered")
                 or set_number_error(sets, number, keep=item)
             ),
+            validate_live=True,
         )
         if answer is None or set_name(answer[-1]).lower() == answer[0].lower():
             return
@@ -3131,7 +3368,9 @@ class EpochSetActions(TierActions):
 
     def delete_set(self) -> None:
         answer = self._choose_set(
-            "Delete Epoch Set", message="The set will be deleted; its epochs are kept.",
+            "Delete Epoch Set",
+            message=lambda name: (
+                f"Delete '{name}'; epochs assigned to this set will be unaltered."),
             validate=lambda item, _name: self._exclude_set_error(item, "deleted"),
         )
         if answer is None:

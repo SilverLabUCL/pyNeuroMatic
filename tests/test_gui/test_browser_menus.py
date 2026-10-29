@@ -316,8 +316,8 @@ def test_data_set_rows_use_the_data_set_prompts(app, monkeypatch):
     browser.refresh()
     browser.show_data_of(app.folder, sets=True, select="Set3")
     actions = _tree_menu(app, monkeypatch, browser.tree.currentIndex())
-    for text, title in (("Renumber...", "Renumber Set"), ("Clear...", "Clear Set"),
-                        ("Delete...", "Delete Set")):
+    for text, title in (("Renumber...", "Renumber Data Set"), ("Clear...", "Clear Data Set"),
+                        ("Delete...", "Delete Data Set")):
         actions[text].trigger()
         got_title, options = asked[-1]
         assert got_title == title and options["current"] == "Set3"  # Data Set ⋯'s prompt
@@ -332,3 +332,19 @@ def test_groups_row_uses_the_group_prompts(app, monkeypatch):
     _tree_menu(app, monkeypatch, browser.tree.currentIndex())["New Groups..."].trigger()
     title, options = asked[-1]
     assert title == "New Groups" and options["context"] == ("Data Series", "Demo › Record")
+
+
+def test_set_rows_copy_and_invert(app, monkeypatch):
+    asked = []
+    monkeypatch.setattr(app.epoch_set_actions, "_choose",
+                        lambda title, **options: asked.append((title, options)) or None)
+    browser = app.browser_widget
+    browser.show_data_of(app.series, sets=True, select="Set1", kind="epochs")
+    actions = _tree_menu(app, monkeypatch, browser.tree.currentIndex())
+    assert list(actions)[:4] == ["Select", "Renumber...", "Copy...", "Invert..."]
+    for text, title in (("Copy...", "Copy Epoch Set"), ("Invert...", "Invert Epoch Set")):
+        actions[text].trigger()
+        assert asked[-1][0] == title and asked[-1][1]["current"] == "Set1"
+    browser.show_data_of(app.series, sets=True, select="SetX", kind="epochs")
+    actions = _tree_menu(app, monkeypatch, browser.tree.currentIndex())
+    assert "Copy..." in actions and "Invert..." not in actions  # SetX: no Invert

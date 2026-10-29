@@ -321,7 +321,8 @@ def test_clear_set_in_tree(qtbot, series, monkeypatch):
                         lambda title, **o: asked.append((title, o)) or (o["current"], None))
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
     actions = _tree_menu(browser, monkeypatch, browser.tree.currentIndex())
-    assert list(actions) == ["Select", "Renumber...", "Clear...", "Delete..."]
+    assert list(actions) == ["Select", "Renumber...", "Copy...", "Invert...", "Clear...",
+                             "Delete..."]
     actions["Clear..."].trigger()
     title, options = asked[0]
     assert title == "Clear Epoch Set" and options["current"] == "Set1"  # Epoch Set ⋯'s prompt
