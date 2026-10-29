@@ -929,6 +929,10 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                 actions = on_set.actions
                 if not self._is_exclude_set(node):  # SetX stays SetX
                     menu.addAction("Renumber...", on_set(actions.rename_set))
+                menu.addAction("Copy...", on_set(actions.copy_set))
+                # Not SetX (it would exclude every other epoch), nor a combined set
+                if not self._is_exclude_set(node) and not self._is_combined_set(node):
+                    menu.addAction("Invert...", on_set(actions.invert_set))
                 if not self._is_combined_set(node):
                     menu.addAction("Clear...", on_set(actions.clear_set))
                 menu.addAction("Delete...", on_set(actions.delete_set))
@@ -1607,7 +1611,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         the next free number; an existing set's number is refused."""
         sets = container.sets
         number, ok = self._ask_set_number(
-            "New Set", "Set number (Set0, Set1, ...):", next_set_number(sets)
+            "New Set", "New Set number (Set0, Set1, ...):", next_set_number(sets)
         )
         if not ok:
             return "", False

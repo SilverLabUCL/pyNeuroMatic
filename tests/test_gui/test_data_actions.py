@@ -63,8 +63,8 @@ def test_data_menus_in_strip_and_menu_bar(app):
         "Delete…", "Show in Browser",
     ]
     assert _menu_texts(strip.action_button("data_set").menu()) == [
-        "New Set…", "Add to Set…", "Remove from Set…", "Combine…",
-        "Renumber…", "Clear…", "Delete…", "Show in Browser",
+        "New Set…", "Add to Set…", "Remove from Set…", "Renumber…", "Copy…", "Invert…",
+        "Combine…", "Clear…", "Delete…", "Show in Browser",
     ]
     menus = {action.text(): action.menu() for action in app.menuBar().actions()}
     assert "Data" in menus
@@ -146,8 +146,10 @@ def test_copy_to_folder(app):
 def test_new_add_remove_and_combine_sets(app):
     actions, data = app.data_actions, app.demo.data
     actions.new_set()  # cancelled; sets are numbered
-    label, spin = app.dialogs[-1][1]["extras"][0]
-    assert label == "Set number" and spin.value == 0
+    options = app.dialogs[-1][1]
+    label, spin = options["extras"][0]
+    assert label == "New Set number" and spin.value == 0
+    assert options["message"](None, "0") == "Create 'Set0', an empty set."
     app.answers = [(None, None, "0")]
     actions.new_set()
     assert "Set0" in data.sets.keys()
@@ -162,7 +164,7 @@ def test_new_add_remove_and_combine_sets(app):
     assert validate("Set0", None, "Loose0") == "'Loose0' is not in 'Set0'"
     assert validate("Set0", None, "RecordA0") is None
 
-    app.answers = [("Set0", None, "OR", "DataSet", "1")]
+    app.answers = [("Set0", None, "OR", "DataSet", "1", False)]
     actions.combine_sets()
     assert app.dialogs[-1][1]["extras"][0] == ("Operator", ["AND", "OR"], "OR")
     assert sorted(data.sets.get_items("Set1", get_keys=True)) == ["Loose0", "RecordA0"]
@@ -177,9 +179,11 @@ def test_clear_rename_and_delete_sets(app):
     actions, data = app.data_actions, app.demo.data
     app.selection_model.update(data_set="DataSet")
 
+    actions.rename_set()  # cancelled; check the message (old to new)
+    assert app.dialogs[-1][1]["message"]("DataSet", "4") == "Renumber 'DataSet' to 'Set4'."
     app.answers = [("DataSet", None, "4")]  # a named (e.g. imported) set renumbered
     actions.rename_set()
-    assert app.dialogs[-1][0] == "Renumber Set"
+    assert app.dialogs[-1][0] == "Renumber Data Set"
     assert "Set4" in data.sets.keys() and "DataSet" not in data.sets.keys()
     assert app.selection_model.selection["data_set"] == "Set4"
     assert app.selection_strip.combo("data_set").currentText() == "Set4"
@@ -189,6 +193,9 @@ def test_clear_rename_and_delete_sets(app):
     assert data.sets.get_items("Set4", get_keys=True) == []
     assert "Set4" in data.sets.keys()
 
+    actions.delete_set()  # cancelled; check the message
+    assert app.dialogs[-1][1]["message"]("Set4") == (
+        "Delete 'Set4'; data assigned to this set will be unaltered.")
     app.answers = [("Set4", None)]
     actions.delete_set()
     assert "Set4" not in data.sets.keys()
@@ -203,17 +210,21 @@ def test_combine_sets_starts_with_two_different_sets(app):
     app.selection_model.update(data_set="Set1")
     assert app.data_actions.set_combine_action.isEnabled()
     app.data_actions.combine_sets()  # cancelled; check the options
-    options = app.dialogs[-1][1]
+    title, options = app.dialogs[-1]
+    assert title == "Combine Data Sets" and options["item_label"] == "Combine"
+    assert options["message"]("Set1", "OR", "DataSet", "0", False) == "Set0 = Set1 OR DataSet"
     assert options["current"] == "Set1"
     assert options["extras"][:2] == [
         ("Operator", ["AND", "OR"], "OR"),
-        ("With Set", ["DataSet", "Set1"], "DataSet"),
+        ("With", ["DataSet", "Set1"], "DataSet"),
     ]
     label, spin = options["extras"][2]
-    assert label == "Set number" and spin.value == 0
-    assert options["validate"]("Set1", None, "OR", "Set1", "0") == "Choose two different sets"
-    assert options["validate"]("Set1", None, "OR", "DataSet", "0") is None
-    assert options["validate"]("Set1", None, "OR", "DataSet", "1") == "'Set1' already exists"
+    assert label == "New Set number" and spin.value == 0
+    assert options["validate"]("Set1", None, "OR", "Set1", "0", False) == (
+        "Choose two different sets.")
+    assert options["validate"]("Set1", None, "OR", "DataSet", "0", False) is None
+    assert options["validate"]("Set1", None, "OR", "DataSet", "1", False) == (
+        "'Set1' already exists.")
 
 
 def test_choose_sets_in_browser_shows_sets_list(app):
@@ -663,3 +674,23 @@ def test_delete_warns_in_red_for_a_series_member(app, qtbot):
     qtbot.addWidget(dialog)
     dialog.item_combo.setCurrentText("RecordA1")
     assert dialog.message_label.textFormat() != dialog.message_label.textFormat().PlainText
+
+
+def test_data_set_copy_and_invert(app):
+    data = app.demo.data
+    data.sets.add("Set0", ["Loose0"])
+    actions = app.data_actions
+    app.answers = [("Set0", None, "1", False)]
+    actions.copy_set()
+    assert app.dialogs[-1][0] == "Copy Data Set"
+    assert data.sets.get_items("Set1", get_keys=True) == ["Loose0"]
+    assert app.selection_model.selection["data_set"] == "Set1"
+    app.answers = [("Set1", None)]
+    actions.invert_set()
+    assert app.dialogs[-1][0] == "Invert Data Set"
+    assert app.dialogs[-1][1]["message"]("Set0") == (
+        f"Invert data assignments of 'Set0'; 1 assigned : {len(data) - 1} unassigned → "
+        f"1 unassigned : {len(data) - 1} assigned")
+    inverted = data.sets.get_items("Set1", get_keys=True)
+    assert "Loose0" not in inverted and len(inverted) == len(data) - 1  # in place
+    assert data.sets.get_items("Set0", get_keys=True) == ["Loose0"]  # the copy's source
