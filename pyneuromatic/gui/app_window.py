@@ -960,6 +960,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self._build_selection_strip()
         self._build_tool_shell()
         self._build_history_panel()
+        self._build_view_menu()
         self.selection_model.selection_changed.connect(self._append_selection_history)
         # The selection is shown in the window title, saving plot space
         self.selection_model.selection_changed.connect(self._update_window_title)
@@ -970,6 +971,10 @@ class NMAppWindow(QtWidgets.QMainWindow):
         file_menu.addAction(self.folder_actions.open_action)
         file_menu.addAction(self.folder_actions.save_action)
         file_menu.addSeparator()
+        # About pyNeuroMatic (Qt moves it to the pyNeuroMatic menu on macOS)
+        self.about_action = file_menu.addAction(f"About {APP_NAME}")
+        self.about_action.setMenuRole(QtGui.QAction.MenuRole.AboutRole)
+        self.about_action.triggered.connect(self.show_about)
         # Settings... (⌘, ; Qt moves it to the pyNeuroMatic menu on macOS)
         self.settings_action = file_menu.addAction("Settings…")
         self.settings_action.setShortcut(
@@ -998,19 +1003,123 @@ class NMAppWindow(QtWidgets.QMainWindow):
         series_menu.addMenu(self.group_actions.group_menu(series_menu))
         self.menuBar().addMenu(series_menu)
 
-        edit_menu = self.menuBar().addMenu("Edit")
-        edit_menu.addAction("Rename")
-        edit_menu.addAction("Delete")
+        # Edit: Copy and Paste, for what has focus (a table, or a text box)
+        self.edit_menu = self.menuBar().addMenu("Edit")
+        self.copy_action = self.edit_menu.addAction("Copy")
+        self.copy_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Copy))
+        self.copy_action.triggered.connect(self.edit_copy)
+        self.paste_action = self.edit_menu.addAction("Paste")
+        self.paste_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Paste))
+        self.paste_action.triggered.connect(self.edit_paste)
+        # Greyed out in the open menu when there's nothing to copy or paste;
+        # enabled again after, so ⌘C / ⌘V reach a table that gains focus
+        self.edit_menu.aboutToShow.connect(self._update_edit_actions)
+        self.edit_menu.aboutToHide.connect(self._enable_edit_actions)
 
-        view_menu = self.menuBar().addMenu("View")
-        view_menu.addAction("Browser")
-        view_menu.addAction("Plot")
-        view_menu.addAction("History")
+        # View: filled once the tools and panels exist (_build_view_menu)
+        self.view_menu = self.menuBar().addMenu("View")
 
-        tools_menu = self.menuBar().addMenu("Tools")
-        tools_menu.addAction("Main")
-        tools_menu.addAction("Stats")
-        tools_menu.addAction("Spike")
+    @staticmethod
+    def about_text() -> str:
+        """The About window's text: version, author, licence and website."""
+        import pyneuromatic
+
+        url = "https://github.com/SilverLabUCL/pyNeuroMatic"
+        return (
+            f"<h3>{APP_NAME} {pyneuromatic.__version__}</h3>"
+            "<p>Python tools for acquiring, analysing and simulating "
+            "electrophysiological data, after NeuroMatic.</p>"
+            f"<p>{pyneuromatic.__author__} · {pyneuromatic.__license__} License<br>"
+            f'<a href="{url}">{url}</a></p>'
+            f"<p><small>Python {sys.version.split()[0]} · "
+            f"Qt {QtCore.qVersion()} · PyQt {QtCore.PYQT_VERSION_STR}</small></p>"
+        )
+
+    def show_about(self) -> None:
+        QtWidgets.QMessageBox.about(self, f"About {APP_NAME}", self.about_text())
+
+    def _build_view_menu(self) -> None:
+        """View: the tools (as the tool rail), the Plot or Table panel, and
+        the History dock."""
+        menu = self.view_menu
+        self.tool_view_actions: dict[str, QtGui.QAction] = {}
+        tools = QtGui.QActionGroup(self)
+        for number, name in enumerate(self.tool_rail.tool_names(), start=1):
+            action = menu.addAction(name)
+            action.setCheckable(True)
+            action.setShortcut(QtGui.QKeySequence(f"Ctrl+{number}"))  # ⌘1... on macOS
+            action.triggered.connect(lambda _checked=False, n=name: self.tool_rail.select_tool(n))
+            tools.addAction(action)
+            self.tool_view_actions[name] = action
+        self.tool_view_actions[self.current_tool_name].setChecked(True)
+        menu.addSeparator()
+        self.panel_view_actions: dict[str, QtGui.QAction] = {}
+        panels = QtGui.QActionGroup(self)
+        for name, panel in (("Plot", self.plot_widget), ("Table", self.table_panel)):
+            action = menu.addAction(name)
+            action.setCheckable(True)
+            action.triggered.connect(
+                lambda _checked=False, p=panel: self.context_panel.setCurrentWidget(p))
+            panels.addAction(action)
+            self.panel_view_actions[name] = action
+        self.context_panel.currentChanged.connect(self._check_panel_view_action)
+        self._check_panel_view_action()
+        menu.addSeparator()
+        self.history_view_action = self.history_dock.toggleViewAction()  # checkable
+        menu.addAction(self.history_view_action)
+
+    def _check_panel_view_action(self, *_args) -> None:
+        current = self.context_panel.currentWidget()
+        self.panel_view_actions["Plot"].setChecked(current is self.plot_widget)
+        self.panel_view_actions["Table"].setChecked(current is self.table_panel)
+
+    # --- Edit › Copy and Paste ----------------------------------------------
+
+    def _edit_target(self) -> tuple[str | None, QtWidgets.QWidget | None]:
+        """What Copy and Paste act on: ("table", view) while the Table panel
+        has focus, ("text", widget) for a text box, else (None, None)."""
+        widget = QtWidgets.QApplication.focusWidget()
+        if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QPlainTextEdit,
+                               QtWidgets.QTextEdit)):
+            return "text", widget
+        if (isinstance(widget, QtWidgets.QAbstractItemView)
+                and self.table_panel.isAncestorOf(widget)):
+            return "table", widget
+        return None, None
+
+    def edit_copy(self) -> None:
+        kind, widget = self._edit_target()
+        if kind == "table":
+            self.table_panel.copy_selection()
+        elif kind == "text":
+            widget.copy()
+
+    def edit_paste(self) -> None:
+        kind, widget = self._edit_target()
+        if kind == "table":
+            self.table_panel.paste()
+        elif kind == "text" and not widget.isReadOnly():
+            widget.paste()
+
+    def _update_edit_actions(self) -> None:
+        kind, widget = self._edit_target()
+        has_text = bool(QtWidgets.QApplication.clipboard().text())
+        if kind == "table":
+            selection = widget.selectionModel()
+            can_copy = selection is not None and selection.hasSelection()
+            can_paste = has_text and self.table_panel.can_paste()
+        elif kind == "text":
+            can_copy = (widget.hasSelectedText() if isinstance(widget, QtWidgets.QLineEdit)
+                        else widget.textCursor().hasSelection())
+            can_paste = has_text and not widget.isReadOnly()
+        else:
+            can_copy = can_paste = False
+        self.copy_action.setEnabled(can_copy)
+        self.paste_action.setEnabled(can_paste)
+
+    def _enable_edit_actions(self) -> None:
+        self.copy_action.setEnabled(True)
+        self.paste_action.setEnabled(True)
 
     def _build_selection_strip(self) -> None:
         # Placed above the workspace in _build_tool_shell, leaving the menu
@@ -1148,6 +1257,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.current_tool_name = tool_name
         idx = self.tool_rail.index_for_name(tool_name)
         self.tool_workspace.setCurrentIndex(idx)
+        action = getattr(self, "tool_view_actions", {}).get(tool_name)
+        if action is not None:
+            action.setChecked(True)  # View › the tool, as the rail
 
     def closeEvent(self, event) -> None:
         # Tear pyqtgraph views down before Qt deletes them, so a queued paint

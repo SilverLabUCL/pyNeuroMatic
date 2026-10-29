@@ -202,6 +202,14 @@ class ValuesPlot(QtWidgets.QWidget):
         self.plot_widget.setTitle(title)
 
 
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
 class ChannelTableModel(QtCore.QAbstractTableModel):
     """Data arrays side by side: an x column, then one column per array.
 
@@ -345,6 +353,34 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         self.data_edited.emit(data)
         return True
 
+    def paste_values(self, row: int, column: int, block: list[list[str]]) -> int:
+        """Write *block* (rows of cell texts) from cell (*row*, *column*).
+        Empty cells, cells that can't be edited (the x column, a locked
+        series, transformed values) and cells past an array's end are left
+        as they are. Returns how many values changed."""
+        changed: dict[int, NMData] = {}
+        count = 0
+        for r, cells in enumerate(block):
+            for c, text in enumerate(cells):
+                index = self.index(row + r, column + c)
+                if not text.strip() or not self._editable(index):
+                    continue
+                try:
+                    number = float(text)
+                except ValueError:
+                    continue
+                data = self._columns[index.column() - 1]
+                if data.nparray.dtype.kind != "f":
+                    data.nparray = data.nparray.astype(float)  # keep fractional values
+                data.nparray[index.row()] = number
+                changed[id(data)] = data
+                count += 1
+        if count:
+            self.refresh()
+            for data in changed.values():
+                self.data_edited.emit(data)
+        return count
+
     def raw_value(self, row: int, column: int):
         """A cell's value (x for column 0), or None past an array's end."""
         if column == 0:
@@ -454,6 +490,29 @@ class ChannelTable(QtWidgets.QWidget):
             row_label_header=header(0) if with_x else "", names=names,
         )
 
+    def paste_text(self, text: str) -> int:
+        """Paste tab-separated values (e.g. copied from this table or a
+        spreadsheet) from the selection's top-left cell, or the current cell.
+        A first line of column names is skipped, and with it a copied x
+        column. Returns how many values changed."""
+        lines = text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n").split("\n")
+        block = [line.split("\t") for line in lines]
+        indexes = self.view.selectionModel().selectedIndexes()
+        if indexes:
+            row = min(i.row() for i in indexes)
+            column = min(i.column() for i in indexes)
+        elif self.view.currentIndex().isValid():
+            row, column = self.view.currentIndex().row(), self.view.currentIndex().column()
+        else:
+            return 0
+        if block and any(cell.strip() and not _is_number(cell) for cell in block[0]):
+            names = block.pop(0)  # column names
+            x_header = str(self.model.headerData(0, QtCore.Qt.Orientation.Horizontal))
+            if names and names[0] == x_header:  # copied with its x values: not pasted
+                block = [cells[1:] for cells in block]
+                column = max(column, 1)
+        return self.model.paste_values(row, column, block)
+
     def selected_array(self) -> NMData | None:
         """The array of the current cell's column."""
         index = self.view.currentIndex()
@@ -484,9 +543,16 @@ class TablePanel(QtWidgets.QWidget):
         self.copy_action.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.copy_action.setToolTip("Copy the selected cells or columns (tab-separated)")
         self.copy_action.triggered.connect(self.copy_selection)
-        self.addAction(self.copy_action)  # ⌘C while the table has focus
         self.copy_all_action = self.table_menu.addAction("Copy All")
         self.copy_all_action.triggered.connect(self.copy_all)
+        self.paste_action = self.table_menu.addAction("Paste")
+        self.paste_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Paste))
+        self.paste_action.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.paste_action.setToolTip(
+            "Paste tab-separated values into the Data table, from the selected cell")
+        self.paste_action.triggered.connect(self.paste)
+        # ⌘C and ⌘V are Edit › Copy and Paste, which call copy_selection and
+        # paste while the table has focus (the shortcuts are shown here too)
         self.table_menu.addSeparator()
         self.browser_action = self.table_menu.addAction("Show in Browser")
         self.browser_action.setToolTip("Show the current array (or results folder) in the browser")
@@ -546,6 +612,31 @@ class TablePanel(QtWidgets.QWidget):
         text = self.selection_text()
         if text:
             QtWidgets.QApplication.clipboard().setText(text)
+
+    def can_paste(self) -> bool:
+        """Whether the table shown takes pasted values (a Data table, not
+        showing transformed values)."""
+        return (self.stack.currentWidget() is self.channel_table
+                and self.channel_table.model.transform_channel is None
+                and bool(self.channel_table.model.arrays))
+
+    def paste(self) -> int:
+        """Paste the clipboard's tab-separated values into the Data table,
+        from the selected cell; returns how many values changed."""
+        text = QtWidgets.QApplication.clipboard().text()
+        if not text.strip():
+            return 0
+        count = self.channel_table.paste_text(text) if self.can_paste() else 0
+        if count == 0:
+            self._show_message(
+                "Paste", "Nothing was pasted. Values can be pasted into a Data table's "
+                "arrays (not the x column, a locked data series, past an array's end, "
+                "or with Show Transformed on).")
+        return count
+
+    def _show_message(self, title: str, text: str) -> None:
+        """A note (replaced in tests)."""
+        QtWidgets.QMessageBox.information(self, title, text)
 
     def shown_object(self):
         """What the table shows: the current array (Data table), or the

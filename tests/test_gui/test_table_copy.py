@@ -40,9 +40,10 @@ def _copied(app):
 def test_menu(app):
     panel = app.table_panel
     texts = [a.text() for a in panel.table_menu.actions() if a.text()]
-    assert texts == ["Copy", "Copy All", "Show in Browser", "Show Transformed",
+    assert texts == ["Copy", "Copy All", "Paste", "Show in Browser", "Show Transformed",
                      "Include Column Names", "Include x Values / Row Names"]
     assert panel.copy_action.shortcut() == QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Copy)
+    assert panel.paste_action.shortcut() == QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Paste)
     assert panel.names_action.isChecked() and panel.x_action.isChecked()
 
 
@@ -187,3 +188,54 @@ def test_right_click_the_stats_tables(qtbot, monkeypatch):
     for table in (tables.arrays_table, tables.summary_table):
         assert _right_click(monkeypatch, table, _header_pos(table, 1), header=True) \
             is panel.table_menu
+
+
+# --- Paste (#425) -------------------------------------------------------------
+
+def _paste(app, text, row, column, monkeypatch=None):
+    """Paste *text* at cell (*row*, *column*); returns (count, messages)."""
+    panel = app.table_panel
+    messages = []
+    panel._show_message = lambda title, message: messages.append(message)
+    view = panel.channel_table.view
+    view.clearSelection()
+    view.selectionModel().setCurrentIndex(view.model().index(row, column), Flag.ClearAndSelect)
+    QtWidgets.QApplication.clipboard().setText(text)
+    return panel.paste(), messages
+
+
+def _values(app, name):
+    return list(app.selection_model.selection["folder"].data[name].nparray)
+
+
+def test_paste_a_block_of_values(app):
+    count, messages = _paste(app, "7\t8\n9\t10\n", 0, 1)
+    assert count == 4 and messages == []
+    assert _values(app, "RecordA0")[:2] == [7.0, 9.0]
+    assert _values(app, "RecordA1")[:2] == [8.0, 10.0]
+
+
+def test_paste_skips_column_names_and_the_x_column(app):
+    # As copied from the table: names first, then x values (not pasted)
+    text = "x (ms)\tRecordA0\n0\t5\n0.5\t6\n1\tNaN"
+    count, _messages = _paste(app, text, 0, 2)  # into RecordA1
+    assert count == 3
+    values = _values(app, "RecordA1")
+    assert values[:2] == [5.0, 6.0] and np.isnan(values[2])
+    assert _values(app, "RecordA0")[:2] == [0.0, 0.123456789]  # unchanged
+
+
+def test_paste_leaves_cells_that_cannot_change(app):
+    # The x column, empty cells, and past the arrays' end are left as they are
+    count, _messages = _paste(app, "1\t2\t\n3\t4\t5\n6\t7\t8\n9\t9\t9", 1, 0)
+    assert count == 3  # rows 1 and 2 (the last two lines are past the end)
+    assert _values(app, "RecordA0")[1:] == [2.0, 4.0]
+    assert _values(app, "RecordA1")[1] == 1.123456789  # the empty cell
+    assert _values(app, "RecordA1")[2] == 5.0
+
+
+def test_nothing_pasted_says_why(app):
+    app.selection_model.selection["dataseries"].locked = True
+    count, messages = _paste(app, "1", 0, 1)
+    assert count == 0 and messages[0].startswith("Nothing was pasted.")
+    assert _values(app, "RecordA0")[0] == 0.0
