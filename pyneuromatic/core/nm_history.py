@@ -37,8 +37,9 @@ import pyneuromatic.core.nm_configurations as nmc
 class NMHistoryBufferHandler(logging.Handler):
     """Logging handler that stores records in a fixed-size in-memory buffer.
 
-    Each record is stored as a dict with keys: date, level, path, message.
-    When the buffer is full, the oldest entry is discarded.
+    Each record is stored as a dict with keys: date, level, path, message,
+    kind ("command" for a command, else ""). When the buffer is full, the
+    oldest entry is discarded.
     """
 
     def __init__(self, maxlen: int = 10000) -> None:
@@ -51,6 +52,7 @@ class NMHistoryBufferHandler(logging.Handler):
             "level": record.levelname,
             "path": getattr(record, "path", ""),
             "message": record.getMessage(),
+            "kind": getattr(record, "kind", ""),
         }
         self._buffer.append(entry)
 
@@ -136,6 +138,7 @@ class NMHistory:
         path: str = "",
         level: int = logging.INFO,
         quiet: bool = False,
+        kind: str = "",
     ) -> str:
         """Log a message to the history buffer and optionally to console.
 
@@ -149,6 +152,9 @@ class NMHistory:
         :type level: int
         :param quiet: if True, suppress console output for this call only.
         :type quiet: bool
+        :param kind: what the message is, e.g. "command" (a Python command,
+            from NMCommandHistory); "" for other messages.
+        :type kind: str
         :return: formatted history string.
         :rtype: str
         """
@@ -169,7 +175,7 @@ class NMHistory:
         self._logger.log(
             level,
             message,
-            extra={"path": path, "title": title},
+            extra={"path": path, "title": title, "kind": kind},
         )
 
         if old_level is not None:
@@ -288,6 +294,7 @@ def history(
     frame: int = 1,
     red: bool = False,
     quiet: bool = False,
+    kind: str = "",
 ) -> str:
     """Print message to NM history.
 
@@ -305,6 +312,8 @@ def history(
     :type red: bool
     :param quiet: True to not print message, False to print.
     :type quiet: bool
+    :param kind: what the message is, e.g. "command"; "" for other messages.
+    :type kind: str
     :return: history string.
     :rtype: str
     """
@@ -332,7 +341,7 @@ def history(
     # delegate to NMHistory if available
     if _nm_history is not None:
         return _nm_history.log(
-            message, title=title, path=path, level=level, quiet=quiet
+            message, title=title, path=path, level=level, quiet=quiet, kind=kind
         )
 
     # fallback: original print() behavior (before NMManager is created)

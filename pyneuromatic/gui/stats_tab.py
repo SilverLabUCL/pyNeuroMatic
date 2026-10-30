@@ -876,6 +876,12 @@ class StatsToolTab(ToolTabWidget):
         self.stats2.show_toolfolder(self._tool.toolfolder)
         return None
 
+    def run_summary(self) -> str:
+        """e.g. "Complete → Stats_Record_A_S1_0" (the last run's subfolder)."""
+        folder = self._tool.toolfolder
+        status = self.status_label.text()
+        return f"{status} → {folder.name}" if folder is not None else status
+
     def _run_each(self, batches: list[tuple[str, list, dict]], skipped: list[str]) -> None:
         """Run once per set or group, each saved in its own subfolder."""
         if not batches:

@@ -229,7 +229,7 @@ class NMCommandHistory:
         self._buffer.append(entry)
         if self._log_to_nm_history:
             import pyneuromatic.core.nm_history as _nmh
-            _nmh.history(command_str, path="NONE")
+            _nmh.history(command_str, path="NONE", kind="command")
         elif not self._quiet:
             print(command_str)
 
