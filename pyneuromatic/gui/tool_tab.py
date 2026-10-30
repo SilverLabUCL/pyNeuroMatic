@@ -43,6 +43,8 @@ class ToolTabWidget(QtWidgets.QWidget):
     selection_updated = QtCore.pyqtSignal(dict)
     # The ⋯ button: open Settings at this tool's page (its title)
     settings_requested = QtCore.pyqtSignal(str)
+    # A run, for the History panel: (kind, text), e.g. ("tool", "Stats: Complete")
+    history_entry = QtCore.pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -109,6 +111,22 @@ class ToolTabWidget(QtWidgets.QWidget):
     def run_tool(self) -> Any:
         """Run this tool and return a value for the shared results panel."""
         raise NotImplementedError("ToolTabWidget subclasses must implement run_tool()")
+
+    def run_summary(self) -> str:
+        """A finished run, for the History panel (e.g. where results went)."""
+        return self.status_label.text()
+
+    def _log_run(self, succeeded: bool) -> None:
+        """The run in the History panel: one entry, then its warnings."""
+        title = self.title_label.text()
+        if succeeded:
+            self.history_entry.emit("tool", f"{title}: {self.run_summary()}")
+            for warning in self.warnings:
+                self.history_entry.emit("warning", f"{title}: {warning}")
+        else:
+            status = self.status_label.text()
+            cancelled = status.startswith("Failed: Cancelled")
+            self.history_entry.emit("message" if cancelled else "error", f"{title}: {status}")
 
     @property
     def selection(self) -> dict[str, Any]:
@@ -179,6 +197,7 @@ class ToolTabWidget(QtWidgets.QWidget):
             self._running = False
             self.run_button.setEnabled(True)
             self.progress_bar.hide()
+            self._log_run(succeeded)
             self.run_finished.emit(succeeded)
 
 

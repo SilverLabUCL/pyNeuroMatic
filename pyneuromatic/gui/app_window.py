@@ -34,6 +34,7 @@ from pyneuromatic.gui.context_views import (
 )
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
+from pyneuromatic.gui.history_panel import HistoryPanel
 from pyneuromatic.gui.results_view import StatsTables
 from pyneuromatic.gui.settings_dialog import SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
@@ -939,6 +940,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def __init__(self, manager: NMManager | None = None, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._manager = manager or NMManager(quiet=True)
+        # Python commands for what is done, for the History panel's Commands
+        self._manager.command_history.enabled = True
         # Tables show NaN as the general settings say
         table_format.set_nan_mode(self._manager.settings.table_nan)
         self.selection_model = SelectionModel(self._manager, self)
@@ -1078,7 +1081,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def _edit_target(self) -> tuple[str | None, QtWidgets.QWidget | None]:
         """What Copy and Paste act on: ("table", view) while the Table panel
-        has focus, ("text", widget) for a text box, else (None, None)."""
+        has focus, ("history", view) for the History panel's entries,
+        ("text", widget) for a text box, else (None, None)."""
         widget = QtWidgets.QApplication.focusWidget()
         if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QPlainTextEdit,
                                QtWidgets.QTextEdit)):
@@ -1086,12 +1090,16 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if (isinstance(widget, QtWidgets.QAbstractItemView)
                 and self.table_panel.isAncestorOf(widget)):
             return "table", widget
+        if widget is not None and widget is self.history_panel.view:
+            return "history", widget
         return None, None
 
     def edit_copy(self) -> None:
         kind, widget = self._edit_target()
         if kind == "table":
             self.table_panel.copy_selection()
+        elif kind == "history":
+            self.history_panel.copy_selection()
         elif kind == "text":
             widget.copy()
 
@@ -1109,6 +1117,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
             selection = widget.selectionModel()
             can_copy = selection is not None and selection.hasSelection()
             can_paste = has_text and self.table_panel.can_paste()
+        elif kind == "history":
+            can_copy = widget.selectionModel().hasSelection()
+            can_paste = False
         elif kind == "text":
             can_copy = (widget.hasSelectedText() if isinstance(widget, QtWidgets.QLineEdit)
                         else widget.textCursor().hasSelection())
@@ -1159,6 +1170,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.stats_tab = StatsToolTab(self._manager, self.tool_workspace)
         self.stats_tab.bind_selection_model(self.selection_model)
         self.stats_tab.settings_requested.connect(self.open_settings)
+        self.stats_tab.history_entry.connect(lambda kind, text: self.history_panel.add(kind, text))
         self.tool_workspace.addWidget(self.stats_tab)
         self.tool_workspace.addWidget(
             _PlaceholderToolWidget("Spike", self.tool_workspace)
@@ -1237,10 +1249,11 @@ class NMAppWindow(QtWidgets.QMainWindow):
         history_layout = QtWidgets.QVBoxLayout(history_widget)
         history_layout.setContentsMargins(6, 0, 6, 4)  # the dock's title names it
 
-        self.history_panel = QtWidgets.QPlainTextEdit(history_widget)
-        self.history_panel.setReadOnly(True)
-        self.history_panel.setPlainText("Welcome to pyNeuroMatic\n")
-        self.history_panel.setMinimumHeight(40)
+        # Commands, messages, warnings, errors, selection and tool runs; the
+        # core history log's records as they are written
+        self.history_panel = HistoryPanel(history_widget)
+        self.history_panel.add("message", f"Welcome to {APP_NAME}")
+        self.history_panel.attach()
         history_layout.addWidget(self.history_panel)
 
         dock = QtWidgets.QDockWidget("History", self)
@@ -1252,7 +1265,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, dock)
         # Short to start with (a few lines), so the tools and plot get the
         # height; drag its edge to see more
-        self.resizeDocks([dock], [110], QtCore.Qt.Orientation.Vertical)
+        self.resizeDocks([dock], [180], QtCore.Qt.Orientation.Vertical)
         self.history_dock = dock
 
     def _on_tool_selected(self, tool_name: str) -> None:
@@ -1264,6 +1277,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
             action.setChecked(True)  # View › the tool, as the rail
 
     def closeEvent(self, event) -> None:
+        self.history_panel.detach()  # the history log no longer writes here
         # Tear pyqtgraph views down before Qt deletes them, so a queued paint
         # event never reaches a half-deleted plot (this crashed the GUI tests)
         for view in (
@@ -1482,7 +1496,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def _append_selection_history(self, selection: dict) -> None:
         selected = selection_summary(selection)
         summary = " / ".join(selected) if selected else "cleared"
-        self.history_panel.appendPlainText(f"Selection: {summary}")
+        self.history_panel.add("selection", f"Selection: {summary}")
 
     @property
     def tool_names(self) -> list[str]:

@@ -214,7 +214,7 @@ def test_browser_selection_updates_shared_gui_state(qtbot, nm):
     assert win.selection_model.selection["data"] is data
     assert win.selection_strip.combo("data").currentText() == "Record"
     assert "Record" in win.windowTitle()
-    assert "Record" in win.history_panel.toPlainText()
+    assert "Record" in win.history_panel.text()
 
     win.selection_model.clear()
 

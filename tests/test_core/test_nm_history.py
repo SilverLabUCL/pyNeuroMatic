@@ -156,6 +156,25 @@ class NMHistoryTest(unittest.TestCase):
         self.assertEqual(h.buffer[0]["message"], "msg5")
         self.assertEqual(h.buffer[4]["message"], "msg9")
 
+    def test07b_kind(self):
+        # "command" for commands (NMCommandHistory); "" for other messages
+        self.h.log("msg")
+        self.h.log("nm.folders.new('A')", path="NONE", kind="command")
+        self.assertEqual(self.h.buffer[0]["kind"], "")
+        self.assertEqual(self.h.buffer[1]["kind"], "command")
+
+    def test07c_command_history_marks_commands(self):
+        import pyneuromatic.core.nm_history as nmh
+        from pyneuromatic.core.nm_command_history import NMCommandHistory
+        old = nmh._nm_history
+        nmh.set_history(self.h)
+        try:
+            NMCommandHistory(enabled=True, quiet=True).add("nm.tool_add('main')")
+        finally:
+            nmh.set_history(old)
+        self.assertEqual(self.h.buffer[-1]["message"], "nm.tool_add('main')")
+        self.assertEqual(self.h.buffer[-1]["kind"], "command")
+
     def test08_no_path(self):
         result = self.h.log("bare message")
         self.assertEqual(result, "bare message")
