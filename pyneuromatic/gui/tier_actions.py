@@ -20,7 +20,6 @@ from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.gui.selection_model import BUILTIN_EPOCH_SETS, SelectionModel
-from pyneuromatic.gui.membership import unassign_from_group
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
 
 
@@ -572,12 +571,11 @@ class AddToSeriesDialog(QtWidgets.QDialog):
         super().accept()
 
 
-def fill_values(value: float, noise: float):
-    """The fill for new arrays: *value*, plus Gaussian noise of SD *noise*."""
-    if noise > 0:
-        rng = np.random.default_rng()
-        return lambda n: value + rng.normal(0.0, noise, n)
-    return value
+def one_or_list(values):
+    """A single value on its own, else a list (so a command reads e.g.
+    clear_group(0), not clear_group([0]))."""
+    values = list(values)
+    return values[0] if len(values) == 1 else values
 
 
 def array_names_text(names: list[str], limit: int = 2) -> str:
@@ -2449,13 +2447,13 @@ class SeriesActions(TierActions):
         values = self._ask_new_series(defaults, error)
         if values is None:
             return
-        fill = fill_values(values["value"], values["noise"])
         series = owner.new_dataseries(
             values["name"],
             n_channels=values["n_channels"], n_epochs=values["n_epochs"],
             n_points=values["points"], dx=values["xdelta"], x_start=values["xstart"],
             x_label=values["xlabel"], x_units=values["xunits"],
-            y_label=values["ylabel"], y_units=values["yunits"], fill=fill,
+            y_label=values["ylabel"], y_units=values["yunits"],
+            fill=values["value"], noise=values["noise"],
         )
         if owner is selected_owner:  # a series elsewhere isn't selectable here
             self._select(dataseries=series)
@@ -2950,7 +2948,7 @@ class SeriesActions(TierActions):
         if values is None:
             return
         owner.add_dataseries_epochs(series.name, values["count"],
-                                    fill=fill_values(values["value"], values["noise"]))
+                                    fill=values["value"], noise=values["noise"])
         self._changed()
 
     def remove_epoch(self) -> None:
@@ -3522,8 +3520,7 @@ class GroupActions(TierActions):
         )
         if answer is None:
             return
-        for number in missing(answer[2]):
-            groups.add_group(number, quiet=True)
+        groups.add_group(list(missing(answer[2])), quiet=True)  # one command
         self._changed()
 
     def assign_cyclic(self) -> None:
@@ -3604,9 +3601,7 @@ class GroupActions(TierActions):
         if answer is None:
             return
         _item, _name, group, first, last, every = answer
-        groups = series.epochs.groups
-        for name in chosen(first, last, every):
-            groups.assign(name, int(group), quiet=True)
+        series.epochs.groups.assign(list(chosen(first, last, every)), int(group), quiet=True)
         self._changed()
 
     def unassign_epochs(self) -> None:
@@ -3637,9 +3632,7 @@ class GroupActions(TierActions):
         if answer is None:
             return
         _item, _name, first, last, every = answer
-        groups = series.epochs.groups
-        for name in targets(first, last, every):
-            groups.unassign(name, quiet=True)
+        series.epochs.groups.unassign(targets(first, last, every), quiet=True)
         self._changed()
 
     ALL = "All"
@@ -3692,9 +3685,7 @@ class GroupActions(TierActions):
         numbers = self._choose_groups("Clear Epoch Group", describe)
         if not numbers:
             return
-        groups = self._series().epochs.groups
-        for number in numbers:
-            unassign_from_group(groups, groups.get_items(number), number)
+        self._series().epochs.groups.clear_group(one_or_list(numbers))  # one command
         self._changed()
 
     def delete_group(self) -> None:
@@ -3715,8 +3706,7 @@ class GroupActions(TierActions):
         strip_group = self._selection.selection.get("group")
         if strip_group in numbers or len(numbers) == len(groups.group_numbers):
             self._select(group=None)  # the strip's group goes
-        for number in numbers:
-            groups.delete_group(number)
+        groups.delete_group(one_or_list(numbers))
         self._changed()
 
     def choose_in_browser(self) -> None:
@@ -3838,7 +3828,7 @@ class ChannelActions(TierActions):
         if values is None:
             return
         added = owner.add_dataseries_channels(
-            series.name, values["count"], fill=fill_values(values["value"], values["noise"]),
+            series.name, values["count"], fill=values["value"], noise=values["noise"],
             y_label=values["ylabel"], y_units=values["yunits"])
         self._select(channel=added[0])  # shown in the Plot and Table
         self._changed()

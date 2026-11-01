@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import copy
 
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_configurations as nmc
@@ -130,6 +131,33 @@ class NMGroups:
         result._notes = copy.deepcopy(self._notes, memo)
         return result
 
+    @property
+    def _nm_cmd_path(self) -> str | None:
+        """'folders["Demo"].dataseries["Rec"].epochs.groups'; None when not in
+        the manager (not recorded)."""
+        path = getattr(self._parent, "_epochs_cmd_path", None)
+        return None if path is None else path + ".groups"
+
+    def _record(self, call: str) -> None:
+        """Record a command on these groups, e.g. "assign(['E0', 'E1'], 1)"."""
+        path = self._nm_cmd_path
+        if path is not None:
+            nmch.add_nm_command("%s.%s" % (path, call))
+
+    @staticmethod
+    def _as_list(value) -> tuple[list, bool]:
+        """(*value* as a list, whether it was one) for an item or a list."""
+        if isinstance(value, (list, tuple)):
+            return list(value), True
+        return [value], False
+
+    @staticmethod
+    def _names_text(names: list) -> str:
+        """e.g. "'E0', 'E1', 'E2'" or "'E0', 'E1', ... 'E99' (100)"."""
+        if len(names) <= 6:
+            return ", ".join("'%s'" % n for n in names)
+        return "'%s', '%s', ... '%s' (%d)" % (names[0], names[1], names[-1], len(names))
+
     def copy(self) -> "NMGroups":
         """Return a deep copy (parent reference cleared)."""
         return copy.deepcopy(self)
@@ -151,28 +179,37 @@ class NMGroups:
     # ------------------------------------------------------------------
     # Core operations
 
+    @nmch.records_command
     def add_group(
         self,
-        group: int,
+        group: int | list[int],
         quiet: bool = nmc.QUIET,
     ) -> None:
-        """Create an empty group with the given non-negative number."""
-        self._check_group(group)
-        if group in self.group_numbers:
-            raise ValueError("group %d already exists" % group)
-        self._declared_groups.add(group)
-        nmh.history("groups: created group %d" % group, path=self.path_str, quiet=quiet)
+        """Create an empty group with the given non-negative number (or
+        several, e.g. [0, 1, 2])."""
+        numbers, many = self._as_list(group)
+        for number in numbers:
+            self._check_group(number)
+            if number in self.group_numbers:
+                raise ValueError("group %d already exists" % number)
+        self._declared_groups.update(numbers)
+        nmh.history("groups: created group%s %s" % ("s" if len(numbers) > 1 else "",
+                                                   ", ".join(map(str, numbers))),
+                    path=self.path_str, quiet=quiet)
+        self._record("add_group(%r)" % (numbers if many else numbers[0],))
 
+    @nmch.records_command
     def assign(
         self,
-        item_name: str,
+        item_name: str | list[str],
         group: int,
         quiet: bool = nmc.QUIET,
     ) -> None:
         """Assign *item_name* to *group* (replaces any previous assignment).
 
         Args:
-            item_name: Name of the item (e.g. epoch name).
+            item_name: Name of the item (e.g. epoch name), or a list of names
+                (one command for them all).
             group: Non-negative integer group number.
             quiet: Suppress history output.
 
@@ -180,16 +217,23 @@ class NMGroups:
             TypeError: If *item_name* is not a string or *group* is not an int.
             ValueError: If *group* is negative.
         """
-        if not isinstance(item_name, str):
-            raise TypeError(nmu.type_error_str(item_name, "item_name", "string"))
+        names, many = self._as_list(item_name)
+        for name in names:
+            if not isinstance(name, str):
+                raise TypeError(nmu.type_error_str(name, "item_name", "string"))
         self._check_group(group)
-        self._map[item_name] = group
+        # A group left empty by moving its items is kept (until deleted)
+        self._declared_groups.update(self._map[n] for n in names if n in self._map)
+        for name in names:
+            self._map[name] = group
         nmh.history(
-            "groups: '%s' → %d" % (item_name, group),
+            "groups: %s → %d" % (self._names_text(names), group),
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("assign(%s, %r)" % (nmu.names_repr(names) if many else repr(names[0]), group))
 
+    @nmch.records_command
     def assign_cyclic(
         self,
         item_names: list[str],
@@ -229,6 +273,8 @@ class NMGroups:
             raise TypeError(nmu.type_error_str(block, "block", "int"))
         if block < 1:
             raise ValueError("block must be >= 1, got %d" % block)
+        self._declared_groups.update(  # groups left empty are kept
+            self._map[n] for n in item_names if n in self._map)
         for i, name in enumerate(item_names):
             self.assign(name, (i // block) % n_groups, quiet=True)
         nmh.history(
@@ -237,6 +283,8 @@ class NMGroups:
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("assign_cyclic(%s, %r, block=%r)"
+                     % (nmu.names_repr(list(item_names)), n_groups, block))
 
     def get_items(self, group: int) -> list[str]:
         """Return item names assigned to *group*, in insertion order.
@@ -273,16 +321,19 @@ class NMGroups:
             raise TypeError(nmu.type_error_str(item_name, "item_name", "string"))
         return self._map.get(item_name)
 
+    @nmch.records_command
     def unassign(
         self,
-        item_name: str,
+        item_name: str | list[str],
         error: bool = True,
         quiet: bool = nmc.QUIET,
     ) -> None:
-        """Remove *item_name* from its group.
+        """Remove *item_name* from its group; the group is kept, even if it
+        empties (delete_group removes a group).
 
         Args:
-            item_name: Name of the item to unassign.
+            item_name: Name of the item to unassign, or a list of names (one
+                command for them all).
             error: If True, raise KeyError when *item_name* is not assigned.
             quiet: Suppress history output.
 
@@ -290,21 +341,26 @@ class NMGroups:
             TypeError: If *item_name* is not a string.
             KeyError: If *item_name* is not assigned and *error* is True.
         """
-        if not isinstance(item_name, str):
-            raise TypeError(nmu.type_error_str(item_name, "item_name", "string"))
-        if item_name not in self._map:
-            if error:
-                raise KeyError(
-                    "'%s' is not assigned to any group" % item_name
-                )
+        names, many = self._as_list(item_name)
+        for name in names:
+            if not isinstance(name, str):
+                raise TypeError(nmu.type_error_str(name, "item_name", "string"))
+            if name not in self._map and error:
+                raise KeyError("'%s' is not assigned to any group" % name)
+        names = [name for name in names if name in self._map]
+        if not names:
             return
-        group = self._map.pop(item_name)
+        groups = sorted({self._map.pop(name) for name in names})
+        self._declared_groups.update(groups)  # kept, even if empty (until deleted)
         nmh.history(
-            "groups: unassigned '%s' from group %d" % (item_name, group),
+            "groups: unassigned %s from group %s"
+            % (self._names_text(names), ", ".join(map(str, groups))),
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("unassign(%s)" % (nmu.names_repr(names) if many else repr(names[0])))
 
+    @nmch.records_command
     def clear(self, quiet: bool = nmc.QUIET) -> None:
         """Remove all group assignments.
 
@@ -321,29 +377,67 @@ class NMGroups:
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("clear()")
 
-    def delete_group(self, group: int, quiet: bool = nmc.QUIET) -> None:
-        """Delete *group*: its items are unassigned (the items are kept).
+    @nmch.records_command
+    def clear_group(self, group: int | list[int], quiet: bool = nmc.QUIET) -> None:
+        """Take every item out of *group* (or several groups); the groups are
+        kept, empty.
 
         Args:
-            group: Group number to delete.
+            group: Group number, or a list of numbers.
             quiet: Suppress history output.
 
         Raises:
             TypeError: If *group* is not an int.
             KeyError: If *group* does not exist.
         """
-        self._check_group(group)
-        if group not in self.group_numbers:
-            raise KeyError(
-                "group %d does not exist; existing groups: %s"
-                % (group, self.group_numbers)
-            )
-        for name in [n for n, g in self._map.items() if g == group]:
-            del self._map[name]
-        self._declared_groups.discard(group)
-        self._notes.pop(group, None)
-        nmh.history("groups: deleted group %d" % group, path=self.path_str, quiet=quiet)
+        numbers, many = self._as_list(group)
+        for number in numbers:
+            self._check_group(number)
+            if number not in self.group_numbers:
+                raise KeyError(
+                    "group %d does not exist; existing groups: %s"
+                    % (number, self.group_numbers)
+                )
+        for number in numbers:
+            for name in [n for n, g in self._map.items() if g == number]:
+                del self._map[name]
+        self._declared_groups.update(numbers)
+        nmh.history("groups: cleared group%s %s" % ("s" if len(numbers) > 1 else "",
+                                                   ", ".join(map(str, numbers))),
+                    path=self.path_str, quiet=quiet)
+        self._record("clear_group(%r)" % (numbers if many else numbers[0],))
+
+    @nmch.records_command
+    def delete_group(self, group: int | list[int], quiet: bool = nmc.QUIET) -> None:
+        """Delete *group*: its items are unassigned (the items are kept).
+
+        Args:
+            group: Group number to delete, or a list of numbers.
+            quiet: Suppress history output.
+
+        Raises:
+            TypeError: If *group* is not an int.
+            KeyError: If *group* does not exist.
+        """
+        numbers, many = self._as_list(group)
+        for number in numbers:
+            self._check_group(number)
+            if number not in self.group_numbers:
+                raise KeyError(
+                    "group %d does not exist; existing groups: %s"
+                    % (number, self.group_numbers)
+                )
+        for number in numbers:
+            for name in [n for n, g in self._map.items() if g == number]:
+                del self._map[name]
+            self._declared_groups.discard(number)
+            self._notes.pop(number, None)
+        nmh.history("groups: deleted group%s %s" % ("s" if len(numbers) > 1 else "",
+                                                   ", ".join(map(str, numbers))),
+                    path=self.path_str, quiet=quiet)
+        self._record("delete_group(%r)" % (numbers if many else numbers[0],))
 
     def notes(self, group: int) -> NMNotes:
         """Notes for *group* (e.g. what its epochs are). A group with notes

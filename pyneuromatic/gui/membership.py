@@ -14,16 +14,10 @@ from pyneuromatic.core.nm_object_container import NMObjectContainer
 
 
 def unassign_from_group(groups, names, group: int) -> None:
-    """Take *names* out of *group*, keeping the group even if it empties.
-
-    A group made by assigning epochs (rather than created empty) would
-    otherwise disappear with its last epoch, and with it the browser row.
-    """
-    for name in names:
-        if groups.get_group(name) == group:
-            groups.unassign(name, error=False, quiet=True)
-    if group not in groups.group_numbers:
-        groups.add_group(group, quiet=True)
+    """Take *names* out of *group* (the group is kept, even if it empties)."""
+    members = [name for name in names if groups.get_group(name) == group]
+    if members:
+        groups.unassign(members, error=False, quiet=True)  # one command
 
 
 _HEADERS = {"name": "Name", "data": "Data", "group": "Group"}
@@ -48,9 +42,7 @@ def set_item_group(groups, name: str, group: int | None) -> None:
     if group is None:
         unassign_from_group(groups, [name], old)
         return
-    groups.assign(name, group, quiet=True)
-    if old is not None and old not in groups.group_numbers:
-        groups.add_group(old, quiet=True)
+    groups.assign(name, group, quiet=True)  # a group it empties is kept
 
 
 class MembershipModel(QtCore.QAbstractTableModel):
@@ -195,12 +187,8 @@ class MembershipModel(QtCore.QAbstractTableModel):
         if self.is_group:
             groups = self.container.groups
             if checked:
-                before = set(groups.group_numbers)
-                for name in change:
-                    groups.assign(name, self.group, quiet=True)
-                # Groups that moved their last epoch here stay (empty)
-                for group in before.difference(groups.group_numbers):
-                    groups.add_group(group, quiet=True)
+                # One command; groups that moved their last epoch here stay (empty)
+                groups.assign(change, self.group, quiet=True)
             else:
                 unassign_from_group(groups, change, self.group)
         else:

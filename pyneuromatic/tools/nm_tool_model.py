@@ -124,6 +124,7 @@ class NMToolModel(NMTool):
     def n_points(self, value: int) -> None:
         self._n_points_set(value)
 
+    @nmch.records_command
     def _n_points_set(self, value: int, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(nmu.type_error_str(value, "n_points", "int"))
@@ -142,6 +143,7 @@ class NMToolModel(NMTool):
     def xstart(self, value: float) -> None:
         self._xstart_set(value)
 
+    @nmch.records_command
     def _xstart_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xstart", "float"))
@@ -158,6 +160,7 @@ class NMToolModel(NMTool):
     def xdelta(self, value: float) -> None:
         self._xdelta_set(value)
 
+    @nmch.records_command
     def _xdelta_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xdelta", "float"))
@@ -176,6 +179,7 @@ class NMToolModel(NMTool):
     def prefix(self, value: str) -> None:
         self._prefix_set(value)
 
+    @nmch.records_command
     def _prefix_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "prefix", "string"))
@@ -194,6 +198,7 @@ class NMToolModel(NMTool):
     def chan(self, value: str) -> None:
         self._chan_set(value)
 
+    @nmch.records_command
     def _chan_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "chan", "string"))
@@ -210,6 +215,7 @@ class NMToolModel(NMTool):
     def save_states(self, value: bool) -> None:
         self._save_states_set(value)
 
+    @nmch.records_command
     def _save_states_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "save_states", "boolean"))
@@ -246,6 +252,7 @@ class NMToolModel(NMTool):
         return dict(self.__gsyn_sources)
 
     @gsyn_sources.setter
+    @nmch.records_command
     def gsyn_sources(self, value: dict[str, str]) -> None:
         if not isinstance(value, dict):
             raise TypeError(nmu.type_error_str(value, "gsyn_sources", "dict"))

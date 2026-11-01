@@ -137,6 +137,7 @@ class NMToolSpike(NMTool):
     def ylevel(self, value: float) -> None:
         self._ylevel_set(value)
 
+    @nmch.records_command
     def _ylevel_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         """Set ylevel.
 
@@ -159,6 +160,7 @@ class NMToolSpike(NMTool):
     def func_name(self, value: str) -> None:
         self._func_name_set(value)
 
+    @nmch.records_command
     def _func_name_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         """Set func_name.
 

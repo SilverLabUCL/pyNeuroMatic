@@ -810,7 +810,7 @@ class NMDataContainer(NMObjectContainer):
         copy = self[key].copy()
         copy._dataseries_set(None, None)
         copy._parent = container._parent
-        copy._name_set(newname=container._newkey(newname or key), quiet=True)
+        copy._name_set(newname=container._newkey(newname or key), quiet=True, history=False)
         container._add(copy, quiet=quiet)
         source = copy.xarray_source
         if source is not None:  # an x array of its new folder (copied if needed)
@@ -837,7 +837,7 @@ class NMDataContainer(NMObjectContainer):
         copy._dataseries_set(None, None)
         copy._NMData__xarray_source = None  # an x array has no x array of its own here
         copy._parent = self._parent
-        copy._name_set(newname=name, quiet=True)
+        copy._name_set(newname=name, quiet=True, history=False)
         self._add(copy, quiet=True)
         if brought is not None:
             brought[id(source)] = copy

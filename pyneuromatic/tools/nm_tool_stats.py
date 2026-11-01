@@ -122,6 +122,7 @@ class NMToolStats(NMTool):
         return self._results_all_epochs
 
     @results_all_epochs.setter
+    @nmch.records_command
     def results_all_epochs(self, value: bool) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_all_epochs", "boolean"))

@@ -172,10 +172,10 @@ class NMObjectContainer(NMObject, MutableMapping):
 
         self.__rename_on = rename_on
 
-        self._auto_name_prefix_set(auto_name_prefix, quiet=True)
+        self._auto_name_prefix_set(auto_name_prefix, quiet=True, history=False)  # as built
         # self.__name_prefix
 
-        self._auto_name_seq_format_set(auto_name_seq_format, quiet=True)
+        self._auto_name_seq_format_set(auto_name_seq_format, quiet=True, history=False)
         # self.__name_seq_format
 
         self.__map: dict[str, NMObject] = {}  # where NMObjects are stored/mapped
@@ -457,6 +457,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         return None
 
     # override MutableMapping mixin method
+    @nmch.records_command
     def pop(  # type: ignore[override]
         self,
         key: str,
@@ -501,6 +502,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     # override so there is only a single delete confirmation
+    @nmch.records_command
     def clear(self, quiet: bool = nmc.QUIET) -> None:
         if len(self) == 0:
             return
@@ -516,6 +518,7 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     # override MutableMapping mixin method
     # add/update NMObject to map
+    @nmch.records_command
     def update(  # type: ignore[override]
         self,
         nmobject: NMObject,
@@ -604,6 +607,7 @@ class NMObjectContainer(NMObject, MutableMapping):
                 raise KeyError("key name '%s' already exists" % newkey)
         return newkey
 
+    @nmch.records_command
     def rename(
         self,
         name: str,
@@ -626,7 +630,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         for k in self.__map.keys():
             o = self.__map[k]
             if k == key:
-                o._name_set(newname=actual_newname, quiet=True)  # no history
+                o._name_set(newname=actual_newname, quiet=True, history=False)
             new_map[o.name] = o
         # self.__map = new_map  # reference change
         self.__map.clear()
@@ -699,6 +703,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__map.update(new_map)
         nmh.history("reordered items", path=self.path_str, quiet=quiet)
 
+    @nmch.records_command
     def duplicate(
         self,
         name: str,
@@ -717,7 +722,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         c = o.copy()
         newkey = self._newkey(newname)
         # c.name = newkey  # double history
-        c._name_set(newname=newkey, quiet=True)  # no history
+        c._name_set(newname=newkey, quiet=True, history=False)
         self.__map[c.name] = c
         self.__update_nmobject_references()
         nmh.history(
@@ -744,6 +749,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             return o
         return None
     
+    @nmch.records_command
     def _add(
         self,
         nmobject: NMObject,
@@ -781,7 +787,8 @@ class NMObjectContainer(NMObject, MutableMapping):
     def _auto_name_prefix_set(
         self, 
         prefix: str | None = "NMObject", 
-        quiet: bool = nmc.QUIET
+        quiet: bool = nmc.QUIET,
+        history: bool = True,
     ) -> None:
         if prefix is None:
             prefix = ""
@@ -795,8 +802,9 @@ class NMObjectContainer(NMObject, MutableMapping):
             return  # nothing to do
         oldprefix = self.__auto_name_prefix
         self.__auto_name_prefix = prefix
-        h = nmh.history_change_str("prefix", oldprefix, self.__auto_name_prefix)
-        nmh.history(h, path=self.path_str, quiet=quiet)
+        if history:
+            h = nmh.history_change_str("prefix", oldprefix, self.__auto_name_prefix)
+            nmh.history(h, path=self.path_str, quiet=quiet)
 
     @property
     def auto_name_seq_format(self) -> str:
@@ -811,7 +819,8 @@ class NMObjectContainer(NMObject, MutableMapping):
 
     def _auto_name_seq_format_set(
         self, seq_format: str = "0",
-        quiet: bool = nmc.QUIET
+        quiet: bool = nmc.QUIET,
+        history: bool = True,
     ) -> None:
         if isinstance(seq_format, int) and seq_format == 0:
             seq_format = "0"
@@ -833,8 +842,9 @@ class NMObjectContainer(NMObject, MutableMapping):
         old_format = self.__auto_name_seq_format
         self.__auto_name_seq_format = slist
         self._auto_name_seq_counter_reset()
-        h = nmh.history_change_str("seq_format", old_format, slist)
-        nmh.history(h, path=self.path_str, quiet=quiet)
+        if history:
+            h = nmh.history_change_str("seq_format", old_format, slist)
+            nmh.history(h, path=self.path_str, quiet=quiet)
 
     @staticmethod
     def __auto_name_seq_char_list() -> list[str]:
@@ -932,6 +942,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         return self.__selected_name
 
     @selected_name.setter
+    @nmch.records_command
     def selected_name(
         self,
         name: str | None

@@ -37,7 +37,7 @@ def _entries(app, kind=None):
 def test_kinds_of_entry(app):
     panel = app.history_panel
     assert [b.text() for b in panel.kind_buttons.values()] == [
-        "Commands", "Messages", "Warnings", "Errors", "Selection", "Tool Runs"]
+        "Commands", "Messages", "Warnings", "Errors", "Selection", "Tool Runs", "Inner Calls"]
     app.folder.data.new("Extra", nparray=np.zeros(2))  # a command and messages
     nmh.alert("careful", path="NONE")
     nmh.error("broken", path="NONE")
@@ -154,3 +154,91 @@ def test_closing_the_window_stops_the_history_writing_to_it(qtbot):
     assert handler in logging.getLogger("pyneuromatic").handlers
     window.close()
     assert handler not in logging.getLogger("pyneuromatic").handlers
+
+
+def test_inner_calls(app):
+    """Calls made inside a command (#437): off by default, not kept while off."""
+    panel = app.history_panel
+    assert not panel.kind_buttons["inner"].isChecked()
+    folder = app.folder
+    folder.new_dataseries("Rec", n_channels=1, n_epochs=3, n_points=2)
+    assert _entries(app, "inner") == []  # not kept while hidden
+    commands = _entries(app, "command")
+    assert commands[-1].startswith('nm.folders["Demo"].new_dataseries(\'Rec\'')
+    assert not any("data.new('RecA0')" in c for c in commands)  # nested: not a command
+    panel.kind_buttons["inner"].setChecked(True)
+    folder.new_dataseries("Two", n_channels=1, n_epochs=2, n_points=2)
+    inner = _entries(app, "inner")
+    assert "nm.folders[\"Demo\"].data.new('TwoA0')" in inner
+    panel.set_shown_kinds({"inner"})
+    assert panel.text().splitlines()[0].startswith("    ")  # indented, under its command
+
+
+def test_a_group_action_is_one_command(app, monkeypatch):
+    """Add Epochs to Group: one command for the range, not one per epoch."""
+    folder = app.folder
+    series = folder.new_dataseries("Rec", n_channels=1, n_epochs=20, n_points=2)
+    app.selection_model.update(dataseries=series, epoch=series.epochs["E0"])
+    actions = app.group_actions
+    monkeypatch.setattr(actions, "_choose",
+                        lambda title, **options: (None, None, "0", "E0", "E19", "1"))
+    before = len(_entries(app, "command"))
+    actions.assign_epochs()
+    commands = _entries(app, "command")[before:]
+    assert commands == [
+        'nm.folders["Demo"].dataseries["Rec"].epochs.groups.assign('
+        '[f"E{i}" for i in range(20)], 0)']  # a range, not 20 names
+
+
+def test_clear_group_is_one_command(app, monkeypatch):
+    """Clear Group: clear_group(n), with no add_group to keep the group (#437)."""
+    series = app.folder.new_dataseries("Rec", n_channels=1, n_epochs=8, n_points=2)
+    series.epochs.groups.assign_cyclic(list(series.epochs.keys()), 2)
+    app.selection_model.update(dataseries=series, epoch=series.epochs["E0"], group=0)
+    actions = app.group_actions
+    monkeypatch.setattr(actions, "_choose_groups", lambda title, describe: [0])
+    before = len(_entries(app, "command"))
+    actions.clear_group()
+    assert _entries(app, "command")[before:] == [
+        'nm.folders["Demo"].dataseries["Rec"].epochs.groups.clear_group(0)']
+    assert series.epochs.groups.group_numbers == [0, 1]  # kept, empty
+    assert series.epochs.groups.get_items(0) == []
+
+
+def test_history_starts_with_the_manager(qtbot):
+    """The first command makes the manager: "nm = NMManager()" (#437)."""
+    manager = NMManager(quiet=True)
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.history_panel.flush()
+    commands = [e.text for e in window.history_panel.model.entries if e.kind == "command"]
+    assert commands[0] == "nm = NMManager()"
+    assert manager.command_history.buffer[0]["command"] == "nm = NMManager()"
+    # Recording already on (NMManager made it): not added again
+    manager = NMManager(quiet=True, command_history=True)
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    assert [c["command"] for c in manager.command_history.buffer].count("nm = NMManager()") == 1
+
+
+def test_an_exported_script_runs(qtbot, tmp_path):
+    """The command history, saved as a script, re-creates the session (made
+    after the window opens, so all of it is recorded)."""
+    manager = NMManager(quiet=True)
+    app = NMAppWindow(manager)
+    qtbot.addWidget(app)
+    app.manager = manager
+    folder = manager.folders.new("Demo")
+    series = folder.new_dataseries("Rec", n_channels=2, n_epochs=6, n_points=3, fill=1.0)
+    series.epochs.groups.assign_cyclic(list(series.epochs.keys()), 2)
+    series.epochs.sets.add("Set0", ["E0", "E1"])
+    app.selection_model.update(dataseries=series, epoch=series.epochs["E2"])
+    path = tmp_path / "session.py"
+    app.manager.command_history.to_script(str(path))
+    namespace = {}
+    exec(path.read_text(), namespace)
+    replayed = namespace["nm"]
+    again = replayed.folders["Demo"]
+    assert sorted(again.dataseries["Rec"].epochs.keys()) == sorted(series.epochs.keys())
+    assert again.dataseries["Rec"].epochs.groups == series.epochs.groups
+    assert again.dataseries["Rec"].epochs.sets.get_items("Set0", get_keys=True) == ["E0", "E1"]

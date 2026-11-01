@@ -215,6 +215,7 @@ class NMToolEvent(NMTool):
     def algorithm(self, value: str) -> None:
         self._algorithm_set(value)
 
+    @nmch.records_command
     def _algorithm_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "algorithm", "string"))
@@ -236,6 +237,7 @@ class NMToolEvent(NMTool):
     def polarity(self, value: str) -> None:
         self._polarity_set(value)
 
+    @nmch.records_command
     def _polarity_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "polarity", "string"))
@@ -257,6 +259,7 @@ class NMToolEvent(NMTool):
     def threshold(self, value: float) -> None:
         self._threshold_set(value)
 
+    @nmch.records_command
     def _threshold_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "threshold", "float"))
@@ -276,6 +279,7 @@ class NMToolEvent(NMTool):
     def nstdv(self, value: float) -> None:
         self._nstdv_set(value)
 
+    @nmch.records_command
     def _nstdv_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "nstdv", "float"))
@@ -295,6 +299,7 @@ class NMToolEvent(NMTool):
     def baseline_avg(self, value: float) -> None:
         self._baseline_avg_set(value)
 
+    @nmch.records_command
     def _baseline_avg_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "baseline_avg", "float"))
@@ -316,6 +321,7 @@ class NMToolEvent(NMTool):
     def baseline_dt(self, value: float) -> None:
         self._baseline_dt_set(value)
 
+    @nmch.records_command
     def _baseline_dt_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "baseline_dt", "float"))
@@ -337,6 +343,7 @@ class NMToolEvent(NMTool):
     def template(self, value: np.ndarray | None) -> None:
         self._template_set(value)
 
+    @nmch.records_command
     def _template_set(
         self, value: np.ndarray | None, quiet: bool = nmc.QUIET
     ) -> None:
@@ -360,6 +367,7 @@ class NMToolEvent(NMTool):
     def criterion_threshold(self, value: float) -> None:
         self._criterion_threshold_set(value)
 
+    @nmch.records_command
     def _criterion_threshold_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "criterion_threshold", "float"))
@@ -386,6 +394,7 @@ class NMToolEvent(NMTool):
     def template_baseline(self, value: float) -> None:
         self._template_baseline_set(value)
 
+    @nmch.records_command
     def _template_baseline_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "template_baseline", "float"))
@@ -407,6 +416,7 @@ class NMToolEvent(NMTool):
     def onset_search(self, value: bool) -> None:
         self._onset_search_set(value)
 
+    @nmch.records_command
     def _onset_search_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "onset_search", "bool"))
@@ -425,6 +435,7 @@ class NMToolEvent(NMTool):
     def onset_avg(self, value: float) -> None:
         self._onset_avg_set(value)
 
+    @nmch.records_command
     def _onset_avg_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "onset_avg", "float"))
@@ -444,6 +455,7 @@ class NMToolEvent(NMTool):
     def onset_nstdv(self, value: float) -> None:
         self._onset_nstdv_set(value)
 
+    @nmch.records_command
     def _onset_nstdv_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "onset_nstdv", "float"))
@@ -465,6 +477,7 @@ class NMToolEvent(NMTool):
     def onset_limit(self, value: float) -> None:
         self._onset_limit_set(value)
 
+    @nmch.records_command
     def _onset_limit_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "onset_limit", "float"))
@@ -486,6 +499,7 @@ class NMToolEvent(NMTool):
     def peak_search(self, value: bool) -> None:
         self._peak_search_set(value)
 
+    @nmch.records_command
     def _peak_search_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "peak_search", "bool"))
@@ -504,6 +518,7 @@ class NMToolEvent(NMTool):
     def peak_avg(self, value: float) -> None:
         self._peak_avg_set(value)
 
+    @nmch.records_command
     def _peak_avg_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "peak_avg", "float"))
@@ -523,6 +538,7 @@ class NMToolEvent(NMTool):
     def peak_nstdv(self, value: float) -> None:
         self._peak_nstdv_set(value)
 
+    @nmch.records_command
     def _peak_nstdv_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "peak_nstdv", "float"))
@@ -544,6 +560,7 @@ class NMToolEvent(NMTool):
     def peak_limit(self, value: float) -> None:
         self._peak_limit_set(value)
 
+    @nmch.records_command
     def _peak_limit_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "peak_limit", "float"))
@@ -565,6 +582,7 @@ class NMToolEvent(NMTool):
     def refractory(self, value: float) -> None:
         self._refractory_set(value)
 
+    @nmch.records_command
     def _refractory_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "refractory", "float"))
@@ -586,6 +604,7 @@ class NMToolEvent(NMTool):
     def max_events(self, value: int) -> None:
         self._max_events_set(value)
 
+    @nmch.records_command
     def _max_events_set(self, value: int, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(nmu.type_error_str(value, "max_events", "int"))

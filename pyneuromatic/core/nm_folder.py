@@ -344,6 +344,7 @@ class NMFolder(NMObject):
             raise RuntimeError("dataseries %r is locked" % ds.name)
         return ds
 
+    @nmch.records_command
     def rename_dataseries(
         self,
         prefix: str,
@@ -389,7 +390,7 @@ class NMFolder(NMObject):
             path=self.path_str,
             quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command('%s.rename_dataseries(%r, %r)' % (_p, old, new_prefix))
         return ds
 
@@ -431,6 +432,7 @@ class NMFolder(NMObject):
                     % (new, ds.name))
         return epochs, arrays, empty
 
+    @nmch.records_command
     def renumber_dataseries_epochs(self, prefix: str, remove_empty: bool = False,
                                    quiet: bool = nmc.QUIET) -> dict:
         """Number the epochs of data series *prefix* E0, E1, ... in order,
@@ -479,7 +481,7 @@ class NMFolder(NMObject):
             % (prefix, changes, len(arrays)),
             path=self.path_str, quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command('%s.renumber_dataseries_epochs(%r, remove_empty=%r)'
                             % (_p, prefix, remove_empty))
         return epochs
@@ -661,6 +663,7 @@ class NMFolder(NMObject):
 
         return ds
 
+    @nmch.records_command
     def new_dataseries(
         self,
         prefix: str,
@@ -678,6 +681,7 @@ class NMFolder(NMObject):
         ep_start: int = 0,
         select: bool = False,
         quiet: bool = nmc.QUIET,
+        noise: float = 0.0,
     ) -> NMDataSeries | None:
         """Create or extend an NMDataSeries with synthetic NumPy arrays.
 
@@ -723,11 +727,16 @@ class NMFolder(NMObject):
                       fill=numpy.random.random          # uniform [0, 1)
                       fill=lambda n: numpy.random.normal(0, 2.0, n)
 
+                A function can't be written in the command history (a named
+                one, e.g. ``numpy.zeros``, is written by name); for noise use
+                *noise*, which is.
+
             ch_start: Index of the first channel to generate (0 = A, 1 = B,
                 ...). Default ``0``.
             ep_start: Index of the first epoch to generate. Default ``0``.
             select: Whether to select the dataseries after creation/update.
             quiet: If True, suppress history output.
+            noise: SD of Gaussian noise added to the fill (0 for none).
 
         Returns:
             The NMDataSeries (new or updated), or None on failure.
@@ -763,6 +772,7 @@ class NMFolder(NMObject):
             raise TypeError(
                 "fill must be a numeric scalar or callable, got %r" % type(fill).__name__
             )
+        rng = self._noise_rng(noise)
 
         ch_nums = range(ch_start, ch_start + n_channels)
         ep_nums = range(ep_start, ep_start + n_epochs)
@@ -785,7 +795,7 @@ class NMFolder(NMObject):
             ch_char = nmu.channel_char(ch_i)
             for ep in ep_nums:
                 name = "%s%s%d" % (prefix, ch_char, ep)
-                arr = fill(n_points) if callable(fill) else np.full(n_points, fill)
+                arr = self._fill_array(fill, n_points, noise, rng)
                 data = self.data.new(
                     name=name, nparray=arr, xscale=xscale, yscale=yscale,
                     quiet=True,
@@ -809,14 +819,15 @@ class NMFolder(NMObject):
             path=self.path_str,
             quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.new_dataseries(%r, n_channels=%r, n_epochs=%r, n_points=%r, '
             'dx=%r, x_start=%r, x_label=%r, x_units=%r, y_label=%r, y_units=%r, '
-            'fill=%r, ch_start=%r, ep_start=%r)'
+            'fill=%s%s, ch_start=%r, ep_start=%r)%s'
             % (_p, prefix, n_channels, n_epochs, n_points,
                dx, x_start, x_label, x_units, y_label, y_units,
-               fill, ch_start, ep_start)
+               *self._fill_args(fill, noise), ch_start, ep_start,
+               self._fill_note(fill))
         )
         return ds
 
@@ -887,6 +898,7 @@ class NMFolder(NMObject):
             n_data=len(matches),
         )
 
+    @nmch.records_command
     def sync_dataseries(
         self,
         prefix: str,
@@ -951,10 +963,11 @@ class NMFolder(NMObject):
             path=self.path_str,
             quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command('%s.sync_dataseries(%r)' % (_p, actual_prefix))
         return ds
 
+    @nmch.records_command
     def copy_dataseries(
         self,
         prefix: str,
@@ -1107,14 +1120,15 @@ class NMFolder(NMObject):
             path=self.path_str,
             quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
-        folder_str = ('%s["%s"]' % (folder._nm_cmd_path, folder.name)) if folder is not None else "None"
+        _p = self._nm_cmd_path
+        folder_str = ("nm." + folder._nm_cmd_path) if folder is not None else "None"
         nmch.add_nm_command(
             '%s.copy_dataseries(%r, new_prefix=%r, channel=%r, epoch=%r, folder=%s)'
             % (_p, prefix, new_prefix, channel, epoch, folder_str)
         )
         return ds
 
+    @nmch.records_command
     def remove_dataseries(
         self,
         prefix: str,
@@ -1149,11 +1163,12 @@ class NMFolder(NMObject):
         if delete_data:
             msg += " (and %d data objects)" % len(data_names)
         nmh.history(msg, path=self.path_str, quiet=quiet)
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.remove_dataseries(%r, delete_data=%r)' % (_p, prefix, delete_data)
         )
 
+    @nmch.records_command
     def remove_dataseries_channel(
         self,
         prefix: str,
@@ -1200,12 +1215,13 @@ class NMFolder(NMObject):
         if delete_data:
             msg += " (and %d data objects)" % n_deleted
         nmh.history(msg, path=self.path_str, quiet=quiet)
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.remove_dataseries_channel(%r, %r, delete_data=%r)'
             % (_p, prefix, channel, delete_data)
         )
 
+    @nmch.records_command
     def remove_dataseries_epoch(
         self,
         prefix: str,
@@ -1255,24 +1271,63 @@ class NMFolder(NMObject):
         if delete_data:
             msg += " (and %d data objects)" % n_deleted
         nmh.history(msg, path=self.path_str, quiet=quiet)
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.remove_dataseries_epoch(%r, %r, delete_data=%r)'
             % (_p, prefix, epoch, delete_data)
         )
 
     @staticmethod
-    def _fill_array(fill, n_points: int):
-        """An array of *n_points* from *fill* (a number, or f(n) -> array)."""
+    def _fill_array(fill, n_points: int, noise: float = 0.0, rng=None):
+        """An array of *n_points* from *fill* (a number, or f(n) -> array),
+        plus Gaussian noise of SD *noise* (from *rng*)."""
         import numpy as np
 
         if callable(fill):
-            return np.asarray(fill(n_points), dtype=float)
-        if isinstance(fill, bool) or not isinstance(fill, (int, float)):
+            values = np.asarray(fill(n_points), dtype=float)
+        elif isinstance(fill, bool) or not isinstance(fill, (int, float)):
             raise TypeError(
                 "fill must be a numeric scalar or callable, got %r" % type(fill).__name__
             )
-        return np.full(n_points, float(fill))
+        else:
+            values = np.full(n_points, float(fill))
+        if noise:
+            values = values + (rng or np.random.default_rng()).normal(0.0, noise, n_points)
+        return values
+
+    @staticmethod
+    def _noise_rng(noise: float):
+        """A random generator for *noise* (an SD >= 0), or None for none."""
+        import numpy as np
+
+        if isinstance(noise, bool) or not isinstance(noise, (int, float)):
+            raise TypeError(nmu.type_error_str(noise, "noise", "number"))
+        if noise < 0:
+            raise ValueError("noise must be >= 0, got %r" % noise)
+        return np.random.default_rng() if noise else None
+
+    @staticmethod
+    def _fill_args(fill, noise: float) -> tuple[str, str]:
+        """*fill* and *noise* as written in a command: ("0.0", ", noise=0.5").
+        A named function is written by name (e.g. numpy.zeros); an unnamed
+        one (a lambda) can't be, so 0.0 is written (see _fill_note)."""
+        if callable(fill):
+            name = getattr(fill, "__qualname__", "") or ""
+            module = getattr(fill, "__module__", "") or ""
+            if name and "<" not in name:
+                text = name if module in ("", "builtins") else "%s.%s" % (module, name)
+            else:
+                text = "0.0"
+        else:
+            text = repr(fill)
+        return text, (", noise=%r" % noise if noise else "")
+
+    @staticmethod
+    def _fill_note(fill) -> str:
+        """A comment for a fill that couldn't be written in the command."""
+        if callable(fill) and "<" in (getattr(fill, "__qualname__", "") or "<"):
+            return "  # fill was a function, not recorded"
+        return ""
 
     @staticmethod
     def _check_count(name: str, value: int) -> None:
@@ -1287,6 +1342,7 @@ class NMFolder(NMObject):
         text = epoch.name[len(ds.epochs.auto_name_prefix):]
         return int(text) if text.isdigit() else None
 
+    @nmch.records_command
     def add_dataseries_channels(
         self,
         prefix: str,
@@ -1295,6 +1351,7 @@ class NMFolder(NMObject):
         y_label: str = "",
         y_units: str = "",
         quiet: bool = nmc.QUIET,
+        noise: float = 0.0,
     ) -> list:
         """Add channels to a dataseries: one new array per epoch.
 
@@ -1307,10 +1364,11 @@ class NMFolder(NMObject):
             prefix: Name of the dataseries.
             n_channels: How many channels to add.
             fill: Initial values: a number (e.g. 0 or NaN) or a function
-                ``f(n_points) -> array`` (e.g. noise).
+                ``f(n_points) -> array``.
             y_label: Y label of the new arrays (e.g. ``"Im"``).
             y_units: Y units of the new arrays (e.g. ``"pA"``).
             quiet: Suppress history messages.
+            noise: SD of Gaussian noise added to the fill (0 for none).
 
         Returns:
             The new NMChannels.
@@ -1324,6 +1382,7 @@ class NMFolder(NMObject):
 
         ds = self._get_unlocked_dataseries(prefix)
         self._check_count("n_channels", n_channels)
+        rng = self._noise_rng(noise)
         epochs = list(ds.epochs.values())
         if not epochs:
             raise ValueError("dataseries '%s' has no epochs" % prefix)
@@ -1360,7 +1419,7 @@ class NMFolder(NMObject):
                 n_points = template.nparray.size if template.nparray is not None else 0
                 data = self.data.new(
                     name="%s%s%s" % (prefix, letter, number[epoch.name]),
-                    nparray=self._fill_array(fill, n_points),
+                    nparray=self._fill_array(fill, n_points, noise, rng),
                     xscale=template.xscale.to_dict(), yscale=yscale, quiet=True,
                 )
                 channel.data.append(data)
@@ -1372,19 +1431,22 @@ class NMFolder(NMObject):
             % (", ".join(letters), prefix, len(names)),
             path=self.path_str, quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
-            '%s.add_dataseries_channels(%r, n_channels=%r, fill=%r, y_label=%r, y_units=%r)'
-            % (_p, prefix, n_channels, fill, y_label, y_units)
+            '%s.add_dataseries_channels(%r, n_channels=%r, fill=%s%s, y_label=%r, y_units=%r)%s'
+            % (_p, prefix, n_channels, *self._fill_args(fill, noise), y_label, y_units,
+               self._fill_note(fill))
         )
         return added
 
+    @nmch.records_command
     def add_dataseries_epochs(
         self,
         prefix: str,
         n_epochs: int = 1,
         fill=0.0,
         quiet: bool = nmc.QUIET,
+        noise: float = 0.0,
     ) -> list:
         """Add epochs to a dataseries: one new array per channel.
 
@@ -1397,8 +1459,9 @@ class NMFolder(NMObject):
             prefix: Name of the dataseries.
             n_epochs: How many epochs to add.
             fill: Initial values: a number (e.g. 0 or NaN) or a function
-                ``f(n_points) -> array`` (e.g. noise).
+                ``f(n_points) -> array``.
             quiet: Suppress history messages.
+            noise: SD of Gaussian noise added to the fill (0 for none).
 
         Returns:
             The new NMEpochs.
@@ -1412,6 +1475,7 @@ class NMFolder(NMObject):
 
         ds = self._get_unlocked_dataseries(prefix)
         self._check_count("n_epochs", n_epochs)
+        rng = self._noise_rng(noise)
         channels = list(ds.channels.values())
         if not channels:
             raise ValueError("dataseries '%s' has no channels" % prefix)
@@ -1438,7 +1502,7 @@ class NMFolder(NMObject):
                 n_points = template.nparray.size if template.nparray is not None else 0
                 data = self.data.new(
                     name="%s%s%d" % (prefix, channel.name, number),
-                    nparray=self._fill_array(fill, n_points),
+                    nparray=self._fill_array(fill, n_points, noise, rng),
                     xscale=template.xscale.to_dict(), yscale=template.yscale.to_dict(),
                     quiet=True,
                 )
@@ -1452,10 +1516,10 @@ class NMFolder(NMObject):
             "added epoch(s) %s to dataseries '%s' (%d arrays)" % (ep_str, prefix, len(names)),
             path=self.path_str, quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
-            '%s.add_dataseries_epochs(%r, n_epochs=%r, fill=%r)'
-            % (_p, prefix, n_epochs, fill)
+            '%s.add_dataseries_epochs(%r, n_epochs=%r, fill=%s%s)%s'
+            % (_p, prefix, n_epochs, *self._fill_args(fill, noise), self._fill_note(fill))
         )
         return added
 
@@ -1487,7 +1551,7 @@ class NMFolder(NMObject):
     def _move_array(self, data: NMData, target: NMFolder, name: str) -> NMData:
         """Take *data* out of this folder into *target*, named *name*."""
         self.data.pop(data.name, quiet=True)
-        data._name_set(newname=name, quiet=True)
+        data._name_set(newname=name, quiet=True, history=False)
         data._parent = target
         target.data._add(data, quiet=True)
         return data
@@ -1616,6 +1680,7 @@ class NMFolder(NMObject):
                 "copy": "A copy of x array '%s' goes too (others here still use it).",
                 "reuse": "It uses the '%s' already in that folder."}[action] % source.name
 
+    @nmch.records_command
     def move_data(
         self,
         name: str,
@@ -1658,11 +1723,12 @@ class NMFolder(NMObject):
                 old_name, target.name, " as '%s'" % new_name if new_name != old_name else ""),
             path=self.path_str, quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command('%s.move_data(%r, nm.folders[%r], new_name=%r)'
                             % (_p, old_name, target.name, new_name))
         return data
 
+    @nmch.records_command
     def move_dataseries(
         self,
         prefix: str,
@@ -1761,7 +1827,7 @@ class NMFolder(NMObject):
                " as '%s'" % name if name != prefix else ""),
             path=self.path_str, quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.move_dataseries(%r, nm.folders[%r], new_prefix=%r)'
             % (_p, prefix, target.name, new_prefix)
@@ -1843,6 +1909,7 @@ class NMFolder(NMObject):
         return ("The appended arrays use %s, as '%s' does ('%s' used %s)."
                 % (how, prefix, source_prefix, was))
 
+    @nmch.records_command
     def append_dataseries(
         self,
         prefix: str,
@@ -1909,7 +1976,7 @@ class NMFolder(NMObject):
                last, prefix, " (source removed)" if delete_source else ""),
             path=self.path_str, quiet=quiet,
         )
-        _p = '%s["%s"]' % (self._nm_cmd_path, self.name)
+        _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.append_dataseries(%r, %r, delete_source=%r)'
             % (_p, prefix, source_prefix, delete_source)
@@ -1920,7 +1987,7 @@ class NMFolder(NMObject):
         """A copy of *data* in this folder, named *name* (it keeps any x
         array, as Duplicate does)."""
         result = copy.deepcopy(data)
-        result._name_set(newname=name, quiet=True)
+        result._name_set(newname=name, quiet=True, history=False)
         result._parent = self
         self.data._add(result, quiet=True)
         return result

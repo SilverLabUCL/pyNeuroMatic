@@ -31,6 +31,7 @@ from collections import deque
 
 from colorama import Fore
 
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_configurations as nmc
 
 
@@ -118,9 +119,10 @@ class NMHistory:
         # prevent duplicate handlers if NMHistory is created multiple times
         self._logger.handlers.clear()
 
-        # in-memory buffer handler - always captures everything
+        # in-memory buffer handler - INFO and up: DEBUG entries (made by calls
+        # inside a top-level command) would crowd out the record of a session
         self._buffer_handler = NMHistoryBufferHandler(maxlen=buffer_size)
-        self._buffer_handler.setLevel(logging.DEBUG)
+        self._buffer_handler.setLevel(logging.INFO)
         self._logger.addHandler(self._buffer_handler)
 
         # console handler - respects quiet flag
@@ -128,7 +130,7 @@ class NMHistory:
         if quiet:
             self._console_handler.setLevel(logging.CRITICAL + 1)
         else:
-            self._console_handler.setLevel(logging.DEBUG)
+            self._console_handler.setLevel(logging.INFO)
         self._logger.addHandler(self._console_handler)
 
     def log(
@@ -235,7 +237,7 @@ class NMHistory:
         if value:
             self._console_handler.setLevel(logging.CRITICAL + 1)
         else:
-            self._console_handler.setLevel(logging.DEBUG)
+            self._console_handler.setLevel(logging.INFO)
 
 
 # Module-level history instance (set by NMManager.__init__ via set_history())
@@ -253,6 +255,12 @@ def set_history(history_instance: NMHistory | None) -> None:
     """
     global _nm_history
     _nm_history = history_instance
+
+
+def _format(message: str, title: str, path: str) -> str:
+    """The history string, as NMHistory.log returns it."""
+    h = path + ": " + message if path and path.upper() != "NONE" else message
+    return title + ": " + h if title else h
 
 
 def history_change_str(
@@ -295,8 +303,15 @@ def history(
     red: bool = False,
     quiet: bool = False,
     kind: str = "",
+    level: int | None = None,
 ) -> str:
     """Print message to NM history.
+
+    Inside a call made by a top-level command (see
+    :func:`nm_command_history.records_command`), notes are logged at DEBUG
+    level (hidden by default); alerts and errors keep their level. During a
+    top-level call, messages are held until its command is recorded, so the
+    command comes first.
 
     This function checks nmc.QUIET internally, so callers don't need to.
 
@@ -314,6 +329,8 @@ def history(
     :type quiet: bool
     :param kind: what the message is, e.g. "command"; "" for other messages.
     :type kind: str
+    :param level: Python logging level, instead of one from title / red.
+    :type level: int | None
     :return: history string.
     :rtype: str
     """
@@ -331,18 +348,29 @@ def history(
         path = ""
 
     # determine log level from title/red
-    if isinstance(title, str) and title.upper() == "ERROR":
+    if level is not None:
+        pass
+    elif isinstance(title, str) and title.upper() == "ERROR":
         level = logging.ERROR
     elif isinstance(title, str) and title.upper() == "ALERT" or red:
         level = logging.WARNING
     else:
         level = logging.INFO
+    if level == logging.INFO and nmch.nested():
+        level = logging.DEBUG  # a note from a call made inside a command
 
     # delegate to NMHistory if available
     if _nm_history is not None:
-        return _nm_history.log(
-            message, title=title, path=path, level=level, quiet=quiet, kind=kind
-        )
+        history_instance = _nm_history
+
+        def log() -> str:
+            return history_instance.log(
+                message, title=title, path=path, level=level, quiet=quiet, kind=kind
+            )
+
+        if nmch.hold(log):  # written once the top-level command is
+            return _format(message, title, path)
+        return log()
 
     # fallback: original print() behavior (before NMManager is created)
     if path:
