@@ -47,6 +47,7 @@ from pyneuromatic.gui.folder_model import (
 )
 from pyneuromatic.gui.tier_actions import (
     next_set_number,
+    one_or_list,
     set_name,
     set_number_error,
     set_number_of,
@@ -1656,9 +1657,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         if not accepted:
             return
         try:
-            for group_number in range(group_count):
-                if group_number not in existing:
-                    epoch_container.groups.add_group(group_number)
+            new = [n for n in range(group_count) if n not in existing]
+            if new:
+                epoch_container.groups.add_group(new)  # one command
         except (KeyError, ValueError, TypeError) as error:
             QtWidgets.QMessageBox.warning(self, "Group Creation Failed", str(error))
             return
@@ -1671,8 +1672,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         group_number: int,
     ) -> None:
         try:
-            for epoch in epochs:
-                epoch_container.groups.assign(epoch.name, group_number)
+            epoch_container.groups.assign([e.name for e in epochs], group_number)
         except (KeyError, ValueError, TypeError) as error:
             QtWidgets.QMessageBox.warning(self, "Group Assignment Failed", str(error))
             return
@@ -1769,8 +1769,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             % ("s" if len(group_nodes) != 1 else "", labels),
         ):
             return
-        for node in group_nodes:
-            unassign_from_group(groups, groups.get_items(node.number), node.number)
+        groups.clear_group(one_or_list(node.number for node in group_nodes))  # one command
         self._changed()
 
     def _delete_groups(self, group_nodes: list[_GroupNumberNode]) -> None:
@@ -1785,9 +1784,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             % ("s" if len(group_nodes) != 1 else "", labels),
         ):
             return
-        for node in group_nodes:
-            if node.number in groups.group_numbers:
-                groups.delete_group(node.number, quiet=True)
+        numbers = [node.number for node in group_nodes if node.number in groups.group_numbers]
+        if numbers:
+            groups.delete_group(one_or_list(numbers), quiet=True)  # one command
         self._changed()
 
     def _remove_from_set(self, set_node: _SetNode, objects: list[NMObject]) -> None:

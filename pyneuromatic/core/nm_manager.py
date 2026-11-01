@@ -47,6 +47,15 @@ nm = None  # holds Manager, accessed via console
 
 # Hierarchy tier selection keys (folder down to epoch)
 HIERARCHY_SELECT_KEYS = ("folder", "toolfolder", "data", "dataseries", "channel", "epoch")
+# The tiers above each, top down (data and dataseries are separate branches)
+SELECT_KEY_PATHS = {
+    "folder": (),
+    "toolfolder": ("folder",),
+    "data": ("folder", "toolfolder"),
+    "dataseries": ("folder", "toolfolder"),
+    "channel": ("folder", "toolfolder", "dataseries"),
+    "epoch": ("folder", "toolfolder", "dataseries"),
+}
 
 # Run target constants (consistent with RunMode in NMObjectContainer)
 RUN_SELECTED = "selected"
@@ -147,6 +156,7 @@ class NMManager(NMObject):
         nm.run_tool()
     """
 
+    @nmch.records_command
     def __init__(
         self,
         quiet: bool = False,
@@ -238,6 +248,7 @@ class NMManager(NMObject):
         elif self.__toolkit:
             self.__toolselect = next(iter(self.__toolkit.keys()))
 
+    @nmch.records_command
     def tool_add(
         self,
         toolname: str,
@@ -281,6 +292,7 @@ class NMManager(NMObject):
         else:
             nmch.add_nm_command("tool_add(%r)" % tname)
 
+    @nmch.records_command
     def tool_remove(self, toolname: str) -> bool:
         """
         Remove a tool from the toolkit.
@@ -309,6 +321,7 @@ class NMManager(NMObject):
         return self.__toolselect
 
     @tool_select.setter
+    @nmch.records_command
     def tool_select(self, toolname: str) -> None:
         if toolname is None:
             self.__toolselect = None
@@ -465,6 +478,29 @@ class NMManager(NMObject):
     def select_keys(self, select: dict[str, str]) -> None:
         self._select_keys_set(select)
 
+    def _select_keys_path(self, select: dict) -> dict:
+        """*select* with the path above it from the current selection, so a
+        command says where, e.g. {'channel': 'A'} is recorded as {'folder':
+        'Demo1', 'dataseries': 'FRAP', 'channel': 'A'}. Only tiers above the
+        highest one given are added; the toolfolder only when it matters (one
+        is selected, or the folder has some), as the data tiers are then its
+        contents. Tiers below are not added."""
+        current = self.select_keys
+        folder = self.select_values["folder"]
+        has_toolfolders = folder is not None and len(folder.toolfolders) > 0
+        path: dict = {}
+        for tier in select:
+            for above in SELECT_KEY_PATHS[tier]:
+                if above in select:
+                    break  # given: the path above it is the caller's
+                if above == "toolfolder" and current["toolfolder"] is None \
+                        and not has_toolfolders:
+                    continue
+                path[above] = current[above]
+        path.update(select)
+        return {k: path[k] for k in HIERARCHY_SELECT_KEYS if k in path}
+
+    @nmch.records_command
     def _select_keys_set(self, select: dict[str, str]) -> None:
         """
         Set selection at each hierarchy tier by name.
@@ -495,7 +531,9 @@ class NMManager(NMObject):
                 raise KeyError(f"'{tier}' is not a valid selection tier. "
                                f"Valid tiers: {HIERARCHY_SELECT_KEYS}")
 
-        nmch.add_nm_command("select_keys = %r" % (select,))
+        # In hierarchy order (folder first), as the tiers are set below
+        select = {k: select[k] for k in HIERARCHY_SELECT_KEYS if k in select}
+        nmch.add_nm_command("select_keys = %r" % (self._select_keys_path(select),))
 
         # Traverse hierarchy, setting values as we go so subsequent tiers
         # use the newly selected parent
@@ -777,6 +815,7 @@ class NMManager(NMObject):
         """
         return len(self.run_keys(dataseries_priority))
 
+    @nmch.records_command
     def run_keys_set(
         self,
         run: dict[str, str],
@@ -964,6 +1003,7 @@ class NMManager(NMObject):
                 f"run_count() to preview target count."
             )
 
+    @nmch.records_command
     def run_reset_all(self) -> None:
         """Reset all run targets to use the selected item at each tier."""
         folders = self.__folders
@@ -995,6 +1035,7 @@ class NMManager(NMObject):
         nmch.add_nm_command("run_reset_all()")
         return None
 
+    @nmch.records_command
     def run_tool(
         self,
         toolname: str = "selected"

@@ -212,6 +212,7 @@ class NMToolFit(NMTool):
     def func_name(self, value: str) -> None:
         self._func_name_set(value)
 
+    @nmch.records_command
     def _func_name_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "func_name", "string"))
@@ -233,6 +234,7 @@ class NMToolFit(NMTool):
     def maxfev(self, value: int) -> None:
         self._maxfev_set(value)
 
+    @nmch.records_command
     def _maxfev_set(self, value: int, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(nmu.type_error_str(value, "maxfev", "int"))
@@ -248,6 +250,7 @@ class NMToolFit(NMTool):
         return self.__p0
 
     @p0.setter
+    @nmch.records_command
     def p0(self, value: dict | None) -> None:
         if value is not None and not isinstance(value, dict):
             raise TypeError(nmu.type_error_str(value, "p0", "dict or None"))
@@ -261,6 +264,7 @@ class NMToolFit(NMTool):
         return self.__sigma
 
     @sigma.setter
+    @nmch.records_command
     def sigma(self, value: np.ndarray | None) -> None:
         if value is not None and not isinstance(value, np.ndarray):
             raise TypeError(nmu.type_error_str(value, "sigma", "numpy ndarray or None"))
@@ -278,6 +282,7 @@ class NMToolFit(NMTool):
     def x_origin(self, value: float) -> None:
         self._x_origin_set(value)
 
+    @nmch.records_command
     def _x_origin_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "x_origin", "float"))
@@ -293,6 +298,7 @@ class NMToolFit(NMTool):
         return self.__param_names
 
     @param_names.setter
+    @nmch.records_command
     def param_names(self, value: dict | None) -> None:
         if value is not None and not isinstance(value, dict):
             raise TypeError(nmu.type_error_str(value, "param_names", "dict or None"))
@@ -309,6 +315,7 @@ class NMToolFit(NMTool):
     def results_errors(self, value: bool) -> None:
         self._results_errors_set(value)
 
+    @nmch.records_command
     def _results_errors_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_errors", "bool"))
@@ -325,6 +332,7 @@ class NMToolFit(NMTool):
     def results_residuals(self, value: bool) -> None:
         self._results_residuals_set(value)
 
+    @nmch.records_command
     def _results_residuals_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_residuals", "bool"))
@@ -341,6 +349,7 @@ class NMToolFit(NMTool):
     def results_fit_array(self, value: bool) -> None:
         self._results_fit_array_set(value)
 
+    @nmch.records_command
     def _results_fit_array_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_fit_array", "bool"))
@@ -357,6 +366,7 @@ class NMToolFit(NMTool):
     def results_fit_npts(self, value: int) -> None:
         self._results_fit_npts_set(value)
 
+    @nmch.records_command
     def _results_fit_npts_set(self, value: int, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(nmu.type_error_str(value, "results_fit_npts", "int"))

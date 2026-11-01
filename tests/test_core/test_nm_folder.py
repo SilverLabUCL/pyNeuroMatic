@@ -1208,7 +1208,9 @@ class TestNMFolderCommandHistory(NMFolderTestBase):
     def test_new_dataseries_uses_nm_cmd_path(self):
         self.folder.new_dataseries("Wave")
         cmd = self._last_command()
-        self.assertIn('folders["%s"]' % self.folder.name, cmd)
+        # The folder named once (#437)
+        self.assertTrue(cmd.startswith(
+            'nm.folders["%s"].new_dataseries(\'Wave\'' % self.folder.name), cmd)
 
     def test_sync_dataseries_recorded(self):
         self.folder.sync_dataseries("Record")

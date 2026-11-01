@@ -940,8 +940,6 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def __init__(self, manager: NMManager | None = None, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._manager = manager or NMManager(quiet=True)
-        # Python commands for what is done, for the History panel's Commands
-        self._manager.command_history.enabled = True
         # Tables show NaN as the general settings say
         table_format.set_nan_mode(self._manager.settings.table_nan)
         self.selection_model = SelectionModel(self._manager, self)
@@ -1254,6 +1252,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.history_panel = HistoryPanel(history_widget)
         self.history_panel.add("message", f"Welcome to {APP_NAME}")
         self.history_panel.attach()
+        self._start_command_history()
         history_layout.addWidget(self.history_panel)
 
         dock = QtWidgets.QDockWidget("History", self)
@@ -1267,6 +1266,16 @@ class NMAppWindow(QtWidgets.QMainWindow):
         # height; drag its edge to see more
         self.resizeDocks([dock], [180], QtCore.Qt.Orientation.Vertical)
         self.history_dock = dock
+
+    def _start_command_history(self) -> None:
+        """Record Python commands for what is done (the History panel's
+        Commands), starting with the manager: "nm = NMManager()"."""
+        history = self._manager.command_history
+        if history.enabled:
+            return  # already recording (e.g. NMManager(command_history=True))
+        history.enabled = True
+        if len(history) == 0:
+            history.add("%s = NMManager()" % history.nm_name)
 
     def _on_tool_selected(self, tool_name: str) -> None:
         self.current_tool_name = tool_name

@@ -115,6 +115,7 @@ class NMToolPulse(NMTool):
     def n_points(self, value: int) -> None:
         self._n_points_set(value)
 
+    @nmch.records_command
     def _n_points_set(self, value: int, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(nmu.type_error_str(value, "n_points", "int"))
@@ -133,6 +134,7 @@ class NMToolPulse(NMTool):
     def xstart(self, value: float) -> None:
         self._xstart_set(value)
 
+    @nmch.records_command
     def _xstart_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xstart", "float"))
@@ -149,6 +151,7 @@ class NMToolPulse(NMTool):
     def xdelta(self, value: float) -> None:
         self._xdelta_set(value)
 
+    @nmch.records_command
     def _xdelta_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xdelta", "float"))
@@ -167,6 +170,7 @@ class NMToolPulse(NMTool):
     def prefix(self, value: str) -> None:
         self._prefix_set(value)
 
+    @nmch.records_command
     def _prefix_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "prefix", "string"))
@@ -185,6 +189,7 @@ class NMToolPulse(NMTool):
     def chan(self, value: str) -> None:
         self._chan_set(value)
 
+    @nmch.records_command
     def _chan_set(self, value: str, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, str):
             raise TypeError(nmu.type_error_str(value, "chan", "string"))

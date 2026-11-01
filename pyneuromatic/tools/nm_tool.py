@@ -104,6 +104,7 @@ class NMTool:
     def ignore_nans(self, value: bool) -> None:
         self._ignore_nans_set(value)
 
+    @nmch.records_command
     def _ignore_nans_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
@@ -120,6 +121,7 @@ class NMTool:
     def overwrite(self, value: bool) -> None:
         self._overwrite_set(value)
 
+    @nmch.records_command
     def _overwrite_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "overwrite", "boolean"))
@@ -136,6 +138,7 @@ class NMTool:
     def results_to_history(self, value: bool) -> None:
         self._results_to_history_set(value)
 
+    @nmch.records_command
     def _results_to_history_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
@@ -154,6 +157,7 @@ class NMTool:
     def results_to_cache(self, value: bool) -> None:
         self._results_to_cache_set(value)
 
+    @nmch.records_command
     def _results_to_cache_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
@@ -172,6 +176,7 @@ class NMTool:
     def results_to_numpy(self, value: bool) -> None:
         self._results_to_numpy_set(value)
 
+    @nmch.records_command
     def _results_to_numpy_set(self, value: bool, quiet: bool = nmc.QUIET) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
@@ -190,6 +195,7 @@ class NMTool:
     def xbgn(self, value: float) -> None:
         self._xbgn_set(value)
 
+    @nmch.records_command
     def _xbgn_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xbgn", "float"))
@@ -208,6 +214,7 @@ class NMTool:
     def xend(self, value: float) -> None:
         self._xend_set(value)
 
+    @nmch.records_command
     def _xend_set(self, value: float, quiet: bool = nmc.QUIET) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "xend", "float"))

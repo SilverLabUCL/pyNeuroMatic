@@ -92,7 +92,7 @@ class NMDataSeries(NMObject):
         self.__notes = NMNotes()  # e.g. what the series recorded
         # Empty epoch sets to start with; SetX excludes its epochs from runs
         for set_name in DEFAULT_EPOCH_SETS:
-            self.__epoch_container.sets.add(set_name, quiet=True)
+            self.__epoch_container.sets.add(set_name, quiet=True, history=False)
 
     # override
     def __eq__(

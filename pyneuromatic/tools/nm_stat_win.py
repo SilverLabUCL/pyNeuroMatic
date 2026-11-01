@@ -43,7 +43,7 @@ from pyneuromatic.tools.nm_stat_func import (
     FUNC_NAMES_BSLN,
     _stat_func_from_dict,
 )
-from pyneuromatic.core.nm_command_history import add_nm_command
+from pyneuromatic.core.nm_command_history import add_nm_command, records_command
 from pyneuromatic.tools.nm_stat_utilities import stat
 from pyneuromatic.core.nm_data import NMData
 import pyneuromatic.core.nm_history as nmh
@@ -190,6 +190,7 @@ class NMStatWin:
         return self.__on
 
     @on.setter
+    @records_command
     def on(self, on: bool) -> None:
         self._on_set(on)
         add_nm_command("%s[%r].on = %r" % (self._nm_path, self._name, self.__on))
@@ -210,6 +211,7 @@ class NMStatWin:
         return self.__func.to_dict() if self.__func else {}
 
     @func.setter
+    @records_command
     def func(self, func: dict | str) -> None:
         self._func_set(func)
         if self.__func is not None:
@@ -255,6 +257,7 @@ class NMStatWin:
         return self.__xbgn
 
     @xbgn.setter
+    @records_command
     def xbgn(self, xbgn: float) -> None:
         self._x_set("xbgn", xbgn)
         add_nm_command("%s[%r].xbgn = %r" % (self._nm_path, self._name, self.__xbgn))
@@ -298,6 +301,7 @@ class NMStatWin:
         return self.__xend
 
     @xend.setter
+    @records_command
     def xend(self, xend: float) -> None:
         self._x_set("xend", xend)
         add_nm_command("%s[%r].xend = %r" % (self._nm_path, self._name, self.__xend))
@@ -309,6 +313,7 @@ class NMStatWin:
         return self.__bsln_on
 
     @bsln_on.setter
+    @records_command
     def bsln_on(self, on: bool) -> None:
         self._bsln_on_set(on)
         add_nm_command("%s[%r].bsln_on = %r" % (self._nm_path, self._name, self.__bsln_on))
@@ -329,6 +334,7 @@ class NMStatWin:
         return self.__bsln_func
 
     @bsln_func.setter
+    @records_command
     def bsln_func(self, func: dict | str) -> None:
         self._bsln_func_set(func)
         if self.__bsln_func:
@@ -394,6 +400,7 @@ class NMStatWin:
         return self.__bsln_xbgn
 
     @bsln_xbgn.setter
+    @records_command
     def bsln_xbgn(self, xbgn: float) -> None:
         self._x_set("bsln_xbgn", xbgn)
         add_nm_command("%s[%r].bsln_xbgn = %r" % (self._nm_path, self._name, self.__bsln_xbgn))
@@ -405,6 +412,7 @@ class NMStatWin:
         return self.__bsln_xend
 
     @bsln_xend.setter
+    @records_command
     def bsln_xend(self, xend: float) -> None:
         self._x_set("bsln_xend", xend)
         add_nm_command("%s[%r].bsln_xend = %r" % (self._nm_path, self._name, self.__bsln_xend))
@@ -520,6 +528,7 @@ class NMStatWinContainer:
         self._count = 0
         self.selected_name: str | None = None
 
+    @records_command
     def new(self, quiet: bool = nmc.QUIET) -> NMStatWin:
         """Create, register, and return a new NMStatWin with an auto-name."""
         name = "%s%d" % (self._prefix, self._count)

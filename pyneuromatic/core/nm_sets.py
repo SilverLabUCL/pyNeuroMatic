@@ -25,6 +25,7 @@ from typing import Callable, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from pyneuromatic.core.nm_object import NMObject
 
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_configurations as nmc
@@ -94,6 +95,32 @@ class NMSets:
             return self._parent.path_str + ".sets"
         return self._name
 
+    @property
+    def _nm_cmd_path(self) -> str | None:
+        """Command-history path for these sets: e.g. 'folders["Demo"].data.sets'
+        (data sets) or 'folders["Demo"].dataseries["Rec"].epochs.sets'
+        (epoch sets); None when they aren't in the manager (not recorded)."""
+        parent = self._parent
+        path = getattr(parent, "_nm_cmd_path", None)
+        if path is None:  # an epoch container: through its data series
+            path = getattr(parent, "_epochs_cmd_path", None)
+            if path is None:
+                return None
+        return path + ".sets"
+
+    def _record(self, call: str) -> None:
+        """Record a command on these sets, e.g. "add('Set1', ['E0'])"."""
+        path = self._nm_cmd_path
+        if path is not None:
+            nmch.add_nm_command("%s.%s" % (path, call))
+
+    def _item_keys(self, olist: Any) -> list[str]:
+        """The item names of *olist* (a name, an NMObject or a list)."""
+        if olist is None:
+            return []
+        items = olist if isinstance(olist, (list, tuple)) else [olist]
+        return [self._to_key(item) for item in items]
+
     def copy(self) -> NMSets:
         return copy.deepcopy(self)
 
@@ -112,12 +139,18 @@ class NMSets:
     def __getitem__(self, key: str) -> Any:
         return self.get_items(key)
 
+    @nmch.records_command
     def __setitem__(
         self,
         key: str,
         olist: str | list[str] | tuple[str, str, str],
     ) -> None:
         self._setitem(key, olist, add=False)
+        path = self._nm_cmd_path
+        if path is not None:  # e.g. sets['Set1'] = ['RecordA0']
+            value = (repr(olist) if NMSets.tuple_is_equation(olist)
+                     else nmu.names_repr(self._item_keys(olist)))
+            nmch.add_nm_command("%s[%r] = %s" % (path, key, value))
 
     def __delitem__(self, key: str) -> None:
         self.pop(key)
@@ -230,13 +263,16 @@ class NMSets:
                 return False
         return True
 
+    @nmch.records_command
     def pop(self, key: str, quiet: bool = nmc.QUIET) -> Any:  # type: ignore[override]
         key = self._getkey(key)
         value = self._map.pop(key)
         self._notes.pop(key, None)
         nmh.history("removed set '%s'" % key, path=self.path_str, quiet=quiet)
+        self._record("pop(%r)" % key)
         return value
 
+    @nmch.records_command
     def clear(self, quiet: bool = nmc.QUIET) -> None:
         if len(self._map) == 0:
             return
@@ -246,6 +282,7 @@ class NMSets:
         nmh.history(
             "cleared all sets: %s" % names, path=self.path_str, quiet=quiet
         )
+        self._record("clear()")
 
     # Key lookup helpers
 
@@ -388,22 +425,29 @@ class NMSets:
 
         self._map[actual_key] = deduped
 
+    @nmch.records_command
     def add(
         self,
         key: str,
         olist: Any = None,
         quiet: bool = nmc.QUIET,
+        history: bool = True,
     ) -> None:
+        """Add *olist* to set *key* (made if new). *history* False for no
+        history (e.g. a series' default sets, made as it is built)."""
         if olist is None:
             olist = []
         self._setitem(key, olist, add=True)
         actual_key = self._getkey(key)
-        nmh.history(
-            "set '%s': added %s" % (actual_key, self._map[actual_key]),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        if history:
+            nmh.history(
+                "set '%s': added %s" % (actual_key, self._map[actual_key]),
+                path=self.path_str,
+                quiet=quiet,
+            )
+            self._record("add(%r, %s)" % (actual_key, nmu.names_repr(self._item_keys(olist))))
 
+    @nmch.records_command
     def define_and(
         self, name: str, set1: str, set2: str, quiet: bool = nmc.QUIET
     ) -> str:
@@ -415,8 +459,10 @@ class NMSets:
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("define_and(%r, %r, %r)" % (actual_key, set1, set2))
         return actual_key
 
+    @nmch.records_command
     def define_or(
         self, name: str, set1: str, set2: str, quiet: bool = nmc.QUIET
     ) -> str:
@@ -428,8 +474,10 @@ class NMSets:
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("define_or(%r, %r, %r)" % (actual_key, set1, set2))
         return actual_key
 
+    @nmch.records_command
     def remove(
         self,
         key: str,
@@ -479,6 +527,7 @@ class NMSets:
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("remove(%r, %s)" % (key, nmu.names_repr(removed)))
 
         # Resolve removed keys to NMObjects for return value
         return self._resolve_keys(removed)
@@ -529,12 +578,15 @@ class NMSets:
                 return False
         return True
 
+    @nmch.records_command
     def new(self, name: str | None = None, quiet: bool = nmc.QUIET) -> tuple[str, list]:
         key = self._newkey(name)
         self._map[key] = []
         nmh.history("new set '%s'" % key, path=self.path_str, quiet=quiet)
+        self._record("new(%r)" % key)
         return (key, [])
 
+    @nmch.records_command
     def duplicate(
         self, name: str, newname: str | None = None, quiet: bool = nmc.QUIET
     ) -> tuple[str, Any]:
@@ -558,8 +610,10 @@ class NMSets:
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("duplicate(%r, %r)" % (key, newkey))
         return (newkey, self._map[newkey])
 
+    @nmch.records_command
     def rename(self, name: str, newname: str | None = None, quiet: bool = nmc.QUIET) -> str:
         key = self._getkey(name)
         newkey = self._newkey(newname)
@@ -586,8 +640,10 @@ class NMSets:
             path=self.path_str,
             quiet=quiet,
         )
+        self._record("rename(%r, %r)" % (key, newkey))
         return newkey
 
+    @nmch.records_command
     def reorder(self, name_order: list[str], quiet: bool = nmc.QUIET) -> None:
         if not isinstance(name_order, list):
             raise TypeError(nmu.type_error_str(name_order, "newkeyorder", "list"))
@@ -605,6 +661,7 @@ class NMSets:
         self._map.update(new_map)
         if list(self._map.keys()) != old_keys:
             nmh.history("reordered sets", path=self.path_str, quiet=quiet)
+            self._record("reorder(%r)" % (list(self._map.keys()),))
 
     def notes(self, key: str) -> NMNotes:
         """Notes for set *key* (e.g. what it contains); kept when the set is
@@ -620,11 +677,13 @@ class NMSets:
             self._notes[actual] = NMNotes()
         return self._notes[actual]
 
+    @nmch.records_command
     def empty(self, key: str, quiet: bool = nmc.QUIET) -> None:
         """Clear the contents of a set, converting equations to empty lists."""
         key = self._getkey(key)
         self._map[key] = []
         nmh.history("emptied set '%s'" % key, path=self.path_str, quiet=quiet)
+        self._record("empty(%r)" % key)
 
     def empty_all(self) -> None:
         """Clear all sets, converting equations to empty lists."""

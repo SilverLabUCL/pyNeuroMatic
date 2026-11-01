@@ -344,10 +344,12 @@ class TestNMGroupsNotes(unittest.TestCase):
         self.assertEqual(self.g.group_numbers, [0, 1, 2])
         self.assertEqual(self.g.notes(1).note, "-80 mV steps")
 
-    def test_an_undescribed_group_still_vanishes(self):
+    def test_an_emptied_group_is_kept_until_deleted(self):
         self.g.notes(1)  # looked at, nothing added
         for name in self.g.get_items(1):
             self.g.unassign(name, quiet=QUIET)
+        self.assertEqual(self.g.group_numbers, [0, 1, 2])  # kept, empty (#437)
+        self.g.delete_group(1, quiet=QUIET)
         self.assertEqual(self.g.group_numbers, [0, 2])
 
     def test_delete_group_drops_notes(self):
@@ -429,8 +431,26 @@ class TestNMGroupsGroupNumbers(unittest.TestCase):
 
     def test_group_numbers_after_unassign(self):
         g, _ = _make_groups(n=3)   # groups 0, 1, 2
-        g.unassign("E2", quiet=QUIET)   # group 2 now empty
-        self.assertEqual(g.group_numbers, [0, 1])
+        g.unassign("E2", quiet=QUIET)   # group 2 now empty: kept (#437)
+        self.assertEqual(g.group_numbers, [0, 1, 2])
+        self.assertEqual(g.get_items(2), [])
+
+    def test_group_numbers_after_moving_the_last_item(self):
+        g, _ = _make_groups(n=3)   # groups 0, 1, 2
+        g.assign("E2", 0, quiet=QUIET)   # group 2 now empty: kept
+        self.assertEqual(g.group_numbers, [0, 1, 2])
+
+    def test_clear_group_keeps_the_group(self):
+        g, _ = _make_groups(n=6)   # E0, E3 -> 0; E1, E4 -> 1; E2, E5 -> 2
+        g.clear_group(1, quiet=QUIET)
+        self.assertEqual(g.group_numbers, [0, 1, 2])
+        self.assertEqual(g.get_items(1), [])
+        self.assertEqual(g.get_group("E1"), None)
+        g.clear_group([0, 2], quiet=QUIET)
+        self.assertEqual(g.group_numbers, [0, 1, 2])
+        self.assertEqual(len(g), 0)
+        with self.assertRaises(KeyError):
+            g.clear_group(7, quiet=QUIET)
 
 
 class TestNMGroupsNGroups(unittest.TestCase):
@@ -441,8 +461,8 @@ class TestNMGroupsNGroups(unittest.TestCase):
 
     def test_n_groups_after_unassign(self):
         g, _ = _make_groups(n=3)   # groups 0, 1, 2 each have 1 member
-        g.unassign("E2", quiet=QUIET)   # group 2 now empty
-        self.assertEqual(g.n_groups, 2)
+        g.unassign("E2", quiet=QUIET)   # group 2 now empty: kept (#437)
+        self.assertEqual(g.n_groups, 3)
 
     def test_n_groups_one_group(self):
         g = NMGroups()

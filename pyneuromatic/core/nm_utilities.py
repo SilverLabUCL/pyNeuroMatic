@@ -740,3 +740,55 @@ def prompt_yes_no(
     if a in ok:
         return a[:1]  # 'y', 'n' or 'c'
     return "error"
+
+
+def names_repr(names: list[str]) -> str:
+    """*names* as Python for a command: the list, or (when shorter) numbered
+    names written as ranges, so a long list stays short and still runs::
+
+        names_repr(["E0", "E1", "E2"])           # "['E0', 'E1', 'E2']"
+        names_repr([f"E{i}" for i in range(1000)])
+        # '[f"E{i}" for i in range(1000)]'
+        names_repr([f"E{i}" for i in range(10)] + ["E15"])
+        # '[f"E{i}" for i in range(10)] + [\'E15\']'
+
+    Names must share a prefix and end in a number to be written as ranges;
+    a run of 3 or more evenly spaced numbers becomes a range.
+    """
+    import re
+
+    plain = repr(list(names))
+    parsed = [re.fullmatch(r"(.*?)(\d+)", name) if isinstance(name, str) else None
+              for name in names]
+    if len(names) < 3 or not all(parsed) or "{" in parsed[0].group(1) \
+            or len({m.group(1) for m in parsed}) != 1 \
+            or any(m.group(2) != str(int(m.group(2))) for m in parsed):  # e.g. "E01"
+        return plain
+    prefix = parsed[0].group(1)
+    numbers = [int(m.group(2)) for m in parsed]
+
+    parts: list[str] = []
+    singles: list[str] = []
+    i = 0
+    while i < len(numbers):
+        step = numbers[i + 1] - numbers[i] if i + 1 < len(numbers) else 0
+        j = i + 1
+        while step > 0 and j < len(numbers) and numbers[j] - numbers[j - 1] == step:
+            j += 1
+        if step > 0 and j - i >= 3:  # a run: a range
+            if singles:
+                parts.append(repr(singles))
+                singles = []
+            first, stop = numbers[i], numbers[j - 1] + 1
+            args = (str(stop) if first == 0 and step == 1
+                    else "%d, %d" % (first, stop) if step == 1
+                    else "%d, %d, %d" % (first, stop, step))
+            parts.append('[f"%s{i}" for i in range(%s)]' % (prefix, args))
+            i = j
+        else:
+            singles.append(names[i])
+            i += 1
+    if singles:
+        parts.append(repr(singles))
+    compact = " + ".join(parts)
+    return compact if len(compact) < len(plain) else plain

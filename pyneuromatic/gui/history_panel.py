@@ -8,6 +8,8 @@ handler) and from the GUI (selection changes, tool runs). Each has a kind:
 - warning / error: alerts and errors, in amber and red
 - selection: the selection, after each change
 - tool: a tool run, e.g. "Stats: Complete → Stats_Record_A_S1_0"
+- inner: commands and notes of calls made inside a command (DEBUG; for
+  debugging, off by default and kept only while shown)
 
 The panel only shows the history; tools and the core write it.
 """
@@ -20,7 +22,7 @@ from collections import deque
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-KINDS = ("command", "message", "warning", "error", "selection", "tool")
+KINDS = ("command", "message", "warning", "error", "selection", "tool", "inner")
 LABELS = {
     "command": "Commands",
     "message": "Messages",
@@ -28,6 +30,7 @@ LABELS = {
     "error": "Errors",
     "selection": "Selection",
     "tool": "Tool Runs",
+    "inner": "Inner Calls",
 }
 TIPS = {
     "command": "Python commands for what was done",
@@ -36,6 +39,8 @@ TIPS = {
     "error": "Errors, e.g. a tool run that failed",
     "selection": "The selection, after each change",
     "tool": "Tool runs and where their results went",
+    "inner": "Commands and notes of calls made inside a command, for debugging "
+             "(kept from when this is turned on)",
 }
 COLORS = {"warning": "#b26a00", "error": "#c62828"}
 # The most recent entries kept (about 30 MB for 100,000); older ones go
@@ -67,7 +72,9 @@ class HistoryEntry:
 
 def entry_from_record(record: logging.LogRecord) -> HistoryEntry:
     """A history log record as an entry: "path: message", by kind."""
-    if getattr(record, "kind", "") == "command":
+    if record.levelno < logging.INFO:  # made inside a command
+        kind = "inner"
+    elif getattr(record, "kind", "") == "command":
         kind = "command"
     elif record.levelno >= logging.ERROR:
         kind = "error"
@@ -143,9 +150,10 @@ class HistoryModel(QtCore.QAbstractListModel):
 
     def text(self, row: int) -> str:
         entry = self._entries[row]
+        text = "    " + entry.text if entry.kind == "inner" else entry.text  # under its command
         if self.show_time:
-            return f"{entry.time:%H:%M:%S}  {entry.text}"
-        return entry.text
+            return f"{entry.time:%H:%M:%S}  {text}"
+        return text
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:  # noqa: N802
         return 0 if parent.isValid() else len(self._entries)
@@ -160,7 +168,7 @@ class HistoryModel(QtCore.QAbstractListModel):
         if role == Role.ForegroundRole:
             if kind in COLORS:
                 return QtGui.QBrush(QtGui.QColor(COLORS[kind]))
-            if kind == "selection":  # quieter
+            if kind in ("selection", "inner"):  # quieter
                 return QtWidgets.QApplication.palette().brush(QtGui.QPalette.ColorRole.PlaceholderText)
             return None
         if role == Role.FontRole and kind == "command":  # code
@@ -204,7 +212,7 @@ class HistoryPanel(QtWidgets.QWidget):
             button.setText(LABELS[kind])
             button.setToolTip(f"Show {LABELS[kind].lower()}: {TIPS[kind]}")
             button.setCheckable(True)
-            button.setChecked(True)
+            button.setChecked(kind != "inner")  # inner calls: for debugging
             button.toggled.connect(self._update_filter)
             row.addWidget(button)
             self.kind_buttons[kind] = button
@@ -268,6 +276,7 @@ class HistoryPanel(QtWidgets.QWidget):
         self._pending: list[HistoryEntry] = []
         self._counts = {"warning": 0, "error": 0}
         self._update_counts()
+        self.filter.set_kinds(self.shown_kinds())
 
     # --- entries -----------------------------------------------------------
 
@@ -276,6 +285,8 @@ class HistoryPanel(QtWidgets.QWidget):
         self.add_entry(HistoryEntry(datetime.datetime.now(), kind, text))
 
     def add_entry(self, entry: HistoryEntry) -> None:
+        if entry.kind == "inner" and not self.kind_buttons["inner"].isChecked():
+            return  # not kept while hidden, so they don't crowd out the rest
         if not self._pending:
             QtCore.QTimer.singleShot(0, self.flush)
         self._pending.append(entry)

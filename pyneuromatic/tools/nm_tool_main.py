@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from pyneuromatic.tools.nm_main_op import NMMainOp, NMMainOpAverage, op_from_name
 from pyneuromatic.tools.nm_tool import NMTool
+from pyneuromatic.core.nm_command_history import records_command
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_utilities as nmu
@@ -57,6 +58,7 @@ class NMToolMain(NMTool):
         return self._op
 
     @op.setter
+    @records_command
     def op(self, value: NMMainOp | str) -> None:
         """Set the current operation.
 

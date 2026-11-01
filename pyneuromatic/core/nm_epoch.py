@@ -209,6 +209,17 @@ class NMEpochContainer(NMObjectContainer):
         self.__groups = NMGroups(name=name + "Groups", parent=self)
         self.__run_group: int | None = None  # set when run_target = "group{N}"
 
+    @property
+    def _epochs_cmd_path(self) -> str | None:
+        """'folders["Demo"].dataseries["Rec"].epochs': the command-history path
+        for these epochs' sets and groups (the container itself records no
+        commands); None when the series isn't in the manager."""
+        series = self._parent
+        folder_path = getattr(getattr(series, "_parent", None), "_nm_cmd_path", None)
+        if folder_path is None or series is None:
+            return None
+        return '%s.dataseries["%s"].epochs' % (folder_path, series.name)
+
     # override, no super
     def content_type(self) -> str:
         return NMEpoch.__name__

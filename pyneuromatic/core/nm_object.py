@@ -124,7 +124,7 @@ class NMObject(object):
             e = nmu.type_error_str(name, "name", "string")
             raise TypeError(e)
 
-        self._name_set(newname=name, quiet=True)
+        self._name_set(newname=name, quiet=True, history=False)  # as it is built
 
     # children should override __deepcopy__ instead of copy()
     def copy(self) -> NMObject:
@@ -337,11 +337,15 @@ class NMObject(object):
         self,
         newname: str = "",
         quiet: bool = nmc.QUIET,
+        history: bool = True,
     ) -> None:
         """Set the name of this NMObject directly (bypasses container).
 
         :param newname: a new name for this NMObject
         :type newname: str
+        :param history: False for no history (e.g. naming an object as it
+            is built or copied; *quiet* only keeps it off the console)
+        :type history: bool
         :raises TypeError: If newname is not a string
         :raises ValueError: If newname is invalid
         :return: None
@@ -354,8 +358,9 @@ class NMObject(object):
             raise ValueError("newname: %s" % newname)
         oldname = self.__name
         self.__name = newname
-        h = nmh.history_change_str("name", oldname, self.__name)
-        nmh.history(h, path=self.path_str, quiet=quiet)
+        if history:
+            h = nmh.history_change_str("name", oldname, self.__name)
+            nmh.history(h, path=self.path_str, quiet=quiet)
 
     @property
     def _manager(self) -> NMManager | None:  # find NMManager of this NMObject

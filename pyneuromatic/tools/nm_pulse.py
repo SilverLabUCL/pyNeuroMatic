@@ -27,7 +27,7 @@ import numpy.random as _rng
 
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_history as nmh
-from pyneuromatic.core.nm_command_history import add_nm_command
+from pyneuromatic.core.nm_command_history import add_nm_command, records_command
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.tools.nm_pulse_func import (
     NMPulseFunc,
@@ -215,6 +215,7 @@ class NMPulse:
         return self._enabled
 
     @enabled.setter
+    @records_command
     def enabled(self, value: bool) -> None:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "enabled", "bool"))
@@ -236,6 +237,7 @@ class NMPulse:
         return self._func.name
 
     @pulse.setter
+    @records_command
     def pulse(self, value: str) -> None:
         self._pulse_set(value)
         add_nm_command("%s[%r].pulse = %r" % (self._nm_path, self._name, value))
@@ -259,6 +261,7 @@ class NMPulse:
         return self._epoch
 
     @epoch.setter
+    @records_command
     def epoch(self, value: int | str) -> None:
         self._epoch_set(value)
         add_nm_command("%s[%r].epoch = %r" % (self._nm_path, self._name, self._epoch))
@@ -286,6 +289,7 @@ class NMPulse:
         return self._epoch_delta
 
     @epoch_delta.setter
+    @records_command
     def epoch_delta(self, value: int) -> None:
         self._epoch_delta_set(value)
         add_nm_command(
@@ -325,6 +329,7 @@ class NMPulse:
         return self._amp
 
     @amp.setter
+    @records_command
     def amp(self, value: float) -> None:
         self._float_set("amp", value)
         add_nm_command("%s[%r].amp = %r" % (self._nm_path, self._name, self._amp))
@@ -334,6 +339,7 @@ class NMPulse:
         return self._onset
 
     @onset.setter
+    @records_command
     def onset(self, value: float) -> None:
         self._float_set("onset", value)
         add_nm_command("%s[%r].onset = %r" % (self._nm_path, self._name, self._onset))
@@ -343,6 +349,7 @@ class NMPulse:
         return self._duration
 
     @duration.setter
+    @records_command
     def duration(self, value: float) -> None:
         self._float_set("duration", value)
         add_nm_command("%s[%r].duration = %r" % (self._nm_path, self._name, self._duration))
@@ -352,6 +359,7 @@ class NMPulse:
         return self._amp_delta
 
     @amp_delta.setter
+    @records_command
     def amp_delta(self, value: float) -> None:
         self._float_set("amp_delta", value)
         add_nm_command(
@@ -363,6 +371,7 @@ class NMPulse:
         return self._onset_delta
 
     @onset_delta.setter
+    @records_command
     def onset_delta(self, value: float) -> None:
         self._float_set("onset_delta", value)
         add_nm_command(
@@ -374,6 +383,7 @@ class NMPulse:
         return self._duration_delta
 
     @duration_delta.setter
+    @records_command
     def duration_delta(self, value: float) -> None:
         self._float_set("duration_delta", value)
         add_nm_command(
@@ -385,6 +395,7 @@ class NMPulse:
         return self._amp_stdv
 
     @amp_stdv.setter
+    @records_command
     def amp_stdv(self, value: float) -> None:
         self._float_set("amp_stdv", value)
         add_nm_command(
@@ -396,6 +407,7 @@ class NMPulse:
         return self._onset_stdv
 
     @onset_stdv.setter
+    @records_command
     def onset_stdv(self, value: float) -> None:
         self._float_set("onset_stdv", value)
         add_nm_command(
@@ -407,6 +419,7 @@ class NMPulse:
         return self._duration_stdv
 
     @duration_stdv.setter
+    @records_command
     def duration_stdv(self, value: float) -> None:
         self._float_set("duration_stdv", value)
         add_nm_command(
@@ -419,6 +432,7 @@ class NMPulse:
         return self._n_pulses
 
     @n_pulses.setter
+    @records_command
     def n_pulses(self, value: int) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(nmu.type_error_str(value, "n_pulses", "int"))
@@ -433,6 +447,7 @@ class NMPulse:
         return self._interval
 
     @interval.setter
+    @records_command
     def interval(self, value: float) -> None:
         self._float_set("interval", value)
         add_nm_command("%s[%r].interval = %r" % (self._nm_path, self._name, self._interval))
@@ -443,6 +458,7 @@ class NMPulse:
         return self._interval_stdv
 
     @interval_stdv.setter
+    @records_command
     def interval_stdv(self, value: float) -> None:
         self._float_set("interval_stdv", value)
         add_nm_command(
@@ -455,6 +471,7 @@ class NMPulse:
         return self._interval_min
 
     @interval_min.setter
+    @records_command
     def interval_min(self, value: float) -> None:
         self._float_set("interval_min", value)
         add_nm_command(
@@ -467,6 +484,7 @@ class NMPulse:
         return self._interval_max
 
     @interval_max.setter
+    @records_command
     def interval_max(self, value: float) -> None:
         self._float_set("interval_max", value)
         add_nm_command(
@@ -479,6 +497,7 @@ class NMPulse:
         return self._interval_type
 
     @interval_type.setter
+    @records_command
     def interval_type(self, value: str) -> None:
         self._interval_type_set(value)
         add_nm_command(
@@ -491,6 +510,7 @@ class NMPulse:
         return self._seed
 
     @seed.setter
+    @records_command
     def seed(self, value: int | None) -> None:
         if value is not None:
             if isinstance(value, bool) or not isinstance(value, int):
@@ -508,6 +528,7 @@ class NMPulse:
         return self._train_duration
 
     @train_duration.setter
+    @records_command
     def train_duration(self, value: float) -> None:
         self._float_set("train_duration", value)
         add_nm_command(
@@ -520,6 +541,7 @@ class NMPulse:
         return self._binomial_n
 
     @binomial_n.setter
+    @records_command
     def binomial_n(self, value: int) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(nmu.type_error_str(value, "binomial_n", "int"))
@@ -535,6 +557,7 @@ class NMPulse:
         return self._binomial_p
 
     @binomial_p.setter
+    @records_command
     def binomial_p(self, value: float) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError(nmu.type_error_str(value, "binomial_p", "float"))
@@ -554,6 +577,7 @@ class NMPulse:
         return self._rp_taur
 
     @rp_taur.setter
+    @records_command
     def rp_taur(self, value: float) -> None:
         self._float_set("rp_taur", value)
         add_nm_command("%s[%r].rp_taur = %g" % (self._nm_path, self._name, self._rp_taur))
@@ -564,6 +588,7 @@ class NMPulse:
         return self._rp_rinf
 
     @rp_rinf.setter
+    @records_command
     def rp_rinf(self, value: float) -> None:
         self._float_set("rp_rinf", value)
         add_nm_command("%s[%r].rp_rinf = %g" % (self._nm_path, self._name, self._rp_rinf))
@@ -574,6 +599,7 @@ class NMPulse:
         return self._rp_rmin
 
     @rp_rmin.setter
+    @records_command
     def rp_rmin(self, value: float) -> None:
         self._float_set("rp_rmin", value)
         add_nm_command("%s[%r].rp_rmin = %g" % (self._nm_path, self._name, self._rp_rmin))
@@ -584,6 +610,7 @@ class NMPulse:
         return self._rp_pinf
 
     @rp_pinf.setter
+    @records_command
     def rp_pinf(self, value: float) -> None:
         self._float_set("rp_pinf", value)
         add_nm_command("%s[%r].rp_pinf = %g" % (self._nm_path, self._name, self._rp_pinf))
@@ -594,6 +621,7 @@ class NMPulse:
         return self._rp_pmax
 
     @rp_pmax.setter
+    @records_command
     def rp_pmax(self, value: float) -> None:
         self._float_set("rp_pmax", value)
         add_nm_command("%s[%r].rp_pmax = %g" % (self._nm_path, self._name, self._rp_pmax))
@@ -604,6 +632,7 @@ class NMPulse:
         return self._rp_taup
 
     @rp_taup.setter
+    @records_command
     def rp_taup(self, value: float) -> None:
         self._float_set("rp_taup", value)
         add_nm_command("%s[%r].rp_taup = %g" % (self._nm_path, self._name, self._rp_taup))
@@ -614,6 +643,7 @@ class NMPulse:
         return self._rp_pscale
 
     @rp_pscale.setter
+    @records_command
     def rp_pscale(self, value: float) -> None:
         self._float_set("rp_pscale", value)
         add_nm_command("%s[%r].rp_pscale = %g" % (self._nm_path, self._name, self._rp_pscale))
@@ -624,6 +654,7 @@ class NMPulse:
         return self._df_taud
 
     @df_taud.setter
+    @records_command
     def df_taud(self, value: float) -> None:
         self._float_set("df_taud", value)
         add_nm_command("%s[%r].df_taud = %g" % (self._nm_path, self._name, self._df_taud))
@@ -634,6 +665,7 @@ class NMPulse:
         return self._df_dinf
 
     @df_dinf.setter
+    @records_command
     def df_dinf(self, value: float) -> None:
         self._float_set("df_dinf", value)
         add_nm_command("%s[%r].df_dinf = %g" % (self._nm_path, self._name, self._df_dinf))
@@ -644,6 +676,7 @@ class NMPulse:
         return self._df_dmin
 
     @df_dmin.setter
+    @records_command
     def df_dmin(self, value: float) -> None:
         self._float_set("df_dmin", value)
         add_nm_command("%s[%r].df_dmin = %g" % (self._nm_path, self._name, self._df_dmin))
@@ -654,6 +687,7 @@ class NMPulse:
         return self._df_dscale
 
     @df_dscale.setter
+    @records_command
     def df_dscale(self, value: float) -> None:
         self._float_set("df_dscale", value)
         add_nm_command("%s[%r].df_dscale = %g" % (self._nm_path, self._name, self._df_dscale))
@@ -664,6 +698,7 @@ class NMPulse:
         return self._df_tauf
 
     @df_tauf.setter
+    @records_command
     def df_tauf(self, value: float) -> None:
         self._float_set("df_tauf", value)
         add_nm_command("%s[%r].df_tauf = %g" % (self._nm_path, self._name, self._df_tauf))
@@ -674,6 +709,7 @@ class NMPulse:
         return self._df_finf
 
     @df_finf.setter
+    @records_command
     def df_finf(self, value: float) -> None:
         self._float_set("df_finf", value)
         add_nm_command("%s[%r].df_finf = %g" % (self._nm_path, self._name, self._df_finf))
@@ -684,6 +720,7 @@ class NMPulse:
         return self._df_fmax
 
     @df_fmax.setter
+    @records_command
     def df_fmax(self, value: float) -> None:
         self._float_set("df_fmax", value)
         add_nm_command("%s[%r].df_fmax = %g" % (self._nm_path, self._name, self._df_fmax))
@@ -694,6 +731,7 @@ class NMPulse:
         return self._df_fscale
 
     @df_fscale.setter
+    @records_command
     def df_fscale(self, value: float) -> None:
         self._float_set("df_fscale", value)
         add_nm_command("%s[%r].df_fscale = %g" % (self._nm_path, self._name, self._df_fscale))
@@ -712,6 +750,7 @@ class NMPulse:
         return self._amp_dist
 
     @amp_dist.setter
+    @records_command
     def amp_dist(self, value: str) -> None:
         self._dist_set("amp_dist", value)
         add_nm_command("%s[%r].amp_dist = %r" % (self._nm_path, self._name, self._amp_dist))
@@ -727,6 +766,7 @@ class NMPulse:
         return self._onset_dist
 
     @onset_dist.setter
+    @records_command
     def onset_dist(self, value: str) -> None:
         self._dist_set("onset_dist", value)
         add_nm_command("%s[%r].onset_dist = %r" % (self._nm_path, self._name, self._onset_dist))
@@ -743,6 +783,7 @@ class NMPulse:
         return self._duration_dist
 
     @duration_dist.setter
+    @records_command
     def duration_dist(self, value: str) -> None:
         self._dist_set("duration_dist", value)
         add_nm_command(
@@ -784,6 +825,7 @@ class NMPulse:
         return self._intervals
 
     @intervals.setter
+    @records_command
     def intervals(self, value: np.ndarray | list | None) -> None:
         self._intervals_set(value)
         n = len(self._intervals) if self._intervals is not None else 0
@@ -1160,6 +1202,7 @@ class NMPulseContainer:
         self._pulses: dict[str, NMPulse] = {}
         self._count: int = 0
 
+    @records_command
     def new(
         self,
         config: dict | None = None,
