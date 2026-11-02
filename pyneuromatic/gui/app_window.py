@@ -984,6 +984,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         )
         self.settings_action.setMenuRole(QtGui.QAction.MenuRole.PreferencesRole)
         self.settings_action.triggered.connect(lambda: self.open_settings())
+        self.export_history_action = file_menu.addAction("Export History…")
+        self.export_history_action.setToolTip("Save the commands as a Python script")
+        self.export_history_action.triggered.connect(lambda: self.export_history())
         quit_action = file_menu.addAction("Quit")
         quit_action.setShortcut(QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Quit))
         quit_action.triggered.connect(self.close)
@@ -1286,7 +1289,70 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if action is not None:
             action.setChecked(True)  # View › the tool, as the rail
 
+    def has_session_to_lose(self) -> bool:
+        """True when quitting would lose something: a folder, or commands
+        recorded since the start (beyond "nm = NMManager()")."""
+        if len(self._manager.folders) > 0:
+            return True
+        history = self._manager.command_history
+        return history.enabled and len(history) > 1
+
+    def export_history(self) -> bool:
+        """Save the command history as a Python script (asks where); False
+        if not saved (cancelled)."""
+        path = self._export_history_path()
+        if not path:
+            return False
+        self._manager.command_history.to_script(path)
+        return True
+
+    def _export_history_path(self) -> str:
+        """Where to save the history script ("" if cancelled; replaced in tests)."""
+        path, _filter = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export History", "pyneuromatic_history.py", "Python script (*.py)")
+        return path
+
+    def _may_quit(self) -> bool:
+        """Ask before quitting, if set to and there is something to lose (#445)."""
+        settings = self._manager.settings
+        if not settings.confirm_quit or not self.has_session_to_lose():
+            return True
+        choice, dont_ask = self._ask_quit()
+        if choice == "cancel" or (choice == "export" and not self.export_history()):
+            return False
+        if dont_ask:
+            settings.confirm_quit = False
+            settings.save_user()
+        return True
+
+    def _ask_quit(self) -> tuple[str, bool]:
+        """The quit question: ("quit", "export" or "cancel", don't ask
+        again). Replaced in tests."""
+        box = QtWidgets.QMessageBox(self)
+        box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+        box.setWindowTitle(f"Quit {APP_NAME}")
+        box.setText(f"Quit {APP_NAME}?")
+        box.setInformativeText("Data and history not saved will be lost.")
+        quit_button = box.addButton("Quit", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
+        export_button = box.addButton("Export History…",
+                                      QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        export_button.setToolTip("Save the commands as a Python script, then quit")
+        cancel_button = box.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(cancel_button)
+        box.setEscapeButton(cancel_button)
+        dont_ask = QtWidgets.QCheckBox("Don't ask again", box)
+        box.setCheckBox(dont_ask)
+        box.exec()
+        clicked = box.clickedButton()
+        choice = ("quit" if clicked is quit_button
+                  else "export" if clicked is export_button else "cancel")
+        return choice, dont_ask.isChecked()
+
     def closeEvent(self, event) -> None:
+        # The close button, Quit and Cmd+Q all come here
+        if not self._may_quit():
+            event.ignore()
+            return
         self.history_panel.detach()  # the history log no longer writes here
         # Tear pyqtgraph views down before Qt deletes them, so a queued paint
         # event never reaches a half-deleted plot (this crashed the GUI tests)

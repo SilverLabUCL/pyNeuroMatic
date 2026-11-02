@@ -43,12 +43,15 @@ class NMSettings(NMToolConfig):
     Parameters:
         table_nan: How tables show NaN values: ``"NaN"``, ``"NaN (grey)"``
             (shown in light grey) or ``"blank"`` (an empty cell).
+        confirm_quit: Ask before quitting when the session has data or
+            history to lose.
     """
 
     _TOML_TYPE = "nm_settings"
     _schema = {
         "table_nan": {"type": str, "default": TABLE_NAN_TEXT,
                       "choices": [TABLE_NAN_TEXT, TABLE_NAN_GREY, TABLE_NAN_BLANK]},
+        "confirm_quit": {"type": bool, "default": True},
     }
 
     def __init__(self) -> None:
