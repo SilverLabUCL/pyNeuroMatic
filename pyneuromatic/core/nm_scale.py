@@ -86,6 +86,11 @@ class NMScaleY:
             return self._parent.path_str + "." + self._path_suffix
         return self._path_suffix
 
+    @property
+    def history_path(self) -> str:
+        parent = getattr(self._parent, "history_path", None)
+        return parent + "." + self._path_suffix if parent else self._path_suffix
+
     # --- label ---
 
     @property
@@ -111,7 +116,7 @@ class NMScaleY:
         if log:
             nmh.history(
                 "set label='%s'" % value,
-                path=self.path_str,
+                path=self.history_path,
                 quiet=quiet,
             )
 
@@ -140,7 +145,7 @@ class NMScaleY:
         if log:
             nmh.history(
                 "set units='%s'" % value,
-                path=self.path_str,
+                path=self.history_path,
                 quiet=quiet,
             )
 
@@ -215,7 +220,7 @@ class NMScaleX(NMScaleY):
         if log:
             nmh.history(
                 "set start=%s" % value,
-                path=self.path_str,
+                path=self.history_path,
                 quiet=quiet,
             )
 
@@ -247,7 +252,7 @@ class NMScaleX(NMScaleY):
         if log:
             nmh.history(
                 "set delta=%s" % value,
-                path=self.path_str,
+                path=self.history_path,
                 quiet=quiet,
             )
 

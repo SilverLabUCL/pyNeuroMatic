@@ -30,6 +30,7 @@ from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_scale import NMScaleX, NMScaleY, _xscale_from_dict, _yscale_from_dict
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -306,6 +307,34 @@ class NMData(NMObject):
         source = self.xarray_source
         return source.name if source is not None else None
 
+    @nmch.records_command
+    def set_scales(
+        self,
+        xstart: float | None = None,
+        xdelta: float | None = None,
+        xlabel: str | None = None,
+        xunits: str | None = None,
+        ylabel: str | None = None,
+        yunits: str | None = None,
+    ) -> None:
+        """Set any of the x and y scale values (None: unchanged), as Edit
+        Scales does: one command for them all."""
+        values = {"xstart": xstart, "xdelta": xdelta, "xlabel": xlabel,
+                  "xunits": xunits, "ylabel": ylabel, "yunits": yunits}
+        given = {k: v for k, v in values.items() if v is not None}
+        for key, value in given.items():  # no message each: the command says it
+            scale = self.xscale if key[0] == "x" else self.yscale
+            getattr(scale, "_set_" + key[1:])(value, log=False)
+        if not given:
+            return
+        args = ", ".join("%s=%r" % kv for kv in given.items())
+        path = self._nm_obj_path
+        if path is not None:
+            nmch.add_nm_command("%s.set_scales(%s)" % (path, args))
+        else:
+            nmh.history("set scales %s" % args, path=self.history_path)
+
+    @nmch.records_command
     def set_xarray_from(self, source: NMData | None) -> None:
         """Use *source*'s values as the x values: a reference, so changing
         *source* changes them (deleting it is refused while in use, see
@@ -319,12 +348,15 @@ class NMData(NMObject):
         """
         if source is None:
             self.xarray = None
-            return
-        if source is self:
-            raise ValueError("'%s' can't be its own x array" % self.name)
-        check_xarray(source, self)
-        self.__xarray = None
-        self.__xarray_source = source
+        else:
+            if source is self:
+                raise ValueError("'%s' can't be its own x array" % self.name)
+            check_xarray(source, self)
+            self.__xarray = None
+            self.__xarray_source = source
+        path = self._nm_obj_path
+        if path is not None:
+            nmch.add_nm_command("%s.set_xarray_from(%s)" % (path, nm_ref(source)))
 
     def xarray_problem(self) -> str | None:
         """Why the x array doesn't give the x values (e.g. it no longer has
@@ -592,6 +624,15 @@ def check_xarray(source: NMData, data: NMData | None = None) -> numpy.ndarray:
     return values
 
 
+def nm_ref(obj) -> str:
+    """*obj* as written in a command: "nm.folders['Demo1'].data['Times']";
+    "None" for None (or an object a command can't name)."""
+    path = getattr(obj, "_nm_obj_path", None)
+    if path is None:
+        return "None"
+    return "%s.%s" % (nmch.get_command_history().nm_name, path)
+
+
 class NMDataContainer(NMObjectContainer):
     """
     Container of NMData
@@ -843,7 +884,11 @@ class NMDataContainer(NMObjectContainer):
             brought[id(source)] = copy
         return copy
 
+    # Scale entries left out of a command when they are these defaults
+    _SCALE_DEFAULTS = {"start": 0, "delta": 1, "label": "", "units": ""}
+
     # override
+    @nmch.records_command
     def new(
         self,
         name: str | None = None,
@@ -852,8 +897,14 @@ class NMDataContainer(NMObjectContainer):
         xarray: numpy.ndarray | None = None,
         xscale: dict | None = None,
         yscale: dict | None = None,
-        quiet: bool = nmc.QUIET
+        quiet: bool = nmc.QUIET,
+        n_points: int | None = None,
+        fill: float = 0.0,
     ) -> NMData | None:
+        """A new data array. Give *nparray*, or *n_points* (each *fill*), as
+        the New Data dialog does (then a command can say it)."""
+        if nparray is None and n_points is not None:
+            nparray = numpy.full(n_points, fill, dtype=float)
         actual_name = self._newkey(name)
         # Use self._parent (NMFolder) to skip container in parent chain,
         # consistent with NMFolder, NMDataSeries, NMChannel, NMEpoch
@@ -866,8 +917,39 @@ class NMDataContainer(NMObjectContainer):
             yscale=yscale,
         )
         if super()._add(d, select=select, quiet=quiet):
+            self._record_new(d.name, select, nparray, xarray, xscale, yscale)
             return d
         return None
+
+    def _record_new(self, name, select, nparray, xarray, xscale, yscale) -> None:
+        """The command for new(): its values, leaving out defaults. An array
+        of one value is written as n_points and fill; any other can't be
+        written, so a comment says so."""
+        path = self._nm_cmd_path
+        if path is None:
+            return
+        values: dict = {"select": select}
+        note = []
+        if isinstance(nparray, numpy.ndarray):
+            flat = nparray.ravel()
+            numeric = numpy.issubdtype(nparray.dtype, numpy.floating) \
+                or numpy.issubdtype(nparray.dtype, numpy.integer)
+            if (numeric and nparray.ndim == 1 and flat.size > 0
+                    and numpy.all(flat == flat[0])):
+                values.update(n_points=int(flat.size), fill=float(flat[0]))
+            else:
+                note.append("nparray")
+        if xarray is not None:
+            note.append("xarray")
+        for key, scale in (("xscale", xscale), ("yscale", yscale)):
+            if isinstance(scale, dict):
+                given = {k: v for k, v in scale.items() if self._SCALE_DEFAULTS.get(k) != v}
+                if given:
+                    values[key] = given
+        comment = "  # %s not recorded" % " and ".join(note) if note else ""
+        nmch.add_nm_command("%s.new(%r%s)%s" % (
+            path, name, nmu.kwargs_repr(self.new, values, always=("n_points", "fill")),
+            comment))
 
     # override
     # TODO: this no longer works

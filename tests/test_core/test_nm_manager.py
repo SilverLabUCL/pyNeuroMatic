@@ -882,17 +882,28 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
             self.nm.run_keys_set({"folder": "folder0"})  # missing data/dataseries
         self.assertEqual(len(self.nm.command_history.buffer), 0)
 
+    def _other_folder(self) -> str:
+        """A folder that isn't selected (selecting the selected one is no
+        change, so not recorded)."""
+        return [n for n in self.nm.folders.keys() if n != self.select_keys["folder"]][0]
+
     def test_select_keys_set_logs_command(self):
+        other = self._other_folder()
         self.nm.command_history.clear()
-        self.nm._select_keys_set({"folder": "folder0"})
+        self.nm._select_keys_set({"folder": other})
         buf = self.nm.command_history.buffer
         self.assertEqual(len(buf), 1)
         self.assertIn("nm.select_keys =", buf[0]["command"])
-        self.assertIn("folder0", buf[0]["command"])
+        self.assertIn(other, buf[0]["command"])
+
+    def test_select_keys_set_no_change_does_not_log(self):
+        self.nm.command_history.clear()
+        self.nm._select_keys_set({"folder": self.select_keys["folder"]})
+        self.assertEqual(len(self.nm.command_history.buffer), 0)
 
     def test_select_keys_set_logs_normalised_keys(self):
         self.nm.command_history.clear()
-        self.nm._select_keys_set({"Folder": "folder0"})
+        self.nm._select_keys_set({"Folder": self._other_folder()})
         cmd = self.nm.command_history.buffer[0]["command"]
         self.assertIn("'folder'", cmd)
         self.assertNotIn("'Folder'", cmd)
@@ -904,16 +915,18 @@ class TestNMManagerCommandHistory(NMManagerTestBase):
         self.assertEqual(len(self.nm.command_history.buffer), 0)
 
     def test_select_value_set_logs_via_select_keys(self):
+        other = self._other_folder()
         self.nm.command_history.clear()
-        folder = self.nm.folders["folder0"]
+        folder = self.nm.folders[other]
         self.nm.select_value_set(folder)
         buf = self.nm.command_history.buffer
         self.assertEqual(len(buf), 1)
         cmd = buf[0]["command"]
         self.assertIn("nm.select_keys =", cmd)
-        self.assertIn("folder0", cmd)
+        self.assertIn(other, cmd)
 
     def test_select_value_set_epoch_logs_full_chain(self):
+        self.nm._select_keys_set({"folder": self._other_folder()})
         self.nm.command_history.clear()
         epoch = self.select_values["epoch"]
         self.nm.select_value_set(epoch)

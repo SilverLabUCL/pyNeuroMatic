@@ -139,9 +139,8 @@ def test_selection_summary_lists_the_active_source(qtbot):
                      group_operator="AND")
     selection.update(data=folder.data["Other0"], data_set="DataSet")
 
-    assert selection_summary(selection.selection) == [
-        "Folder", "Other0", "Data Set: DataSet",
-    ]
+    # The Data Set is what a run uses: shown instead of the array
+    assert selection_summary(selection.selection) == ["Folder", "Data DataSet"]
     selection.update(source="dataseries")
     assert selection_summary(selection.selection) == [
         "Folder", "Record", "A", "Epoch Set1 AND Group 0",
@@ -150,6 +149,8 @@ def test_selection_summary_lists_the_active_source(qtbot):
     assert selection_summary(selection.selection)[-1] == "Epoch Set1"
     selection.update(epoch_set="All")
     assert selection_summary(selection.selection)[-1] == "All Epochs"
+    selection.update(source="data", data_set=None)  # no Data Set: the array
+    assert selection_summary(selection.selection) == ["Folder", "Other0"]
     selection.update(epoch_set="Current Epoch")
     assert selection_summary(selection.selection)[-1] == "E0"
     selection.update(epoch_set=None, group=0)

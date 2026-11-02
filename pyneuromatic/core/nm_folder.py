@@ -239,7 +239,7 @@ class NMFolder(NMObject):
         self.__toolresults[tool].append(entry)
         idx = len(self.__toolresults[tool]) - 1
         nmh.history(
-            "saved %s results to %s[%d]" % (tool, self.path_str, idx),
+            "saved %s results to %s[%d]" % (tool, self.history_path, idx),
             quiet=quiet,
         )
         return idx
@@ -387,7 +387,7 @@ class NMFolder(NMObject):
         self.dataseries._rename_locked(old, new_prefix, quiet=True)
         nmh.history(
             "renamed dataseries '%s' as '%s' (%d data)" % (old, new_prefix, len(renames)),
-            path=self.path_str,
+            path=self.history_path,
             quiet=quiet,
         )
         _p = self._nm_cmd_path
@@ -479,7 +479,7 @@ class NMFolder(NMObject):
         nmh.history(
             "renumbered epochs of dataseries '%s': %s (%d arrays renamed)"
             % (prefix, changes, len(arrays)),
-            path=self.path_str, quiet=quiet,
+            path=self.history_path, quiet=quiet,
         )
         _p = self._nm_cmd_path
         nmch.add_nm_command('%s.renumber_dataseries_epochs(%r, remove_empty=%r)'
@@ -563,13 +563,13 @@ class NMFolder(NMObject):
     def _nm_cmd_path(self) -> str:
         """Command-history path for this folder, derived from parent.
 
-        Returns e.g. ``'folders["TestFolder"]'`` when the parent is an
+        Returns e.g. ``"folders['TestFolder']"`` when the parent is an
         NMManager, so that ``nmch.add_nm_command(_nm_cmd_path + ".method()")``
-        produces ``nm.folders["TestFolder"].method()``.
+        produces ``nm.folders['TestFolder'].method()``.
         """
         from pyneuromatic.core.nm_manager import NMManager
         if isinstance(self._parent, NMManager):
-            return 'folders["%s"]' % self.name
+            return "folders[%r]" % self.name
         return self.name
 
     def build_dataseries(
@@ -621,7 +621,7 @@ class NMFolder(NMObject):
                 # A locked series keeps its membership; copy it to change it
                 nmh.history(
                     "dataseries '%s' is locked; not updated" % prefix,
-                    path=self.path_str,
+                    path=self.history_path,
                     quiet=quiet,
                 )
                 return ds
@@ -810,23 +810,24 @@ class NMFolder(NMObject):
 
         channel_chars = sorted(set(ch for ch, _ in matches.keys()))
         epoch_nums = sorted(set(ep for _, ep in matches.keys()))
-        ch_str = ", ".join(channel_chars)
+        ch_str = self._channels_text(channel_chars)
         ep_str = ("E%d..E%d" % (epoch_nums[0], epoch_nums[-1])) if epoch_nums else ""
-        action = "new" if is_new else "updated"
         nmh.history(
-            "%s dataseries '%s': channels %s; epochs %s"
-            % (action, prefix, ch_str, ep_str),
-            path=self.path_str,
+            "%s data series %s: channels %s; epochs %s"
+            % ("new" if is_new else "updated", prefix, ch_str, ep_str),
+            path=self.history_path,
             quiet=quiet,
         )
         _p = self._nm_cmd_path
         nmch.add_nm_command(
-            '%s.new_dataseries(%r, n_channels=%r, n_epochs=%r, n_points=%r, '
-            'dx=%r, x_start=%r, x_label=%r, x_units=%r, y_label=%r, y_units=%r, '
-            'fill=%s%s, ch_start=%r, ep_start=%r)%s'
-            % (_p, prefix, n_channels, n_epochs, n_points,
-               dx, x_start, x_label, x_units, y_label, y_units,
-               *self._fill_args(fill, noise), ch_start, ep_start,
+            '%s.new_dataseries(%r%s)%s'
+            % (_p, prefix, nmu.kwargs_repr(self.new_dataseries, dict(
+                n_channels=n_channels, n_epochs=n_epochs, n_points=n_points,
+                dx=dx, x_start=x_start, x_label=x_label, x_units=x_units,
+                y_label=y_label, y_units=y_units, fill=fill,
+                ch_start=ch_start, ep_start=ep_start, noise=noise),
+                text={"fill": self._fill_args(fill, 0.0)[0]},
+                always=("n_channels", "n_epochs", "n_points", "fill")),
                self._fill_note(fill))
         )
         return ds
@@ -954,13 +955,12 @@ class NMFolder(NMObject):
 
         channel_chars = sorted(set(ch for ch, _ in matches.keys()))
         epoch_nums = sorted(set(ep for _, ep in matches.keys()))
-        ch_str = ", ".join(channel_chars)
+        ch_str = self._channels_text(channel_chars)
         ep_str = ("E%d..E%d" % (epoch_nums[0], epoch_nums[-1])) if epoch_nums else ""
-        action = "new" if is_new else "updated"
         nmh.history(
-            "%s dataseries '%s': channels %s; epochs %s"
-            % (action, actual_prefix, ch_str, ep_str),
-            path=self.path_str,
+            "%s data series %s: channels %s; epochs %s"
+            % ("new" if is_new else "updated", actual_prefix, ch_str, ep_str),
+            path=self.history_path,
             quiet=quiet,
         )
         _p = self._nm_cmd_path
@@ -1117,7 +1117,7 @@ class NMFolder(NMObject):
         nmh.history(
             "copied dataseries %s: %d channel(s), %d epoch(s)"
             % (src_desc, n_ch, n_ep),
-            path=self.path_str,
+            path=self.history_path,
             quiet=quiet,
         )
         _p = self._nm_cmd_path
@@ -1162,7 +1162,7 @@ class NMFolder(NMObject):
         msg = "removed dataseries '%s'" % prefix
         if delete_data:
             msg += " (and %d data objects)" % len(data_names)
-        nmh.history(msg, path=self.path_str, quiet=quiet)
+        nmh.history(msg, path=self.history_path, quiet=quiet)
         _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.remove_dataseries(%r, delete_data=%r)' % (_p, prefix, delete_data)
@@ -1214,7 +1214,7 @@ class NMFolder(NMObject):
         msg = "removed channel(s) [%s] from dataseries '%s'" % (ch_str, prefix)
         if delete_data:
             msg += " (and %d data objects)" % n_deleted
-        nmh.history(msg, path=self.path_str, quiet=quiet)
+        nmh.history(msg, path=self.history_path, quiet=quiet)
         _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.remove_dataseries_channel(%r, %r, delete_data=%r)'
@@ -1270,7 +1270,7 @@ class NMFolder(NMObject):
         msg = "removed epoch(s) [%s] from dataseries '%s'" % (ep_str, prefix)
         if delete_data:
             msg += " (and %d data objects)" % n_deleted
-        nmh.history(msg, path=self.path_str, quiet=quiet)
+        nmh.history(msg, path=self.history_path, quiet=quiet)
         _p = self._nm_cmd_path
         nmch.add_nm_command(
             '%s.remove_dataseries_epoch(%r, %r, delete_data=%r)'
@@ -1321,6 +1321,16 @@ class NMFolder(NMObject):
         else:
             text = repr(fill)
         return text, (", noise=%r" % noise if noise else "")
+
+    @staticmethod
+    def _channels_text(letters) -> str:
+        """Channel letters for a message: a run of 3 or more as "A..F", like
+        epochs ("E0..E9"); otherwise "A, B" or "A, C, D"."""
+        letters = sorted(letters)
+        if len(letters) >= 3 and all(
+                ord(b) - ord(a) == 1 for a, b in zip(letters, letters[1:])):
+            return "%s..%s" % (letters[0], letters[-1])
+        return ", ".join(letters)
 
     @staticmethod
     def _fill_note(fill) -> str:
@@ -1428,13 +1438,17 @@ class NMFolder(NMObject):
 
         nmh.history(
             "added channel(s) %s to dataseries '%s' (%d arrays)"
-            % (", ".join(letters), prefix, len(names)),
-            path=self.path_str, quiet=quiet,
+            % (self._channels_text(letters), prefix, len(names)),
+            path=self.history_path, quiet=quiet,
         )
         _p = self._nm_cmd_path
         nmch.add_nm_command(
-            '%s.add_dataseries_channels(%r, n_channels=%r, fill=%s%s, y_label=%r, y_units=%r)%s'
-            % (_p, prefix, n_channels, *self._fill_args(fill, noise), y_label, y_units,
+            '%s.add_dataseries_channels(%r%s)%s'
+            % (_p, prefix, nmu.kwargs_repr(self.add_dataseries_channels, dict(
+                n_channels=n_channels, fill=fill, noise=noise,
+                y_label=y_label, y_units=y_units),
+                text={"fill": self._fill_args(fill, 0.0)[0]},
+                always=("n_channels", "fill")),
                self._fill_note(fill))
         )
         return added
@@ -1514,12 +1528,16 @@ class NMFolder(NMObject):
                   "%s%d..%s%d" % (epoch_prefix, first, epoch_prefix, new_numbers[-1]))
         nmh.history(
             "added epoch(s) %s to dataseries '%s' (%d arrays)" % (ep_str, prefix, len(names)),
-            path=self.path_str, quiet=quiet,
+            path=self.history_path, quiet=quiet,
         )
         _p = self._nm_cmd_path
         nmch.add_nm_command(
-            '%s.add_dataseries_epochs(%r, n_epochs=%r, fill=%s%s)%s'
-            % (_p, prefix, n_epochs, *self._fill_args(fill, noise), self._fill_note(fill))
+            '%s.add_dataseries_epochs(%r%s)%s'
+            % (_p, prefix, nmu.kwargs_repr(self.add_dataseries_epochs, dict(
+                n_epochs=n_epochs, fill=fill, noise=noise),
+                text={"fill": self._fill_args(fill, 0.0)[0]},
+                always=("n_epochs", "fill")),
+               self._fill_note(fill))
         )
         return added
 
@@ -1721,7 +1739,7 @@ class NMFolder(NMObject):
         nmh.history(
             "moved data '%s' to folder '%s'%s" % (
                 old_name, target.name, " as '%s'" % new_name if new_name != old_name else ""),
-            path=self.path_str, quiet=quiet,
+            path=self.history_path, quiet=quiet,
         )
         _p = self._nm_cmd_path
         nmch.add_nm_command('%s.move_data(%r, nm.folders[%r], new_name=%r)'
@@ -1825,7 +1843,7 @@ class NMFolder(NMObject):
             "moved dataseries '%s' (%d arrays) to folder '%s'%s"
             % (prefix, len(arrays), target.name,
                " as '%s'" % name if name != prefix else ""),
-            path=self.path_str, quiet=quiet,
+            path=self.history_path, quiet=quiet,
         )
         _p = self._nm_cmd_path
         nmch.add_nm_command(
@@ -1974,7 +1992,7 @@ class NMFolder(NMObject):
             "appended dataseries '%s' (%d epochs, %s to %s) to '%s'%s"
             % (source_prefix, len(added), new_epoch[list(new_epoch)[0]] if new_epoch else "",
                last, prefix, " (source removed)" if delete_source else ""),
-            path=self.path_str, quiet=quiet,
+            path=self.history_path, quiet=quiet,
         )
         _p = self._nm_cmd_path
         nmch.add_nm_command(

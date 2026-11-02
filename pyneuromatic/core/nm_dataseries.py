@@ -35,6 +35,7 @@ from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_channel import NMChannel, NMChannelContainer
 from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, NMEpoch, NMEpochContainer
 from pyneuromatic.core.nm_notes import NMNotes
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
@@ -187,7 +188,7 @@ class NMDataSeries(NMObject):
         self.__locked = locked
         nmh.history(
             "%s dataseries '%s'" % ("locked" if locked else "unlocked", self.name),
-            path=self.path_str,
+            path=self.history_path,
         )
 
     # override
@@ -346,6 +347,52 @@ class NMDataSeries(NMObject):
     # multiple data objects. NMData remains the source of truth for scales.
     # =========================================================================
 
+    @staticmethod
+    def _channel_arg(channel: str | None) -> str:
+        return "" if channel is None else ", channel=%r" % channel
+
+    def _record_or_note(self, call: str, note: str, quiet: bool) -> None:
+        """Record *call* (e.g. "set_xstart(-1.0)") on this series; when it
+        can't be (not in a manager), write *note* instead (#441)."""
+        path = self._nm_obj_path
+        if path is not None:
+            nmch.add_nm_command("%s.%s" % (path, call))
+        else:
+            nmh.history(note, path=self.history_path, quiet=quiet)
+
+    @nmch.records_command
+    def set_scales(
+        self,
+        xstart: float | None = None,
+        xdelta: float | None = None,
+        xlabel: str | None = None,
+        xunits: str | None = None,
+        ylabel: str | None = None,
+        yunits: str | None = None,
+        channel: str | None = None,
+    ) -> None:
+        """Set any of the x and y scale values (None: unchanged) of this
+        series' arrays, or of one *channel*'s (and that channel's own scale,
+        the template for its new arrays), as Edit Scales does: one command."""
+        values = {"xstart": xstart, "xdelta": xdelta, "xlabel": xlabel,
+                  "xunits": xunits, "ylabel": ylabel, "yunits": yunits}
+        given = {k: v for k, v in values.items() if v is not None}
+        setters = {"xstart": self.set_xstart, "xdelta": self.set_xdelta,
+                   "xlabel": self.set_xlabel, "xunits": self.set_xunits,
+                   "ylabel": self.set_ylabel, "yunits": self.set_yunits}
+        for key, value in given.items():
+            setters[key](value, channel=channel)
+            if channel is not None:  # the channel's own scale too
+                ch = self.channels[channel]
+                scale = ch.xscale if key[0] == "x" else ch.yscale
+                getattr(scale, "_set_" + key[1:])(value, log=False)
+        if given:
+            self._record_or_note(
+                "set_scales(%s%s)" % (", ".join("%s=%r" % kv for kv in given.items()),
+                                      self._channel_arg(channel)),
+                "set scales %s" % ", ".join("%s=%r" % kv for kv in given.items()), True)
+
+    @nmch.records_command
     def set_xstart(
         self,
         value: float | int,
@@ -372,13 +419,11 @@ class NMDataSeries(NMObject):
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
-            nmh.history(
-                "set xstart=%s, channel=%s, n=%d" % (value, ch_str, count),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._record_or_note("set_xstart(%r%s)" % (value, self._channel_arg(channel)),
+                                 "set xstart=%s, channel=%s, n=%d" % (value, ch_str, count), quiet)
         return count
 
+    @nmch.records_command
     def set_xarray(
         self,
         source,
@@ -411,15 +456,15 @@ class NMDataSeries(NMObject):
         for data in arrays:
             data.set_xarray_from(source)
         if arrays:
+            from pyneuromatic.core.nm_data import nm_ref
             ch_str = channel if channel else "all"
             name = source.name if source is not None else None
-            nmh.history(
-                "set xarray=%s, channel=%s, n=%d" % (name, ch_str, len(arrays)),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._record_or_note("set_xarray(%s%s)" % (nm_ref(source), self._channel_arg(channel)),
+                                 "set xarray=%s, channel=%s, n=%d" % (name, ch_str, len(arrays)),
+                                 quiet)
         return len(arrays)
 
+    @nmch.records_command
     def set_xdelta(
         self,
         value: float | int,
@@ -446,13 +491,11 @@ class NMDataSeries(NMObject):
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
-            nmh.history(
-                "set xdelta=%s, channel=%s, n=%d" % (value, ch_str, count),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._record_or_note("set_xdelta(%r%s)" % (value, self._channel_arg(channel)),
+                                 "set xdelta=%s, channel=%s, n=%d" % (value, ch_str, count), quiet)
         return count
 
+    @nmch.records_command
     def set_xlabel(
         self,
         label: str,
@@ -479,13 +522,11 @@ class NMDataSeries(NMObject):
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
-            nmh.history(
-                "set xlabel='%s', channel=%s, n=%d" % (label, ch_str, count),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._record_or_note("set_xlabel(%r%s)" % (label, self._channel_arg(channel)),
+                                 "set xlabel='%s', channel=%s, n=%d" % (label, ch_str, count), quiet)
         return count
 
+    @nmch.records_command
     def set_xunits(
         self,
         units: str,
@@ -512,13 +553,11 @@ class NMDataSeries(NMObject):
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
-            nmh.history(
-                "set xunits='%s', channel=%s, n=%d" % (units, ch_str, count),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._record_or_note("set_xunits(%r%s)" % (units, self._channel_arg(channel)),
+                                 "set xunits='%s', channel=%s, n=%d" % (units, ch_str, count), quiet)
         return count
 
+    @nmch.records_command
     def set_ylabel(
         self,
         label: str,
@@ -545,13 +584,11 @@ class NMDataSeries(NMObject):
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
-            nmh.history(
-                "set ylabel='%s', channel=%s, n=%d" % (label, ch_str, count),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._record_or_note("set_ylabel(%r%s)" % (label, self._channel_arg(channel)),
+                                 "set ylabel='%s', channel=%s, n=%d" % (label, ch_str, count), quiet)
         return count
 
+    @nmch.records_command
     def set_yunits(
         self,
         units: str,
@@ -578,11 +615,8 @@ class NMDataSeries(NMObject):
                 count += 1
         if count > 0:
             ch_str = channel if channel else "all"
-            nmh.history(
-                "set yunits='%s', channel=%s, n=%d" % (units, ch_str, count),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._record_or_note("set_yunits(%r%s)" % (units, self._channel_arg(channel)),
+                                 "set yunits='%s', channel=%s, n=%d" % (units, ch_str, count), quiet)
         return count
 
     def get_xscales_summary(self) -> dict[str, dict]:

@@ -694,3 +694,30 @@ def test_data_set_copy_and_invert(app):
     inverted = data.sets.get_items("Set1", get_keys=True)
     assert "Loose0" not in inverted and len(inverted) == len(data) - 1  # in place
     assert data.sets.get_items("Set0", get_keys=True) == ["Loose0"]  # the copy's source
+
+
+def test_deleting_the_selected_array_selects_the_next(app):
+    """Delete the selected array: the next one is selected, still on Data
+    (not the data series); the last one: the one before."""
+    app.selection_model.update(data=app.demo.data["RecordA1"], source="data")
+    app.answers.append(("RecordA1", None))
+    app.data_actions.delete_data()
+    selection = app.selection_model.selection
+    assert selection["source"] == "data" and selection["data"].name == "RecordB0"
+    app.selection_model.update(data=app.demo.data["Loose0"], source="data")
+    app.answers.append(("Loose0", None))
+    app.data_actions.delete_data()  # the last: the one before
+    selection = app.selection_model.selection
+    assert selection["source"] == "data" and selection["data"].name == "RecordB0"
+    app.answers.append(("RecordA0", None))  # not the selected one: unchanged
+    app.data_actions.delete_data()
+    assert app.selection_model.selection["data"].name == "RecordB0"
+
+
+def test_next_remaining():
+    from pyneuromatic.gui.tier_actions import next_remaining
+    keys = ["A", "B", "C", "D"]
+    assert next_remaining(keys, ["B"]) == "C"
+    assert next_remaining(keys, ["B", "C"]) == "D"
+    assert next_remaining(keys, ["C", "D"]) == "B"
+    assert next_remaining(keys, keys) is None

@@ -547,3 +547,24 @@ def test_group_notes_below_the_list(qtbot, series, monkeypatch):
 
     browser.show_groups_of(series, 0)  # another group, its own notes
     assert notes.table.rowCount() == 0
+
+
+def test_clearing_every_member_is_one_short_command(series):
+    """Untick all: sets.empty('Set1') / groups.clear_group(1), not a list of
+    every name; untick some (e.g. a filter shows only some): remove them."""
+    epochs = series.epochs
+    history = epochs._manager.command_history
+    history.enabled = True
+    path = "nm.folders['Demo'].dataseries['Record'].epochs."
+    commands = lambda: [c["command"] for c in history.buffer]
+    model = MembershipModel(epochs, set_name="Set1")
+    model.check_none(rows=[3])  # only E3 shown: removed, not emptied
+    assert commands()[-1] == path + "sets.remove('Set1', ['E3'])"
+    model.check_all()
+    model.check_none()
+    assert commands()[-1] == path + "sets.empty('Set1')"
+    assert model.members() == []
+    groups = MembershipModel(epochs, group=1)
+    groups.check_none()
+    assert commands()[-1] == path + "groups.clear_group(1)"
+    assert epochs.groups.group_numbers == [0, 1]  # kept, empty

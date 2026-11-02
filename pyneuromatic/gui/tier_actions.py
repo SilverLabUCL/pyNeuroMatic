@@ -871,6 +871,10 @@ def x_array_error(folder, arrays, name: str) -> str | None:
     return None
 
 
+# Edit Scales' x fields, as set_scales() names them
+_X_FIELDS = ("xstart", "xdelta", "xlabel", "xunits")
+
+
 def new_data_defaults(container, points: int = 100) -> dict:
     """Fields for a new data array: the next auto name, *points* points,
     value 0, x from 0 in steps of 1, and no labels or units."""
@@ -899,11 +903,24 @@ def create_data(container, values: dict):
     """Add a data array to *container* from New Data dialog *values*."""
     return container.new(
         values["name"],
-        nparray=np.full(values["points"], values["value"], dtype=float),
+        n_points=values["points"],
+        fill=float(values["value"]),
         xscale={"start": values["xstart"], "delta": values["xdelta"],
                 "label": values["xlabel"], "units": values["xunits"]},
         yscale={"label": values["ylabel"], "units": values["yunits"]},
     )
+
+
+def next_remaining(keys: list[str], removed) -> str | None:
+    """The item to select after deleting *removed* from *keys* (in order):
+    the next one left after the first deleted, else the one before it."""
+    removed = set(removed)
+    hits = [i for i, key in enumerate(keys) if key in removed]
+    if not hits:
+        return None
+    after = [key for key in keys[hits[0]:] if key not in removed]
+    before = [key for key in keys[:hits[0]] if key not in removed]
+    return after[0] if after else (before[-1] if before else None)
 
 
 def name_error(container: NMObjectContainer, name: str | None) -> str | None:
@@ -1037,6 +1054,26 @@ class TierActions(QtCore.QObject):
         """Change the strip's selection, unless acting on another folder."""
         if not self._elsewhere():
             self._selection.update(**changes)
+
+    def before_delete(self, container) -> tuple:
+        """What select_after_delete needs, taken before deleting from
+        *container*: its names, the selected one and the source."""
+        return (list(container.keys()), container.selected_name,
+                self._selection.selection.get("source"))
+
+    def select_after_delete(self, container, before: tuple, deleted, tier: str) -> None:
+        """After deleting the selected item of *container* (data or data
+        series, *tier*), select the next one; the source stays as it was
+        (e.g. Data, not falling back to the data series)."""
+        keys, selected, source = before
+        if selected not in deleted:
+            return
+        name = next_remaining(keys, [n for n in deleted if n not in container])
+        if name is not None and name in container:
+            changes = {tier: container[name]}
+            if source is not None:
+                changes["source"] = source
+            self._selection.update(changes)
 
     def _changed(self) -> None:
         self._selection.refresh()
@@ -1942,12 +1979,11 @@ class DataActions(TierActions):
             source = container.get(name) if name else None
             if not name or source is not None:  # e.g. one in another folder: kept
                 data.set_xarray_from(source)
-        for key, attribute in (("xstart", "start"), ("xdelta", "delta"),
-                               ("xlabel", "label"), ("xunits", "units")):
-            if key in changes:
-                setattr(data.xscale, attribute, changes[key])
-        for field, value in changes.get("y", {}).get("Y", {}).items():
-            setattr(data.yscale, field, value)
+        values = {key: changes[key] for key in _X_FIELDS if key in changes}
+        values.update(("y" + field, value)
+                      for field, value in changes.get("y", {}).get("Y", {}).items())
+        if values:
+            data.set_scales(**values)  # one command
         self._changed()
 
     def move_data_to_folder(self, data=None) -> None:
@@ -2012,7 +2048,9 @@ class DataActions(TierActions):
         )
         if answer is None:
             return
+        before = self.before_delete(container)
         container.pop(answer[0])
+        self.select_after_delete(container, before, [answer[0]], "data")
         self._changed()
 
     def choose_in_browser(self) -> None:
@@ -2620,15 +2658,13 @@ class SeriesActions(TierActions):
         if not changes or lock_error:  # the dialog only shows a locked series
             return
         self._apply_x_array(owner, series, changes)
-        for key, setter in (("xstart", series.set_xstart), ("xdelta", series.set_xdelta),
-                            ("xlabel", series.set_xlabel), ("xunits", series.set_xunits)):
-            if key in changes:
-                setter(changes[key])
-        for channel, fields in changes.get("y", {}).items():
-            if "label" in fields:
-                series.set_ylabel(fields["label"], channel=channel)
-            if "units" in fields:
-                series.set_yunits(fields["units"], channel=channel)
+        values = {key: changes[key] for key in _X_FIELDS if key in changes}
+        if values:
+            series.set_scales(**values)  # one command for x
+        for channel, fields in changes.get("y", {}).items():  # one per channel for y
+            if fields:
+                series.set_scales(channel=channel,
+                                  **{"y" + field: value for field, value in fields.items()})
         self._changed()
 
     @staticmethod
@@ -2665,22 +2701,11 @@ class SeriesActions(TierActions):
         if not changes or lock_error:  # the dialog only shows a locked series
             return
         self._apply_x_array(owner, series, changes, channel=channel.name)
-        for key, setter in (("xstart", series.set_xstart), ("xdelta", series.set_xdelta),
-                            ("xlabel", series.set_xlabel), ("xunits", series.set_xunits)):
-            if key in changes:
-                setter(changes[key], channel=channel.name)
-        fields = changes.get("y", {}).get("Y", {})
-        if "label" in fields:
-            series.set_ylabel(fields["label"], channel=channel.name)
-        if "units" in fields:
-            series.set_yunits(fields["units"], channel=channel.name)
-        # The channel's own scale too: the template for its new arrays
-        for key, attribute in (("xstart", "start"), ("xdelta", "delta"),
-                               ("xlabel", "label"), ("xunits", "units")):
-            if key in changes:
-                setattr(channel.xscale, attribute, changes[key])
-        for field, value in fields.items():
-            setattr(channel.yscale, field, value)
+        values = {key: changes[key] for key in _X_FIELDS if key in changes}
+        values.update(("y" + field, value)
+                      for field, value in changes.get("y", {}).get("Y", {}).items())
+        if values:  # one command; the channel's own scale too (its new arrays')
+            series.set_scales(channel=channel.name, **values)
         self._changed()
 
     def toggle_lock(self) -> None:
@@ -2998,7 +3023,9 @@ class SeriesActions(TierActions):
         if answer is None:
             return
         item, _name, arrays = answer
+        before = self.before_delete(owner.dataseries)
         owner.remove_dataseries(item, delete_data=arrays == self.DELETE)
+        self.select_after_delete(owner.dataseries, before, [item], "dataseries")
         self._changed()
 
     def delete_series_list(self, owner, names: list[str]) -> None:
@@ -3020,8 +3047,10 @@ class SeriesActions(TierActions):
         if answer is None:
             return
         delete_data = answer[-1] == self.DELETE
+        before = self.before_delete(owner.dataseries)
         for name in names:
             owner.remove_dataseries(name, delete_data=delete_data)
+        self.select_after_delete(owner.dataseries, before, names, "dataseries")
         self._changed()
 
     def choose_in_browser(self) -> None:

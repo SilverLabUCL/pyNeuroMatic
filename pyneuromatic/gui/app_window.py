@@ -45,6 +45,7 @@ from pyneuromatic.gui.selection_model import (
     SelectionModel,
     is_stored_epoch_set,
     scoped_epoch_names,
+    needs_group_operator,
     selection_summary,
     source_object,
 )
@@ -1505,7 +1506,13 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def _append_selection_history(self, selection: dict) -> None:
         selected = selection_summary(selection)
         summary = " / ".join(selected) if selected else "cleared"
-        self.history_panel.add("selection", f"Selection: {summary}")
+        if needs_group_operator(selection):
+            summary += " (choose AND or OR)"
+        text = f"Selection: {summary}"
+        if text == getattr(self, "_last_selection_text", None):
+            return  # e.g. stepping through epochs (< >) in All Epochs or a set
+        self._last_selection_text = text
+        self.history_panel.add("selection", text)
 
     @property
     def tool_names(self) -> list[str]:

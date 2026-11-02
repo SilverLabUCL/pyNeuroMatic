@@ -18,6 +18,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import logging
+import re
 from collections import deque
 
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -89,6 +90,17 @@ def entry_from_record(record: logging.LogRecord) -> HistoryEntry:
     return HistoryEntry(datetime.datetime.fromtimestamp(record.created), kind, text)
 
 
+# "nm.select_keys = {...}": not shown, as the Selection entry the window adds
+# says the same, and more (Epoch Sets, Groups); it's kept in the command
+# history, for scripts (#441)
+_SELECT_COMMAND = re.compile(r"^[A-Za-z_]\w*\.select_keys = ")
+
+
+def is_select_command(record: logging.LogRecord) -> bool:
+    return (getattr(record, "kind", "") == "command"
+            and bool(_SELECT_COMMAND.match(record.getMessage())))
+
+
 class _Emitter(QtCore.QObject):
     entry = QtCore.pyqtSignal(object)
 
@@ -101,6 +113,8 @@ class QtHistoryHandler(logging.Handler):
         self.emitter = _Emitter()
 
     def emit(self, record: logging.LogRecord) -> None:
+        if is_select_command(record):
+            return
         try:
             self.emitter.entry.emit(entry_from_record(record))
         except RuntimeError:  # the panel has gone (e.g. the window closed)

@@ -184,17 +184,24 @@ class MembershipModel(QtCore.QAbstractTableModel):
         change = [n for n in names if (n in self._members) != checked]
         if not change:
             return 0
+        # Unticking every member: one short command, e.g. sets.empty('Set0')
+        empties = not checked and set(change) >= set(self._members)
         if self.is_group:
             groups = self.container.groups
             if checked:
                 # One command; groups that moved their last epoch here stay (empty)
                 groups.assign(change, self.group, quiet=True)
+            elif empties:
+                groups.clear_group(self.group, quiet=True)  # kept, empty
             else:
                 unassign_from_group(groups, change, self.group)
         else:
-            items = [self.container[name] for name in change]
             sets = self.container.sets
-            (sets.add if checked else sets.remove)(self.set_name, items)
+            if empties:
+                sets.empty(self.set_name)
+            else:
+                items = [self.container[name] for name in change]
+                (sets.add if checked else sets.remove)(self.set_name, items)
         self._reload_members()
         self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1,
                                                            self.columnCount() - 1))
