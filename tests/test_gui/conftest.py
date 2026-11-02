@@ -37,6 +37,8 @@ def _close_app_windows(monkeypatch):
 
     monkeypatch.setattr(NMAppWindow, "__init__", init)
     yield
+    # Closed without the quit question, whatever a test answers it with
+    monkeypatch.setattr(NMAppWindow, "_may_quit", lambda self: True)
     for window in windows:
         window.close()  # closeEvent tears the pyqtgraph views down first
         window.deleteLater()
@@ -54,6 +56,20 @@ def _reset_table_nan():
 
     yield
     table_format.set_nan_mode("NaN")
+
+
+@pytest.fixture(autouse=True)
+def _quit_without_asking(monkeypatch):
+    """Closing a window (e.g. when a test ends) answers the quit question
+    with Quit, instead of showing it; tests of the question replace this."""
+    from pyneuromatic.gui.app_window import NMAppWindow
+
+    monkeypatch.setattr(NMAppWindow, "_ask_quit", lambda self: ("quit", False))
+
+    def unstubbed(self):
+        raise RuntimeError("Export History file dialog opened in a test without being stubbed")
+
+    monkeypatch.setattr(NMAppWindow, "_export_history_path", unstubbed)
 
 
 @pytest.fixture(autouse=True)

@@ -61,6 +61,14 @@ class SettingsDialog(QtWidgets.QDialog):
             tables_layout.addWidget(button)
             self.nan_buttons[mode] = button
         general_layout.addWidget(tables)
+        self.confirm_quit_checkbox = QtWidgets.QCheckBox("Ask before quitting", general)
+        self.confirm_quit_checkbox.setToolTip(
+            "When quitting with data or history, ask first (and offer to export "
+            "the history as a script)")
+        self.confirm_quit_checkbox.setChecked(settings.confirm_quit)
+        self.confirm_quit_checkbox.toggled.connect(
+            lambda checked: self._set("confirm_quit", checked))
+        general_layout.addWidget(self.confirm_quit_checkbox)
         general_layout.addStretch(1)
         self._add_page("General", general)
 
