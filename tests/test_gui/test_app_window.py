@@ -284,14 +284,13 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert series_menu.currentText() == "Alpha"
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "AlphaA0"
-    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "All Sets", "Set0", "Set1", "SetX", "Demo1Set"]
+    assert _combo_values(set_menu) == ["", "All", "All Sets", "Set0", "Set1", "SetX", "Demo1Set"]
     assert _combo_values(group_menu) == ["", "All", "0", "1"]
-    assert _combo_values(operator_menu) == [""]
+    assert _combo_values(operator_menu) == ["", "AND", "OR"]  # always: choose it first
 
+    operator_menu.setCurrentText("AND")
     set_menu.setCurrentText("Demo1Set")
     group_menu.setCurrentText("1")
-    assert _combo_values(operator_menu) == ["", "AND", "OR"]
-    operator_menu.setCurrentText("AND")
     folder_menu.setCurrentText("Demo2")
 
     assert nm.select_values["folder"] is folder2
@@ -301,14 +300,14 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert _combo_values(series_menu) == ["", "Gamma"]
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA0"
-    assert _combo_values(set_menu) == ["", "All", "Current Epoch", "All Sets", "Set0", "Set1", "SetX", "Demo2Set"]
+    assert _combo_values(set_menu) == ["", "All", "All Sets", "Set0", "Set1", "SetX", "Demo2Set"]
     assert set_menu.currentText() == "All"
     assert _combo_values(group_menu) == ["", "All", "0", "1"]
     assert group_menu.currentText() == ""
-    assert _combo_values(operator_menu) == [""]
+    assert operator_menu.currentText() == ""
+    operator_menu.setCurrentText("OR")
     set_menu.setCurrentText("Demo2Set")
     group_menu.setCurrentText("0")
-    operator_menu.setCurrentText("OR")
 
     series_menu.setCurrentText("Gamma")
 
@@ -371,9 +370,9 @@ def test_selection_memory_is_independent_per_dataseries(qtbot, nm):
     )
     trace_navigator = win.plot_widget
 
+    operator_menu.setCurrentText("AND")  # first: Set and Group are then both kept
     set_menu.setCurrentText("AlphaSet")
     group_menu.setCurrentText("1")
-    operator_menu.setCurrentText("AND")
     channel_menu.setCurrentText("B")
     trace_navigator.trace_index.setValue(1)
     series_menu.setCurrentText("Beta")
@@ -385,9 +384,9 @@ def test_selection_memory_is_independent_per_dataseries(qtbot, nm):
     assert group_menu.currentText() == ""
     assert operator_menu.currentText() == ""
 
+    operator_menu.setCurrentText("OR")
     set_menu.setCurrentText("BetaSet")
     group_menu.setCurrentText("0")
-    operator_menu.setCurrentText("OR")
     series_menu.setCurrentText("Alpha")
 
     assert nm.select_values["dataseries"] is alpha
@@ -433,7 +432,7 @@ def test_data_and_dataseries_sections_are_independent(qtbot, nm):
     assert strip.is_active_section("dataseries")
     assert strip.source_button("data").isEnabled()  # a data array is selected too
     assert _combo_values(data_set_menu) == ["", "FlatSet", "DataSet"]
-    assert _combo_values(epoch_set_menu) == ["", "All", "Current Epoch", "All Sets", "Set0", "Set1", "SetX", "EpochSet"]
+    assert _combo_values(epoch_set_menu) == ["", "All", "All Sets", "Set0", "Set1", "SetX", "EpochSet"]
     assert _combo_values(group_menu) == ["", "All", "0", "1"]
 
     channel_menu.setCurrentText("B")

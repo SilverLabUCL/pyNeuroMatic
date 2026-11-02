@@ -27,7 +27,6 @@ from pyneuromatic.tools.nm_tool_stats import NMToolStats
 from pyneuromatic.gui.results_view import Stats2Panel
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
-    CURRENT_EPOCH,
     SelectionModel,
     scope_runs,
     combine_scope_names,
@@ -690,7 +689,7 @@ class StatsToolTab(ToolTabWidget):
             return {"data": data_set} if data_set else {}
         epoch_set = selection.get("epoch_set")
         group = selection.get("group")
-        if epoch_set is None or epoch_set == CURRENT_EPOCH:
+        if epoch_set is None:
             # Current Epoch (or a Group alone): name the epoch if just one
             epoch_set = None
             if group is None and len(targets) == 1 and targets[0].get("epoch") is not None:

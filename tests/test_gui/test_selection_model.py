@@ -151,7 +151,43 @@ def test_selection_summary_lists_the_active_source(qtbot):
     assert selection_summary(selection.selection)[-1] == "All Epochs"
     selection.update(source="data", data_set=None)  # no Data Set: the array
     assert selection_summary(selection.selection) == ["Folder", "Other0"]
-    selection.update(epoch_set="Current Epoch")
+    selection.update(epoch_set="Current Epoch", source="dataseries")  # old name: blank
+    assert selection.selection["epoch_set"] is None
     assert selection_summary(selection.selection)[-1] == "E0"
     selection.update(epoch_set=None, group=0)
     assert selection_summary(selection.selection)[-1] == "Group 0"
+
+
+def test_epoch_set_and_group_are_either_or_unless_combined(qtbot):
+    """AND/OR blank: choosing an Epoch Set blanks the Group and the other way
+    round; AND/OR chosen: both kept; blanking AND/OR keeps the Set (#444)."""
+    manager = NMManager(quiet=True)
+    folder, series = _folder_with_data_and_series(manager)
+    selection = SelectionModel(manager)
+    selection.update(folder=folder, dataseries=series)
+    state = lambda: tuple(selection.selection[k] for k in ("epoch_set", "group", "group_operator"))
+    selection.update(epoch_set="Set1")
+    selection.update(group=0)
+    assert state() == (None, 0, None)  # the Group blanks the Set
+    selection.update(epoch_set="All")
+    assert state() == ("All", None, None)  # and the Set the Group
+    selection.update(group_operator="AND")  # first: then both are kept
+    selection.update(epoch_set="Set1")
+    selection.update(group=0)
+    assert state() == ("Set1", 0, "AND")
+    selection.update(group_operator=None)  # blank AND/OR: the Set stays
+    assert state() == ("Set1", None, None)
+
+
+def test_current_epoch_is_read_as_blank(qtbot):
+    """The old "Current Epoch" choice: blank Set and (as it ignored the
+    Group) no Group; it can't be a set's name (#444)."""
+    from pyneuromatic.gui.tier_actions import epoch_set_name_error
+    manager = NMManager(quiet=True)
+    folder, series = _folder_with_data_and_series(manager)
+    selection = SelectionModel(manager)
+    selection.update(folder=folder, dataseries=series, group_operator="OR")
+    selection.update(epoch_set="Set1", group=0)
+    selection.update(epoch_set="Current Epoch")
+    assert (selection.selection["epoch_set"], selection.selection["group"]) == (None, None)
+    assert "built-in" in epoch_set_name_error(series.epochs.sets, "Current Epoch")

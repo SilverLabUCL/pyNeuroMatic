@@ -19,7 +19,7 @@ import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET
 from pyneuromatic.core.nm_folder import NMFolder
-from pyneuromatic.gui.selection_model import BUILTIN_EPOCH_SETS, SelectionModel
+from pyneuromatic.gui.selection_model import RESERVED_EPOCH_SET_NAMES, SelectionModel
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
 
 
@@ -3116,8 +3116,8 @@ def range_summary(verb: str, epochs: list[str], every: int) -> str:
 
 
 def epoch_set_name_error(sets, name: str | None) -> str | None:
-    """Like set_name_error, also refusing the built-in All and Current Epoch."""
-    if name is not None and name.lower() in (b.lower() for b in BUILTIN_EPOCH_SETS):
+    """Like set_name_error, also refusing All and Current Epoch."""
+    if name is not None and name.lower() in (b.lower() for b in RESERVED_EPOCH_SET_NAMES):
         return f"'{name}' is a built-in Epoch Set choice"
     return set_name_error(sets, name)
 
