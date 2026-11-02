@@ -13,7 +13,6 @@ from pyneuromatic.gui.selection_model import (
     BUILTIN_EPOCH_SETS,
     SelectionModel,
     all_set_names,
-    is_stored_epoch_set,
     scope_runs,
     scoped_epoch_names,
 )
@@ -431,11 +430,9 @@ class SelectionStrip(QtWidgets.QWidget):
             options["group"] = ([("All", ALL_GROUPS)] if numbers else []) + [
                 (str(number), number) for number in numbers
             ]
-        # AND/OR combines a stored Epoch Set (or All Sets) with a Group (or
-        # All Groups); All needs neither
-        epoch_set = selection.get("epoch_set")
-        if ((is_stored_epoch_set(epoch_set) or epoch_set == ALL_SETS)
-                and selection.get("group") is not None):
+        # AND/OR combines an Epoch Set and a Group; blank, they are either/or
+        # (choosing one blanks the other), so it can be chosen first (#444)
+        if dataseries is not None:
             options["group_operator"] = [("AND", "AND"), ("OR", "OR")]
         return options
 

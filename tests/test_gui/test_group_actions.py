@@ -227,8 +227,8 @@ def test_strip_shows_epoch_count_beside_group(app):
 
     app.selection_model.update(group=0)
     assert _shown(label) == "n=5-1"
-    app.selection_model.update(epoch_set="Set1", group_operator=None)
-    assert _shown(label) == "Choose AND or OR"
+    app.selection_model.update(epoch_set="Set1", group=0, group_operator=None)
+    assert _shown(label) == "Choose AND or OR"  # both, set together: AND/OR needed
     app.selection_model.update(group_operator="OR")
     assert _shown(label) == "n=5-1"  # Set1 is empty
     app.selection_model.update(epoch_set="Current Epoch")

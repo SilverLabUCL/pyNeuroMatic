@@ -16,11 +16,15 @@ from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 
-# Built-in Epoch Set choices (not stored sets): every epoch, or only the
-# current one (Igor NeuroMatic's "All" and "This Wave")
+# Built-in Epoch Set choice (not a stored set): every epoch (Igor
+# NeuroMatic's "All"). The blank choice (None) is the current epoch, as
+# blank Data Set is the current array (#444).
 ALL_EPOCHS = "All"
+BUILTIN_EPOCH_SETS = (ALL_EPOCHS,)
+# Once a choice for the current epoch; now read as blank. Not allowed as a
+# set name, so old selections can't mean a set.
 CURRENT_EPOCH = "Current Epoch"
-BUILTIN_EPOCH_SETS = (ALL_EPOCHS, CURRENT_EPOCH)
+RESERVED_EPOCH_SET_NAMES = (ALL_EPOCHS, CURRENT_EPOCH)
 
 # Run once per set or per group (Igor NeuroMatic's "All Sets" / "All Groups").
 # Elsewhere (Table, stepping, counts) they mean the union of the sets
@@ -136,6 +140,9 @@ class SelectionModel(QtCore.QObject):
             updates = {**changes, **updates}
         if not updates:
             return
+        if updates.get("epoch_set") == CURRENT_EPOCH:
+            # No longer a choice: blank, and (as it ignored the Group) no Group
+            updates = {"group": None, **updates, "epoch_set": None}
 
         unknown = set(updates).difference(self._KEYS)
         if unknown:
@@ -172,6 +179,7 @@ class SelectionModel(QtCore.QObject):
         for key in ("data_set",) + self._EPOCH_KEYS:
             if key in updates:
                 setattr(self, f"_{key}", updates[key])
+        self._either_set_or_group(updates)
         if "all_channels" in updates:
             self._all_channels = bool(updates["all_channels"])  # None or False: off
         elif updates.get("channel") is not None:
@@ -192,6 +200,20 @@ class SelectionModel(QtCore.QObject):
         self._normalize_source()
         self._remember_context()
         self._emit_if_changed(previous)
+
+    def _either_set_or_group(self, updates: Mapping[str, Any]) -> None:
+        """Epoch Set and Group are either/or unless AND/OR combines them
+        (#444): choosing one blanks the other; blanking AND/OR keeps the Set."""
+        if self._group_operator is not None:
+            return
+        if updates.get("group") is not None and "epoch_set" not in updates:
+            self._epoch_set = None
+        elif updates.get("epoch_set") is not None and "group" not in updates:
+            self._group = None
+        elif ("group_operator" in updates and "epoch_set" not in updates
+                and "group" not in updates
+                and self._epoch_set is not None and self._group is not None):
+            self._group = None
 
     def _normalize_source(self) -> None:
         """Keep ``source`` pointing at a selected data array or data series."""
@@ -386,9 +408,8 @@ def combine_scope_names(
 
 
 def is_stored_epoch_set(name: str | None) -> bool:
-    """True for a real epoch set (Set1, SetX...), not All, Current Epoch or
-    All Sets."""
-    return name is not None and name not in BUILTIN_EPOCH_SETS and name != ALL_SETS
+    """True for a real epoch set (Set1, SetX...), not All or All Sets."""
+    return name is not None and name not in RESERVED_EPOCH_SET_NAMES and name != ALL_SETS
 
 
 def all_set_names(dataseries: NMDataSeries) -> list[str]:
@@ -431,7 +452,7 @@ def scoped_epoch_names(
     """
     selected_set = selection.get("epoch_set")
     selected_group = selection.get("group")
-    if selected_set == CURRENT_EPOCH or (selected_set is None and selected_group is None):
+    if selected_set is None and selected_group is None:
         return None
     set_names = None
     group_names = None
@@ -525,8 +546,6 @@ def epoch_scope_label(selection: Mapping[str, Any]) -> str:
     epoch_set = selection.get("epoch_set")
     if is_stored_epoch_set(epoch_set) or epoch_set == ALL_SETS:
         parts.append(f"Epoch Set: {epoch_set}")
-    elif epoch_set == CURRENT_EPOCH:
-        parts.append(CURRENT_EPOCH)
     group = selection.get("group")
     if group == ALL_GROUPS:
         parts.append(ALL_GROUPS)
@@ -545,6 +564,7 @@ __all__ = [
     "scope_runs",
     "BUILTIN_EPOCH_SETS",
     "CURRENT_EPOCH",
+    "RESERVED_EPOCH_SET_NAMES",
     "SelectionModel",
     "is_stored_epoch_set",
     "combine_scope_names",

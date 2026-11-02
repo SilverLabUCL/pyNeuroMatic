@@ -199,18 +199,13 @@ def test_choose_in_browser_selects_epoch_set(app):
     assert isinstance(node, _SetNode) and node.name == "Set0"
 
 
-def test_epoch_set_list_starts_with_all_and_current(app):
+def test_epoch_set_list_starts_with_blank_and_all(app):
     combo = app.selection_strip.combo("epoch_set")
     texts = [combo.itemText(i) for i in range(combo.count())]
-    assert texts[:3] == ["", "All", "Current Epoch"]  # blank, like Data Set
-    assert texts[3:] == ["All Sets", "Set0", "Set1", "SetX"]  # in order, from 0
+    # Blank is the current epoch, like Data Set's blank: no "Current Epoch" (#444)
+    assert texts == ["", "All", "All Sets", "Set0", "Set1", "SetX"]  # sets in order
     assert combo.currentText() == "All"  # the default for a series
-    # AND/OR only combines a stored set with a group
-    app.series.epochs.groups.assign_cyclic(list(app.series.epochs.keys()), n_groups=2)
-    app.selection_model.update(group=0)
-    assert not app.selection_strip.combo("group_operator").isEnabled()
-    app.selection_model.update(epoch_set="Set0")
-    assert app.selection_strip.combo("group_operator").isEnabled()
+    assert app.selection_strip.combo("group_operator").isEnabled()  # AND/OR: always
 
 
 def test_exclude_and_include_with_add_to_set(app):
@@ -305,7 +300,9 @@ def test_blank_epoch_set_scopes_to_the_group_alone(app):
     app.selection_model.update(group=1)
     names = scoped_epoch_names(app.series, app.selection_model.selection)
     assert names == app.series.epochs.groups.get_items(1)
-    assert app.selection_strip.combo("group_operator").count() == 1  # no AND/OR
+    assert app.selection_model.selection["epoch_set"] is None
+    operator = app.selection_strip.combo("group_operator")
+    assert [operator.itemText(i) for i in range(operator.count())] == ["", "AND", "OR"]
 
 
 def test_invert_refuses_combined_sets_and_setx(app):
