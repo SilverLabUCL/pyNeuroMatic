@@ -155,15 +155,17 @@ class SelectionModel(QtCore.QObject):
             for tier, value in updates.items()
             if tier in HIERARCHY_SELECT_KEYS and not isinstance(value, NMObject)
         }
+        # One select_keys call (one command in the history), objects first:
+        # each brings the path above it
+        select: dict[str, Any] = {}
         for tier in HIERARCHY_SELECT_KEYS:
             value = object_updates.get(tier)
             if value is not None:
-                self._manager.select_value_set(value)
-        if manager_updates:
+                select.update(self._manager._select_value_keys(value))
+        select.update(manager_updates)
+        if select:
             self._manager.select_keys = {
-                tier: manager_updates[tier]
-                for tier in HIERARCHY_SELECT_KEYS
-                if tier in manager_updates
+                tier: select[tier] for tier in HIERARCHY_SELECT_KEYS if tier in select
             }
 
         self._restore_context(previous_scopes)
@@ -474,9 +476,10 @@ def selection_summary(selection: Mapping[str, Any]) -> list[str]:
     parts = [name("folder"), name("toolfolder")]
     source = selection.get("source")
     if source == "data":
-        parts.append(name("data"))
-        if selection.get("data_set") is not None:
-            parts.append(f"Data Set: {selection['data_set']}")
+        # A Data Set is what a run uses (the array is only the one shown),
+        # as an Epoch Set is for a data series
+        data_set = selection.get("data_set")
+        parts.append(name("data") if data_set is None else f"Data {data_set}")
     elif source == "dataseries":
         channel = ALL_CHANNELS if selection.get("all_channels") else name("channel")
         parts += [name("dataseries"), channel, _epochs_summary(selection, name)]
@@ -498,13 +501,22 @@ def _epochs_summary(selection: Mapping[str, Any], name) -> str | None:
         set_text = ALL_SETS if epoch_set == ALL_SETS else f"Epoch {epoch_set}"
         if group_text is None:
             return set_text
-        operator = selection.get("group_operator") or "+"
-        return f"{set_text} {operator} {group_text}"
+        operator = selection.get("group_operator")
+        # "?": AND or OR not chosen yet (a "+" looked like a choice)
+        return f"{set_text} {operator or '?'} {group_text}"
     if epoch_set == ALL_EPOCHS:
         return group_text or "All Epochs"
     if epoch_set is None and group_text is not None:
         return group_text
     return name("epoch")
+
+
+def needs_group_operator(selection: Mapping[str, Any]) -> bool:
+    """True when an Epoch Set and a Group are both chosen but not AND or OR."""
+    epoch_set = selection.get("epoch_set")
+    return ((is_stored_epoch_set(epoch_set) or epoch_set == ALL_SETS)
+            and selection.get("group") is not None
+            and selection.get("group_operator") is None)
 
 
 def epoch_scope_label(selection: Mapping[str, Any]) -> str:
@@ -520,7 +532,7 @@ def epoch_scope_label(selection: Mapping[str, Any]) -> str:
         parts.append(ALL_GROUPS)
     elif group is not None:
         parts.append(f"Group {group}")
-    operator = selection.get("group_operator") or "+"
+    operator = selection.get("group_operator") or "?"  # "?": AND or OR not chosen
     return f" {operator} ".join(parts)
 
 
@@ -537,6 +549,7 @@ __all__ = [
     "is_stored_epoch_set",
     "combine_scope_names",
     "epoch_scope_label",
+    "needs_group_operator",
     "scoped_epoch_names",
     "selection_summary",
     "source_object",

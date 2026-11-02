@@ -92,6 +92,11 @@ class NMTransform:
         return self._path_suffix
 
     @property
+    def history_path(self) -> str:
+        parent = getattr(self._parent, "history_path", None)
+        return parent + "." + self._path_suffix if parent else self._path_suffix
+
+    @property
     def on(self) -> bool:
         """If False, the transform is kept but not applied."""
         return getattr(self, "_on", True)

@@ -38,12 +38,13 @@ def test_kinds_of_entry(app):
     panel = app.history_panel
     assert [b.text() for b in panel.kind_buttons.values()] == [
         "Commands", "Messages", "Warnings", "Errors", "Selection", "Tool Runs", "Inner Calls"]
-    app.folder.data.new("Extra", nparray=np.zeros(2))  # a command and messages
+    app.folder.data.new("Extra", nparray=np.zeros(2))  # a command (no message: it says it)
+    app.folder.new_dataseries("Rec", n_points=2)  # a command and a message
     nmh.alert("careful", path="NONE")
     nmh.error("broken", path="NONE")
     app.selection_model.update(data=app.folder.data["Extra"])
-    assert "nm.folders[\"Demo\"].data.new('Extra')" in _entries(app, "command")
-    assert any("new 'Extra'" in text for text in _entries(app, "message"))
+    assert "nm.folders['Demo'].data.new('Extra', n_points=2, fill=0.0)" in _entries(app, "command")
+    assert _entries(app, "message")[-1] == "Demo: new data series Rec: channels A; epochs E0..E0"
     assert _entries(app, "warning") == ["careful"] and _entries(app, "error") == ["broken"]
     assert _entries(app, "selection")[-1].startswith("Selection: ")
     # Warnings and Errors say how many
@@ -55,7 +56,7 @@ def test_commands_are_marked_in_the_core_history(app):
     app.folder.data.new("Extra", nparray=np.zeros(2))
     buffer = app.manager.history.buffer
     commands = [e["message"] for e in buffer if e["kind"] == "command"]
-    assert "nm.folders[\"Demo\"].data.new('Extra')" in commands
+    assert "nm.folders['Demo'].data.new('Extra', n_points=2, fill=0.0)" in commands
     assert all(e["kind"] == "" for e in buffer if e["message"].startswith("nm.Demo"))
 
 
@@ -164,12 +165,12 @@ def test_inner_calls(app):
     folder.new_dataseries("Rec", n_channels=1, n_epochs=3, n_points=2)
     assert _entries(app, "inner") == []  # not kept while hidden
     commands = _entries(app, "command")
-    assert commands[-1].startswith('nm.folders["Demo"].new_dataseries(\'Rec\'')
+    assert commands[-1].startswith("nm.folders['Demo'].new_dataseries('Rec'")
     assert not any("data.new('RecA0')" in c for c in commands)  # nested: not a command
     panel.kind_buttons["inner"].setChecked(True)
     folder.new_dataseries("Two", n_channels=1, n_epochs=2, n_points=2)
     inner = _entries(app, "inner")
-    assert "nm.folders[\"Demo\"].data.new('TwoA0')" in inner
+    assert "nm.folders['Demo'].data.new('TwoA0')" in inner
     panel.set_shown_kinds({"inner"})
     assert panel.text().splitlines()[0].startswith("    ")  # indented, under its command
 
@@ -186,8 +187,8 @@ def test_a_group_action_is_one_command(app, monkeypatch):
     actions.assign_epochs()
     commands = _entries(app, "command")[before:]
     assert commands == [
-        'nm.folders["Demo"].dataseries["Rec"].epochs.groups.assign('
-        '[f"E{i}" for i in range(20)], 0)']  # a range, not 20 names
+        "nm.folders['Demo'].dataseries['Rec'].epochs.groups.assign("
+        "[f'E{i}' for i in range(20)], 0)"]  # a range, not 20 names
 
 
 def test_clear_group_is_one_command(app, monkeypatch):
@@ -200,7 +201,7 @@ def test_clear_group_is_one_command(app, monkeypatch):
     before = len(_entries(app, "command"))
     actions.clear_group()
     assert _entries(app, "command")[before:] == [
-        'nm.folders["Demo"].dataseries["Rec"].epochs.groups.clear_group(0)']
+        "nm.folders['Demo'].dataseries['Rec'].epochs.groups.clear_group(0)"]
     assert series.epochs.groups.group_numbers == [0, 1]  # kept, empty
     assert series.epochs.groups.get_items(0) == []
 
@@ -242,3 +243,44 @@ def test_an_exported_script_runs(qtbot, tmp_path):
     assert sorted(again.dataseries["Rec"].epochs.keys()) == sorted(series.epochs.keys())
     assert again.dataseries["Rec"].epochs.groups == series.epochs.groups
     assert again.dataseries["Rec"].epochs.sets.get_items("Set0", get_keys=True) == ["E0", "E1"]
+
+
+def test_selection_says_when_and_or_is_not_chosen(app):
+    """Epoch Set and Group without AND/OR: "?" and a hint, not "+" (#441)."""
+    series = app.folder.new_dataseries("Rec", n_epochs=4, n_points=2)
+    series.epochs.sets.add("Set0", ["E0", "E1"])
+    series.epochs.groups.assign_cyclic(list(series.epochs.keys()), 2)
+    app.selection_model.update(dataseries=series, epoch_set="Set0", group=0)
+    assert _entries(app, "selection")[-1] == (
+        "Selection: Demo / Rec / A / Epoch Set0 ? Group 0 (choose AND or OR)")
+    app.selection_model.update(group_operator="AND")
+    assert _entries(app, "selection")[-1] == "Selection: Demo / Rec / A / Epoch Set0 AND Group 0"
+
+
+def test_select_commands_are_not_shown(app):
+    """A click: the Selection entry, not also "nm.select_keys = ..." (kept in
+    the command history, for scripts) (#441)."""
+    series = app.folder.new_dataseries("Rec", n_epochs=4, n_points=2)
+    for epoch in ("E1", "E2"):
+        app.selection_model.update(dataseries=series, epoch=series.epochs[epoch])
+    assert not any("select_keys" in text for text in _entries(app, "command"))
+    assert _entries(app, "selection")[-2:] == [
+        "Selection: Demo / Rec / A / E1", "Selection: Demo / Rec / A / E2"]
+    commands = [c["command"] for c in app.manager.command_history.buffer]
+    assert commands[-1] == "nm.select_keys = {'folder': 'Demo', 'dataseries': 'Rec', 'epoch': 'E2'}"
+    assert sum("select_keys" in c for c in commands) == 1  # E1 replaced by E2
+
+
+def test_edit_scales_is_one_command(app, monkeypatch):
+    """Data › Edit Scales: one set_scales command, no message per value (#441)."""
+    data = app.folder.data["RecordA0"]
+    actions = app.data_actions
+    monkeypatch.setattr(actions, "_ask_scales", lambda *a, **k: {
+        "xstart": -1.0, "xdelta": 0.1, "xlabel": "Time", "xunits": "ms",
+        "y": {"Y": {"label": "Voltage", "units": "mV"}}})
+    before = len(_entries(app))
+    actions.edit_scales(data)
+    assert _entries(app)[before:] == [
+        "nm.folders['Demo'].data['RecordA0'].set_scales(xstart=-1.0, xdelta=0.1, "
+        "xlabel='Time', xunits='ms', ylabel='Voltage', yunits='mV')"]
+    assert (data.xscale.start, data.yscale.units) == (-1.0, "mV")

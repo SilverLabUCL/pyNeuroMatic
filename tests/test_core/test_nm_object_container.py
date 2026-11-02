@@ -1250,17 +1250,12 @@ class TestNMObjectContainerHistory(unittest.TestCase):
         self.assertIn("item0", msg)
         self.assertIn("renamed0", msg)
 
-    def test_selected_name_set_logs(self):
-        self.container._selected_name_set("item1", quiet=False)
-        msg = self._last_message()
-        self.assertIn("item1", msg)
-
-    def test_selected_name_set_none_logs(self):
-        self.container._selected_name_set("item1", quiet=False)
+    def test_selected_name_set_no_message(self):
+        # The select command and the Selection entry say it (#441)
         self.nm.history.clear()
+        self.container._selected_name_set("item1", quiet=False)
         self.container._selected_name_set(None, quiet=False)
-        msg = self._last_message()
-        self.assertIn("item1", msg)
+        self.assertEqual(len(self.nm.history.buffer), 0)
 
     def test_selected_name_set_same_no_log(self):
         self.container._selected_name_set("item1", quiet=False)

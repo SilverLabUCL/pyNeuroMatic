@@ -5,6 +5,8 @@ import pytest
 
 pytest.importorskip("PyQt6")
 
+from PyQt6 import QtWidgets
+
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
 
@@ -191,3 +193,24 @@ def test_stepping_options_are_in_a_menu_beside_the_buttons(app):
     assert panel.selection_scope_label.text() == "(All: 10)"
     panel.selection_only_action.setChecked(False)
     assert panel.selection_scope_label.text() == ""
+
+
+def test_stepping_adds_no_repeated_selection_entries(app):
+    """< > in All Epochs: the Selection entry would read the same each step,
+    so it is written once (#441)."""
+    def entries():
+        QtWidgets.QApplication.processEvents()
+        app.history_panel.flush()
+        return [e.text for e in app.history_panel.model.entries if e.kind == "selection"]
+
+    app.selection_model.update(epoch_set="Set1")
+    app.selection_model.update(epoch_set="All")
+    before = entries()
+    assert before[-2:] == ["Selection: Demo / Record / A / Epoch Set1",
+                           "Selection: Demo / Record / A / All Epochs"]
+    for _ in range(3):
+        app.plot_widget.trace_next_button.click()
+    assert _at(app.plot_widget) == "E3"
+    assert entries() == before  # stepping: no new, identical entries
+    app.selection_model.update(epoch_set="Set1")
+    assert entries()[-1] == "Selection: Demo / Record / A / Epoch Set1"

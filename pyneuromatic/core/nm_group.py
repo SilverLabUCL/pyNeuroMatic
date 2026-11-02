@@ -77,6 +77,11 @@ class NMGroups:
             return self._parent.path_str + ".groups"
         return self._name
 
+    @property
+    def history_path(self) -> str:
+        parent = getattr(self._parent, "history_path", None)
+        return parent + ".groups" if parent else self._name
+
     def __len__(self) -> int:
         return len(self._map)
 
@@ -133,10 +138,16 @@ class NMGroups:
 
     @property
     def _nm_cmd_path(self) -> str | None:
-        """'folders["Demo"].dataseries["Rec"].epochs.groups'; None when not in
+        """E.g. "folders['Demo'].dataseries['Rec'].epochs.groups"; None when not in
         the manager (not recorded)."""
         path = getattr(self._parent, "_epochs_cmd_path", None)
         return None if path is None else path + ".groups"
+
+    def _echo(self, message: str, quiet: bool = nmc.QUIET) -> None:
+        """A history message that says only what its command does: written
+        only when no command is recorded (#441)."""
+        if self._nm_cmd_path is None:
+            nmh.history(message, path=self.history_path, quiet=quiet)
 
     def _record(self, call: str) -> None:
         """Record a command on these groups, e.g. "assign(['E0', 'E1'], 1)"."""
@@ -193,9 +204,8 @@ class NMGroups:
             if number in self.group_numbers:
                 raise ValueError("group %d already exists" % number)
         self._declared_groups.update(numbers)
-        nmh.history("groups: created group%s %s" % ("s" if len(numbers) > 1 else "",
-                                                   ", ".join(map(str, numbers))),
-                    path=self.path_str, quiet=quiet)
+        self._echo("created group%s %s" % ("s" if len(numbers) > 1 else "",
+                                       ", ".join(map(str, numbers))), quiet)
         self._record("add_group(%r)" % (numbers if many else numbers[0],))
 
     @nmch.records_command
@@ -226,11 +236,7 @@ class NMGroups:
         self._declared_groups.update(self._map[n] for n in names if n in self._map)
         for name in names:
             self._map[name] = group
-        nmh.history(
-            "groups: %s → %d" % (self._names_text(names), group),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._echo("%s → %d" % (self._names_text(names), group), quiet)
         self._record("assign(%s, %r)" % (nmu.names_repr(names) if many else repr(names[0]), group))
 
     @nmch.records_command
@@ -277,14 +283,20 @@ class NMGroups:
             self._map[n] for n in item_names if n in self._map)
         for i, name in enumerate(item_names):
             self.assign(name, (i // block) % n_groups, quiet=True)
-        nmh.history(
-            "groups: cyclic assignment, %d names, %d groups, block %d"
-            % (len(item_names), n_groups, block),
-            path=self.path_str,
-            quiet=quiet,
-        )
-        self._record("assign_cyclic(%s, %r, block=%r)"
-                     % (nmu.names_repr(list(item_names)), n_groups, block))
+        # What the command doesn't say: how many each group now has
+        sizes = [0] * n_groups
+        for i in range(len(item_names)):
+            sizes[(i // block) % n_groups] += 1
+        if item_names:
+            nmh.history(
+                "%d groups of %d" % (n_groups, sizes[0]) if len(set(sizes)) == 1
+                else "group sizes %s" % ", ".join(map(str, sizes)),
+                path=self.history_path,
+                quiet=quiet,
+            )
+        self._record("assign_cyclic(%s, %r%s)" % (
+            nmu.names_repr(list(item_names)), n_groups,
+            nmu.kwargs_repr(self.assign_cyclic, {"block": block})))
 
     def get_items(self, group: int) -> list[str]:
         """Return item names assigned to *group*, in insertion order.
@@ -352,12 +364,8 @@ class NMGroups:
             return
         groups = sorted({self._map.pop(name) for name in names})
         self._declared_groups.update(groups)  # kept, even if empty (until deleted)
-        nmh.history(
-            "groups: unassigned %s from group %s"
-            % (self._names_text(names), ", ".join(map(str, groups))),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._echo("unassigned %s from group %s"
+                   % (self._names_text(names), ", ".join(map(str, groups))), quiet)
         self._record("unassign(%s)" % (nmu.names_repr(names) if many else repr(names[0])))
 
     @nmch.records_command
@@ -372,11 +380,7 @@ class NMGroups:
         self._map.clear()
         self._declared_groups.clear()
         self._notes.clear()
-        nmh.history(
-            "groups: cleared all assignments",
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._echo("cleared all assignments", quiet)
         self._record("clear()")
 
     @nmch.records_command
@@ -404,9 +408,8 @@ class NMGroups:
             for name in [n for n, g in self._map.items() if g == number]:
                 del self._map[name]
         self._declared_groups.update(numbers)
-        nmh.history("groups: cleared group%s %s" % ("s" if len(numbers) > 1 else "",
-                                                   ", ".join(map(str, numbers))),
-                    path=self.path_str, quiet=quiet)
+        self._echo("cleared group%s %s" % ("s" if len(numbers) > 1 else "",
+                                       ", ".join(map(str, numbers))), quiet)
         self._record("clear_group(%r)" % (numbers if many else numbers[0],))
 
     @nmch.records_command
@@ -434,9 +437,8 @@ class NMGroups:
                 del self._map[name]
             self._declared_groups.discard(number)
             self._notes.pop(number, None)
-        nmh.history("groups: deleted group%s %s" % ("s" if len(numbers) > 1 else "",
-                                                   ", ".join(map(str, numbers))),
-                    path=self.path_str, quiet=quiet)
+        self._echo("deleted group%s %s" % ("s" if len(numbers) > 1 else "",
+                                       ", ".join(map(str, numbers))), quiet)
         self._record("delete_group(%r)" % (numbers if many else numbers[0],))
 
     def notes(self, group: int) -> NMNotes:

@@ -19,6 +19,7 @@ Website: https://github.com/SilverLabUCL/pyNeuroMatic
 Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
+import ast
 import datetime
 # import math
 # import matplotlib
@@ -155,6 +156,8 @@ class NMManager(NMObject):
         nm.stats.windows.get("w0").func = "mean"
         nm.run_tool()
     """
+
+    _IN_HISTORY_PATH = False  # history messages start below it
 
     @nmch.records_command
     def __init__(
@@ -498,7 +501,38 @@ class NMManager(NMObject):
                     continue
                 path[above] = current[above]
         path.update(select)
+        if "toolfolder" in path and path["toolfolder"] is None:
+            # Clearing it only matters if the folder has one selected
+            name = path.get("folder", current["folder"])
+            target = self.__folders.get(name) if name and self.__folders else None
+            if target is None or target.toolfolders.selected_name is None:
+                del path["toolfolder"]
         return {k: path[k] for k in HIERARCHY_SELECT_KEYS if k in path}
+
+    @staticmethod
+    def _replaces_last_select(path: dict) -> bool:
+        """True if the last command recorded is a select_keys that *path*
+        makes unnecessary: each tier it set is set again, in the same place
+        (the same tiers above). Clicking through epochs then records one
+        command, not one per click; replayed, the selection is the same."""
+        history = nmch.get_command_history()
+        last = history.last_command()
+        prefix = history.nm_name + ".select_keys = "
+        if last is None or not last.startswith(prefix):
+            return False
+        try:
+            previous = ast.literal_eval(last[len(prefix):])
+        except (ValueError, SyntaxError):
+            return False
+        if not isinstance(previous, dict):
+            return False
+        for tier in previous:
+            if tier not in path:
+                return False  # left as it was set: still needed
+            if any(path.get(above) != previous.get(above)
+                   for above in SELECT_KEY_PATHS.get(tier, ())):
+                return False  # set in another folder or series: still needed
+        return True
 
     @nmch.records_command
     def _select_keys_set(self, select: dict[str, str]) -> None:
@@ -533,7 +567,11 @@ class NMManager(NMObject):
 
         # In hierarchy order (folder first), as the tiers are set below
         select = {k: select[k] for k in HIERARCHY_SELECT_KEYS if k in select}
-        nmch.add_nm_command("select_keys = %r" % (self._select_keys_path(select),))
+        path = self._select_keys_path(select)
+        current = self.select_keys
+        if any(current.get(tier) != name for tier, name in path.items()):  # a change
+            nmch.add_nm_command("select_keys = %r" % (path,),
+                                replaces_last=self._replaces_last_select(path))
 
         # Traverse hierarchy, setting values as we go so subsequent tiers
         # use the newly selected parent
@@ -588,6 +626,10 @@ class NMManager(NMObject):
             >>> nm.select_value_set(some_epoch)  # Sets folder, dataseries, channel, epoch
             >>> nm.select_value_set(some_dataseries)  # Sets folder, dataseries
         """
+        self._select_keys_set(self._select_value_keys(obj))
+
+    def _select_value_keys(self, obj: NMObject) -> dict[str, str | None]:
+        """The select_keys dict that selects *obj* (see select_value_set)."""
         if not isinstance(obj, NMObject):
             raise TypeError(nmu.type_error_str(obj, "obj", "NMObject"))
 
@@ -654,8 +696,7 @@ class NMManager(NMObject):
                 f"(NMFolder, NMToolFolder, NMData, NMDataSeries, NMChannel, NMEpoch)"
             )
 
-        # Use existing _select_keys_set to apply the selection
-        self._select_keys_set(select)
+        return select
 
     def run_values(
         self,

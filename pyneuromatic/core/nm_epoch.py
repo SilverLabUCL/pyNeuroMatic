@@ -211,14 +211,14 @@ class NMEpochContainer(NMObjectContainer):
 
     @property
     def _epochs_cmd_path(self) -> str | None:
-        """'folders["Demo"].dataseries["Rec"].epochs': the command-history path
+        """The command-history path, e.g. "folders['Demo'].dataseries['Rec'].epochs",
         for these epochs' sets and groups (the container itself records no
         commands); None when the series isn't in the manager."""
         series = self._parent
         folder_path = getattr(getattr(series, "_parent", None), "_nm_cmd_path", None)
         if folder_path is None or series is None:
             return None
-        return '%s.dataseries["%s"].epochs' % (folder_path, series.name)
+        return "%s.dataseries[%r].epochs" % (folder_path, series.name)
 
     # override, no super
     def content_type(self) -> str:

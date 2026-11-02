@@ -307,6 +307,24 @@ class NMObject(object):
         """
         return ".".join(self.path) if self.path else self.__name
 
+    # Left out of history_path: containers and the manager (#441)
+    _IN_HISTORY_PATH: bool = True
+
+    @property
+    def history_path(self) -> str:
+        """Short path at the start of history messages, e.g. 'Demo1.RecordA0'
+        (path_str is 'nm.Demo1.NMDataContainer0.RecordA0'): containers and the
+        manager are left out. '' for the manager itself."""
+        return ".".join(o.name for o in self.path_objects if o._IN_HISTORY_PATH)
+
+    @property
+    def _nm_obj_path(self) -> str | None:
+        """Command-history path of this object, e.g. "folders['Demo1'].data
+        ['RecordA0']": its container's path and its name; None when its
+        container records no commands."""
+        path = getattr(self._container, "_nm_cmd_path", None)
+        return None if path is None else "%s[%r]" % (path, self.__name)
+
     @property
     def path_objects(self) -> list[NMObject]:
         """Hierarchy path as list of NMObject references.
@@ -360,7 +378,7 @@ class NMObject(object):
         self.__name = newname
         if history:
             h = nmh.history_change_str("name", oldname, self.__name)
-            nmh.history(h, path=self.path_str, quiet=quiet)
+            nmh.history(h, path=self.history_path, quiet=quiet)
 
     @property
     def _manager(self) -> NMManager | None:  # find NMManager of this NMObject

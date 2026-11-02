@@ -2,6 +2,8 @@
 import logging
 import unittest
 
+import numpy as np
+
 import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_command_history import NMCommandHistory, records_command
@@ -127,10 +129,11 @@ class TestCoreCommands(unittest.TestCase):
         commands = self._commands()
         self.assertEqual(len(commands), 1)
         self.assertTrue(commands[0].startswith(
-            "nm.folders[\"Demo\"].new_dataseries('Long', n_channels=2, n_epochs=200"))
+            "nm.folders['Demo'].new_dataseries('Long', n_channels=2, n_epochs=200"))
         messages = [e["message"] for e in self.nm.history.buffer]
         self.assertEqual(messages, [commands[0],
-                                    "new dataseries 'Long': channels A, B; epochs E0..E199"])
+                                    "new data series Long: channels A, B; epochs E0..E199"])
+        self.assertEqual(self.nm.history.buffer[1]["path"], "Demo")
 
     def test_folder_commands_name_the_folder_once(self):
         folder = self.nm.folders.new("Demo")
@@ -138,7 +141,7 @@ class TestCoreCommands(unittest.TestCase):
         folder.add_dataseries_epochs("Rec", 1)
         folder.remove_dataseries_epoch("Rec", "E0")
         for command in self._commands()[1:]:
-            self.assertTrue(command.startswith('nm.folders["Demo"].'), command)
+            self.assertTrue(command.startswith("nm.folders['Demo']."), command)
             self.assertNotIn('["Demo"]["Demo"]', command)
 
     def test_building_objects_writes_no_history(self):
@@ -180,10 +183,12 @@ class TestCoreCommands(unittest.TestCase):
         folder.new_dataseries("Zero", n_points=3, fill=np.zeros)
         folder.new_dataseries("Lam", n_points=3, fill=lambda n: np.ones(n))
         commands = self._commands()[1:]
-        self.assertIn("fill=1.0, noise=0.5,", commands[0])
+        # Counts, points and fill always; other defaults left out
+        self.assertEqual(commands[0], "nm.folders['Demo'].new_dataseries('Rec', n_channels=1, "
+                                      "n_epochs=1, n_points=4, fill=1.0, noise=0.5)")
         self.assertIn("fill=2.0, noise=0.1)", commands[1])
-        self.assertIn("fill=nan,", commands[2])
-        self.assertIn("fill=numpy.zeros,", commands[3])
+        self.assertIn("fill=nan)", commands[2])
+        self.assertIn("fill=numpy.zeros)", commands[3])
         self.assertTrue(commands[4].endswith("  # fill was a function, not recorded"))
         self.assertNotIn("<function", " ".join(commands))
         values = folder.data["RecA0"].nparray
@@ -196,9 +201,22 @@ class TestCoreCommands(unittest.TestCase):
     def test_select_keys_command_in_hierarchy_order(self):
         folder = self.nm.folders.new("Demo")
         folder.new_dataseries("Rec", n_points=3)
-        self.nm.select_keys = {"dataseries": "Rec", "toolfolder": None, "folder": "Demo"}
+        folder.new_dataseries("Two", n_points=3)
+        self.nm.select_keys = {"dataseries": "Two", "folder": "Demo"}
         self.assertEqual(self._commands()[-1],
-                         "nm.select_keys = {'folder': 'Demo', 'toolfolder': None, 'dataseries': 'Rec'}")
+                         "nm.select_keys = {'folder': 'Demo', 'dataseries': 'Two'}")
+
+    def test_select_keys_command_is_short(self):
+        folder = self.nm.folders.new("Demo")
+        folder.new_dataseries("Rec", n_points=3)
+        folder.new_dataseries("Two", n_points=3)
+        before = len(self._commands())
+        self.nm.select_keys = {"folder": "Demo"}  # already selected: no change
+        self.assertEqual(len(self._commands()), before)
+        # toolfolder None only when one is selected (clearing it changes something)
+        self.nm.select_keys = {"folder": "Demo", "toolfolder": None, "dataseries": "Two"}
+        self.assertEqual(self._commands()[-1],
+                         "nm.select_keys = {'folder': 'Demo', 'dataseries': 'Two'}")
 
     def test_select_keys_command_has_the_path_above(self):
         demo = self.nm.folders.new("Demo")
@@ -218,11 +236,11 @@ class TestCoreCommands(unittest.TestCase):
         self.nm.select_keys = {"folder": "Demo", "channel": "A"}
         self.assertEqual(last(), "nm.select_keys = {'folder': 'Demo', 'channel': 'A'}")
         # With toolfolders, the toolfolder is part of the path (data tiers are its contents)
+        # Toolfolders but none selected: no toolfolder (None would change nothing)
         demo.toolfolders.new("Stats_0")
-        self.nm.select_keys = {"toolfolder": None}
-        self.nm.select_keys = {"channel": "A"}
-        self.assertEqual(last(), "nm.select_keys = {'folder': 'Demo', 'toolfolder': None, "
-                                 "'dataseries': 'Rec', 'channel': 'A'}")
+        self.nm.select_keys = {"channel": "B"}
+        self.assertEqual(last(), "nm.select_keys = {'folder': 'Demo', 'dataseries': 'Rec', "
+                                 "'channel': 'B'}")
         # The commands replay: the same selection
         replayed = NMManager(quiet=True)
         namespace = {"nm": replayed}
@@ -246,8 +264,8 @@ class TestCoreCommands(unittest.TestCase):
         epoch_sets.empty("Set1")
         folder.data.sets.add("Set0", ["RecA0", "Extra"])
         folder.data.sets["Set1"] = ["Extra"]
-        epochs = 'nm.folders["Demo"].dataseries["Rec"].epochs.sets.'
-        data = 'nm.folders["Demo"].data.sets'
+        epochs = "nm.folders['Demo'].dataseries['Rec'].epochs.sets."
+        data = "nm.folders['Demo'].data.sets"
         self.assertEqual(self._commands(), [
             epochs + "add('Set0', ['E0', 'E1'])",
             epochs + "remove('Set0', ['E1'])",
@@ -296,7 +314,7 @@ class TestCoreCommands(unittest.TestCase):
         groups.clear_group(1)
         groups.delete_group([0, 2])
         groups.clear()
-        path = 'nm.folders["Demo"].dataseries["Rec"].epochs.groups.'
+        path = "nm.folders['Demo'].dataseries['Rec'].epochs.groups."
         self.assertEqual(self._commands(), [
             path + "add_group([0, 1, 2])",
             path + "assign(['E0', 'E1', 'E2'], 1)",
@@ -307,9 +325,9 @@ class TestCoreCommands(unittest.TestCase):
             path + "delete_group([0, 2])",
             path + "clear()",
         ])
+        # Notes only say what the commands don't: cyclic gives group sizes (#441)
         notes = [e["message"] for e in self.nm.history.buffer if e["kind"] == ""]
-        self.assertIn("groups: 'E0', 'E1', 'E2' → 1", notes)
-        self.assertEqual(sum("→" in n for n in notes), 2)  # cyclic: one note, not each
+        self.assertEqual(notes, ["2 groups of 2"])
 
     def test_group_commands_replay(self):
         folder = self.nm.folders.new("Demo")
@@ -327,6 +345,143 @@ class TestCoreCommands(unittest.TestCase):
         again = replayed.folders["Demo"].dataseries["Rec"].epochs.groups
         self.assertEqual(again, groups)
 
+    def test_select_commands_in_a_row_keep_the_last(self):
+        """Clicking through epochs: one select command, the last; a select
+        that leaves an earlier choice in place keeps it (#441)."""
+        demo = self.nm.folders.new("Demo")
+        demo.new_dataseries("Rec", n_channels=2, n_epochs=5, n_points=2)
+        demo.new_dataseries("Two", n_epochs=2, n_points=2)
+        self.nm.command_history.clear()
+        for epoch in ("E1", "E2", "E3"):
+            self.nm.select_keys = {"folder": "Demo", "dataseries": "Rec", "epoch": epoch}
+        self.assertEqual(self._commands(), [
+            "nm.select_keys = {'folder': 'Demo', 'dataseries': 'Rec', 'epoch': 'E3'}"])
+        self.nm.select_keys = {"channel": "B"}  # the epoch choice stays: kept
+        self.nm.select_keys = {"dataseries": "Two", "epoch": "E1"}  # another series: kept
+        self.assertEqual(len(self._commands()), 3)
+        demo.data.new("Extra")  # a command between: nothing replaced
+        self.nm.select_keys = {"dataseries": "Two", "epoch": "E0"}
+        self.assertEqual(len(self._commands()), 5)
+
+    def test_select_commands_replay_the_same_selection(self):
+        demo = self.nm.folders.new("Demo")
+        demo.new_dataseries("Rec", n_channels=2, n_epochs=5, n_points=2)
+        demo.new_dataseries("Two", n_epochs=2, n_points=2)
+        for keys in ({"dataseries": "Rec", "epoch": "E1"}, {"epoch": "E4"},
+                     {"channel": "B"}, {"dataseries": "Two", "epoch": "E1"},
+                     {"dataseries": "Rec"}, {"epoch": "E2"}):
+            self.nm.select_keys = keys
+        replayed = NMManager(quiet=True)
+        namespace = {"nm": replayed}
+        for command in self._commands():
+            exec(command, namespace)
+        self.assertEqual(replayed.select_keys, self.nm.select_keys)
+        two = replayed.folders["Demo"].dataseries["Two"]
+        self.assertEqual(two.epochs.selected_name, "E1")
+
+    def test_new_data_command_has_its_values(self):
+        """data.new records points, fill and scales (not just the name), and
+        replays; an array it can't write gets a comment (#441)."""
+        folder = self.nm.folders.new("TEST")
+        folder.data.new(  # as the New Data dialog does: every field
+            "data0", n_points=50, fill=2.5,
+            xscale={"start": 0, "delta": 0.1, "label": "", "units": "ms"},
+            yscale={"label": "Vm", "units": "mV"})
+        folder.data.new("Zeros", nparray=np.zeros(3))
+        folder.data.new("Sine", nparray=np.sin(np.arange(5)))
+        path = "nm.folders['TEST'].data."
+        self.assertEqual(self._commands()[-3:], [
+            path + "new('data0', n_points=50, fill=2.5, xscale={'delta': 0.1, 'units': 'ms'}, "
+                   "yscale={'label': 'Vm', 'units': 'mV'})",
+            path + "new('Zeros', n_points=3, fill=0.0)",
+            path + "new('Sine')  # nparray not recorded",
+        ])
+        replayed = NMManager(quiet=True)
+        namespace = {"nm": replayed}
+        for command in self._commands():
+            exec(command, namespace)
+        again = replayed.folders["TEST"].data["data0"]
+        self.assertEqual(list(again.nparray), [2.5] * 50)
+        self.assertEqual((again.xscale.delta, again.xscale.units), (0.1, "ms"))
+        self.assertEqual((again.yscale.label, again.yscale.units), ("Vm", "mV"))
+
+    def test_scales_are_one_command_each_and_replay(self):
+        """Edit Scales: one set_scales command (no message per value); a
+        series' x array names its source (#441)."""
+        folder = self.nm.folders.new("Demo1")
+        data = folder.data.new("Test0", n_points=4)
+        series = folder.new_dataseries("Rec", n_channels=2, n_epochs=2, n_points=4)
+        times = folder.data.new("Times", n_points=4)
+        times.nparray = np.arange(4.0)
+        self.nm.command_history.clear()
+        self.nm.history.clear()
+        data.set_scales(xstart=-1.0, xdelta=0.1, xunits="ms", ylabel="Voltage")
+        series.set_scales(xdelta=0.2, xunits="s")
+        series.set_scales(xstart=5.0, ylabel="I", channel="B")
+        series.set_xarray(times, channel="A")
+        series.set_xarray(None, channel="A")
+        self.assertEqual(self._commands(), [
+            "nm.folders['Demo1'].data['Test0'].set_scales("
+            "xstart=-1.0, xdelta=0.1, xunits='ms', ylabel='Voltage')",
+            "nm.folders['Demo1'].dataseries['Rec'].set_scales(xdelta=0.2, xunits='s')",
+            "nm.folders['Demo1'].dataseries['Rec'].set_scales(xstart=5.0, ylabel='I', channel='B')",
+            "nm.folders['Demo1'].dataseries['Rec'].set_xarray("
+            "nm.folders['Demo1'].data['Times'], channel='A')",
+            "nm.folders['Demo1'].dataseries['Rec'].set_xarray(None, channel='A')",
+        ])
+        notes = [e for e in self.nm.history.buffer if e["kind"] == ""]
+        self.assertEqual(notes, [])  # the commands say it all
+        self.assertEqual(series.channels["B"].xscale.start, 5.0)  # the channel's own too
+        # Replayed (the commands since the folder), the scales are the same
+        replayed = NMManager(quiet=True)
+        namespace = {"nm": replayed}
+        exec("nm.folders.new('Demo1')", namespace)
+        again = replayed.folders["Demo1"]
+        again.data.new("Test0", n_points=4)
+        again.new_dataseries("Rec", n_channels=2, n_epochs=2, n_points=4)
+        again.data.new("Times", nparray=np.arange(4.0))
+        for command in self._commands():
+            exec(command, namespace)
+        self.assertEqual(again.data["Test0"].xscale, data.xscale)
+        self.assertEqual(again.data["Test0"].yscale, data.yscale)
+        self.assertEqual(again.data["RecB1"].xscale, folder.data["RecB1"].xscale)
+        self.assertEqual(again.data["RecB1"].yscale, folder.data["RecB1"].yscale)
+
+    def test_commands_use_single_quotes(self):
+        """Paths are written with repr, so quotes are single, like the
+        arguments (#441)."""
+        folder = self.nm.folders.new("Demo")
+        folder.new_dataseries("Rec", n_epochs=20, n_points=2)
+        folder.dataseries["Rec"].epochs.groups.assign([f"E{i}" for i in range(20)], 0)
+        self.assertEqual(self._commands()[-2:], [
+            "nm.folders['Demo'].new_dataseries('Rec', n_channels=1, n_epochs=20, n_points=2, fill=0.0)",
+            "nm.folders['Demo'].dataseries['Rec'].epochs.groups.assign("
+            "[f'E{i}' for i in range(20)], 0)",
+        ])
+
+    def test_channel_runs_are_short(self):
+        """Channels A..F, like epochs E0..E9; two channels listed (#441)."""
+        folder = self.nm.folders.new("Demo")
+        notes = lambda: [e["message"] for e in self.nm.history.buffer if e["kind"] == ""]
+        folder.new_dataseries("Six", n_channels=6, n_epochs=10, n_points=2)
+        self.assertEqual(notes()[-1], "new data series Six: channels A..F; epochs E0..E9")
+        folder.new_dataseries("Two", n_channels=2, n_epochs=1, n_points=2)
+        self.assertEqual(notes()[-1], "new data series Two: channels A, B; epochs E0..E0")
+
+    def test_set_notes_name_the_arrays(self):
+        """An epoch set's note names the epochs' arrays, and the count (#441)."""
+        folder = self.nm.folders.new("Demo")
+        epochs = folder.new_dataseries("Rec", n_channels=2, n_epochs=20, n_points=2).epochs
+        notes = lambda: [e["message"] for e in self.nm.history.buffer if e["kind"] == ""]
+        epochs.sets.add("Set0", ["E0"])
+        self.assertEqual(notes()[-1], "Set0 added RecA0, RecB0; n=1")
+        self.assertEqual(self.nm.history.buffer[-1]["path"], "Demo.Rec.sets")
+        epochs.sets.add("Set0", [f"E{i}" for i in range(2, 12)])  # 20 arrays: the first 6
+        self.assertEqual(notes()[-1], "Set0 added RecA2, RecB2, RecA3, RecB3, RecA4, RecB4, "
+                                      "… (+14); n=11")
+        epochs.sets.remove("Set0", "E3")
+        self.assertEqual(notes()[-1], "Set0 removed RecA3, RecB3; n=10")
+
     def test_long_lists_of_names_are_short(self):
         folder = self.nm.folders.new("Demo")
         folder.new_dataseries("Rec", n_channels=1, n_epochs=1000, n_points=2)
@@ -336,12 +491,12 @@ class TestCoreCommands(unittest.TestCase):
         epochs.groups.assign_cyclic(names, 3)
         epochs.groups.unassign(names[::2])
         epochs.sets.add("Set0", names[:10] + ["E15"] + names[20:40])
-        path = 'nm.folders["Demo"].dataseries["Rec"].epochs.'
+        path = "nm.folders['Demo'].dataseries['Rec'].epochs."
         self.assertEqual(self._commands(), [
-            path + 'groups.assign_cyclic([f"E{i}" for i in range(1000)], 3, block=1)',
-            path + 'groups.unassign([f"E{i}" for i in range(0, 999, 2)])',  # E0, E2... E998
-            path + 'sets.add(\'Set0\', [f"E{i}" for i in range(10)] + [\'E15\'] '
-                   '+ [f"E{i}" for i in range(20, 40)])',
+            path + "groups.assign_cyclic([f'E{i}' for i in range(1000)], 3)",
+            path + "groups.unassign([f'E{i}' for i in range(0, 999, 2)])",  # E0, E2... E998
+            path + "sets.add('Set0', [f'E{i}' for i in range(10)] + ['E15'] "
+                   "+ [f'E{i}' for i in range(20, 40)])",
         ])
         # They replay
         replayed = NMManager(quiet=True)

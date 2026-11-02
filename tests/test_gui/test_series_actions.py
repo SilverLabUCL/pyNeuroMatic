@@ -449,3 +449,30 @@ def test_renumber_epochs_removes_empty_epochs(app):
     actions.renumber_epochs()
     assert list(app.series.epochs.keys()) == ["E0"]
     assert "RecordA0" in app.demo.data
+
+
+def test_deleting_the_selected_series_selects_the_next(app):
+    """Delete the selected series: the next one is selected, still on Data
+    Series (not falling back to Data); none left: Data."""
+    app.demo.sync_dataseries("Stim")
+    app.selection_model.update(dataseries=app.series, source="dataseries")
+    app.answers.append(("Record", None, "Keep"))
+    app.series_actions.delete_series()
+    selection = app.selection_model.selection
+    assert selection["source"] == "dataseries" and selection["dataseries"].name == "Stim"
+    app.answers.append(("Stim", None, "Keep"))
+    app.series_actions.delete_series()  # the last one
+    assert app.selection_model.selection["dataseries"] is None
+
+
+def test_deleting_several_series_selects_the_next(app):
+    for prefix in ("Stim", "Sweep"):
+        if prefix == "Sweep":
+            for name in ("SweepA0", "SweepA1"):
+                app.demo.data.new(name, nparray=np.array([1.0, 2.0]))
+        app.demo.sync_dataseries(prefix)
+    app.selection_model.update(dataseries=app.series, source="dataseries")
+    app.answers.append((None, None, "Keep"))
+    app.series_actions.delete_series_list(app.demo, ["Record", "Stim"])
+    selection = app.selection_model.selection
+    assert selection["source"] == "dataseries" and selection["dataseries"].name == "Sweep"

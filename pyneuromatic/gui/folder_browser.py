@@ -1382,6 +1382,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             actions.delete_subfolders(selected[0]._folder, names)
             return
         problems = []
+        before = (self._data_actions.before_delete(container)
+                  if isinstance(container, NMDataContainer) and self._data_actions else None)
         # Arrays taking their x values from another go first, so deleting
         # both (e.g. a series' arrays and their x array) works
         ordered = sorted(selected, key=lambda o: getattr(o, "xarray_source", None) is None)
@@ -1392,6 +1394,8 @@ class FolderBrowserWidget(QtWidgets.QWidget):
                 problems.append(str(e))
         if problems:
             QtWidgets.QMessageBox.warning(self, "Delete Failed", "\n".join(problems))
+        if before is not None:  # the selected array deleted: the next one
+            self._data_actions.select_after_delete(container, before, names, "data")
         self._changed()
 
     def _ask_new_data(self, defaults: dict, validate, context) -> dict | None:

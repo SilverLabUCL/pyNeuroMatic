@@ -125,6 +125,8 @@ class NMObjectContainer(NMObject, MutableMapping):
     """
 
     # Extend NMObject's special attrs with NMObjectContainer's own
+    _IN_HISTORY_PATH = False  # history messages name its contents' owner
+
     _DEEPCOPY_SPECIAL_ATTRS: frozenset[str] = NMObject._DEEPCOPY_SPECIAL_ATTRS | frozenset({
         "_NMObjectContainer__map",
         "_NMObjectContainer__sets",
@@ -450,11 +452,18 @@ class NMObjectContainer(NMObject, MutableMapping):
         """Command-history path for this container.
 
         Returns the dotted access path used to build ``nmch.add_nm_command()``
-        strings, e.g. ``"folders"`` or ``'folders["f0"].data'``.
+        strings, e.g. ``"folders"`` or ``"folders['f0'].data"``.
         Returns ``None`` to opt out of command-history logging (default).
         Subclasses override this for containers that should be logged.
         """
         return None
+
+    def _echo(self, message: str, quiet: bool = nmc.QUIET) -> None:
+        """A history message that says only what its command does: written
+        only when no command is recorded (the container isn't in a manager),
+        as otherwise the command says it (#441)."""
+        if self._nm_cmd_path is None:
+            nmh.history(message, path=self.history_path, quiet=quiet)
 
     # override MutableMapping mixin method
     @nmch.records_command
@@ -476,7 +485,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.sets.remove_from_all(actual_key)
         o = self.__map.pop(actual_key)
         o._container = None
-        nmh.history("removed '%s'" % actual_key, path=self.path_str, quiet=quiet)
+        self._echo("removed '%s'" % actual_key, quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command('%s.pop(%r)' % (self._nm_cmd_path, actual_key))
         return o
@@ -512,7 +521,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.selected_name = None
         self.sets.empty_all()
         self.__map.clear()
-        nmh.history("cleared all: %s" % names, path=self.path_str, quiet=quiet)
+        nmh.history("cleared all: %s" % names, path=self.history_path, quiet=quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command('%s.clear()' % self._nm_cmd_path)
 
@@ -532,7 +541,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             key = self._newkey(nmobject.name)
         self.__map[key] = nmobject
         self.__update_nmobject_references()
-        nmh.history("updated '%s'" % key, path=self.path_str, quiet=quiet)
+        self._echo("updated '%s'" % key, quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command('%s.update(%r)' % (self._nm_cmd_path, nmobject.name))
 
@@ -642,10 +651,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             and self.__selected_name.lower() == key.lower()
         ):
             self.__selected_name = actual_newname
-        nmh.history(
-            "renamed '%s' as '%s'" % (key, actual_newname),
-            path=self.path_str, quiet=quiet,
-        )
+        self._echo("renamed '%s' as '%s'" % (key, actual_newname), quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command(
                 '%s.rename(%r, %r)' % (self._nm_cmd_path, key, actual_newname)
@@ -701,7 +707,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # self.__map = new_map  # reference change
         self.__map.clear()
         self.__map.update(new_map)
-        nmh.history("reordered items", path=self.path_str, quiet=quiet)
+        self._echo("reordered items", quiet)
 
     @nmch.records_command
     def duplicate(
@@ -725,10 +731,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         c._name_set(newname=newkey, quiet=True, history=False)
         self.__map[c.name] = c
         self.__update_nmobject_references()
-        nmh.history(
-            "duplicated '%s' as '%s'" % (key, c.name),
-            path=self.path_str, quiet=quiet,
-        )
+        self._echo("duplicated '%s' as '%s'" % (key, c.name), quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command(
                 '%s.duplicate(%r, %r)' % (self._nm_cmd_path, key, c.name)
@@ -768,7 +771,7 @@ class NMObjectContainer(NMObject, MutableMapping):
             select = True  # select first entry
         if isinstance(select, bool) and select:
             self.__selected_name = newkey
-        nmh.history("new '%s'" % newkey, path=self.path_str, quiet=quiet)
+        self._echo("new '%s'" % newkey, quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command('%s.new(%r)' % (self._nm_cmd_path, newkey))
         return True
@@ -804,7 +807,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self.__auto_name_prefix = prefix
         if history:
             h = nmh.history_change_str("prefix", oldprefix, self.__auto_name_prefix)
-            nmh.history(h, path=self.path_str, quiet=quiet)
+            nmh.history(h, path=self.history_path, quiet=quiet)
 
     @property
     def auto_name_seq_format(self) -> str:
@@ -844,7 +847,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         self._auto_name_seq_counter_reset()
         if history:
             h = nmh.history_change_str("seq_format", old_format, slist)
-            nmh.history(h, path=self.path_str, quiet=quiet)
+            nmh.history(h, path=self.history_path, quiet=quiet)
 
     @staticmethod
     def __auto_name_seq_char_list() -> list[str]:
@@ -958,7 +961,6 @@ class NMObjectContainer(NMObject, MutableMapping):
         name: str | None,
         quiet: bool = nmc.QUIET,
     ) -> None:
-        old_selected = self.__selected_name
         if name is None or (isinstance(name, str) and
                             (name == "" or name.lower() == "none")):
             self.__selected_name = None
@@ -970,10 +972,8 @@ class NMObjectContainer(NMObject, MutableMapping):
             if key is None:
                 raise KeyError("key name '%s' does not exist" % name)
             self.__selected_name = key
-        if old_selected != self.__selected_name:
-            h = nmh.history_change_str("selected", old_selected,
-                                       self.__selected_name)
-            nmh.history(h, path=self.path_str, quiet=quiet)
+        # No history message: the select command (and the History panel's
+        # Selection entry) already say what was selected (#441)
 
     def is_selected(
         self, 

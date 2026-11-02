@@ -286,8 +286,11 @@ class NMCommandHistory:
     # ------------------------------------------------------------------
     # Core
 
-    def add(self, command_str: str) -> None:
+    def add(self, command_str: str, replaces_last: bool = False) -> None:
         """Append *command_str* to the buffer with a timestamp.
+
+        *replaces_last* True: it takes the place of the last command, which
+        it makes unnecessary (e.g. a selection replacing the one before it).
 
         Does nothing when :attr:`enabled` is *False*. Inside a call made by
         a top-level command (see :func:`records_command`) it is not
@@ -317,7 +320,10 @@ class NMCommandHistory:
                              level=logging.DEBUG)
             return
         entry = {"date": datetime.now().isoformat(), "command": command_str}
-        self._buffer.append(entry)
+        if replaces_last and self._buffer:
+            self._buffer[-1] = entry
+        else:
+            self._buffer.append(entry)
         if self._log_to_nm_history:
             # The command first, then what the call wrote while it ran
             global _held
@@ -328,7 +334,11 @@ class NMCommandHistory:
         elif not self._quiet:
             print(command_str)
 
-    def add_nm(self, suffix: str) -> None:
+    def last_command(self) -> str | None:
+        """The most recent command recorded, or None."""
+        return self._buffer[-1]["command"] if self._buffer else None
+
+    def add_nm(self, suffix: str, replaces_last: bool = False) -> None:
         """Log a command prefixed with :attr:`nm_name` and a dot.
 
         Equivalent to ``self.add(self.nm_name + "." + suffix)``.  Use this
@@ -338,7 +348,7 @@ class NMCommandHistory:
             history.add_nm("tool_add('main')")     # → "nm.tool_add('main')"
             history.add_nm("tool_select = 'main'") # → "nm.tool_select = 'main'"
         """
-        self.add(self._nm_name + "." + suffix)
+        self.add(self._nm_name + "." + suffix, replaces_last=replaces_last)
 
     def clear(self) -> None:
         """Remove all entries from the buffer."""
@@ -450,9 +460,9 @@ def add_command(command_str: str) -> None:
     _nm_command_history.add(command_str)
 
 
-def add_nm_command(suffix: str) -> None:
+def add_nm_command(suffix: str, replaces_last: bool = False) -> None:
     """Log a command prefixed with the global instance's :attr:`~NMCommandHistory.nm_name`."""
-    _nm_command_history.add_nm(suffix)
+    _nm_command_history.add_nm(suffix, replaces_last=replaces_last)
 
 
 def enable_command_history() -> None:

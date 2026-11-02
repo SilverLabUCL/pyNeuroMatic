@@ -96,9 +96,14 @@ class NMSets:
         return self._name
 
     @property
+    def history_path(self) -> str:
+        parent = getattr(self._parent, "history_path", None)
+        return parent + ".sets" if parent else self._name
+
+    @property
     def _nm_cmd_path(self) -> str | None:
-        """Command-history path for these sets: e.g. 'folders["Demo"].data.sets'
-        (data sets) or 'folders["Demo"].dataseries["Rec"].epochs.sets'
+        """Command-history path for these sets: e.g. "folders['Demo'].data.sets"
+        (data sets) or "folders['Demo'].dataseries['Rec'].epochs.sets"
         (epoch sets); None when they aren't in the manager (not recorded)."""
         parent = self._parent
         path = getattr(parent, "_nm_cmd_path", None)
@@ -113,6 +118,38 @@ class NMSets:
         path = self._nm_cmd_path
         if path is not None:
             nmch.add_nm_command("%s.%s" % (path, call))
+
+    def _echo(self, message: str, quiet: bool = nmc.QUIET) -> None:
+        """A history message that says only what its command does: written
+        only when no command is recorded (#441)."""
+        if self._nm_cmd_path is None:
+            nmh.history(message, path=self.history_path, quiet=quiet)
+
+    # Arrays named in a set message before the rest are counted
+    _NOTE_NAMES = 6
+
+    def _arrays_text(self, keys: list[str]) -> str:
+        """The arrays of items *keys*, for a message: an epoch's arrays (its
+        channels), e.g. "FRAPA0, FRAPB0", as they mean more than "E0"; at most
+        _NOTE_NAMES, then "… (+N)"."""
+        names: list[str] = []
+        for key in keys:
+            item = self._parent.get(key) if self._parent is not None else None
+            arrays = getattr(item, "data", None)
+            if isinstance(arrays, list):  # an epoch: its arrays
+                names.extend(getattr(d, "name", str(d)) for d in arrays)
+            else:
+                names.append(key)
+        if len(names) > self._NOTE_NAMES:
+            more = len(names) - self._NOTE_NAMES
+            return ", ".join(names[:self._NOTE_NAMES]) + ", … (+%d)" % more
+        return ", ".join(names)
+
+    def _count_note(self, key: str, what: str, quiet: bool = nmc.QUIET) -> None:
+        """A message on set *key*: *what* happened (e.g. "added FRAPA0") and
+        how many it now has, e.g. "Set0 added FRAPA0, FRAPB0; n=3"."""
+        n = len(self.get_items(key, default=[], get_keys=True) or [])
+        nmh.history("%s %s; n=%d" % (key, what, n), path=self.history_path, quiet=quiet)
 
     def _item_keys(self, olist: Any) -> list[str]:
         """The item names of *olist* (a name, an NMObject or a list)."""
@@ -268,7 +305,7 @@ class NMSets:
         key = self._getkey(key)
         value = self._map.pop(key)
         self._notes.pop(key, None)
-        nmh.history("removed set '%s'" % key, path=self.path_str, quiet=quiet)
+        self._echo("removed set '%s'" % key, quiet)
         self._record("pop(%r)" % key)
         return value
 
@@ -280,7 +317,7 @@ class NMSets:
         self._map.clear()
         self._notes.clear()
         nmh.history(
-            "cleared all sets: %s" % names, path=self.path_str, quiet=quiet
+            "cleared all sets: %s" % names, path=self.history_path, quiet=quiet
         )
         self._record("clear()")
 
@@ -440,11 +477,8 @@ class NMSets:
         self._setitem(key, olist, add=True)
         actual_key = self._getkey(key)
         if history:
-            nmh.history(
-                "set '%s': added %s" % (actual_key, self._map[actual_key]),
-                path=self.path_str,
-                quiet=quiet,
-            )
+            self._count_note(actual_key, "added " + self._arrays_text(
+                self._item_keys(olist)), quiet)
             self._record("add(%r, %s)" % (actual_key, nmu.names_repr(self._item_keys(olist))))
 
     @nmch.records_command
@@ -454,11 +488,7 @@ class NMSets:
         """Define an equation set as the AND (intersection) of two sets."""
         self._setitem(name, ("and", set1, set2), add=False)
         actual_key = self._getkey(name) or name
-        nmh.history(
-            "set '%s' = '%s' AND '%s'" % (actual_key, set1, set2),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._count_note(actual_key, "= %s AND %s" % (set1, set2), quiet)
         self._record("define_and(%r, %r, %r)" % (actual_key, set1, set2))
         return actual_key
 
@@ -469,11 +499,7 @@ class NMSets:
         """Define an equation set as the OR (union) of two sets."""
         self._setitem(name, ("or", set1, set2), add=False)
         actual_key = self._getkey(name) or name
-        nmh.history(
-            "set '%s' = '%s' OR '%s'" % (actual_key, set1, set2),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._count_note(actual_key, "= %s OR %s" % (set1, set2), quiet)
         self._record("define_or(%r, %r, %r)" % (actual_key, set1, set2))
         return actual_key
 
@@ -522,11 +548,7 @@ class NMSets:
         for r in removed:
             value.remove(r)
 
-        nmh.history(
-            "set '%s': removed %s" % (key, removed),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._count_note(key, "removed " + self._arrays_text(removed), quiet)
         self._record("remove(%r, %s)" % (key, nmu.names_repr(removed)))
 
         # Resolve removed keys to NMObjects for return value
@@ -582,7 +604,7 @@ class NMSets:
     def new(self, name: str | None = None, quiet: bool = nmc.QUIET) -> tuple[str, list]:
         key = self._newkey(name)
         self._map[key] = []
-        nmh.history("new set '%s'" % key, path=self.path_str, quiet=quiet)
+        self._echo("new set '%s'" % key, quiet)
         self._record("new(%r)" % key)
         return (key, [])
 
@@ -605,11 +627,7 @@ class NMSets:
             self._map[newkey] = list(value)
         if key in self._notes:
             self._notes[newkey] = copy.deepcopy(self._notes[key])
-        nmh.history(
-            "duplicated set '%s' as '%s'" % (key, newkey),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._echo("duplicated set '%s' as '%s'" % (key, newkey), quiet)
         self._record("duplicate(%r, %r)" % (key, newkey))
         return (newkey, self._map[newkey])
 
@@ -635,11 +653,7 @@ class NMSets:
         self._map.update(new_map)
         if key in self._notes:
             self._notes[newkey] = self._notes.pop(key)
-        nmh.history(
-            "renamed set '%s' as '%s'" % (key, newkey),
-            path=self.path_str,
-            quiet=quiet,
-        )
+        self._echo("renamed set '%s' as '%s'" % (key, newkey), quiet)
         self._record("rename(%r, %r)" % (key, newkey))
         return newkey
 
@@ -660,7 +674,7 @@ class NMSets:
         self._map.clear()
         self._map.update(new_map)
         if list(self._map.keys()) != old_keys:
-            nmh.history("reordered sets", path=self.path_str, quiet=quiet)
+            self._echo("reordered sets", quiet)
             self._record("reorder(%r)" % (list(self._map.keys()),))
 
     def notes(self, key: str) -> NMNotes:
@@ -682,7 +696,7 @@ class NMSets:
         """Clear the contents of a set, converting equations to empty lists."""
         key = self._getkey(key)
         self._map[key] = []
-        nmh.history("emptied set '%s'" % key, path=self.path_str, quiet=quiet)
+        self._echo("emptied set '%s'" % key, quiet)
         self._record("empty(%r)" % key)
 
     def empty_all(self) -> None:

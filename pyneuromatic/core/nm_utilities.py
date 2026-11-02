@@ -742,15 +742,50 @@ def prompt_yes_no(
     return "error"
 
 
+def kwargs_repr(
+    func: Callable,
+    values: dict,
+    text: dict[str, str] | None = None,
+    always: tuple[str, ...] = (),
+) -> str:
+    """Keyword arguments as written in a command, e.g. ", n_epochs=4,
+    fill=1.0", leaving out those equal to *func*'s defaults (#441), except
+    those in *always* (so a script doesn't change if a default does).
+
+    :param func: the function called (its signature gives the defaults).
+    :param values: argument name → value, in the order written.
+    :param text: argument name → text written instead of repr(value), e.g.
+        a function's name.
+    :param always: argument names written even when equal to the default.
+    """
+    params = inspect.signature(func).parameters
+    text = text or {}
+    written = []
+    for name, value in values.items():
+        param = params.get(name)
+        if name not in always and param is not None \
+                and param.default is not inspect.Parameter.empty:
+            default = param.default
+            try:
+                same = (isinstance(value, bool) == isinstance(default, bool)
+                        and not callable(value) and bool(value == default))
+            except Exception:  # e.g. an array
+                same = False
+            if same:
+                continue
+        written.append("%s=%s" % (name, text.get(name, repr(value))))
+    return "".join(", " + w for w in written)
+
+
 def names_repr(names: list[str]) -> str:
     """*names* as Python for a command: the list, or (when shorter) numbered
     names written as ranges, so a long list stays short and still runs::
 
         names_repr(["E0", "E1", "E2"])           # "['E0', 'E1', 'E2']"
         names_repr([f"E{i}" for i in range(1000)])
-        # '[f"E{i}" for i in range(1000)]'
+        # "[f'E{i}' for i in range(1000)]"
         names_repr([f"E{i}" for i in range(10)] + ["E15"])
-        # '[f"E{i}" for i in range(10)] + [\'E15\']'
+        # "[f'E{i}' for i in range(10)] + ['E15']"
 
     Names must share a prefix and end in a number to be written as ranges;
     a run of 3 or more evenly spaced numbers becomes a range.
@@ -783,7 +818,7 @@ def names_repr(names: list[str]) -> str:
             args = (str(stop) if first == 0 and step == 1
                     else "%d, %d" % (first, stop) if step == 1
                     else "%d, %d, %d" % (first, stop, step))
-            parts.append('[f"%s{i}" for i in range(%s)]' % (prefix, args))
+            parts.append("[f%r for i in range(%s)]" % (prefix + "{i}", args))
             i = j
         else:
             singles.append(names[i])

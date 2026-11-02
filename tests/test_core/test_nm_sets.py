@@ -618,40 +618,28 @@ class TestNMSetsHistory(unittest.TestCase):
 
     def test_add_logs(self):
         self.sets.add("setA", ["obj0", "obj1"], quiet=False)
-        msg = self._last_message()
-        self.assertIn("setA", msg)
-        self.assertIn("obj0", msg)
-        self.assertIn("obj1", msg)
+        # What the command doesn't say: how many the set now has (#441)
+        self.assertEqual(self._last_message(), "setA added obj0, obj1; n=2")
 
     def test_define_and_logs(self):
         self.sets.add("s1", ["obj0", "obj1"])
         self.sets.add("s2", ["obj1", "obj2"])
         self.nm.history.clear()
         self.sets.define_and("s3", "s1", "s2", quiet=False)
-        msg = self._last_message()
-        self.assertIn("s3", msg)
-        self.assertIn("s1", msg)
-        self.assertIn("AND", msg)
-        self.assertIn("s2", msg)
+        self.assertEqual(self._last_message(), "s3 = s1 AND s2; n=1")
 
     def test_define_or_logs(self):
         self.sets.add("s1", ["obj0", "obj1"])
         self.sets.add("s2", ["obj1", "obj2"])
         self.nm.history.clear()
         self.sets.define_or("s3", "s1", "s2", quiet=False)
-        msg = self._last_message()
-        self.assertIn("s3", msg)
-        self.assertIn("s1", msg)
-        self.assertIn("OR", msg)
-        self.assertIn("s2", msg)
+        self.assertEqual(self._last_message(), "s3 = s1 OR s2; n=3")
 
     def test_remove_logs(self):
         self.sets.add("setA", ["obj0", "obj1", "obj2"])
         self.nm.history.clear()
         self.sets.remove("setA", "obj1", quiet=False)
-        msg = self._last_message()
-        self.assertIn("setA", msg)
-        self.assertIn("obj1", msg)
+        self.assertEqual(self._last_message(), "setA removed obj1; n=2")
 
     def test_pop_logs(self):
         self.sets.add("setA", ["obj0"])

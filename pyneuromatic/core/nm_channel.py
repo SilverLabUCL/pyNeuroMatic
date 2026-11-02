@@ -232,7 +232,7 @@ class NMChannel(NMObject):
         self.__transform = result
         nmh.history(
             "set transform=[%s]" % ", ".join(t.type_str for t in result),
-            path=self.path_str,
+            path=self.history_path,
             quiet=quiet,
         )
 
