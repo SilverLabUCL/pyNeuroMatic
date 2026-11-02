@@ -827,3 +827,31 @@ def names_repr(names: list[str]) -> str:
         parts.append(repr(singles))
     compact = " + ".join(parts)
     return compact if len(compact) < len(plain) else plain
+
+
+def combine_scope_names(
+    all_names: list[str],
+    set_names: list[str] | None,
+    group_names: list[str] | None,
+    operator: str | None,
+) -> list[str]:
+    """Names from *all_names* allowed by a set and/or group selection.
+
+    ``None`` means that tier is not selected. When both are selected,
+    *operator* (``"AND"`` or ``"OR"``) combines them.
+    """
+    if set_names is not None and group_names is not None:
+        if operator not in ("AND", "OR"):
+            raise RuntimeError("Choose AND or OR to combine the selected Epoch Set and Group")
+        allowed = (
+            set(set_names).intersection(group_names)
+            if operator == "AND"
+            else set(set_names).union(group_names)
+        )
+    elif set_names is not None:
+        allowed = set(set_names)
+    elif group_names is not None:
+        allowed = set(group_names)
+    else:
+        return all_names
+    return [name for name in all_names if name in allowed]

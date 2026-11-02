@@ -312,6 +312,54 @@ class NMEpochContainer(NMObjectContainer):
             return set()
         return set(self.sets.get_items(EXCLUDE_SET, get_keys=True) or [])
 
+    def scope_names(
+        self,
+        epochs: str | list[str] | None = None,
+        group: int | None = None,
+        group_operator: str | None = None,
+        exclude: bool = True,
+    ) -> list[str]:
+        """Names of the epochs a run analyses, in order (#448).
+
+        Args:
+            epochs: ``"all"``, a set's name (e.g. ``"Set1"``), an epoch's
+                name (e.g. ``"E3"``) or a list of epoch names; None for no
+                epoch set (the group alone).
+            group: A group number, or None.
+            group_operator: ``"AND"`` or ``"OR"``, combining *epochs* and
+                *group* when both are given (not for ``"all"``).
+            exclude: Leave out the epochs in the exclusion set (SetX),
+                unless *epochs* is SetX.
+
+        Raises:
+            KeyError: If *epochs* names no set or epoch.
+            RuntimeError: If *epochs* and *group* are both given without an
+                operator.
+        """
+        if epochs is None and group is None:
+            raise ValueError("epochs and group: choose epochs, a group or both")
+        set_names = None
+        if isinstance(epochs, (list, tuple)):
+            set_names = [str(name) for name in epochs]
+        elif isinstance(epochs, str) and epochs.lower() != "all":
+            if self.sets._getkey(epochs) is not None:
+                set_names = self.sets.get_items(epochs, get_keys=True) or []
+            elif self._getkey(epochs) is not None:
+                set_names = [self._getkey(epochs)]
+            else:
+                raise KeyError("no epoch set or epoch '%s'" % epochs)
+        elif epochs is not None and not isinstance(epochs, str):
+            raise TypeError(nmu.type_error_str(epochs, "epochs", "string or list"))
+        group_names = None if group is None else self.__groups.get_items(group)
+        names = nmu.combine_scope_names(
+            list(self.keys()), set_names, group_names,
+            group_operator.upper() if isinstance(group_operator, str) else None,
+        )
+        if exclude and not (isinstance(epochs, str) and epochs.lower() == EXCLUDE_SET.lower()):
+            excluded = self.excluded_names()
+            names = [name for name in names if name not in excluded]
+        return names
+
     # override: also remove from groups when an epoch is popped
     def pop(
         self,

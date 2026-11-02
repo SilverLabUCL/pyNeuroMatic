@@ -13,6 +13,7 @@ from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS, NMManager
 from pyneuromatic.core.nm_object import NMObject
+from pyneuromatic.core.nm_utilities import combine_scope_names
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 
@@ -377,34 +378,6 @@ class SelectionModel(QtCore.QObject):
         if isinstance(first, NMObject) or isinstance(second, NMObject):
             return first is second
         return first == second
-
-
-def combine_scope_names(
-    all_names: list[str],
-    set_names: list[str] | None,
-    group_names: list[str] | None,
-    operator: str | None,
-) -> list[str]:
-    """Names from *all_names* allowed by a set and/or group selection.
-
-    ``None`` means that tier is not selected. When both are selected,
-    *operator* (``"AND"`` or ``"OR"``) combines them.
-    """
-    if set_names is not None and group_names is not None:
-        if operator not in ("AND", "OR"):
-            raise RuntimeError("Choose AND or OR to combine the selected Epoch Set and Group")
-        allowed = (
-            set(set_names).intersection(group_names)
-            if operator == "AND"
-            else set(set_names).union(group_names)
-        )
-    elif set_names is not None:
-        allowed = set(set_names)
-    elif group_names is not None:
-        allowed = set(group_names)
-    else:
-        return all_names
-    return [name for name in all_names if name in allowed]
 
 
 def is_stored_epoch_set(name: str | None) -> bool:

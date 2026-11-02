@@ -247,6 +247,16 @@ class NMToolFolderContainer(NMObjectContainer):
         return NMToolFolder.__name__
 
     # override
+    @property
+    def _nm_cmd_path(self) -> str | None:
+        """e.g. "folders['Demo1'].toolfolders", so deleting a subfolder is
+        a command (#448)."""
+        from pyneuromatic.core.nm_folder import NMFolder
+        if isinstance(self._parent, NMFolder):
+            return '%s.toolfolders' % self._parent._nm_cmd_path
+        return None
+
+    # override
     def new(
         self,
         name: str | None = None,

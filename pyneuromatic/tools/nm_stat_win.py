@@ -181,7 +181,6 @@ class NMStatWin:
                 self._x_set("bsln_xend", v, quiet=True)  # type: ignore[arg-type]
             else:
                 raise KeyError("unknown key '%s'" % k)
-        nmh.history("set win=%s" % win, path=self._name, quiet=quiet)
         return None
 
     @property
@@ -202,7 +201,6 @@ class NMStatWin:
             e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
         self.__on = on
-        nmh.history("set on=%s" % on, path=self._name, quiet=quiet)
         return None
 
     @property
@@ -214,13 +212,16 @@ class NMStatWin:
     @records_command
     def func(self, func: dict | str) -> None:
         self._func_set(func)
-        if self.__func is not None:
-            params = self.__func._params_str()
-            add_nm_command(
-                "%s[%r].func = %s(%s)"
-                % (self._nm_path, self._name, type(self.__func).__name__, params)
-            )
+        add_nm_command("%s[%r].func = %r" % (self._nm_path, self._name, self._func_arg()))
         return None
+
+    def _func_arg(self) -> dict | str | None:
+        """The func as a command sets it: its name alone (e.g. 'mean'),
+        else its dict (e.g. {'name': 'risetime+', 'p0': 10.0, 'p1': 90.0})."""
+        func = self.func
+        if not func:
+            return None
+        return func["name"] if list(func) == ["name"] else func
 
     def _func_set(
         self,
@@ -243,12 +244,6 @@ class NMStatWin:
             else:
                 raise KeyError("missing func key 'name'")
         self.__func = _stat_func_from_dict(func)
-        if self.__func is not None:
-            nmh.history(
-                "set func=%s" % self.__func.to_dict(),
-                path=self._name,
-                quiet=quiet,
-            )
         return None
 
     @property
@@ -292,7 +287,6 @@ class NMStatWin:
             self.__bsln_xbgn = x
         elif n == "bsln_xend":
             self.__bsln_xend = x
-        nmh.history("set %s=%s" % (n, x), path=self._name, quiet=quiet)
         return None
 
     @property
@@ -325,7 +319,6 @@ class NMStatWin:
             e = nmu.type_error_str(on, "on", "boolean")
             raise TypeError(e)
         self.__bsln_on = on
-        nmh.history("set bsln_on=%s" % on, path=self._name, quiet=quiet)
         return None
 
     @property
@@ -337,10 +330,8 @@ class NMStatWin:
     @records_command
     def bsln_func(self, func: dict | str) -> None:
         self._bsln_func_set(func)
-        if self.__bsln_func:
-            add_nm_command(
-                "%s[%r].bsln_func = %r" % (self._nm_path, self._name, self.__bsln_func)
-            )
+        add_nm_command("%s[%r].bsln_func = %r"
+                       % (self._nm_path, self._name, self.__bsln_func.get("name")))
         return None
 
     def _bsln_func_set(
@@ -387,11 +378,6 @@ class NMStatWin:
 
         self.__bsln_func.clear()
         self.__bsln_func.update({"name": func_name.lower()})
-        nmh.history(
-            "set bsln_func=%s" % self.__bsln_func,
-            path=self._name,
-            quiet=quiet,
-        )
         return None
 
     @property
@@ -510,8 +496,7 @@ class NMStatWinContainer:
     """Ordered container of NMStatWin objects with auto-naming.
 
     Windows are created via ``new()`` and named ``{prefix}0``, ``{prefix}1``,
-    etc. The ``selected_name`` attribute tracks which window is currently
-    active.
+    etc. ``selected_name`` is the window currently shown for editing.
 
     Args:
         name_prefix: Prefix for auto-generated window names (default ``"w"``).
@@ -526,19 +511,39 @@ class NMStatWinContainer:
         self._nm_path = nm_path
         self._windows: dict[str, NMStatWin] = {}
         self._count = 0
-        self.selected_name: str | None = None
+        self._selected_name: str | None = None
+
+    @property
+    def selected_name(self) -> str | None:
+        """Name of the window shown for editing (None if there are none)."""
+        return self._selected_name
+
+    @selected_name.setter
+    @records_command
+    def selected_name(self, name: str | None) -> None:
+        if name is not None and name not in self._windows:
+            raise KeyError("no stat window '%s'" % name)
+        if name == self._selected_name:
+            return  # unchanged: nothing to record
+        self._selected_name = name
+        add_nm_command("%s.selected_name = %r" % (self._nm_path, name))
 
     @records_command
-    def new(self, quiet: bool = nmc.QUIET) -> NMStatWin:
-        """Create, register, and return a new NMStatWin with an auto-name."""
+    def new(self, select: bool = False, quiet: bool = nmc.QUIET) -> NMStatWin:
+        """Create, register, and return a new NMStatWin with an auto-name.
+
+        Args:
+            select: If True, select it (the first window is always selected).
+        """
         name = "%s%d" % (self._prefix, self._count)
         self._count += 1
         w = NMStatWin(name=name, nm_path=self._nm_path)
         self._windows[name] = w
-        if self.selected_name is None:
-            self.selected_name = name
-        nmh.history("new NMStatWin=%s" % name, quiet=quiet)
-        add_nm_command("%s.new(%r)" % (self._nm_path, name))
+        if select or self._selected_name is None:
+            self._selected_name = name
+        # The command doesn't name the window (it is named for you)
+        nmh.history("new window %s" % name, path=self._nm_path, quiet=quiet)
+        add_nm_command("%s.new(%s)" % (self._nm_path, "select=True" if select else ""))
         return w
 
     def __iter__(self):
@@ -601,7 +606,7 @@ class NMStatWinContainer:
             w = NMStatWin(name=name, win=wd)
             container._windows[name] = w
             container._count += 1
-        container.selected_name = d.get("selected_name")
+        container._selected_name = d.get("selected_name")
         return container
 
     def save(self, filepath: str | Path) -> Path:

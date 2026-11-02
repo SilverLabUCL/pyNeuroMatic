@@ -316,7 +316,7 @@ class StatsToolTab(ToolTabWidget):
             runs = len(batches)
             self.run_info_label.setText(f"n={runs} run{'s' * (runs != 1)}")
             tip = "Run goes once per set or group: " + ", ".join(
-                f"{label}: {len(targets)}" for label, targets, _keys in batches
+                f"{label}: {len(targets)}" for label, targets, _selection in batches
             ) if batches else "No set or group has epochs to analyze"
             if skipped:
                 tip += f"\nSkipped (no epochs): {', '.join(skipped)}"
@@ -655,51 +655,59 @@ class StatsToolTab(ToolTabWidget):
             return
 
         try:
-            window._win_set(
-                {
-                    "on": self.window_enabled.isChecked(),
-                    "func": {"name": measurement, **params} if measurement else {},
-                    "xbgn": xbgn,
-                    "xend": xend,
-                    "bsln_on": self.bsln_checkbox.isChecked(),
-                    "bsln_func": self.bsln_combo.currentData(),
-                    "bsln_xbgn": bsln_xbgn,
-                    "bsln_xend": bsln_xend,
-                },
-                quiet=True,
-            )
+            func = _stat_func_from_dict({"name": measurement, **params}) if measurement else None
         except (KeyError, TypeError, ValueError) as error:
             self.show_warning(f"Invalid {measurement} parameter: {error}")
             return
+        values: dict[str, Any] = {
+            "on": self.window_enabled.isChecked(),
+            "func": func.to_dict() if func is not None else {},
+            "xbgn": xbgn,
+            "xend": xend,
+            "bsln_on": self.bsln_checkbox.isChecked(),
+        }
+        if values["bsln_on"]:  # its fields are left as they are while it is off
+            values.update(bsln_func={"name": self.bsln_combo.currentData()},
+                          bsln_xbgn=bsln_xbgn, bsln_xend=bsln_xend)
+        # Only what changed, each one command (#448)
+        for key, value in values.items():
+            if getattr(window, key) != value:
+                setattr(window, key, value if value != {} else None)
 
     def _add_window(self) -> None:
-        window = self._tool.windows.new()
-        self._tool.windows.selected_name = window.name
+        self._tool.windows.new(select=True)
         self._refresh_window_combo()
         self._load_selected_window()
 
-    def _run_keys(self, targets: list[dict], selection: dict | None = None) -> dict:
-        """What the run analyses, for the tool's subfolder name: the Epoch
-        Set ("all", "Set1"...) or the current epoch, with any Group and
-        AND / OR; or a data array run's Data Set. *selection* defaults to
-        the strip's (one per set or group for All Sets / All Groups)."""
-        selection = self.selection if selection is None else selection
+    def _run_selection_args(self, targets: list[dict], selection: dict) -> tuple[Any, dict]:
+        """The run as the Stats tool's ``run_selection`` arguments (its command,
+        #448): the data series, its channel, Epoch Set ("all", "Set1"...) or
+        the current epoch, with any Group and AND / OR; or a data array
+        run's folder and Data Set (or array)."""
         if selection.get("source") != "dataseries":
-            data_set = selection.get("data_set")
-            return {"data": data_set} if data_set else {}
+            data = selection.get("data_set") or targets[0]["data"].name
+            return selection.get("toolfolder") or selection.get("folder"), {"data": data}
+        series = selection["dataseries"]
         epoch_set = selection.get("epoch_set")
         group = selection.get("group")
-        if epoch_set is None:
-            # Current Epoch (or a Group alone): name the epoch if just one
-            epoch_set = None
-            if group is None and len(targets) == 1 and targets[0].get("epoch") is not None:
-                epoch_set = targets[0]["epoch"].name
-        keys: dict = {"epoch": epoch_set.lower() if epoch_set == ALL_EPOCHS else epoch_set}
+        if epoch_set == ALL_EPOCHS:
+            epochs = "all"
+        elif epoch_set is not None:
+            epochs = epoch_set
+        elif group is None:  # the current epoch
+            epochs = targets[0]["epoch"].name
+        else:
+            epochs = None  # the Group alone
+        args: dict[str, Any] = {"channel": selection["channel"].name, "epochs": epochs}
         if group is not None:
-            keys["group"] = group
-            if selection.get("group_operator"):
-                keys["group_operator"] = selection["group_operator"]
-        return keys
+            args["group"] = group
+            if epochs not in (None, "all"):
+                args["group_operator"] = selection.get("group_operator")
+        return series, args
+
+    def _run_selection(self, targets: list[dict], selection: dict) -> bool:
+        source, args = self._run_selection_args(targets, selection)
+        return self._tool.run_selection(source, **args)
 
     def _scope_runs(self) -> list[tuple[str, dict]] | None:
         """For All Channels / All Sets / All Groups: (label, selection) per
@@ -723,7 +731,7 @@ class StatsToolTab(ToolTabWidget):
 
     def _run_batches(self) -> tuple[list[tuple[str, list, dict]], list[str]] | None:
         """For All Sets / All Groups: the runs with epochs to analyse, as
-        (label, targets, run keys), and the labels of empty ones (skipped);
+        (label, targets, selection), and the labels of empty ones (skipped);
         None for a single run."""
         runs = self._scope_runs()
         if runs is None:
@@ -732,7 +740,7 @@ class StatsToolTab(ToolTabWidget):
         for label, run_selection in runs:
             targets = self._selected_targets(run_selection)
             if targets:
-                batches.append((label, targets, self._run_keys(targets, run_selection)))
+                batches.append((label, targets, run_selection))
             else:
                 skipped.append(label)
         return batches, skipped
@@ -862,11 +870,8 @@ class StatsToolTab(ToolTabWidget):
         targets = self._selected_targets()
         if not targets:
             raise RuntimeError("The current selection has no data to analyze")
-        selected_window = self._tool.windows.selected_name
-        # The selection, so the subfolder is named after it (e.g. _S1_)
-        succeeded = self._tool.run_all(targets, run_keys=self._run_keys(targets))
-        self._tool.windows.selected_name = selected_window
-        if not succeeded:
+        # One command, naming what it runs on (the subfolder too, e.g. _S1_)
+        if not self._run_selection(targets, self.selection):
             raise RuntimeError("Stats analysis did not complete")
 
         records = self._tool.results
@@ -885,11 +890,9 @@ class StatsToolTab(ToolTabWidget):
         """Run once per set or group, each saved in its own subfolder."""
         if not batches:
             raise RuntimeError("None of the sets or groups has epochs to analyze")
-        selected_window = self._tool.windows.selected_name
-        done = self._tool.run_each([(targets, keys) for _label, targets, keys in batches])
-        self._tool.windows.selected_name = selected_window
-        if len(done) < len(batches):
-            raise RuntimeError("Stats analysis did not complete")
+        for _label, targets, selection in batches:  # a command each
+            if not self._run_selection(targets, selection):
+                raise RuntimeError("Stats analysis did not complete")
         if skipped:
             self.show_warning(f"Skipped (no epochs to analyze): {', '.join(skipped)}")
         self.stats2.show_toolfolder(self._tool.toolfolder)  # the last run's

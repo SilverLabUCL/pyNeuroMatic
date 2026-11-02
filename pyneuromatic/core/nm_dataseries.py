@@ -728,6 +728,10 @@ class NMDataSeriesContainer(NMObjectContainer):
         from pyneuromatic.core.nm_folder import NMFolder
         if isinstance(self._parent, NMFolder):
             return '%s.dataseries' % self._parent._nm_cmd_path
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+        if isinstance(self._parent, NMToolFolder):  # e.g. a Stats subfolder's
+            path = self._parent._nm_obj_path
+            return None if path is None else '%s.dataseries' % path
         return None
 
     # override, no super

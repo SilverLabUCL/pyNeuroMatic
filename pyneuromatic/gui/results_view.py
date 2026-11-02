@@ -641,9 +641,9 @@ class Stats2Panel(QtWidgets.QWidget):
             return
         # Square-root rule, capped so small result sets stay readable
         bins = max(1, min(20, math.ceil(math.sqrt(finite))))
-        result = NMToolStats2.histogram(
-            toolfolder, name, bins=bins, save_to_numpy=False
-        )
+        # Saved in the Stats subfolder (H_<array>_counts, H_<array>_edges),
+        # as one command
+        result = self._manager.stats.histogram(toolfolder, name, bins=bins)
         self.plot_requested.emit(
             f"{toolfolder.name}: {name} histogram",
             result["counts"],

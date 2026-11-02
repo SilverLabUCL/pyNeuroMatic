@@ -452,6 +452,22 @@ class TestNMToolStats2Histogram(unittest.TestCase):
         d = self.tf.data.get("H_ST_w0_mean_y_counts")
         self.assertAlmostEqual(d.xscale.delta, 1.0)  # (5 - 1) / 4 = 1.0
 
+    def test_histogram_again_replaces_the_arrays(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=2)
+        self.assertEqual(len(self.tf.data.get("H_ST_w0_mean_y_counts").nparray), 2)
+        self.assertEqual(len(self.tf.data.get("H_ST_w0_mean_y_edges").nparray), 3)
+
+    def test_histogram_scales(self):
+        self.tf.data.get("ST_w0_mean_y").yscale.label = "Vm"
+        self.tf.data.get("ST_w0_mean_y").yscale.units = "mV"
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
+        counts = self.tf.data.get("H_ST_w0_mean_y_counts")
+        self.assertEqual((counts.xscale.label, counts.xscale.units), ("Vm", "mV"))
+        self.assertEqual(counts.yscale.label, "count")
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, density=True)
+        self.assertEqual(self.tf.data.get("H_ST_w0_mean_y_counts").yscale.label, "density")
+
     def test_histogram_no_save_skips_arrays(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, save_to_numpy=False)
         self.assertNotIn("H_ST_w0_mean_y_counts", self.tf.data)
@@ -1218,87 +1234,46 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
     # ------------------------------------------------------------------
     # NMStatWin.func setter
 
-    def test_func_setter_logs_basic(self):
+    def _func_command(self, func):
         self._ch.clear()
-        self.w0.func = 'mean'
+        self.w0.func = func
         self.assertEqual(len(self._ch.buffer), 1)
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("stats.windows['w0'].func", cmd)
-        self.assertIn("NMStatFuncBasic", cmd)
-        self.assertIn("'mean'", cmd)
+        return self._ch.buffer[0]['command']
 
-    def test_func_setter_logs_maxmin_no_n_mean(self):
-        self._ch.clear()
-        self.w0.func = 'max'
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncMaxMin", cmd)
-        self.assertIn("'max'", cmd)
-        self.assertNotIn("n_mean", cmd)
+    def test_func_setter_logs_a_name_alone(self):
+        """As the setter takes it, so a script runs it (#448)."""
+        for name in ('mean', 'max'):
+            self.assertEqual(self._func_command(name),
+                             "nm.stats.windows['w0'].func = %r" % name)
 
-    def test_func_setter_logs_maxmin_with_n_mean(self):
-        self._ch.clear()
-        self.w0.func = {'name': 'mean@max', 'n_mean': 3}
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncMaxMin", cmd)
-        self.assertIn("'mean@max'", cmd)
-        self.assertIn("n_mean=3", cmd)
+    def test_func_setter_logs_a_dict_with_parameters(self):
+        for func in (
+            {'name': 'mean@max', 'n_mean': 3},
+            {'name': 'level', 'ylevel': 10.0},
+            {'name': 'level', 'n_std': 2.0},
+            {'name': 'risetime+', 'p0': 10.0, 'p1': 90.0},
+            {'name': 'decaytime+', 'p0': 50.0},
+            {'name': 'fwhm+', 'p0': 30.0, 'p1': 70.0},
+        ):
+            self.assertEqual(self._func_command(dict(func)),
+                             "nm.stats.windows['w0'].func = %r" % func)
 
-    def test_func_setter_logs_level(self):
-        self._ch.clear()
-        self.w0.func = {'name': 'level', 'ylevel': 10.0}
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncLevel", cmd)
-        self.assertIn("ylevel=10.0", cmd)
+    def test_func_setter_logs_default_parameters(self):
+        self.assertIn("{'name': 'decaytime+', 'p0': ", self._func_command('decaytime+'))
+        self.assertEqual(self._func_command('fwhm+'),
+                         "nm.stats.windows['w0'].func = "
+                         "{'name': 'fwhm+', 'p0': 50.0, 'p1': 50.0}")
 
-    def test_func_setter_logs_levelnstd(self):
-        self._ch.clear()
-        self.w0.func = {'name': 'level', 'n_std': 2.0}
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncLevelNstd", cmd)
-        self.assertIn("n_std=2.0", cmd)
+    def test_func_setter_logs_none(self):
+        """Clearing is recorded too, so a script matches the session."""
+        self.assertEqual(self._func_command(None), "nm.stats.windows['w0'].func = None")
 
-    def test_func_setter_logs_risetime(self):
-        self._ch.clear()
-        self.w0.func = {'name': 'risetime+', 'p0': 10.0, 'p1': 90.0}
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncRiseTime", cmd)
-        self.assertIn("p0=10.0", cmd)
-        self.assertIn("p1=90.0", cmd)
-
-    def test_func_setter_logs_decaytime_default_p0(self):
-        self._ch.clear()
-        self.w0.func = 'decaytime+'
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncDecayTime", cmd)
-        self.assertIn("p0=", cmd)
-
-    def test_func_setter_logs_decaytime_custom_p0(self):
-        self._ch.clear()
-        self.w0.func = {'name': 'decaytime+', 'p0': 50.0}
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncDecayTime", cmd)
-        self.assertIn("p0=50.0", cmd)
-
-    def test_func_setter_logs_fwhm_default_p0_p1(self):
-        self._ch.clear()
-        self.w0.func = 'fwhm+'
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncFWHM", cmd)
-        self.assertIn("p0=", cmd)
-        self.assertIn("p1=", cmd)
-
-    def test_func_setter_logs_fwhm_custom_p0_p1(self):
-        self._ch.clear()
-        self.w0.func = {'name': 'fwhm+', 'p0': 30.0, 'p1': 70.0}
-        cmd = self._ch.buffer[0]['command']
-        self.assertIn("NMStatFuncFWHM", cmd)
-        self.assertIn("p0=30.0", cmd)
-        self.assertIn("p1=70.0", cmd)
-
-    def test_func_setter_none_does_not_log(self):
-        self._ch.clear()
-        self.w0.func = None
-        self.assertEqual(len(self._ch.buffer), 0)
+    def test_func_command_replays(self):
+        self.w0.func = {'name': 'risetime+', 'p0': 20.0, 'p1': 80.0}
+        command = self._ch.buffer[-1]['command']
+        other = nms.NMToolStats()
+        exec(command, {'nm': type('NM', (), {'stats': other})})
+        self.assertEqual(other.windows['w0'].func, self.w0.func)
 
     # ------------------------------------------------------------------
     # NMStatWin scalar setters
@@ -1353,10 +1328,11 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
         self.assertIn("stats.windows['w0'].bsln_func", cmd)
         self.assertIn("'mean'", cmd)
 
-    def test_bsln_func_setter_none_does_not_log(self):
+    def test_bsln_func_setter_logs_none(self):
         self._ch.clear()
         self.w0.bsln_func = None
-        self.assertEqual(len(self._ch.buffer), 0)
+        self.assertEqual([e['command'] for e in self._ch.buffer],
+                         ["nm.stats.windows['w0'].bsln_func = None"])
 
     # ------------------------------------------------------------------
     # NMStatWinContainer.new()
@@ -1366,8 +1342,26 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
         self.tool.windows.new()
         self.assertEqual(len(self._ch.buffer), 1)
         cmd = self._ch.buffer[0]['command']
-        self.assertIn("stats.windows.new(", cmd)
-        self.assertIn("'w1'", cmd)
+        # No argument: new() names the window itself (#448)
+        self.assertEqual(cmd, "nm.stats.windows.new()")
+        self.assertEqual(self.tool.windows.selected_name, 'w0')
+
+    def test_windows_new_select_logs(self):
+        self._ch.clear()
+        self.tool.windows.new(select=True)
+        self.assertEqual([e['command'] for e in self._ch.buffer],
+                         ["nm.stats.windows.new(select=True)"])
+        self.assertEqual(self.tool.windows.selected_name, 'w1')
+
+    def test_windows_selected_name_logs_changes_only(self):
+        self.tool.windows.new()
+        self._ch.clear()
+        self.tool.windows.selected_name = 'w0'  # unchanged
+        self.tool.windows.selected_name = 'w1'
+        self.assertEqual([e['command'] for e in self._ch.buffer],
+                         ["nm.stats.windows.selected_name = 'w1'"])
+        with self.assertRaises(KeyError):
+            self.tool.windows.selected_name = 'w9'
 
     # ------------------------------------------------------------------
     # NMToolStats tool-level flag setters
@@ -1563,3 +1557,91 @@ class TestNMToolRunEach(unittest.TestCase):
 
     def test_nothing_to_run(self):
         self.assertEqual(self.tool.run_each([([], {"epoch": "Set2"})]), [])
+
+
+class TestRunSelection(unittest.TestCase):
+    """NMTool.run_selection: a run as one command, which a script repeats (#448)."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True, command_history=True)
+        self._ch = self.nm.command_history
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_epochs=4, n_points=3)
+        for i, data in enumerate(self.folder.data.values()):
+            data.nparray[:] = float(i)
+        self.series.epochs.sets.add("Set1", ["E1", "E2"])
+        self.series.epochs.groups.assign_cyclic(list(self.series.epochs.keys()), n_groups=2)
+        self.nm.tool_add("stats")
+        self.tool = self.nm.stats
+        self.tool.windows["w0"].func = "mean"
+        self._ch.clear()
+
+    def _commands(self):
+        return [e["command"] for e in self._ch.buffer]
+
+    def _means(self):
+        return [r[0]["s"] for r in self.tool.results["w0"]]
+
+    def test_series_epoch_set(self):
+        self.assertTrue(self.tool.run_selection(self.series, channel="A", epochs="Set1"))
+        self.assertEqual(self._means(), [1.0, 2.0])
+        self.assertEqual(self.tool.toolfolder.name, "Stats_Record_A_S1_0")
+        self.assertEqual(self._commands(), [
+            "nm.stats.run_selection(nm.folders['Demo'].dataseries['Record'], channel='A', "
+            "epochs='Set1')"])
+
+    def test_series_set_and_group(self):
+        self.tool.run_selection(self.series, channel="A", epochs="Set1", group=1,
+                         group_operator="AND")
+        self.assertEqual(self._means(), [1.0])
+        self.assertEqual(self.tool.toolfolder.name, "Stats_Record_A_S1andG1_0")
+        self.assertIn("group=1, group_operator='AND'", self._commands()[0])
+
+    def test_series_one_epoch_group_and_list(self):
+        self.tool.run_selection(self.series, epochs="E3")  # the selected channel
+        self.assertEqual(self._means(), [3.0])
+        self.assertEqual(self.tool.toolfolder.name, "Stats_Record_A_E3_0")
+        self.tool.run_selection(self.series, group=0)
+        self.assertEqual(self._means(), [0.0, 2.0])
+        self.tool.run_selection(self.series, epochs=["E0", "E1", "E2"])
+        self.assertEqual(self._commands()[-1],
+                         "nm.stats.run_selection(nm.folders['Demo'].dataseries['Record'], "
+                         "epochs=['E0', 'E1', 'E2'])")
+
+    def test_folder_data(self):
+        self.folder.data.sets.add("DS", ["RecordA0", "RecordA3"])
+        self.tool.run_selection(self.folder, data="DS")
+        self.assertEqual(self._means(), [0.0, 3.0])
+        self.assertEqual(self.tool.toolfolder.name, "Stats_DS_0")
+        self.tool.run_selection(self.folder, data="RecordA2")
+        self.assertEqual(self._means(), [2.0])
+        self.assertEqual(self._commands()[-1],
+                         "nm.stats.run_selection(nm.folders['Demo'], data='RecordA2')")
+
+    def test_bad_arguments(self):
+        with self.assertRaises(ValueError):
+            self.tool.run_selection(self.folder)  # no data
+        with self.assertRaises(ValueError):
+            self.tool.run_selection(self.folder, data="RecordA0", epochs="all")
+        with self.assertRaises(KeyError):
+            self.tool.run_selection(self.series, channel="Z", epochs="all")
+        self.series.epochs.sets.add("Empty", [])
+        self._ch.clear()
+        with self.assertRaises(RuntimeError):
+            self.tool.run_selection(self.series, epochs="Empty")  # nothing to analyze
+        self.assertEqual(self._commands(), [])
+
+    def test_compute_notes_are_inner_calls(self):
+        """A run's own notes (each compute, its subfolder) are inner calls
+        (DEBUG, not kept by default): the command is the run's one entry."""
+        before = len(self.nm.history.buffer)
+        self.tool.run_selection(self.series, epochs="all")
+        self.assertEqual([e["kind"] for e in self.nm.history.buffer[before:]], ["command"])
+
+    def test_command_replays(self):
+        self.tool.run_selection(self.series, channel="A", epochs="Set1", group=1, group_operator="OR")
+        expected = self._means()
+        self.tool.run_init()
+        exec(self._commands()[-1], {"nm": self.nm})
+        self.assertEqual(self._means(), expected)
+        self.assertEqual(self.tool.toolfolder.name, "Stats_Record_A_S1orG1_1")
