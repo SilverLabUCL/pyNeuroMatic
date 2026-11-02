@@ -595,3 +595,214 @@ def test_choose_measurement_is_red(qtbot):
     assert "#c62828" in combo.styleSheet()
     combo.setCurrentText("mean")
     assert combo.styleSheet() == ""
+
+
+def _series_manager():
+    """Folder Demo, series Record (4 epochs, epoch i = i, i+1, ...); Set0 =
+    E1, E2; groups 0/1 cyclic; RecordSet = RecordA0, RecordA3."""
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=True)
+    for epoch in range(4):
+        folder.data.new(f"RecordA{epoch}", nparray=np.arange(5.0) + epoch,
+                        xscale={"start": 0.0, "delta": 1.0})
+    series = folder.sync_dataseries("Record", select=True)
+    series.epochs.sets.add("Set0", ["E1", "E2"])
+    series.epochs.groups.assign_cyclic(list(series.epochs.keys()), n_groups=2)
+    folder.data.sets.add("RecordSet", ["RecordA0", "RecordA3"])
+    return manager, folder, series
+
+
+@pytest.fixture
+def series_app(qtbot):
+    manager, folder, series = _series_manager()
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.selection_model.update(dataseries=series, epoch_set="Set0")
+    window.manager, window.folder, window.series = manager, folder, series
+    return window
+
+
+def _history(app, start=0):
+    QtWidgets.QApplication.processEvents()
+    app.history_panel.flush()
+    return [(e.kind, e.text) for e in app.history_panel.model.entries[start:]]
+
+
+def _edit(edit, text):
+    edit.setText(text)
+    edit.editingFinished.emit()
+
+
+def test_window_changes_are_commands_one_per_change(series_app):
+    """Only what changed, as the window's own commands; no echo messages (#448)."""
+    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab.measurement_combo.setCurrentText("mean")
+    _edit(tab.xbgn_edit, "1")
+    _edit(tab.xbgn_edit, "1")  # unchanged: nothing
+    _edit(tab.xend_edit, "3")
+    tab.window_enabled.setChecked(False)
+    assert _history(series_app, start) == [
+        ("command", "nm.stats.windows['w0'].func = 'mean'"),
+        ("command", "nm.stats.windows['w0'].xbgn = 1.0"),
+        ("command", "nm.stats.windows['w0'].xend = 3.0"),
+        ("command", "nm.stats.windows['w0'].on = False"),
+    ]
+
+
+def test_baseline_fields_are_set_once_it_is_on(series_app):
+    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab.measurement_combo.setCurrentText("mean")
+    _edit(tab.xbgn_edit, "2")
+    tab.bsln_checkbox.setChecked(True)  # its range is prefilled: 0 to 2
+    commands = [text for kind, text in _history(series_app, start) if kind == "command"]
+    assert commands[-4:] == [
+        "nm.stats.windows['w0'].bsln_on = True",
+        "nm.stats.windows['w0'].bsln_func = 'mean'",
+        "nm.stats.windows['w0'].bsln_xbgn = 0.0",
+        "nm.stats.windows['w0'].bsln_xend = 2.0",
+    ]
+
+
+def test_new_window_is_one_command(series_app):
+    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab.window_combo.setCurrentIndex(tab.window_combo.findData(tab.NEW_WINDOW_ACTION))
+    tab.window_combo.setCurrentIndex(tab.window_combo.findData("w0"))
+    assert [text for kind, text in _history(series_app, start) if kind == "command"] == [
+        "nm.stats.windows.new(select=True)",
+        "nm.stats.windows.selected_name = 'w0'",
+    ]
+
+
+def test_run_is_one_command_and_one_result(series_app):
+    tab = series_app.stats_tab
+    tab.measurement_combo.setCurrentText("mean")
+    start = len(_history(series_app))
+    tab.run_button.click()
+    assert _history(series_app, start) == [
+        ("command", "nm.stats.run_selection(nm.folders['Demo'].dataseries['Record'], "
+                    "channel='A', epochs='Set0')"),
+        ("tool", "Stats: Complete → Stats_Record_A_S0_0"),
+    ]
+
+
+@pytest.mark.parametrize("scope, expected", [
+    ({"epoch_set": "All"}, "channel='A', epochs='all'"),
+    ({"epoch_set": None, "group": 1}, "channel='A', group=1"),
+    ({"group_operator": "OR", "group": 1}, "channel='A', epochs='Set0', group=1, "
+                                           "group_operator='OR'"),
+    ({"epoch_set": None}, "channel='A', epochs='E0'"),  # the current epoch
+])
+def test_run_command_names_the_epochs(series_app, scope, expected):
+    tab = series_app.stats_tab
+    tab.measurement_combo.setCurrentText("mean")
+    for key, value in scope.items():  # one at a time, as the strip does
+        series_app.selection_model.update(**{key: value})
+    start = len(_history(series_app))
+    tab.run_button.click()
+    commands = [text for kind, text in _history(series_app, start) if kind == "command"]
+    assert commands == ["nm.stats.run_selection(nm.folders['Demo'].dataseries['Record'], %s)"
+                        % expected]
+
+
+def test_data_set_run_command(series_app):
+    tab = series_app.stats_tab
+    tab.measurement_combo.setCurrentText("mean")
+    series_app.selection_model.update(data=series_app.folder.data["RecordA0"],
+                                      data_set="RecordSet")
+    start = len(_history(series_app))
+    tab.run_button.click()
+    assert ("command", "nm.stats.run_selection(nm.folders['Demo'], data='RecordSet')") \
+        in _history(series_app, start)
+    assert [r[0]["s"] for r in series_app.manager.stats.results["w0"]] == [2.0, 5.0]
+
+
+def test_all_sets_is_a_command_per_set(series_app):
+    tab = series_app.stats_tab
+    series_app.series.epochs.sets.add("Set2", ["E3"])
+    tab.measurement_combo.setCurrentText("mean")
+    series_app.selection_model.update(epoch_set="All Sets")
+    start = len(_history(series_app))
+    tab.run_button.click()
+    commands = [text for kind, text in _history(series_app, start) if kind == "command"]
+    assert [c.split("channel='A', ")[1] for c in commands] == [
+        "epochs='Set0')", "epochs='Set2')"]
+
+
+def test_recorded_stats_commands_repeat_the_run(series_app):
+    """A script of the tab's commands gives the same results (#448)."""
+    tab, manager = series_app.stats_tab, series_app.manager
+    start = len(manager.command_history.buffer)
+    tab.measurement_combo.setCurrentText("risetime+")
+    _edit(tab.param_edits["p0"], "20")
+    _edit(tab.xbgn_edit, "1")
+    series_app.selection_model.update(group_operator="AND")
+    series_app.selection_model.update(group=0)
+    tab.run_button.click()
+    expected = manager.stats.results
+    commands = [e["command"] for e in manager.command_history.buffer[start:]
+                if e["command"].startswith("nm.stats")]
+
+    other, _folder, _series = _series_manager()
+    other.tool_add("stats")
+    for command in commands:
+        exec(command, {"nm": other})
+    assert other.stats.windows["w0"].func == manager.stats.windows["w0"].func
+    assert other.stats.results == expected
+    assert other.stats.toolfolder.name == manager.stats.toolfolder.name
+
+
+def test_stats_options_are_commands_without_messages(series_app):
+    """Settings › Stats and Output: the command alone, no "set ..." echo (#448)."""
+    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab.set_config_option("overwrite", True)
+    tab.set_config_option("results_all_epochs", True)
+    tab.output_history_checkbox.setChecked(True)
+    assert _history(series_app, start) == [
+        ("command", "nm.stats.overwrite = True"),
+        ("command", "nm.stats.results_all_epochs = True"),
+        ("command", "nm.stats.results_to_history = True"),
+    ]
+
+
+def test_deleting_a_stats_subfolder_is_a_command(series_app):
+    """Subfolders and their arrays are named in commands, so deleting one is
+    recorded (and repeats), not just echoed (#448)."""
+    tab, folder = series_app.stats_tab, series_app.folder
+    tab.measurement_combo.setCurrentText("mean")
+    tab.run_button.click()
+    subfolder = folder.toolfolders["Stats_Record_A_S0_0"]
+    array = next(iter(subfolder.data.keys()))
+    start = len(_history(series_app))
+    subfolder.data.pop(array)
+    folder.toolfolders.pop("Stats_Record_A_S0_0")
+    assert _history(series_app, start) == [
+        ("command", "nm.folders['Demo'].toolfolders['Stats_Record_A_S0_0'].data.pop(%r)" % array),
+        ("command", "nm.folders['Demo'].toolfolders.pop('Stats_Record_A_S0_0')"),
+    ]
+    other, other_folder, _series = _series_manager()
+    other_folder.toolfolders.new("Stats_Record_A_S0_0")
+    exec(_history(series_app, start)[-1][1], {"nm": other})
+    assert "Stats_Record_A_S0_0" not in other_folder.toolfolders
+
+
+def test_stats2_histogram_is_one_command_saved_in_the_subfolder(series_app):
+    """Saved as H_ arrays in the Stats subfolder; its steps (replacing the
+    arrays) aren't commands of their own; the command repeats it (#448)."""
+    tab, manager = series_app.stats_tab, series_app.manager
+    tab.measurement_combo.setCurrentText("mean")
+    series_app.selection_model.update(epoch_set="All")
+    tab.run_button.click()
+    tab.stats2.array_combo.setCurrentText("ST_w0_mean_y")
+    start = len(_history(series_app))
+    tab.stats2.histogram_button.click()
+    tab.stats2.histogram_button.click()  # again: replaced
+    command = ("nm.stats.histogram(nm.folders['Demo'].toolfolders['Stats_Record_A_All_0'], "
+               "'ST_w0_mean_y', bins=2)")
+    assert _history(series_app, start) == [("command", command)] * 2
+    subfolder = manager.stats.toolfolder
+    counts = list(subfolder.data["H_ST_w0_mean_y_counts"].nparray)
+    assert sum(counts) == 4
+
+    subfolder.data.pop("H_ST_w0_mean_y_counts")
+    exec(command, {"nm": manager})
+    assert list(subfolder.data["H_ST_w0_mean_y_counts"].nparray) == counts

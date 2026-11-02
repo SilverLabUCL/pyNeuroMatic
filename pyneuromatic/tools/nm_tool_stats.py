@@ -29,7 +29,7 @@ from pyneuromatic.tools.nm_stat_win import NMStatWinContainer  # noqa: F401
 from pyneuromatic.tools.nm_tool import NMTool
 from pyneuromatic.tools.nm_tool_config import NMToolConfig
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
-from pyneuromatic.core.nm_data import NMData
+from pyneuromatic.core.nm_data import NMData, nm_ref
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_epoch import NMEpoch
 from pyneuromatic.core.nm_folder import NMFolder
@@ -127,8 +127,34 @@ class NMToolStats(NMTool):
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_all_epochs", "boolean"))
         self._results_all_epochs = value
-        nmh.history("set results_all_epochs=%s" % value, quiet=nmc.QUIET)
         nmch.add_nm_command("%s.results_all_epochs = %r" % (self._name, value))
+
+    @nmch.records_command
+    def histogram(
+        self,
+        toolfolder: NMToolFolder,
+        name: str,
+        bins: int | list = 10,
+        xrange: tuple | None = None,
+        density: bool = False,
+    ) -> dict[str, Any]:
+        """Histogram of ST_ array *name*, saved in *toolfolder* as
+        ``H_{name}_counts`` and ``H_{name}_edges`` (replacing earlier ones),
+        as one command (#448), e.g.::
+
+            nm.stats.histogram(nm.folders['Demo'].toolfolders['Stats_Record_A_All_0'],
+                               'ST_w0_max_y', bins=3)
+
+        See :meth:`NMToolStats2.histogram` for the arguments.
+        """
+        result = NMToolStats2.histogram(toolfolder, name, bins=bins, xrange=xrange,
+                                        density=density)
+        call = nmu.kwargs_repr(self.histogram,
+                               {"bins": bins, "xrange": xrange, "density": density},
+                               always=("bins",))
+        nmch.add_nm_command("%s.histogram(%s, %r%s)"
+                            % (self._name, nm_ref(toolfolder), name, call))
+        return result
 
     @property
     def windows(self) -> NMStatWinContainer:
@@ -192,7 +218,6 @@ class NMToolStats(NMTool):
         self.__n_analysed += 1
         position = self._epoch_position()
         for w in self.windows:
-            self.windows.selected_name = w.name
             if not w.on:
                 continue
             w.compute(data, ignore_nans=self._ignore_nans)
@@ -815,15 +840,22 @@ class NMToolStats2:
         if save_to_numpy:
             edges = result["edges"]
             xscale = {"start": float(edges[0]),
-                      "delta": float(edges[1] - edges[0])}
+                      "delta": float(edges[1] - edges[0]),
+                      "label": d.yscale.label, "units": d.yscale.units}
+            yscale = {"label": "density" if density else "count"}
+            for suffix in ("counts", "edges"):  # replace an earlier histogram's
+                if "H_%s_%s" % (name, suffix) in toolfolder.data:
+                    toolfolder.data.pop("H_%s_%s" % (name, suffix))
             toolfolder.data.new(
                 "H_%s_counts" % name,
                 nparray=result["counts"].astype(float),
                 xscale=xscale,
+                yscale=yscale,
             )
             toolfolder.data.new(
                 "H_%s_edges" % name,
                 nparray=edges,
+                yscale={"label": d.yscale.label, "units": d.yscale.units},
             )
 
         return result

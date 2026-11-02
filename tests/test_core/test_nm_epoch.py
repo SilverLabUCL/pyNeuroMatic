@@ -147,3 +147,42 @@ class NMEpochTest(unittest.TestCase):
         e0 = epochs.get("E0")
         self.assertFalse(c == e0)  # name is different
         self.assertFalse(c.name == e0.name)
+
+
+class ScopeNamesTest(unittest.TestCase):
+    """NMEpochContainer.scope_names: the epochs a run analyses (#448)."""
+
+    def setUp(self):
+        nm = NMManager(quiet=True)
+        folder = nm.folders.new("Demo")
+        self.epochs = folder.new_dataseries("Record", n_epochs=6, n_points=2).epochs
+        self.epochs.sets.add("Set1", ["E1", "E2", "E4"])
+        self.epochs.groups.assign_cyclic(list(self.epochs.keys()), n_groups=2)
+
+    def test_all_set_epoch_and_list(self):
+        names = self.epochs.scope_names
+        self.assertEqual(names("all"), ["E0", "E1", "E2", "E3", "E4", "E5"])
+        self.assertEqual(names("All"), names("all"))
+        self.assertEqual(names("Set1"), ["E1", "E2", "E4"])
+        self.assertEqual(names("E3"), ["E3"])
+        self.assertEqual(names(["E5", "E0"]), ["E0", "E5"])  # in series order
+        with self.assertRaises(KeyError):
+            names("Set9")
+        with self.assertRaises(ValueError):
+            names()
+
+    def test_group_alone_or_combined(self):
+        names = self.epochs.scope_names
+        self.assertEqual(names(group=1), ["E1", "E3", "E5"])
+        self.assertEqual(names("all", group=1), ["E1", "E3", "E5"])
+        self.assertEqual(names("Set1", group=1, group_operator="AND"), ["E1"])
+        self.assertEqual(names("Set1", group=1, group_operator="or"),
+                         ["E1", "E2", "E3", "E4", "E5"])
+        with self.assertRaises(RuntimeError):
+            names("Set1", group=1)  # AND or OR not given
+
+    def test_setx_is_left_out_unless_chosen(self):
+        self.epochs.sets.add("SetX", ["E2"])
+        self.assertEqual(self.epochs.scope_names("Set1"), ["E1", "E4"])
+        self.assertEqual(self.epochs.scope_names("Set1", exclude=False), ["E1", "E2", "E4"])
+        self.assertEqual(self.epochs.scope_names("SetX"), ["E2"])

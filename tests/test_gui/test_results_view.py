@@ -275,6 +275,12 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     assert style == "histogram"
     assert sum(counts) == len(PEAKS)
     assert len(edges) == len(counts) + 1
+    # Saved in the Stats subfolder, and replaced when made again
+    subfolder = window.stats_tab.stats_tool.toolfolder
+    assert list(subfolder.data.get("H_ST_w0_max_ds_counts").nparray) == list(counts)
+    assert list(subfolder.data.get("H_ST_w0_max_ds_edges").nparray) == list(edges)
+    stats2.histogram_button.click()
+    assert "H_ST_w0_max_ds_counts" in subfolder.data
 
 
 def test_copy_all_stats_tables_from_the_table_panel(qtbot):

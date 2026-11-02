@@ -29,7 +29,7 @@ import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_folder import NMFolder
-from pyneuromatic.core.nm_data import NMData
+from pyneuromatic.core.nm_data import NMData, nm_ref
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_epoch import NMEpoch
@@ -109,7 +109,6 @@ class NMTool:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "ignore_nans", "boolean"))
         self._ignore_nans = value
-        nmh.history("set ignore_nans=%s" % value, quiet=quiet)
         nmch.add_nm_command("%s.ignore_nans = %r" % (self._name, self._ignore_nans))
 
     @property
@@ -126,7 +125,6 @@ class NMTool:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "overwrite", "boolean"))
         self._overwrite = value
-        nmh.history("set overwrite=%s" % value, quiet=quiet)
         nmch.add_nm_command("%s.overwrite = %r" % (self._name, self._overwrite))
 
     @property
@@ -143,7 +141,6 @@ class NMTool:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_history", "boolean"))
         self._results_to_history = value
-        nmh.history("set results_to_history=%s" % value, quiet=quiet)
         nmch.add_nm_command(
             "%s.results_to_history = %r" % (self._name, self._results_to_history)
         )
@@ -162,7 +159,6 @@ class NMTool:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_cache", "boolean"))
         self._results_to_cache = value
-        nmh.history("set results_to_cache=%s" % value, quiet=quiet)
         nmch.add_nm_command(
             "%s.results_to_cache = %r" % (self._name, self._results_to_cache)
         )
@@ -181,7 +177,6 @@ class NMTool:
         if not isinstance(value, bool):
             raise TypeError(nmu.type_error_str(value, "results_to_numpy", "boolean"))
         self._results_to_numpy = value
-        nmh.history("set results_to_numpy=%s" % value, quiet=quiet)
         nmch.add_nm_command(
             "%s.results_to_numpy = %r" % (self._name, self._results_to_numpy)
         )
@@ -202,7 +197,6 @@ class NMTool:
         if math.isnan(value):
             raise ValueError("xbgn cannot be NaN")
         self._xbgn = float(value)
-        nmh.history("set xbgn=%g" % self._xbgn, quiet=quiet)
         nmch.add_nm_command("%s.xbgn = %r" % (self._name, self._xbgn))
 
     @property
@@ -221,7 +215,6 @@ class NMTool:
         if math.isnan(value):
             raise ValueError("xend cannot be NaN")
         self._xend = float(value)
-        nmh.history("set xend=%g" % self._xend, quiet=quiet)
         nmch.add_nm_command("%s.xend = %r" % (self._name, self._xend))
 
     # Read-only convenience properties for accessing selection
@@ -431,6 +424,108 @@ class NMTool:
             return code + operator + group_code
         return code
 
+    @nmch.records_command
+    def run_selection(
+        self,
+        source: NMDataSeries | NMFolder | NMToolFolder,
+        channel: str | None = None,
+        epochs: str | list[str] | None = None,
+        group: int | None = None,
+        group_operator: str | None = None,
+        data: str | list[str] | None = None,
+    ) -> bool:
+        """Run the tool on data named by a data series or a folder, as one
+        command (#448), e.g.::
+
+            nm.stats.run_selection(nm.folders['Demo'].dataseries['Record'],
+                            channel='A', epochs='Set1')
+            nm.stats.run_selection(nm.folders['Demo'], data='RecordSet')
+
+        Args:
+            source: A data series, or the folder (or tool subfolder) whose
+                data arrays to analyse.
+            channel: The data series' channel (default: its selected one).
+            epochs: The data series' epochs: ``"all"``, a set (e.g.
+                ``"Set1"``), an epoch (e.g. ``"E3"``) or a list of epochs.
+                Epochs in SetX are left out, unless *epochs* is SetX.
+            group: The data series' group number, alone or with *epochs*.
+            group_operator: ``"AND"`` or ``"OR"``, when *epochs* and
+                *group* are both given.
+            data: The folder's data: an array, a Data Set or a list of arrays.
+
+        Returns:
+            Return value of :meth:`run_all`.
+        """
+        targets, run_keys = self._run_selection_targets(
+            source, channel, epochs, group, group_operator, data)
+        if not targets:
+            raise RuntimeError("nothing to analyze")
+        call = nmu.kwargs_repr(self.run_selection, {
+            "channel": channel, "epochs": epochs, "group": group,
+            "group_operator": group_operator, "data": data,
+        }, text={"epochs": nmu.names_repr(epochs)} if isinstance(epochs, list) else None)
+        nmch.add_nm_command("%s.run_selection(%s%s)" % (self._name, nm_ref(source), call))
+        return self.run_all(targets, run_keys=run_keys)
+
+    @staticmethod
+    def _run_selection_targets(source, channel, epochs, group, group_operator, data,
+                        ) -> tuple[list[dict[str, NMObject | None]], dict]:
+        """The targets and run keys of :meth:`run_selection`."""
+        folder = toolfolder = None
+        for obj in getattr(source, "path_objects", []):
+            if isinstance(obj, NMToolFolder):
+                toolfolder = obj
+            elif isinstance(obj, NMFolder):
+                folder = obj
+        context = {"folder": folder, "toolfolder": toolfolder}
+        if isinstance(source, NMDataSeries):
+            if data is not None:
+                raise ValueError("data: use epochs for a data series")
+            c = source.channels.selected_value if channel is None else source.channels.get(channel)
+            if not isinstance(c, NMChannel):
+                raise KeyError("no channel '%s' in %s" % (channel, source.name))
+            names = source.epochs.scope_names(epochs, group, group_operator)
+            found = source.epoch_data_map(c.name)
+            targets = [
+                {**context, "dataseries": source, "channel": c,
+                 "epoch": source.epochs[name], "data": found[name]}
+                for name in names if isinstance(found.get(name), NMData)
+            ]
+            epoch = epochs.lower() if isinstance(epochs, str) and epochs.lower() == "all" \
+                else epochs if isinstance(epochs, str) else None
+            run_keys: dict = {"epoch": epoch}
+            if group is not None:
+                run_keys["group"] = group
+                if group_operator:
+                    run_keys["group_operator"] = group_operator.upper()
+            return targets, run_keys
+        if not isinstance(source, (NMFolder, NMToolFolder)):
+            raise TypeError(nmu.type_error_str(source, "source", "data series or folder"))
+        if channel is not None or epochs is not None or group is not None:
+            raise ValueError("channel, epochs and group are for a data series")
+        if data is None:
+            raise ValueError("data: name an array, a Data Set or a list of arrays")
+        sets = source.data.sets
+        run_keys = {}
+        if isinstance(data, (list, tuple)):
+            names = list(data)
+        elif sets._getkey(data) is not None:
+            members = sets.get_items(data, get_keys=True) or []
+            names = [name for name in source.data.keys() if name in members]
+            run_keys = {"data": data}
+        else:
+            names = [data]
+        targets = []
+        for name in names:
+            item = source.data.get(name)
+            if not isinstance(item, NMData):
+                raise KeyError("no data '%s' in %s" % (name, source.name))
+            # None (not left out), so an earlier series run's selection
+            # doesn't stay in the tool (or its subfolder's name)
+            targets.append({**context, "dataseries": None, "channel": None,
+                            "epoch": None, "data": item})
+        return targets, run_keys
+
     def run_each(
         self,
         batches: list[tuple[list[dict[str, NMObject]], dict | None]],
@@ -462,6 +557,9 @@ class NMTool:
                 break
         return done
 
+    # recorded so a run's notes (e.g. each compute) are inner calls under
+    # the command that ran it (run_selection, run_tool); it records none itself
+    @nmch.records_command
     def run_all(
         self,
         targets: list[dict[str, NMObject]],
