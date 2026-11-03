@@ -221,6 +221,7 @@ def test_open_imports_each_file_into_a_new_folder(app, monkeypatch, tmp_path):
 
     monkeypatch.setitem(FILE_READERS, ".fake", fake_reader)
     monkeypatch.setitem(FILE_READERS, ".abf", missing_reader)
+    app.selection_model.manager.settings.ask_import_options = False  # no prompt
     app.folder_actions.open_files([
         str(tmp_path / "my rec-1.fake"),
         str(tmp_path / "cell.abf"),

@@ -45,6 +45,8 @@ class NMSettings(NMToolConfig):
             (shown in light grey) or ``"blank"`` (an empty cell).
         confirm_quit: Ask before quitting when the session has data or
             history to lose.
+        ask_import_options: Before importing a file, ask what to import
+            (folder name, prefix, channels, epochs, X range).
     """
 
     _TOML_TYPE = "nm_settings"
@@ -52,6 +54,7 @@ class NMSettings(NMToolConfig):
         "table_nan": {"type": str, "default": TABLE_NAN_TEXT,
                       "choices": [TABLE_NAN_TEXT, TABLE_NAN_GREY, TABLE_NAN_BLANK]},
         "confirm_quit": {"type": bool, "default": True},
+        "ask_import_options": {"type": bool, "default": True},
     }
 
     def __init__(self) -> None:

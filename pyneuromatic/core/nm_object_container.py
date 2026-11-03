@@ -1185,6 +1185,8 @@ if __name__ == "__main__":
 def unique_name(container: NMObjectContainer, base: str) -> str:
     """A valid name not yet in *container*, based on *base* (e.g. a file name)."""
     name = re.sub(r"[^0-9A-Za-z_]", "_", base).strip("_")
+    if name[:1].isdigit():
+        name = "F" + name  # e.g. a file "15804044.abf", as the file readers do
     if not name or not nmu.name_ok(name):
         return container.auto_name_next()
     existing = {key.lower() for key in container.keys()}

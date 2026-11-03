@@ -18,7 +18,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pyneuromatic.core.nm_folder import NMFolder
 
-from pyneuromatic.io.base import make_data_name
+from pyneuromatic.io.base import (
+    FileInfo, check_options, crop, import_numbers, make_data_name, note_import,
+)
 import pyneuromatic.core.nm_utilities as nmu
 
 
@@ -27,6 +29,9 @@ def read_abf(
     folder: "NMFolder | None" = None,
     prefix: str = "Record",
     make_dataseries: bool = True,
+    channels: list[str] | None = None,
+    epochs: list[int] | range | None = None,
+    xrange: tuple[float | None, float | None] | None = None,
 ) -> "NMFolder":
     """Read an Axon Binary Format file into an NMFolder.
 
@@ -38,6 +43,10 @@ def read_abf(
         folder: Optional existing folder to add data to. If None, creates new.
         prefix: Prefix for data names (default "Record").
         make_dataseries: If True, automatically create dataseries from data.
+        channels: Channel letters to import (e.g. ["A"]); None for all.
+        epochs: Epoch (sweep) numbers to import; None for all. The
+            channels and epochs imported are renumbered from A and 0.
+        xrange: (xbgn, xend) to crop each array to; None for an open end.
 
     Returns:
         NMFolder containing the imported data.
@@ -54,6 +63,7 @@ def read_abf(
             "Install it with: pip install pyabf"
         )
 
+    check_options(channels, epochs, xrange)
     filepath = Path(filepath)
 
     if not filepath.exists():
@@ -96,16 +106,26 @@ def read_abf(
     x_delta = abf.dataSecPerPoint * 1000  # sec -> ms
     x_units = "ms"
 
+    # The channels and sweeps to import, renumbered from A and 0
+    letters = [nmu.channel_char(c) for c in range(abf.channelCount)]
+    channel_numbers, epoch_numbers = import_numbers(
+        letters, list(range(abf.sweepCount)), channels, epochs)
+    note_import(folder, channel_numbers, epoch_numbers, channels, epochs, xrange)
+
     # Process sweeps and channels; build matches dict as we go
     matches = {}
     for sweep in range(abf.sweepCount):
         for channel in range(abf.channelCount):
+            if letters[channel] not in channel_numbers or sweep not in epoch_numbers:
+                continue
             abf.setSweep(sweep, channel=channel)
+            new_channel, new_epoch = channel_numbers[letters[channel]], epoch_numbers[sweep]
 
-            name = make_data_name(prefix, channel, sweep)
+            name = make_data_name(prefix, new_channel, new_epoch)
+            y, start = crop(abf.sweepY, x_start, x_delta, xrange)
 
             # Build scale dicts
-            xscale = {"start": x_start, "delta": x_delta, "units": x_units}
+            xscale = {"start": start, "delta": x_delta, "units": x_units}
             yscale = {}
             if channel < len(abf.adcNames):
                 yscale["label"] = abf.adcNames[channel]
@@ -119,11 +139,11 @@ def read_abf(
                 continue
 
             # Set y data
-            data.nparray = abf.sweepY.copy()
+            data.nparray = y.copy()
 
-            ch_char = nmu.channel_char(channel)
+            ch_char = nmu.channel_char(new_channel)
             if ch_char:
-                matches[(ch_char, sweep)] = data
+                matches[(ch_char, new_epoch)] = data
 
     # Optionally create dataseries directly from the matches dict
     if make_dataseries and matches:
@@ -132,3 +152,33 @@ def read_abf(
             dataseries.locked = True  # protect raw recordings
 
     return folder
+
+
+def abf_info(filepath: str | Path) -> FileInfo:
+    """What an ABF file holds (its header only; the data isn't read)."""
+    try:
+        import pyabf
+    except ImportError:
+        raise ImportError(
+            "pyabf is required to read ABF files. "
+            "Install it with: pip install pyabf"
+        )
+    filepath = Path(filepath)
+    if not filepath.exists():
+        raise FileNotFoundError(f"File not found: {filepath}")
+    abf = pyabf.ABF(str(filepath), loadData=False)
+    channels = []
+    for channel in range(abf.channelCount):
+        label = abf.adcNames[channel] if channel < len(abf.adcNames) else ""
+        units = abf.adcUnits[channel] if channel < len(abf.adcUnits) else ""
+        channels.append((nmu.channel_char(channel), label, units))
+    return FileInfo(
+        prefix="Record",
+        channels=channels,
+        epochs=list(range(abf.sweepCount)),
+        n_points=int(abf.sweepPointCount),
+        x_start=0.0,
+        x_delta=abf.dataSecPerPoint * 1000,  # sec -> ms
+        x_units="ms",
+        file_format=f"Axon Binary Format (ABF {abf.abfVersionString})",
+    )

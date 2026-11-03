@@ -75,3 +75,9 @@ def test_a_file_that_cannot_be_read_leaves_nothing(nm, tmp_path, monkeypatch):
         nm.folders.import_file(str(tmp_path / "cell.fake"))
     assert len(nm.folders) == 0
     assert _commands(nm) == []  # neither the import nor its steps
+
+
+def test_a_file_name_starting_with_a_digit(nm):
+    pytest.importorskip("pyabf")
+    folder = nm.folders.import_file(str(FIXTURES / "15804044.abf"))
+    assert folder.name == "F15804044"  # as the file readers name it
