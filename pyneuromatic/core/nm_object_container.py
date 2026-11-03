@@ -20,6 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 import copy
+import re
 from collections.abc import MutableMapping
 from enum import Enum, auto
 
@@ -1179,3 +1180,16 @@ if __name__ == "__main__":
     print(dict(test))
     # print(test.nmobject_class.__name__)
     """
+
+
+def unique_name(container: NMObjectContainer, base: str) -> str:
+    """A valid name not yet in *container*, based on *base* (e.g. a file name)."""
+    name = re.sub(r"[^0-9A-Za-z_]", "_", base).strip("_")
+    if not name or not nmu.name_ok(name):
+        return container.auto_name_next()
+    existing = {key.lower() for key in container.keys()}
+    candidate, number = name, 1
+    while candidate.lower() in existing:
+        candidate = f"{name}_{number}"
+        number += 1
+    return candidate

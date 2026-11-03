@@ -8,6 +8,7 @@ pytest.importorskip("PyQt6")
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import tier_actions
 from pyneuromatic.gui.app_window import NMAppWindow
+from pyneuromatic.core.nm_folder import FILE_READERS
 from pyneuromatic.gui.tier_actions import unique_name
 
 pytestmark = pytest.mark.gui
@@ -218,8 +219,8 @@ def test_open_imports_each_file_into_a_new_folder(app, monkeypatch, tmp_path):
     def missing_reader(path, folder):
         raise ImportError("pyabf is required to read ABF files")
 
-    monkeypatch.setattr(tier_actions, "READERS",
-                        {".fake": fake_reader, ".abf": missing_reader})
+    monkeypatch.setitem(FILE_READERS, ".fake", fake_reader)
+    monkeypatch.setitem(FILE_READERS, ".abf", missing_reader)
     app.folder_actions.open_files([
         str(tmp_path / "my rec-1.fake"),
         str(tmp_path / "cell.abf"),
@@ -228,6 +229,10 @@ def test_open_imports_each_file_into_a_new_folder(app, monkeypatch, tmp_path):
 
     manager = app.selection_model.manager
     assert list(manager.folders.keys()) == ["Demo", "Other", "my_rec_1"]
+    # One command per file read (#455): not its folder's or data's own
+    imports = [e["command"] for e in manager.command_history.buffer
+               if e["command"].startswith("nm.folders")]
+    assert imports == ["nm.folders.import_file(%r)" % str(tmp_path / "my rec-1.fake")]
     assert manager.select_values["folder"] is manager.folders["my_rec_1"]
     assert app.selection_strip.combo("data").currentText() == "RecordA0"
     # The Browser shows the imported folder, opened, with its Info (metadata)
