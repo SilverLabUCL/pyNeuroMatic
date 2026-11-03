@@ -16,53 +16,18 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 import numpy as np
 
 import pyneuromatic.core.nm_utilities as nmu
-from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_object_container import NMObjectContainer, unique_name
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET
-from pyneuromatic.core.nm_folder import NMFolder
+from pyneuromatic.core.nm_folder import FILE_READERS, NMFolder
 from pyneuromatic.gui.selection_model import RESERVED_EPOCH_SET_NAMES, SelectionModel
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
 
 
-def _read_abf(path, folder):
-    from pyneuromatic.io.abf import read_abf
-    return read_abf(path, folder=folder)
-
-
-def _read_axograph(path, folder):
-    from pyneuromatic.io.axograph import read_axograph
-    return read_axograph(path, folder=folder)
-
-
-def _read_pxp(path, folder):
-    from pyneuromatic.io.pxp import read_pxp
-    return read_pxp(path, folder=folder)
-
-
-# File suffix -> reader(path, folder) that adds the file's data to folder
-READERS: dict[str, Callable] = {
-    ".abf": _read_abf,
-    ".axgd": _read_axograph,
-    ".axgx": _read_axograph,
-    ".pxp": _read_pxp,
-}
 OPEN_FILTER = (
     "Data files (*.abf *.axgd *.axgx *.pxp);;"
     "Axon Binary (*.abf);;AxoGraph (*.axgd *.axgx);;"
     "Igor packed experiment (*.pxp);;All files (*)"
 )
-
-
-def unique_name(container: NMObjectContainer, base: str) -> str:
-    """A valid name not yet in *container*, based on *base* (e.g. a file name)."""
-    name = re.sub(r"[^0-9A-Za-z_]", "_", base).strip("_")
-    if not name or not nmu.name_ok(name):
-        return container.auto_name_next()
-    existing = {key.lower() for key in container.keys()}
-    candidate, number = name, 1
-    while candidate.lower() in existing:
-        candidate = f"{name}_{number}"
-        number += 1
-    return candidate
 
 
 # Prefix for duplicated data, keeping copies in NeuroMatic's naming pattern
@@ -1228,21 +1193,15 @@ class FolderActions(TierActions):
         problems: list[str] = []
         for path in paths:
             path = Path(path)
-            reader = READERS.get(path.suffix.lower())
-            if reader is None:
+            if path.suffix.lower() not in FILE_READERS:
                 problems.append(f"{path.name}: unsupported file type")
                 continue
-            folder = self._folders.new(unique_name(self._folders, path.stem))
-            try:
-                reader(path, folder)
+            try:  # one command (#455); a folder that can't be read is removed
+                imported = self._folders.import_file(str(path))
             except ImportError as error:
-                self._folders.pop(folder.name)
                 problems.append(f"{path.name}: {error}")
             except Exception as error:  # reader errors vary by format
-                self._folders.pop(folder.name)
                 problems.append(f"{path.name}: could not read ({error})")
-            else:
-                imported = folder
         if imported is not None:
             self._select(folder=imported)
             self._changed()
@@ -3893,7 +3852,6 @@ __all__ = [
     "create_data",
     "new_data_defaults",
     "OPEN_FILTER",
-    "READERS",
     "copy_name",
     "copy_target_name",
     "name_error",

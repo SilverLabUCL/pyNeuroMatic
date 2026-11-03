@@ -29,7 +29,7 @@ from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries, NMDataSeriesContainer
 from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
-from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_object_container import NMObjectContainer, unique_name
 import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_configurations as nmc
@@ -2011,6 +2011,31 @@ class NMFolder(NMObject):
         return result
 
 
+def _read_abf(path, folder):
+    from pyneuromatic.io.abf import read_abf
+    return read_abf(path, folder=folder)
+
+
+def _read_axograph(path, folder):
+    from pyneuromatic.io.axograph import read_axograph
+    return read_axograph(path, folder=folder)
+
+
+def _read_pxp(path, folder):
+    from pyneuromatic.io.pxp import read_pxp
+    return read_pxp(path, folder=folder)
+
+
+# File suffix -> reader(path, folder) that adds the file's data to folder,
+# for NMFolderContainer.import_file
+FILE_READERS: dict[str, Any] = {
+    ".abf": _read_abf,
+    ".axgd": _read_axograph,
+    ".axgx": _read_axograph,
+    ".pxp": _read_pxp,
+}
+
+
 class NMFolderContainer(NMObjectContainer):
     """
     Container of NMFolders
@@ -2055,6 +2080,70 @@ class NMFolderContainer(NMObjectContainer):
         if super()._add(f, select=select, quiet=quiet):
             return f
         return None
+
+    @nmch.records_command
+    def import_file(self, path: str, name: str | None = None) -> NMFolder:
+        """Read a data file into a new folder, as one command (#455), e.g.
+        ``nm.folders.import_file('/Users/me/Data/nm02Jul04c0_002.pxp')``.
+
+        The reader is chosen by the file's suffix (see ``FILE_READERS``):
+        .abf, .axgd, .axgx, .pxp. The folder, its data and data series are
+        made inside this command, so they aren't commands of their own.
+
+        Args:
+            path: The file to read.
+            name: The new folder's name; default: the file's name (made
+                unique, e.g. "nm02Jul04c0_002_1").
+
+        Returns:
+            The new folder.
+
+        Raises:
+            ValueError: If the file type isn't supported.
+            ImportError: If the reader's library isn't installed.
+            Other errors from the reader, after the new folder is removed.
+        """
+        from pathlib import Path
+
+        file = Path(path)
+        read = FILE_READERS.get(file.suffix.lower())
+        if read is None:
+            raise ValueError("unsupported file type: %s" % file.name)
+        folder = self.new(unique_name(self, file.stem) if name is None else name)
+        try:
+            self._read_file(read, file, folder)
+        except BaseException:
+            self.pop(folder.name)  # nothing half-read is left
+            raise
+        nmch.add_nm_command("%s.import_file(%r%s)" % (
+            self._nm_cmd_path, str(path), "" if name is None else ", name=%r" % name))
+        nmh.history(self._import_note(folder), path=folder.history_path)
+        return folder
+
+    @staticmethod
+    @nmch.records_command
+    def _read_file(read, file, folder: NMFolder) -> None:
+        """Run a file reader one level inside import_file, so all it writes
+        (e.g. "locked dataseries") are inner calls."""
+        read(file, folder)
+
+    @staticmethod
+    def _import_note(folder: NMFolder) -> str:
+        """What a file brought in, e.g. "imported 38 data arrays; data series
+        Record: channels A, B; epochs E0..E18 (locked)"."""
+        n = len(folder.data)
+        parts = ["imported %d data array%s" % (n, "s" * (n != 1))]
+        for series in folder.dataseries.values():
+            epochs = list(series.epochs.keys())
+            text = "data series %s: channels %s" % (
+                series.name, NMFolder._channels_text(list(series.channels.keys())))
+            if epochs:
+                text += "; epochs %s" % (epochs[0] if len(epochs) == 1
+                                         else "%s..%s" % (epochs[0], epochs[-1]))
+            if series.locked:
+                text += " (locked)"
+            parts.append(text)
+        return "; ".join(parts)
 
     def open_hdf5(self):
         dataseries = "Record"
