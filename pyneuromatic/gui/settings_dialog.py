@@ -69,6 +69,14 @@ class SettingsDialog(QtWidgets.QDialog):
         self.confirm_quit_checkbox.toggled.connect(
             lambda checked: self._set("confirm_quit", checked))
         general_layout.addWidget(self.confirm_quit_checkbox)
+        self.import_options_checkbox = QtWidgets.QCheckBox("Ask for import options", general)
+        self.import_options_checkbox.setToolTip(
+            "Before importing a file, choose its folder name, prefix, channels, "
+            "epochs and X range")
+        self.import_options_checkbox.setChecked(settings.ask_import_options)
+        self.import_options_checkbox.toggled.connect(
+            lambda checked: self._set("ask_import_options", checked))
+        general_layout.addWidget(self.import_options_checkbox)
         general_layout.addStretch(1)
         self._add_page("General", general)
 

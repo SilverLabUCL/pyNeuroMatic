@@ -18,7 +18,9 @@ import numpy as np
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.core.nm_object_container import NMObjectContainer, unique_name
 from pyneuromatic.core.nm_epoch import EXCLUDE_SET
-from pyneuromatic.core.nm_folder import FILE_READERS, NMFolder
+from pyneuromatic.core.nm_folder import (
+    FILE_INFO, FILE_READERS, NMFolder, clear_file_cache, file_info,
+)
 from pyneuromatic.gui.selection_model import RESERVED_EPOCH_SET_NAMES, SelectionModel
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
 
@@ -1137,6 +1139,15 @@ class FolderActions(TierActions):
 
     # --- dialogs (replaced in tests) ----------------------------------------
 
+    def _ask_import_options(self, path: Path, info) -> dict | None:
+        """The import options for *path* (``import_file`` keywords), or None
+        if cancelled."""
+        from pyneuromatic.gui.import_dialog import ImportOptionsDialog
+        dialog = ImportOptionsDialog(path, info, self._folders, self._parent_widget)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return None
+        return dialog.options()
+
     def _ask_open_paths(self) -> list[str]:
         paths, _filter = QtWidgets.QFileDialog.getOpenFileNames(
             self._parent_widget, "Open / Import", "", OPEN_FILTER
@@ -1196,8 +1207,23 @@ class FolderActions(TierActions):
             if path.suffix.lower() not in FILE_READERS:
                 problems.append(f"{path.name}: unsupported file type")
                 continue
+            options: dict = {}
+            if (self._selection.manager.settings.ask_import_options
+                    and path.suffix.lower() in FILE_INFO):  # what to import (#456)
+                try:
+                    info = file_info(str(path))
+                except ImportError as error:
+                    problems.append(f"{path.name}: {error}")
+                    continue
+                except Exception as error:  # reader errors vary by format
+                    problems.append(f"{path.name}: could not read ({error})")
+                    continue
+                options = self._ask_import_options(path, info)
+                if options is None:  # cancelled: skip this file
+                    clear_file_cache()
+                    continue
             try:  # one command (#455); a folder that can't be read is removed
-                imported = self._folders.import_file(str(path))
+                imported = self._folders.import_file(str(path), **options)
             except ImportError as error:
                 problems.append(f"{path.name}: {error}")
             except Exception as error:  # reader errors vary by format

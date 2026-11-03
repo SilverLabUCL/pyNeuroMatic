@@ -133,8 +133,17 @@ class TestReadPxpOptions(unittest.TestCase):
     def test_custom_prefix(self):
         from pyneuromatic.io.pxp import read_pxp
 
+        # The file's "Record" waves, imported with the new prefix (#456)
         folder = read_pxp(PXP_FILE, prefix="Wave")
-        # Custom prefix doesn't match "Record" waves, so no data imported
+        self.assertEqual(len(folder.data), 38)
+        self.assertIn("WaveA0", folder.data)
+        self.assertIn("Wave", folder.dataseries)
+
+    def test_wave_prefix_chooses_the_waves(self):
+        from pyneuromatic.io.pxp import read_pxp
+
+        # The file has no "Wave" waves, so nothing is imported
+        folder = read_pxp(PXP_FILE, wave_prefix="Wave")
         self.assertEqual(len(folder.data), 0)
 
     def test_matching_prefix(self):

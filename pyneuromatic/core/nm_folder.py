@@ -2011,29 +2011,72 @@ class NMFolder(NMObject):
         return result
 
 
-def _read_abf(path, folder):
+def _read_abf(path, folder, **options):
     from pyneuromatic.io.abf import read_abf
-    return read_abf(path, folder=folder)
+    return read_abf(path, folder=folder, **options)
 
 
-def _read_axograph(path, folder):
+def _read_axograph(path, folder, **options):
     from pyneuromatic.io.axograph import read_axograph
-    return read_axograph(path, folder=folder)
+    return read_axograph(path, folder=folder, **options)
 
 
-def _read_pxp(path, folder):
+def _read_pxp(path, folder, **options):
     from pyneuromatic.io.pxp import read_pxp
-    return read_pxp(path, folder=folder)
+    return read_pxp(path, folder=folder, **options)
 
 
-# File suffix -> reader(path, folder) that adds the file's data to folder,
-# for NMFolderContainer.import_file
+def _abf_info(path):
+    from pyneuromatic.io.abf import abf_info
+    return abf_info(path)
+
+
+def _axograph_info(path):
+    from pyneuromatic.io.axograph import axograph_info
+    return axograph_info(path)
+
+
+def _pxp_info(path):
+    from pyneuromatic.io.pxp import pxp_info
+    return pxp_info(path)
+
+
+# File suffix -> reader(path, folder, **options) that adds the file's data
+# to folder, for NMFolderContainer.import_file; options: prefix, channels,
+# epochs, xrange, make_dataseries
 FILE_READERS: dict[str, Any] = {
     ".abf": _read_abf,
     ".axgd": _read_axograph,
     ".axgx": _read_axograph,
     ".pxp": _read_pxp,
 }
+
+# File suffix -> info(path): what the file holds (pyneuromatic.io.base.FileInfo)
+FILE_INFO: dict[str, Any] = {
+    ".abf": _abf_info,
+    ".axgd": _axograph_info,
+    ".axgx": _axograph_info,
+    ".pxp": _pxp_info,
+}
+
+
+def file_info(path: str):
+    """What a data file holds (channels, epochs, points, X scale, prefix),
+    for choosing what to import (#456)."""
+    from pathlib import Path
+    info = FILE_INFO.get(Path(path).suffix.lower())
+    if info is None:
+        raise ValueError("unsupported file type: %s" % Path(path).name)
+    return info(path)
+
+
+def clear_file_cache() -> None:
+    """Forget the file the readers kept (PXP and Axograph keep the last file
+    read, so describing then importing it reads it once)."""
+    import sys
+    for module in ("pyneuromatic.io.pxp", "pyneuromatic.io.axograph"):
+        if module in sys.modules:
+            sys.modules[module].clear_cache()
 
 
 class NMFolderContainer(NMObjectContainer):
@@ -2082,18 +2125,37 @@ class NMFolderContainer(NMObjectContainer):
         return None
 
     @nmch.records_command
-    def import_file(self, path: str, name: str | None = None) -> NMFolder:
+    def import_file(
+        self,
+        path: str,
+        name: str | None = None,
+        prefix: str | None = None,
+        channels: list[str] | None = None,
+        epochs: list[int] | range | None = None,
+        xrange: tuple[float | None, float | None] | None = None,
+        make_dataseries: bool = True,
+    ) -> NMFolder:
         """Read a data file into a new folder, as one command (#455), e.g.
         ``nm.folders.import_file('/Users/me/Data/nm02Jul04c0_002.pxp')``.
 
         The reader is chosen by the file's suffix (see ``FILE_READERS``):
         .abf, .axgd, .axgx, .pxp. The folder, its data and data series are
         made inside this command, so they aren't commands of their own.
+        Only the options given are written in the command (#456), e.g.
+        ``import_file('…/cell.abf', channels=['A'], epochs=range(0, 10))``.
 
         Args:
             path: The file to read.
             name: The new folder's name; default: the file's name (made
                 unique, e.g. "nm02Jul04c0_002_1").
+            prefix: The imported arrays' prefix; default: the file's
+                (WavePrefix for .pxp), else "Record".
+            channels: Channel letters to import (e.g. ['A', 'C']); None: all.
+            epochs: Epoch numbers to import (e.g. range(0, 10)); None: all.
+                The channels and epochs imported are renumbered from A and 0.
+            xrange: (xbgn, xend) to crop each array to, None for an open
+                end (e.g. (0.0, None)); None: the whole array.
+            make_dataseries: Make a data series of the arrays.
 
         Returns:
             The new folder.
@@ -2109,23 +2171,30 @@ class NMFolderContainer(NMObjectContainer):
         read = FILE_READERS.get(file.suffix.lower())
         if read is None:
             raise ValueError("unsupported file type: %s" % file.name)
+        given = {"prefix": prefix, "channels": channels, "epochs": epochs,
+                 "xrange": xrange, "make_dataseries": make_dataseries}
+        defaults = {"make_dataseries": True}
+        options = {k: v for k, v in given.items() if v is not defaults.get(k)}
         folder = self.new(unique_name(self, file.stem) if name is None else name)
         try:
-            self._read_file(read, file, folder)
+            self._read_file(read, file, folder, options)
         except BaseException:
             self.pop(folder.name)  # nothing half-read is left
             raise
+        finally:
+            clear_file_cache()
         nmch.add_nm_command("%s.import_file(%r%s)" % (
-            self._nm_cmd_path, str(path), "" if name is None else ", name=%r" % name))
+            self._nm_cmd_path, str(path),
+            nmu.kwargs_repr(self.import_file, {"name": name, **given})))
         nmh.history(self._import_note(folder), path=folder.history_path)
         return folder
 
     @staticmethod
     @nmch.records_command
-    def _read_file(read, file, folder: NMFolder) -> None:
+    def _read_file(read, file, folder: NMFolder, options: dict) -> None:
         """Run a file reader one level inside import_file, so all it writes
         (e.g. "locked dataseries") are inner calls."""
-        read(file, folder)
+        read(file, folder, **options)
 
     @staticmethod
     def _import_note(folder: NMFolder) -> str:
