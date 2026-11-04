@@ -360,6 +360,8 @@ class Stats2Panel(QtWidgets.QWidget):
     plot_requested = QtCore.pyqtSignal(str, object, object, str, str, str)
     # The list of Stats toolfolders in the current folder was reloaded
     results_changed = QtCore.pyqtSignal()
+    # The ST_ array chosen in the Array list (or its folder or window) changed
+    array_changed = QtCore.pyqtSignal()
 
     def __init__(
         self,
@@ -564,6 +566,7 @@ class Stats2Panel(QtWidgets.QWidget):
             self.tables.select_array(name)
         self._update_details()
         self._update_buttons()
+        self.array_changed.emit()
 
     def _on_table_column_selected(self) -> None:
         # Clicking a column in either table picks that array here too
@@ -614,12 +617,14 @@ class Stats2Panel(QtWidgets.QWidget):
         units = self.toolfolder().data.get(name).yscale.units
         return f"{name} ({units})" if units else name
 
-    def plot_selected(self) -> None:
+    def selected_plot(self) -> tuple | None:
+        """The chosen ST_ array as :attr:`plot_requested` values (title, y,
+        x, x label, y label, style), or None if no array is chosen."""
         name = self.selected_array()
         toolfolder = self.toolfolder()
         if name is None or toolfolder is None:
-            return
-        self.plot_requested.emit(
+            return None
+        return (
             f"{toolfolder.name}: {name}",
             toolfolder.data.get(name).nparray,
             None,
@@ -627,6 +632,11 @@ class Stats2Panel(QtWidgets.QWidget):
             self._axis_label(name),
             "points",
         )
+
+    def plot_selected(self) -> None:
+        values = self.selected_plot()
+        if values is not None:
+            self.plot_requested.emit(*values)
 
     def histogram_selected(self) -> None:
         name = self.selected_array()

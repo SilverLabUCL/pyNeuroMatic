@@ -281,11 +281,12 @@ def test_plot_and_table_follow_the_strip_channel(app):
     assert _shown(plot.view_tabs) == ("channel", "B") == _shown(table.view_tabs)
     assert plot.current_trace.name == "RecordB0"
     assert table.channel_table.model.arrays[0].name == "RecordB0"
-    # A tab shows another channel, until the strip's channel changes again
+    # A tab shows another channel, until the strip's channel changes again;
+    # Plot and Table share the tab (#460)
     plot.view_tabs.select_channel("A")
     app.selection_model.update(epoch=series.epochs["E1"])
-    assert _shown(plot.view_tabs) == ("channel", "A")
-    assert _shown(table.view_tabs) == ("channel", "B")
+    assert _shown(plot.view_tabs) == ("channel", "A") == _shown(table.view_tabs)
+    assert table.channel_table.model.arrays[0].name == "RecordA0"  # channel A's table
     app.selection_model.update(channel=series.channels["A"])
     app.selection_model.update(channel=series.channels["B"])
     assert _shown(plot.view_tabs) == ("channel", "B")

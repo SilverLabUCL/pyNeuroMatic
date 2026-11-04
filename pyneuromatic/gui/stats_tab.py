@@ -301,6 +301,9 @@ class StatsToolTab(ToolTabWidget):
         self.table_view = self.stats2.tables
         self.stats2.results_changed.connect(self.results_changed)
         self.stats2.plot_requested.connect(self._show_plot_values)
+        # The plot follows the array chosen in Stats2, e.g. after a run
+        self.stats2.array_changed.connect(self._plot_selected_array)
+        self._plot_selected_array()
 
     def _on_mode_tab_changed(self, _index: int) -> None:
         # Run belongs to Stats1
@@ -370,6 +373,14 @@ class StatsToolTab(ToolTabWidget):
         if succeeded and self._tool.toolfolder is not None:
             self.mode_tabs.setCurrentWidget(self.stats2)
             self.view_requested.emit("table")
+
+    def _plot_selected_array(self) -> None:
+        """Draw the array chosen in Stats2 (the panel shown doesn't change)."""
+        values = self.stats2.selected_plot()
+        if values is None:
+            self.plot_view.clear()
+        else:
+            self.plot_view.show_values(*values)
 
     def _show_plot_values(self, title, y, x, xlabel, ylabel, style) -> None:
         """A Stats2 plot or histogram, in the Plot panel."""

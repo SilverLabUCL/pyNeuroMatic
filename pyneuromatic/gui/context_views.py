@@ -50,6 +50,12 @@ class ChannelToolBar(QtWidgets.QTabBar):
         self.currentChanged.connect(self._on_current_changed)
         self.hide()
 
+    def minimumSizeHint(self) -> QtCore.QSize:  # noqa: N802 (Qt)
+        # No wider than its tabs: room for scroll buttons is only needed when
+        # the tabs don't fit (macOS centres the tabs in any extra width)
+        hint = super().minimumSizeHint()
+        return QtCore.QSize(min(hint.width(), self.sizeHint().width()), hint.height())
+
     @property
     def channel_names(self) -> list[str]:
         return list(self._channels)
@@ -140,8 +146,28 @@ class ChannelToolBar(QtWidgets.QTabBar):
             self.view_changed.emit(kind, name)
 
 
+def no_view_label(kind: str, parent: QtWidgets.QWidget) -> QtWidgets.QLabel:
+    """A panel's page for a tool with no view of *kind* ("plot" or "table")."""
+    label = QtWidgets.QLabel("", parent)
+    label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+    label.setProperty("kind", kind)
+    return label
+
+
+def show_tool_page(stack: QtWidgets.QStackedWidget, pages: dict, note: QtWidgets.QLabel,
+                    name: str) -> None:
+    """Show tool *name*'s page in *stack*, or *note* if it has none here."""
+    page = pages.get(name)
+    if page is None:
+        note.setText(f"{name} has no {note.property('kind')}")
+        page = note
+    stack.setCurrentWidget(page)
+
+
 class ValuesPlot(QtWidgets.QWidget):
     """Plot of values that are not traces, e.g. a Stats results column."""
+
+    EMPTY_TITLE = "Use Plot or Histogram in Stats2"
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -150,7 +176,7 @@ class ValuesPlot(QtWidgets.QWidget):
         if pg is not None:
             self.plot_widget = pg.PlotWidget(self)
             self.plot_widget.setBackground("w")
-            self.plot_widget.setTitle("Use Plot or Histogram in Stats2")
+            self.plot_widget.setTitle(self.EMPTY_TITLE)
             layout.addWidget(self.plot_widget)
         else:  # pragma: no cover - optional GUI dependency
             self.plot_widget = None
@@ -200,6 +226,15 @@ class ValuesPlot(QtWidgets.QWidget):
         self.plot_widget.setLabel("bottom", xlabel)
         self.plot_widget.setLabel("left", ylabel)
         self.plot_widget.setTitle(title)
+
+    def clear(self) -> None:
+        """Nothing plotted: the hint again."""
+        if self.plot_widget is None:
+            return
+        self.plot_widget.clear()
+        self.plot_widget.setLabel("bottom", "")
+        self.plot_widget.setLabel("left", "")
+        self.plot_widget.setTitle(self.EMPTY_TITLE)
 
 
 def _is_number(text: str) -> bool:
@@ -528,13 +563,17 @@ class TablePanel(QtWidgets.QWidget):
     # Show in Browser: the current array, or the tool's results folder
     show_in_browser_requested = QtCore.pyqtSignal(object)
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None,
+                 view_tabs: ChannelToolBar | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        self.view_tabs = ChannelToolBar(self)
+        # Channel tabs, then tabs of tools with results: the window's, shared
+        # with the Plot panel (#460), or its own
+        self.view_tabs = view_tabs if view_tabs is not None else ChannelToolBar(self)
         self.view_tabs.view_changed.connect(self._on_view_changed)
-        layout.addWidget(self.view_tabs)
+        if view_tabs is None:
+            layout.addWidget(self.view_tabs)
 
         # Table functions, in a ⋯ menu at the upper-left corner (as the Plot's)
         self.table_menu = QtWidgets.QMenu("Table", self)
@@ -587,6 +626,8 @@ class TablePanel(QtWidgets.QWidget):
         self.stack.addWidget(self.channel_table)
         self.channel_table.model.data_edited.connect(self.data_edited)
         self._add_context_menu(self.channel_table)
+        self.no_view_label = no_view_label("table", self.stack)
+        self.stack.addWidget(self.no_view_label)
 
         self._selection_model: Any = None
         self._last_selection: dict = {}
@@ -708,8 +749,9 @@ class TablePanel(QtWidgets.QWidget):
         return self._tool_pages.get(name)
 
     def set_tools(self, names: list[str]) -> None:
-        """Show tabs for the registered tools in *names*, in that order."""
-        self._tools = [name for name in names if name in self._tool_pages]
+        """Show tabs for the tools in *names*, in that order (one without
+        tables shows a note)."""
+        self._tools = list(names)
         self.update_selection(self._last_selection)
 
     def show_tool(self, name: str) -> None:
@@ -776,7 +818,7 @@ class TablePanel(QtWidgets.QWidget):
     def _show_current_page(self) -> None:
         view = self.view_tabs.current_view()
         if view is not None and view[0] == "tool":
-            self.stack.setCurrentWidget(self._tool_pages[view[1]])
+            show_tool_page(self.stack, self._tool_pages, self.no_view_label, view[1])
         else:
             self.stack.setCurrentWidget(self.channel_table)
 
@@ -850,6 +892,8 @@ __all__ = [
     "ChannelTableModel",
     "ChannelToolBar",
     "DATA_VIEW",
+    "no_view_label",
+    "show_tool_page",
     "TablePanel",
     "ValuesPlot",
 ]
