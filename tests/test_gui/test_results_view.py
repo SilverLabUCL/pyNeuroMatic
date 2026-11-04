@@ -40,7 +40,7 @@ def _stats_window(qtbot, *, arrays=True):
     qtbot.addWidget(window)
     window.selection_model.update(epoch_set="Set1")
 
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     tab.output_arrays_checkbox.setChecked(arrays)
     tab.measurement_combo.setCurrentText("max")
     tab.xbgn_edit.setText("10")
@@ -77,7 +77,7 @@ def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
     assert _tab_texts(plot.view_tabs) == ["A"]
     assert _tab_texts(table.view_tabs) == ["A"]
 
-    window.stats_tab.run_button.click()
+    window.tool_tabs["Stats"].run_button.click()
     assert _tab_texts(plot.view_tabs) == ["A", "Stats"]
     assert _tab_texts(table.view_tabs) == ["A", "Stats"]
     assert table.view_tabs.current_view() == ("tool", "Stats")
@@ -92,7 +92,7 @@ def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
     assert table.stack.currentWidget() is table.channel_table
 
     # Deleting the only Stats folder removes the tabs
-    stats2 = window.stats_tab.stats2
+    stats2 = window.tool_tabs["Stats"].stats2
     stats2._confirm_delete = lambda name: True
     stats2.delete_button.click()
     assert _tab_texts(plot.view_tabs) == ["A"]
@@ -102,7 +102,7 @@ def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
 
 def test_stats_tool_has_stats1_and_stats2_tabs(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     modes = tab.mode_tabs
     assert [modes.tabText(i) for i in range(modes.count())] == ["Stats1", "Stats2"]
 
@@ -115,7 +115,7 @@ def test_stats_tool_has_stats1_and_stats2_tabs(qtbot):
 
 def test_run_selects_stats2_when_arrays_saved(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     assert tab.mode_tabs.currentIndex() == 0
     tab.run_button.click()
     assert tab.mode_tabs.currentWidget() is tab.stats2
@@ -126,7 +126,7 @@ def test_run_adds_subfolder_to_selection_strip(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
     sub_menu = window.selection_strip.combo("toolfolder")
     assert [sub_menu.itemText(i) for i in range(sub_menu.count())] == ["—"]
-    window.stats_tab.run_button.click()
+    window.tool_tabs["Stats"].run_button.click()
     assert [sub_menu.itemText(i) for i in range(sub_menu.count())] == [
         "—", "Stats_Record_A_S1_0",
     ]
@@ -135,15 +135,15 @@ def test_run_adds_subfolder_to_selection_strip(qtbot):
 
 def test_run_stays_on_stats1_without_arrays(qtbot):
     _manager, _folder, window = _stats_window(qtbot, arrays=False)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     tab.run_button.click()
     assert tab.mode_tabs.currentIndex() == 0
 
 
 def test_run_fills_arrays_and_summary_tables(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
-    stats2 = window.stats_tab.stats2
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
     tables = stats2.tables
 
     assert window.context_panel.currentWidget() is window.table_panel
@@ -174,14 +174,14 @@ def test_run_fills_arrays_and_summary_tables(qtbot):
         )
 
     # A second run is shown as the newest folder
-    window.stats_tab.run_button.click()
+    window.tool_tabs["Stats"].run_button.click()
     assert stats2.folder_combo.currentText() == "Stats_Record_A_S1_1"
 
 
 def test_column_selection_is_shared_between_tables(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
-    stats2 = window.stats_tab.stats2
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
     tables = stats2.tables
 
     tables.summary_table.setCurrentCell(1, 3)  # a click on one summary cell
@@ -196,8 +196,8 @@ def test_column_selection_is_shared_between_tables(qtbot):
 
 def test_array_dropdown_selects_column_and_shows_details(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
-    stats2 = window.stats_tab.stats2
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
     tables = stats2.tables
 
     names = [stats2.array_combo.itemText(i) for i in range(stats2.array_combo.count())]
@@ -223,15 +223,15 @@ def test_array_dropdown_selects_column_and_shows_details(qtbot):
 def test_details_list_nan_rows(qtbot):
     _manager, folder, window = _stats_window(qtbot)
     folder.data["RecordA2"].nparray[:10] = np.nan  # no baseline for this trace
-    window.stats_tab.run_button.click()
-    stats2 = window.stats_tab.stats2
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
     stats2.array_combo.setCurrentText("ST_w0_max_ds")
     assert stats2.details.toPlainText().splitlines()[-1] == "NaN for: RecordA2"
 
 
 def test_all_columns_and_window_switch(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     tab.window_combo.setCurrentIndex(tab.window_combo.findData(tab.NEW_WINDOW_ACTION))
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
@@ -251,8 +251,8 @@ def test_all_columns_and_window_switch(qtbot):
 
 def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
-    stats2 = window.stats_tab.stats2
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
     stats2.array_combo.setCurrentText("ST_w0_max_ds")
 
     plots = []
@@ -266,7 +266,7 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     plot = window.plot_widget
     assert plot.view_tabs.current_view() == ("tool", "Stats")
     assert isinstance(plot.stack.currentWidget(), ValuesPlot)
-    assert window.stats_plot.plot_widget.getPlotItem().listDataItems()
+    assert window.tool_tabs["Stats"].plot_view.plot_widget.getPlotItem().listDataItems()
     # The trace plot is untouched
     assert plot.plot_widget.getPlotItem().listDataItems()
 
@@ -276,7 +276,7 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     assert sum(counts) == len(PEAKS)
     assert len(edges) == len(counts) + 1
     # Saved in the Stats subfolder, and replaced when made again
-    subfolder = window.stats_tab.stats_tool.toolfolder
+    subfolder = window.tool_tabs["Stats"].stats_tool.toolfolder
     assert list(subfolder.data.get("H_ST_w0_max_ds_counts").nparray) == list(counts)
     assert list(subfolder.data.get("H_ST_w0_max_ds_edges").nparray) == list(edges)
     stats2.histogram_button.click()
@@ -285,8 +285,8 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
 
 def test_copy_all_stats_tables_from_the_table_panel(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
-    assert not hasattr(window.stats_tab.stats2, "copy_button")  # moved to the Table panel
+    window.tool_tabs["Stats"].run_button.click()
+    assert not hasattr(window.tool_tabs["Stats"].stats2, "copy_button")  # moved to the Table panel
 
     window.table_panel.show_tool("Stats")
     window.table_panel.copy_all_action.trigger()
@@ -300,8 +300,8 @@ def test_copy_all_stats_tables_from_the_table_panel(qtbot):
 
 def test_delete_folder_after_confirmation(qtbot, monkeypatch):
     _manager, folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
-    stats2 = window.stats_tab.stats2
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
 
     monkeypatch.setattr(stats2, "_confirm_delete", lambda name: False)
     stats2.delete_button.click()
@@ -317,10 +317,10 @@ def test_delete_folder_after_confirmation(qtbot, monkeypatch):
 
 def test_without_stats_arrays_table_explains(qtbot):
     _manager, _folder, window = _stats_window(qtbot, arrays=False)
-    window.stats_tab.run_button.click()
-    stats2 = window.stats_tab.stats2
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
 
-    assert window.stats_tab.status_label.text() == "Complete"
+    assert window.tool_tabs["Stats"].status_label.text() == "Complete"
     assert window.context_panel.currentWidget() is window.plot_widget
     assert stats2.folder_combo.count() == 0
     assert "Run Stats1 with 'Stats arrays' on" in stats2.message_label.text()
@@ -342,5 +342,5 @@ def test_browser_shows_new_results_folder_after_run(qtbot):
         return []
 
     assert tool_folders() == []
-    window.stats_tab.run_button.click()
+    window.tool_tabs["Stats"].run_button.click()
     assert tool_folders() == ["Stats_Record_A_S1_0"]

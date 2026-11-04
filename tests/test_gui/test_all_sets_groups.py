@@ -31,7 +31,7 @@ def app(qtbot):
                            "channel": "A", "epoch": "E0"}
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    window.stats_tab.measurement_combo.setCurrentText("mean")
+    window.tool_tabs["Stats"].measurement_combo.setCurrentText("mean")
     window.folder, window.series = folder, series
     return window
 
@@ -70,7 +70,7 @@ def test_union_for_the_other_views(app):
 
 
 def test_run_all_sets(app):
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     app.series.epochs.sets.add("Set2")  # empty: skipped
     app.selection_model.update(epoch_set=ALL_SETS)
     assert tab.run_info_label.text() == "n=2 runs"
@@ -89,7 +89,7 @@ def test_run_all_sets(app):
 
 
 def test_run_all_groups_with_a_set(app):
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     app.selection_model.update(epoch_set=None, group=ALL_GROUPS)
     tab.run_button.click()
     folders = app.folder.toolfolders
@@ -105,7 +105,7 @@ def test_run_all_groups_with_a_set(app):
 
 
 def test_all_sets_with_all_groups_is_refused(app):
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     app.selection_model.update(epoch_set=ALL_SETS, group=ALL_GROUPS, group_operator="AND")
     assert "isn't supported yet" in tab.run_info_label.text()
     before = list(app.folder.toolfolders.keys())

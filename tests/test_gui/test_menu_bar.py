@@ -53,7 +53,7 @@ def test_view_switches_the_tool_as_the_rail_does(app):
     assert actions["Browser"].isChecked()
     actions["Stats"].trigger()
     assert app.current_tool_name == "Stats" and app.tool_rail.current_tool_name == "Stats"
-    assert app.tool_workspace.currentWidget() is app.stats_tab
+    assert app.tool_workspace.currentWidget() is app.tool_tabs["Stats"]
     assert actions["Stats"].isChecked() and not actions["Browser"].isChecked()
     app.tool_rail.select_tool("Main")  # a rail click: the menu follows
     assert actions["Main"].isChecked() and not actions["Stats"].isChecked()

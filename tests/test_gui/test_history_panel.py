@@ -86,7 +86,7 @@ def test_time_stamps_on_and_off(app):
 
 
 def test_tool_runs(app):
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     tab.run_button.click()  # no measurement chosen: fails
     assert _entries(app, "error")[-1] == (
         "Stats: Failed: Choose a measurement in an enabled Stats window first")
