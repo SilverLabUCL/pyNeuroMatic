@@ -25,6 +25,7 @@ from pyneuromatic.tools.nm_stat_func import (
 )
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
 from pyneuromatic.gui.context_views import ValuesPlot
+from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.gui.results_view import Stats2Panel
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
@@ -67,6 +68,9 @@ class StatsToolTab(ToolTabWidget):
 
     # "Choose measurement" (no measurement yet), as SetX's red
     CHOOSE_COLOR = "#c62828"
+    # The current window's X range and its baseline range, on the Plot (#436)
+    WINDOW_COLOR = "#2563eb"
+    BSLN_COLOR = "#16a34a"
 
     NEW_WINDOW_ACTION = "__new_stats_window__"
     # Dropdown groups, separated in the measurement menu
@@ -470,6 +474,7 @@ class StatsToolTab(ToolTabWidget):
 
         for control in controls:
             control.blockSignals(False)
+        self.ranges_changed.emit()
 
     def _window_controls(self) -> list[QtWidgets.QWidget]:
         return [
@@ -522,7 +527,7 @@ class StatsToolTab(ToolTabWidget):
             return "-inf"
         if value == float("inf"):
             return "inf"
-        return f"{value:g}"
+        return f"{value:.10g}"  # e.g. a dragged edge, snapped to a sample
 
     def _param_keys(self, measurement: str | None) -> tuple[str, ...]:
         if measurement in FUNC_NAMES_LEVEL:
@@ -706,6 +711,32 @@ class StatsToolTab(ToolTabWidget):
         for key, value in values.items():
             if getattr(window, key) != value:
                 setattr(window, key, value if value != {} else None)
+        self.ranges_changed.emit()
+
+    # --- the window's X ranges on the Plot (#436) ----------------------------
+
+    def plot_ranges(self) -> list[PlotRange]:
+        """The current window's X range, and its baseline range while Bsln is on."""
+        window = self._selected_window()
+        if window is None:
+            return []
+        ranges = [PlotRange("window", window.name, window.xbgn, window.xend, self.WINDOW_COLOR)]
+        if window.bsln_on:
+            ranges.append(PlotRange("bsln", f"{window.name} baseline", window.bsln_xbgn,
+                                    window.bsln_xend, self.BSLN_COLOR))
+        return ranges
+
+    def set_plot_range(self, key: str, xbgn: float, xend: float, final: bool) -> None:
+        """A dragged range: its X begin / X end fields follow, and it is saved
+        (one command for each value changed) when released."""
+        if key == "window":
+            edits = (self.xbgn_edit, self.xend_edit)
+        else:
+            edits = (self.bsln_xbgn_edit, self.bsln_xend_edit)
+        for edit, value in zip(edits, (xbgn, xend)):
+            edit.setText(self._format_bound(value))
+        if final:
+            self._save_window_controls()
 
     def _add_window(self) -> None:
         self._tool.windows.new(select=True)
