@@ -1,6 +1,8 @@
 """Stats1 tool tab backed by the NMToolStats analysis engine."""
 from __future__ import annotations
 
+import math
+
 from typing import Any
 
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -25,7 +27,9 @@ from pyneuromatic.tools.nm_stat_func import (
 )
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
 from pyneuromatic.gui.context_views import ValuesPlot
+from pyneuromatic.gui.plot_marks import PlotMark
 from pyneuromatic.gui.plot_ranges import PlotRange
+from pyneuromatic.tools.nm_stat_win import NMStatWin
 from pyneuromatic.gui.results_view import Stats2Panel
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
@@ -63,6 +67,64 @@ class _ChooseComboBox(QtWidgets.QComboBox):
         self.restyle()
 
 
+# Results that are a level of the trace, drawn as a line across their range
+LEVEL_FUNCS = ("median", "mean", "mean+var", "mean+std", "mean+sem")
+
+
+def _finite(value) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def result_marks(results: list[dict], x_first: float, x_last: float,
+                 color: str, bsln_color: str) -> list[PlotMark]:
+    """What to draw for a window's ``compute()`` *results* (#463).
+
+    - a point found (``x``), e.g. the max or a level crossing: a marker at
+      its value, or at the level it crossed (with a dashed line at the level)
+    - a level of the trace (mean, median...): a line across its range
+    - slope: the line fitted; value@xbgn / value@xend: a marker
+    - the baseline: a line across its range, in *bsln_color*
+
+    Results not in the trace's units (std, area, count...) aren't drawn.
+    Unbounded ranges are drawn to the trace's ends (*x_first*, *x_last*).
+    """
+    marks: list[PlotMark] = []
+    for r in results:
+        func = r.get("func") or {}
+        name = func.get("name", "")
+        xbgn = r.get("xbgn", -math.inf)
+        xend = r.get("xend", math.inf)
+        xbgn = x_first if not _finite(xbgn) else float(xbgn)
+        xend = x_last if not _finite(xend) else float(xend)
+        s = r.get("s")
+        if r.get("id") == "bsln":
+            if name in LEVEL_FUNCS and _finite(s):
+                marks.append(PlotMark("line", [xbgn, xend], [s, s], bsln_color,
+                                      label="baseline " + name))
+            continue
+        if "x" in r:  # a point found
+            level = func.get("ylevel")
+            y = s if _finite(s) else level
+            if _finite(r["x"]) and _finite(y):
+                marks.append(PlotMark("points", [float(r["x"])], [float(y)], color, label=name))
+            if _finite(level):
+                marks.append(PlotMark("line", [xbgn, xend], [level, level], color,
+                                      dashed=True, label=f"{name} level"))
+        elif name == "slope" and _finite(s) and _finite(r.get("b")):
+            b = float(r["b"])
+            marks.append(PlotMark("line", [xbgn, xend], [b + s * xbgn, b + s * xend], color,
+                                  label=name))
+        elif name in ("value@xbgn", "value@xend") and _finite(s):
+            x = xbgn if name == "value@xbgn" else xend
+            marks.append(PlotMark("points", [x], [float(s)], color, label=name))
+        elif name in LEVEL_FUNCS and _finite(s):
+            marks.append(PlotMark("line", [xbgn, xend], [s, s], color, label=name))
+    return marks
+
+
 class StatsToolTab(ToolTabWidget):
     """Single-window Stats1 editor and runner using the project's Stats tool."""
 
@@ -71,8 +133,12 @@ class StatsToolTab(ToolTabWidget):
     # The current window's X range and its baseline range, on the Plot (#436)
     WINDOW_COLOR = "#2563eb"
     BSLN_COLOR = "#16a34a"
+    # Its measurements of the trace shown (#463)
+    MARK_COLOR = "#dc2626"
+    BSLN_MARK_COLOR = "#15803d"
 
     NEW_WINDOW_ACTION = "__new_stats_window__"
+    DELETE_WINDOW_ACTION = "__delete_stats_window__"
     # Dropdown groups, separated in the measurement menu
     _MEASUREMENT_GROUPS = (
         FUNC_NAMES_BASIC,
@@ -158,9 +224,11 @@ class StatsToolTab(ToolTabWidget):
         window_row = QtWidgets.QHBoxLayout()
         self.window_combo = QtWidgets.QComboBox(self)
         self.window_combo.setObjectName("statsWindowSelector")
-        self.window_combo.setSizeAdjustPolicy(
-            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents
-        )
+        # Wide enough for a window name (w0, w12), not "New Window...": its
+        # menu opens wider to show that and "Delete Window w12"
+        self.window_combo.setFixedWidth(70)
+        self.window_combo.view().setMinimumWidth(
+            self.window_combo.fontMetrics().horizontalAdvance("Delete Window w00") + 40)
         window_row.addWidget(QtWidgets.QLabel("Window", self))
         window_row.addWidget(self.window_combo)
         self.measurement_combo = _ChooseComboBox(self.CHOOSE_COLOR, self)
@@ -180,6 +248,13 @@ class StatsToolTab(ToolTabWidget):
         self._style_measurement_combo()
         self.window_enabled = QtWidgets.QCheckBox("On", self)
         window_row.addWidget(self.window_enabled)
+        self.reset_button = QtWidgets.QToolButton(self)
+        self.reset_button.setText("Reset")
+        self.reset_button.setToolTip(
+            "Return this window to its defaults: no measurement, X begin / X end "
+            "and the baseline cleared")
+        self.reset_button.clicked.connect(self._reset_window)
+        window_row.addWidget(self.reset_button)
         stats1_layout.addLayout(window_row)
 
         # Parameter row: only the inputs the current measurement needs are shown
@@ -417,12 +492,17 @@ class StatsToolTab(ToolTabWidget):
         if self.window_combo.count():
             self.window_combo.insertSeparator(self.window_combo.count())
         self.window_combo.addItem("New Window...", self.NEW_WINDOW_ACTION)
+        windows = list(self._tool.windows)
+        if len(windows) > 1:  # only the last, so names stay in sequence (w0, w1...)
+            self.window_combo.addItem(f"Delete Window {windows[-1].name}",
+                                      self.DELETE_WINDOW_ACTION)
         index = self.window_combo.findData(selected_name)
         if index < 0 and self.window_combo.count() > 1:
             index = 0
         self.window_combo.setCurrentIndex(index)
         self.window_combo.blockSignals(False)
-        if index >= 0 and self.window_combo.currentData() != self.NEW_WINDOW_ACTION:
+        if index >= 0 and self.window_combo.currentData() not in (
+                self.NEW_WINDOW_ACTION, self.DELETE_WINDOW_ACTION):
             self._tool.windows.selected_name = self.window_combo.currentData()
 
     def _selected_window(self):
@@ -435,6 +515,9 @@ class StatsToolTab(ToolTabWidget):
         name = self.window_combo.currentData()
         if name == self.NEW_WINDOW_ACTION:
             self._add_window()
+            return
+        if name == self.DELETE_WINDOW_ACTION:
+            self._delete_last_window()
             return
         if name is not None:
             self._tool.windows.selected_name = name
@@ -475,6 +558,7 @@ class StatsToolTab(ToolTabWidget):
         for control in controls:
             control.blockSignals(False)
         self.ranges_changed.emit()
+        self.marks_changed.emit()
 
     def _window_controls(self) -> list[QtWidgets.QWidget]:
         return [
@@ -504,6 +588,7 @@ class StatsToolTab(ToolTabWidget):
     def set_config_option(self, key: str, value: bool) -> None:
         """Set an option from Settings › Stats (used from the next run)."""
         self._set_tool_option(key, value)
+        self.marks_changed.emit()  # e.g. Ignore NaNs
 
     def _set_tool_option(self, key: str, value: bool) -> None:
         setattr(self._tool, key, value)
@@ -712,8 +797,28 @@ class StatsToolTab(ToolTabWidget):
             if getattr(window, key) != value:
                 setattr(window, key, value if value != {} else None)
         self.ranges_changed.emit()
+        self.marks_changed.emit()
 
     # --- the window's X ranges on the Plot (#436) ----------------------------
+
+    def plot_marks(self, data) -> list[PlotMark]:
+        """The current window's measurement of *data*, as Run would make it.
+
+        A copy of the window measures, so nothing is recorded and the
+        window's results are kept."""
+        window = self._selected_window()
+        if (window is None or not window.func or data is None or data.nparray is None
+                or data.nparray.size == 0):
+            return []
+        settings = {k: v for k, v in window.to_dict().items() if k != "name"}
+        preview = NMStatWin(window.name, win=settings)
+        results = preview.compute(data, ignore_nans=bool(self._tool.ignore_nans), note=False)
+        last = data.nparray.size - 1
+        x_first, x_last = data.get_xvalue(0), data.get_xvalue(last)
+        if x_first is None or x_last is None:  # no x scale: the index, as plotted
+            x_first, x_last = 0, last
+        return result_marks(results, float(x_first), float(x_last),
+                            self.MARK_COLOR, self.BSLN_MARK_COLOR)
 
     def plot_ranges(self) -> list[PlotRange]:
         """The current window's X range, and its baseline range while Bsln is on."""
@@ -737,6 +842,33 @@ class StatsToolTab(ToolTabWidget):
             edit.setText(self._format_bound(value))
         if final:
             self._save_window_controls()
+
+    def _reset_window(self) -> None:
+        """Reset: the current window back to its defaults (one command), after
+        asking; nothing to do if it has them."""
+        window = self._selected_window()
+        if window is None:
+            return
+        defaults = NMStatWin(window.name).to_dict()
+        if window.to_dict() == defaults:
+            return
+        if not self._confirm(
+            "Reset window",
+            f"Reset {window.name} to its defaults? Its measurement, X begin / X end "
+            "and baseline will be cleared.",
+        ):
+            return
+        window.reset()
+        self._param_values.clear()  # parameters (e.g. rise time %) back to defaults
+        self._load_selected_window()
+
+    def _delete_last_window(self) -> None:
+        """Delete Window: the last one (one command), after asking."""
+        last = list(self._tool.windows)[-1].name
+        if self._confirm("Delete window", f"Delete {last}? Its settings will be lost."):
+            self._tool.windows.delete_last()
+        self._refresh_window_combo()  # also back from the Delete item if cancelled
+        self._load_selected_window()
 
     def _add_window(self) -> None:
         self._tool.windows.new(select=True)

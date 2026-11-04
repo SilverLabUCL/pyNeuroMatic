@@ -404,6 +404,22 @@ class NMStatWin:
         add_nm_command("%s[%r].bsln_xend = %r" % (self._nm_path, self._name, self.__bsln_xend))
         return None
 
+    @records_command
+    def reset(self) -> None:
+        """Return to the default settings, as a new window has them: on, no
+        function, X begin / X end unbounded, and the baseline off (no
+        function, unbounded). The name and the last results are kept."""
+        self.__on = True
+        self.__func = None
+        self.__xbgn = -math.inf
+        self.__xend = math.inf
+        self.__bsln_on = False
+        self.__bsln_func = {}
+        self.__bsln_xbgn = -math.inf
+        self.__bsln_xend = math.inf
+        add_nm_command("%s[%r].reset()" % (self._nm_path, self._name))
+        return None
+
     @property
     def results(self) -> list[dict]:
         """List of result dicts from the most recent ``compute()`` call."""
@@ -439,7 +455,8 @@ class NMStatWin:
         self,
         data: NMData,
         ignore_nans: bool = False,
-        quiet: bool = nmc.QUIET
+        quiet: bool = nmc.QUIET,
+        note: bool = True,
     ) -> list:
         """Run the stat computation on data.
 
@@ -450,7 +467,9 @@ class NMStatWin:
         Args:
             data: NMData object to analyse.
             ignore_nans: If True, exclude NaN values from computations.
-            quiet: If True, suppress history logging.
+            quiet: If True, the note isn't printed (it is still logged).
+            note: If False, no note is written to the history at all (e.g.
+                the Plot's preview of the measurement, #463).
 
         Returns:
             List of result dicts from each stat call in the pipeline.
@@ -482,12 +501,13 @@ class NMStatWin:
             self._run_stat, bsln_result
         )
 
-        nmh.history(
-            "compute func=%s, xbgn=%s, xend=%s, n=%d"
-            % (self.__func.name, self.__xbgn, self.__xend, len(self.__results)),
-            path=self._name,
-            quiet=quiet,
-        )
+        if note:
+            text = "compute func=%s, xbgn=%s, xend=%s" % (
+                self.__func.name, self.__xbgn, self.__xend)
+            if self.__bsln_on:
+                text += ", bsln=%s %s to %s" % (
+                    self.__bsln_func.get("name"), self.__bsln_xbgn, self.__bsln_xend)
+            nmh.history(text, path=self._name, quiet=quiet)
 
         return self.__results
 
@@ -545,6 +565,32 @@ class NMStatWinContainer:
         nmh.history("new window %s" % name, path=self._nm_path, quiet=quiet)
         add_nm_command("%s.new(%s)" % (self._nm_path, "select=True" if select else ""))
         return w
+
+    @records_command
+    def delete_last(self, quiet: bool = nmc.QUIET) -> str:
+        """Delete the last window (e.g. w2), so the names stay in sequence;
+        the next ``new()`` window takes its name again. The first window is
+        kept: there is always one. If the last window was selected, the one
+        before it is selected.
+
+        Returns:
+            The name of the window deleted.
+
+        Raises:
+            RuntimeError: If there is only one window (or none).
+        """
+        if len(self._windows) <= 1:
+            raise RuntimeError("the first stat window can't be deleted")
+        name = list(self._windows)[-1]
+        del self._windows[name]
+        number = name[len(self._prefix):]
+        if name.startswith(self._prefix) and number.isdigit():
+            self._count = int(number)  # new() makes it again
+        if self._selected_name == name:
+            self._selected_name = list(self._windows)[-1]
+        nmh.history("deleted window %s" % name, path=self._nm_path, quiet=quiet)
+        add_nm_command("%s.delete_last()" % self._nm_path)
+        return name
 
     def __iter__(self):
         """Iterate over all NMStatWin objects in insertion order."""
