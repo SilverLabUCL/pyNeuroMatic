@@ -241,7 +241,7 @@ def test_setx_is_protected(app):
 
 
 def test_run_leaves_out_setx_and_reports_it(app, monkeypatch):
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     assert tab.run_info_label.text() == "n=10"
     app.sets.add("SetX", [app.series.epochs[e] for e in ("E7", "E8", "E9")])
     app.selection_model.refresh()

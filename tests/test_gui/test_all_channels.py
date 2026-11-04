@@ -30,7 +30,7 @@ def app(qtbot):
                            "channel": "A", "epoch": "E0"}
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    window.stats_tab.measurement_combo.setCurrentText("mean")
+    window.tool_tabs["Stats"].measurement_combo.setCurrentText("mean")
     window.folder, window.series = folder, series
     return window
 
@@ -66,7 +66,7 @@ def test_no_all_for_one_channel(qtbot):
 
 
 def test_run_once_per_channel(app):
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     app.selection_model.update(epoch_set="Set0", all_channels=True)
     assert tab.run_info_label.text() == "n=2 runs"
     assert "A: 2, B: 2" in tab.run_info_label.toolTip()
@@ -79,7 +79,7 @@ def test_run_once_per_channel(app):
 
 
 def test_channels_with_all_sets(app):
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     app.selection_model.update(epoch_set=ALL_SETS, all_channels=True)
     assert tab.run_info_label.text() == "n=4 runs"
     assert "A Set0: 2, A Set1: 1, B Set0: 2, B Set1: 1" in tab.run_info_label.toolTip()

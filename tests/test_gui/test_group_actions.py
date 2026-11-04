@@ -148,7 +148,7 @@ def test_run_uses_group_minus_setx(app):
     app.series.epochs.sets.add("SetX", [app.series.epochs["E0"]])
     app.selection_model.refresh()
     app.selection_model.update(group=0)
-    assert app.stats_tab.run_info_label.text() == "n=4"
+    assert app.tool_tabs["Stats"].run_info_label.text() == "n=4"
 
 
 def test_choose_in_browser_selects_epochs(app):

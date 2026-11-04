@@ -24,6 +24,7 @@ from pyneuromatic.tools.nm_stat_func import (
     _stat_func_from_dict,
 )
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
+from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.results_view import Stats2Panel
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
@@ -295,6 +296,12 @@ class StatsToolTab(ToolTabWidget):
         self.mode_tabs.currentChanged.connect(self._on_mode_tab_changed)
         self.run_finished.connect(self._on_run_finished)
 
+        # In the app window: Stats2's plots and its tables
+        self.plot_view = ValuesPlot()
+        self.table_view = self.stats2.tables
+        self.stats2.results_changed.connect(self.results_changed)
+        self.stats2.plot_requested.connect(self._show_plot_values)
+
     def _on_mode_tab_changed(self, _index: int) -> None:
         # Run belongs to Stats1
         self.run_row.setVisible(self.mode_tabs.currentWidget() is not self.stats2)
@@ -362,6 +369,21 @@ class StatsToolTab(ToolTabWidget):
         # Saved arrays are viewed in Stats2; without them there is nothing new
         if succeeded and self._tool.toolfolder is not None:
             self.mode_tabs.setCurrentWidget(self.stats2)
+            self.view_requested.emit("table")
+
+    def _show_plot_values(self, title, y, x, xlabel, ylabel, style) -> None:
+        """A Stats2 plot or histogram, in the Plot panel."""
+        self.plot_view.show_values(title, y, x, xlabel, ylabel, style)
+        self.view_requested.emit("plot")
+
+    def has_results(self) -> bool:
+        return self.stats2.has_results()
+
+    def refresh(self) -> None:
+        self.stats2.refresh()
+
+    def apply_settings(self) -> None:
+        self.stats2.tables.refresh()
 
     def bind_selection_model(self, model: Any) -> None:
         super().bind_selection_model(model)

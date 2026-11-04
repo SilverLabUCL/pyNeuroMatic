@@ -72,7 +72,7 @@ def test_stats_page_edits_the_stats_config(app):
     boxes["results_all_epochs"].setChecked(True)
     stats = app.manager.stats
     assert stats.results_all_epochs and stats.config.results_all_epochs
-    options = {key: value for key, _label, value, _tip in app.stats_tab.config_options()}
+    options = {key: value for key, _label, value, _tip in app.tool_tabs["Stats"].config_options()}
     assert options["results_all_epochs"] is True
     # Each option says what it does
     assert all(box.toolTip() for box in boxes.values())
@@ -81,7 +81,7 @@ def test_stats_page_edits_the_stats_config(app):
 def test_stats_dots_open_settings_at_its_page(app, monkeypatch):
     from pyneuromatic.gui.settings_dialog import SettingsDialog
 
-    button = app.stats_tab.settings_button
+    button = app.tool_tabs["Stats"].settings_button
     assert button.text() == "⋯" and button.menu() is None  # straight to Settings
     opened = []
     monkeypatch.setattr(SettingsDialog, "exec", lambda dialog: opened.append(dialog.current_page()))
@@ -107,8 +107,8 @@ def test_one_name_settings(app):
 
     for action in app.menuBar().actions():
         texts += list(menu_texts(action.menu()))
-    texts.append(app.stats_tab.settings_button.toolTip())
-    texts += [w.text() for w in app.stats_tab.findChildren(QtWidgets.QAbstractButton)]
+    texts.append(app.tool_tabs["Stats"].settings_button.toolTip())
+    texts += [w.text() for w in app.tool_tabs["Stats"].findChildren(QtWidgets.QAbstractButton)]
     for word in ("config", "preferences"):
         assert not [t for t in texts if word in t.lower()], word
 

@@ -30,12 +30,10 @@ from pyneuromatic.gui.context_views import (
     DATA_VIEW,
     ChannelToolBar,
     TablePanel,
-    ValuesPlot,
 )
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.history_panel import HistoryPanel
-from pyneuromatic.gui.results_view import StatsTables
 from pyneuromatic.gui.settings_dialog import SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
@@ -59,6 +57,7 @@ from pyneuromatic.gui.tier_actions import (
     SeriesActions,
 )
 from pyneuromatic.gui.stats_tab import StatsToolTab
+from pyneuromatic.gui.tool_tab import ToolTabWidget
 from pyneuromatic.gui.transform_dialog import (
     MARK,
     MENU_TEXT,
@@ -69,6 +68,10 @@ from pyneuromatic.gui.transform_dialog import (
 
 
 APP_NAME = "pyNeuroMatic"
+
+# The tool tabs, in the tool rail after Browser (None: a placeholder). The app
+# window registers each the same way: see ToolTabWidget and _register_tool_tab.
+TOOL_TABS = {"Main": None, "Stats": StatsToolTab, "Spike": None}
 
 
 def set_app_name(name: str = APP_NAME) -> None:
@@ -1151,7 +1154,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         strip.set_actions_menu("group", self.group_actions.group_menu(strip))
 
     def _build_tool_shell(self) -> None:
-        self.tool_rail = ToolRail(["Browser", "Main", "Stats", "Spike"], self)
+        self.tool_rail = ToolRail(["Browser", *TOOL_TABS], self)
         self.tool_rail.tool_selected.connect(self._on_tool_selected)
 
         self.tool_workspace = QtWidgets.QStackedWidget(self)
@@ -1166,17 +1169,14 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.browser_widget = browser_widget
         self.tool_workspace.addWidget(browser_widget)
 
-        self.tool_workspace.addWidget(
-            _PlaceholderToolWidget("Main", self.tool_workspace)
-        )
-        self.stats_tab = StatsToolTab(self._manager, self.tool_workspace)
-        self.stats_tab.bind_selection_model(self.selection_model)
-        self.stats_tab.settings_requested.connect(self.open_settings)
-        self.stats_tab.history_entry.connect(lambda kind, text: self.history_panel.add(kind, text))
-        self.tool_workspace.addWidget(self.stats_tab)
-        self.tool_workspace.addWidget(
-            _PlaceholderToolWidget("Spike", self.tool_workspace)
-        )
+        # name -> tool tab (placeholders aren't tool tabs)
+        self.tool_tabs: dict[str, ToolTabWidget] = {}
+        for name, tab_class in TOOL_TABS.items():
+            if tab_class is None:
+                self.tool_workspace.addWidget(_PlaceholderToolWidget(name, self.tool_workspace))
+            else:
+                self.tool_tabs[name] = tab_class(self._manager, self.tool_workspace)
+                self.tool_workspace.addWidget(self.tool_tabs[name])
 
         self.context_panel = QtWidgets.QTabWidget(self)
         self.context_panel.setTabsClosable(False)
@@ -1191,12 +1191,6 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.context_panel.addTab(self.table_panel, "Table")
         self._build_view_tabs_corner()
 
-        # Tool views appear in both panels while the folder has their results
-        stats2 = self.stats_tab.stats2
-        self.stats_plot = ValuesPlot()
-        self.plot_widget.register_tool("Stats", self.stats_plot)
-        self.table_panel.register_tool("Stats", stats2.tables)
-        stats2.results_changed.connect(self._update_tool_tabs)
         self.folder_actions.content_changed.connect(self._on_content_changed)
         self.data_actions.content_changed.connect(self._on_content_changed)
         self.series_actions.content_changed.connect(self._on_content_changed)
@@ -1222,10 +1216,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self.browser_widget.set_series_actions(self.series_actions)
             self.browser_widget.set_data_actions(self.data_actions)
             self.browser_widget.set_set_actions(self.epoch_set_actions, self.group_actions)
-        # A run or a deleted folder changes the Subfolder list
-        stats2.results_changed.connect(self.selection_strip.refresh_options)
-        stats2.plot_requested.connect(self._show_plot_values)
-        self.stats_tab.run_finished.connect(self._on_stats_run_finished)
+        for name, tab in self.tool_tabs.items():
+            self._register_tool_tab(name, tab)
         self._update_tool_tabs()
         # Future: Inspector tab reserved for later development.
         self.context_panel.setMinimumWidth(280)
@@ -1356,12 +1348,11 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.history_panel.detach()  # the history log no longer writes here
         # Tear pyqtgraph views down before Qt deletes them, so a queued paint
         # event never reaches a half-deleted plot (this crashed the GUI tests)
-        for view in (
-            getattr(self.plot_widget, "plot_widget", None),
-            getattr(getattr(self, "stats_plot", None), "plot_widget", None),
-        ):
-            if view is not None and not getattr(view, "closed", False):
-                view.close()
+        view = getattr(self.plot_widget, "plot_widget", None)
+        if view is not None and not getattr(view, "closed", False):
+            view.close()
+        for tab in self.tool_tabs.values():
+            tab.close_views()
         super().closeEvent(event)
 
     def _build_view_tabs_corner(self) -> None:
@@ -1402,9 +1393,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def settings_dialog(self) -> SettingsDialog:
         """A Settings window: General, then each tool's options."""
-        dialog = SettingsDialog(
-            self._manager.settings, [("Stats", self.stats_tab)], parent=self
-        )
+        pages = [(name, tab) for name, tab in self.tool_tabs.items() if tab.config_options()]
+        dialog = SettingsDialog(self._manager.settings, pages, parent=self)
         dialog.settings_changed.connect(self._apply_settings)
         return dialog
 
@@ -1419,8 +1409,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         """Show the general settings, e.g. redraw tables after the NaN one."""
         table_format.set_nan_mode(self._manager.settings.table_nan)
         self.table_panel.channel_table.model.refresh()
-        for tables in self.findChildren(StatsTables):
-            tables.refresh()
+        for tab in self.tool_tabs.values():
+            tab.apply_settings()
 
     def _edit_scales_of(self, obj) -> None:
         """The browser's Edit Scales...: a data array's, a channel's or a
@@ -1472,7 +1462,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self.selection_model.update(group=None)  # the group(s) were deleted
         self.selection_model.refresh()
         self.selection_strip.refresh_options()
-        self.stats_tab.stats2.refresh()
+        for tab in self.tool_tabs.values():
+            tab.refresh()
         self.folder_actions.update_enabled()
         self.data_actions.update_enabled()
         self.series_actions.update_enabled()
@@ -1533,23 +1524,37 @@ class NMAppWindow(QtWidgets.QMainWindow):
         # Redraw the trace with the edited values
         self.plot_widget.update_selection(self.selection_model.selection)
 
+    def _register_tool_tab(self, name: str, tab: ToolTabWidget) -> None:
+        """Connect a tool tab to the window: what it provides is optional."""
+        tab.bind_selection_model(self.selection_model)
+        tab.settings_requested.connect(self.open_settings)
+        tab.history_entry.connect(lambda kind, text: self.history_panel.add(kind, text))
+        # Its views appear in both panels while the folder has its results
+        if tab.plot_view is not None:
+            self.plot_widget.register_tool(name, tab.plot_view)
+        if tab.table_view is not None:
+            self.table_panel.register_tool(name, tab.table_view)
+        tab.results_changed.connect(self._update_tool_tabs)
+        # A run or a deleted subfolder changes the Subfolder list
+        tab.results_changed.connect(self.selection_strip.refresh_options)
+        tab.view_requested.connect(lambda view, n=name: self._show_tool_view(n, view))
+        tab.run_finished.connect(self._on_tool_run_finished)
+
     def _update_tool_tabs(self) -> None:
-        tools = ["Stats"] if self.stats_tab.stats2.has_results() else []
+        tools = [name for name, tab in self.tool_tabs.items() if tab.has_results()]
         self.plot_widget.set_tools(tools)
         self.table_panel.set_tools(tools)
 
-    def _show_plot_values(self, title, y, x, xlabel, ylabel, style) -> None:
-        self.stats_plot.show_values(title, y, x, xlabel, ylabel, style)
-        self.plot_widget.show_tool("Stats")
-        self.context_panel.setCurrentWidget(self.plot_widget)
+    def _show_tool_view(self, name: str, view: str) -> None:
+        """Show tool *name*'s "plot" or "table" view."""
+        panel = self.plot_widget if view == "plot" else self.table_panel
+        panel.show_tool(name)
+        self.context_panel.setCurrentWidget(panel)
 
-    def _on_stats_run_finished(self, succeeded: bool) -> None:
-        # A run adds a results subfolder: show it in the browser too
+    def _on_tool_run_finished(self, succeeded: bool) -> None:
+        # A run may add a results subfolder: show it in the browser too
         if succeeded and isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.refresh()
-        if succeeded and self.stats_tab.stats_tool.toolfolder is not None:
-            self.table_panel.show_tool("Stats")
-            self.context_panel.setCurrentWidget(self.table_panel)
 
     def _on_browser_selection_requested(self, selection: dict) -> None:
         obj = selection.get("object")

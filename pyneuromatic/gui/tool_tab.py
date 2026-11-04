@@ -36,6 +36,16 @@ class ToolTabWidget(QtWidgets.QWidget):
     :meth:`run_tool`. The method's return value is displayed in the standard
     results panel; subclasses can also update status and progress while work
     is running.
+
+    What a tool shows in the app window is optional, and the app window
+    registers every tool tab the same way (#454):
+
+    - :attr:`plot_view`, :attr:`table_view`: its pages in the Plot and Table
+      panels, shown as a tab there while :meth:`has_results` is True
+    - :meth:`config_options` / :meth:`set_config_option`: its page in Settings
+    - :meth:`refresh`, :meth:`apply_settings`, :meth:`close_views`: called when
+      the data, the general settings or the window change
+    - :attr:`results_changed`, :attr:`view_requested`: signals to the window
     """
 
     run_finished = QtCore.pyqtSignal(bool)
@@ -45,6 +55,14 @@ class ToolTabWidget(QtWidgets.QWidget):
     settings_requested = QtCore.pyqtSignal(str)
     # A run, for the History panel: (kind, text), e.g. ("tool", "Stats: Complete")
     history_entry = QtCore.pyqtSignal(str, str)
+    # Its results changed (a run, a deleted subfolder): its tabs and the Subfolder list
+    results_changed = QtCore.pyqtSignal()
+    # Show its view: "plot" or "table"
+    view_requested = QtCore.pyqtSignal(str)
+
+    # Its pages in the Plot and Table panels, if any
+    plot_view: QtWidgets.QWidget | None = None
+    table_view: QtWidgets.QWidget | None = None
 
     def __init__(
         self,
@@ -115,6 +133,33 @@ class ToolTabWidget(QtWidgets.QWidget):
     def run_summary(self) -> str:
         """A finished run, for the History panel (e.g. where results went)."""
         return self.status_label.text()
+
+    # --- what the app window asks of a tool (all optional) --------------------
+
+    def has_results(self) -> bool:
+        """Whether its views have something to show (their tabs appear)."""
+        return False
+
+    def config_options(self) -> list[tuple[str, str, bool, str]]:
+        """(key, label, value, tip) of each option in Settings; none: no page."""
+        return []
+
+    def set_config_option(self, key: str, value: bool) -> None:
+        """Set an option from its Settings page."""
+        raise KeyError(f"{self.title_label.text()} has no option {key!r}")
+
+    def refresh(self) -> None:
+        """Folders, data or sets changed."""
+
+    def apply_settings(self) -> None:
+        """A general setting changed (e.g. how tables show NaN)."""
+
+    def close_views(self) -> None:
+        """The window is closing: tear its pyqtgraph plot down before Qt
+        deletes it, so a queued paint event never reaches a half-deleted plot."""
+        view = getattr(self.plot_view, "plot_widget", None)
+        if view is not None and not getattr(view, "closed", False):
+            view.close()
 
     def _log_run(self, succeeded: bool) -> None:
         """The run in the History panel: one entry, then its warnings."""

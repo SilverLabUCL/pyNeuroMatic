@@ -259,7 +259,7 @@ def test_table_show_transformed(app):
 
 def test_stats_measures_what_is_plotted(app):
     app.series.channels["A"].transform = [NMTransformInvert()]
-    tab = app.stats_tab
+    tab = app.tool_tabs["Stats"]
     tab.measurement_combo.setCurrentText("mean")
     app.selection_model.update(epoch_set="All")
     tab.run_button.click()

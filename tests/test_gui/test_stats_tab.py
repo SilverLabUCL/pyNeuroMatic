@@ -33,11 +33,11 @@ def test_stats_tab_runs_selected_trace_and_shows_backend_results(qtbot):
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
 
-    assert isinstance(window.stats_tab, StatsToolTab)
+    assert isinstance(window.tool_tabs["Stats"], StatsToolTab)
     assert "stats" in manager.enabled_tools()
-    assert window.tool_workspace.widget(window.tool_rail.index_for_name("Stats")) is window.stats_tab
+    assert window.tool_workspace.widget(window.tool_rail.index_for_name("Stats")) is window.tool_tabs["Stats"]
 
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     tab.measurement_combo.setCurrentText("mean")
     tab.xbgn_edit.setText("1")
     tab.xend_edit.setText("3")
@@ -54,7 +54,7 @@ def test_window_combo_creates_and_selects_new_window(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     new_window_index = tab.window_combo.findData(tab.NEW_WINDOW_ACTION)
     assert new_window_index >= 0
@@ -84,7 +84,7 @@ def test_run_uses_selected_epoch_set_instead_of_current_trace(qtbot):
     }
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     window.selection_model.update(epoch_set="Chosen")
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
@@ -102,7 +102,7 @@ def test_stats_tab_preserves_multiple_window_settings(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     tab.window_enabled.setChecked(False)
     tab.window_combo.setCurrentIndex(tab.window_combo.findData(tab.NEW_WINDOW_ACTION))
@@ -148,7 +148,7 @@ def test_stats_tab_uses_analysis_channel_not_plot_channel(qtbot):
 
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     window.plot_widget.view_tabs.setCurrentIndex(1)
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
@@ -165,7 +165,7 @@ def test_stats_output_options_control_backend_sinks(qtbot):
     manager.select_value_set(data)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     tab.measurement_combo.setCurrentText("mean")
     tab.output_history_checkbox.setChecked(True)
@@ -183,7 +183,7 @@ def test_options_are_in_settings_not_the_panel(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     # No Config control in the panel (#432)
     assert not hasattr(tab, "config_checkbox")
     assert "Config" not in [box.text() for box in tab.findChildren(QtWidgets.QCheckBox)]
@@ -201,7 +201,7 @@ def test_param_row_shows_only_inputs_for_current_measurement(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     assert tab.param_row.isHidden()
     tab.measurement_combo.setCurrentText("mean@max")
@@ -226,7 +226,7 @@ def test_mean_at_max_uses_n_mean_parameter(qtbot):
     manager.select_value_set(data)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     tab.measurement_combo.setCurrentText("mean@max")
     tab.param_edits["n_mean"].setText("3")
@@ -242,7 +242,7 @@ def test_level_uses_ylevel_parameter_and_rejects_bad_input(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     tab.measurement_combo.setCurrentText("level+")
     tab.param_edits["ylevel"].setText("-20.5")
@@ -262,7 +262,7 @@ def test_param_values_restored_per_window(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     tab.measurement_combo.setCurrentText("mean@min")
     tab.param_edits["n_mean"].setText("7")
@@ -291,7 +291,7 @@ def _step_trace_window(qtbot):
     manager.select_value_set(data)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    return manager, window, window.stats_tab
+    return manager, window, window.tool_tabs["Stats"]
 
 
 def _set_text(edit, text):
@@ -409,7 +409,7 @@ def _pulse_window(qtbot):
     manager.select_value_set(data)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    return manager, window, window.stats_tab
+    return manager, window, window.tool_tabs["Stats"]
 
 
 def test_percent_measurements_use_family_defaults(qtbot):
@@ -494,7 +494,7 @@ def test_run_info_counts_epochs_and_data_arrays(qtbot):
     }
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
 
     assert tab.run_info_label.text() == "n=3"  # All epochs by default
     window.selection_model.update(epoch_set="Current Epoch")
@@ -511,7 +511,7 @@ def test_run_info_explains_missing_selection(qtbot):
     manager = NMManager(quiet=True)
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    assert window.stats_tab.run_info_label.text() == (
+    assert window.tool_tabs["Stats"].run_info_label.text() == (
         "Select a data array or a Data Series channel and epoch first"
     )
 
@@ -528,7 +528,7 @@ def test_st_arrays_one_point_per_epoch(qtbot):
                            "channel": "A", "epoch": "E0"}
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     window.selection_model.update(epoch_set="Chosen")
     tab.measurement_combo.setCurrentText("mean")
 
@@ -559,7 +559,7 @@ def test_subfolder_named_after_the_epoch_selection(qtbot):
                            "channel": "A", "epoch": "E2"}
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
-    tab = window.stats_tab
+    tab = window.tool_tabs["Stats"]
     tab.measurement_combo.setCurrentText("mean")
 
     def run(**selection):
@@ -582,7 +582,7 @@ def test_subfolder_named_after_the_epoch_selection(qtbot):
 def test_choose_measurement_is_red(qtbot):
     window = NMAppWindow(NMManager(quiet=True))
     qtbot.addWidget(window)
-    combo = window.stats_tab.measurement_combo
+    combo = window.tool_tabs["Stats"].measurement_combo
     brush = combo.itemData(0, QtCore.Qt.ItemDataRole.ForegroundRole)
     assert combo.itemText(0) == "Choose measurement" and brush.color().name() == "#c62828"
     combo.setCurrentIndex(0)
@@ -635,7 +635,7 @@ def _edit(edit, text):
 
 def test_window_changes_are_commands_one_per_change(series_app):
     """Only what changed, as the window's own commands; no echo messages (#448)."""
-    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab, start = series_app.tool_tabs["Stats"], len(_history(series_app))
     tab.measurement_combo.setCurrentText("mean")
     _edit(tab.xbgn_edit, "1")
     _edit(tab.xbgn_edit, "1")  # unchanged: nothing
@@ -650,7 +650,7 @@ def test_window_changes_are_commands_one_per_change(series_app):
 
 
 def test_baseline_fields_are_set_once_it_is_on(series_app):
-    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab, start = series_app.tool_tabs["Stats"], len(_history(series_app))
     tab.measurement_combo.setCurrentText("mean")
     _edit(tab.xbgn_edit, "2")
     tab.bsln_checkbox.setChecked(True)  # its range is prefilled: 0 to 2
@@ -664,7 +664,7 @@ def test_baseline_fields_are_set_once_it_is_on(series_app):
 
 
 def test_new_window_is_one_command(series_app):
-    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab, start = series_app.tool_tabs["Stats"], len(_history(series_app))
     tab.window_combo.setCurrentIndex(tab.window_combo.findData(tab.NEW_WINDOW_ACTION))
     tab.window_combo.setCurrentIndex(tab.window_combo.findData("w0"))
     assert [text for kind, text in _history(series_app, start) if kind == "command"] == [
@@ -674,7 +674,7 @@ def test_new_window_is_one_command(series_app):
 
 
 def test_run_is_one_command_and_one_result(series_app):
-    tab = series_app.stats_tab
+    tab = series_app.tool_tabs["Stats"]
     tab.measurement_combo.setCurrentText("mean")
     start = len(_history(series_app))
     tab.run_button.click()
@@ -693,7 +693,7 @@ def test_run_is_one_command_and_one_result(series_app):
     ({"epoch_set": None}, "channel='A', epochs='E0'"),  # the current epoch
 ])
 def test_run_command_names_the_epochs(series_app, scope, expected):
-    tab = series_app.stats_tab
+    tab = series_app.tool_tabs["Stats"]
     tab.measurement_combo.setCurrentText("mean")
     for key, value in scope.items():  # one at a time, as the strip does
         series_app.selection_model.update(**{key: value})
@@ -705,7 +705,7 @@ def test_run_command_names_the_epochs(series_app, scope, expected):
 
 
 def test_data_set_run_command(series_app):
-    tab = series_app.stats_tab
+    tab = series_app.tool_tabs["Stats"]
     tab.measurement_combo.setCurrentText("mean")
     series_app.selection_model.update(data=series_app.folder.data["RecordA0"],
                                       data_set="RecordSet")
@@ -717,7 +717,7 @@ def test_data_set_run_command(series_app):
 
 
 def test_all_sets_is_a_command_per_set(series_app):
-    tab = series_app.stats_tab
+    tab = series_app.tool_tabs["Stats"]
     series_app.series.epochs.sets.add("Set2", ["E3"])
     tab.measurement_combo.setCurrentText("mean")
     series_app.selection_model.update(epoch_set="All Sets")
@@ -730,7 +730,7 @@ def test_all_sets_is_a_command_per_set(series_app):
 
 def test_recorded_stats_commands_repeat_the_run(series_app):
     """A script of the tab's commands gives the same results (#448)."""
-    tab, manager = series_app.stats_tab, series_app.manager
+    tab, manager = series_app.tool_tabs["Stats"], series_app.manager
     start = len(manager.command_history.buffer)
     tab.measurement_combo.setCurrentText("risetime+")
     _edit(tab.param_edits["p0"], "20")
@@ -753,7 +753,7 @@ def test_recorded_stats_commands_repeat_the_run(series_app):
 
 def test_stats_options_are_commands_without_messages(series_app):
     """Settings › Stats and Output: the command alone, no "set ..." echo (#448)."""
-    tab, start = series_app.stats_tab, len(_history(series_app))
+    tab, start = series_app.tool_tabs["Stats"], len(_history(series_app))
     tab.set_config_option("overwrite", True)
     tab.set_config_option("results_all_epochs", True)
     tab.output_history_checkbox.setChecked(True)
@@ -767,7 +767,7 @@ def test_stats_options_are_commands_without_messages(series_app):
 def test_deleting_a_stats_subfolder_is_a_command(series_app):
     """Subfolders and their arrays are named in commands, so deleting one is
     recorded (and repeats), not just echoed (#448)."""
-    tab, folder = series_app.stats_tab, series_app.folder
+    tab, folder = series_app.tool_tabs["Stats"], series_app.folder
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
     subfolder = folder.toolfolders["Stats_Record_A_S0_0"]
@@ -788,7 +788,7 @@ def test_deleting_a_stats_subfolder_is_a_command(series_app):
 def test_stats2_histogram_is_one_command_saved_in_the_subfolder(series_app):
     """Saved as H_ arrays in the Stats subfolder; its steps (replacing the
     arrays) aren't commands of their own; the command repeats it (#448)."""
-    tab, manager = series_app.stats_tab, series_app.manager
+    tab, manager = series_app.tool_tabs["Stats"], series_app.manager
     tab.measurement_combo.setCurrentText("mean")
     series_app.selection_model.update(epoch_set="All")
     tab.run_button.click()

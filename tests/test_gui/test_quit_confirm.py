@@ -57,7 +57,7 @@ def test_an_empty_session_quits_without_asking(qtbot, asked):
 def test_commands_since_the_start_are_something_to_lose(qtbot, asked):
     window = _window(qtbot, with_folder=False)
     assert not window.has_session_to_lose()  # only "nm = NMManager()"
-    window.stats_tab.set_config_option("overwrite", True)  # a command
+    window.tool_tabs["Stats"].set_config_option("overwrite", True)  # a command
     assert window.has_session_to_lose()
     assert not window.close()
 

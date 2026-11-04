@@ -94,10 +94,10 @@ def test_copy_stats_cells_with_row_names(qtbot):
     from tests.test_gui.test_results_view import _stats_window
 
     _manager, _folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
+    window.tool_tabs["Stats"].run_button.click()
     panel = window.table_panel
     panel.show_tool("Stats")
-    tables = window.stats_tab.stats2.tables
+    tables = window.tool_tabs["Stats"].stats2.tables
     tables.arrays_table.clearSelection()
     tables.arrays_table.selectColumn(1)  # max_y
     lines = _copied(window)
@@ -118,12 +118,12 @@ def test_show_in_browser_shows_the_results_folder(qtbot):
     from tests.test_gui.test_results_view import _stats_window
 
     _manager, folder, window = _stats_window(qtbot)
-    window.stats_tab.run_button.click()
+    window.tool_tabs["Stats"].run_button.click()
     panel = window.table_panel
     panel.show_tool("Stats")
     panel.browser_action.trigger()
     shown = window.browser_widget.tree.currentIndex().internalPointer()
-    assert shown is window.stats_tab.stats_tool.toolfolder
+    assert shown is window.tool_tabs["Stats"].stats_tool.toolfolder
 
 
 # --- right-click: the ⋯ menu -----------------------------------------------
@@ -181,10 +181,10 @@ def test_right_click_the_stats_tables(qtbot, monkeypatch):
 
     _manager, _folder, window = _stats_window(qtbot)
     window.show()
-    window.stats_tab.run_button.click()
+    window.tool_tabs["Stats"].run_button.click()
     panel = window.table_panel
     panel.show_tool("Stats")
-    tables = window.stats_tab.stats2.tables
+    tables = window.tool_tabs["Stats"].stats2.tables
     for table in (tables.arrays_table, tables.summary_table):
         assert _right_click(monkeypatch, table, _header_pos(table, 1), header=True) \
             is panel.table_menu
