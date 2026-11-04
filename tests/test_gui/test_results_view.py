@@ -71,8 +71,6 @@ def _tab_texts(tabs):
 
 def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
     _manager, folder, window = _stats_window(qtbot)
-    panel = window.context_panel
-    assert _tab_texts(panel) == ["Plot", "Table"]
     plot, table = window.plot_widget, window.table_panel
     assert _tab_texts(plot.view_tabs) == ["A"]
     assert _tab_texts(table.view_tabs) == ["A"]
@@ -82,7 +80,9 @@ def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
     assert _tab_texts(table.view_tabs) == ["A", "Stats"]
     assert table.view_tabs.current_view() == ("tool", "Stats")
     assert isinstance(table.stack.currentWidget(), StatsTables)
-    assert plot.view_tabs.current_view() == ("channel", "A")
+    # One bar (#460): the Plot panel shows Stats too, its plot
+    assert plot.view_tabs.current_view() == ("tool", "Stats")
+    assert plot.stack.currentWidget() is window.tool_tabs["Stats"].plot_view
 
     # Stepping through traces keeps the Stats view selected
     window.selection_model.update(epoch=folder.dataseries["Record"].epochs["E1"])
@@ -247,6 +247,33 @@ def test_all_columns_and_window_switch(qtbot):
 
     stats2.window_combo.setCurrentText("w1")
     assert "mean_y" in _headers(tables.arrays_table)
+
+
+def test_stats_plot_follows_the_stats2_array(qtbot):
+    """After a run, the Stats plot already shows the array chosen in Stats2
+    (the Table panel stays shown), and follows a new choice."""
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    plot_item = tab.plot_view.plot_widget.getPlotItem()
+    assert not plot_item.listDataItems()
+    assert plot_item.titleLabel.text == ValuesPlot.EMPTY_TITLE
+    tab.run_button.click()
+    assert window.context_panel.currentWidget() is window.table_panel
+    chosen = tab.stats2.selected_array()
+    assert chosen is not None
+    assert plot_item.titleLabel.text == f"Stats_Record_A_S1_0: {chosen}"
+    assert plot_item.listDataItems()
+
+    tab.stats2.array_combo.setCurrentText("ST_w0_max_ds")
+    assert plot_item.titleLabel.text == "Stats_Record_A_S1_0: ST_w0_max_ds"
+    assert list(plot_item.listDataItems()[0].yData) == list(PEAKS)
+    assert window.context_panel.currentWidget() is window.table_panel
+
+    # Deleting the folder: nothing chosen, the hint again
+    tab.stats2._confirm_delete = lambda name: True
+    tab.stats2.delete_button.click()
+    assert not plot_item.listDataItems()
+    assert plot_item.titleLabel.text == ValuesPlot.EMPTY_TITLE
 
 
 def test_plot_and_histogram_draw_in_plot_tab(qtbot):

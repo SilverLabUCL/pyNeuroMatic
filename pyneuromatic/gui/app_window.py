@@ -30,10 +30,12 @@ from pyneuromatic.gui.context_views import (
     DATA_VIEW,
     ChannelToolBar,
     TablePanel,
+    no_view_label as _no_view_label,
+    show_tool_page as _show_tool_page,
 )
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
-from pyneuromatic.gui.history_panel import HistoryPanel
+from pyneuromatic.gui.history_panel import SEGMENT_STYLE, HistoryPanel
 from pyneuromatic.gui.settings_dialog import SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
@@ -235,17 +237,22 @@ class PlotPanel(QtWidgets.QWidget):
     # A channel's filters or transforms changed (Filter & Transform...)
     transforms_changed = QtCore.pyqtSignal()
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None,
+                 view_tabs: ChannelToolBar | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
 
-        # Channel tabs, then tabs of tools with results (e.g. Stats)
-        self.view_tabs = ChannelToolBar(self)
+        # Channel tabs, then tabs of tools with results (e.g. Stats): the
+        # window's, shared with the Table panel (#460), or its own
+        self.view_tabs = view_tabs if view_tabs is not None else ChannelToolBar(self)
         self.view_tabs.view_changed.connect(self._on_view_changed)
-        layout.addWidget(self.view_tabs)
+        if view_tabs is None:
+            layout.addWidget(self.view_tabs)
         self.stack = QtWidgets.QStackedWidget(self)
         layout.addWidget(self.stack, stretch=1)
+        self.no_view_label = _no_view_label("plot", self.stack)
+        self.stack.addWidget(self.no_view_label)
         self.trace_page = QtWidgets.QWidget(self.stack)
         trace_layout = QtWidgets.QVBoxLayout(self.trace_page)
         trace_layout.setContentsMargins(0, 0, 0, 0)
@@ -465,8 +472,9 @@ class PlotPanel(QtWidgets.QWidget):
         return self._tool_pages.get(name)
 
     def set_tools(self, names: list[str]) -> None:
-        """Show tabs for the registered tools in *names*, in that order."""
-        self._tools = [name for name in names if name in self._tool_pages]
+        """Show tabs for the tools in *names*, in that order (one without a
+        plot shows a note)."""
+        self._tools = list(names)
         self._update_channel_tabs(self._last_selection)
 
     def show_tool(self, name: str) -> None:
@@ -475,7 +483,7 @@ class PlotPanel(QtWidgets.QWidget):
     def _show_current_page(self) -> None:
         view = self.view_tabs.current_view()
         if view is not None and view[0] == "tool":
-            self.stack.setCurrentWidget(self._tool_pages[view[1]])
+            _show_tool_page(self.stack, self._tool_pages, self.no_view_label, view[1])
         else:
             self.stack.setCurrentWidget(self.trace_page)
 
@@ -1071,16 +1079,10 @@ class NMAppWindow(QtWidgets.QMainWindow):
                 lambda _checked=False, p=panel: self.context_panel.setCurrentWidget(p))
             panels.addAction(action)
             self.panel_view_actions[name] = action
-        self.context_panel.currentChanged.connect(self._check_panel_view_action)
-        self._check_panel_view_action()
+        self._update_panel_buttons()  # checks these too
         menu.addSeparator()
         self.history_view_action = self.history_dock.toggleViewAction()  # checkable
         menu.addAction(self.history_view_action)
-
-    def _check_panel_view_action(self, *_args) -> None:
-        current = self.context_panel.currentWidget()
-        self.panel_view_actions["Plot"].setChecked(current is self.plot_widget)
-        self.panel_view_actions["Table"].setChecked(current is self.table_panel)
 
     # --- Edit › Copy and Paste ----------------------------------------------
 
@@ -1178,18 +1180,20 @@ class NMAppWindow(QtWidgets.QMainWindow):
                 self.tool_tabs[name] = tab_class(self._manager, self.tool_workspace)
                 self.tool_workspace.addWidget(self.tool_tabs[name])
 
-        self.context_panel = QtWidgets.QTabWidget(self)
-        self.context_panel.setTabsClosable(False)
-        self.plot_widget = PlotPanel(self.context_panel)
+        # What is shown (channel or tool) on the left, then how (Plot | Table)
+        # on the right: one channel/tool bar for both panels (#460)
+        self.view_tabs = ChannelToolBar(self)
+        self.context_panel = QtWidgets.QStackedWidget(self)
+        self.plot_widget = PlotPanel(self.context_panel, view_tabs=self.view_tabs)
         self.plot_widget.bind_selection_model(self.selection_model)
         self.plot_widget.membership_changed.connect(self._on_content_changed)
         self.plot_widget.transforms_changed.connect(self._on_transforms_changed)
-        self.context_panel.addTab(self.plot_widget, "Plot")
-        self.table_panel = TablePanel(self.context_panel)
+        self.context_panel.addWidget(self.plot_widget)
+        self.table_panel = TablePanel(self.context_panel, view_tabs=self.view_tabs)
         self.table_panel.bind_selection_model(self.selection_model)
         self.table_panel.show_in_browser_requested.connect(self._show_object_in_browser)
-        self.context_panel.addTab(self.table_panel, "Table")
-        self._build_view_tabs_corner()
+        self.context_panel.addWidget(self.table_panel)
+        self._build_context_area()
 
         self.folder_actions.content_changed.connect(self._on_content_changed)
         self.data_actions.content_changed.connect(self._on_content_changed)
@@ -1220,12 +1224,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self._register_tool_tab(name, tab)
         self._update_tool_tabs()
         # Future: Inspector tab reserved for later development.
-        self.context_panel.setMinimumWidth(280)
+        self.context_area.setMinimumWidth(280)
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, self)
         splitter.addWidget(self.tool_rail)
         splitter.addWidget(self.tool_workspace)
-        splitter.addWidget(self.context_panel)
+        splitter.addWidget(self.context_area)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 2)
@@ -1355,41 +1359,69 @@ class NMAppWindow(QtWidgets.QMainWindow):
             tab.close_views()
         super().closeEvent(event)
 
-    def _build_view_tabs_corner(self) -> None:
-        """Channel/tool tabs to the right of the Plot/Table tabs, saving a row.
-
-        Each panel keeps its own tab bar; only the open panel's is shown.
-        """
-        corner = QtWidgets.QWidget(self.context_panel)
-        layout = QtWidgets.QHBoxLayout(corner)
+    def _build_context_area(self) -> None:
+        """The channel/tool tabs, Plot | Table, then the panel shown."""
+        self.context_area = QtWidgets.QWidget(self)
+        layout = QtWidgets.QVBoxLayout(self.context_area)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        self._view_tabs_holders = {}
-        for panel in (self.plot_widget, self.table_panel):
-            # A holder, since each tab bar hides itself when it has no tabs
-            holder = QtWidgets.QWidget(corner)
-            holder_layout = QtWidgets.QHBoxLayout(holder)
-            holder_layout.setContentsMargins(0, 0, 0, 0)
-            panel.view_tabs.setDrawBase(False)
-            holder_layout.addWidget(panel.view_tabs)
-            layout.addWidget(holder)
-            self._view_tabs_holders[panel] = holder
-        self.context_panel.setCornerWidget(corner, QtCore.Qt.Corner.TopRightCorner)
-        # Plot/Table at the far left (macOS centres them), so the channel and
-        # tool tabs have room to grow leftwards. A plain pane frame, since the
-        # native one keeps a gap in its edge for centred tabs.
-        self.context_panel.setStyleSheet(
-            "QTabWidget::tab-bar { alignment: left; }"
-            " QTabWidget::pane { border: 1px solid palette(mid); border-radius: 4px;"
-            " top: -1px; }"
-        )
-        self.context_panel.currentChanged.connect(self._show_current_view_tabs)
-        self._show_current_view_tabs()
+        header = QtWidgets.QHBoxLayout()
+        header.setContentsMargins(6, 4, 6, 0)
+        self.view_tabs.setDrawBase(False)
+        # No wider than its tabs, which macOS would otherwise centre
+        self.view_tabs.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum,
+                                     QtWidgets.QSizePolicy.Policy.Fixed)
+        header.addWidget(self.view_tabs)
+        header.addStretch(1)
+        header.addSpacing(8)
+        # A toggle, not tabs: Plot and Table are views of the channel or tool
+        self.panel_buttons: dict[str, QtWidgets.QToolButton] = {}
+        group = QtWidgets.QButtonGroup(self.context_area)
+        for segment, (name, panel) in zip(
+                ("first", "last"), (("Plot", self.plot_widget), ("Table", self.table_panel))):
+            button = QtWidgets.QToolButton(self.context_area)
+            button.setText(name)
+            button.setCheckable(True)
+            button.setProperty("segment", segment)
+            button.setToolTip(f"Show the {name.lower()} of the channel or tool chosen on the left")
+            button.clicked.connect(
+                lambda _checked=False, p=panel: self.context_panel.setCurrentWidget(p))
+            group.addButton(button)
+            header.addWidget(button)
+            self.panel_buttons[name] = button
+        self.context_area.setStyleSheet(SEGMENT_STYLE)
+        layout.addLayout(header)
+        layout.addWidget(self.context_panel, stretch=1)
+        self.context_panel.currentChanged.connect(self._update_panel_buttons)
+        self.view_tabs.view_changed.connect(self._update_panel_buttons)
+        self.selection_model.selection_changed.connect(self._update_panel_buttons)
+        self._update_panel_buttons()
 
-    def _show_current_view_tabs(self, *_args) -> None:
+    def _panels_of_view(self) -> dict[str, bool]:
+        """Whether the Plot and Table panels have a view of the current
+        channel or tool: a tool may have only one (#454)."""
+        view = self.view_tabs.current_view()
+        if view is None or view[0] != "tool":
+            return {"Plot": True, "Table": True}
+        return {"Plot": self.plot_widget.tool_page(view[1]) is not None,
+                "Table": self.table_panel.tool_page(view[1]) is not None}
+
+    def _update_panel_buttons(self, *_args) -> None:
+        """Check the panel shown; a tool's missing view can't be chosen."""
+        available = self._panels_of_view()
+        panels = {"Plot": self.plot_widget, "Table": self.table_panel}
         current = self.context_panel.currentWidget()
-        for panel, holder in self._view_tabs_holders.items():
-            holder.setVisible(panel is current)
+        if not available["Plot" if current is self.plot_widget else "Table"]:
+            other = "Table" if current is self.plot_widget else "Plot"
+            if available[other]:
+                self.context_panel.setCurrentWidget(panels[other])
+                return  # back here from currentChanged
+        for name, button in self.panel_buttons.items():
+            button.setEnabled(available[name])
+            button.setChecked(panels[name] is current)
+        for name, action in getattr(self, "panel_view_actions", {}).items():
+            action.setEnabled(available[name])
+            action.setChecked(panels[name] is current)
 
     def settings_dialog(self) -> SettingsDialog:
         """A Settings window: General, then each tool's options."""
@@ -1544,6 +1576,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         tools = [name for name, tab in self.tool_tabs.items() if tab.has_results()]
         self.plot_widget.set_tools(tools)
         self.table_panel.set_tools(tools)
+        self._update_panel_buttons()
 
     def _show_tool_view(self, name: str, view: str) -> None:
         """Show tool *name*'s "plot" or "table" view."""

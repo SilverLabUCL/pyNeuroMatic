@@ -185,7 +185,9 @@ def test_app_window_builds_shell(qtbot, nm):
     assert hasattr(win, "selection_model")
     assert hasattr(win, "browser_widget")
     assert hasattr(win, "plot_widget")
-    assert win.context_panel.tabText(0) == "Plot"
+    assert list(win.panel_buttons) == ["Plot", "Table"]  # a toggle (#460)
+    assert win.context_panel.currentWidget() is win.plot_widget
+    assert win.plot_widget.view_tabs is win.table_panel.view_tabs is win.view_tabs
     assert isinstance(win.browser_widget, FolderBrowserWidget)
     assert win.tool_rail.tool_names() == ["Browser", "Main", "Stats", "Spike"]
     win.show()
