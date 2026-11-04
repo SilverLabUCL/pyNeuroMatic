@@ -36,6 +36,7 @@ from pyneuromatic.gui.context_views import (
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.history_panel import SEGMENT_STYLE, HistoryPanel
+from pyneuromatic.gui.plot_ranges import RangeOverlay
 from pyneuromatic.gui.settings_dialog import SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
@@ -391,6 +392,22 @@ class PlotPanel(QtWidgets.QWidget):
         self.grid_action.setCheckable(True)
         self.rescale_action = self.graph_menu.addAction("Rescale")
         self.rescale_action.setToolTip("Fit the axes to the data")
+        # The chosen tool's X ranges (e.g. a Stats window): on, frozen or off
+        self.ranges_menu = self.graph_menu.addMenu("Tool Ranges")
+        self.ranges_menu.setToolTipsVisible(True)
+        self.range_mode_actions: dict[str, QtGui.QAction] = {}
+        modes = QtGui.QActionGroup(self.ranges_menu)
+        for mode, text, tip in (
+                ("on", "On", "Shown; drag an edge, or the middle to move both"),
+                ("frozen", "Frozen", "Shown, but can't be dragged"),
+                ("off", "Off", "Hidden")):
+            action = self.ranges_menu.addAction(text)
+            action.setCheckable(True)
+            action.setToolTip(tip)
+            action.triggered.connect(lambda _checked=False, m=mode: self.set_range_mode(m))
+            modes.addAction(action)
+            self.range_mode_actions[mode] = action
+        self.range_mode_actions["on"].setChecked(True)
         self.graph_menu.addSeparator()
         self.transform_action = self.graph_menu.addAction(MENU_TEXT)
         self.transform_action.setToolTip(
@@ -435,6 +452,8 @@ class PlotPanel(QtWidgets.QWidget):
 
         if pg is not None:
             self.plot_widget = pg.PlotWidget(self)
+            # The chosen tool's X ranges, with draggable edges (#436)
+            self.range_overlay = RangeOverlay(self.plot_widget, self)
             self.plot_widget.setBackground("w")
             # No title (the navigator names the trace); a small top margin
             # keeps the corner ⋯ button clear of the axis labels
@@ -455,6 +474,7 @@ class PlotPanel(QtWidgets.QWidget):
             self.graph_button.move(2, 2)
         else:
             self.plot_widget = None
+            self.range_overlay = None
             self.plot_fallback_label = QtWidgets.QLabel(
                 "Plot view unavailable. Install pyqtgraph to enable preview plots."
             )
@@ -850,6 +870,8 @@ class PlotPanel(QtWidgets.QWidget):
         if not self._trace_entries:
             self.trace_count_label.setText("of 0")
             self.overlay_status_label.setText("")
+            self.range_overlay.set_x(None)
+            self.range_overlay.redraw()
             return
 
         current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
@@ -899,6 +921,10 @@ class PlotPanel(QtWidgets.QWidget):
             curve.setClipToView(True)
             self.rendered_trace_count += 1
         self.transform_error = error
+        # The tool's ranges, over the current trace's x (cleared above)
+        self.range_overlay.set_x(self._x_values(current_data) if current_data is not None
+                                 and current_data.nparray is not None else None)
+        self.range_overlay.redraw()
         if error:
             shown = self.overlay_status_label.text()
             self.overlay_status_label.setText(
@@ -909,6 +935,17 @@ class PlotPanel(QtWidgets.QWidget):
             self.overlay_status_label.setToolTip("")
         if self._transform_dialog is not None:
             self._transform_dialog.set_status(f"Can't apply to {error}" if error else "")
+
+    def set_range_mode(self, mode: str) -> None:
+        """The tool ranges: "on" (draggable), "frozen" or "off" (hidden)."""
+        self.range_mode_actions[mode].setChecked(True)
+        if self.range_overlay is not None:
+            self.range_overlay.set_mode(mode)
+
+    def set_range_source(self, tool) -> None:
+        """Show the X ranges of *tool* (a tool tab), or none (#436)."""
+        if self.range_overlay is not None:
+            self.range_overlay.set_source(tool)
 
     def edit_transforms(self) -> None:
         """Open Filter & Transform for the channel plotted."""
@@ -1279,6 +1316,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def _on_tool_selected(self, tool_name: str) -> None:
         self.current_tool_name = tool_name
+        # The Plot shows the X ranges of the tool chosen only
+        self.plot_widget.set_range_source(self.tool_tabs.get(tool_name))
         idx = self.tool_rail.index_for_name(tool_name)
         self.tool_workspace.setCurrentIndex(idx)
         action = getattr(self, "tool_view_actions", {}).get(tool_name)
