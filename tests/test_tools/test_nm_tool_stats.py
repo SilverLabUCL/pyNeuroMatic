@@ -1240,6 +1240,71 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
         self.assertEqual(len(self._ch.buffer), 1)
         return self._ch.buffer[0]['command']
 
+    def _compute_notes(self, **kwargs):
+        from pyneuromatic.core.nm_manager import NMManager
+        nm = NMManager(quiet=True)
+        data = nm.folders.new("F").data.new(
+            "RecordA0", nparray=np.arange(20.0), xscale={"start": 0.0, "delta": 1.0})
+        count = len(nm.history.buffer)
+        self.w0.compute(data, **kwargs)
+        return [e["message"] for e in nm.history.buffer[count:] if "compute" in e["message"]]
+
+    def test_compute_note(self):
+        self.w0.func = "max"
+        self.w0.xbgn, self.w0.xend = 1.5, 15.0
+        self.assertEqual(self._compute_notes(), ["compute func=max, xbgn=1.5, xend=15.0"])
+        self.w0.bsln_on = True
+        self.w0.bsln_func = "mean"
+        self.w0.bsln_xbgn, self.w0.bsln_xend = 0.5, 2.5
+        self.assertEqual(self._compute_notes(), [
+            "compute func=max, xbgn=1.5, xend=15.0, bsln=mean 0.5 to 2.5"])
+        self.assertEqual(self._compute_notes(note=False), [])
+
+    def test_delete_last_window_keeps_names_in_sequence(self):
+        windows = self.tool.windows
+        windows.new()
+        windows.new(select=True)  # w2
+        self._ch.clear()
+        self.assertEqual(windows.delete_last(), "w2")
+        self.assertEqual([e["command"] for e in self._ch.buffer],
+                         ["nm.stats.windows.delete_last()"])
+        self.assertEqual([w.name for w in windows], ["w0", "w1"])
+        self.assertEqual(windows.selected_name, "w1")  # w2 was selected
+        windows.new()
+        self.assertEqual([w.name for w in windows], ["w0", "w1", "w2"])  # w2 again
+
+    def test_the_first_window_is_not_deleted(self):
+        windows = self.tool.windows
+        self.assertEqual([w.name for w in windows], ["w0"])
+        self._ch.clear()
+        with self.assertRaises(RuntimeError):
+            windows.delete_last()
+        self.assertEqual([w.name for w in windows], ["w0"])
+        self.assertEqual(self._ch.buffer, [])
+
+    def test_delete_last_keeps_another_selection(self):
+        windows = self.tool.windows
+        windows.new()  # w1, w0 still selected
+        windows.delete_last()
+        self.assertEqual(windows.selected_name, "w0")
+
+    def test_reset_returns_to_defaults_as_one_command(self):
+        w0 = self.w0
+        w0.func = "mean"
+        w0.xbgn, w0.xend = 2.0, 8.0
+        w0.on = False
+        w0.bsln_on = True
+        w0.bsln_xbgn, w0.bsln_xend = 0.0, 1.0
+        self._ch.clear()
+        w0.reset()
+        self.assertEqual([e["command"] for e in self._ch.buffer],
+                         ["nm.stats.windows['w0'].reset()"])
+        from pyneuromatic.tools.nm_stat_win import NMStatWin
+        self.assertEqual(w0.to_dict(), NMStatWin("w0").to_dict())
+        self.assertEqual(w0.name, "w0")
+        self.assertTrue(w0.on and w0.func == {} and not w0.bsln_on)
+        self.assertEqual((w0.xbgn, w0.xend), (-math.inf, math.inf))
+
     def test_func_setter_logs_a_name_alone(self):
         """As the setter takes it, so a script runs it (#448)."""
         for name in ('mean', 'max'):

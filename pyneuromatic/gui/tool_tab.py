@@ -47,8 +47,10 @@ class ToolTabWidget(QtWidgets.QWidget):
       the data, the general settings or the window change
     - :meth:`plot_ranges` / :meth:`set_plot_range`: its X ranges, drawn on the
       Plot with draggable edges while it is the tool chosen (#436)
-    - :attr:`results_changed`, :attr:`view_requested`, :attr:`ranges_changed`:
-      signals to the window
+    - :meth:`plot_marks`: its measurements of the trace shown, drawn over it
+      while it is the tool chosen (#463)
+    - :attr:`results_changed`, :attr:`view_requested`, :attr:`ranges_changed`,
+      :attr:`marks_changed`: signals to the window
     """
 
     run_finished = QtCore.pyqtSignal(bool)
@@ -64,6 +66,8 @@ class ToolTabWidget(QtWidgets.QWidget):
     view_requested = QtCore.pyqtSignal(str)
     # Its X ranges changed (e.g. a typed X begin): the Plot moves them
     ranges_changed = QtCore.pyqtSignal()
+    # What it would measure changed (e.g. its function): the Plot redraws the marks
+    marks_changed = QtCore.pyqtSignal()
 
     # Its pages in the Plot and Table panels, if any
     plot_view: QtWidgets.QWidget | None = None
@@ -152,6 +156,12 @@ class ToolTabWidget(QtWidgets.QWidget):
     def set_config_option(self, key: str, value: bool) -> None:
         """Set an option from its Settings page."""
         raise KeyError(f"{self.title_label.text()} has no option {key!r}")
+
+    def plot_marks(self, data) -> list:
+        """Its measurements of *data* (the trace shown) to draw over it
+        (:class:`~pyneuromatic.gui.plot_marks.PlotMark`); never writes a
+        command or changes data."""
+        return []
 
     def plot_ranges(self) -> list:
         """Its X ranges to draw on the Plot (:class:`~pyneuromatic.gui.plot_ranges.PlotRange`)."""

@@ -806,3 +806,110 @@ def test_stats2_histogram_is_one_command_saved_in_the_subfolder(series_app):
     subfolder.data.pop("H_ST_w0_mean_y_counts")
     exec(command, {"nm": manager})
     assert list(subfolder.data["H_ST_w0_mean_y_counts"].nparray) == counts
+
+
+# --- Reset: the window back to its defaults ------------------------------------
+
+def _reset_tab(qtbot):
+    manager = NMManager(quiet=True, command_history=True)
+    folder = manager.folders.new("Demo", select=False)
+    data = folder.data.new("RecordA0", nparray=np.arange(10.0),
+                           xscale={"start": 0.0, "delta": 1.0})
+    manager.select_value_set(data)
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.tool_rail.select_tool("Stats")
+    tab = window.tool_tabs["Stats"]
+    tab.measurement_combo.setCurrentText("max")
+    for edit, text in ((tab.xbgn_edit, "2"), (tab.xend_edit, "8")):
+        edit.setText(text)
+        edit.editingFinished.emit()
+    tab.bsln_checkbox.setChecked(True)
+    return manager, window, tab
+
+
+def test_reset_returns_the_window_to_its_defaults(qtbot):
+    manager, window, tab = _reset_tab(qtbot)
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or True
+    count = len(manager.command_history.buffer)
+    tab.reset_button.click()
+    assert asked and "w0" in asked[0]
+    assert [e["command"] for e in manager.command_history.buffer][count:] == [
+        "nm.stats.windows['w0'].reset()"]
+    w0 = manager.stats.windows["w0"]
+    assert w0.func == {} and w0.on and not w0.bsln_on
+    # The fields show it
+    assert tab.measurement_combo.currentData() is None
+    assert (tab.xbgn_edit.text(), tab.xend_edit.text()) == ("-inf", "inf")
+    assert not tab.bsln_checkbox.isChecked()
+    assert tab.window_enabled.isChecked()
+    # ... and the Plot: its range is the whole trace, and nothing is measured
+    region = window.plot_widget.range_overlay.regions["window"]
+    assert region.getRegion() == (0.0, 9.0)
+    assert window.plot_widget.mark_overlay.marks == []
+
+
+def test_reset_cancelled_or_nothing_to_reset(qtbot):
+    manager, _window, tab = _reset_tab(qtbot)
+    tab._confirm = lambda title, text: False  # No
+    tab.reset_button.click()
+    assert manager.stats.windows["w0"].func == {"name": "max"}
+    w0 = manager.stats.windows["w0"]
+    w0.reset()
+    tab._load_selected_window()
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or True
+    count = len(manager.command_history.buffer)
+    tab.reset_button.click()  # already the defaults: not asked, no command
+    assert asked == [] and len(manager.command_history.buffer) == count
+
+
+def test_reset_restores_parameter_defaults(qtbot):
+    _manager, _window, tab = _reset_tab(qtbot)
+    tab._confirm = lambda title, text: True
+    tab.measurement_combo.setCurrentText("risetime+")
+    default = tab.param_edits["p0"].text()
+    tab.param_edits["p0"].setText("20")
+    tab.param_edits["p0"].editingFinished.emit()
+    tab.reset_button.click()
+    tab.measurement_combo.setCurrentText("risetime+")
+    assert tab.param_edits["p0"].text() == default
+
+
+# --- Delete Window: the last one ---------------------------------------------
+
+def _items(combo):
+    return [combo.itemText(i) for i in range(combo.count()) if combo.itemText(i)]
+
+
+def test_delete_window_deletes_the_last_one(qtbot):
+    manager, _window, tab = _reset_tab(qtbot)
+    combo = tab.window_combo
+    assert _items(combo) == ["w0", "New Window..."]  # w0 can't be deleted
+    tab._add_window()
+    tab._add_window()
+    assert _items(combo) == ["w0", "w1", "w2", "New Window...", "Delete Window w2"]
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or True
+    count = len(manager.command_history.buffer)
+    combo.setCurrentIndex(combo.findData(tab.DELETE_WINDOW_ACTION))
+    assert asked == ["Delete w2? Its settings will be lost."]
+    assert [e["command"] for e in manager.command_history.buffer][count:] == [
+        "nm.stats.windows.delete_last()"]
+    assert _items(combo) == ["w0", "w1", "New Window...", "Delete Window w1"]
+    assert combo.currentData() == "w1"  # w2 was shown
+    tab._add_window()
+    assert combo.currentData() == "w2"  # its name again
+
+
+def test_delete_window_cancelled(qtbot):
+    manager, _window, tab = _reset_tab(qtbot)
+    combo = tab.window_combo
+    tab._add_window()
+    combo.setCurrentIndex(combo.findData("w0"))
+    tab._confirm = lambda title, text: False
+    combo.setCurrentIndex(combo.findData(tab.DELETE_WINDOW_ACTION))
+    assert [w.name for w in manager.stats.windows] == ["w0", "w1"]
+    assert combo.currentData() == "w0"  # back to the window shown
+    assert manager.stats.windows.selected_name == "w0"

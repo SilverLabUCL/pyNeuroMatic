@@ -36,6 +36,7 @@ from pyneuromatic.gui.context_views import (
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.history_panel import SEGMENT_STYLE, HistoryPanel
+from pyneuromatic.gui.plot_marks import MarkOverlay
 from pyneuromatic.gui.plot_ranges import RangeOverlay
 from pyneuromatic.gui.settings_dialog import SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
@@ -408,6 +409,12 @@ class PlotPanel(QtWidgets.QWidget):
             modes.addAction(action)
             self.range_mode_actions[mode] = action
         self.range_mode_actions["on"].setChecked(True)
+        self.measures_action = self.graph_menu.addAction("Tool Measures")
+        self.measures_action.setCheckable(True)
+        self.measures_action.setChecked(True)
+        self.measures_action.setToolTip(
+            "Show what the chosen tool measures on the trace (e.g. the Stats "
+            "window's mean, or its max point)")
         self.graph_menu.addSeparator()
         self.transform_action = self.graph_menu.addAction(MENU_TEXT)
         self.transform_action.setToolTip(
@@ -447,6 +454,7 @@ class PlotPanel(QtWidgets.QWidget):
         self.overlay_action.toggled.connect(self._sync_overlay_limit)
         self.overlay_limit.valueChanged.connect(self._render_current_traces)
         self.grid_action.toggled.connect(self._show_grid)
+        self.measures_action.toggled.connect(self._show_measures)
         self.rescale_action.triggered.connect(self.rescale)
         self.transform_action.triggered.connect(self.edit_transforms)
 
@@ -454,6 +462,8 @@ class PlotPanel(QtWidgets.QWidget):
             self.plot_widget = pg.PlotWidget(self)
             # The chosen tool's X ranges, with draggable edges (#436)
             self.range_overlay = RangeOverlay(self.plot_widget, self)
+            # ... and its measurements of the trace shown (#463)
+            self.mark_overlay = MarkOverlay(self.plot_widget, self)
             self.plot_widget.setBackground("w")
             # No title (the navigator names the trace); a small top margin
             # keeps the corner ⋯ button clear of the axis labels
@@ -475,6 +485,7 @@ class PlotPanel(QtWidgets.QWidget):
         else:
             self.plot_widget = None
             self.range_overlay = None
+            self.mark_overlay = None
             self.plot_fallback_label = QtWidgets.QLabel(
                 "Plot view unavailable. Install pyqtgraph to enable preview plots."
             )
@@ -872,6 +883,8 @@ class PlotPanel(QtWidgets.QWidget):
             self.overlay_status_label.setText("")
             self.range_overlay.set_x(None)
             self.range_overlay.redraw()
+            self.mark_overlay.set_data(None)
+            self.mark_overlay.redraw()
             return
 
         current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
@@ -900,6 +913,7 @@ class PlotPanel(QtWidgets.QWidget):
         channel = self._trace_channel
         transform = channel if channel is not None and channel.transform_on else None
         error = ""
+        shown = None  # the current trace, as plotted
         for item, data in entries:
             if data is None or data.nparray is None:
                 continue
@@ -910,6 +924,8 @@ class PlotPanel(QtWidgets.QWidget):
                     error = error or f"{data.name}: {e}"
             x_values = self._x_values(data)
             is_current = item is self._trace_entries[current_index][0]
+            if is_current:
+                shown = data
             color = "#2563eb" if is_current else "#78909c"
             width = 2 if is_current else 1
             curve = self.plot_widget.plot(
@@ -925,6 +941,8 @@ class PlotPanel(QtWidgets.QWidget):
         self.range_overlay.set_x(self._x_values(current_data) if current_data is not None
                                  and current_data.nparray is not None else None)
         self.range_overlay.redraw()
+        self.mark_overlay.set_data(shown)  # measured as plotted (transformed)
+        self.mark_overlay.redraw()
         if error:
             shown = self.overlay_status_label.text()
             self.overlay_status_label.setText(
@@ -942,10 +960,16 @@ class PlotPanel(QtWidgets.QWidget):
         if self.range_overlay is not None:
             self.range_overlay.set_mode(mode)
 
-    def set_range_source(self, tool) -> None:
-        """Show the X ranges of *tool* (a tool tab), or none (#436)."""
+    def set_tool(self, tool) -> None:
+        """Show the X ranges (#436) and measurements (#463) of *tool* (a tool
+        tab), or none."""
         if self.range_overlay is not None:
             self.range_overlay.set_source(tool)
+            self.mark_overlay.set_source(tool)
+
+    def _show_measures(self, show: bool) -> None:
+        if self.mark_overlay is not None:
+            self.mark_overlay.set_visible(show)
 
     def edit_transforms(self) -> None:
         """Open Filter & Transform for the channel plotted."""
@@ -1316,8 +1340,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def _on_tool_selected(self, tool_name: str) -> None:
         self.current_tool_name = tool_name
-        # The Plot shows the X ranges of the tool chosen only
-        self.plot_widget.set_range_source(self.tool_tabs.get(tool_name))
+        # The Plot shows the X ranges and measurements of the tool chosen only
+        self.plot_widget.set_tool(self.tool_tabs.get(tool_name))
         idx = self.tool_rail.index_for_name(tool_name)
         self.tool_workspace.setCurrentIndex(idx)
         action = getattr(self, "tool_view_actions", {}).get(tool_name)
