@@ -137,7 +137,8 @@ def test_graph_menu(app):
     menu = panel.graph_button.menu()
     texts = [a.text() for a in menu.actions() if a.text()]
     assert texts == ["Overlay Traces", "Grid", "Rescale", "Tool Ranges", "Tool Measures",
-                     "Filter && Transform..."]  # shows "&"
+                     "Trace Style...",
+                     "Filter && Transform...", "Axes", "Export..."]  # shows "&"
     assert panel.overlay_action.isEnabled() and not panel.overlay_limit.isEnabled()
     panel.overlay_action.setChecked(True)
     assert panel.overlay_limit.isEnabled()

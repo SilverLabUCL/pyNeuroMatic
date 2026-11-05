@@ -30,6 +30,11 @@ TABLE_NAN_GREY = "NaN (grey)"
 TABLE_NAN_BLANK = "blank"
 
 
+# The Plot's trace line styles and symbols (#465)
+TRACE_LINES = ("solid", "dash", "dot", "dash-dot", "none")
+TRACE_SYMBOLS = ("none", "circle", "square", "triangle", "diamond", "plus", "cross", "star")
+
+
 class NMSettings(NMToolConfig):
     """General settings for the whole application (not one tool).
 
@@ -47,6 +52,11 @@ class NMSettings(NMToolConfig):
             history to lose.
         ask_import_options: Before importing a file, ask what to import
             (folder name, prefix, channels, epochs, X range).
+        plot_trace_color, plot_trace_width, plot_trace_line,
+        plot_trace_symbol, plot_trace_symbol_size: How the Plot draws the
+            current trace: colour (e.g. "#000000"), line width (pixels),
+            line style and symbol (see ``TRACE_LINES``, ``TRACE_SYMBOLS``).
+        plot_overlay_color, plot_overlay_width: How it draws overlay traces.
     """
 
     _TOML_TYPE = "nm_settings"
@@ -55,11 +65,26 @@ class NMSettings(NMToolConfig):
                       "choices": [TABLE_NAN_TEXT, TABLE_NAN_GREY, TABLE_NAN_BLANK]},
         "confirm_quit": {"type": bool, "default": True},
         "ask_import_options": {"type": bool, "default": True},
+        # The Plot's traces (#465)
+        "plot_trace_color": {"type": str, "default": "#000000"},
+        "plot_trace_width": {"type": float, "default": 2.0, "min": 0.5, "max": 10.0},
+        "plot_trace_line": {"type": str, "default": "solid", "choices": list(TRACE_LINES)},
+        "plot_trace_symbol": {"type": str, "default": "none", "choices": list(TRACE_SYMBOLS)},
+        "plot_trace_symbol_size": {"type": float, "default": 6.0, "min": 1.0, "max": 30.0},
+        "plot_overlay_color": {"type": str, "default": "#78909c"},
+        "plot_overlay_width": {"type": float, "default": 1.0, "min": 0.5, "max": 10.0},
     }
 
     def __init__(self) -> None:
         super().__init__()
         object.__setattr__(self, "_path", None)  # the file to save to, if loaded
+
+    def _validate(self, key: str, value: object) -> object:
+        # A whole number for a width or size, e.g. plot_trace_width = 2
+        if (self._schema[key]["type"] is float and isinstance(value, int)
+                and not isinstance(value, bool)):
+            value = float(value)
+        return super()._validate(key, value)
 
     @staticmethod
     def user_path() -> Path:
@@ -91,4 +116,5 @@ class NMSettings(NMToolConfig):
         return self.save(self._path)
 
 
-__all__ = ["NMSettings", "TABLE_NAN_BLANK", "TABLE_NAN_GREY", "TABLE_NAN_TEXT"]
+__all__ = ["NMSettings", "TABLE_NAN_BLANK", "TABLE_NAN_GREY", "TABLE_NAN_TEXT",
+           "TRACE_LINES", "TRACE_SYMBOLS"]

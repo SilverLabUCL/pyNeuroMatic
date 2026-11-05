@@ -26,6 +26,7 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_epoch import DEFAULT_EPOCH_SETS, EXCLUDE_SET
 from pyneuromatic.core.nm_manager import NMManager
+from pyneuromatic.core.nm_settings import TRACE_LINES, TRACE_SYMBOLS, NMSettings
 from pyneuromatic.gui.context_views import (
     DATA_VIEW,
     ChannelToolBar,
@@ -38,7 +39,7 @@ from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.history_panel import SEGMENT_STYLE, HistoryPanel
 from pyneuromatic.gui.plot_marks import MarkOverlay
 from pyneuromatic.gui.plot_ranges import RangeOverlay
-from pyneuromatic.gui.settings_dialog import SettingsDialog
+from pyneuromatic.gui.settings_dialog import LINE_LABELS, SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
@@ -231,6 +232,26 @@ class _PlaceholderToolWidget(QtWidgets.QWidget):
         layout.addStretch()
 
 
+# The Plot's trace style settings and their defaults (Settings › Plot, #465)
+TRACE_STYLE_DEFAULTS = {key: spec["default"] for key, spec in NMSettings._schema.items()
+                        if key.startswith(("plot_trace_", "plot_overlay_"))}
+_PEN_STYLES = {
+    "solid": QtCore.Qt.PenStyle.SolidLine,
+    "dash": QtCore.Qt.PenStyle.DashLine,
+    "dot": QtCore.Qt.PenStyle.DotLine,
+    "dash-dot": QtCore.Qt.PenStyle.DashDotLine,
+}
+_SYMBOLS = {"circle": "o", "square": "s", "triangle": "t", "diamond": "d",
+            "plus": "+", "cross": "x", "star": "star"}
+
+
+def _style_color(name: str, default: str) -> QtGui.QColor:
+    """*name* as a colour, or *default* if it isn't one (e.g. a typo in the
+    settings file)."""
+    color = QtGui.QColor(name)
+    return color if color.isValid() else QtGui.QColor(default)
+
+
 class PlotPanel(QtWidgets.QWidget):
     """Plot panel with a trace navigator for data and dataseries modes."""
 
@@ -238,6 +259,14 @@ class PlotPanel(QtWidgets.QWidget):
     membership_changed = QtCore.pyqtSignal()
     # A channel's filters or transforms changed (Filter & Transform...)
     transforms_changed = QtCore.pyqtSignal()
+    # Trace Style...: open Settings at its Plot page
+    trace_style_requested = QtCore.pyqtSignal()
+    # A trace style chosen by right-clicking a trace: {setting: value}
+    trace_style_set = QtCore.pyqtSignal(dict)
+
+    # The trace menu's choices (right-click a trace)
+    TRACE_WIDTHS = (0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
+    SYMBOL_SIZES = (3.0, 4.0, 6.0, 8.0, 10.0, 12.0)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None,
                  view_tabs: ChannelToolBar | None = None) -> None:
@@ -415,6 +444,10 @@ class PlotPanel(QtWidgets.QWidget):
         self.measures_action.setToolTip(
             "Show what the chosen tool measures on the trace (e.g. the Stats "
             "window's mean, or its max point)")
+        self.trace_style_action = self.graph_menu.addAction("Trace Style...")
+        self.trace_style_action.setToolTip(
+            "Colour, line and symbols of the traces (opens Settings at Plot)")
+        self.trace_style_action.triggered.connect(self.trace_style_requested)
         self.graph_menu.addSeparator()
         self.transform_action = self.graph_menu.addAction(MENU_TEXT)
         self.transform_action.setToolTip(
@@ -438,6 +471,8 @@ class PlotPanel(QtWidgets.QWidget):
         self._strip_channel_name: str | None = None  # the strip's channel, last seen
         self._last_selection: dict = {}
         self.current_trace = None
+        self._trace_style = dict(TRACE_STYLE_DEFAULTS)  # until set_trace_style
+        self._drawn_curves: list[tuple[object, bool]] = []
         self.rendered_trace_count = 0
         self.transform_error = ""  # why the plotted traces aren't transformed
         self.trace_index.valueChanged.connect(self._on_trace_index_changed)
@@ -469,6 +504,7 @@ class PlotPanel(QtWidgets.QWidget):
             # keeps the corner ⋯ button clear of the axis labels
             self.plot_widget.getPlotItem().setContentsMargins(0, 22, 4, 0)
             trace_layout.addWidget(self.plot_widget)
+            self._build_plot_right_click()
             self.graph_button = QtWidgets.QToolButton(self.plot_widget)
             self.graph_button.setText("⋯")
             self.graph_button.setToolTip("Graph functions")
@@ -877,6 +913,7 @@ class PlotPanel(QtWidgets.QWidget):
             return
         self.plot_widget.clear()
         self.rendered_trace_count = 0
+        self._drawn_curves = []  # (curve, is current)
 
         if not self._trace_entries:
             self.trace_count_label.setText("of 0")
@@ -926,14 +963,12 @@ class PlotPanel(QtWidgets.QWidget):
             is_current = item is self._trace_entries[current_index][0]
             if is_current:
                 shown = data
-            color = "#2563eb" if is_current else "#78909c"
-            width = 2 if is_current else 1
-            curve = self.plot_widget.plot(
-                x_values,
-                data.nparray,
-                pen=pg.mkPen(color=color, width=width, alpha=255 if is_current else 150),
-            )
+            # As set in Settings › Plot (#465)
+            style = self._current_style() if is_current else self._overlay_style()
+            curve = self.plot_widget.plot(x_values, data.nparray, **style)
             curve.setDownsampling(auto=True, method="peak")
+            curve.setCurveClickable(True, width=8)  # right-click: its style
+            self._drawn_curves.append((curve, is_current))
             curve.setClipToView(True)
             self.rendered_trace_count += 1
         self.transform_error = error
@@ -959,6 +994,131 @@ class PlotPanel(QtWidgets.QWidget):
         self.range_mode_actions[mode].setChecked(True)
         if self.range_overlay is not None:
             self.range_overlay.set_mode(mode)
+
+    # --- right-click: a trace's style, or the Plot menu ------------------------
+
+    def _build_plot_right_click(self) -> None:
+        """Right-click a trace: its style. Elsewhere, the axes too: the Plot
+        menu (as ⋯), which gets pyqtgraph's axis controls and Export."""
+        view_box = self.plot_widget.getPlotItem().getViewBox()
+        self.axes_menu = view_box.menu  # View All, X Axis, Y Axis, Mouse Mode
+        self.axes_menu.setTitle("Axes")
+        self.graph_menu.addSeparator()
+        self.graph_menu.addMenu(self.axes_menu)
+        self.export_action = self.graph_menu.addAction("Export...")
+        self.export_action.setToolTip("Save the plot as an image (PNG, SVG...) or its data (CSV)")
+        self.export_action.triggered.connect(self._export_plot)
+        # The axes pass their right-clicks to the view box
+        view_box.raiseContextMenu = self._on_right_click
+
+    def _export_plot(self) -> None:
+        scene = self.plot_widget.scene()
+        scene.contextMenuItem = self.plot_widget.getPlotItem()
+        scene.showExportDialog()
+
+    def _on_right_click(self, event) -> None:
+        on_trace = self.trace_at(event.scenePos())
+        menu = self.graph_menu if on_trace is None else self.trace_menu(current=on_trace)
+        self._popup(menu, event.screenPos().toPoint())
+
+    def _popup(self, menu: QtWidgets.QMenu, pos: QtCore.QPoint) -> None:
+        """Show *menu* at *pos* (replaced in tests)."""
+        menu.popup(pos)
+
+    def trace_at(self, scene_pos) -> bool | None:
+        """True if *scene_pos* is on the current trace, False if on an overlay
+        trace, None if on neither."""
+        for curve, is_current in sorted(self._drawn_curves, key=lambda c: not c[1]):
+            line, points = curve.curve, curve.scatter
+            if line.isVisible() and line.mouseShape().contains(line.mapFromScene(scene_pos)):
+                return is_current
+            if points.isVisible() and len(points.pointsAt(points.mapFromScene(scene_pos))):
+                return is_current
+        return None
+
+    def trace_menu(self, current: bool) -> QtWidgets.QMenu:
+        """The style of the current trace, or of the overlay traces."""
+        prefix = "plot_trace_" if current else "plot_overlay_"
+        menu = QtWidgets.QMenu(self)
+        header = menu.addAction("Current Trace" if current else "Overlay Traces")
+        header.setEnabled(False)
+        menu.addAction("Colour...").triggered.connect(
+            lambda: self._pick_trace_color(prefix + "color"))
+        self._choice_menu(menu, "Line Width", prefix + "width", self.TRACE_WIDTHS)
+        if current:
+            self._choice_menu(menu, "Line", "plot_trace_line", TRACE_LINES, LINE_LABELS)
+            self._choice_menu(menu, "Symbol", "plot_trace_symbol", TRACE_SYMBOLS,
+                              {name: name.capitalize() for name in TRACE_SYMBOLS})
+            self._choice_menu(menu, "Symbol Size", "plot_trace_symbol_size", self.SYMBOL_SIZES)
+        menu.addSeparator()
+        menu.addAction("Default Style").triggered.connect(
+            lambda: self.trace_style_set.emit(dict(TRACE_STYLE_DEFAULTS)))
+        menu.addAction("Trace Style...").triggered.connect(self.trace_style_requested)
+        self._trace_menu = menu  # kept while it shows
+        return menu
+
+    def _choice_menu(self, menu: QtWidgets.QMenu, title: str, key: str, values,
+                     labels: dict | None = None) -> QtWidgets.QMenu:
+        """A submenu of *values* for setting *key*, the current one checked."""
+        current = self._trace_style[key]
+        values = list(values)
+        if labels is None and current not in values:  # e.g. a width typed in Settings
+            values = sorted(values + [current])
+        submenu = menu.addMenu(title)
+        group = QtGui.QActionGroup(submenu)
+        for value in values:
+            action = submenu.addAction(labels[value] if labels else f"{value:g}")
+            action.setCheckable(True)
+            action.setChecked(value == current)
+            action.triggered.connect(
+                lambda _checked=False, v=value: self.trace_style_set.emit({key: v}))
+            group.addAction(action)
+        return submenu
+
+    def _choose_color(self, initial: str) -> str | None:
+        """A colour from the colour picker, or None if cancelled (replaced in tests)."""
+        color = QtWidgets.QColorDialog.getColor(QtGui.QColor(initial), self, "Trace colour")
+        return color.name() if color.isValid() else None
+
+    def _pick_trace_color(self, key: str) -> None:
+        color = self._choose_color(self._trace_style[key])
+        if color is not None:
+            self.trace_style_set.emit({key: color})
+
+    # --- trace style (Settings › Plot, #465) ---------------------------------
+
+    def set_trace_style(self, settings) -> None:
+        """Draw traces as *settings* say (its plot_trace_* and plot_overlay_*
+        values), and redraw."""
+        self._trace_style = {key: getattr(settings, key) for key in TRACE_STYLE_DEFAULTS}
+        self._render_current_traces()
+
+    @property
+    def trace_style(self) -> dict:
+        return dict(self._trace_style)
+
+    def _current_style(self) -> dict:
+        """pyqtgraph plot() arguments for the current trace."""
+        style = self._trace_style
+        color = _style_color(style["plot_trace_color"], TRACE_STYLE_DEFAULTS["plot_trace_color"])
+        line = style["plot_trace_line"]
+        symbol = style["plot_trace_symbol"]
+        if line == "none" and symbol == "none":
+            symbol = "circle"  # neither: the trace would not be seen
+        kwargs: dict = {"pen": None if line == "none" else pg.mkPen(
+            color, width=style["plot_trace_width"], style=_PEN_STYLES[line])}
+        if symbol != "none":
+            kwargs.update(symbol=_SYMBOLS[symbol], symbolSize=style["plot_trace_symbol_size"],
+                          symbolPen=pg.mkPen(color), symbolBrush=pg.mkBrush(color))
+        return kwargs
+
+    def _overlay_style(self) -> dict:
+        """pyqtgraph plot() arguments for an overlay trace (behind the current)."""
+        style = self._trace_style
+        color = _style_color(style["plot_overlay_color"],
+                             TRACE_STYLE_DEFAULTS["plot_overlay_color"])
+        color.setAlpha(150)
+        return {"pen": pg.mkPen(color, width=style["plot_overlay_width"])}
 
     def set_tool(self, tool) -> None:
         """Show the X ranges (#436) and measurements (#463) of *tool* (a tool
@@ -1249,6 +1409,10 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.plot_widget.bind_selection_model(self.selection_model)
         self.plot_widget.membership_changed.connect(self._on_content_changed)
         self.plot_widget.transforms_changed.connect(self._on_transforms_changed)
+        self.plot_widget.trace_style_requested.connect(lambda: self.open_settings("Plot"))
+        self.plot_widget.trace_style_set.connect(self._set_trace_style)
+        if self._manager is not None:
+            self.plot_widget.set_trace_style(self._manager.settings)
         self.context_panel.addWidget(self.plot_widget)
         self.table_panel = TablePanel(self.context_panel, view_tabs=self.view_tabs)
         self.table_panel.bind_selection_model(self.selection_model)
@@ -1500,9 +1664,19 @@ class NMAppWindow(QtWidgets.QMainWindow):
             dialog.show_page(page)
         dialog.exec()
 
+    def _set_trace_style(self, values: dict) -> None:
+        """A trace style chosen on the Plot (right-click a trace): saved, as
+        if set in Settings › Plot."""
+        settings = self._manager.settings
+        for key, value in values.items():
+            setattr(settings, key, value)
+        settings.save_user()
+        self._apply_settings()
+
     def _apply_settings(self) -> None:
         """Show the general settings, e.g. redraw tables after the NaN one."""
         table_format.set_nan_mode(self._manager.settings.table_nan)
+        self.plot_widget.set_trace_style(self._manager.settings)
         self.table_panel.channel_table.model.refresh()
         for tab in self.tool_tabs.values():
             tab.apply_settings()

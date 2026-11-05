@@ -193,3 +193,10 @@ def test_tool_ranges_on_frozen_or_off(app):
     panel.range_mode_actions["on"].trigger()
     assert list(_regions(app)) == ["window", "bsln"]
     assert all(r.movable for r in _regions(app).values())
+
+
+def test_edges_are_wide_enough_to_grab(app):
+    region = _regions(app)["window"]
+    for line in region.lines:
+        assert line.pen.width() == 2
+        assert line.hoverPen.width() == 4  # wider under the pointer
