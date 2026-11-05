@@ -44,7 +44,7 @@ def test_settings_menu_item(app):
 def test_pages(app):
     dialog = app.settings_dialog()
     pages = [dialog.page_list.item(i).text() for i in range(dialog.page_list.count())]
-    assert pages == ["General", "Stats"]
+    assert pages == ["General", "Plot", "Stats"]
     assert dialog.nan_buttons["NaN"].isChecked()
 
 

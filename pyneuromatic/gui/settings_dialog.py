@@ -1,4 +1,5 @@
-"""The Settings window: general pyNeuroMatic settings, then one page per tool.
+"""The Settings window: general pyNeuroMatic settings, the Plot's trace style,
+then one page per tool.
 
 General settings (``manager.settings``) are saved to the user's settings file
 as they change. A tool's page lists its options; this is the one place they
@@ -6,14 +7,21 @@ are edited (each tool's ⋯ button, by its title, opens its page).
 """
 from __future__ import annotations
 
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from pyneuromatic.core.nm_settings import (
     NMSettings,
     TABLE_NAN_BLANK,
     TABLE_NAN_GREY,
     TABLE_NAN_TEXT,
+    TRACE_LINES,
+    TRACE_SYMBOLS,
 )
+
+LINE_LABELS = {"solid": "Solid", "dash": "Dashed", "dot": "Dotted",
+                "dash-dot": "Dash-dot", "none": "None (symbols only)"}
+_PLOT_KEYS = ("plot_trace_color", "plot_trace_width", "plot_trace_line", "plot_trace_symbol",
+              "plot_trace_symbol_size", "plot_overlay_color", "plot_overlay_width")
 
 _NAN_LABELS = {
     TABLE_NAN_TEXT: "NaN",
@@ -79,6 +87,7 @@ class SettingsDialog(QtWidgets.QDialog):
         general_layout.addWidget(self.import_options_checkbox)
         general_layout.addStretch(1)
         self._add_page("General", general)
+        self._add_page("Plot", self._plot_page())
 
         # One page per tool: its options
         self.tool_checkboxes: dict[str, dict[str, QtWidgets.QCheckBox]] = {}
@@ -123,6 +132,105 @@ class SettingsDialog(QtWidgets.QDialog):
     def current_page(self) -> str:
         return self.page_titles()[self.page_list.currentRow()]
 
+    # --- Plot: how the traces are drawn (#465) --------------------------------
+
+    def _plot_page(self) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget(self)
+        layout = QtWidgets.QVBoxLayout(page)
+        self.plot_controls: dict[str, QtWidgets.QWidget] = {}
+
+        current = QtWidgets.QGroupBox("Current trace", page)
+        form = QtWidgets.QFormLayout(current)
+        form.addRow("Colour", self._color_button("plot_trace_color", current))
+        form.addRow("Line width", self._width_box("plot_trace_width", current))
+        form.addRow("Line", self._choice_box("plot_trace_line", TRACE_LINES, LINE_LABELS,
+                                             current))
+        form.addRow("Symbol", self._choice_box(
+            "plot_trace_symbol", TRACE_SYMBOLS, {name: name.capitalize() for name in TRACE_SYMBOLS},
+            current))
+        form.addRow("Symbol size", self._width_box("plot_trace_symbol_size", current))
+        layout.addWidget(current)
+
+        overlay = QtWidgets.QGroupBox("Overlay traces", page)
+        form = QtWidgets.QFormLayout(overlay)
+        form.addRow("Colour", self._color_button("plot_overlay_color", overlay))
+        form.addRow("Line width", self._width_box("plot_overlay_width", overlay))
+        layout.addWidget(overlay)
+
+        self.plot_defaults_button = QtWidgets.QPushButton("Default Style", page)
+        self.plot_defaults_button.setAutoDefault(False)
+        self.plot_defaults_button.setToolTip("Black current traces, grey overlays")
+        self.plot_defaults_button.clicked.connect(self.default_plot_style)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(self.plot_defaults_button)
+        row.addStretch(1)
+        layout.addLayout(row)
+        layout.addStretch(1)
+        self._show_plot_values()
+        return page
+
+    def _color_button(self, key: str, parent: QtWidgets.QWidget) -> QtWidgets.QPushButton:
+        button = QtWidgets.QPushButton(parent)
+        button.setAutoDefault(False)  # Return closes Settings, not open a picker
+        button.setToolTip("Choose a colour")
+        button.clicked.connect(lambda: self._pick_color(key))
+        self.plot_controls[key] = button
+        return button
+
+    def _width_box(self, key: str, parent: QtWidgets.QWidget) -> QtWidgets.QDoubleSpinBox:
+        spec = self._settings._schema[key]
+        box = QtWidgets.QDoubleSpinBox(parent)
+        box.setRange(spec["min"], spec["max"])
+        box.setSingleStep(0.5)
+        box.setDecimals(1)
+        box.valueChanged.connect(lambda value: self._set(key, float(value)))
+        self.plot_controls[key] = box
+        return box
+
+    def _choice_box(self, key: str, names, labels: dict, parent: QtWidgets.QWidget):
+        box = QtWidgets.QComboBox(parent)
+        for name in names:
+            box.addItem(labels[name], name)
+        box.currentIndexChanged.connect(lambda _i: self._set(key, box.currentData()))
+        self.plot_controls[key] = box
+        return box
+
+    def _show_plot_values(self) -> None:
+        """The controls show the settings (without setting them again)."""
+        for key in _PLOT_KEYS:
+            control, value = self.plot_controls[key], getattr(self._settings, key)
+            control.blockSignals(True)
+            if isinstance(control, QtWidgets.QPushButton):
+                swatch = QtGui.QPixmap(28, 14)
+                swatch.fill(QtGui.QColor(value))
+                control.setIcon(QtGui.QIcon(swatch))
+                control.setIconSize(swatch.size())
+                control.setText(value)
+            elif isinstance(control, QtWidgets.QDoubleSpinBox):
+                control.setValue(value)
+            else:
+                control.setCurrentIndex(control.findData(value))
+            control.blockSignals(False)
+
+    def _choose_color(self, initial: str) -> str | None:
+        """A colour from the colour picker, or None if cancelled (replaced in tests)."""
+        color = QtWidgets.QColorDialog.getColor(QtGui.QColor(initial), self, "Trace colour")
+        return color.name() if color.isValid() else None
+
+    def _pick_color(self, key: str) -> None:
+        color = self._choose_color(getattr(self._settings, key))
+        if color is not None:
+            self._set(key, color)
+            self._show_plot_values()
+
+    def default_plot_style(self) -> None:
+        """Default Style: the trace settings back to their defaults."""
+        for key in _PLOT_KEYS:
+            setattr(self._settings, key, self._settings._schema[key]["default"])
+        self._settings.save_user()
+        self._show_plot_values()
+        self.settings_changed.emit()
+
     def _add_page(self, title: str, page: QtWidgets.QWidget) -> None:
         self.page_list.addItem(title)
         self.pages.addWidget(page)
@@ -133,4 +241,4 @@ class SettingsDialog(QtWidgets.QDialog):
         self.settings_changed.emit()
 
 
-__all__ = ["SettingsDialog"]
+__all__ = ["LINE_LABELS", "SettingsDialog"]

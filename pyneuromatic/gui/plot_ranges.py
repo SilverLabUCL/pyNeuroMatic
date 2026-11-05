@@ -55,6 +55,10 @@ class RangeOverlay(QtCore.QObject):
     """Draws a tool's ranges over a pyqtgraph plot and sends drags back."""
 
     BRUSH_ALPHA = 40
+    # Edges: wide enough to grab easily; wider under the pointer, which also
+    # widens where they can be grabbed (pyqtgraph uses the wider pen)
+    EDGE_WIDTH = 2
+    EDGE_HOVER_WIDTH = 4
 
     def __init__(self, plot_widget: Any, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
@@ -152,7 +156,8 @@ class RangeOverlay(QtCore.QObject):
         for line, unbounded in zip(region.lines,
                                    (math.isinf(plot_range.xbgn), math.isinf(plot_range.xend))):
             style = QtCore.Qt.PenStyle.DashLine if unbounded else QtCore.Qt.PenStyle.SolidLine
-            line.setPen(pg.mkPen(color, width=1, style=style))
+            line.setPen(pg.mkPen(color, width=self.EDGE_WIDTH, style=style))
+            line.setHoverPen(pg.mkPen(color, width=self.EDGE_HOVER_WIDTH, style=style))
         region.setToolTip(f"{plot_range.label}: drag an edge, or the middle to move both"
                           if self._movable else plot_range.label)
         region.blockSignals(False)
