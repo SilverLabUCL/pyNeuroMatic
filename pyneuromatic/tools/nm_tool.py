@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime
 import math
+from typing import Callable
 
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_command_history as nmch
@@ -84,6 +85,10 @@ class NMTool:
         # X-axis window — subclasses init from config.
         self._xbgn: float = -math.inf
         self._xend: float = math.inf
+        # Called after each target as progress(done, total); returning False
+        # stops the run (e.g. the GUI's progress bar and Stop, #450)
+        self.progress: Callable[[int, int], bool] | None = None
+        self._stopped: tuple[int, int] | None = None
 
     @property
     def name(self) -> str:
@@ -601,11 +606,26 @@ class NMTool:
             "epochs": [],
         }
         self._made_toolfolders: list[NMToolFolder] = []
+        self._stopped = None
         if not self.run_init():
             return False
-        for target in targets:
+        total = len(targets)
+        for done, target in enumerate(targets, start=1):
             self.select_values = target
             self._update_run_meta(target)
             if not self.run():
                 break
-        return self.run_finish()
+            if self.progress is not None and self.progress(done, total) is False:
+                self._stopped = (done, total)
+                break
+        finished = self.run_finish()  # a stopped run keeps what it did
+        if self._stopped is not None:
+            for folder in self._made_toolfolders:
+                folder.notes.add("stopped after %d of %d: partial results" % self._stopped)
+        return finished
+
+    @property
+    def stopped(self) -> tuple[int, int] | None:
+        """(done, total) if the last run was stopped by :attr:`progress`,
+        else None."""
+        return self._stopped

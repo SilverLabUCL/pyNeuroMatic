@@ -2,9 +2,41 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 from PyQt6 import QtCore, QtWidgets
+
+
+class _RunGuard(QtCore.QObject):
+    """While a tool runs: the window ignores clicks, keys and closing, except
+    on Stop; Esc stops the run (#450)."""
+
+    _BLOCKED = {
+        QtCore.QEvent.Type.MouseButtonPress, QtCore.QEvent.Type.MouseButtonRelease,
+        QtCore.QEvent.Type.MouseButtonDblClick, QtCore.QEvent.Type.KeyPress,
+        QtCore.QEvent.Type.KeyRelease, QtCore.QEvent.Type.Wheel,
+        QtCore.QEvent.Type.ContextMenu, QtCore.QEvent.Type.Shortcut,
+        QtCore.QEvent.Type.ShortcutOverride, QtCore.QEvent.Type.Close,
+    }
+
+    def __init__(self, tab: "ToolTabWidget") -> None:
+        super().__init__(tab)
+        self._tab = tab
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 (Qt)
+        kind = event.type()
+        if kind not in self._BLOCKED:
+            return False
+        if kind == QtCore.QEvent.Type.Close and not event.spontaneous():
+            return False  # Qt closing a widget itself
+        if kind == QtCore.QEvent.Type.KeyPress and event.key() == QtCore.Qt.Key.Key_Escape:
+            self._tab.stop()
+            return True
+        button = self._tab.run_button
+        if isinstance(obj, QtWidgets.QWidget) and (obj is button or button.isAncestorOf(obj)):
+            return False
+        return True
 
 
 class ResultPanel(QtWidgets.QWidget):
@@ -64,6 +96,13 @@ class ToolTabWidget(QtWidgets.QWidget):
     results_changed = QtCore.pyqtSignal()
     # Show its view: "plot" or "table"
     view_requested = QtCore.pyqtSignal(str)
+    # A run's progress, as shown: (done, total)
+    progress_changed = QtCore.pyqtSignal(int, int)
+
+    # Progress is shown once a run takes longer than this (s), so quick runs
+    # don't flash, and updated at most this often (s)
+    SHOW_PROGRESS_AFTER = 0.5
+    PROGRESS_INTERVAL = 0.1
     # Its X ranges changed (e.g. a typed X begin): the Plot moves them
     ranges_changed = QtCore.pyqtSignal()
     # What it would measure changed (e.g. its function): the Plot redraws the marks
@@ -80,6 +119,7 @@ class ToolTabWidget(QtWidgets.QWidget):
     ) -> None:
         super().__init__(parent)
         self._running = False
+        self._stop_requested = False
         self.warnings: list[str] = []
         self._selection_model: Any = None
 
@@ -113,7 +153,8 @@ class ToolTabWidget(QtWidgets.QWidget):
         run_layout = QtWidgets.QHBoxLayout(self.run_row)
         run_layout.setContentsMargins(0, 0, 0, 0)
         self.run_button = QtWidgets.QPushButton("Run", self.run_row)
-        self.run_button.clicked.connect(self._execute)
+        self.run_button.setToolTip("Run (while running: Stop, or Esc)")
+        self.run_button.clicked.connect(self._on_run_clicked)
         run_layout.addWidget(self.run_button)
         self.run_info_label = QtWidgets.QLabel("", self.run_row)
         run_layout.addWidget(self.run_info_label, stretch=1)
@@ -134,6 +175,62 @@ class ToolTabWidget(QtWidgets.QWidget):
         status_layout.addWidget(self.status_label, stretch=1)
         status_layout.addWidget(self.progress_bar)
         layout.addLayout(status_layout)
+
+    # --- progress and Stop (#450) -----------------------------------------------
+
+    def analysis_tool(self) -> Any:
+        """The NMTool a run uses, which reports its progress (None: none)."""
+        return None
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_requested
+
+    def stop(self) -> None:
+        """Stop the run after the epoch (or data array) it's on. What it has
+        done is kept."""
+        if self._running:
+            self._stop_requested = True
+            self.set_status("Stopping")
+
+    def set_run_total(self, total: int) -> None:
+        """A run made of several tool runs (e.g. All Sets): their targets in
+        all, so progress counts them together."""
+        self._run_total = total
+
+    def _on_run_clicked(self) -> None:
+        if self._running:
+            self.stop()
+        else:
+            self._execute()
+
+    def _run_progress(self, done: int, total: int) -> bool:
+        """The tool's progress callback: shows how far the run is (once it's
+        long enough to see), lets the window handle Stop, and says whether
+        to go on."""
+        if self._stop_requested:
+            return False
+        overall = self._progress_offset + done
+        overall_total = self._run_total or total
+        if done >= total:  # this tool run is done; the next one adds on
+            self._progress_offset += total
+        self._progress_done = (overall, overall_total)
+        now = time.monotonic()
+        if (now - self._run_started >= self.SHOW_PROGRESS_AFTER
+                and (now - self._progress_shown >= self.PROGRESS_INTERVAL
+                     or overall >= overall_total)):
+            self._progress_shown = now
+            self.progress_bar.setRange(0, overall_total)
+            self.progress_bar.setValue(overall)
+            self.progress_bar.show()
+            self.run_info_label.setText(f"{overall} / {overall_total}")
+            self.progress_changed.emit(overall, overall_total)
+            QtWidgets.QApplication.processEvents()  # repaint, and Stop
+        return not self._stop_requested
 
     def run_tool(self) -> Any:
         """Run this tool and return a value for the shared results panel."""
@@ -245,25 +342,44 @@ class ToolTabWidget(QtWidgets.QWidget):
             return
 
         self._running = True
+        self._stop_requested = False
+        self._run_total = 0
+        self._progress_offset = 0
+        self._progress_done: tuple[int, int] | None = None
+        self._run_started = time.monotonic()
+        self._progress_shown = 0.0
+        info = self.run_info_label.text()
         self.warnings.clear()
         self.results_panel.clear()
-        self.run_button.setEnabled(False)
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.show()
+        self.run_button.setText("Stop")
         self.set_status("Running")
+        tool = self.analysis_tool()
+        if tool is not None:
+            tool.progress = self._run_progress
+        guard = _RunGuard(self)
+        QtWidgets.QApplication.instance().installEventFilter(guard)
         succeeded = False
         try:
             result = self.run_tool()
             if result is not None:
                 self.results_panel.set_result(result)
-            self.set_status("Complete with warnings" if self.warnings else "Complete")
+            if self._stop_requested and self._progress_done is not None:
+                self.set_status("Stopped after %d of %d" % self._progress_done)
+            else:
+                self.set_status("Complete with warnings" if self.warnings else "Complete")
             succeeded = True
         except Exception as error:
             self.set_status(f"Failed: {error}")
             self.run_failed.emit(str(error))
         finally:
+            QtWidgets.QApplication.instance().removeEventFilter(guard)
+            guard.deleteLater()
+            if tool is not None:
+                tool.progress = None
             self._running = False
-            self.run_button.setEnabled(True)
+            self._stop_requested = False
+            self.run_button.setText("Run")
+            self.run_info_label.setText(info)
             self.progress_bar.hide()
             self._log_run(succeeded)
             self.run_finished.emit(succeeded)
