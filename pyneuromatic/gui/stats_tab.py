@@ -483,6 +483,9 @@ class StatsToolTab(ToolTabWidget):
     def stats_tool(self) -> NMToolStats:
         return self._tool
 
+    def analysis_tool(self) -> NMToolStats:
+        return self._tool  # reports a run's progress (#450)
+
     def _refresh_window_combo(self) -> None:
         selected_name = self._tool.windows.selected_name
         self.window_combo.blockSignals(True)
@@ -1086,9 +1089,12 @@ class StatsToolTab(ToolTabWidget):
         """Run once per set or group, each saved in its own subfolder."""
         if not batches:
             raise RuntimeError("None of the sets or groups has epochs to analyze")
+        self.set_run_total(sum(len(targets) for _label, targets, _sel in batches))
         for _label, targets, selection in batches:  # a command each
             if not self._run_selection(targets, selection):
                 raise RuntimeError("Stats analysis did not complete")
+            if self.stop_requested:  # Stop: not the sets or groups after it
+                break
         if skipped:
             self.show_warning(f"Skipped (no epochs to analyze): {', '.join(skipped)}")
         self.stats2.show_toolfolder(self._tool.toolfolder)  # the last run's
