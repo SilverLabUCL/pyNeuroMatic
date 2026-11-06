@@ -89,6 +89,7 @@ class NMTool:
         # stops the run (e.g. the GUI's progress bar and Stop, #450)
         self.progress: Callable[[int, int], bool] | None = None
         self._stopped: tuple[int, int] | None = None
+        self._omitted: list[str] = []  # left out during the run (omit_last)
 
     @property
     def name(self) -> str:
@@ -438,6 +439,7 @@ class NMTool:
         group: int | None = None,
         group_operator: str | None = None,
         data: str | list[str] | None = None,
+        omit: list[str] | None = None,
     ) -> bool:
         """Run the tool on data named by a data series or a folder, as one
         command (#448), e.g.::
@@ -457,20 +459,71 @@ class NMTool:
             group_operator: ``"AND"`` or ``"OR"``, when *epochs* and
                 *group* are both given.
             data: The folder's data: an array, a Data Set or a list of arrays.
+            omit: Epochs (or data arrays) to leave out, by name, e.g.
+                ``["E3"]``. Those omitted during the run (:meth:`omit_last`)
+                are added to the command, which is recorded when the run ends,
+                so the script repeats the run as it was made (#472).
 
         Returns:
             Return value of :meth:`run_all`.
         """
         targets, run_keys = self._run_selection_targets(
             source, channel, epochs, group, group_operator, data)
+        omit = list(omit or [])
+        targets = [t for t in targets if self._target_name(t) not in omit]
         if not targets:
             raise RuntimeError("nothing to analyze")
-        call = nmu.kwargs_repr(self.run_selection, {
-            "channel": channel, "epochs": epochs, "group": group,
-            "group_operator": group_operator, "data": data,
-        }, text={"epochs": nmu.names_repr(epochs)} if isinstance(epochs, list) else None)
-        nmch.add_nm_command("%s.run_selection(%s%s)" % (self._name, nm_ref(source), call))
-        return self.run_all(targets, run_keys=run_keys)
+        self._omitted = []
+        try:
+            return self.run_all(targets, run_keys=run_keys)
+        finally:
+            # Recorded as the run was made: with the epochs omitted during it
+            omitted = omit + [name for name in self._omitted if name not in omit]
+            values = {"channel": channel, "epochs": epochs, "group": group,
+                      "group_operator": group_operator, "data": data,
+                      "omit": omitted or None}
+            text = {"omit": nmu.names_repr(omitted)} if omitted else {}
+            if isinstance(epochs, list):
+                text["epochs"] = nmu.names_repr(epochs)
+            call = nmu.kwargs_repr(self.run_selection, values, text=text or None)
+            nmch.add_nm_command("%s.run_selection(%s%s)" % (self._name, nm_ref(source), call))
+
+    @staticmethod
+    def _target_name(target: dict) -> str | None:
+        """A target's name for omit: its epoch's, else its data array's."""
+        obj = target.get("epoch") or target.get("data")
+        return obj.name if isinstance(obj, NMObject) else None
+
+    # --- omitting the epoch just analysed (#472) ------------------------------
+
+    @property
+    def can_omit(self) -> bool:
+        """True if :meth:`omit_last` works (the tool has :meth:`discard_last`)."""
+        return type(self).discard_last is not NMTool.discard_last
+
+    def discard_last(self) -> None:
+        """Drop the results of the target :meth:`run` just analysed.
+        Override in subclass (e.g. NMToolStats)."""
+        raise NotImplementedError("%s can't omit an epoch" % type(self).__name__)
+
+    def omit_last(self) -> str | None:
+        """Leave the target just analysed out of the run (e.g. a bad epoch,
+        from the run prompt): its results are dropped, and its name is kept
+        in :attr:`omitted`. Returns the name."""
+        target = dict(self._select)
+        name = self._target_name(target)
+        self.discard_last()
+        epoch = target.get("epoch")
+        if isinstance(epoch, NMObject) and epoch.name in self._run_meta.get("epochs", []):
+            self._run_meta["epochs"].remove(epoch.name)  # as if not run on
+        if name is not None:
+            self._omitted.append(name)
+        return name
+
+    @property
+    def omitted(self) -> list[str]:
+        """Names left out during the last run (:meth:`omit_last`)."""
+        return list(self._omitted)
 
     @staticmethod
     def _run_selection_targets(source, channel, epochs, group, group_operator, data,
@@ -619,6 +672,9 @@ class NMTool:
                 self._stopped = (done, total)
                 break
         finished = self.run_finish()  # a stopped run keeps what it did
+        if self._omitted:
+            for folder in self._made_toolfolders:
+                folder.notes.add("omitted: %s" % ", ".join(self._omitted))
         if self._stopped is not None:
             for folder in self._made_toolfolders:
                 folder.notes.add("cancelled after %d of %d: partial results" % self._stopped)

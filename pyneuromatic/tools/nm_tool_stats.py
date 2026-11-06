@@ -217,6 +217,7 @@ class NMToolStats(NMTool):
                 self.__transforms.append(steps)
         self.__n_analysed += 1
         position = self._epoch_position()
+        self.__last_windows: list[str] = []  # for discard_last
         for w in self.windows:
             if not w.on:
                 continue
@@ -229,7 +230,20 @@ class NMToolStats(NMTool):
             else:
                 self.__results[w.name] = [w.results]
             self.__positions.setdefault(w.name, []).append(position)
+            self.__last_windows.append(w.name)
         return True  # ok
+
+    def discard_last(self) -> None:
+        """Drop the results of the data array :meth:`run` just measured (an
+        epoch omitted from the run, #472)."""
+        for name in getattr(self, "_NMToolStats__last_windows", []):
+            self.__results[name].pop()
+            self.__positions[name].pop()
+            if not self.__results[name]:
+                del self.__results[name]
+                del self.__positions[name]
+        self.__last_windows = []
+        self.__n_analysed -= 1
 
     def _epoch_position(self) -> int | None:
         """The current epoch's position in its data series (E0 is 0), or None

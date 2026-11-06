@@ -147,7 +147,7 @@ def test_ask_continue_and_continue_all(app):
     assert prompts == ["E0 (1 of 6)", "E1 (2 of 6)"]  # the result: in Details (#471)
     assert len(seen) == N  # every epoch still shown after Continue All
     assert app.stats.status_label.text() == "Complete"
-    assert not app.stats.prompt_bar.isVisible()
+    assert not any(b.isVisibleTo(app.stats) for b in app.stats.prompt_buttons.values())
 
 
 def test_ask_cancel_stops_there(app):
@@ -278,7 +278,7 @@ def test_prompt_buttons_take_mouse_clicks(shown_app, click, answers, status):
     tab.run_button.click()
     assert tab.status_label.text() == status
     assert len(answered) == 2
-    assert list(tab.prompt_buttons) == ["continue", "all"]  # Cancel: the Run button
+    assert list(tab.prompt_buttons) == ["continue", "all", "omit"]  # Cancel: the Run button
 
 
 def test_stop_takes_a_mouse_click_during_a_delay(shown_app, click):
@@ -328,3 +328,71 @@ def test_details_show_the_runs_result_at_the_prompt(app):
     # After the run: E0 again (the Plot's), measured as a preview
     assert app.stats.details.toPlainText().splitlines() == [
         "RecordA0  w0 mean  (x -inf to inf)", "mean = 0"]
+
+
+# --- Omit the epoch shown (#472) --------------------------------------------------
+
+def test_omit_the_epoch_shown(app):
+    _display(app, "ask")
+    tab = app.stats
+    buttons = []
+    tab.prompt_shown.connect(lambda _t: buttons.append(
+        (tab.prompt_buttons["omit"].text(), tab.prompt_buttons["omit"].isVisibleTo(tab))))
+    _answer(app, ["continue", "omit", "omit", "all"])  # E1 and E2 omitted
+    count = len(_commands(app))
+    tab.run_button.click()
+    assert buttons[:3] == [("Omit E0", True), ("Omit E1", True), ("Omit E2", True)]
+    values = tab.stats_tool.toolfolder.data.get("ST_w0_mean_y").nparray
+    assert list(values) == [0.0, 3.0, 4.0, 5.0]
+    assert tab.status_label.text() == "Complete (omitted E1, E2)"
+    assert "Stats: Complete (omitted E1, E2)" in app.history_panel.text()
+    runs = [c for c in _commands(app)[count:] if c.startswith("nm.stats.run_selection(")]
+    assert len(runs) == 1 and runs[0].endswith("epochs='all', omit=['E1', 'E2'])")
+
+
+def test_omit_then_cancel(app):
+    _display(app, "ask")
+    _answer(app, ["omit", "continue", "cancel"])
+    app.stats.run_button.click()
+    assert app.stats.status_label.text() == f"Cancelled after 3 of {N} (omitted E0)"
+
+
+def test_omit_takes_a_mouse_click(shown_app, click):
+    tab = shown_app.stats
+    _display(shown_app, "ask")
+    answers = ["omit"]
+
+    def shown(_text):
+        QtCore.QTimer.singleShot(2000, tab.stop)  # if the click doesn't land: fail, not hang
+        button = tab.prompt_buttons[answers.pop(0)] if answers else tab.prompt_buttons["all"]
+        QtCore.QTimer.singleShot(0, lambda: click(button))
+
+    tab.prompt_shown.connect(shown)
+    tab.run_button.click()
+    assert tab.status_label.text() == "Complete (omitted E0)"
+
+
+
+def test_the_prompt_is_in_the_run_row(app):
+    """Cancel, Continue, Continue All, Omit, then the count at the right: one
+    row, so the panel (and the History below it) doesn't change height."""
+    _display(app, "ask")
+    tab = app.stats
+    seen = []
+
+    def shown(_text):
+        layout = tab.run_row.layout()
+        widgets = [layout.itemAt(i).widget() for i in range(layout.count())]
+        visible = [w.text() for w in widgets if w is not None and w.isVisibleTo(tab)]
+        seen.append((visible, tab.run_info_label.alignment() & QtCore.Qt.AlignmentFlag.AlignRight,
+                     tab.sizeHint().height()))
+        QtCore.QTimer.singleShot(0, tab.stop)
+
+    height = tab.sizeHint().height()
+    tab.prompt_shown.connect(shown)
+    tab.run_button.click()
+    (visible, right, asking_height), = seen
+    assert visible == ["Cancel", "Continue", "Continue All", "Omit E0", f"1 / {N}"]
+    assert right
+    assert asking_height == height
+    assert not any(b.isVisibleTo(tab) for b in tab.prompt_buttons.values())  # after
