@@ -194,6 +194,23 @@ class ToolTabWidget(QtWidgets.QWidget):
         self._show_run_button(running=False)
         self.run_button.clicked.connect(self._on_run_clicked)
         run_layout.addWidget(self.run_button)
+        # Ask after each epoch: Continue, Continue All or Omit, beside the Run
+        # button (Cancel while running; or Esc), shown only while asking, so
+        # the panel doesn't grow (#468, #472)
+        self.prompt_buttons: dict[str, QtWidgets.QPushButton] = {}
+        for answer, text, tip in (
+                ("continue", "Continue", "Analyse the next epoch (Return)"),
+                ("all", "Continue All", "Finish the run without asking again"),
+                ("omit", "Omit", "Leave this epoch's result out of the run, and go on "
+                                 "(the run command says so, to repeat it)")):
+            button = QtWidgets.QPushButton(text, self.run_row)
+            button.setAutoDefault(False)
+            button.setToolTip(tip)
+            button.clicked.connect(lambda _checked=False, a=answer: self.answer_prompt(a))
+            button.hide()
+            run_layout.addWidget(button)
+            self.prompt_buttons[answer] = button
+        # What will run; while running, how far (e.g. 3 / 200), at the right
         self.run_info_label = QtWidgets.QLabel("", self.run_row)
         run_layout.addWidget(self.run_info_label, stretch=1)
         layout.addWidget(self.run_row)
@@ -226,27 +243,6 @@ class ToolTabWidget(QtWidgets.QWidget):
         self.display_row.hide()  # until set_settings
         layout.addWidget(self.display_row)
 
-        # Ask after each epoch: Continue or Continue All; Cancel is the Run
-        # button (Cancel while running) or Esc (#468)
-        self.prompt_bar = QtWidgets.QFrame(self)
-        self.prompt_bar.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        prompt_layout = QtWidgets.QHBoxLayout(self.prompt_bar)
-        prompt_layout.setContentsMargins(6, 4, 6, 4)
-        self.prompt_label = QtWidgets.QLabel("", self.prompt_bar)
-        self.prompt_label.setWordWrap(True)
-        prompt_layout.addWidget(self.prompt_label, stretch=1)
-        self.prompt_buttons: dict[str, QtWidgets.QPushButton] = {}
-        for answer, text, tip in (
-                ("continue", "Continue", "Analyse the next epoch (Return)"),
-                ("all", "Continue All", "Finish the run without asking again")):
-            button = QtWidgets.QPushButton(text, self.prompt_bar)
-            button.setAutoDefault(False)
-            button.setToolTip(tip)
-            button.clicked.connect(lambda _checked=False, a=answer: self.answer_prompt(a))
-            prompt_layout.addWidget(button)
-            self.prompt_buttons[answer] = button
-        self.prompt_bar.hide()
-        layout.addWidget(self.prompt_bar)
 
         self.results_group = QtWidgets.QGroupBox("Results", self)
         self.results_layout = QtWidgets.QVBoxLayout(self.results_group)
@@ -301,7 +297,7 @@ class ToolTabWidget(QtWidgets.QWidget):
         self._run_allowed.append(widget)
 
     def allowed_during_run(self) -> list[QtWidgets.QWidget]:
-        return [self.run_button, self.prompt_bar, *self._run_allowed]
+        return [self.run_button, *self.prompt_buttons.values(), *self._run_allowed]
 
     def run_display(self) -> str:
         """"off", "each" or "ask" (Settings: run_display)."""
@@ -339,7 +335,8 @@ class ToolTabWidget(QtWidgets.QWidget):
         return self._asking
 
     def answer_prompt(self, answer: str) -> None:
-        """The prompt's answer: "continue", "all" (Continue All) or "cancel"."""
+        """The prompt's answer: "continue", "all" (Continue All), "omit" (the
+        epoch shown, then continue, #472) or "cancel"."""
         self._prompt_answer = answer
         if answer == "cancel":
             self.stop()
@@ -354,21 +351,30 @@ class ToolTabWidget(QtWidgets.QWidget):
         self._wait_loop = None
 
     def _ask(self, name: str, done: int, total: int) -> str:
-        """Ask after an epoch: "continue", "all" or "cancel"."""
-        # Its result is in the tool's own display (e.g. Stats' Results, #471)
-        self.prompt_label.setText(f"{name} ({done} of {total})")
+        """Ask after an epoch: "continue", "all", "omit" or "cancel"."""
+        # Its result is in the tool's own display (e.g. Stats' Results, #471);
+        # the count is at the right of the Run row
+        text = f"{name} ({done} of {total})"
+        # Omit is named for the epoch shown, so it can't be taken for the next
+        self.prompt_buttons["omit"].setText(f"Omit {name}")
+        can_omit = bool(getattr(self.analysis_tool(), "can_omit", False))
+        for answer, button in self.prompt_buttons.items():
+            button.setVisible(answer != "omit" or can_omit)
         self._prompt_answer = ""
         self._asking = True
-        self.prompt_bar.show()
         self.prompt_buttons["continue"].setFocus()
         self._wait_loop = QtCore.QEventLoop(self)
-        self.prompt_shown.emit(self.prompt_label.text())
+        self.prompt_shown.emit(text)
         if not self._stop_requested and not self._prompt_answer:  # not answered yet
             self._wait_loop.exec()
         self._wait_loop = None
         self._asking = False
-        self.prompt_bar.hide()
+        self._hide_prompt()
         return "cancel" if self._stop_requested else (self._prompt_answer or "continue")
+
+    def _hide_prompt(self) -> None:
+        for button in self.prompt_buttons.values():
+            button.hide()
 
     def _display_step(self, done: int, total: int) -> None:
         """Show the epoch just analysed, then wait (the delay) or ask."""
@@ -383,6 +389,10 @@ class ToolTabWidget(QtWidgets.QWidget):
             answer = self._ask(name, done, total)
             if answer == "all":
                 self._continue_all = True  # as "each", with its delay
+            elif answer == "omit":
+                omitted = tool.omit_last()
+                if omitted:
+                    self._omitted_names.append(omitted)
         elif self._settings is not None and self._settings.run_delay > 0:
             self._wait(self._settings.run_delay)
 
@@ -423,7 +433,7 @@ class ToolTabWidget(QtWidgets.QWidget):
             self.progress_bar.setRange(0, overall_total)
             self.progress_bar.setValue(overall)
             self.progress_bar.show()
-            self.run_info_label.setText(f"{overall} / {overall_total}")
+            self.run_info_label.setText(f"{overall} / {overall_total}")  # at the right
             self.progress_changed.emit(overall, overall_total)
             QtWidgets.QApplication.processEvents()  # repaint, and Cancel
         if displayed and not self._stop_requested:
@@ -544,12 +554,16 @@ class ToolTabWidget(QtWidgets.QWidget):
         self._running = True
         self._stop_requested = False
         self._continue_all = False
+        self._omitted_names: list[str] = []
         self._run_total = 0
         self._progress_offset = 0
         self._progress_done: tuple[int, int] | None = None
         self._run_started = time.monotonic()
         self._progress_shown = 0.0
         info = self.run_info_label.text()
+        # While running it shows the count, at the right of the row
+        self.run_info_label.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.warnings.clear()
         self.results_panel.clear()
         self._show_run_button(running=True)
@@ -565,9 +579,12 @@ class ToolTabWidget(QtWidgets.QWidget):
             if result is not None:
                 self.results_panel.set_result(result)
             if self._stop_requested and self._progress_done is not None:
-                self.set_status("Cancelled after %d of %d" % self._progress_done)
+                status = "Cancelled after %d of %d" % self._progress_done
             else:
-                self.set_status("Complete with warnings" if self.warnings else "Complete")
+                status = "Complete with warnings" if self.warnings else "Complete"
+            if self._omitted_names:
+                status += " (omitted %s)" % ", ".join(self._omitted_names)
+            self.set_status(status)
             succeeded = True
         except Exception as error:
             self.set_status(f"Failed: {error}")
@@ -581,8 +598,10 @@ class ToolTabWidget(QtWidgets.QWidget):
             self._stop_requested = False
             self._show_run_button(running=False)
             self.run_info_label.setText(info)
+            self.run_info_label.setAlignment(
+                QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
             self.progress_bar.hide()
-            self.prompt_bar.hide()
+            self._hide_prompt()
             if self.run_display() != "off":
                 self.run_trace_shown.emit(None, "")  # the Plot as before the run
             self._log_run(succeeded)
