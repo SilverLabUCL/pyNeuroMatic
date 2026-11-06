@@ -101,7 +101,7 @@ def test_view_requested_shows_the_view(window):
 def test_settings_page_and_button(window):
     full = window.tool_tabs["Spike"]
     dialog = window.settings_dialog()
-    assert dialog.page_titles() == ["General", "Plot", "Stats", "Spike"]
+    assert dialog.page_titles() == ["General", "Plot", "Table", "Stats", "Spike"]
     dialog.tool_checkboxes["Spike"]["option"].setChecked(True)
     assert full.option is True
 

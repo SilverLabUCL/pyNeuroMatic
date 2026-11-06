@@ -16,12 +16,17 @@ from pyneuromatic.core.nm_settings import (
     TABLE_NAN_TEXT,
     TRACE_LINES,
     TRACE_SYMBOLS,
+    RUN_DISPLAYS,
 )
 
 LINE_LABELS = {"solid": "Solid", "dash": "Dashed", "dot": "Dotted",
                 "dash-dot": "Dash-dot", "none": "None (symbols only)"}
 _PLOT_KEYS = ("plot_trace_color", "plot_trace_width", "plot_trace_line", "plot_trace_symbol",
               "plot_trace_symbol_size", "plot_overlay_color", "plot_overlay_width")
+
+# While a tool runs (#468); the tool panel's Display control says it briefly
+_RUN_DISPLAY_LABELS = {"off": "Off (fastest)", "each": "Show each epoch, then wait",
+                       "ask": "Show each epoch, then ask to go on"}
 
 _NAN_LABELS = {
     TABLE_NAN_TEXT: "NaN",
@@ -54,7 +59,11 @@ class SettingsDialog(QtWidgets.QDialog):
         # General
         general = QtWidgets.QWidget(self)
         general_layout = QtWidgets.QVBoxLayout(general)
-        tables = QtWidgets.QGroupBox("Tables", general)
+
+        # Table: how tables show values
+        table_page = QtWidgets.QWidget(self)
+        table_layout = QtWidgets.QVBoxLayout(table_page)
+        tables = QtWidgets.QGroupBox(table_page)  # its label says what it is
         tables_layout = QtWidgets.QVBoxLayout(tables)
         tables_layout.addWidget(QtWidgets.QLabel("Show NaN values as:", tables))
         self.nan_buttons: dict[str, QtWidgets.QRadioButton] = {}
@@ -68,7 +77,9 @@ class SettingsDialog(QtWidgets.QDialog):
             group.addButton(button)
             tables_layout.addWidget(button)
             self.nan_buttons[mode] = button
-        general_layout.addWidget(tables)
+        table_layout.addWidget(tables)
+        table_layout.addStretch(1)
+
         self.confirm_quit_checkbox = QtWidgets.QCheckBox("Ask before quitting", general)
         self.confirm_quit_checkbox.setToolTip(
             "When quitting with data or history, ask first (and offer to export "
@@ -85,9 +96,38 @@ class SettingsDialog(QtWidgets.QDialog):
         self.import_options_checkbox.toggled.connect(
             lambda checked: self._set("ask_import_options", checked))
         general_layout.addWidget(self.import_options_checkbox)
+
+        general_layout.addSpacing(8)
+        runs = QtWidgets.QGroupBox(general)  # titled by the heading above it
+        runs_form = QtWidgets.QFormLayout(runs)
+        self.run_display_combo = QtWidgets.QComboBox(runs)
+        for key in RUN_DISPLAYS:
+            self.run_display_combo.addItem(_RUN_DISPLAY_LABELS[key], key)
+        self.run_display_combo.setCurrentIndex(
+            self.run_display_combo.findData(settings.run_display))
+        self.run_display_combo.setToolTip(
+            "While a tool runs, show each epoch in the Plot with the tool's "
+            "measurements (also in each tool's panel, by Run)")
+        self.run_display_combo.currentIndexChanged.connect(self._on_run_display_changed)
+        runs_form.addRow("Display", self.run_display_combo)
+        self.run_delay_box = QtWidgets.QDoubleSpinBox(runs)
+        self.run_delay_box.setRange(0.0, 10.0)
+        self.run_delay_box.setSingleStep(0.1)
+        self.run_delay_box.setDecimals(1)
+        self.run_delay_box.setSuffix(" s")
+        self.run_delay_box.setValue(settings.run_delay)
+        self.run_delay_box.setToolTip(
+            "Wait after showing each epoch")
+        self.run_delay_box.valueChanged.connect(
+            lambda value: self._set("run_delay", float(value)))
+        runs_form.addRow("Delay", self.run_delay_box)
+        self._runs_form = runs_form
+        self._show_run_delay()
+        general_layout.addLayout(self._section("Tool runs", runs, general))
         general_layout.addStretch(1)
         self._add_page("General", general)
         self._add_page("Plot", self._plot_page())
+        self._add_page("Table", table_page)
 
         # One page per tool: its options
         self.tool_checkboxes: dict[str, dict[str, QtWidgets.QCheckBox]] = {}
@@ -132,6 +172,31 @@ class SettingsDialog(QtWidgets.QDialog):
     def current_page(self) -> str:
         return self.page_titles()[self.page_list.currentRow()]
 
+    @staticmethod
+    def _section(text: str, box: QtWidgets.QWidget,
+                 parent: QtWidgets.QWidget) -> QtWidgets.QVBoxLayout:
+        """A bold heading in the dialog's font size, just above *box* (a group
+        box's own title is drawn small on macOS; the style's spacing between
+        a label and a group box is large, so it's set here)."""
+        label = QtWidgets.QLabel(text, parent)
+        font = label.font()
+        font.setBold(True)
+        label.setFont(font)
+        section = QtWidgets.QVBoxLayout()
+        section.setSpacing(4)
+        section.addWidget(label)
+        section.addWidget(box)
+        return section
+
+    def _on_run_display_changed(self, _index: int) -> None:
+        self._set("run_display", self.run_display_combo.currentData())
+        self._show_run_delay()
+
+    def _show_run_delay(self) -> None:
+        """The delay is for "each", and "ask" after Continue All."""
+        self._runs_form.setRowVisible(
+            self.run_delay_box, self.run_display_combo.currentData() != "off")
+
     # --- Plot: how the traces are drawn (#465) --------------------------------
 
     def _plot_page(self) -> QtWidgets.QWidget:
@@ -139,7 +204,7 @@ class SettingsDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(page)
         self.plot_controls: dict[str, QtWidgets.QWidget] = {}
 
-        current = QtWidgets.QGroupBox("Current trace", page)
+        current = QtWidgets.QGroupBox(page)  # titled by _section
         form = QtWidgets.QFormLayout(current)
         form.addRow("Colour", self._color_button("plot_trace_color", current))
         form.addRow("Line width", self._width_box("plot_trace_width", current))
@@ -149,13 +214,14 @@ class SettingsDialog(QtWidgets.QDialog):
             "plot_trace_symbol", TRACE_SYMBOLS, {name: name.capitalize() for name in TRACE_SYMBOLS},
             current))
         form.addRow("Symbol size", self._width_box("plot_trace_symbol_size", current))
-        layout.addWidget(current)
+        layout.addLayout(self._section("Current trace", current, page))
+        layout.addSpacing(8)
 
-        overlay = QtWidgets.QGroupBox("Overlay traces", page)
+        overlay = QtWidgets.QGroupBox(page)  # titled by _section
         form = QtWidgets.QFormLayout(overlay)
         form.addRow("Colour", self._color_button("plot_overlay_color", overlay))
         form.addRow("Line width", self._width_box("plot_overlay_width", overlay))
-        layout.addWidget(overlay)
+        layout.addLayout(self._section("Overlay traces", overlay, page))
 
         self.plot_defaults_button = QtWidgets.QPushButton("Default Style", page)
         self.plot_defaults_button.setAutoDefault(False)

@@ -87,3 +87,28 @@ def _no_real_input_dialogs(monkeypatch):
         raise RuntimeError(f"{type(self).__name__} opened in a test without being stubbed")
 
     monkeypatch.setattr(QtWidgets.QDialog, "exec", unstubbed_exec)
+
+
+def mouse_click(widget) -> None:
+    """Click *widget* as a mouse does: through its window (its QWindow),
+    which passes the click on to the widget under it. ``QTest.mouseClick``
+    sends to the widget directly, which misses what sees the window's
+    events first (e.g. the run guard, #468). The window must be shown."""
+    from PyQt6 import QtGui
+
+    window = widget.window()
+    centre = widget.rect().center()
+    pos = QtCore.QPointF(widget.mapTo(window, centre))
+    global_pos = QtCore.QPointF(widget.mapToGlobal(centre))
+    for kind, buttons in (
+            (QtCore.QEvent.Type.MouseButtonPress, QtCore.Qt.MouseButton.LeftButton),
+            (QtCore.QEvent.Type.MouseButtonRelease, QtCore.Qt.MouseButton.NoButton)):
+        event = QtGui.QMouseEvent(kind, pos, global_pos, QtCore.Qt.MouseButton.LeftButton,
+                                  buttons, QtCore.Qt.KeyboardModifier.NoModifier)
+        QtGui.QGuiApplication.sendEvent(window.windowHandle(), event)
+
+
+@pytest.fixture
+def click():
+    """mouse_click, for tests."""
+    return mouse_click
