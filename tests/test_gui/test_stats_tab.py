@@ -168,12 +168,11 @@ def test_stats_output_options_control_backend_sinks(qtbot):
     tab = window.tool_tabs["Stats"]
 
     tab.measurement_combo.setCurrentText("mean")
-    tab.output_history_checkbox.setChecked(True)
+    assert not hasattr(tab, "output_history_checkbox")  # removed (#475)
     tab.output_cache_checkbox.setChecked(False)
     tab.output_arrays_checkbox.setChecked(True)
     tab.run_button.click()
 
-    assert manager.stats.results_to_history is True
     assert manager.stats.results_to_cache is False
     assert manager.stats.results_to_numpy is True
     assert "Stats_0" in folder.toolfolders
@@ -579,21 +578,13 @@ def test_subfolder_named_after_the_epoch_selection(qtbot):
     assert run(data=folder.data["RecordA0"], source="data", data_set="Set2") == "Stats_S2_0"
 
 
-def test_choose_measurement_is_red(qtbot):
+def test_choose_measurement_is_plain(qtbot):
+    """"Choose measurement" (none yet) looks like the other items: no red."""
     window = NMAppWindow(NMManager(quiet=True))
     qtbot.addWidget(window)
     combo = window.tool_tabs["Stats"].measurement_combo
-    brush = combo.itemData(0, QtCore.Qt.ItemDataRole.ForegroundRole)
-    assert combo.itemText(0) == "Choose measurement" and brush.color().name() == "#c62828"
-    combo.setCurrentIndex(0)
-    assert "#c62828" in combo.styleSheet()  # the closed combo too
-    # The open list keeps the usual colours: only its first item is red
-    window.show()
-    combo.showPopup()
-    assert combo.styleSheet() == ""
-    combo.hidePopup()
-    assert "#c62828" in combo.styleSheet()
-    combo.setCurrentText("mean")
+    assert combo.itemText(0) == "Choose measurement" and combo.itemData(0) is None
+    assert combo.itemData(0, QtCore.Qt.ItemDataRole.ForegroundRole) is None
     assert combo.styleSheet() == ""
 
 
@@ -756,11 +747,11 @@ def test_stats_options_are_commands_without_messages(series_app):
     tab, start = series_app.tool_tabs["Stats"], len(_history(series_app))
     tab.set_config_option("overwrite", True)
     tab.set_config_option("results_all_epochs", True)
-    tab.output_history_checkbox.setChecked(True)
+    tab.output_cache_checkbox.setChecked(False)
     assert _history(series_app, start) == [
         ("command", "nm.stats.overwrite = True"),
         ("command", "nm.stats.results_all_epochs = True"),
-        ("command", "nm.stats.results_to_history = True"),
+        ("command", "nm.stats.results_to_cache = False"),
     ]
 
 

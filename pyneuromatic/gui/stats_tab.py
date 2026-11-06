@@ -41,32 +41,6 @@ from pyneuromatic.gui.selection_model import (
 from pyneuromatic.gui.tool_tab import ToolTabWidget
 
 
-class _ChooseComboBox(QtWidgets.QComboBox):
-    """A dropdown whose box is in *color* while its "Choose ..." item (no
-    data) shows. Its list keeps the usual colours, so only that item is red
-    there: a style sheet would colour the whole list, so it is cleared while
-    the list is open."""
-
-    def __init__(self, color: str, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._color = color
-        self._popup_open = False
-
-    def restyle(self) -> None:
-        choosing = self.currentData() is None and not self._popup_open
-        self.setStyleSheet(f"QComboBox {{ color: {self._color}; }}" if choosing else "")
-
-    def showPopup(self) -> None:  # noqa: N802 (Qt)
-        self._popup_open = True
-        self.restyle()
-        super().showPopup()
-
-    def hidePopup(self) -> None:  # noqa: N802 (Qt)
-        super().hidePopup()
-        self._popup_open = False
-        self.restyle()
-
-
 # Results that are a level of the trace, drawn as a line across their range
 LEVEL_FUNCS = ("median", "mean", "mean+var", "mean+std", "mean+sem")
 
@@ -192,8 +166,6 @@ def result_lines(results: list[dict], digits: int = 6) -> list[str]:
 class StatsToolTab(ToolTabWidget):
     """Single-window Stats1 editor and runner using the project's Stats tool."""
 
-    # "Choose measurement" (no measurement yet), as SetX's red
-    CHOOSE_COLOR = "#c62828"
     # The current window's X range and its baseline range, on the Plot (#436)
     WINDOW_COLOR = "#2563eb"
     BSLN_COLOR = "#16a34a"
@@ -295,21 +267,14 @@ class StatsToolTab(ToolTabWidget):
             self.window_combo.fontMetrics().horizontalAdvance("Delete Window w00") + 40)
         window_row.addWidget(QtWidgets.QLabel("Window", self))
         window_row.addWidget(self.window_combo)
-        self.measurement_combo = _ChooseComboBox(self.CHOOSE_COLOR, self)
-        self.measurement_combo.addItem("Choose measurement", None)
-        # In red until a measurement is chosen (the list item and the combo)
-        self.measurement_combo.setItemData(
-            0, QtGui.QBrush(QtGui.QColor(self.CHOOSE_COLOR)),
-            QtCore.Qt.ItemDataRole.ForegroundRole,
-        )
+        self.measurement_combo = QtWidgets.QComboBox(self)
+        self.measurement_combo.addItem("Choose measurement", None)  # none yet
         for group in self._MEASUREMENT_GROUPS:
             if self.measurement_combo.count() > 1:
                 self.measurement_combo.insertSeparator(self.measurement_combo.count())
             for name in group:
                 self.measurement_combo.addItem(name, name)
         window_row.addWidget(self.measurement_combo, stretch=1)
-        self.measurement_combo.currentIndexChanged.connect(self._style_measurement_combo)
-        self._style_measurement_combo()
         self.window_enabled = QtWidgets.QCheckBox("On", self)
         window_row.addWidget(self.window_enabled)
         self.reset_button = QtWidgets.QToolButton(self)
@@ -379,11 +344,9 @@ class StatsToolTab(ToolTabWidget):
 
         output_group = QtWidgets.QGroupBox("Output", self.stats1_page)
         output_layout = QtWidgets.QHBoxLayout(output_group)
-        self.output_history_checkbox = QtWidgets.QCheckBox("History", output_group)
         self.output_cache_checkbox = QtWidgets.QCheckBox("Results cache", output_group)
         self.output_arrays_checkbox = QtWidgets.QCheckBox("Stats arrays", output_group)
         for checkbox in (
-            self.output_history_checkbox,
             self.output_cache_checkbox,
             self.output_arrays_checkbox,
         ):
@@ -446,9 +409,6 @@ class StatsToolTab(ToolTabWidget):
         self.bsln_combo.currentIndexChanged.connect(self._save_window_controls)
         self.bsln_xbgn_edit.editingFinished.connect(self._save_window_controls)
         self.bsln_xend_edit.editingFinished.connect(self._save_window_controls)
-        self.output_history_checkbox.toggled.connect(
-            lambda checked: self._set_tool_option("results_to_history", checked)
-        )
         self.output_cache_checkbox.toggled.connect(
             lambda checked: self._set_tool_option("results_to_cache", checked)
         )
@@ -539,6 +499,8 @@ class StatsToolTab(ToolTabWidget):
         return sum(name in excluded for name in names)
 
     def _on_run_finished(self, succeeded: bool) -> None:
+        # Results: a preview again (during the run, the run's own)
+        self._show_details()
         # Saved arrays are viewed in Stats2; without them there is nothing new
         if succeeded and self._tool.toolfolder is not None:
             self.mode_tabs.setCurrentWidget(self.stats2)
@@ -672,10 +634,6 @@ class StatsToolTab(ToolTabWidget):
             *self.param_edits.values(),
         ]
 
-    def _style_measurement_combo(self, *_args) -> None:
-        """Red while "Choose measurement" shows, so a missing choice stands out."""
-        self.measurement_combo.restyle()
-
     # --- the options edited in Settings › Stats -----------------------------
 
     def config_options(self) -> list[tuple]:
@@ -719,7 +677,6 @@ class StatsToolTab(ToolTabWidget):
 
     def _sync_output_options(self) -> None:
         for checkbox, key in (
-            (self.output_history_checkbox, "results_to_history"),
             (self.output_cache_checkbox, "results_to_cache"),
             (self.output_arrays_checkbox, "results_to_numpy"),
         ):
