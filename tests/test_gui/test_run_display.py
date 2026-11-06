@@ -144,7 +144,7 @@ def test_ask_continue_and_continue_all(app):
     prompts = _answer(app, ["continue", "all"])
     seen = _record(app)
     app.stats.run_button.click()
-    assert prompts == ["E0 (1 of 6): w0 mean = 0", "E1 (2 of 6): w0 mean = 1"]
+    assert prompts == ["E0 (1 of 6)", "E1 (2 of 6)"]  # the result: in Details (#471)
     assert len(seen) == N  # every epoch still shown after Continue All
     assert app.stats.status_label.text() == "Complete"
     assert not app.stats.prompt_bar.isVisible()
@@ -314,3 +314,17 @@ def test_the_rest_of_the_window_ignores_mouse_clicks(shown_app, click):
     assert tab.status_label.text() == f"Cancelled after 1 of {N}"
     click(shown_app.tool_rail._buttons["Browser"])  # after the run: works again
     assert shown_app.current_tool_name == "Browser"
+
+
+def test_details_show_the_runs_result_at_the_prompt(app):
+    _display(app, "ask")
+    details = []
+    app.stats.prompt_shown.connect(
+        lambda _text: (details.append(app.stats.details.toPlainText()),
+                       QtCore.QTimer.singleShot(0, lambda: app.stats.answer_prompt("continue"))))
+    app.stats.run_button.click()
+    assert details[2].splitlines() == ["RecordA2  w0 mean  (x -inf to inf)",
+                                       "mean = 2"]  # E2's, from the run
+    # After the run: E0 again (the Plot's), measured as a preview
+    assert app.stats.details.toPlainText().splitlines() == [
+        "RecordA0  w0 mean  (x -inf to inf)", "mean = 0"]

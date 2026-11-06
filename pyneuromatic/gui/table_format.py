@@ -29,8 +29,9 @@ def set_nan_mode(mode: str) -> None:
     _nan_mode = mode
 
 
-def cell(value) -> tuple[str, bool]:
-    """(text, is_nan) for a table cell; None is an empty cell."""
+def cell(value, digits: int = 6) -> tuple[str, bool]:
+    """(text, is_nan) for a table cell, to *digits* significant digits; None
+    is an empty cell."""
     if value is None:
         return "", False
     try:
@@ -39,7 +40,7 @@ def cell(value) -> tuple[str, bool]:
         return str(value), False
     if math.isnan(number):
         return ("" if _nan_mode == TABLE_NAN_BLANK else "NaN"), True
-    return f"{number:.6g}", False
+    return f"{number:.{digits}g}", False
 
 
 def nan_foreground() -> QtGui.QColor | None:

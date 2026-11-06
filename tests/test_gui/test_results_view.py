@@ -204,9 +204,9 @@ def test_array_dropdown_selects_column_and_shows_details(qtbot):
 
     names = [stats2.array_combo.itemText(i) for i in range(stats2.array_combo.count())]
     assert names == ["ST_w0_bsln_y", "ST_w0_max_y", "ST_w0_max_x", "ST_w0_max_ds"]
-    # The first array is chosen and highlighted in the tables
-    assert tables.selected_array() == "ST_w0_bsln_y"
-    assert stats2.details.toPlainText().startswith("ST_w0_bsln_y")
+    # The measurement is chosen (not the baseline) and highlighted in the tables
+    assert tables.selected_array() == "ST_w0_max_y"
+    assert stats2.details.toPlainText().startswith("ST_w0_max_y")
 
     stats2.array_combo.setCurrentText("ST_w0_max_ds")
     assert tables.selected_array() == "ST_w0_max_ds"
@@ -376,3 +376,28 @@ def test_browser_shows_new_results_folder_after_run(qtbot):
     assert tool_folders() == []
     window.tool_tabs["Stats"].run_button.click()
     assert tool_folders() == ["Stats_Record_A_S1_0"]
+
+
+@pytest.mark.parametrize("names, measure", [
+    (["ST_w0_bsln_y", "ST_w0_max_y", "ST_w0_max_x", "ST_w0_max_ds"], "ST_w0_max_y"),
+    (["ST_w0_bsln_y", "ST_w0_rt_p_y", "ST_w0_rt_p_x", "ST_w0_rt_p_dx"], "ST_w0_rt_p_dx"),
+    (["ST_w0_bsln_y", "ST_w0_level_p_x", "ST_w0_level_p_ds"], "ST_w0_level_p_x"),
+    (["ST_w0_mean_y"], "ST_w0_mean_y"),  # no baseline
+    ([], None),
+])
+def test_the_measurement_array(qtbot, monkeypatch, names, measure):
+    _manager, _folder, window = _stats_window(qtbot)
+    stats2 = window.tool_tabs["Stats"].stats2
+    monkeypatch.setattr(type(stats2.tables), "columns", property(lambda self: names))
+    assert stats2.measure_array() == measure
+
+
+def test_a_run_chooses_its_measurement_again(qtbot):
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    tab.stats2.array_combo.setCurrentText("ST_w0_bsln_y")  # looked at the baseline
+    tab.run_button.click()
+    assert tab.stats2.selected_array() == "ST_w0_max_y"
+    plot = tab.plot_view.plot_widget.getPlotItem()
+    assert plot.titleLabel.text.endswith(": ST_w0_max_y")  # the Stats plot shows it

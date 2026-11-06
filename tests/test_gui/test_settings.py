@@ -72,8 +72,9 @@ def test_stats_page_edits_the_stats_config(app):
     boxes["results_all_epochs"].setChecked(True)
     stats = app.manager.stats
     assert stats.results_all_epochs and stats.config.results_all_epochs
-    options = {key: value for key, _label, value, _tip in app.tool_tabs["Stats"].config_options()}
+    options = {option[0]: option[2] for option in app.tool_tabs["Stats"].config_options()}
     assert options["results_all_epochs"] is True
+    assert options["digits"] == 6  # a number (a spin box), #471
     # Each option says what it does
     assert all(box.toolTip() for box in boxes.values())
 

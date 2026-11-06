@@ -329,10 +329,9 @@ class ToolTabWidget(QtWidgets.QWidget):
         self.delay_box.setVisible(self.run_display() != "off")
         self.run_display_changed.emit()
 
-    def run_step_text(self) -> str:
-        """The current epoch's result, for the prompt, e.g. "max = -54.8 mV
-        at 80 ms" ("" for none)."""
-        return ""
+    def set_trace(self, data) -> None:
+        """The trace the Plot shows (as plotted; None for none), e.g. to
+        describe its measurement (Stats' Results, #471)."""
 
     @property
     def asking(self) -> bool:
@@ -356,9 +355,8 @@ class ToolTabWidget(QtWidgets.QWidget):
 
     def _ask(self, name: str, done: int, total: int) -> str:
         """Ask after an epoch: "continue", "all" or "cancel"."""
-        result = self.run_step_text()
-        self.prompt_label.setText(
-            f"{name} ({done} of {total})" + (f": {result}" if result else ""))  # the buttons ask
+        # Its result is in the tool's own display (e.g. Stats' Results, #471)
+        self.prompt_label.setText(f"{name} ({done} of {total})")
         self._prompt_answer = ""
         self._asking = True
         self.prompt_bar.show()

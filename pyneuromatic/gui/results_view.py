@@ -23,6 +23,10 @@ class StatsTables(QtWidgets.QWidget):
     the selected column.
     """
 
+    # Significant digits of the values shown (Settings › Stats, #471);
+    # copying keeps them all
+    digits = 6
+
     # Bookkeeping arrays hidden unless all columns are requested
     _DETAIL_SUFFIXES = frozenset(("i", "i0", "i1", "n", "nans", "infs"))
     # NMToolStats2.stats key -> row label
@@ -239,12 +243,12 @@ class StatsTables(QtWidgets.QWidget):
 
     @staticmethod
     def _value_text(value) -> str:
-        """Plain text for a value (NaN always as "NaN")."""
+        """Plain text for a value (NaN always as "NaN"), to the digits shown."""
         try:
             number = float(value)
         except (TypeError, ValueError):
             return str(value)
-        return "NaN" if math.isnan(number) else f"{number:.6g}"
+        return "NaN" if math.isnan(number) else f"{number:.{StatsTables.digits}g}"
 
     @staticmethod
     def _value_item(value) -> QtWidgets.QTableWidgetItem:
@@ -259,7 +263,7 @@ class StatsTables(QtWidgets.QWidget):
 
     @staticmethod
     def _style_item(item: QtWidgets.QTableWidgetItem, value) -> None:
-        text, is_nan = table_format.cell(value)
+        text, is_nan = table_format.cell(value, StatsTables.digits)
         item.setText(text)
         color = table_format.nan_foreground() if is_nan else None
         item.setForeground(QtGui.QBrush(color) if color is not None else QtGui.QBrush())
@@ -418,7 +422,7 @@ class Stats2Panel(QtWidgets.QWidget):
         self.message_label.setWordWrap(True)
         layout.addWidget(self.message_label)
 
-        details_group = QtWidgets.QGroupBox("Details", self)
+        details_group = QtWidgets.QGroupBox("Results", self)
         details_layout = QtWidgets.QVBoxLayout(details_group)
         self.details = QtWidgets.QPlainTextEdit(details_group)
         self.details.setReadOnly(True)
@@ -499,8 +503,12 @@ class Stats2Panel(QtWidgets.QWidget):
         return self.folder_combo.count() > 0
 
     def show_toolfolder(self, toolfolder: NMToolFolder | None) -> None:
-        """Show *toolfolder*, e.g. the one a Stats run just wrote."""
+        """Show *toolfolder*, e.g. the one a Stats run just wrote, with its
+        measurement chosen (not its baseline)."""
         self.refresh(select=toolfolder.name if toolfolder is not None else None)
+        measure = self.measure_array()
+        if measure is not None:
+            self.select_array(measure)
 
     def _on_folder_changed(self, *_args) -> None:
         previous = self.window_combo.currentData()
@@ -544,6 +552,19 @@ class Stats2Panel(QtWidgets.QWidget):
         """ST_ array name chosen in the Array list."""
         return self.array_combo.currentData()
 
+    def measure_array(self) -> str | None:
+        """The window's measurement among its arrays: a rise time, decay time
+        or FWHM's result (``_dx``), else the first that isn't the baseline,
+        e.g. ST_w0_max_y rather than ST_w0_bsln_y."""
+        names = list(self.tables.columns)
+        for name in names:
+            if name.endswith("_dx"):
+                return name
+        for name in names:
+            if "_bsln_" not in name:
+                return name
+        return names[0] if names else None
+
     def select_array(self, name: str) -> None:
         index = self.array_combo.findData(name)
         if index >= 0:
@@ -556,6 +577,8 @@ class Stats2Panel(QtWidgets.QWidget):
         for name in self.tables.columns:
             self.array_combo.addItem(name, name)
         index = self.array_combo.findData(previous)
+        if index < 0:  # not in these results: their measurement
+            index = self.array_combo.findData(self.measure_array())
         self.array_combo.setCurrentIndex(max(index, 0) if self.array_combo.count() else -1)
         self.array_combo.blockSignals(False)
         self._on_array_changed()
@@ -573,6 +596,10 @@ class Stats2Panel(QtWidgets.QWidget):
         name = self.tables.selected_array()
         if name is not None and name != self.selected_array():
             self.select_array(name)
+
+    def refresh_details(self) -> None:
+        """Show the Results again (e.g. with other digits)."""
+        self._update_details()
 
     def _update_details(self) -> None:
         name = self.selected_array()

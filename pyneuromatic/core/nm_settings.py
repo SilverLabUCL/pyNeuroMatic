@@ -63,6 +63,8 @@ class NMSettings(NMToolConfig):
             ``"off"`` (fastest), ``"each"`` (then wait *run_delay*) or
             ``"ask"`` (then ask to continue).
         run_delay: Seconds to wait after showing each epoch ("each").
+        stats_digits: Significant digits of Stats values shown (Stats1's
+            Details, Stats2's tables and Details); copying keeps them all.
     """
 
     _TOML_TYPE = "nm_settings"
@@ -82,6 +84,8 @@ class NMSettings(NMToolConfig):
         # Tool runs: show each epoch as it's analysed (#468)
         "run_display": {"type": str, "default": "off", "choices": list(RUN_DISPLAYS)},
         "run_delay": {"type": float, "default": 0.0, "min": 0.0, "max": 10.0},
+        # Stats values shown (#471)
+        "stats_digits": {"type": int, "default": 6, "min": 2, "max": 10},
     }
 
     def __init__(self) -> None:
