@@ -131,21 +131,40 @@ class SettingsDialog(QtWidgets.QDialog):
 
         # One page per tool: its options
         self.tool_checkboxes: dict[str, dict[str, QtWidgets.QCheckBox]] = {}
+        self.tool_spinboxes: dict[str, dict[str, QtWidgets.QSpinBox]] = {}
         for title, tab in tool_pages or []:
             page = QtWidgets.QWidget(self)
             page_layout = QtWidgets.QVBoxLayout(page)
             boxes = {}
-            for key, label, value, tip in tab.config_options():
-                box = QtWidgets.QCheckBox(label, page)
-                box.setChecked(value)
-                box.setToolTip(tip)
-                box.toggled.connect(
-                    lambda checked, t=tab, k=key: t.set_config_option(k, checked)
-                )
-                page_layout.addWidget(box)
-                boxes[key] = box
+            spins = {}
+            for option in tab.config_options():
+                key, label, value, tip = option[:4]
+                if isinstance(value, bool):
+                    box = QtWidgets.QCheckBox(label, page)
+                    box.setChecked(value)
+                    box.setToolTip(tip)
+                    box.toggled.connect(
+                        lambda checked, t=tab, k=key: t.set_config_option(k, checked)
+                    )
+                    page_layout.addWidget(box)
+                    boxes[key] = box
+                    continue
+                # A number: (key, label, value, tip, (minimum, maximum))
+                row = QtWidgets.QHBoxLayout()
+                row.addWidget(QtWidgets.QLabel(label, page))
+                spin = QtWidgets.QSpinBox(page)
+                spin.setRange(*option[4])
+                spin.setValue(value)
+                spin.setToolTip(tip)
+                spin.valueChanged.connect(
+                    lambda number, t=tab, k=key: t.set_config_option(k, number))
+                row.addWidget(spin)
+                row.addStretch(1)
+                page_layout.addLayout(row)
+                spins[key] = spin
             page_layout.addStretch(1)
             self.tool_checkboxes[title] = boxes
+            self.tool_spinboxes[title] = spins
             self._add_page(title, page)
 
         buttons = QtWidgets.QDialogButtonBox(

@@ -263,6 +263,8 @@ class PlotPanel(QtWidgets.QWidget):
     trace_style_requested = QtCore.pyqtSignal()
     # A trace style chosen by right-clicking a trace: {setting: value}
     trace_style_set = QtCore.pyqtSignal(dict)
+    # The current trace drawn, as plotted (transformed, if the channel is); None
+    trace_drawn = QtCore.pyqtSignal(object)
 
     # The trace menu's choices (right-click a trace)
     TRACE_WIDTHS = (0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
@@ -473,6 +475,7 @@ class PlotPanel(QtWidgets.QWidget):
         self.current_trace = None
         self._trace_style = dict(TRACE_STYLE_DEFAULTS)  # until set_trace_style
         self._run_display = False  # showing a tool run's epochs (#468)
+        self.shown_trace = None  # the current trace, as plotted (trace_drawn)
         self._drawn_curves: list[tuple[object, bool]] = []
         self.rendered_trace_count = 0
         self.transform_error = ""  # why the plotted traces aren't transformed
@@ -923,6 +926,8 @@ class PlotPanel(QtWidgets.QWidget):
             self.range_overlay.redraw()
             self.mark_overlay.set_data(None)
             self.mark_overlay.redraw()
+            self.shown_trace = None
+            self.trace_drawn.emit(None)
             return
 
         current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
@@ -980,6 +985,8 @@ class PlotPanel(QtWidgets.QWidget):
         self.range_overlay.redraw()
         self.mark_overlay.set_data(shown)  # measured as plotted (transformed)
         self.mark_overlay.redraw()
+        self.shown_trace = shown
+        self.trace_drawn.emit(shown)
         if error:
             shown = self.overlay_status_label.text()
             self.overlay_status_label.setText(
@@ -1831,6 +1838,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         tab.run_trace_shown.connect(self._show_run_trace)
         if self.plot_widget.plot_widget is not None:
             tab.allow_during_run(self.plot_widget.plot_widget)  # zoom an epoch shown
+        # The trace the Plot shows, e.g. for Stats' Details (#471)
+        self.plot_widget.trace_drawn.connect(tab.set_trace)
+        tab.set_trace(self.plot_widget.shown_trace)
         tab.settings_requested.connect(self.open_settings)
         tab.history_entry.connect(lambda kind, text: self.history_panel.add(kind, text))
         # Its views appear in both panels while the folder has its results

@@ -30,7 +30,7 @@ from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.plot_marks import PlotMark
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.tools.nm_stat_win import NMStatWin
-from pyneuromatic.gui.results_view import Stats2Panel
+from pyneuromatic.gui.results_view import Stats2Panel, StatsTables
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
     SelectionModel,
@@ -123,6 +123,70 @@ def result_marks(results: list[dict], x_first: float, x_last: float,
         elif name in LEVEL_FUNCS and _finite(s):
             marks.append(PlotMark("line", [xbgn, xend], [s, s], color, label=name))
     return marks
+
+
+def _number(value, digits: int = 6) -> str:
+    """*value* to *digits* significant digits; ±inf as "-inf" / "inf"."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "NaN"
+    if math.isinf(number):
+        return "-inf" if number < 0 else "inf"
+    return "NaN" if math.isnan(number) else f"{number:.{digits}g}"
+
+
+def result_lines(results: list[dict], digits: int = 6) -> list[str]:
+    """A window's ``compute()`` *results* as text, a line per step (#471), e.g.
+
+        bsln mean = -70 mV  (x 0 to 40)
+        max = -55 mV at 80 ms   Δ = 15 mV
+        level+ 10% = -68.5 mV at 61.77 ms
+        level+ 90% = -56.5 mV at 76.12 ms
+        risetime+ = 14.34 ms
+
+    Δ (the difference from the baseline) is shown when it's in the
+    baseline's units (not, e.g., for a slope).
+    """
+    def number(value) -> str:
+        return _number(value, digits)
+
+    def _value(value, units: str = "") -> str:
+        return f"{number(value)} {units}".strip() if units else number(value)
+
+    lines: list[str] = []
+    bsln_units = None
+    for r in results:
+        func = r.get("func") or {}
+        name = func.get("name", "")
+        if r.get("id") == "bsln":
+            bsln_units = r.get("sunits", "")
+            lines.append(f"bsln {name} = {_value(r.get('s'), bsln_units)}  "
+                         f"(x {number(r.get('xbgn'))} to {number(r.get('xend'))})")
+            continue
+        label = name
+        percent = r.get("p0", r.get("p1"))
+        if percent is not None:
+            label += f" {float(percent):g}%"
+        units = r.get("sunits") or func.get("yunits", "")
+        if "x" in r:  # a point found: its value (or the level crossed) and x
+            y = r.get("s") if _finite(r.get("s")) else func.get("ylevel")
+            line = f"{label} = {_value(y, units)} at {_value(r['x'], r.get('xunits', ''))}"
+        elif "s" in r:
+            line = f"{label} = {_value(r['s'], units)}"
+            for key in ("std", "sem", "var"):
+                if key in r:
+                    line += f", {key} {number(r[key])}"
+            if "b" in r:
+                line += f", intercept {_value(r['b'], r.get('bunits', ''))}"
+        else:
+            line = f"{label}: no value"
+        if (_finite(r.get("Δs")) and bsln_units is not None and units == bsln_units):
+            line += f"   Δ = {_value(r['Δs'], units)}"
+        lines.append(line)
+        if "dx" in r:  # e.g. the rise time: the crossings' difference
+            lines.append(f"{r.get('id')} = {_value(r['dx'], r.get('xunits', ''))}")
+    return lines
 
 
 class StatsToolTab(ToolTabWidget):
@@ -325,6 +389,31 @@ class StatsToolTab(ToolTabWidget):
         ):
             output_layout.addWidget(checkbox)
         stats1_layout.addWidget(output_group)
+
+        # Results: the current window's measurement of the trace shown (#471)
+        details_group = QtWidgets.QGroupBox("Results", self.stats1_page)
+        details_layout = QtWidgets.QVBoxLayout(details_group)
+        self.details = QtWidgets.QPlainTextEdit(details_group)
+        self.details.setReadOnly(True)  # selectable, to copy
+        self.details.setFont(
+            QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
+        self.details.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
+        # Six lines (e.g. rise time with Bsln), measured as the box draws
+        # them; shorter than Stats2's, which has more to show
+        self.details.document().setDocumentMargin(3)
+        sample = QtGui.QTextDocument()
+        sample.setDefaultFont(self.details.font())
+        sample.setDocumentMargin(3)
+        sample.setPlainText("\n".join(["x"] * 6))
+        self.details.setFixedHeight(
+            int(sample.size().height()) + 2 * self.details.frameWidth() + 2)
+        self.details.setToolTip(
+            "The current window's measurement of the trace in the Plot "
+            "(as Run would make it; during a run, the run's own)")
+        details_layout.addWidget(self.details)
+        stats1_layout.addWidget(details_group)
+        self._trace = None  # the trace the Plot shows (set_trace)
+        self.marks_changed.connect(self._show_details)  # e.g. its function or range
         # Keep the settings at the top when Stats2 makes the tabs taller
         stats1_layout.addStretch(1)
 
@@ -370,7 +459,7 @@ class StatsToolTab(ToolTabWidget):
         self._refresh_window_combo()
         self._load_selected_window()
 
-        # Results are shown in Stats2 (Details) and the Table pane instead
+        # Results are shown in Stats2 (Results) and the Table pane instead
         self.results_group.hide()
         self.mode_tabs.currentChanged.connect(self._on_mode_tab_changed)
         self.run_finished.connect(self._on_run_finished)
@@ -476,7 +565,10 @@ class StatsToolTab(ToolTabWidget):
 
     def apply_settings(self) -> None:
         super().apply_settings()  # the Display control
+        StatsTables.digits = self.digits()
         self.stats2.tables.refresh()
+        self.stats2.refresh_details()
+        self._show_details()
 
     def bind_selection_model(self, model: Any) -> None:
         super().bind_selection_model(model)
@@ -586,15 +678,38 @@ class StatsToolTab(ToolTabWidget):
 
     # --- the options edited in Settings › Stats -----------------------------
 
-    def config_options(self) -> list[tuple[str, str, bool, str]]:
-        """(key, label, value, tip) of each option in Settings › Stats."""
-        return [(key, self._config_labels[key], bool(getattr(self._tool, key)),
-                 self._config_tips[key]) for key in self._config_keys]
+    def config_options(self) -> list[tuple]:
+        """(key, label, value, tip) of each option in Settings › Stats; a
+        number also has its (minimum, maximum)."""
+        options: list[tuple] = [
+            (key, self._config_labels[key], bool(getattr(self._tool, key)),
+             self._config_tips[key]) for key in self._config_keys]
+        if self._settings is not None:
+            spec = self._settings._schema["stats_digits"]
+            options.append((
+                "digits", "Digits shown", self.digits(),
+                "Significant digits of the values in Stats1's Results and "
+                "Stats2's tables and Results (copying keeps them all)",
+                (spec["min"], spec["max"])))
+        return options
 
-    def set_config_option(self, key: str, value: bool) -> None:
+    def set_config_option(self, key: str, value) -> None:
         """Set an option from Settings › Stats (used from the next run)."""
+        if key == "digits":  # how values show (a setting, not the tool's)
+            self._settings.stats_digits = int(value)
+            self._settings.save_user()  # only if loaded from the user's file
+            self.apply_settings()
+            return
         self._set_tool_option(key, value)
         self.marks_changed.emit()  # e.g. Ignore NaNs
+
+    def digits(self) -> int:
+        """Significant digits of the values shown (Settings: stats_digits)."""
+        return getattr(self._settings, "stats_digits", 6)
+
+    def set_settings(self, settings) -> None:
+        super().set_settings(settings)
+        self.apply_settings()  # the digits shown
 
     def _set_tool_option(self, key: str, value: bool) -> None:
         setattr(self._tool, key, value)
@@ -817,13 +932,7 @@ class StatsToolTab(ToolTabWidget):
         if (window is None or not window.func or data is None or data.nparray is None
                 or data.nparray.size == 0):
             return []
-        if self.running:
-            results = window.results if window.on else []
-        else:
-            settings = {k: v for k, v in window.to_dict().items() if k != "name"}
-            preview = NMStatWin(window.name, win=settings)
-            results = preview.compute(data, ignore_nans=bool(self._tool.ignore_nans),
-                                      note=False)
+        results = self._measure(window, data)
         last = data.nparray.size - 1
         x_first, x_last = data.get_xvalue(0), data.get_xvalue(last)
         if x_first is None or x_last is None:  # no x scale: the index, as plotted
@@ -831,25 +940,44 @@ class StatsToolTab(ToolTabWidget):
         return result_marks(results, float(x_first), float(x_last),
                             self.MARK_COLOR, self.BSLN_MARK_COLOR)
 
-    def run_step_text(self) -> str:
-        """The current window's result for the epoch just analysed, for the
-        run's prompt (#468), e.g. "w0 max = -54.8 mV at 80 ms"."""
-        window = self._selected_window()
-        if window is None or not window.on:
+    def _measure(self, window, data) -> list[dict]:
+        """*window*'s measurement of *data*, as Run would make it: a copy of
+        the window measures (nothing recorded, its results kept). During a
+        run, the run's own results for the epoch shown (#468)."""
+        if self.running:
+            return window.results if window.on else []
+        settings = {k: v for k, v in window.to_dict().items() if k != "name"}
+        preview = NMStatWin(window.name, win=settings)
+        return preview.compute(data, ignore_nans=bool(self._tool.ignore_nans), note=False)
+
+    def set_trace(self, data) -> None:
+        self._trace = data
+        self._show_details()
+
+    def details_text(self) -> str:
+        """The Results box's text: the current window's measurement of the
+        trace shown (#471)."""
+        window, data = self._selected_window(), self._trace
+        if window is None or data is None or data.nparray is None or data.nparray.size == 0:
             return ""
-        main = [r for r in window.results if r.get("id") != "bsln"]
-        if not main:
-            return ""
-        r = main[0]
-        name = (r.get("func") or {}).get("name", "")
-        value = r.get("s")
-        text = f"{window.name} {name} = " + (
-            f"{float(value):.4g}" if value is not None else "nan")
-        if r.get("sunits"):
-            text += f" {r['sunits']}"
-        if r.get("x") is not None:
-            text += f" at {float(r['x']):.4g}" + (f" {r['xunits']}" if r.get("xunits") else "")
-        return text
+        name = window.func.get("name") if window.func else None
+        header = f"{data.name}  {window.name}" + (f" {name}" if name else "")
+        if not name:
+            return f"{header}\nChoose a measurement"
+        digits = self.digits()
+        header += f"  (x {_number(window.xbgn, digits)} to {_number(window.xend, digits)})"
+        if not window.on:
+            return f"{header}\nWindow off"
+        try:
+            lines = result_lines(self._measure(window, data), digits)
+        except Exception as error:  # e.g. the window outside the trace
+            lines = [f"no value: {error}"]
+        return "\n".join([header, *lines])
+
+    def _show_details(self) -> None:
+        text = self.details_text()
+        if text != self.details.toPlainText():
+            self.details.setPlainText(text)
 
     def plot_ranges(self) -> list[PlotRange]:
         """The current window's X range, and its baseline range while Bsln is on."""
