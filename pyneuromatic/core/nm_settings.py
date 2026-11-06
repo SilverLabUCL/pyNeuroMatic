@@ -33,6 +33,8 @@ TABLE_NAN_BLANK = "blank"
 # The Plot's trace line styles and symbols (#465)
 TRACE_LINES = ("solid", "dash", "dot", "dash-dot", "none")
 TRACE_SYMBOLS = ("none", "circle", "square", "triangle", "diamond", "plus", "cross", "star")
+# While a tool runs, show each epoch: no/off, yes+wait, or yes+ask (#468)
+RUN_DISPLAYS = ("off", "each", "ask")
 
 
 class NMSettings(NMToolConfig):
@@ -57,6 +59,10 @@ class NMSettings(NMToolConfig):
             current trace: colour (e.g. "#000000"), line width (pixels),
             line style and symbol (see ``TRACE_LINES``, ``TRACE_SYMBOLS``).
         plot_overlay_color, plot_overlay_width: How it draws overlay traces.
+        run_display: While a tool runs, show each epoch in the Plot:
+            ``"off"`` (fastest), ``"each"`` (then wait *run_delay*) or
+            ``"ask"`` (then ask to continue).
+        run_delay: Seconds to wait after showing each epoch ("each").
     """
 
     _TOML_TYPE = "nm_settings"
@@ -73,6 +79,9 @@ class NMSettings(NMToolConfig):
         "plot_trace_symbol_size": {"type": float, "default": 6.0, "min": 1.0, "max": 30.0},
         "plot_overlay_color": {"type": str, "default": "#78909c"},
         "plot_overlay_width": {"type": float, "default": 1.0, "min": 0.5, "max": 10.0},
+        # Tool runs: show each epoch as it's analysed (#468)
+        "run_display": {"type": str, "default": "off", "choices": list(RUN_DISPLAYS)},
+        "run_delay": {"type": float, "default": 0.0, "min": 0.0, "max": 10.0},
     }
 
     def __init__(self) -> None:
@@ -117,4 +126,4 @@ class NMSettings(NMToolConfig):
 
 
 __all__ = ["NMSettings", "TABLE_NAN_BLANK", "TABLE_NAN_GREY", "TABLE_NAN_TEXT",
-           "TRACE_LINES", "TRACE_SYMBOLS"]
+           "RUN_DISPLAYS", "TRACE_LINES", "TRACE_SYMBOLS"]

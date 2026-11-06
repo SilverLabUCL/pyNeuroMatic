@@ -146,7 +146,9 @@ def test_run_fills_arrays_and_summary_tables(qtbot):
     stats2 = window.tool_tabs["Stats"].stats2
     tables = stats2.tables
 
-    assert window.context_panel.currentWidget() is window.table_panel
+    # After a run: the Stats plot (its tables a click away, on Table)
+    assert window.context_panel.currentWidget() is window.plot_widget
+    assert window.view_tabs.current_view() == ("tool", "Stats")
     assert stats2.folder_combo.currentText() == "Stats_Record_A_S1_0"
     assert stats2.window_combo.currentText() == "w0"
     assert tables.title_label.text() == "Stats_Record_A_S1_0  w0"
@@ -258,7 +260,8 @@ def test_stats_plot_follows_the_stats2_array(qtbot):
     assert not plot_item.listDataItems()
     assert plot_item.titleLabel.text == ValuesPlot.EMPTY_TITLE
     tab.run_button.click()
-    assert window.context_panel.currentWidget() is window.table_panel
+    assert window.context_panel.currentWidget() is window.plot_widget  # shown after a run
+    assert window.plot_widget.stack.currentWidget() is tab.plot_view
     chosen = tab.stats2.selected_array()
     assert chosen is not None
     assert plot_item.titleLabel.text == f"Stats_Record_A_S1_0: {chosen}"
@@ -267,7 +270,9 @@ def test_stats_plot_follows_the_stats2_array(qtbot):
     tab.stats2.array_combo.setCurrentText("ST_w0_max_ds")
     assert plot_item.titleLabel.text == "Stats_Record_A_S1_0: ST_w0_max_ds"
     assert list(plot_item.listDataItems()[0].yData) == list(PEAKS)
-    assert window.context_panel.currentWidget() is window.table_panel
+    window.context_panel.setCurrentWidget(window.table_panel)
+    tab.stats2.array_combo.setCurrentText("ST_w0_max_y")
+    assert window.context_panel.currentWidget() is window.table_panel  # a choice doesn't switch
 
     # Deleting the folder: nothing chosen, the hint again
     tab.stats2._confirm_delete = lambda name: True

@@ -1,4 +1,4 @@
-"""Tests for a tool run's progress bar and Stop (#450)."""
+"""Tests for a tool run's progress bar and Cancel (#450)."""
 
 import numpy as np
 import pytest
@@ -71,7 +71,7 @@ def test_progress_while_running(app):
     info = tab.run_info_label.text()
     tab.run_button.click()
     assert [s[:2] for s in seen] == [(i, N) for i in range(1, N + 1)]
-    assert all(s[2] == "Stop" for s in seen)  # Run becomes Stop
+    assert all(s[2] == "Cancel" for s in seen)  # Run becomes Cancel
     assert seen[1][3] == f"2 / {N}"
     # Afterwards: Run again, no bar, the label as it was
     assert tab.run_button.text() == "Run"
@@ -86,13 +86,13 @@ def test_stop_keeps_what_was_done(app):
     history = app.manager.command_history
     count = len(history.buffer)
     tab.run_button.click()
-    assert tab.status_label.text() == f"Stopped after 2 of {N}"
+    assert tab.status_label.text() == f"Cancelled after 2 of {N}"
     assert _means(app) == [0.0, 1.0]
     folder = tab.stats_tool.toolfolder
-    assert "stopped after 2 of 6: partial results" in [n["note"] for n in folder.notes]
+    assert "cancelled after 2 of 6: partial results" in [n["note"] for n in folder.notes]
     commands = [e["command"] for e in history.buffer][count:]
     assert sum(c.startswith("nm.stats.run_selection(") for c in commands) == 1  # kept
-    assert f"Stats: Stopped after 2 of {N}" in app.history_panel.text()
+    assert f"Stats: Cancelled after 2 of {N}" in app.history_panel.text()
     assert tab.run_button.text() == "Run" and not tab.running
 
 
@@ -102,7 +102,7 @@ def test_esc_stops(app):
     tab.progress_changed.connect(
         lambda done, total: done == 3 and QtTest.QTest.keyClick(app, QtCore.Qt.Key.Key_Escape))
     tab.run_button.click()
-    assert tab.status_label.text() == f"Stopped after 3 of {N}"
+    assert tab.status_label.text() == f"Cancelled after 3 of {N}"
 
 
 def test_the_rest_of_the_window_is_blocked(app):
@@ -141,6 +141,18 @@ def test_all_sets_count_together_and_stop_ends_them(app):
     history = app.manager.command_history
     count = len(history.buffer)
     tab.run_button.click()
-    assert tab.status_label.text() == f"Stopped after 2 of {N}"
+    assert tab.status_label.text() == f"Cancelled after 2 of {N}"
     commands = [e["command"] for e in history.buffer][count:]
     assert sum(c.startswith("nm.stats.run_selection(") for c in commands) == 1  # Set0 only
+
+
+def test_run_is_green_and_cancel_red(app):
+    tab = app.stats
+    _show_at_once(tab)
+    assert tab.run_button.text() == "Run" and tab.RUN_COLOR in tab.run_button.styleSheet()
+    during = []
+    tab.progress_changed.connect(
+        lambda done, total: during.append((tab.run_button.text(), tab.run_button.styleSheet())))
+    tab.run_button.click()
+    assert during[0][0] == "Cancel" and tab.CANCEL_COLOR in during[0][1]
+    assert tab.run_button.text() == "Run" and tab.RUN_COLOR in tab.run_button.styleSheet()

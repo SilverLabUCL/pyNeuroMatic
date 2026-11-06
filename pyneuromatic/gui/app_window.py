@@ -472,6 +472,7 @@ class PlotPanel(QtWidgets.QWidget):
         self._last_selection: dict = {}
         self.current_trace = None
         self._trace_style = dict(TRACE_STYLE_DEFAULTS)  # until set_trace_style
+        self._run_display = False  # showing a tool run's epochs (#468)
         self._drawn_curves: list[tuple[object, bool]] = []
         self.rendered_trace_count = 0
         self.transform_error = ""  # why the plotted traces aren't transformed
@@ -925,7 +926,8 @@ class PlotPanel(QtWidgets.QWidget):
             return
 
         current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
-        overlay = self.overlay_action.isChecked() and self._trace_mode == "dataseries"
+        overlay = (self.overlay_action.isChecked() and self._trace_mode == "dataseries"
+                   and not self._run_display)  # a run shows its epoch alone
         if overlay:
             total = len(self._trace_entries)
             limit = min(self.overlay_limit.value(), total)
@@ -1119,6 +1121,32 @@ class PlotPanel(QtWidgets.QWidget):
                              TRACE_STYLE_DEFAULTS["plot_overlay_color"])
         color.setAlpha(150)
         return {"pen": pg.mkPen(color, width=style["plot_overlay_width"])}
+
+    # --- a tool run's epochs (#468) --------------------------------------------
+
+    @property
+    def run_display(self) -> bool:
+        """True while showing a tool run's epochs."""
+        return self._run_display
+
+    def show_run_trace(self, data) -> None:
+        """Show *data*, the epoch (or data array) a tool run just analysed, as
+        the current trace: display only, so the selection doesn't change and
+        no command is written. None: the run ended, show the selection again."""
+        if data is None:
+            if self._run_display:
+                self._run_display = False
+                self.update_selection(self._last_selection)
+            return
+        index = next((i for i, (_item, d) in enumerate(self._trace_entries) if d is data),
+                     None)
+        if index is None:  # not in this plot (e.g. another channel)
+            return
+        self._run_display = True
+        self._sync_trace_controls(index)  # the navigator shows it
+        self.current_trace = data
+        self.trace_name_label.setText(data.name)
+        self._render_current_traces()
 
     def set_tool(self, tool) -> None:
         """Show the X ranges (#436) and measurements (#463) of *tool* (a tool
@@ -1796,6 +1824,13 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def _register_tool_tab(self, name: str, tab: ToolTabWidget) -> None:
         """Connect a tool tab to the window: what it provides is optional."""
         tab.bind_selection_model(self.selection_model)
+        # Display while running (#468): the shared settings, and the Plot
+        if self._manager is not None:
+            tab.set_settings(self._manager.settings)
+        tab.run_display_changed.connect(self._apply_settings)
+        tab.run_trace_shown.connect(self._show_run_trace)
+        if self.plot_widget.plot_widget is not None:
+            tab.allow_during_run(self.plot_widget.plot_widget)  # zoom an epoch shown
         tab.settings_requested.connect(self.open_settings)
         tab.history_entry.connect(lambda kind, text: self.history_panel.add(kind, text))
         # Its views appear in both panels while the folder has its results
@@ -1808,6 +1843,14 @@ class NMAppWindow(QtWidgets.QMainWindow):
         tab.results_changed.connect(self.selection_strip.refresh_options)
         tab.view_requested.connect(lambda view, n=name: self._show_tool_view(n, view))
         tab.run_finished.connect(self._on_tool_run_finished)
+
+    def _show_run_trace(self, data, channel: str) -> None:
+        """A tool run's epoch in the Plot (None: the run ended)."""
+        if data is not None and not self.plot_widget.run_display:  # the run's first
+            self.context_panel.setCurrentWidget(self.plot_widget)
+            if channel in self.view_tabs.channel_names:
+                self.view_tabs.select_channel(channel)
+        self.plot_widget.show_run_trace(data)
 
     def _update_tool_tabs(self) -> None:
         tools = [name for name, tab in self.tool_tabs.items() if tab.has_results()]

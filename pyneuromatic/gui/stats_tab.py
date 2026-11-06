@@ -385,8 +385,10 @@ class StatsToolTab(ToolTabWidget):
         self._plot_selected_array()
 
     def _on_mode_tab_changed(self, _index: int) -> None:
-        # Run belongs to Stats1
-        self.run_row.setVisible(self.mode_tabs.currentWidget() is not self.stats2)
+        # Run (and its Display) belong to Stats1
+        stats1 = self.mode_tabs.currentWidget() is not self.stats2
+        self.run_row.setVisible(stats1)
+        self.display_row.setVisible(stats1 and self._settings is not None)
 
     def _on_selection_changed(self, selection: dict[str, Any]) -> None:
         super()._on_selection_changed(selection)
@@ -451,7 +453,7 @@ class StatsToolTab(ToolTabWidget):
         # Saved arrays are viewed in Stats2; without them there is nothing new
         if succeeded and self._tool.toolfolder is not None:
             self.mode_tabs.setCurrentWidget(self.stats2)
-            self.view_requested.emit("table")
+            self.view_requested.emit("plot")  # its plot of the Stats2 array; Channel a click away
 
     def _plot_selected_array(self) -> None:
         """Draw the array chosen in Stats2 (the panel shown doesn't change)."""
@@ -473,6 +475,7 @@ class StatsToolTab(ToolTabWidget):
         self.stats2.refresh()
 
     def apply_settings(self) -> None:
+        super().apply_settings()  # the Display control
         self.stats2.tables.refresh()
 
     def bind_selection_model(self, model: Any) -> None:
@@ -808,20 +811,45 @@ class StatsToolTab(ToolTabWidget):
         """The current window's measurement of *data*, as Run would make it.
 
         A copy of the window measures, so nothing is recorded and the
-        window's results are kept."""
+        window's results are kept. During a run, the run's own results for
+        the epoch shown (#468), so the Plot shows what's saved."""
         window = self._selected_window()
         if (window is None or not window.func or data is None or data.nparray is None
                 or data.nparray.size == 0):
             return []
-        settings = {k: v for k, v in window.to_dict().items() if k != "name"}
-        preview = NMStatWin(window.name, win=settings)
-        results = preview.compute(data, ignore_nans=bool(self._tool.ignore_nans), note=False)
+        if self.running:
+            results = window.results if window.on else []
+        else:
+            settings = {k: v for k, v in window.to_dict().items() if k != "name"}
+            preview = NMStatWin(window.name, win=settings)
+            results = preview.compute(data, ignore_nans=bool(self._tool.ignore_nans),
+                                      note=False)
         last = data.nparray.size - 1
         x_first, x_last = data.get_xvalue(0), data.get_xvalue(last)
         if x_first is None or x_last is None:  # no x scale: the index, as plotted
             x_first, x_last = 0, last
         return result_marks(results, float(x_first), float(x_last),
                             self.MARK_COLOR, self.BSLN_MARK_COLOR)
+
+    def run_step_text(self) -> str:
+        """The current window's result for the epoch just analysed, for the
+        run's prompt (#468), e.g. "w0 max = -54.8 mV at 80 ms"."""
+        window = self._selected_window()
+        if window is None or not window.on:
+            return ""
+        main = [r for r in window.results if r.get("id") != "bsln"]
+        if not main:
+            return ""
+        r = main[0]
+        name = (r.get("func") or {}).get("name", "")
+        value = r.get("s")
+        text = f"{window.name} {name} = " + (
+            f"{float(value):.4g}" if value is not None else "nan")
+        if r.get("sunits"):
+            text += f" {r['sunits']}"
+        if r.get("x") is not None:
+            text += f" at {float(r['x']):.4g}" + (f" {r['xunits']}" if r.get("xunits") else "")
+        return text
 
     def plot_ranges(self) -> list[PlotRange]:
         """The current window's X range, and its baseline range while Bsln is on."""
