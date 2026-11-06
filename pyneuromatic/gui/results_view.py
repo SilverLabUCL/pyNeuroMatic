@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 import numpy as np
@@ -12,6 +13,112 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.tools.nm_tool_stats import NMToolStats2
+
+
+_NOTE_PAIR = re.compile(r"(\w+)=([^,()]+)")
+
+
+def _note_fields(data) -> dict[str, str]:
+    """An ST_ array's note as fields, e.g. "NMStats(win=w0, func=max,
+    id=main, xbgn=60.0, xend=120.0, n=2)" -> {"func": "max", "id": "main", ...}."""
+    for note in data.notes:
+        if str(note["note"]).startswith("NMStats("):
+            return {k: v.strip() for k, v in _NOTE_PAIR.findall(note["note"])}
+    return {}
+
+
+def _bound(text) -> str:
+    """An X range bound from a note, e.g. "60.0" -> "60", "inf" -> "inf"."""
+    try:
+        value = float(text)
+    except (TypeError, ValueError):
+        return str(text)
+    return f"{value:g}" if math.isfinite(value) else ("-inf" if value < 0 else "inf")
+
+
+def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
+                       digits: int = 6) -> list[str]:
+    """A window's saved result for one row (epoch) of its ST_ arrays, as text
+    in the format of Stats1's Results (#475), e.g.
+
+        bsln mean = -70 mV  (x 0 to 40)
+        peak = -55 mV at 80 ms   Δ = 15 mV
+        p0 at 61.774 ms
+        p1 at 76.116 ms
+        risetime+ = 14.342 ms
+
+    From the saved arrays and their notes, so what was saved; a crossing's
+    level (and its %) isn't saved, so it's shown by its step (p0, p1).
+    """
+    def number(value) -> str:
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return "NaN"
+        return "NaN" if math.isnan(value) else f"{value:.{digits}g}"
+
+    def value(data) -> str:
+        values = data.nparray
+        text = number(values[row]) if row < len(values) else "NaN"
+        units = data.yscale.units
+        return f"{text} {units}".strip() if units else text
+
+    prefix = f"ST_{window}_"
+    groups: dict[tuple[str, str], list[tuple[str, object]]] = {}
+    fields: dict[tuple[str, str], dict[str, str]] = {}
+    for name, data in toolfolder.data.items():
+        if not name.startswith(prefix) or name == f"{prefix}data":
+            continue
+        suffix = name.rsplit("_", 1)[-1]
+        if suffix in StatsTables._DETAIL_SUFFIXES or not isinstance(data.nparray, np.ndarray):
+            continue
+        note = _note_fields(data)
+        key = (note.get("id", ""), note.get("step", ""))
+        groups.setdefault(key, []).append((name[len(prefix):], data))
+        fields.setdefault(key, note)
+    lines: list[str] = []
+    bsln_units = None
+    for key, arrays in groups.items():
+        step_id, step = key
+        note = fields[key]
+        func = note.get("func", "")
+        if step_id == "bsln":
+            label = f"bsln {func}"
+        elif step:
+            label = step  # a crossing: its level isn't saved
+        else:
+            label = func if step_id == "main" else "peak"  # a pipeline's peak
+        main = None
+        parts: list[str] = []
+        delta = dx = None
+        for short, data in arrays:
+            suffix = short.rsplit("_", 1)[-1]
+            base = short[:-len(suffix) - 1]
+            if suffix == "y":
+                if main is None:
+                    main = f"{label} = {value(data)}"
+                else:  # e.g. mean+std's std
+                    parts.append(f", {base} {value(data)}")
+            elif suffix == "x":
+                parts.append(f" at {value(data)}")
+            elif suffix == "b":
+                parts.append(f", intercept {value(data)}")
+            elif suffix == "ds":
+                delta = data
+            elif suffix == "dx":
+                dx = data
+        if step_id == "bsln":
+            bsln_units = arrays[0][1].yscale.units if arrays else None
+        line = (main if main is not None else label) + "".join(parts)
+        if step_id == "bsln":
+            line += f"  (x {_bound(note.get('xbgn'))} to {_bound(note.get('xend'))})"
+        if delta is not None and bsln_units is not None \
+                and delta.yscale.units == bsln_units and number(delta.nparray[row]) != "NaN":
+            line += f"   Δ = {value(delta)}"
+        lines.append(line)
+        if dx is not None:
+            lines.append(f"{func} = {value(dx)}")
+    return lines
 
 
 class StatsTables(QtWidgets.QWidget):
@@ -422,8 +529,21 @@ class Stats2Panel(QtWidgets.QWidget):
         self.message_label.setWordWrap(True)
         layout.addWidget(self.message_label)
 
-        details_group = QtWidgets.QGroupBox("Results", self)
+        details_group = QtWidgets.QGroupBox(self)  # titled by its Results choice
         details_layout = QtWidgets.QVBoxLayout(details_group)
+        # Show: the chosen array's summary, or every epoch's result, a line
+        # each (in the format of Stats1's Results, #475)
+        show_row = QtWidgets.QHBoxLayout()
+        show_row.addWidget(QtWidgets.QLabel("Results", details_group))
+        self.results_combo = QtWidgets.QComboBox(details_group)
+        self.results_combo.addItem("Summary", "summary")
+        self.results_combo.addItem("All epochs", "epochs")
+        self.results_combo.setToolTip(
+            "Summary: the chosen array (units, notes, mean, std...). All epochs: "
+            "the saved result of every epoch the run computed, a line each, to copy")
+        show_row.addWidget(self.results_combo)
+        show_row.addStretch(1)
+        details_layout.addLayout(show_row)
         self.details = QtWidgets.QPlainTextEdit(details_group)
         self.details.setReadOnly(True)
         self.details.setFont(
@@ -437,6 +557,7 @@ class Stats2Panel(QtWidgets.QWidget):
         self.all_columns_checkbox.toggled.connect(self._show_tables)
         self.array_combo.currentIndexChanged.connect(self._on_array_changed)
         self.tables.column_selected.connect(self._on_table_column_selected)
+        self.results_combo.currentIndexChanged.connect(self._update_details)
         self.plot_button.clicked.connect(self.plot_selected)
         self.histogram_button.clicked.connect(self.histogram_selected)
         self.delete_button.clicked.connect(self.delete_folder)
@@ -601,15 +722,52 @@ class Stats2Panel(QtWidgets.QWidget):
         """Show the Results again (e.g. with other digits)."""
         self._update_details()
 
-    def _update_details(self) -> None:
-        name = self.selected_array()
+    def _update_details(self, *_args) -> None:
         toolfolder = self.toolfolder()
+        if self.results_combo.currentData() == "epochs":
+            self.details.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
+            self.details.setPlainText(self.epochs_text() if toolfolder is not None else "")
+            return
+        self.details.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.WidgetWidth)
+        name = self.selected_array()
         if name is None or toolfolder is None:
             self.details.clear()
             return
         self.details.setPlainText(
             self.array_details(toolfolder, self.window_combo.currentData(), name)
         )
+
+    # --- every epoch's saved result, as a list (#475) ----------------------
+
+    def epochs_text(self) -> str:
+        """Results (All epochs): a line per epoch (row) the run computed, in
+        the format of Stats1's Results, to copy."""
+        toolfolder, window = self.toolfolder(), self.window_combo.currentData()
+        if toolfolder is None or window is None:
+            return ""
+        main = next((d for n, d in toolfolder.data.items()
+                     if n.startswith(f"ST_{window}_") and _note_fields(d).get("id")
+                     not in (None, "bsln")), None)
+        note = _note_fields(main) if main is not None else {}
+        header = f"{toolfolder.name}  {window}"
+        if note.get("func"):
+            header += (f" {note['func']}  (x {_bound(note.get('xbgn'))} "
+                       f"to {_bound(note.get('xend'))})")
+        bsln = next((d for n, d in toolfolder.data.items()
+                     if n.startswith(f"ST_{window}_bsln_")), None)
+        if bsln is not None:
+            bsln_note = _note_fields(bsln)
+            header += (f"  bsln {bsln_note.get('func', '')} (x {_bound(bsln_note.get('xbgn'))} "
+                       f"to {_bound(bsln_note.get('xend'))})")
+        lines = [header]
+        for row, label in enumerate(StatsTables._row_labels(toolfolder, window)):
+            if not label:  # e.g. an epoch not analysed (one point per epoch)
+                continue
+            steps = epoch_result_lines(toolfolder, window, row, StatsTables.digits)
+            # The baseline's X range is in the header
+            steps = [re.sub(r"  \(x [^)]*\)$", "", step) for step in steps]
+            lines.append(f"{label}: " + "; ".join(steps))
+        return "\n".join(lines)
 
     @staticmethod
     def array_details(toolfolder: NMToolFolder, window: str, name: str) -> str:
