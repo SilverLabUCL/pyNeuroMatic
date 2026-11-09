@@ -332,8 +332,12 @@ class PlotPanel(QtWidgets.QWidget):
         navigator_layout.addWidget(self.trace_last_button)
 
         # Stepping options, in a ⋯ menu beside the buttons: how far < > move,
-        # and whether they visit only the selected traces
+        # whether they visit only the selected traces, and overlaid epochs
         self.step_menu = QtWidgets.QMenu("Stepping", self)
+        # Its title: "Epoch" (a data series) or "Data" (a Data Set's arrays)
+        self.step_menu_title = self.step_menu.addAction("Epoch")
+        self.step_menu_title.setEnabled(False)
+        self.step_menu.addSeparator()
         step_row = QtWidgets.QWidget(self.step_menu)
         step_layout = QtWidgets.QHBoxLayout(step_row)
         step_layout.setContentsMargins(28, 2, 8, 2)
@@ -345,11 +349,27 @@ class PlotPanel(QtWidgets.QWidget):
         step_action = QtWidgets.QWidgetAction(self.step_menu)
         step_action.setDefaultWidget(step_row)
         self.step_menu.addAction(step_action)
-        self.selection_only_action = self.step_menu.addAction("Selected Epochs Only")
+        self.selection_only_action = self.step_menu.addAction("Selected Only")
         self.selection_only_action.setCheckable(True)
         self.selection_only_action.setToolTip(
             "Step only through the traces in the strip's Epoch Set / Group or Data Set"
         )
+        # Which epochs are drawn around the current one (#483)
+        self.step_menu.addSeparator()
+        overlay_row = QtWidgets.QWidget(self.step_menu)
+        overlay_layout = QtWidgets.QHBoxLayout(overlay_row)
+        overlay_layout.setContentsMargins(28, 2, 8, 2)
+        overlay_layout.addWidget(QtWidgets.QLabel("Overlay", overlay_row))
+        self.overlay_count = QtWidgets.QSpinBox(overlay_row)
+        self.overlay_count.setRange(0, 1999)  # 0: no overlay
+        self.overlay_count.setToolTip(
+            "How many nearby epochs to plot with the current one (0: none), "
+            "for the selected data series and channel"
+        )
+        overlay_layout.addWidget(self.overlay_count)
+        overlay_action = QtWidgets.QWidgetAction(self.step_menu)
+        overlay_action.setDefaultWidget(overlay_row)
+        self.step_menu.addAction(overlay_action)
         self.step_button = QtWidgets.QToolButton(self)
         self.step_button.setText("⋯")
         self.step_button.setToolTip("Stepping options")
@@ -402,24 +422,6 @@ class PlotPanel(QtWidgets.QWidget):
 
         # Graph functions, in a ⋯ menu at the plot's upper-left corner
         self.graph_menu = QtWidgets.QMenu("Graph", self)
-        self.overlay_action = self.graph_menu.addAction("Overlay Traces")
-        self.overlay_action.setCheckable(True)
-        self.overlay_action.setToolTip(
-            "Plot nearby epochs together for the selected data series and channel"
-        )
-        limit_row = QtWidgets.QWidget(self.graph_menu)
-        limit_layout = QtWidgets.QHBoxLayout(limit_row)
-        limit_layout.setContentsMargins(28, 2, 8, 2)
-        limit_layout.addWidget(QtWidgets.QLabel("Limit", limit_row))
-        self.overlay_limit = QtWidgets.QSpinBox(limit_row)
-        self.overlay_limit.setRange(1, 2000)
-        self.overlay_limit.setValue(3)
-        self.overlay_limit.setToolTip("Most traces to overlay")
-        limit_layout.addWidget(self.overlay_limit)
-        limit_action = QtWidgets.QWidgetAction(self.graph_menu)
-        limit_action.setDefaultWidget(limit_row)
-        self.graph_menu.addAction(limit_action)
-        self.graph_menu.addSeparator()
         self.grid_action = self.graph_menu.addAction("Grid")
         self.grid_action.setCheckable(True)
         self.rescale_action = self.graph_menu.addAction("Rescale")
@@ -489,9 +491,7 @@ class PlotPanel(QtWidgets.QWidget):
         # Rows of the traces in the strip's selection (None: no selection)
         self._scope_rows: list[int] | None = None
         self._scope_text = ""
-        self.overlay_action.toggled.connect(self._render_current_traces)
-        self.overlay_action.toggled.connect(self._sync_overlay_limit)
-        self.overlay_limit.valueChanged.connect(self._render_current_traces)
+        self.overlay_count.valueChanged.connect(self._render_current_traces)
         self.grid_action.toggled.connect(self._show_grid)
         self.measures_action.toggled.connect(self._show_measures)
         self.rescale_action.triggered.connect(self.rescale)
@@ -694,8 +694,7 @@ class PlotPanel(QtWidgets.QWidget):
         self._update_scope()
         self._update_step_buttons()
         can_overlay = self._trace_mode == "dataseries" and self.plot_widget is not None
-        self.overlay_action.setEnabled(can_overlay)
-        self._sync_overlay_limit()
+        self.overlay_count.setEnabled(can_overlay)
         self._updating_navigator = False
 
     # --- the current item's sets and group -------------------------------
@@ -803,11 +802,6 @@ class PlotPanel(QtWidgets.QWidget):
 
     # --- graph functions ------------------------------------------------
 
-    def _sync_overlay_limit(self, *_args) -> None:
-        self.overlay_limit.setEnabled(
-            self.overlay_action.isEnabled() and self.overlay_action.isChecked()
-        )
-
     def _show_grid(self, show: bool) -> None:
         if self.plot_widget is not None:
             self.plot_widget.showGrid(x=show, y=show, alpha=0.3)
@@ -846,9 +840,7 @@ class PlotPanel(QtWidgets.QWidget):
             self._scope_text = f"({label}: {len(self._scope_rows)})"
         self.selection_only_action.setEnabled(self._scope_rows is not None)
         # Epochs of a data series, or the arrays of a Data Set
-        self.selection_only_action.setText(
-            "Selected Data Only" if self._trace_mode == "data" else "Selected Epochs Only"
-        )
+        self.step_menu_title.setText("Data" if self._trace_mode == "data" else "Epoch")
 
     def _step_rows(self) -> list[int]:
         """The rows ◀ ▶ |◀ ▶| visit, in order."""
@@ -931,11 +923,11 @@ class PlotPanel(QtWidgets.QWidget):
             return
 
         current_index = max(0, min(self.trace_index.value(), len(self._trace_entries) - 1))
-        overlay = (self.overlay_action.isChecked() and self._trace_mode == "dataseries"
+        overlay = (self.overlay_count.value() > 0 and self._trace_mode == "dataseries"
                    and not self._run_display)  # a run shows its epoch alone
         if overlay:
             total = len(self._trace_entries)
-            limit = min(self.overlay_limit.value(), total)
+            limit = min(self.overlay_count.value() + 1, total)  # and the current
             first_index = max(0, min(current_index - limit // 2, total - limit))
             last_index = first_index + limit
             entries = self._trace_entries[first_index:last_index]

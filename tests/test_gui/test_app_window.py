@@ -154,12 +154,10 @@ def test_plot_overlay_limits_and_downsamples_traces(qtbot, nm):
     if navigator.plot_widget is None:
         pytest.skip("pyqtgraph is not installed")
 
-    assert navigator.overlay_limit.value() == 3
-    assert not navigator.overlay_action.isChecked()
+    assert navigator.overlay_count.value() == 0  # no overlay
     assert len(navigator.plot_widget.getPlotItem().listDataItems()) == 1
 
-    navigator.overlay_limit.setValue(3)
-    navigator.overlay_action.setChecked(True)
+    navigator.overlay_count.setValue(2)  # 2 epochs with the current one
 
     curves = navigator.plot_widget.getPlotItem().listDataItems()
     assert navigator.rendered_trace_count == 3
@@ -168,8 +166,10 @@ def test_plot_overlay_limits_and_downsamples_traces(qtbot, nm):
     assert all(curve.opts["autoDownsample"] for curve in curves)
     assert all(curve.opts["clipToView"] for curve in curves)
 
-    navigator.overlay_limit.setValue(6)
+    navigator.overlay_count.setValue(5)
     assert navigator.rendered_trace_count == 6
+    navigator.overlay_count.setValue(0)
+    assert navigator.rendered_trace_count == 1
     assert dataseries.epochs.selected_name == "E0"
 
 

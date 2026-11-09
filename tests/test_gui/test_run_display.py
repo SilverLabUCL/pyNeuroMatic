@@ -181,7 +181,7 @@ def test_ask_return_continues_and_esc_cancels(app):
 def test_overlay_traces_are_not_shown_during_a_run(app):
     _display(app, "each")
     plot = app.plot_widget
-    plot.overlay_action.setChecked(True)
+    plot.overlay_count.setValue(2)
     curves = []
     app.stats.run_trace_shown.connect(
         lambda data, _c: data is not None and curves.append(
@@ -189,7 +189,7 @@ def test_overlay_traces_are_not_shown_during_a_run(app):
             - len(plot.mark_overlay.items)))
     app.stats.run_button.click()
     assert curves and all(n == 1 for n in curves)
-    assert plot.overlay_action.isChecked()
+    assert plot.overlay_count.value() == 2
     assert plot.rendered_trace_count > 1  # overlays back after the run
 
 
