@@ -206,7 +206,7 @@ def test_param_row_shows_only_inputs_for_current_measurement(qtbot):
     tab.measurement_combo.setCurrentText("mean@max")
     assert _param_visible(tab, "n_mean")
     assert not _param_visible(tab, "ylevel")
-    tab.measurement_combo.setCurrentText("level+")
+    tab.set_measurement("level+")
     assert _param_visible(tab, "ylevel")
     assert not _param_visible(tab, "n_mean")
     tab.measurement_combo.setCurrentText("max")
@@ -243,7 +243,7 @@ def test_level_uses_ylevel_parameter_and_rejects_bad_input(qtbot):
     qtbot.addWidget(window)
     tab = window.tool_tabs["Stats"]
 
-    tab.measurement_combo.setCurrentText("level+")
+    tab.set_measurement("level+")
     tab.param_edits["ylevel"].setText("-20.5")
     tab.param_edits["ylevel"].editingFinished.emit()
     assert manager.stats.windows["w0"].func == {"name": "level+", "ylevel": -20.5}
@@ -327,7 +327,7 @@ def test_baseline_disabled_for_non_y_measurements(qtbot):
     tab.bsln_checkbox.setChecked(True)
     assert manager.stats.windows["w0"].bsln_on is True
 
-    tab.measurement_combo.setCurrentText("count")
+    tab.set_measurement("count")
     assert not tab.bsln_checkbox.isEnabled()
     assert not tab.bsln_checkbox.isChecked()
     assert manager.stats.windows["w0"].bsln_on is False
@@ -341,7 +341,7 @@ def test_baseline_disabled_for_non_y_measurements(qtbot):
 def test_level_n_std_requires_mean_std_baseline(qtbot):
     manager, _window, tab = _step_trace_window(qtbot)
     _set_text(tab.xbgn_edit, "10")
-    tab.measurement_combo.setCurrentText("level+")
+    tab.set_measurement("level+")
     assert tab.level_mode_combo.isVisibleTo(tab)
     assert tab.bsln_checkbox.isEnabled()
 
@@ -351,7 +351,8 @@ def test_level_n_std_requires_mean_std_baseline(qtbot):
     win = manager.stats.windows["w0"]
     assert win.func == {"name": "level+", "n_std": 3.0}
     assert tab.bsln_checkbox.isChecked()
-    assert not tab.bsln_checkbox.isEnabled()
+    assert tab.bsln_checkbox.isEnabled()  # not faded, but locked on
+    assert tab.bsln_checkbox.testAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     assert win.bsln_on is True
     assert win.bsln_func == {"name": "mean+std"}
     model = tab.bsln_combo.model()
@@ -419,26 +420,26 @@ def test_percent_measurements_use_family_defaults(qtbot):
         "fwhm+": {"p0": 50.0, "p1": 50.0},
     }
     for name, params in expected.items():
-        tab.measurement_combo.setCurrentText(name)
+        tab.set_measurement(name)
         assert _param_visible(tab, "p0") and _param_visible(tab, "p1")
         assert manager.stats.windows["w0"].func == {"name": name, **params}
 
-    tab.measurement_combo.setCurrentText("decaytime+")
+    tab.set_measurement("decaytime+")
     assert _param_visible(tab, "p0") and not _param_visible(tab, "p1")
     assert tab.param_edits["p0"].text() == "36.7879"
 
 
 def test_percent_values_kept_per_family(qtbot):
     manager, _window, tab = _pulse_window(qtbot)
-    tab.measurement_combo.setCurrentText("risetime+")
+    tab.set_measurement("risetime+")
     _set_text(tab.param_edits["p0"], "20")
     _set_text(tab.param_edits["p1"], "80")
 
-    tab.measurement_combo.setCurrentText("fwhm+")
+    tab.set_measurement("fwhm+")
     assert manager.stats.windows["w0"].func == {"name": "fwhm+", "p0": 50.0, "p1": 50.0}
 
     # Same family, other direction: rise time values carry over
-    tab.measurement_combo.setCurrentText("risetimeslope-")
+    tab.set_measurement("risetimeslope-")
     assert manager.stats.windows["w0"].func == {
         "name": "risetimeslope-", "p0": 20.0, "p1": 80.0
     }
@@ -446,7 +447,7 @@ def test_percent_values_kept_per_family(qtbot):
 
 def test_risetime_rejects_p0_above_p1(qtbot):
     manager, _window, tab = _pulse_window(qtbot)
-    tab.measurement_combo.setCurrentText("risetime+")
+    tab.set_measurement("risetime+")
     _set_text(tab.param_edits["p0"], "95")
     assert "Invalid risetime+ parameter" in tab.status_label.text()
     assert manager.stats.windows["w0"].func["p0"] == 10.0
@@ -456,10 +457,11 @@ def test_risetime_runs_with_required_baseline(qtbot):
     manager, _window, tab = _pulse_window(qtbot)
     _set_text(tab.xbgn_edit, "10")
     _set_text(tab.xend_edit, "30")
-    tab.measurement_combo.setCurrentText("risetime+")
+    tab.set_measurement("risetime+")
 
     assert tab.bsln_checkbox.isChecked()
-    assert not tab.bsln_checkbox.isEnabled()
+    assert tab.bsln_checkbox.isEnabled()  # not faded, but locked on
+    assert tab.bsln_checkbox.testAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     assert tab.bsln_xbgn_edit.text() == "0"
     assert tab.bsln_xend_edit.text() == "10"
     _set_text(tab.bsln_xend_edit, "9.98")
@@ -723,7 +725,7 @@ def test_recorded_stats_commands_repeat_the_run(series_app):
     """A script of the tab's commands gives the same results (#448)."""
     tab, manager = series_app.tool_tabs["Stats"], series_app.manager
     start = len(manager.command_history.buffer)
-    tab.measurement_combo.setCurrentText("risetime+")
+    tab.set_measurement("risetime+")
     _edit(tab.param_edits["p0"], "20")
     _edit(tab.xbgn_edit, "1")
     series_app.selection_model.update(group_operator="AND")
@@ -819,12 +821,18 @@ def _reset_tab(qtbot):
     return manager, window, tab
 
 
+def _choose_reset(tab):
+    """Window menu > Reset w0 (the window shown)."""
+    combo = tab.window_combo
+    combo.setCurrentIndex(combo.findData(tab.RESET_WINDOW_ACTION))
+
+
 def test_reset_returns_the_window_to_its_defaults(qtbot):
     manager, window, tab = _reset_tab(qtbot)
     asked = []
     tab._confirm = lambda title, text: asked.append(text) or True
     count = len(manager.command_history.buffer)
-    tab.reset_button.click()
+    _choose_reset(tab)
     assert asked and "w0" in asked[0]
     assert [e["command"] for e in manager.command_history.buffer][count:] == [
         "nm.stats.windows['w0'].reset()"]
@@ -844,7 +852,7 @@ def test_reset_returns_the_window_to_its_defaults(qtbot):
 def test_reset_cancelled_or_nothing_to_reset(qtbot):
     manager, _window, tab = _reset_tab(qtbot)
     tab._confirm = lambda title, text: False  # No
-    tab.reset_button.click()
+    _choose_reset(tab)
     assert manager.stats.windows["w0"].func == {"name": "max"}
     w0 = manager.stats.windows["w0"]
     w0.reset()
@@ -852,23 +860,23 @@ def test_reset_cancelled_or_nothing_to_reset(qtbot):
     asked = []
     tab._confirm = lambda title, text: asked.append(text) or True
     count = len(manager.command_history.buffer)
-    tab.reset_button.click()  # already the defaults: not asked, no command
+    _choose_reset(tab)  # already the defaults: not asked, no command
     assert asked == [] and len(manager.command_history.buffer) == count
 
 
 def test_reset_restores_parameter_defaults(qtbot):
     _manager, _window, tab = _reset_tab(qtbot)
     tab._confirm = lambda title, text: True
-    tab.measurement_combo.setCurrentText("risetime+")
+    tab.set_measurement("risetime+")
     default = tab.param_edits["p0"].text()
     tab.param_edits["p0"].setText("20")
     tab.param_edits["p0"].editingFinished.emit()
-    tab.reset_button.click()
-    tab.measurement_combo.setCurrentText("risetime+")
+    _choose_reset(tab)
+    tab.set_measurement("risetime+")
     assert tab.param_edits["p0"].text() == default
 
 
-# --- Delete Window: the last one ---------------------------------------------
+# --- Delete: the last window --------------------------------------------------
 
 def _items(combo):
     return [combo.itemText(i) for i in range(combo.count()) if combo.itemText(i)]
@@ -877,10 +885,10 @@ def _items(combo):
 def test_delete_window_deletes_the_last_one(qtbot):
     manager, _window, tab = _reset_tab(qtbot)
     combo = tab.window_combo
-    assert _items(combo) == ["w0", "New Window..."]  # w0 can't be deleted
+    assert _items(combo) == ["w0", "New", "Reset w0"]  # w0 can't be deleted
     tab._add_window()
     tab._add_window()
-    assert _items(combo) == ["w0", "w1", "w2", "New Window...", "Delete Window w2"]
+    assert _items(combo) == ["w0", "w1", "w2", "New", "Reset w2", "Delete w2"]
     asked = []
     tab._confirm = lambda title, text: asked.append(text) or True
     count = len(manager.command_history.buffer)
@@ -888,7 +896,7 @@ def test_delete_window_deletes_the_last_one(qtbot):
     assert asked == ["Delete w2? Its settings will be lost."]
     assert [e["command"] for e in manager.command_history.buffer][count:] == [
         "nm.stats.windows.delete_last()"]
-    assert _items(combo) == ["w0", "w1", "New Window...", "Delete Window w1"]
+    assert _items(combo) == ["w0", "w1", "New", "Reset w1", "Delete w1"]
     assert combo.currentData() == "w1"  # w2 was shown
     tab._add_window()
     assert combo.currentData() == "w2"  # its name again
@@ -904,3 +912,44 @@ def test_delete_window_cancelled(qtbot):
     assert [w.name for w in manager.stats.windows] == ["w0", "w1"]
     assert combo.currentData() == "w0"  # back to the window shown
     assert manager.stats.windows.selected_name == "w0"
+
+
+
+def test_reset_is_in_the_window_menu_for_the_window_shown(qtbot):
+    _manager, _window, tab = _reset_tab(qtbot)
+    combo = tab.window_combo
+    assert not hasattr(tab, "reset_button")
+    assert _items(combo) == ["w0", "New", "Reset w0"]
+    tab._add_window()  # w1, shown
+    assert _items(combo) == ["w0", "w1", "New", "Reset w1", "Delete w1"]
+    combo.setCurrentIndex(combo.findData("w0"))
+    assert _items(combo) == ["w0", "w1", "New", "Reset w0", "Delete w1"]
+    tab._confirm = lambda title, text: True
+    _choose_reset(tab)
+    assert combo.currentData() == "w0"  # back from the Reset item to the window
+    assert tab._tool.windows["w0"].func == {}
+
+
+
+def test_a_required_baseline_is_shown_on_and_cant_be_turned_off(qtbot, click):
+    """Not faded (#478 follow-up): on, and a click through the window (as a
+    mouse) doesn't turn it off; a measurement that can't use one is faded."""
+    manager, window, tab = _pulse_window(qtbot)
+    window.resize(1300, 800)
+    window.show()
+    qtbot.waitExposed(window)
+    window.tool_rail.select_tool("Stats")
+    tab.set_measurement("risetime+")
+    box = tab.bsln_checkbox
+    assert box.isChecked() and box.isEnabled()
+    assert "requires a baseline" in box.toolTip()
+    click(box)
+    assert box.isChecked() and manager.stats.windows["w0"].bsln_on
+    tab.measurement_combo.setCurrentText("std")  # can't use a baseline
+    assert not box.isEnabled() and not box.isChecked()
+    tab.measurement_combo.setCurrentText("mean")  # optional: the user's choice
+    assert box.isEnabled()
+    assert not box.testAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    before = box.isChecked()
+    click(box)
+    assert box.isChecked() != before  # takes the click

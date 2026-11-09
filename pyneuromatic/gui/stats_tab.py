@@ -41,6 +41,27 @@ from pyneuromatic.gui.selection_model import (
 from pyneuromatic.gui.tool_tab import ToolTabWidget
 
 
+# The measurement menu lists each measurement once (#478): a peak
+# measurement's sign (+ a positive peak, - a negative one) and a level's
+# crossing direction are choices beside it. The core names are unchanged
+# (risetime+, level-...), so commands, saved windows and scripts are too.
+SIGNED_MEASUREMENTS = ("risetime", "risetimeslope", "falltime", "falltimeslope",
+                       "decaytime", "fwhm")
+PEAK_SIGNS = (("+", "+"), ("\u2212", "-"))  # (shown, in the core name)
+CROSSINGS = (("any", ""), ("rising", "+"), ("falling", "-"))
+# Not in the menu: every measurement records its points, NaNs and INFs
+# (n, nans, infs; ST_ arrays _n, _nans, _infs)
+MENU_HIDDEN = ("count", "count_nans", "count_infs")
+
+
+def split_measurement(name: str | None) -> tuple[str | None, str]:
+    """A core name as (menu name, sign), e.g. "risetime-" -> ("risetime",
+    "-"), "level+" -> ("level", "+"), "mean+std" -> ("mean+std", "")."""
+    if name and name[-1] in "+-" and (name[:-1] in SIGNED_MEASUREMENTS or name[:-1] == "level"):
+        return name[:-1], name[-1]
+    return name, ""
+
+
 # Results that are a level of the trace, drawn as a line across their range
 LEVEL_FUNCS = ("median", "mean", "mean+var", "mean+std", "mean+sem")
 
@@ -175,13 +196,13 @@ class StatsToolTab(ToolTabWidget):
 
     NEW_WINDOW_ACTION = "__new_stats_window__"
     DELETE_WINDOW_ACTION = "__delete_stats_window__"
+    RESET_WINDOW_ACTION = "__reset_stats_window__"
     # Dropdown groups, separated in the measurement menu
     _MEASUREMENT_GROUPS = (
         FUNC_NAMES_BASIC,
         FUNC_NAMES_MAXMIN,
         FUNC_NAMES_LEVEL,
-        FUNC_NAMES_RISETIME,
-        FUNC_NAMES_FALLTIME,
+        FUNC_NAMES_RISETIME + FUNC_NAMES_FALLTIME,  # rise and fall together
         FUNC_NAMES_DECAYTIME,
         FUNC_NAMES_FWHM,
     )
@@ -260,36 +281,48 @@ class StatsToolTab(ToolTabWidget):
         window_row = QtWidgets.QHBoxLayout()
         self.window_combo = QtWidgets.QComboBox(self)
         self.window_combo.setObjectName("statsWindowSelector")
-        # Wide enough for a window name (w0, w12), not "New Window...": its
-        # menu opens wider to show that and "Delete Window w12"
+        # Wide enough for a window name (w0, w12): its menu opens wider to
+        # show "Delete w12"
         self.window_combo.setFixedWidth(70)
         self.window_combo.view().setMinimumWidth(
-            self.window_combo.fontMetrics().horizontalAdvance("Delete Window w00") + 40)
+            self.window_combo.fontMetrics().horizontalAdvance("Delete w00") + 40)
         window_row.addWidget(QtWidgets.QLabel("Window", self))
         window_row.addWidget(self.window_combo)
         self.measurement_combo = QtWidgets.QComboBox(self)
         self.measurement_combo.addItem("Choose measurement", None)  # none yet
         for group in self._MEASUREMENT_GROUPS:
+            names = []  # each measurement once, without its sign (#478)
+            for name in group:
+                base = split_measurement(name)[0]
+                if base not in names and base not in MENU_HIDDEN:
+                    names.append(base)
             if self.measurement_combo.count() > 1:
                 self.measurement_combo.insertSeparator(self.measurement_combo.count())
-            for name in group:
+            for name in names:
                 self.measurement_combo.addItem(name, name)
         window_row.addWidget(self.measurement_combo, stretch=1)
         self.window_enabled = QtWidgets.QCheckBox("On", self)
         window_row.addWidget(self.window_enabled)
-        self.reset_button = QtWidgets.QToolButton(self)
-        self.reset_button.setText("Reset")
-        self.reset_button.setToolTip(
-            "Return this window to its defaults: no measurement, X begin / X end "
-            "and the baseline cleared")
-        self.reset_button.clicked.connect(self._reset_window)
-        window_row.addWidget(self.reset_button)
         stats1_layout.addLayout(window_row)
 
         # Parameter row: only the inputs the current measurement needs are shown
         self.param_row = QtWidgets.QWidget(self.stats1_page)
         param_layout = QtWidgets.QHBoxLayout(self.param_row)
         param_layout.setContentsMargins(0, 0, 0, 0)
+        # The sign: a peak's (+ / -), a level crossing's direction (#478)
+        self.peak_label = QtWidgets.QLabel("Peak", self.param_row)
+        self.peak_combo = QtWidgets.QComboBox(self.param_row)
+        for shown, sign in PEAK_SIGNS:
+            self.peak_combo.addItem(shown, sign)
+        self.peak_combo.setToolTip("+ a positive peak (max), \u2212 a negative peak (min)")
+        self.crossing_label = QtWidgets.QLabel("Crossing", self.param_row)
+        self.crossing_combo = QtWidgets.QComboBox(self.param_row)
+        for shown, sign in CROSSINGS:
+            self.crossing_combo.addItem(shown, sign)
+        self.crossing_combo.setToolTip("The direction of the crossing: either, rising or falling")
+        for widget in (self.peak_label, self.peak_combo, self.crossing_label,
+                       self.crossing_combo):
+            param_layout.addWidget(widget)
         self.level_mode_combo = QtWidgets.QComboBox(self.param_row)
         for key in self._LEVEL_MODES:
             self.level_mode_combo.addItem(self._PARAM_SPECS[key][0], key)
@@ -405,6 +438,8 @@ class StatsToolTab(ToolTabWidget):
         for edit in self.param_edits.values():
             edit.editingFinished.connect(self._save_window_controls)
         self.level_mode_combo.currentIndexChanged.connect(self._save_window_controls)
+        self.peak_combo.currentIndexChanged.connect(self._save_window_controls)
+        self.crossing_combo.currentIndexChanged.connect(self._save_window_controls)
         self.bsln_checkbox.toggled.connect(self._on_bsln_toggled)
         self.bsln_combo.currentIndexChanged.connect(self._save_window_controls)
         self.bsln_xbgn_edit.editingFinished.connect(self._save_window_controls)
@@ -551,10 +586,13 @@ class StatsToolTab(ToolTabWidget):
             self.window_combo.addItem(window.name, window.name)
         if self.window_combo.count():
             self.window_combo.insertSeparator(self.window_combo.count())
-        self.window_combo.addItem("New Window...", self.NEW_WINDOW_ACTION)
+        # No "...": New, Reset and Delete don't ask for more (they only confirm)
+        self.window_combo.addItem("New", self.NEW_WINDOW_ACTION)
+        if selected_name is not None:  # the window shown
+            self.window_combo.addItem(f"Reset {selected_name}", self.RESET_WINDOW_ACTION)
         windows = list(self._tool.windows)
         if len(windows) > 1:  # only the last, so names stay in sequence (w0, w1...)
-            self.window_combo.addItem(f"Delete Window {windows[-1].name}",
+            self.window_combo.addItem(f"Delete {windows[-1].name}",
                                       self.DELETE_WINDOW_ACTION)
         index = self.window_combo.findData(selected_name)
         if index < 0 and self.window_combo.count() > 1:
@@ -562,7 +600,8 @@ class StatsToolTab(ToolTabWidget):
         self.window_combo.setCurrentIndex(index)
         self.window_combo.blockSignals(False)
         if index >= 0 and self.window_combo.currentData() not in (
-                self.NEW_WINDOW_ACTION, self.DELETE_WINDOW_ACTION):
+                self.NEW_WINDOW_ACTION, self.DELETE_WINDOW_ACTION,
+                self.RESET_WINDOW_ACTION):
             self._tool.windows.selected_name = self.window_combo.currentData()
 
     def _selected_window(self):
@@ -579,8 +618,14 @@ class StatsToolTab(ToolTabWidget):
         if name == self.DELETE_WINDOW_ACTION:
             self._delete_last_window()
             return
+        if name == self.RESET_WINDOW_ACTION:
+            self._reset_window()
+            return
         if name is not None:
             self._tool.windows.selected_name = name
+            reset = self.window_combo.findData(self.RESET_WINDOW_ACTION)
+            if reset >= 0:  # Reset names the window shown
+                self.window_combo.setItemText(reset, f"Reset {name}")
         self._load_selected_window()
 
     def _load_selected_window(self) -> None:
@@ -594,7 +639,7 @@ class StatsToolTab(ToolTabWidget):
         self.window_enabled.setChecked(window.on)
         func = window.func
         func_name = func.get("name")
-        self.measurement_combo.setCurrentIndex(self.measurement_combo.findData(func_name))
+        self._show_measurement(func_name)
         if func_name in FUNC_NAMES_LEVEL:
             mode = "n_std" if "n_std" in func else "ylevel"
             self.level_mode_combo.setCurrentIndex(self.level_mode_combo.findData(mode))
@@ -624,6 +669,8 @@ class StatsToolTab(ToolTabWidget):
         return [
             self.window_enabled,
             self.measurement_combo,
+            self.peak_combo,
+            self.crossing_combo,
             self.level_mode_combo,
             self.xbgn_edit,
             self.xend_edit,
@@ -709,19 +756,60 @@ class StatsToolTab(ToolTabWidget):
         self._shown_family = family
 
     def _update_param_row(self) -> None:
-        measurement = self.measurement_combo.currentData()
+        measurement = self.measurement()
         keys = self._param_keys(measurement)
         is_level = measurement in FUNC_NAMES_LEVEL
+        base = self.measurement_combo.currentData()
+        signed = base in SIGNED_MEASUREMENTS
+        self.peak_label.setVisible(signed)
+        self.peak_combo.setVisible(signed)
+        self.crossing_label.setVisible(is_level)
+        self.crossing_combo.setVisible(is_level)
         self.level_mode_combo.setVisible(is_level)
         for key in self._PARAM_SPECS:
             # The level mode combo labels the level input
             self.param_labels[key].setVisible(key in keys and not is_level)
             self.param_edits[key].setVisible(key in keys)
-        self.param_row.setVisible(bool(keys))
+        self.param_row.setVisible(bool(keys) or signed)
+
+    # --- the measurement: the menu and its sign (#478) ----------------------
+
+    def measurement(self) -> str | None:
+        """The core name of the measurement shown, e.g. "risetime-" (the menu's
+        risetime with Peak -), "level+" (level, Crossing rising)."""
+        base = self.measurement_combo.currentData()
+        if base in SIGNED_MEASUREMENTS:
+            return base + self.peak_combo.currentData()
+        if base == "level":
+            return base + self.crossing_combo.currentData()
+        return base
+
+    def _show_measurement(self, name: str | None) -> None:
+        """Show core name *name* in the menu and its sign (without saving).
+        One not in the menu (e.g. count, set from a script) is added."""
+        base, sign = split_measurement(name)
+        if base is not None and self.measurement_combo.findData(base) < 0:
+            self.measurement_combo.addItem(base, base)
+        self.measurement_combo.setCurrentIndex(self.measurement_combo.findData(base))
+        if base in SIGNED_MEASUREMENTS:
+            self.peak_combo.setCurrentIndex(self.peak_combo.findData(sign or "+"))
+        elif base == "level":
+            self.crossing_combo.setCurrentIndex(self.crossing_combo.findData(sign))
+
+    def set_measurement(self, name: str | None) -> None:
+        """Choose core name *name* (e.g. "fwhm-"), as choosing it in the menu
+        and its sign would: saved, one command."""
+        controls = (self.measurement_combo, self.peak_combo, self.crossing_combo)
+        for control in controls:
+            control.blockSignals(True)
+        self._show_measurement(name)
+        for control in controls:
+            control.blockSignals(False)
+        self._save_window_controls()
 
     def _current_func(self) -> NMStatFunc | None:
         """Engine func for the measurement shown, used for baseline rules."""
-        measurement = self.measurement_combo.currentData()
+        measurement = self.measurement()
         if not measurement:
             return None
         func: dict[str, Any] = {"name": measurement}
@@ -748,7 +836,7 @@ class StatsToolTab(ToolTabWidget):
 
     def _update_baseline_row(self) -> None:
         """Lock or free the baseline controls to suit the measurement."""
-        measurement = self.measurement_combo.currentData()
+        measurement = self.measurement()
         func = self._current_func()
         required = func is not None and func.needs_baseline
         optional = measurement in self._DELTA_MEASUREMENTS
@@ -757,9 +845,15 @@ class StatsToolTab(ToolTabWidget):
         self.bsln_checkbox.blockSignals(True)
         self.bsln_combo.blockSignals(True)
         self.bsln_checkbox.setChecked(required or (optional and self._bsln_user_on))
-        self.bsln_checkbox.setEnabled(optional and not required)
+        # Required: shown on, not faded, but it can't be turned off (clicks and
+        # keys don't reach it). Not used: faded (off and unavailable)
+        self.bsln_checkbox.setEnabled(optional or required)
+        self.bsln_checkbox.setAttribute(
+            QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, required)
+        self.bsln_checkbox.setFocusPolicy(
+            QtCore.Qt.FocusPolicy.NoFocus if required else QtCore.Qt.FocusPolicy.StrongFocus)
         if required:
-            tip = f"{measurement} requires a baseline"
+            tip = f"{measurement} requires a baseline (always on)"
         elif not optional:
             tip = "Baseline is not used by this measurement"
         else:
@@ -825,7 +919,7 @@ class StatsToolTab(ToolTabWidget):
         window = self._selected_window()
         if window is None:
             return
-        measurement = self.measurement_combo.currentData()
+        measurement = self.measurement()
         family = self._PARAM_FAMILIES.get(measurement, "")
         if family != self._shown_family:
             self._show_param_values(family)
@@ -960,26 +1054,22 @@ class StatsToolTab(ToolTabWidget):
             self._save_window_controls()
 
     def _reset_window(self) -> None:
-        """Reset: the current window back to its defaults (one command), after
-        asking; nothing to do if it has them."""
-        window = self._selected_window()
-        if window is None:
-            return
-        defaults = NMStatWin(window.name).to_dict()
-        if window.to_dict() == defaults:
-            return
-        if not self._confirm(
-            "Reset window",
-            f"Reset {window.name} to its defaults? Its measurement, X begin / X end "
-            "and baseline will be cleared.",
-        ):
-            return
-        window.reset()
-        self._param_values.clear()  # parameters (e.g. rise time %) back to defaults
+        """Reset (Window menu): the window shown back to its defaults (one
+        command), after asking; nothing to do if it has them."""
+        name = self._tool.windows.selected_name  # the menu shows Reset just now
+        window = self._tool.windows[name] if name is not None else None
+        if (window is not None and window.to_dict() != NMStatWin(window.name).to_dict()
+                and self._confirm(
+                    "Reset window",
+                    f"Reset {window.name} to its defaults? Its measurement, X begin / "
+                    "X end and baseline will be cleared.")):
+            window.reset()
+            self._param_values.clear()  # parameters (e.g. rise time %) back to defaults
+        self._refresh_window_combo()  # back from the Reset item to the window
         self._load_selected_window()
 
     def _delete_last_window(self) -> None:
-        """Delete Window: the last one (one command), after asking."""
+        """Delete: the last window (one command), after asking."""
         last = list(self._tool.windows)[-1].name
         if self._confirm("Delete window", f"Delete {last}? Its settings will be lost."):
             self._tool.windows.delete_last()
