@@ -292,7 +292,8 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     stats2.plot_button.click()
     title, y, x, _xlabel, ylabel, style = plots[-1]
     assert title == "Stats_Record_A_S1_0: ST_w0_max_ds"
-    assert list(y) == list(PEAKS) and x is None and style == "points"
+    assert list(y) == list(PEAKS) and style == "points"
+    assert list(x) == [0, 1, 2, 3] and _xlabel == "epoch"  # x: epoch (#476)
     assert ylabel == "ST_w0_max_ds (mV)"
     assert window.context_panel.currentWidget() is window.plot_widget
     plot = window.plot_widget

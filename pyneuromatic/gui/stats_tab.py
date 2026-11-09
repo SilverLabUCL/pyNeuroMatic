@@ -30,7 +30,7 @@ from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.plot_marks import PlotMark
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.tools.nm_stat_win import NMStatWin
-from pyneuromatic.gui.results_view import Stats2Panel, StatsTables
+from pyneuromatic.gui.results_view import Stats2Panel, StatsTables, display_name
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
     SelectionModel,
@@ -156,10 +156,11 @@ def result_lines(results: list[dict], digits: int = 6) -> list[str]:
         name = func.get("name", "")
         if r.get("id") == "bsln":
             bsln_units = r.get("sunits", "")
-            lines.append(f"bsln {name} = {_value(r.get('s'), bsln_units)}  "
+            lines.append(f"bsln {display_name(name)} = {_value(r.get('s'), bsln_units)}  "
                          f"(x {number(r.get('xbgn'))} to {number(r.get('xend'))})")
             continue
-        label = name
+        # mean+std's value is the mean (its std follows): not "mean+std = ..."
+        label = "mean" if name.startswith("mean+") else name
         percent = r.get("p0", r.get("p1"))
         if percent is not None:
             label += f" {float(percent):g}%"
@@ -170,8 +171,9 @@ def result_lines(results: list[dict], digits: int = 6) -> list[str]:
         elif "s" in r:
             line = f"{label} = {_value(r['s'], units)}"
             for key in ("std", "sem", "var"):
-                if key in r:
-                    line += f", {key} {number(r[key])}"
+                if key in r:  # the mean's spread, as ±std (copies as written)
+                    # var's units would be squared: none shown
+                    line += f", \u00b1{key} {_value(r[key], units if key != 'var' else '')}"
             if "b" in r:
                 line += f", intercept {_value(r['b'], r.get('bunits', ''))}"
         else:
@@ -299,7 +301,7 @@ class StatsToolTab(ToolTabWidget):
             if self.measurement_combo.count() > 1:
                 self.measurement_combo.insertSeparator(self.measurement_combo.count())
             for name in names:
-                self.measurement_combo.addItem(name, name)
+                self.measurement_combo.addItem(display_name(name), name)
         window_row.addWidget(self.measurement_combo, stretch=1)
         self.window_enabled = QtWidgets.QCheckBox("On", self)
         window_row.addWidget(self.window_enabled)
@@ -360,7 +362,7 @@ class StatsToolTab(ToolTabWidget):
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents
         )
         for name in FUNC_NAMES_BSLN:
-            self.bsln_combo.addItem(name, name)
+            self.bsln_combo.addItem(display_name(name), name)
         self.bsln_combo.setCurrentIndex(self.bsln_combo.findData("mean"))
         bsln_row.addWidget(self.bsln_combo)
         self.bsln_xbgn_edit = QtWidgets.QLineEdit(self)
@@ -1012,7 +1014,7 @@ class StatsToolTab(ToolTabWidget):
         if window is None or data is None or data.nparray is None or data.nparray.size == 0:
             return ""
         name = window.func.get("name") if window.func else None
-        header = f"{data.name}  {window.name}" + (f" {name}" if name else "")
+        header = f"{data.name}  {window.name}" + (f" {display_name(name)}" if name else "")
         if not name:
             return f"{header}\nChoose a measurement"
         digits = self.digits()

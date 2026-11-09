@@ -43,7 +43,7 @@ def test_stats_measures_the_transformed_channel(setup):
     assert list(f.data["ST_w0_mean_y"].nparray) == [-1.0, -11.0, -21.0]
     assert list(series.channels["A"].data[0].nparray) == [0.0, 1.0, 1.0, 2.0]  # unchanged
     # The results still name the arrays measured
-    assert list(f.data["ST_w0_data"].nparray) == [d.path_str for d in series.channels["A"].data]
+    assert list(f.data["ST_data_names"].nparray) == [d.path_str for d in series.channels["A"].data]
 
 
 def test_steps_recorded_in_notes(setup):

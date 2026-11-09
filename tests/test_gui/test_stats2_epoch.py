@@ -66,12 +66,13 @@ def test_every_epoch_a_line(qtbot):
 
 @pytest.mark.parametrize("func, line", [
     ({"name": "risetime+", "p0": 10, "p1": 90},
-     "RecordA1: bsln mean = -70 mV; peak = -54 mV at 80 ms   Δ = 16 mV; p0 at 61.774 ms; "
-     "p1 at 76.1158 ms; risetime+ = 14.3418 ms"),
-    ("mean+std", "RecordA1: bsln mean = -70 mV; mean+std = -64.4647 mV, std 5.69728 mV   "
+     "RecordA1: bsln mean = -70 mV; max = -54 mV at 80 ms   Δ = 16 mV; "
+     "level+ 10% = -68.4 mV at 61.774 ms; level+ 90% = -55.6 mV at 76.1158 ms; "
+     "risetime+ = 14.3418 ms"),
+    ("mean+std", "RecordA1: bsln mean = -70 mV; mean = -64.4647 mV, ±std 5.69728 mV   "
                  "Δ = 5.53524 mV"),
     ({"name": "level+", "ylevel": -60},
-     "RecordA1: bsln mean = -70 mV; level+ at 71.7734 ms"),  # its level isn't saved
+     "RecordA1: bsln mean = -70 mV; level+ = -60 mV at 71.7734 ms   Δ = 9.99999 mV"),
 ])
 def test_each_kind_of_result(qtbot, func, line):
     assert _epochs(_app(qtbot, func))[2] == line
@@ -116,3 +117,107 @@ def test_stats1_results_after_a_run_and_no_history_checkbox(qtbot):
     assert tab.details.toPlainText().splitlines()[-1] == "max = -54 mV at 80 ms   Δ = 16 mV"
     assert not hasattr(tab, "output_history_checkbox")
     assert hasattr(app.selection_model.manager.stats, "results_to_history")  # for scripts
+
+
+
+@pytest.mark.parametrize("func", [
+    "max", "mean+std", {"name": "risetime+", "p0": 10, "p1": 90}, "fwhm+",
+    {"name": "decaytime+", "p0": 36.7879}, {"name": "level+", "ylevel": -60},
+])
+def test_all_epochs_matches_stats1(qtbot, func):
+    """From the saved arrays, the same text as Stats1's Results (#476)."""
+    app = _app(qtbot, func)
+    stats1 = app.stats.details.toPlainText().splitlines()[1:]  # E1 (shown), a preview
+    line = _epochs(app)[2]  # RecordA1
+    assert line == "RecordA1: " + "; ".join(
+        step.split("  (x ")[0] for step in stats1)  # its bsln range is in the header
+
+
+def test_plot_x_is_the_epoch_numbers(qtbot):
+    app = _app(qtbot, "max", epoch_set="Set1")  # E0, E1
+    stats2 = app.stats.stats2
+    title, y, x, xlabel, _ylabel, _style = stats2.selected_plot()
+    assert list(x) == [0, 1] and xlabel == "epoch"
+    stats2.epoch_x_checkbox.setChecked(False)
+    assert stats2.selected_plot()[2] is None and stats2.selected_plot()[3] == "data index"
+
+
+def test_an_older_subfolder_still_reads(qtbot):
+    """Saved before #476: ST_w0_data (no ST_data_names or ST_epoch_num)."""
+    app = _app(qtbot, "max")
+    stats2 = app.stats.stats2
+    folder = stats2._folder
+    old = folder.toolfolders.new("Stats_Old_0")
+    old.data.new("ST_w0_data", nparray=np.array(["nm.Demo.RecordA0", "nm.Demo.RecordA1"],
+                                                 dtype=object))
+    peak = old.data.new("ST_w0_max_y", nparray=np.array([-55.0, -54.0]),
+                        yscale={"units": "mV"})
+    peak.notes.add("NMStats(win=w0, func=max, id=main, xbgn=60.0, xend=120.0, n=2)")
+    stats2.refresh(select="Stats_Old_0")
+    assert stats2._windows(old) == ["w0"]
+    assert _epochs(app) == ["Stats_Old_0  w0 max  (x 60 to 120)",
+                            "RecordA0: max = -55 mV", "RecordA1: max = -54 mV"]
+    title, y, x, xlabel, _yl, _style = stats2.selected_plot()
+    assert x is None and xlabel == "data index"  # no epoch numbers saved
+    assert not stats2.epoch_x_checkbox.isEnabled()
+
+
+def test_epoch_numbers_under_all_columns(qtbot):
+    app = _app(qtbot, "max")
+    stats2 = app.stats.stats2
+    assert "ST_epoch_num" not in stats2.tables.columns
+    stats2.all_columns_checkbox.setChecked(True)
+    assert stats2.tables.columns[0] == "ST_epoch_num"
+    assert stats2.measure_array() == "ST_w0_max_y"  # never the rows' epochs
+
+
+def test_the_epoch_column_is_headed_epoch(qtbot):
+    app = _app(qtbot, "max")
+    stats2 = app.stats.stats2
+    stats2.all_columns_checkbox.setChecked(True)
+    table = stats2.tables.arrays_table
+    headers = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
+    assert headers[0] == "epoch"  # not "ch_num" (ST_epoch_num cut as a window's array)
+    assert table.horizontalHeaderItem(0).toolTip() == "ST_epoch_num"
+    assert [table.item(r, 0).text() for r in range(table.rowCount())] == ["0", "1", "2"]
+    assert "max_y" in headers
+
+
+def test_the_chosen_arrays_header_is_bold_in_the_summary_too(qtbot):
+    app = _app(qtbot, "max")
+    stats2 = app.stats.stats2
+    summary = stats2.tables.summary_table
+
+    def bold():
+        return [summary.horizontalHeaderItem(c).text()
+                for c in range(summary.columnCount())
+                if summary.horizontalHeaderItem(c).font().bold()]
+
+    assert bold() == ["max_y"]  # the measurement, after the run
+    stats2.array_combo.setCurrentText("ST_w0_max_x")
+    assert bold() == ["max_x"]
+    stats2.tables.arrays_table.setCurrentCell(0, 0)  # a cell in the bsln column
+    assert bold() == ["bsln_y"]
+
+
+def test_plot_x_axis_shows_whole_numbers(qtbot):
+    """Points against a row index or epoch number: whole-number ticks, no
+    minor ticks; a histogram's bin edges keep the usual axis."""
+    from pyneuromatic.gui.context_views import ValuesPlot
+    plot = ValuesPlot()
+    qtbot.addWidget(plot)
+    plot.resize(600, 400)
+    plot.show()
+    axis = plot.x_axis
+    for n, step in ((3, 1.0), (9, 2.0), (40, 10.0)):
+        plot.show_values("t", np.arange(float(n)), None, "data index", "y", "points")
+        low, high = axis.range
+        assert axis.whole_numbers
+        assert axis.tickSpacing(low, high, 500) == [(step, 0.0)]  # one level: no minor ticks
+        values = axis.tickValues(low, high, 500)[0][1]
+        assert all(v == int(v) for v in values)
+    plot.show_values("e", np.arange(3.0), np.array([0, 2, 4]), "epoch", "y", "points")
+    assert axis.whole_numbers
+    plot.show_values("h", np.arange(3.0), np.array([0.0, 0.5, 1.0, 1.5]), "x", "count",
+                     "histogram")
+    assert not axis.whole_numbers

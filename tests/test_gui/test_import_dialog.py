@@ -136,3 +136,25 @@ def test_setting_in_settings_general(qtbot):
     assert dialog.import_options_checkbox.isChecked()  # on by default
     dialog.import_options_checkbox.setChecked(False)
     assert manager.settings.ask_import_options is False
+
+
+def test_import_selects_its_data_series(app):
+    """After Open / Import, Data Series is chosen, with the imported series."""
+    app.selection_model.update(source="data")  # as if Data was chosen before
+    app.selection_model.manager.settings.ask_import_options = False
+    app.folder_actions.open_files([str(AXGD)])
+    selection = app.selection_model.selection
+    folder = app.selection_model.manager.folders["Vers6_060523_004"]
+    assert selection["folder"] is folder
+    assert selection["source"] == "dataseries"
+    assert selection["dataseries"] is folder.dataseries["Record"]
+
+
+def test_import_without_a_data_series_selects_data(app, monkeypatch):
+    monkeypatch.setattr(FolderActions, "_ask_import_options",
+                        lambda self, path, info: {"make_dataseries": False})
+    app.selection_model.update(source="dataseries")
+    app.folder_actions.open_files([str(AXGD)])
+    selection = app.selection_model.selection
+    assert selection["source"] == "data"
+    assert len(selection["folder"].dataseries) == 0

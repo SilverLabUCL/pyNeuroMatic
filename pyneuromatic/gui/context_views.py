@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 try:
@@ -164,6 +165,43 @@ def show_tool_page(stack: QtWidgets.QStackedWidget, pages: dict, note: QtWidgets
     stack.setCurrentWidget(page)
 
 
+def _whole_numbers(x, n: int) -> bool:
+    """True if the points' x (None: their index) are all whole numbers."""
+    if x is None:
+        return True
+    try:
+        values = np.asarray(x, dtype=float)
+    except (TypeError, ValueError):
+        return False
+    finite = values[np.isfinite(values)]
+    return finite.size > 0 and bool(np.all(finite == np.round(finite)))
+
+
+def _whole_number_axis():
+    """A pyqtgraph bottom axis that can show whole numbers only (a row index
+    or epoch number): ticks at 1, 2, 5, 10... apart, no minor ticks. Off
+    (``whole_numbers = False``), the usual axis."""
+
+    class WholeNumberAxis(pg.AxisItem):
+        whole_numbers = False
+
+        def tickSpacing(self, minVal, maxVal, size):  # noqa: N802, N803 (pyqtgraph)
+            levels = super().tickSpacing(minVal, maxVal, size)
+            if not self.whole_numbers or not levels:
+                return levels
+            spacing = max(levels[0][0], 1.0)
+            magnitude = 10.0 ** math.floor(math.log10(spacing))
+            step = next(m * magnitude for m in (1, 2, 5, 10) if m * magnitude >= spacing)
+            return [(step, 0.0)]  # whole numbers 1, 2, 5, 10, 20... apart; no minor ticks
+
+        def tickStrings(self, values, scale, spacing):  # noqa: N802 (pyqtgraph)
+            if not self.whole_numbers:
+                return super().tickStrings(values, scale, spacing)
+            return [f"{int(round(v))}" for v in values]
+
+    return WholeNumberAxis(orientation="bottom")
+
+
 class ValuesPlot(QtWidgets.QWidget):
     """Plot of values that are not traces, e.g. a Stats results column."""
 
@@ -174,7 +212,9 @@ class ValuesPlot(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         if pg is not None:
-            self.plot_widget = pg.PlotWidget(self)
+            # x of a points plot: a row index or epoch number, whole numbers
+            self.x_axis = _whole_number_axis()
+            self.plot_widget = pg.PlotWidget(self, axisItems={"bottom": self.x_axis})
             self.plot_widget.setBackground("w")
             self.plot_widget.setTitle(self.EMPTY_TITLE)
             layout.addWidget(self.plot_widget)
@@ -201,6 +241,11 @@ class ValuesPlot(QtWidgets.QWidget):
         if self.plot_widget is None:
             return
         self.plot_widget.clear()
+        # A histogram's x is its bin edges; points are at whole numbers (a row
+        # index or epoch number)
+        self.x_axis.whole_numbers = style != "histogram" and _whole_numbers(x, len(y))
+        self.x_axis.picture = None  # redraw the ticks
+        self.x_axis.update()
         if style == "histogram":
             self.plot_widget.plot(
                 x,
