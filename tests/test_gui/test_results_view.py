@@ -159,7 +159,7 @@ def test_run_fills_arrays_and_summary_tables(qtbot):
     assert stats2.window_combo.currentText() == "w0"
     assert tables.title_label.text() == "Stats_Record_A_S1_0  w0"
 
-    labels = ["bsln_y", "max_y", "max_x", "max_ds"]
+    labels = ["bsln_y", "max_y", "max_x", "max_dy"]
     assert _headers(tables.arrays_table) == labels
     assert _headers(tables.summary_table) == labels
     assert _row_labels(tables.arrays_table) == [
@@ -168,8 +168,8 @@ def test_run_fills_arrays_and_summary_tables(qtbot):
     assert _row_labels(tables.summary_table) == [
         "mean", "std", "sem", "N", "NaNs", "INFs", "min", "max",
     ]
-    assert _column(tables.arrays_table, "max_ds") == ["20", "22", "24", "26"]
-    assert _column(tables.summary_table, "max_ds") == [
+    assert _column(tables.arrays_table, "max_dy") == ["20", "22", "24", "26"]
+    assert _column(tables.summary_table, "max_dy") == [
         "23", "2.58199", "1.29099", "4", "0", "0", "20", "26",
     ]
     assert "mV" in tables.arrays_table.horizontalHeaderItem(3).toolTip()
@@ -193,13 +193,13 @@ def test_column_selection_is_shared_between_tables(qtbot):
     tables = stats2.tables
 
     tables.summary_table.setCurrentCell(1, 3)  # a click on one summary cell
-    assert tables.selected_array() == "ST_w0_max_ds"
+    assert tables.selected_array() == "ST_w0_max_dy"
     assert tables.arrays_table.currentColumn() == 3
     # Only the clicked cell is highlighted, not its column
     assert [(i.row(), i.column()) for i in tables.summary_table.selectedIndexes()] == [(1, 3)]
     assert tables.arrays_table.selectedIndexes() == []
     assert stats2.plot_button.isEnabled()
-    assert stats2.array_combo.currentText() == "ST_w0_max_ds"
+    assert stats2.array_combo.currentText() == "ST_w0_max_dy"
 
 
 def test_array_dropdown_selects_column_and_shows_details(qtbot):
@@ -209,21 +209,21 @@ def test_array_dropdown_selects_column_and_shows_details(qtbot):
     tables = stats2.tables
 
     names = [stats2.array_combo.itemText(i) for i in range(stats2.array_combo.count())]
-    assert names == ["ST_w0_bsln_y", "ST_w0_max_y", "ST_w0_max_x", "ST_w0_max_ds"]
+    assert names == ["ST_w0_bsln_y", "ST_w0_max_y", "ST_w0_max_x", "ST_w0_max_dy"]
     # The measurement is chosen (not the baseline) and highlighted in the tables
     assert tables.selected_array() == "ST_w0_max_y"
     assert stats2.details.toPlainText().startswith("ST_w0_max_y")
 
-    stats2.array_combo.setCurrentText("ST_w0_max_ds")
-    assert tables.selected_array() == "ST_w0_max_ds"
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
+    assert tables.selected_array() == "ST_w0_max_dy"
     details = stats2.details.toPlainText().splitlines()
-    assert details[0] == "ST_w0_max_ds  (values in mV)"  # no x units in this data
+    assert details[0] == "ST_w0_max_dy  (values in mV)"  # no x units in this data
     assert details[1].startswith("NMStats(win=w0, func=max")
     assert "mean  23" in details
     assert "N     4" in details
 
     stats2.all_columns_checkbox.setChecked(True)
-    assert stats2.array_combo.currentText() == "ST_w0_max_ds"
+    assert stats2.array_combo.currentText() == "ST_w0_max_dy"
     assert stats2.array_combo.findText("ST_w0_max_n") >= 0
 
 
@@ -233,7 +233,7 @@ def test_details_list_nan_rows(qtbot):
     folder.data["RecordA2"].nparray[:10] = np.nan  # no baseline for this trace
     window.tool_tabs["Stats"].run_button.click()
     stats2 = window.tool_tabs["Stats"].stats2
-    stats2.array_combo.setCurrentText("ST_w0_max_ds")
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
     assert stats2.details.toPlainText().splitlines()[-1] == "NaN for: RecordA2"
 
 
@@ -273,8 +273,8 @@ def test_stats_plot_follows_the_stats2_array(qtbot):
     assert plot_item.titleLabel.text == f"Stats_Record_A_S1_0: {chosen}"
     assert plot_item.listDataItems()
 
-    tab.stats2.array_combo.setCurrentText("ST_w0_max_ds")
-    assert plot_item.titleLabel.text == "Stats_Record_A_S1_0: ST_w0_max_ds"
+    tab.stats2.array_combo.setCurrentText("ST_w0_max_dy")
+    assert plot_item.titleLabel.text == "Stats_Record_A_S1_0: ST_w0_max_dy"
     assert list(plot_item.listDataItems()[0].yData) == list(PEAKS)
     window.context_panel.setCurrentWidget(window.table_panel)
     tab.stats2.array_combo.setCurrentText("ST_w0_max_y")
@@ -291,16 +291,16 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
     window.tool_tabs["Stats"].run_button.click()
     stats2 = window.tool_tabs["Stats"].stats2
-    stats2.array_combo.setCurrentText("ST_w0_max_ds")
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
 
     plots = []
     stats2.plot_requested.connect(lambda *args: plots.append(args))
     stats2.plot_button.click()
     title, y, x, _xlabel, ylabel, style = plots[-1]
-    assert title == "Stats_Record_A_S1_0: ST_w0_max_ds"
+    assert title == "Stats_Record_A_S1_0: ST_w0_max_dy"
     assert list(y) == list(PEAKS) and style == "points"
     assert list(x) == [0, 1, 2, 3] and _xlabel == "epoch"  # x: epoch (#476)
-    assert ylabel == "ST_w0_max_ds (mV)"
+    assert ylabel == "ST_w0_max_dy (mV)"
     assert window.context_panel.currentWidget() is window.plot_widget
     plot = window.plot_widget
     assert plot.view_tabs.current_view() == ("tool", "Stats")
@@ -318,13 +318,13 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     assert sum(counts) == len(PEAKS)
     assert len(edges) == len(counts) + 1
     subfolder = window.tool_tabs["Stats"].stats_tool.toolfolder
-    assert "H_ST_w0_max_ds_counts" not in subfolder.data
+    assert "H_ST_w0_max_dy_counts" not in subfolder.data
     # Save Histogram saves what's shown, and replaces it when saved again
     stats2.save_histogram_action.trigger()
-    assert list(subfolder.data.get("H_ST_w0_max_ds_counts").nparray) == list(counts)
-    assert list(subfolder.data.get("H_ST_w0_max_ds_edges").nparray) == list(edges)
+    assert list(subfolder.data.get("H_ST_w0_max_dy_counts").nparray) == list(counts)
+    assert list(subfolder.data.get("H_ST_w0_max_dy_edges").nparray) == list(edges)
     stats2.save_histogram_action.trigger()
-    assert "H_ST_w0_max_ds_counts" in subfolder.data
+    assert "H_ST_w0_max_dy_counts" in subfolder.data
     # Off: points again, x: epoch back
     stats2.histogram_action.setChecked(False)
     assert stats2.epoch_x_action.isEnabled()
@@ -401,7 +401,7 @@ def test_copy_all_stats_tables_from_the_table_panel(qtbot):
     window.table_panel.show_tool("Stats")
     window.table_panel.copy_all_action.trigger()
     lines = QtWidgets.QApplication.clipboard().text().splitlines()
-    assert lines[0] == "\tbsln_y\tmax_y\tmax_x\tmax_ds"
+    assert lines[0] == "\tbsln_y\tmax_y\tmax_x\tmax_dy"
     assert lines[1] == "RecordA0\t-70\t-50\t10\t20"
     assert lines[5] == ""
     assert lines[6] == lines[0]
@@ -457,9 +457,9 @@ def test_browser_shows_new_results_folder_after_run(qtbot):
 
 
 @pytest.mark.parametrize("names, measure", [
-    (["ST_w0_bsln_y", "ST_w0_max_y", "ST_w0_max_x", "ST_w0_max_ds"], "ST_w0_max_y"),
+    (["ST_w0_bsln_y", "ST_w0_max_y", "ST_w0_max_x", "ST_w0_max_dy"], "ST_w0_max_y"),
     (["ST_w0_bsln_y", "ST_w0_rt_p_y", "ST_w0_rt_p_x", "ST_w0_rt_p_dx"], "ST_w0_rt_p_dx"),
-    (["ST_w0_bsln_y", "ST_w0_level_p_x", "ST_w0_level_p_ds"], "ST_w0_level_p_x"),
+    (["ST_w0_bsln_y", "ST_w0_level_p_x", "ST_w0_level_p_dy"], "ST_w0_level_p_x"),
     (["ST_w0_mean_y"], "ST_w0_mean_y"),  # no baseline
     ([], None),
 ])

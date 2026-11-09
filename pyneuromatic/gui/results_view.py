@@ -148,7 +148,7 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
                 parts.append(f" at {value(data)}")
             elif suffix == "b":
                 parts.append(f", intercept {value(data)}")
-            elif suffix == "ds":
+            elif suffix == "dy":
                 delta = data
             elif suffix == "dx":
                 dx = data
