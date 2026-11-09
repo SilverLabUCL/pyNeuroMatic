@@ -47,6 +47,13 @@ FUNC_NAMES_BASIC = (
     # TODO: add "onset" — Igor version requires sigmoid curve fit
 )
 
+# Basic functions whose value is a point or average on the trace, so its
+# difference from the baseline (Δs) means something; not a spread (std...),
+# a total (sum, area, pathlength), a slope or a count (#488)
+FUNC_NAMES_BASIC_DELTA = (
+    "median", "mean", "mean+var", "mean+std", "mean+sem", "value@xbgn", "value@xend",
+)
+
 FUNC_NAMES_MAXMIN = (
     "max",          # np.argmax
     "min",          # np.argmin
@@ -226,10 +233,12 @@ class NMStatFuncBasic(NMStatFunc):
         super().__init__(name.lower())
 
     def compute(self, data, xbgn, xend, ignore_nans, run_stat, bsln_result):
-        """Run a single stat call and optionally record the baseline delta."""
+        """Run a single stat call and, for a point or average on the trace
+        (``FUNC_NAMES_BASIC_DELTA``), record the baseline delta."""
         r = run_stat(data, {"name": self._name}, "main",
                      xbgn, xend, ignore_nans)
-        self._add_ds(r, bsln_result)
+        if self._name in FUNC_NAMES_BASIC_DELTA:
+            self._add_ds(r, bsln_result)
 
 
 class NMStatFuncMaxMin(NMStatFunc):
