@@ -108,18 +108,17 @@ def test_esc_stops(app):
 def test_the_rest_of_the_window_is_blocked(app):
     tab = app.stats
     _show_at_once(tab)
-    asked = []
-    tab._confirm = lambda title, text: asked.append(title) or True
+    on = tab.window_enabled.isChecked()
 
     def during(done, total):
         if done == 2:
-            QtTest.QTest.mouseClick(tab.reset_button, QtCore.Qt.MouseButton.LeftButton)
+            QtTest.QTest.mouseClick(tab.window_enabled, QtCore.Qt.MouseButton.LeftButton)
             QtTest.QTest.mouseClick(app.tool_rail._buttons["Browser"],
                                     QtCore.Qt.MouseButton.LeftButton)
 
     tab.progress_changed.connect(during)
     tab.run_button.click()
-    assert asked == []  # Reset didn't ask
+    assert tab.window_enabled.isChecked() == on  # On didn't change
     assert app.current_tool_name == "Stats"  # the rail didn't change
     assert tab.status_label.text() == "Complete"
     # ... and works again afterwards

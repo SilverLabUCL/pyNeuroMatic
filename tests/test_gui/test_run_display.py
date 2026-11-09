@@ -296,19 +296,18 @@ def test_stop_takes_a_mouse_click_during_a_delay(shown_app, click):
 def test_the_rest_of_the_window_ignores_mouse_clicks(shown_app, click):
     tab = shown_app.stats
     _display(shown_app, "ask")
-    reset = []
-    tab._confirm = lambda title, text: reset.append(title) or True
+    on = tab.window_enabled.isChecked()
 
     def shown(_text):
         QtCore.QTimer.singleShot(2000, tab.stop)  # if Cancel doesn't land: fail, not hang
-        click(tab.reset_button)
+        click(tab.window_enabled)
         click(shown_app.tool_rail._buttons["Browser"])
         shown_app.close()  # refused during a run
         QtCore.QTimer.singleShot(0, lambda: click(tab.run_button))  # Cancel
 
     tab.prompt_shown.connect(shown)
     tab.run_button.click()
-    assert reset == []
+    assert tab.window_enabled.isChecked() == on  # On didn't change
     assert shown_app.current_tool_name == "Stats"
     assert shown_app.isVisible()
     assert tab.status_label.text() == f"Cancelled after 1 of {N}"
