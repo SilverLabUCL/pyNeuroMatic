@@ -48,7 +48,7 @@ class TestNMToolStats(unittest.TestCase):
         self.assertFalse(self.tool.results_to_history)
 
     def test_results_to_cache_default(self):
-        self.assertTrue(self.tool.results_to_cache)
+        self.assertFalse(self.tool.results_to_cache)  # off: memory; scripts turn it on (#480)
 
     def test_results_to_numpy_default(self):
         self.assertTrue(self.tool.results_to_numpy)
@@ -978,7 +978,7 @@ class TestNMToolStatsConfig(unittest.TestCase):
         self.assertFalse(self.cfg.results_to_history)
 
     def test_results_to_cache_default(self):
-        self.assertTrue(self.cfg.results_to_cache)
+        self.assertFalse(self.cfg.results_to_cache)  # #480
 
     def test_results_to_numpy_default(self):
         self.assertTrue(self.cfg.results_to_numpy)

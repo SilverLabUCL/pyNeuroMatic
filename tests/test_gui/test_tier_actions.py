@@ -268,9 +268,8 @@ def test_subfolder_duplicate_rename_and_delete(app):
     assert strip.combo("toolfolder").currentText() == "Stats_1"
     # Stats2 lists the renamed results folder
     stats2 = app.tool_tabs["Stats"].stats2
-    assert [stats2.folder_combo.itemText(i) for i in range(stats2.folder_combo.count())] == [
-        "Stats_0", "Stats_1",
-    ]
+    items = [stats2.folder_combo.itemText(i) for i in range(stats2.folder_combo.count())]
+    assert items[:2] == ["Stats_0", "Stats_1"]  # then Delete (the one shown)
 
     app.answers = [("Stats_1", None)]
     actions.delete_subfolder()

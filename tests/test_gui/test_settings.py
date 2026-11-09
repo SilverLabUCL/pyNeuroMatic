@@ -67,7 +67,8 @@ def test_table_shows_nan_as_chosen(app):
 def test_stats_page_edits_the_stats_config(app):
     dialog = app.settings_dialog()
     boxes = dialog.tool_checkboxes["Stats"]
-    assert list(boxes) == ["ignore_nans", "overwrite", "results_all_epochs"]
+    assert list(boxes) == ["ignore_nans", "overwrite", "results_to_numpy",
+                           "results_all_epochs"]  # Stats arrays, from the panel (#480)
     assert boxes["results_all_epochs"].text() == "ST_ arrays: one point per epoch"
     boxes["results_all_epochs"].setChecked(True)
     stats = app.manager.stats

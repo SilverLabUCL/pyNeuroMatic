@@ -41,7 +41,7 @@ def _stats_window(qtbot, *, arrays=True):
     window.selection_model.update(epoch_set="Set1")
 
     tab = window.tool_tabs["Stats"]
-    tab.output_arrays_checkbox.setChecked(arrays)
+    tab.set_config_option("results_to_numpy", arrays)  # Settings › Stats (#480)
     tab.measurement_combo.setCurrentText("max")
     tab.xbgn_edit.setText("10")
     tab.xbgn_edit.editingFinished.emit()
@@ -63,6 +63,12 @@ def _row_labels(table):
 def _column(table, label):
     column = _headers(table).index(label)
     return [table.item(r, column).text() for r in range(table.rowCount())]
+
+
+def _delete(stats2):
+    """Folder menu > Delete <the subfolder shown>."""
+    stats2.folder_combo.setCurrentIndex(
+        stats2.folder_combo.findData(stats2.DELETE_FOLDER_ACTION))
 
 
 def _tab_texts(tabs):
@@ -94,7 +100,7 @@ def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
     # Deleting the only Stats folder removes the tabs
     stats2 = window.tool_tabs["Stats"].stats2
     stats2._confirm_delete = lambda name: True
-    stats2.delete_button.click()
+    _delete(stats2)
     assert _tab_texts(plot.view_tabs) == ["A"]
     assert _tab_texts(table.view_tabs) == ["A"]
     assert table.stack.currentWidget() is table.channel_table
@@ -211,7 +217,7 @@ def test_array_dropdown_selects_column_and_shows_details(qtbot):
     stats2.array_combo.setCurrentText("ST_w0_max_ds")
     assert tables.selected_array() == "ST_w0_max_ds"
     details = stats2.details.toPlainText().splitlines()
-    assert details[0] == "ST_w0_max_ds (mV)"
+    assert details[0] == "ST_w0_max_ds  (values in mV)"  # no x units in this data
     assert details[1].startswith("NMStats(win=w0, func=max")
     assert "mean  23" in details
     assert "N     4" in details
@@ -276,7 +282,7 @@ def test_stats_plot_follows_the_stats2_array(qtbot):
 
     # Deleting the folder: nothing chosen, the hint again
     tab.stats2._confirm_delete = lambda name: True
-    tab.stats2.delete_button.click()
+    _delete(tab.stats2)
     assert not plot_item.listDataItems()
     assert plot_item.titleLabel.text == ValuesPlot.EMPTY_TITLE
 
@@ -337,11 +343,11 @@ def test_delete_folder_after_confirmation(qtbot, monkeypatch):
     stats2 = window.tool_tabs["Stats"].stats2
 
     monkeypatch.setattr(stats2, "_confirm_delete", lambda name: False)
-    stats2.delete_button.click()
+    _delete(stats2)
     assert "Stats_Record_A_S1_0" in folder.toolfolders
 
     monkeypatch.setattr(stats2, "_confirm_delete", lambda name: True)
-    stats2.delete_button.click()
+    _delete(stats2)
     assert "Stats_Record_A_S1_0" not in folder.toolfolders
     assert stats2.folder_combo.count() == 0
     assert stats2.tables.arrays_table.columnCount() == 0
@@ -402,3 +408,38 @@ def test_a_run_chooses_its_measurement_again(qtbot):
     assert tab.stats2.selected_array() == "ST_w0_max_y"
     plot = tab.plot_view.plot_widget.getPlotItem()
     assert plot.titleLabel.text.endswith(": ST_w0_max_y")  # the Stats plot shows it
+
+
+
+def test_delete_is_in_the_folder_menu(qtbot):
+    """No Delete folder button: the Folder menu ends with Delete...; with
+    several subfolders, choose which; with one, confirm it."""
+    _manager, folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    tab.run_button.click()
+    stats2 = tab.stats2
+    combo = stats2.folder_combo
+    assert not hasattr(stats2, "delete_button")
+    items = [combo.itemText(i) for i in range(combo.count())]
+    assert items == ["Stats_Record_A_S1_0", "Stats_Record_A_S1_1", "", "Delete..."]
+    combo.setCurrentIndex(0)  # shown: _0
+    asked = []
+    stats2._confirm_delete = lambda name: asked.append(name) or True  # not used: several
+
+    stats2._choose_delete = lambda names, shown: asked.append((names, shown)) and None
+    _delete(stats2)  # cancelled
+    assert asked == [(["Stats_Record_A_S1_0", "Stats_Record_A_S1_1"], "Stats_Record_A_S1_0")]
+    assert combo.currentText() == "Stats_Record_A_S1_0"  # back to it
+    assert len(folder.toolfolders) == 2
+
+    stats2._choose_delete = lambda names, shown: "Stats_Record_A_S1_1"  # not the one shown
+    _delete(stats2)
+    assert "Stats_Record_A_S1_1" not in folder.toolfolders
+    assert combo.currentText() == "Stats_Record_A_S1_0"  # still shown
+
+    stats2._choose_delete = lambda names, shown: pytest.fail("one: confirm, not choose")
+    asked.clear()
+    _delete(stats2)  # only one left: confirm it
+    assert asked == ["Stats_Record_A_S1_0"]
+    assert combo.count() == 0  # none left: no Delete... either

@@ -131,23 +131,42 @@ def _number(value, digits: int = 6) -> str:
     return "NaN" if math.isnan(number) else f"{number:.{digits}g}"
 
 
-def result_lines(results: list[dict], digits: int = 6) -> list[str]:
+def _limits(xbgn, xend, x_limits: tuple[float, float] | None) -> tuple:
+    """An X range as measured: an unbounded edge (-inf, inf) at the trace's
+    start or end (*x_limits*), as the Plot draws it."""
+    if x_limits is None:
+        return xbgn, xend
+    try:
+        xbgn = x_limits[0] if math.isinf(float(xbgn)) else xbgn
+        xend = x_limits[1] if math.isinf(float(xend)) else xend
+    except (TypeError, ValueError):
+        pass
+    return xbgn, xend
+
+
+def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
+                 x_limits: tuple[float, float] | None = None,
+                 known_units: tuple[str, ...] = ()) -> list[str]:
     """A window's ``compute()`` *results* as text, a line per step (#471), e.g.
 
         bsln mean = -70 mV  (x 0 to 40)
-        max = -55 mV at 80 ms   Δ = 15 mV
+        max = -55 mV at 80 ms  (Δ = 15 mV)
         level+ 10% = -68.5 mV at 61.77 ms
         level+ 90% = -56.5 mV at 76.12 ms
         risetime+ = 14.34 ms
 
     Δ (the difference from the baseline) is shown when it's in the
-    baseline's units (not, e.g., for a slope).
+    baseline's units (not, e.g., for a slope). Values in *known_units*
+    (given once, on the top line) are shown without them; others (e.g. a
+    slope's intercept) keep theirs.
     """
     def number(value) -> str:
         return _number(value, digits)
 
     def _value(value, units: str = "") -> str:
-        return f"{number(value)} {units}".strip() if units else number(value)
+        if not units or units in known_units:
+            return number(value)
+        return f"{number(value)} {units}"
 
     lines: list[str] = []
     bsln_units = None
@@ -156,8 +175,14 @@ def result_lines(results: list[dict], digits: int = 6) -> list[str]:
         name = func.get("name", "")
         if r.get("id") == "bsln":
             bsln_units = r.get("sunits", "")
-            lines.append(f"bsln {display_name(name)} = {_value(r.get('s'), bsln_units)}  "
-                         f"(x {number(r.get('xbgn'))} to {number(r.get('xend'))})")
+            xbgn, xend = _limits(r.get("xbgn"), r.get("xend"), x_limits)
+            spread = "".join(  # a baseline's spread (e.g. mean ± std), as the mean's
+                f", \u00b1{key} {_value(r[key], bsln_units if key != 'var' else '')}"
+                for key in ("std", "sem", "var") if key in r)
+            # Its value is the mean (a spread follows): "bsln mean", as the mean's
+            label = "mean" if name.startswith("mean+") else name
+            lines.append(f"bsln {label} = {_value(r.get('s'), bsln_units)}"
+                         f"{spread}  (x {number(xbgn)} to {_value(xend, xunits)})")
             continue
         # mean+std's value is the mean (its std follows): not "mean+std = ..."
         label = "mean" if name.startswith("mean+") else name
@@ -179,7 +204,7 @@ def result_lines(results: list[dict], digits: int = 6) -> list[str]:
         else:
             line = f"{label}: no value"
         if (_finite(r.get("Δs")) and bsln_units is not None and units == bsln_units):
-            line += f"   Δ = {_value(r['Δs'], units)}"
+            line += f"  (Δ = {_value(r['Δs'], units)})"
         lines.append(line)
         if "dx" in r:  # e.g. the rise time: the crossings' difference
             lines.append(f"{r.get('id')} = {_value(r['dx'], r.get('xunits', ''))}")
@@ -377,19 +402,8 @@ class StatsToolTab(ToolTabWidget):
         # measurement forces the checkbox on or off
         self._bsln_user_on = False
 
-        output_group = QtWidgets.QGroupBox("Output", self.stats1_page)
-        output_layout = QtWidgets.QHBoxLayout(output_group)
-        self.output_cache_checkbox = QtWidgets.QCheckBox("Results cache", output_group)
-        self.output_arrays_checkbox = QtWidgets.QCheckBox("Stats arrays", output_group)
-        for checkbox in (
-            self.output_cache_checkbox,
-            self.output_arrays_checkbox,
-        ):
-            output_layout.addWidget(checkbox)
-        stats1_layout.addWidget(output_group)
-
         # Results: the current window's measurement of the trace shown (#471)
-        details_group = QtWidgets.QGroupBox("Results", self.stats1_page)
+        details_group = QtWidgets.QGroupBox(self.stats1_page)  # untitled: its text says what it is
         details_layout = QtWidgets.QVBoxLayout(details_group)
         self.details = QtWidgets.QPlainTextEdit(details_group)
         self.details.setReadOnly(True)  # selectable, to copy
@@ -416,10 +430,13 @@ class StatsToolTab(ToolTabWidget):
         stats1_layout.addStretch(1)
 
         # The options listed in Settings › Stats
-        self._config_keys = ("ignore_nans", "overwrite", "results_all_epochs")
+        # Settings › Stats (the Stats arrays option was the panel's Output, #480)
+        self._config_keys = ("ignore_nans", "overwrite", "results_to_numpy",
+                             "results_all_epochs")
         self._config_labels = {
             "ignore_nans": "Ignore NaNs",
             "overwrite": "Overwrite Stats tool folder",
+            "results_to_numpy": "Save Stats arrays (ST_)",
             "results_all_epochs": "ST_ arrays: one point per epoch",
         }
         self._config_tips = {
@@ -427,6 +444,8 @@ class StatsToolTab(ToolTabWidget):
                            "in the window gives NaN)",
             "overwrite": "Clear and reuse the run's first Stats subfolder (…_0), "
                          "instead of making a new one each run",
+            "results_to_numpy": "Save each run's results as ST_ arrays in a Stats "
+                                "subfolder (what Stats2, its tables and plots show)",
             "results_all_epochs": "For a data series, one point per epoch of the series "
                                   "(NaN where an epoch wasn't analysed), so ST_ arrays "
                                   "line up with the series",
@@ -446,13 +465,6 @@ class StatsToolTab(ToolTabWidget):
         self.bsln_combo.currentIndexChanged.connect(self._save_window_controls)
         self.bsln_xbgn_edit.editingFinished.connect(self._save_window_controls)
         self.bsln_xend_edit.editingFinished.connect(self._save_window_controls)
-        self.output_cache_checkbox.toggled.connect(
-            lambda checked: self._set_tool_option("results_to_cache", checked)
-        )
-        self.output_arrays_checkbox.toggled.connect(
-            lambda checked: self._set_tool_option("results_to_numpy", checked)
-        )
-        self._sync_output_options()
         self._refresh_window_combo()
         self._load_selected_window()
 
@@ -723,15 +735,6 @@ class StatsToolTab(ToolTabWidget):
         config = self._tool.config
         if config is not None and key in config._schema:
             setattr(config, key, value)
-
-    def _sync_output_options(self) -> None:
-        for checkbox, key in (
-            (self.output_cache_checkbox, "results_to_cache"),
-            (self.output_arrays_checkbox, "results_to_numpy"),
-        ):
-            checkbox.blockSignals(True)
-            checkbox.setChecked(bool(getattr(self._tool, key)))
-            checkbox.blockSignals(False)
 
     @staticmethod
     def _format_bound(value: float) -> str:
@@ -1018,11 +1021,22 @@ class StatsToolTab(ToolTabWidget):
         if not name:
             return f"{header}\nChoose a measurement"
         digits = self.digits()
-        header += f"  (x {_number(window.xbgn, digits)} to {_number(window.xend, digits)})"
+        xunits = data.xscale.units or ""  # the window's X range, in x units
+        last = data.nparray.size - 1  # an unbounded edge: the trace's start or end
+        first_x, last_x = data.get_xvalue(0), data.get_xvalue(last)
+        x_limits = (first_x, last_x) if first_x is not None and last_x is not None else None
+        xbgn, xend = _limits(window.xbgn, window.xend, x_limits)
+        header += f"  (x {_number(xbgn, digits)} to {_number(xend, digits)})"
+        # Units once, here, as Stats2's: "(values in mV, x in ms)"
+        yunits = data.yscale.units or ""
+        known = tuple(u for u in (yunits, xunits) if u)
+        if known:
+            header += "  (" + ", ".join(
+                f"{axis} in {u}" for axis, u in (("values", yunits), ("x", xunits)) if u) + ")"
         if not window.on:
             return f"{header}\nWindow off"
         try:
-            lines = result_lines(self._measure(window, data), digits)
+            lines = result_lines(self._measure(window, data), digits, xunits, x_limits, known)
         except Exception as error:  # e.g. the window outside the trace
             lines = [f"no value: {error}"]
         return "\n".join([header, *lines])

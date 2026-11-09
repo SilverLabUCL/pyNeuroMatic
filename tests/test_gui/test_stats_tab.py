@@ -158,7 +158,9 @@ def test_stats_tab_uses_analysis_channel_not_plot_channel(qtbot):
     assert _main_result(manager)["s"] == 2.0
 
 
-def test_stats_output_options_control_backend_sinks(qtbot):
+def test_stats_arrays_are_a_setting_and_no_cache(qtbot):
+    """No Output group (#480): Stats arrays is in Settings › Stats (on by
+    default); the results cache is off by default (memory; for scripts)."""
     manager = NMManager(quiet=True)
     folder = manager.folders.new("Demo", select=False)
     data = folder.data.new("RecordA0", nparray=np.array([1.0, 3.0]))
@@ -166,16 +168,25 @@ def test_stats_output_options_control_backend_sinks(qtbot):
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
     tab = window.tool_tabs["Stats"]
+    for name in ("output_history_checkbox", "output_cache_checkbox",
+                 "output_arrays_checkbox"):
+        assert not hasattr(tab, name)
+    options = {option[0]: option for option in tab.config_options()}
+    assert options["results_to_numpy"][1:3] == ("Save Stats arrays (ST_)", True)
 
     tab.measurement_combo.setCurrentText("mean")
-    assert not hasattr(tab, "output_history_checkbox")  # removed (#475)
-    tab.output_cache_checkbox.setChecked(False)
-    tab.output_arrays_checkbox.setChecked(True)
     tab.run_button.click()
-
     assert manager.stats.results_to_cache is False
-    assert manager.stats.results_to_numpy is True
+    assert "stats" not in folder.toolresults  # nothing kept in memory
     assert "Stats_0" in folder.toolfolders
+
+    tab.set_config_option("results_to_numpy", False)
+    tab.run_button.click()
+    assert "Stats_1" not in folder.toolfolders  # no arrays saved
+
+    manager.stats.results_to_cache = True  # from a script: still works
+    tab.run_button.click()
+    assert len(folder.toolresults["stats"]) == 1
 
 
 def test_options_are_in_settings_not_the_panel(qtbot):
@@ -749,11 +760,11 @@ def test_stats_options_are_commands_without_messages(series_app):
     tab, start = series_app.tool_tabs["Stats"], len(_history(series_app))
     tab.set_config_option("overwrite", True)
     tab.set_config_option("results_all_epochs", True)
-    tab.output_cache_checkbox.setChecked(False)
+    tab.set_config_option("results_to_numpy", False)
     assert _history(series_app, start) == [
         ("command", "nm.stats.overwrite = True"),
         ("command", "nm.stats.results_all_epochs = True"),
-        ("command", "nm.stats.results_to_cache = False"),
+        ("command", "nm.stats.results_to_numpy = False"),
     ]
 
 

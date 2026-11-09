@@ -34,7 +34,6 @@ def app(qtbot):
     qtbot.addWidget(window)
     window.selection_model.update(epoch_set=ALL_EPOCHS)
     tab = window.tool_tabs["Stats"]
-    tab.output_arrays_checkbox.setChecked(True)
     tab.measurement_combo.setCurrentText("mean")
     window.tool_rail.select_tool("Stats")
     window.stats, window.manager, window.series = tab, manager, series
@@ -65,7 +64,13 @@ def _commands(app):
     return [e["command"] for e in app.manager.command_history.buffer]
 
 
+def test_each_epoch_is_the_default():
+    assert NMManager(quiet=True).settings.run_display == "each"
+    assert NMManager(quiet=True).settings.run_delay == 0.0
+
+
 def test_off_shows_nothing(app):
+    _display(app, "off")
     seen = _record(app)
     app.stats.run_button.click()
     assert seen == []
@@ -195,7 +200,8 @@ def test_the_plot_takes_clicks_during_a_run(app):
 def test_display_controls_and_settings_agree(app, qtbot):
     tab = app.stats
     assert tab.display_row.isVisible() or not tab.isVisible()
-    assert tab.display_combo.currentData() == "off"
+    assert tab.display_combo.currentData() == "each"  # the default
+    tab.display_combo.setCurrentIndex(tab.display_combo.findData("off"))
     assert not tab.delay_box.isVisibleTo(tab)  # no delay when off
     tab.display_combo.setCurrentIndex(tab.display_combo.findData("each"))
     tab.delay_box.setValue(0.5)
@@ -322,11 +328,11 @@ def test_details_show_the_runs_result_at_the_prompt(app):
         lambda _text: (details.append(app.stats.details.toPlainText()),
                        QtCore.QTimer.singleShot(0, lambda: app.stats.answer_prompt("continue"))))
     app.stats.run_button.click()
-    assert details[2].splitlines() == ["RecordA2  w0 mean  (x -inf to inf)",
+    assert details[2].splitlines() == ["RecordA2  w0 mean  (x 0 to 4)",
                                        "mean = 2"]  # E2's, from the run
     # After the run: E0 again (the Plot's), measured as a preview
     assert app.stats.details.toPlainText().splitlines() == [
-        "RecordA0  w0 mean  (x -inf to inf)", "mean = 0"]
+        "RecordA0  w0 mean  (x 0 to 4)", "mean = 0"]
 
 
 # --- Omit the epoch shown (#472) --------------------------------------------------
@@ -395,3 +401,37 @@ def test_the_prompt_is_in_the_run_row(app):
     assert right
     assert asking_height == height
     assert not any(b.isVisibleTo(tab) for b in tab.prompt_buttons.values())  # after
+
+
+
+def test_after_a_run_the_plot_is_back_on_its_channel(qtbot):
+    """The run shows its channel's epochs; afterwards the Plot is on the
+    channel (and panel) shown before."""
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=False)
+    series = folder.new_dataseries("Record", n_channels=2, n_epochs=2, n_points=5)
+    manager.select_keys = {"folder": folder.name, "dataseries": series.name,
+                           "channel": "A", "epoch": "E0"}
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    tab = window.tool_tabs["Stats"]
+    tab.measurement_combo.setCurrentText("mean")
+    tab.set_config_option("results_to_numpy", False)  # no Stats plot after it
+    window.view_tabs.select_channel("B")  # looking at B; the run is on A
+    window.context_panel.setCurrentWidget(window.table_panel)
+    channels = []
+    tab.run_trace_shown.connect(
+        lambda data, _c: data is not None and channels.append(window.view_tabs.current_view()))
+    tab.run_button.click()
+    assert channels and all(view == ("channel", "A") for view in channels)
+    assert window.view_tabs.current_view() == ("channel", "B")
+    assert window.context_panel.currentWidget() is window.table_panel
+    assert window.plot_widget.current_trace is series.get_data("B", "E0")
+
+
+def test_the_choice_is_labelled_progress(app, qtbot):
+    assert app.stats.display_label.text() == "Progress"
+    dialog = app.settings_dialog()
+    qtbot.addWidget(dialog)
+    form = dialog.run_display_combo.parentWidget().layout()
+    assert form.labelForField(dialog.run_display_combo).text() == "Progress"

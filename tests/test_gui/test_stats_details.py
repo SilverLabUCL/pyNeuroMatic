@@ -25,7 +25,7 @@ def test_a_point_found_with_baseline_and_difference():
             "x": 80.0, "xunits": "ms", "Δs": 15.0}
     assert result_lines([BSLN, max_]) == [
         "bsln mean = -70 mV  (x 0 to 40)",
-        "max = -55 mV at 80 ms   Δ = 15 mV",
+        "max = -55 mV at 80 ms  (Δ = 15 mV)",
     ]
 
 
@@ -41,7 +41,7 @@ def test_a_pipeline_a_line_per_step_then_its_measure():
          "dx": 14.342},
     ]
     assert result_lines(steps)[1:] == [
-        "max = -55 mV at 80 ms   Δ = 15 mV",
+        "max = -55 mV at 80 ms  (Δ = 15 mV)",
         "level+ 10% = -68.5 mV at 61.774 ms",
         "level+ 90% = -56.5 mV at 76.116 ms",
         "risetime+ = 14.342 ms",
@@ -96,7 +96,7 @@ def test_details_follow_the_window_and_the_trace(app):
     tab = app.stats
     assert _lines(app) == ["RecordA0  w0", "Choose a measurement"]
     tab.measurement_combo.setCurrentText("max")
-    assert _lines(app)[0] == "RecordA0  w0 max  (x -inf to inf)"  # its X range
+    assert _lines(app)[0] == "RecordA0  w0 max  (x 0 to 199)"  # its X range: the trace (-inf to inf)
     _type(tab.xbgn_edit, "60")
     _type(tab.xend_edit, "120")
     assert _lines(app) == ["RecordA0  w0 max  (x 60 to 120)", "max = -55 at 80"]
@@ -106,7 +106,7 @@ def test_details_follow_the_window_and_the_trace(app):
     _type(tab.bsln_xbgn_edit, "0")
     _type(tab.bsln_xend_edit, "40")
     assert _lines(app) == ["RecordA1  w0 max  (x 60 to 120)", "bsln mean = -70  (x 0 to 40)",
-                           "max = -55 at 90   Δ = 15"]
+                           "max = -55 at 90  (Δ = 15)"]
     tab.window_enabled.setChecked(False)
     assert _lines(app) == ["RecordA1  w0 max  (x 60 to 120)", "Window off"]
 
@@ -162,7 +162,6 @@ def test_digits_shown_in_settings(app, qtbot):
     assert app.manager.settings.stats_digits == 3
     assert _lines(app)[1] == f"mean = {float(mean.split()[2]):.3g}"
     # Stats2: its tables, after a run
-    tab.output_arrays_checkbox.setChecked(True)
     tab.run_button.click()
     tables = tab.stats2.tables
     assert StatsTables.digits == 3
