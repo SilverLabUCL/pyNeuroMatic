@@ -58,7 +58,7 @@ def test_other_results():
     nan = {"id": "main", "func": {"name": "mean"}, "s": math.nan, "sunits": "mV"}
     assert result_lines([BSLN, slope, spread, missing, nan])[1:] == [
         "slope = -0.164 mV/ms, intercept -50.022 mV",  # no Δ: not the baseline's units
-        "mean+std = -64.811 mV, std 5.341",
+        "mean = -64.811 mV, ±std 5.341 mV",  # mean+std: its value is the mean
         "max: no value",
         "mean = NaN mV",
     ]

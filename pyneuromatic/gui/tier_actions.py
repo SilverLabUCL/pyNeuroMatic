@@ -1229,7 +1229,15 @@ class FolderActions(TierActions):
             except Exception as error:  # reader errors vary by format
                 problems.append(f"{path.name}: could not read ({error})")
         if imported is not None:
-            self._select(folder=imported)
+            # The import's data series, if it made one (Data Series); else its
+            # data arrays (Data)
+            series = imported.dataseries.selected_value
+            if series is None and len(imported.dataseries):
+                series = next(iter(imported.dataseries.values()))
+            if series is not None:
+                self._select(folder=imported, dataseries=series, source="dataseries")
+            else:
+                self._select(folder=imported, source="data")
             self._changed()
             # Shown in the Browser, opened: its Info lists the imported metadata
             self.browse_requested.emit(imported)

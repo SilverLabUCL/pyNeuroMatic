@@ -119,3 +119,23 @@ def test_each_window_keeps_its_sign(app):
     assert tab.peak_combo.currentData() == "-"
     tab.window_combo.setCurrentIndex(tab.window_combo.findData("w1"))
     assert tab.peak_combo.currentData() == "+"
+
+
+def test_mean_plus_spread_shows_as_plus_minus(app):
+    """mean+std shows as "mean ± std" (a mean and its spread, not a sum);
+    the core name is unchanged."""
+    from pyneuromatic.gui.results_view import display_name
+    assert display_name("mean+std") == "mean ± std"
+    assert display_name("mean+sem") == "mean ± sem" and display_name("mean") == "mean"
+    tab = app.stats
+    combo = tab.measurement_combo
+    index = combo.findData("mean+std")
+    assert combo.itemText(index) == "mean ± std"
+    combo.setCurrentIndex(index)
+    assert app.manager.stats.windows["w0"].func["name"] == "mean+std"  # core name
+    assert _commands(app)[-1] == "nm.stats.windows['w0'].func = 'mean+std'"
+    lines = tab.details.toPlainText().splitlines()
+    assert lines[0].startswith("RecordA0  w0 mean ± std")
+    assert lines[1].startswith("mean = ")  # the value is the mean
+    bsln = tab.bsln_combo
+    assert bsln.itemText(bsln.findData("mean+sem")) == "mean ± sem"

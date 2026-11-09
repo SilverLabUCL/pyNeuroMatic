@@ -105,9 +105,11 @@ class NMToolStats(NMTool):
         self.__win_container.new()
 
         self.__results: dict[str, list[Any]] = {}
-        # Each result's epoch position in its data series (None outside a
-        # data series), by window, and the series' epoch count
-        self.__positions: dict[str, list[int | None]] = {}
+        # The run's rows (#476): (data array path, its epoch's position in its
+        # data series and its number (E3: 3), or None), one per data array
+        # analysed; each window's results' rows; and the series' epoch count
+        self.__rows: list[tuple[str, int | None, int | None]] = []
+        self.__row_of: dict[str, list[int]] = {}
         self.__n_epochs: int | None = None
         self.__run_series: NMDataSeries | None = None  # and its channel run on
         self.__run_channel = None
@@ -189,7 +191,8 @@ class NMToolStats(NMTool):
         """
         if isinstance(self.__results, dict):
             self.__results.clear()
-        self.__positions.clear()
+        self.__rows = []
+        self.__row_of = {}
         self.__n_epochs = None
         self.__run_series = self.__run_channel = None
         self.__transforms = []
@@ -229,8 +232,10 @@ class NMToolStats(NMTool):
                 self.__results[w.name].append(w.results)
             else:
                 self.__results[w.name] = [w.results]
-            self.__positions.setdefault(w.name, []).append(position)
+            self.__row_of.setdefault(w.name, []).append(len(self.__rows))
             self.__last_windows.append(w.name)
+        number = self.epoch.number if position is not None else None
+        self.__rows.append((self.data.path_str, position, number))  # whatever the windows
         return True  # ok
 
     def discard_last(self) -> None:
@@ -238,11 +243,13 @@ class NMToolStats(NMTool):
         epoch omitted from the run, #472)."""
         for name in getattr(self, "_NMToolStats__last_windows", []):
             self.__results[name].pop()
-            self.__positions[name].pop()
+            self.__row_of[name].pop()
             if not self.__results[name]:
                 del self.__results[name]
-                del self.__positions[name]
+                del self.__row_of[name]
         self.__last_windows = []
+        if self.__rows:
+            self.__rows.pop()
         self.__n_analysed -= 1
 
     def _epoch_position(self) -> int | None:
@@ -499,18 +506,57 @@ class NMToolStats(NMTool):
             safe = "%s_%s" % (safe, step)
         return "ST_%s_%s_%s" % (wname, safe, suffix)
 
-    def _result_slots(self, wname: str, n_results: int) -> list[int] | None:
-        """Each result's slot in the ST_ arrays when they have one point per
-        epoch (results_all_epochs, on a data series), else None."""
-        if not self._results_all_epochs or not self.__n_epochs:
-            return None
-        positions = self.__positions.get(wname, [])
-        if len(positions) != n_results or any(p is None for p in positions):
-            return None  # not (only) epochs of one data series
-        return positions
+    def _run_rows(self) -> tuple[list[str], list[int] | None, list[int], bool]:
+        """The ST_ arrays' rows (#476): the data array names, their epoch
+        numbers (None outside a data series), each run row's index, and
+        whether there's a row per epoch of the series.
+
+        One row per data array analysed; with results_all_epochs (on a data
+        series), one per epoch of the series, analysed or not."""
+        positions = [position for _path, position, _number in self.__rows]
+        if (self._results_all_epochs and self.__n_epochs
+                and all(p is not None for p in positions)):
+            names = [""] * self.__n_epochs
+            for path, position, _number in self.__rows:
+                names[position] = path
+            self._fill_epoch_paths(names)
+            series = self.__run_series
+            numbers = ([epoch.number for epoch in series.epochs.values()]
+                       if series is not None else list(range(self.__n_epochs)))
+            return names, numbers, positions, True
+        numbers = [number for _path, _position, number in self.__rows]
+        epochs = numbers if numbers and all(n is not None for n in numbers) else None
+        return [path for path, _p, _n in self.__rows], epochs, list(range(len(self.__rows))), False
+
+    @staticmethod
+    def _result_value(rdict: dict[str, Any], rkey: str) -> Any:
+        """A result's value for ST_ array key *rkey*; a crossing (no "s") gives
+        its level as "s", so it's saved as its step's _y (#476)."""
+        if rkey == "s" and "s" not in rdict:
+            return (rdict.get("func") or {}).get("ylevel")
+        return rdict.get(rkey)
+
+    @staticmethod
+    def _note_params(rdict: dict[str, Any], win: Any, id_str: str) -> str:
+        """What a step's note adds (#476): its percentage (p0=10), the
+        function that made it (stepfunc=max, stepfunc=level+), and a level's
+        ylevel or n_std, e.g. ", p0=10, stepfunc=level+"."""
+        parts = []
+        for key in ("p0", "p1"):
+            if key in rdict:
+                parts.append("%s=%g" % (key, rdict[key]))
+        func = rdict.get("func") or {}
+        if id_str not in ("main", "bsln") and func.get("name"):
+            parts.append("stepfunc=%s" % func["name"])
+        win_func = win.func if win is not None else {}
+        if id_str == "main":
+            for key in ("ylevel", "n_std"):
+                if win_func.get(key) is not None:
+                    parts.append("%s=%g" % (key, win_func[key]))
+        return "".join(", " + part for part in parts)
 
     def _fill_epoch_paths(self, data_paths: list[str]) -> None:
-        """Fill the blank entries of a per-epoch ST_{w}_data with the names of
+        """Fill the blank entries of a per-epoch ST_data_names with the names of
         the epochs' arrays (in the channel run on) that weren't analysed."""
         series, channel = self.__run_series, self.__run_channel
         if series is None or channel is None:
@@ -542,7 +588,12 @@ class NMToolStats(NMTool):
           ``ST_{w}_{func}_dx``, ``ST_{w}_{func}_n``, etc.
         * Long/special-char func names are abbreviated via
           ``_FUNC_NAME_MAP`` (e.g. ``risetime+`` → ``rt_p``).
-        * String data paths are saved as ``ST_{w}_data``.
+        * The rows, shared by all windows (#476): ``ST_data_names`` (the
+          data arrays' paths) and, for a data series, ``ST_epoch_num`` (their
+          epoch numbers). A window with no result for a row has NaN there.
+        * A crossing's level is saved as its step's ``_y`` (e.g.
+          ``ST_w0_rt_p_p0_y``); its percentage, the function that made the
+          step, and a level's ylevel / n_std are in each array's note.
 
         Returns:
             The newly created NMToolFolder, or None if no folder is set.
@@ -557,38 +608,34 @@ class NMToolStats(NMTool):
         f.notes.add(self._run_note())  # how the results were made
         transform_str = ", transform=%s" % transform if transform else ""
 
+        # The rows, shared by all windows (#476). Results set directly (not by
+        # run(), e.g. tests): a row per result, from their data names
+        if any(len(self.__row_of.get(w, [])) != len(v) for w, v in self.__results.items()):
+            longest = max(self.__results.values(), key=len)
+            self.__rows = [((ilist[0].get("data", "") if ilist else ""), None, None)
+                           for ilist in longest]
+            self.__row_of = {w: list(range(len(v))) for w, v in self.__results.items()}
+        data_names, epoch_nums, slot_of_row, per_epoch_rows = self._run_rows()
+        n_arrays = len(data_names)
+        if f.data is not None:
+            f.data.new("ST_data_names", nparray=np.array(data_names, dtype=object))
+            if epoch_nums is not None:
+                f.data.new("ST_epoch_num", nparray=np.array(epoch_nums, dtype=int))
+
         for wname, vlist in self.__results.items():
-            # vlist: list of lists, one inner list per data array
-            # Each inner list contains result dicts for that array
-
-            # Collect data path strings (one per array, from first rdict)
-            # Result dicts grouped by (id, step), one slot per data array so
-            # every ST_ array lines up with ST_{w}_data; a step a data array
-            # did not reach (e.g. no peak found) stays None and becomes NaN.
-            # With results_all_epochs, one slot per epoch of the series.
-            slots_of = self._result_slots(wname, len(vlist))
-            n_arrays = (self.__n_epochs if slots_of is not None and self.__n_epochs
-                        else len(vlist))
-            data_paths: list[str] = [""] * n_arrays
+            # vlist: one list of result dicts per data array the window measured.
+            # Result dicts grouped by (id, step), a slot per row, so every ST_
+            # array lines up with ST_data_names; a row the window (or step)
+            # has no result for stays None and becomes NaN.
+            rows = self.__row_of.get(wname, [])
             step_rdicts: dict[tuple[str, str], list[dict | None]] = {}
-
             for result_index, ilist in enumerate(vlist):
-                index = slots_of[result_index] if slots_of is not None else result_index
-                data_paths[index] = ilist[0].get("data", "") if ilist else ""
+                index = slot_of_row[rows[result_index]]
                 for rdict in ilist:
                     key = (rdict.get("id", "main"), self._result_step(rdict))
                     if key not in step_rdicts:
                         step_rdicts[key] = [None] * n_arrays
                     step_rdicts[key][index] = rdict
-            if slots_of is not None:  # name every epoch's array, analysed or not
-                self._fill_epoch_paths(data_paths)
-
-            # Save data path strings
-            if data_paths and f.data is not None:
-                f.data.new(
-                    "ST_%s_data" % wname,
-                    nparray=np.array(data_paths, dtype=object),
-                )
 
             # Save numeric arrays per (id, step)
             for (id_str, step), slots in step_rdicts.items():
@@ -596,7 +643,7 @@ class NMToolStats(NMTool):
                 func_name = present[0].get("func", {}).get("name", "")
                 for rkey, (_suffix, units_key) in self._NUMERIC_KEYS.items():
                     values = [
-                        rdict.get(rkey) if rdict is not None else None
+                        self._result_value(rdict, rkey) if rdict is not None else None
                         for rdict in slots
                     ]
                     if all(v is None for v in values):
@@ -606,6 +653,8 @@ class NMToolStats(NMTool):
                         dtype=float,
                     )
                     units = present[0].get(units_key) if units_key else None
+                    if rkey in ("s", "Δs") and not units:  # a crossing's level (and Δ): y units
+                        units = present[0].get("func", {}).get("yunits")
                     yscale = {"units": units} if units else None
                     dname = self._st_array_name(
                         wname, func_name, id_str, rkey, step
@@ -624,12 +673,13 @@ class NMToolStats(NMTool):
                             # (max, level+, ...); name the window's func
                             note_func = func_name if id_str == "main" else id_str
                         step_str = ", step=%s" % step if step else ""
-                        per_epoch = ", per epoch" if slots_of is not None else ""
+                        per_epoch = ", per epoch" if per_epoch_rows else ""
                         self._add_note(
                             d,
-                            "NMStats(win=%s, func=%s, id=%s%s, xbgn=%s, xend=%s, n=%d%s%s)"
-                            % (wname, note_func, id_str, step_str, xbgn, xend,
-                               len(present), per_epoch, transform_str),
+                            "NMStats(win=%s, func=%s, id=%s%s%s, xbgn=%s, xend=%s, n=%d%s%s)"
+                            % (wname, note_func, id_str, step_str,
+                               self._note_params(present[0], win, id_str),
+                               xbgn, xend, len(present), per_epoch, transform_str),
                         )
 
                 # Save warnings if any occurred
@@ -709,7 +759,8 @@ class NMToolStats2:
         targets: list[NMData] = []
         if select.lower() == "all":
             for name in toolfolder.data:
-                if name.startswith("ST_") and not name.endswith("_data"):
+                if (name.startswith("ST_") and not name.endswith("_data")
+                        and name not in ("ST_data_names", "ST_epoch_num")):
                     d = toolfolder.data.get(name)
                     if (d is not None
                             and isinstance(d.nparray, np.ndarray)
@@ -1019,25 +1070,32 @@ class NMToolStats2:
         if len(parts) < 2:
             return
         wname = parts[1]
-        data_arr = toolfolder.data.get("ST_%s_data" % wname)
-        if data_arr is None or not isinstance(data_arr.nparray, np.ndarray):
-            return
-
         epoch_map: dict[int, str] = {
             ep.number: ep.name
             for ep in dataseries.epochs.values()
             if isinstance(ep, NMEpoch)
         }
+        # Each row's epoch number: ST_epoch_num (#476), else parsed from the
+        # rows' data names (ST_data_names; or, saved before, ST_{w}_data)
+        numbers_arr = toolfolder.data.get("ST_epoch_num")
+        if numbers_arr is not None and isinstance(numbers_arr.nparray, np.ndarray):
+            numbers = [int(n) for n in numbers_arr.nparray]
+        else:
+            data_arr = (toolfolder.data.get("ST_data_names")
+                        or toolfolder.data.get("ST_%s_data" % wname))
+            if data_arr is None or not isinstance(data_arr.nparray, np.ndarray):
+                return
+            parsed_names = [nmu.parse_data_name(str(n)) for n in data_arr.nparray]
+            numbers = [p[2] if p is not None else None for p in parsed_names]
 
         true_epochs: list[str] = []
         false_epochs: list[str] = []
-        for i, array_name in enumerate(data_arr.nparray):
+        for i, number in enumerate(numbers):
             if i >= len(mask):
                 break
-            parsed = nmu.parse_data_name(str(array_name))
-            if parsed is None:
+            if number is None:
                 continue
-            ep_name = epoch_map.get(parsed[2])
+            ep_name = epoch_map.get(number)
             if ep_name is None:
                 continue
             if mask[i]:

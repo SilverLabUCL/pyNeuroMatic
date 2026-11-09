@@ -15,6 +15,15 @@ from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.tools.nm_tool_stats import NMToolStats2
 
 
+def display_name(name: str) -> str:
+    """A measurement as Stats shows it: mean+std, mean+var and mean+sem as
+    "mean ± std"... (a mean and its spread, not a sum). The core name, in
+    commands and scripts, is unchanged."""
+    if name and name.startswith("mean+"):
+        return "mean \u00b1 " + name[len("mean+"):]
+    return name
+
+
 _NOTE_PAIR = re.compile(r"(\w+)=([^,()]+)")
 
 
@@ -82,12 +91,16 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
         step_id, step = key
         note = fields[key]
         func = note.get("func", "")
+        stepfunc = note.get("stepfunc")  # the function that made a step (#476)
         if step_id == "bsln":
-            label = f"bsln {func}"
-        elif step:
-            label = step  # a crossing: its level isn't saved
-        else:
-            label = func if step_id == "main" else "peak"  # a pipeline's peak
+            label = f"bsln {display_name(func)}"
+        elif step:  # a crossing: e.g. "level+ 10%", as Stats1 (older: "p0")
+            percent = note.get(step)
+            label = f"{stepfunc} {_bound(percent)}%" if stepfunc and percent else step
+        else:  # a pipeline's peak is the max or min (older: "peak")
+            label = func if step_id == "main" else (stepfunc or "peak")
+            if label.startswith("mean+"):  # its value is the mean (its std follows)
+                label = "mean"
         main = None
         parts: list[str] = []
         delta = dx = None
@@ -97,8 +110,11 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
             if suffix == "y":
                 if main is None:
                     main = f"{label} = {value(data)}"
-                else:  # e.g. mean+std's std
-                    parts.append(f", {base} {value(data)}")
+                elif base == "var" or base.endswith("_var"):  # squared units: none
+                    parts.append(f", \u00b1{base} "
+                                 f"{number(data.nparray[row]) if row < len(data.nparray) else 'NaN'}")
+                else:  # mean+std's std: the mean's spread, as ±std (copies as written)
+                    parts.append(f", \u00b1{base} {value(data)}")
             elif suffix == "x":
                 parts.append(f" at {value(data)}")
             elif suffix == "b":
@@ -166,6 +182,9 @@ class StatsTables(QtWidgets.QWidget):
 
         self.arrays_table = self._make_table()
         self.summary_table = self._make_table()
+        # The chosen array's header is bold in both tables (the arrays table's
+        # by Qt, as its cell is selected; the summary's here)
+        self.arrays_table.currentCellChanged.connect(lambda *_a: self._bold_summary_header())
         # The summary is at most the height of its rows and the arrays get the
         # rest; drag the divider to trade space between them
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical, self)
@@ -231,6 +250,19 @@ class StatsTables(QtWidgets.QWidget):
         self._syncing = False
         self.column_selected.emit()
 
+    def _bold_summary_header(self) -> None:
+        """The summary table's header of the chosen array (the arrays table's
+        current column) in bold, as the arrays table's is."""
+        column = self.arrays_table.currentColumn()
+        for c in range(self.summary_table.columnCount()):
+            item = self.summary_table.horizontalHeaderItem(c)
+            if item is None:
+                continue
+            font = item.font()
+            if font.bold() != (c == column):
+                font.setBold(c == column)
+                item.setFont(font)
+
     @staticmethod
     def _set_current_column(table: QtWidgets.QTableWidget, column: int) -> None:
         """Make *column* current in *table* without highlighting a cell."""
@@ -281,7 +313,11 @@ class StatsTables(QtWidgets.QWidget):
             data = toolfolder.data.get(name)
             units = data.yscale.units
             for table in (self.arrays_table, self.summary_table):
-                header = QtWidgets.QTableWidgetItem(name[len(prefix):])
+                # The window's arrays by their own part (max_y); the rows'
+                # epoch numbers (ST_epoch_num, no window prefix) as "epoch"
+                label = name[len(prefix):] if name.startswith(prefix) else (
+                    "epoch" if name == "ST_epoch_num" else name)
+                header = QtWidgets.QTableWidgetItem(label)
                 header.setToolTip(f"{name} ({units})" if units else name)
                 table.setHorizontalHeaderItem(column, header)
             for row, value in enumerate(data.nparray):
@@ -292,6 +328,7 @@ class StatsTables(QtWidgets.QWidget):
                     row, column, self._value_item(summary.get(key, math.nan))
                 )
         self._align_columns()
+        self._bold_summary_header()
         self.column_selected.emit()
 
     def _align_columns(self) -> None:
@@ -338,11 +375,15 @@ class StatsTables(QtWidgets.QWidget):
             if name.rsplit("_", 1)[-1] in cls._DETAIL_SUFFIXES and not all_columns:
                 continue
             names.append(name)
+        if all_columns and "ST_epoch_num" in toolfolder.data:  # the rows' epochs (#476)
+            names.insert(0, "ST_epoch_num")
         return names
 
     @staticmethod
     def _row_labels(toolfolder: NMToolFolder, window: str) -> list[str]:
-        data = toolfolder.data.get(f"ST_{window}_data")
+        """The rows' data array names: ST_data_names (#476), or ST_{window}_data
+        in subfolders saved before."""
+        data = toolfolder.data.get("ST_data_names") or toolfolder.data.get(f"ST_{window}_data")
         if data is None or data.nparray is None:
             return []
         # Data paths look like "nm.Folder.RecordA0"; show the data name
@@ -520,8 +561,14 @@ class Stats2Panel(QtWidgets.QWidget):
         array_row.addWidget(self.array_combo, stretch=1)
         self.plot_button = QtWidgets.QPushButton("Plot", self)
         self.histogram_button = QtWidgets.QPushButton("Histogram", self)
+        # Plot against the rows' epoch numbers (ST_epoch_num, #476), not the index
+        self.epoch_x_checkbox = QtWidgets.QCheckBox("x: epoch", self)
+        self.epoch_x_checkbox.setChecked(True)
+        self.epoch_x_checkbox.setToolTip(
+            "Plot against the epoch numbers (ST_epoch_num); off: the row index")
         array_row.addWidget(self.plot_button)
         array_row.addWidget(self.histogram_button)
+        array_row.addWidget(self.epoch_x_checkbox)
         form.addRow("Array", array_row)
         layout.addLayout(form)
 
@@ -559,6 +606,7 @@ class Stats2Panel(QtWidgets.QWidget):
         self.tables.column_selected.connect(self._on_table_column_selected)
         self.results_combo.currentIndexChanged.connect(self._update_details)
         self.plot_button.clicked.connect(self.plot_selected)
+        self.epoch_x_checkbox.toggled.connect(lambda _on: self.array_changed.emit())
         self.histogram_button.clicked.connect(self.histogram_selected)
         self.delete_button.clicked.connect(self.delete_folder)
 
@@ -631,16 +679,27 @@ class Stats2Panel(QtWidgets.QWidget):
         if measure is not None:
             self.select_array(measure)
 
+    @staticmethod
+    def _windows(toolfolder: NMToolFolder) -> list[str]:
+        """The windows with results in *toolfolder*, from the ST_{window}_...
+        array names (not the rows' ST_data_names and ST_epoch_num, #476)."""
+        windows: list[str] = []
+        for name in toolfolder.data.keys():
+            if not name.startswith("ST_") or name in ("ST_data_names", "ST_epoch_num"):
+                continue
+            window = name[len("ST_"):].split("_", 1)[0]
+            if window and window not in windows:
+                windows.append(window)
+        return windows
+
     def _on_folder_changed(self, *_args) -> None:
         previous = self.window_combo.currentData()
         self.window_combo.blockSignals(True)
         self.window_combo.clear()
         toolfolder = self.toolfolder()
         if toolfolder is not None:
-            for name in toolfolder.data.keys():
-                if name.startswith("ST_") and name.endswith("_data"):
-                    window = name[len("ST_"):-len("_data")]
-                    self.window_combo.addItem(window, window)
+            for window in self._windows(toolfolder):
+                self.window_combo.addItem(window, window)
         index = self.window_combo.findData(previous)
         self.window_combo.setCurrentIndex(max(index, 0))
         self.window_combo.blockSignals(False)
@@ -677,7 +736,7 @@ class Stats2Panel(QtWidgets.QWidget):
         """The window's measurement among its arrays: a rise time, decay time
         or FWHM's result (``_dx``), else the first that isn't the baseline,
         e.g. ST_w0_max_y rather than ST_w0_bsln_y."""
-        names = list(self.tables.columns)
+        names = [n for n in self.tables.columns if n != "ST_epoch_num"]
         for name in names:
             if name.endswith("_dx"):
                 return name
@@ -751,13 +810,14 @@ class Stats2Panel(QtWidgets.QWidget):
         note = _note_fields(main) if main is not None else {}
         header = f"{toolfolder.name}  {window}"
         if note.get("func"):
-            header += (f" {note['func']}  (x {_bound(note.get('xbgn'))} "
+            header += (f" {display_name(note['func'])}  (x {_bound(note.get('xbgn'))} "
                        f"to {_bound(note.get('xend'))})")
         bsln = next((d for n, d in toolfolder.data.items()
                      if n.startswith(f"ST_{window}_bsln_")), None)
         if bsln is not None:
             bsln_note = _note_fields(bsln)
-            header += (f"  bsln {bsln_note.get('func', '')} (x {_bound(bsln_note.get('xbgn'))} "
+            header += (f"  bsln {display_name(bsln_note.get('func', ''))} "
+                       f"(x {_bound(bsln_note.get('xbgn'))} "
                        f"to {_bound(bsln_note.get('xend'))})")
         lines = [header]
         for row, label in enumerate(StatsTables._row_labels(toolfolder, window)):
@@ -809,14 +869,19 @@ class Stats2Panel(QtWidgets.QWidget):
         toolfolder = self.toolfolder()
         if name is None or toolfolder is None:
             return None
-        return (
-            f"{toolfolder.name}: {name}",
-            toolfolder.data.get(name).nparray,
-            None,
-            "data index",
-            self._axis_label(name),
-            "points",
-        )
+        y = toolfolder.data.get(name).nparray
+        x, xlabel = self.epoch_x(toolfolder, len(y))
+        return (f"{toolfolder.name}: {name}", y, x, xlabel, self._axis_label(name), "points")
+
+    def epoch_x(self, toolfolder: NMToolFolder, n: int) -> tuple:
+        """The Plot's x: the rows' epoch numbers (ST_epoch_num, #476) if there
+        are and "x: epoch" is on, else the row index (None)."""
+        epochs = toolfolder.data.get("ST_epoch_num")
+        usable = epochs is not None and epochs.nparray is not None and len(epochs.nparray) == n
+        self.epoch_x_checkbox.setEnabled(usable)
+        if usable and self.epoch_x_checkbox.isChecked():
+            return epochs.nparray, "epoch"
+        return None, "data index"
 
     def plot_selected(self) -> None:
         values = self.selected_plot()

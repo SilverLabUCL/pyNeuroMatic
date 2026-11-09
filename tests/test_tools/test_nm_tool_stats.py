@@ -166,13 +166,13 @@ class TestNMToolStats(unittest.TestCase):
         self._setup_folder()
         self._run_compute(n_arrays=3)
         f = self.tool._write_results_to_numpy()
-        self.assertIn("ST_w0_data", f.data)
+        self.assertIn("ST_data_names", f.data)
 
     def test_results_to_numpy_data_array_length(self):
         self._setup_folder()
         self._run_compute(n_arrays=3)
         f = self.tool._write_results_to_numpy()
-        d = f.data.get("ST_w0_data")
+        d = f.data.get("ST_data_names")
         self.assertEqual(len(d.nparray), 3)
 
     def test_results_to_numpy_creates_mean_y_array(self):
@@ -1173,9 +1173,9 @@ class TestNMToolStatsNotes(unittest.TestCase):
         self.assertIn("n=%d" % self.n_arrays, self._note_text())
 
     def test_st_data_array_has_no_note(self):
-        st_data = self.f.data.get("ST_w0_data")
+        st_data = self.f.data.get("ST_data_names")
         if st_data is None:
-            self.skipTest("ST_w0_data not created for this func")
+            self.skipTest("ST_data_names not created for this func")
         notes = getattr(st_data, "notes", None)
         if notes is not None:
             self.assertEqual(len(list(notes)), 0)
@@ -1505,7 +1505,7 @@ class TestNMToolStatsAllEpochs(unittest.TestCase):
         self.assertEqual([values[i] for i in (1, 3, 7)], [10.0, 30.0, 70.0])
         self.assertTrue(all(math.isnan(values[i]) for i in (0, 2, 4, 5, 6, 8, 9)))
         # Every epoch's array is named, analysed or not
-        paths = list(f.data["ST_w0_data"].nparray)
+        paths = list(f.data["ST_data_names"].nparray)
         self.assertEqual([p.rsplit(".", 1)[-1] for p in paths],
                          [f"RecordA{i}" for i in range(10)])
         self.assertIn("per epoch", f.data["ST_w0_mean_y"].notes.note)
@@ -1543,7 +1543,7 @@ class TestNMToolStatsAllEpochs(unittest.TestCase):
 
     def test_off_names_only_the_analysed_arrays(self):
         f = self._run(["E1", "E3"])
-        paths = list(f.data["ST_w0_data"].nparray)
+        paths = list(f.data["ST_data_names"].nparray)
         self.assertEqual([p.rsplit(".", 1)[-1] for p in paths], ["RecordA1", "RecordA3"])
 
     def test_names_follow_the_channel_run_on(self):
@@ -1554,7 +1554,7 @@ class TestNMToolStatsAllEpochs(unittest.TestCase):
             {"folder": self.folder, "dataseries": series, "channel": channel,
              "epoch": series.epochs["E1"], "data": series.epochs["E1"].data[1]},
         ])
-        paths = list(self.tool.toolfolder.data["ST_w0_data"].nparray)
+        paths = list(self.tool.toolfolder.data["ST_data_names"].nparray)
         self.assertEqual([p.rsplit(".", 1)[-1] for p in paths], ["TwoB0", "TwoB1", "TwoB2"])
 
 
