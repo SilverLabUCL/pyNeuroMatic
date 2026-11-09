@@ -48,8 +48,9 @@ class NMToolStatsConfig(NMToolConfig):
             ``np.nanmean``).  Defaults to True.
         results_to_history: If True, print results to history log after run.
             Defaults to False.
-        results_to_cache: If True, save results to NMFolder tool-results cache.
-            Defaults to True.
+        results_to_cache: If True, save results to NMFolder tool-results cache
+            (raw result dicts in memory, for scripts; the app doesn't use
+            it). Defaults to False (#480).
         results_to_numpy: If True, write results as ST_ NMData arrays.
             Defaults to True.
         results_all_epochs: If True, ST_ arrays of a data series run have one
@@ -63,7 +64,7 @@ class NMToolStatsConfig(NMToolConfig):
         "ignore_nans":        {"type": bool, "default": True},
         "overwrite":          {"type": bool, "default": False},
         "results_to_history": {"type": bool, "default": False},
-        "results_to_cache":   {"type": bool, "default": True},
+        "results_to_cache":   {"type": bool, "default": False},  # memory; scripts (#480)
         "results_to_numpy":   {"type": bool, "default": True},
         "results_all_epochs": {"type": bool, "default": False},
     }

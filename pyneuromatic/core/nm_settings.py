@@ -60,8 +60,8 @@ class NMSettings(NMToolConfig):
             line style and symbol (see ``TRACE_LINES``, ``TRACE_SYMBOLS``).
         plot_overlay_color, plot_overlay_width: How it draws overlay traces.
         run_display: While a tool runs, show each epoch in the Plot:
-            ``"off"`` (fastest), ``"each"`` (then wait *run_delay*) or
-            ``"ask"`` (then ask to continue).
+            ``"off"`` (fastest), ``"each"`` (the default; then wait
+            *run_delay*) or ``"ask"`` (then ask to continue).
         run_delay: Seconds to wait after showing each epoch ("each").
         stats_digits: Significant digits of Stats values shown (Stats1's
             Details, Stats2's tables and Details); copying keeps them all.
@@ -82,7 +82,7 @@ class NMSettings(NMToolConfig):
         "plot_overlay_color": {"type": str, "default": "#78909c"},
         "plot_overlay_width": {"type": float, "default": 1.0, "min": 0.5, "max": 10.0},
         # Tool runs: show each epoch as it's analysed (#468)
-        "run_display": {"type": str, "default": "off", "choices": list(RUN_DISPLAYS)},
+        "run_display": {"type": str, "default": "each", "choices": list(RUN_DISPLAYS)},
         "run_delay": {"type": float, "default": 0.0, "min": 0.0, "max": 10.0},
         # Stats values shown (#471)
         "stats_digits": {"type": int, "default": 6, "min": 2, "max": 10},

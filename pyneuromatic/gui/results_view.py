@@ -36,6 +36,26 @@ def _note_fields(data) -> dict[str, str]:
     return {}
 
 
+def _note_limits(note: dict, x_limits: tuple[float, float] | None) -> tuple[str, str]:
+    """A note's X range as text, an unbounded edge at the trace's start or
+    end (*x_limits*), as Stats1 shows it."""
+    bounds = []
+    for key, limit in (("xbgn", 0), ("xend", 1)):
+        text = note.get(key)
+        try:
+            if x_limits is not None and math.isinf(float(text)):
+                text = x_limits[limit]
+        except (TypeError, ValueError):
+            pass
+        bounds.append(_bound(text))
+    return bounds[0], bounds[1]
+
+
+def _with(text: str, units: str) -> str:
+    """*text* and its *units*, e.g. "120 ms"."""
+    return f"{text} {units}" if units else text
+
+
 def _bound(text) -> str:
     """An X range bound from a note, e.g. "60.0" -> "60", "inf" -> "inf"."""
     try:
@@ -46,7 +66,9 @@ def _bound(text) -> str:
 
 
 def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
-                       digits: int = 6) -> list[str]:
+                       digits: int = 6, xunits: str = "",
+                       x_limits: tuple[float, float] | None = None,
+                       known_units: tuple[str, ...] = ()) -> list[str]:
     """A window's saved result for one row (epoch) of its ST_ arrays, as text
     in the format of Stats1's Results (#475), e.g.
 
@@ -58,6 +80,8 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
 
     From the saved arrays and their notes, so what was saved; a crossing's
     level (and its %) isn't saved, so it's shown by its step (p0, p1).
+    Values in *known_units* (e.g. given once in a header) are shown without
+    them; others (e.g. a slope's mV/ms) keep theirs.
     """
     def number(value) -> str:
         try:
@@ -70,7 +94,7 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
         values = data.nparray
         text = number(values[row]) if row < len(values) else "NaN"
         units = data.yscale.units
-        return f"{text} {units}".strip() if units else text
+        return f"{text} {units}".strip() if units and units not in known_units else text
 
     prefix = f"ST_{window}_"
     groups: dict[tuple[str, str], list[tuple[str, object]]] = {}
@@ -93,7 +117,8 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
         func = note.get("func", "")
         stepfunc = note.get("stepfunc")  # the function that made a step (#476)
         if step_id == "bsln":
-            label = f"bsln {display_name(func)}"
+            # Its value is the mean (a spread follows): "bsln mean", as the mean's
+            label = "bsln " + ("mean" if func.startswith("mean+") else func)
         elif step:  # a crossing: e.g. "level+ 10%", as Stats1 (older: "p0")
             percent = note.get(step)
             label = f"{stepfunc} {_bound(percent)}%" if stepfunc and percent else step
@@ -115,6 +140,10 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
                                  f"{number(data.nparray[row]) if row < len(data.nparray) else 'NaN'}")
                 else:  # mean+std's std: the mean's spread, as ±std (copies as written)
                     parts.append(f", \u00b1{base} {value(data)}")
+            elif suffix in ("std", "sem", "var") and base == "bsln":
+                # A baseline's spread (e.g. mean ± std), as the mean's
+                parts.append(f", \u00b1{suffix} " + (
+                    value(data) if suffix != "var" else number(data.nparray[row])))
             elif suffix == "x":
                 parts.append(f" at {value(data)}")
             elif suffix == "b":
@@ -127,7 +156,8 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
             bsln_units = arrays[0][1].yscale.units if arrays else None
         line = (main if main is not None else label) + "".join(parts)
         if step_id == "bsln":
-            line += f"  (x {_bound(note.get('xbgn'))} to {_bound(note.get('xend'))})"
+            xbgn, xend = _note_limits(note, x_limits)
+            line += f"  (x {xbgn} to {_with(xend, xunits if xunits not in known_units else '')})"
         if delta is not None and bsln_units is not None \
                 and delta.yscale.units == bsln_units and number(delta.nparray[row]) != "NaN":
             line += f"   Δ = {value(delta)}"
@@ -535,9 +565,12 @@ class Stats2Panel(QtWidgets.QWidget):
         folder_row = QtWidgets.QHBoxLayout()
         self.folder_combo = QtWidgets.QComboBox(self)
         self.folder_combo.setObjectName("stats2Folder")
-        folder_row.addWidget(self.folder_combo, stretch=1)
-        self.delete_button = QtWidgets.QPushButton("Delete folder", self)
-        folder_row.addWidget(self.delete_button)
+        # As wide as its subfolder names (refresh); Delete... is the menu's
+        # last item: choose which subfolder (or confirm, if there's one)
+        folder_row.addWidget(self.folder_combo)
+        folder_row.addStretch(1)
+        self._folder_names: list[str] = []
+        self._shown_name: str | None = None  # the subfolder shown (not Delete)
         form.addRow("Folder", folder_row)
 
         window_row = QtWidgets.QHBoxLayout()
@@ -608,7 +641,6 @@ class Stats2Panel(QtWidgets.QWidget):
         self.plot_button.clicked.connect(self.plot_selected)
         self.epoch_x_checkbox.toggled.connect(lambda _on: self.array_changed.emit())
         self.histogram_button.clicked.connect(self.histogram_selected)
-        self.delete_button.clicked.connect(self.delete_folder)
 
         self.refresh()
 
@@ -634,11 +666,16 @@ class Stats2Panel(QtWidgets.QWidget):
 
     # --- folder and window lists ------------------------------------------
 
+    DELETE_FOLDER_ACTION = "__delete_stats_folder__"
+
     def toolfolder(self) -> NMToolFolder | None:
-        """The Stats toolfolder chosen in the Folder list."""
+        """The Stats toolfolder chosen in the Folder list (the one shown, while
+        its Delete item is chosen)."""
         if self._folder is None:
             return None
         name = self.folder_combo.currentData()
+        if name == self.DELETE_FOLDER_ACTION:
+            name = self._shown_name
         if name is None:
             return None
         return self._folder.toolfolders.get(name)
@@ -649,7 +686,7 @@ class Stats2Panel(QtWidgets.QWidget):
         Otherwise the current choice is kept, or the newest folder is chosen.
         """
         self._folder = self._current_folder()
-        previous = select or self.folder_combo.currentData()
+        previous = select or self._shown_name
         names: list[str] = []
         if self._folder is not None:
             names = [
@@ -661,15 +698,24 @@ class Stats2Panel(QtWidgets.QWidget):
         self.folder_combo.clear()
         for name in names:
             self.folder_combo.addItem(name, name)
-        index = self.folder_combo.findData(previous)
-        self.folder_combo.setCurrentIndex(index if index >= 0 else len(names) - 1)
+        self._folder_names = names
+        if names:  # Delete...: choose which (or confirm the only one)
+            self.folder_combo.insertSeparator(self.folder_combo.count())
+            self.folder_combo.addItem("Delete...", self.DELETE_FOLDER_ACTION)
+        metrics = self.folder_combo.fontMetrics()
+        longest = max(names, key=metrics.horizontalAdvance) if names else "Stats_Record_A_All_0"
+        self.folder_combo.setFixedWidth(metrics.horizontalAdvance(longest) + 44)
+
+        # The one before, else the newest (not the divider, whose data is None)
+        index = names.index(previous) if previous in names else len(names) - 1
+        self.folder_combo.setCurrentIndex(index)
         self.folder_combo.blockSignals(False)
         self._on_folder_changed()
         self.results_changed.emit()
 
     def has_results(self) -> bool:
         """True if the current folder has saved Stats results."""
-        return self.folder_combo.count() > 0
+        return bool(self._folder_names)
 
     def show_toolfolder(self, toolfolder: NMToolFolder | None) -> None:
         """Show *toolfolder*, e.g. the one a Stats run just wrote, with its
@@ -693,6 +739,11 @@ class Stats2Panel(QtWidgets.QWidget):
         return windows
 
     def _on_folder_changed(self, *_args) -> None:
+        name = self.folder_combo.currentData()
+        if name == self.DELETE_FOLDER_ACTION:
+            self.delete_folder()
+            return
+        self._shown_name = name
         previous = self.window_combo.currentData()
         self.window_combo.blockSignals(True)
         self.window_combo.clear()
@@ -793,10 +844,37 @@ class Stats2Panel(QtWidgets.QWidget):
             self.details.clear()
             return
         self.details.setPlainText(
-            self.array_details(toolfolder, self.window_combo.currentData(), name)
+            self.array_details(toolfolder, self.window_combo.currentData(), name,
+                               self._x_units(toolfolder, self.window_combo.currentData()))
         )
 
     # --- every epoch's saved result, as a list (#475) ----------------------
+
+    def _x_limits(self, toolfolder: NMToolFolder,
+                  window: str) -> tuple[float, float] | None:
+        """Where the measured traces start and end (the first data array the
+        run measured), for an unbounded X range edge (-inf, inf)."""
+        folder = self._folder
+        for label in StatsTables._row_labels(toolfolder, window):
+            source = folder.data.get(label) if folder is not None and label else None
+            if source is not None and source.nparray is not None and source.nparray.size:
+                first, last = source.get_xvalue(0), source.get_xvalue(source.nparray.size - 1)
+                if first is not None and last is not None:
+                    return first, last
+        return None
+
+    def _x_units(self, toolfolder: NMToolFolder, window: str) -> str:
+        """The x units of the run: a saved x array's (e.g. ST_w0_max_x, in
+        ms), else those of the data arrays it measured."""
+        for name, data in toolfolder.data.items():
+            if name.startswith(f"ST_{window}_") and name.endswith("_x") and data.yscale.units:
+                return data.yscale.units
+        folder = self._folder
+        for label in StatsTables._row_labels(toolfolder, window):
+            source = folder.data.get(label) if folder is not None and label else None
+            if source is not None:
+                return source.xscale.units or ""
+        return ""
 
     def epochs_text(self) -> str:
         """Results (All epochs): a line per epoch (row) the run computed, in
@@ -808,33 +886,46 @@ class Stats2Panel(QtWidgets.QWidget):
                      if n.startswith(f"ST_{window}_") and _note_fields(d).get("id")
                      not in (None, "bsln")), None)
         note = _note_fields(main) if main is not None else {}
+        xunits = self._x_units(toolfolder, window)
+        x_limits = self._x_limits(toolfolder, window)
         header = f"{toolfolder.name}  {window}"
         if note.get("func"):
-            header += (f" {display_name(note['func'])}  (x {_bound(note.get('xbgn'))} "
-                       f"to {_bound(note.get('xend'))})")
+            xbgn, xend = _note_limits(note, x_limits)
+            header += f" {display_name(note['func'])}  (x {xbgn} to {xend})"  # x units: below
         bsln = next((d for n, d in toolfolder.data.items()
                      if n.startswith(f"ST_{window}_bsln_")), None)
         if bsln is not None:
             bsln_note = _note_fields(bsln)
+            xbgn, xend = _note_limits(bsln_note, x_limits)
             header += (f"  bsln {display_name(bsln_note.get('func', ''))} "
-                       f"(x {_bound(bsln_note.get('xbgn'))} "
-                       f"to {_bound(bsln_note.get('xend'))})")
+                       f"(x {xbgn} to {xend})")
+        # Units once, here, not on every value: y (the main array's) and x
+        yunits = main.yscale.units if main is not None else ""
+        known = tuple(u for u in (yunits, xunits) if u)
+        if known:
+            header += "  (" + ", ".join(
+                f"{axis} in {u}" for axis, u in (("values", yunits), ("x", xunits)) if u) + ")"
         lines = [header]
         for row, label in enumerate(StatsTables._row_labels(toolfolder, window)):
             if not label:  # e.g. an epoch not analysed (one point per epoch)
                 continue
-            steps = epoch_result_lines(toolfolder, window, row, StatsTables.digits)
-            # The baseline's X range is in the header
-            steps = [re.sub(r"  \(x [^)]*\)$", "", step) for step in steps]
+            steps = epoch_result_lines(toolfolder, window, row, StatsTables.digits, xunits,
+                                       x_limits, known)
+            # The baseline's X range is in the header; Δ a step of its own
+            steps = [re.sub(r"  \(x [^)]*\)$", "", step).replace("   \u0394 = ", "; \u0394 = ")
+                     for step in steps]
             lines.append(f"{label}: " + "; ".join(steps))
         return "\n".join(lines)
 
     @staticmethod
-    def array_details(toolfolder: NMToolFolder, window: str, name: str) -> str:
+    def array_details(toolfolder: NMToolFolder, window: str, name: str,
+                      xunits: str = "") -> str:
         """Text describing ST_ array *name*: units, notes, summary, NaN rows."""
         data = toolfolder.data.get(name)
         units = data.yscale.units
-        lines = [f"{name} ({units})" if units else name]
+        # Units as in All epochs: "(values in mV, x in ms)"
+        given = [f"{axis} in {u}" for axis, u in (("values", units), ("x", xunits)) if u]
+        lines = [f"{name}  ({', '.join(given)})" if given else name]
         lines += [note["note"] for note in data.notes]
         lines.append("")
         summary = NMToolStats2.stats(toolfolder, select=name).get(name, {})
@@ -856,7 +947,6 @@ class Stats2Panel(QtWidgets.QWidget):
         name = self.selected_array()
         self.plot_button.setEnabled(name is not None)
         self.histogram_button.setEnabled(name is not None)
-        self.delete_button.setEnabled(self.toolfolder() is not None)
 
     def _axis_label(self, name: str) -> str:
         units = self.toolfolder().data.get(name).yscale.units
@@ -921,14 +1011,34 @@ class Stats2Panel(QtWidgets.QWidget):
         )
         return answer == QtWidgets.QMessageBox.StandardButton.Yes
 
+    def _choose_delete(self, names: list[str], shown: str | None) -> str | None:
+        """Which subfolder to delete, from a list (the one *shown* chosen
+        first), or None if cancelled (replaced in tests)."""
+        dialog = QtWidgets.QInputDialog(self)
+        dialog.setWindowTitle("Delete Stats folder")
+        dialog.setLabelText("Delete Stats folder and all its Stats arrays?")
+        dialog.setComboBoxItems(names)
+        if shown in names:
+            dialog.setTextValue(shown)
+        dialog.setOkButtonText("Delete")
+        return dialog.textValue() if dialog.exec() else None
+
     def delete_folder(self) -> None:
-        toolfolder = self.toolfolder()
-        if toolfolder is None or self._folder is None:
+        """Delete... (Folder menu): with several subfolders, choose which; with
+        one, confirm it."""
+        if self._folder is None or not self._folder_names:
+            self.refresh()
             return
-        if not self._confirm_delete(toolfolder.name):
-            return
-        self._folder.toolfolders.pop(toolfolder.name)
-        self.refresh()
+        names = self._folder_names
+        if len(names) > 1:
+            name = self._choose_delete(names, self._shown_name)
+        else:
+            name = names[0] if self._confirm_delete(names[0]) else None
+        if name is not None and name in self._folder.toolfolders:
+            self._folder.toolfolders.pop(name)
+            if name == self._shown_name:
+                self._shown_name = None  # the newest is shown next
+        self.refresh()  # back from the Delete... item to the subfolder shown
 
 
 __all__ = ["Stats2Panel", "StatsTables"]

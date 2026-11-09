@@ -109,7 +109,7 @@ class SettingsDialog(QtWidgets.QDialog):
             "While a tool runs, show each epoch in the Plot with the tool's "
             "measurements (also in each tool's panel, by Run)")
         self.run_display_combo.currentIndexChanged.connect(self._on_run_display_changed)
-        runs_form.addRow("Display", self.run_display_combo)
+        runs_form.addRow("Progress", self.run_display_combo)
         self.run_delay_box = QtWidgets.QDoubleSpinBox(runs)
         self.run_delay_box.setRange(0.0, 10.0)
         self.run_delay_box.setSingleStep(0.1)

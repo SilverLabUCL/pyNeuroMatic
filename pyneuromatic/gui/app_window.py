@@ -1855,12 +1855,24 @@ class NMAppWindow(QtWidgets.QMainWindow):
         tab.run_finished.connect(self._on_tool_run_finished)
 
     def _show_run_trace(self, data, channel: str) -> None:
-        """A tool run's epoch in the Plot (None: the run ended)."""
+        """A tool run's epoch in the Plot (None: the run ended, and the Plot is
+        as it was: its panel, channel or tool tab, and epoch)."""
         if data is not None and not self.plot_widget.run_display:  # the run's first
+            self._before_run_display = (self.context_panel.currentWidget(),
+                                        self.view_tabs.current_view())
             self.context_panel.setCurrentWidget(self.plot_widget)
             if channel in self.view_tabs.channel_names:
                 self.view_tabs.select_channel(channel)
         self.plot_widget.show_run_trace(data)
+        before = getattr(self, "_before_run_display", None)
+        if data is None and before is not None:
+            self._before_run_display = None
+            panel, view = before
+            if view is not None:
+                kind, name = view
+                (self.view_tabs.select_channel if kind == "channel"
+                 else self.view_tabs.select_tool)(name)
+            self.context_panel.setCurrentWidget(panel)
 
     def _update_tool_tabs(self) -> None:
         tools = [name for name, tab in self.tool_tabs.items() if tab.has_results()]

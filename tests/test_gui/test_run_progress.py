@@ -32,7 +32,6 @@ def app(qtbot):
     qtbot.addWidget(window)
     window.selection_model.update(epoch_set=ALL_EPOCHS)
     tab = window.tool_tabs["Stats"]
-    tab.output_arrays_checkbox.setChecked(True)
     tab.measurement_combo.setCurrentText("mean")
     window.tool_rail.select_tool("Stats")
     window.stats, window.manager = tab, manager
@@ -50,6 +49,8 @@ def _means(app):
 
 
 def test_a_quick_run_shows_no_progress(app):
+    app.manager.settings.run_display = "off"  # each epoch shown: progress too
+    app._apply_settings()
     shown = []
     app.stats.progress_changed.connect(lambda done, total: shown.append(done))
     app.stats.run_button.click()

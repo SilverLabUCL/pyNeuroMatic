@@ -220,7 +220,7 @@ class ToolTabWidget(QtWidgets.QWidget):
         self.display_row = QtWidgets.QWidget(self)
         display_layout = QtWidgets.QHBoxLayout(self.display_row)
         display_layout.setContentsMargins(0, 0, 0, 0)
-        self.display_label = QtWidgets.QLabel("Display", self.display_row)
+        self.display_label = QtWidgets.QLabel("Progress", self.display_row)
         display_layout.addWidget(self.display_label)
         self.display_combo = QtWidgets.QComboBox(self.display_row)
         for key, label in RUN_DISPLAY_LABELS.items():
