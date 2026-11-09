@@ -143,7 +143,7 @@ def test_plot_x_is_the_epoch_numbers(qtbot):
     stats2 = app.stats.stats2
     title, y, x, xlabel, _ylabel, _style = stats2.selected_plot()
     assert list(x) == [0, 1] and xlabel == "epoch"
-    stats2.epoch_x_checkbox.setChecked(False)
+    stats2.epoch_x_action.setChecked(False)
     assert stats2.selected_plot()[2] is None and stats2.selected_plot()[3] == "data index"
 
 
@@ -164,7 +164,7 @@ def test_an_older_subfolder_still_reads(qtbot):
                             "RecordA0: max = -55", "RecordA1: max = -54"]
     title, y, x, xlabel, _yl, _style = stats2.selected_plot()
     assert x is None and xlabel == "data index"  # no epoch numbers saved
-    assert not stats2.epoch_x_checkbox.isEnabled()
+    assert not stats2.epoch_x_action.isEnabled()
 
 
 def test_epoch_numbers_under_all_columns(qtbot):

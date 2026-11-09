@@ -309,17 +309,68 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     # The trace plot is untouched
     assert plot.plot_widget.getPlotItem().listDataItems()
 
-    stats2.histogram_button.click()
+    # Histogram (⋯ menu, #485): Plot draws it, a preview (nothing saved)
+    stats2.histogram_action.setChecked(True)
+    assert not stats2.epoch_x_action.isEnabled()  # its x is the bin edges
+    stats2.plot_button.click()
     _title, counts, edges, _xlabel, _ylabel, style = plots[-1]
     assert style == "histogram"
     assert sum(counts) == len(PEAKS)
     assert len(edges) == len(counts) + 1
-    # Saved in the Stats subfolder, and replaced when made again
     subfolder = window.tool_tabs["Stats"].stats_tool.toolfolder
+    assert "H_ST_w0_max_ds_counts" not in subfolder.data
+    # Save Histogram saves what's shown, and replaces it when saved again
+    stats2.save_histogram_action.trigger()
     assert list(subfolder.data.get("H_ST_w0_max_ds_counts").nparray) == list(counts)
     assert list(subfolder.data.get("H_ST_w0_max_ds_edges").nparray) == list(edges)
-    stats2.histogram_button.click()
+    stats2.save_histogram_action.trigger()
     assert "H_ST_w0_max_ds_counts" in subfolder.data
+    # Off: points again, x: epoch back
+    stats2.histogram_action.setChecked(False)
+    assert stats2.epoch_x_action.isEnabled()
+    stats2.plot_button.click()
+    assert plots[-1][5] == "points"
+
+
+def _field_widgets(panel, label: str) -> list:
+    """The widgets of form row *label* in *panel*."""
+    form = panel.findChild(QtWidgets.QFormLayout)
+    role = QtWidgets.QFormLayout.ItemRole
+    for row in range(form.rowCount()):
+        if form.itemAt(row, role.LabelRole).widget().text() == label:
+            field = form.itemAt(row, role.FieldRole).layout()
+            return [field.itemAt(i).widget() for i in range(field.count())
+                    if field.itemAt(i).widget() is not None]
+    return []
+
+
+def test_plot_options_are_in_a_menu_beside_plot(qtbot):
+    _manager, _folder, window = _stats_window(qtbot)
+    window.tool_tabs["Stats"].run_button.click()
+    stats2 = window.tool_tabs["Stats"].stats2
+    assert stats2.plot_menu_button.menu() is stats2.plot_menu
+    texts = [a.text() for a in stats2.plot_menu.actions() if a.text()]
+    assert texts == ["Histogram", "x: epoch", "Save Histogram"]
+    assert not stats2.histogram_action.isChecked()  # points, until turned on
+    # The Array row: the dropdown (its width back), Plot and ⋯ only (#485)
+    assert _field_widgets(stats2, "Array") == [
+        stats2.array_combo, stats2.plot_button, stats2.plot_menu_button]
+
+
+def test_histogram_follows_the_chosen_array_without_saving(qtbot):
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    stats2 = tab.stats2
+    stats2.histogram_action.setChecked(True)
+    drawn = []
+    stats2.array_changed.connect(lambda: drawn.append(stats2.selected_plot()[5]))
+    for i in range(stats2.array_combo.count()):  # browsing
+        stats2.array_combo.setCurrentIndex(i)
+    assert drawn and set(drawn) == {"histogram"}
+    assert not any(name.startswith("H_") for name in tab.stats_tool.toolfolder.data)
+    stats2.refresh()
+    assert stats2.histogram_action.isChecked()  # on until turned off
 
 
 def test_copy_all_stats_tables_from_the_table_panel(qtbot):

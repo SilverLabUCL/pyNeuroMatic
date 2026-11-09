@@ -798,8 +798,10 @@ def test_stats2_histogram_is_one_command_saved_in_the_subfolder(series_app):
     tab.run_button.click()
     tab.stats2.array_combo.setCurrentText("ST_w0_mean_y")
     start = len(_history(series_app))
-    tab.stats2.histogram_button.click()
-    tab.stats2.histogram_button.click()  # again: replaced
+    tab.stats2.histogram_action.setChecked(True)  # browsing: a preview, no command
+    assert _history(series_app, start) == []
+    tab.stats2.save_histogram_action.trigger()
+    tab.stats2.save_histogram_action.trigger()  # again: replaced
     command = ("nm.stats.histogram(nm.folders['Demo'].toolfolders['Stats_Record_A_All_0'], "
                "'ST_w0_mean_y', bins=2)")
     assert _history(series_app, start) == [("command", command)] * 2
