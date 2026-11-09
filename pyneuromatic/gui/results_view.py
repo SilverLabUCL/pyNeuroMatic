@@ -562,6 +562,9 @@ class Stats2Panel(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         form = QtWidgets.QFormLayout()
+        # Rows span the panel, so the Array list has its row's width (macOS
+        # keeps a form's fields at their size hint, cutting off array names)
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         folder_row = QtWidgets.QHBoxLayout()
         self.folder_combo = QtWidgets.QComboBox(self)
         self.folder_combo.setObjectName("stats2Folder")

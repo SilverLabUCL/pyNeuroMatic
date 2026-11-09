@@ -9,7 +9,7 @@ from PyQt6 import QtWidgets
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
 from pyneuromatic.gui.context_views import ValuesPlot
-from pyneuromatic.gui.results_view import StatsTables
+from pyneuromatic.gui.results_view import Stats2Panel, StatsTables
 
 pytestmark = pytest.mark.gui
 
@@ -355,6 +355,26 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
     # The Array row: the dropdown (its width back), Plot and ⋯ only (#485)
     assert _field_widgets(stats2, "Array") == [
         stats2.array_combo, stats2.plot_button, stats2.plot_menu_button]
+
+
+@pytest.mark.parametrize("style", ["macos", "fusion"])
+def test_array_list_spans_its_row(qtbot, style):
+    """The rows span the panel, so array names aren't cut off, also with
+    macOS's style (its forms keep fields at their size hint)."""
+    if style not in [key.lower() for key in QtWidgets.QStyleFactory.keys()]:
+        pytest.skip(f"no {style} style here")
+    panel = Stats2Panel(NMManager(quiet=True))
+    qtbot.addWidget(panel)
+    qt_style = QtWidgets.QStyleFactory.create(style)
+    panel.setStyle(qt_style)
+    panel.resize(420, 600)
+    panel.show()
+    qtbot.waitExposed(panel)
+    combo, plot, menu = panel.array_combo, panel.plot_button, panel.plot_menu_button
+    assert combo.width() > panel.width() // 2
+    # Up to Plot and ⋯, at the row's end
+    assert combo.geometry().right() < plot.geometry().left()
+    assert menu.geometry().right() >= panel.width() - 20
 
 
 def test_histogram_follows_the_chosen_array_without_saving(qtbot):
