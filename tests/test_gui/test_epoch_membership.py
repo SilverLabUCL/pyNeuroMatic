@@ -92,7 +92,7 @@ def test_group_dropdown_hidden_without_groups(app):
 
 def test_usable_with_overlay_hidden_for_data_without_sets(app):
     panel = app.plot_widget
-    panel.overlay_action.setChecked(True)  # still the current (blue) epoch
+    panel.overlay_count.setValue(2)  # still the current (blue) epoch
     assert panel.membership_row.isVisibleTo(panel)
     assert panel.membership_row.isEnabled()
     panel.set_checkboxes["Set0"].setChecked(True)
@@ -136,13 +136,12 @@ def test_graph_menu(app):
         pytest.skip("needs pyqtgraph")
     menu = panel.graph_button.menu()
     texts = [a.text() for a in menu.actions() if a.text()]
-    assert texts == ["Overlay Traces", "Grid", "Rescale", "Tool Ranges", "Tool Measures",
+    assert texts == ["Grid", "Rescale", "Tool Ranges", "Tool Measures",
                      "Trace Style...",
                      "Filter && Transform...", "Axes", "Export..."]  # shows "&"
-    assert panel.overlay_action.isEnabled() and not panel.overlay_limit.isEnabled()
-    panel.overlay_action.setChecked(True)
-    assert panel.overlay_limit.isEnabled()
-    assert panel.overlay_status_label.text() == "Showing 3 of 6 traces"  # limit 3
+    assert panel.overlay_count.isEnabled() and panel.overlay_count.value() == 0
+    panel.overlay_count.setValue(2)
+    assert panel.overlay_status_label.text() == "Showing 3 of 6 traces"  # and the current
 
     panel.grid_action.setChecked(True)
     assert panel.plot_widget.getAxis("bottom").grid
@@ -160,8 +159,7 @@ def test_overlay_unavailable_for_data_arrays(app):
     folder = app.selection_model.selection["folder"]
     folder.data.new("Single", nparray=np.array([1.0, 2.0]))
     app.selection_model.update(data=folder.data["Single"], source="data")
-    assert not app.plot_widget.overlay_action.isEnabled()
-    assert not app.plot_widget.overlay_limit.isEnabled()
+    assert not app.plot_widget.overlay_count.isEnabled()
 
 
 def test_selection_is_shown_in_the_window_title(app):

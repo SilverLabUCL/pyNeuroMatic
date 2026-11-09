@@ -107,7 +107,7 @@ def test_overlay_traces(app):
     app.settings.plot_overlay_color = "#ff9800"
     app.settings.plot_overlay_width = 1.5
     app._apply_settings()
-    app.plot_widget.overlay_action.setChecked(True)
+    app.plot_widget.overlay_count.setValue(2)
     curves = _curves(app)
     assert len(curves) > 1
     current = [c for c in curves if _pen(c).color().name() == "#000000"]
@@ -258,7 +258,7 @@ def test_trace_menu_colour_default_and_settings(shown, monkeypatch):
 
 
 def test_right_click_an_overlay_trace(shown):
-    shown.plot_widget.overlay_action.setChecked(True)  # 3 shown, E0..E2: y = x + i
+    shown.plot_widget.overlay_count.setValue(2)  # 3 shown, E0..E2: y = x + i
     shown.plot_widget.rescale()
     menu = _right_click(shown, 4.5, 6.5)  # on E2 (y = x + 2), an overlay
     assert _texts(menu) == ["Overlay Traces", "Colour...", "Line Width",
