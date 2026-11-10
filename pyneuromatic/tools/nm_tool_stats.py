@@ -137,24 +137,25 @@ class NMToolStats(NMTool):
         self,
         toolfolder: NMToolFolder,
         name: str,
-        bins: int | list = 10,
+        bins: int | str | list = "auto",
+        binwidth: float | None = None,
         xrange: tuple | None = None,
-        density: bool = False,
+        pad: int = 1,
+        output: str = "count",
     ) -> dict[str, Any]:
-        """Histogram of ST_ array *name*, saved in *toolfolder* as
-        ``H_{name}_counts`` and ``H_{name}_edges`` (replacing earlier ones),
-        as one command (#448), e.g.::
+        """Histogram of ST_ array *name*, saved in *toolfolder* as ``H_{name}``
+        (replacing an earlier one), as one command (#448, #492), e.g.::
 
             nm.stats.histogram(nm.folders['Demo'].toolfolders['Stats_Record_A_All_0'],
-                               'ST_w0_max_y', bins=3)
+                               'ST_w0_max_y', binwidth=2)
 
         See :meth:`NMToolStats2.histogram` for the arguments.
         """
-        result = NMToolStats2.histogram(toolfolder, name, bins=bins, xrange=xrange,
-                                        density=density)
+        result = NMToolStats2.histogram(toolfolder, name, bins=bins, binwidth=binwidth,
+                                        xrange=xrange, pad=pad, output=output)
         call = nmu.kwargs_repr(self.histogram,
-                               {"bins": bins, "xrange": xrange, "density": density},
-                               always=("bins",))
+                               {"bins": bins, "binwidth": binwidth, "xrange": xrange,
+                                "pad": pad, "output": output})
         nmch.add_nm_command("%s.histogram(%s, %r%s)"
                             % (self._name, nm_ref(toolfolder), name, call))
         return result
@@ -854,37 +855,47 @@ class NMToolStats2:
     def histogram(
         toolfolder: NMToolFolder,
         name: str,
-        bins: int | list = 10,
+        bins: int | str | list = "auto",
+        binwidth: float | None = None,
         xrange: tuple | None = None,
-        density: bool = False,
+        pad: int = 1,
+        output: str = "count",
         save_to_numpy: bool = True,
     ) -> dict[str, Any]:
-        """Compute a histogram of a single ST_ array.
+        """Histogram of ST_ array *name* (#492), saved in *toolfolder* as
+        ``H_{name}`` (replacing an earlier one).
 
-        NaN and Inf values are excluded before computing the histogram.
+        NaN and Inf values are excluded. ``H_{name}`` holds the counts (or
+        probability, or density), its x scale the first bin edge and the bin
+        width, in *name*'s units. The bin edges are saved too, as
+        ``H_{name}_edges``, only if the bins differ in width (*bins* a list of
+        edges); otherwise an earlier ``H_{name}_edges`` is removed.
 
         Args:
             toolfolder: NMToolFolder containing the ST_ array.
             name: Name of the ST_ array to histogram.
-            bins: Number of equal-width bins (int) or explicit bin edges
-                (list). Defaults to 10.
-            xrange: ``(min, max)`` tuple to restrict the data range.
-                Defaults to None (full data range).
-            density: If True, return probability density instead of counts.
-                Defaults to False.
-            save_to_numpy: If True, save ``H_{name}_counts`` and
-                ``H_{name}_edges`` as NMData arrays in toolfolder.
-                Defaults to True.
+            bins: ``"auto"`` (numpy's "auto" width), a number of bins, or a
+                list of bin edges.
+            binwidth: The bins' width (instead of *bins*).
+            xrange: ``(min, max)`` the bins span, or None: the values' range,
+                the bin edges multiples of the width (round numbers).
+            pad: Empty bins added at each end (not with *xrange* or a list of
+                edges). Defaults to 1.
+            output: ``"count"``, ``"probability"`` (the heights add up to 1)
+                or ``"density"`` (the areas add up to 1).
+            save_to_numpy: If True, save ``H_{name}`` in toolfolder.
 
         Returns:
-            Dict with keys ``"counts"`` (bin counts or density values) and
-            ``"edges"`` (bin edge values, length = bins + 1).
+            Dict with keys ``"counts"`` (the output), ``"edges"`` (length
+            bins + 1), ``"width"`` (None for unequal bins) and ``"n"`` (the
+            number of values counted). See :func:`nm_math.histogram_round_edges`.
 
         Raises:
             TypeError: If toolfolder is not an NMToolFolder or name is not
                 a string.
             KeyError: If name is not found in toolfolder.
-            ValueError: If the named array has no nparray data.
+            ValueError: If the named array has no nparray data, or no finite
+                values, or for bad bins or output.
         """
         if not isinstance(toolfolder, NMToolFolder):
             raise TypeError(
@@ -898,29 +909,33 @@ class NMToolStats2:
         if not isinstance(d.nparray, np.ndarray):
             raise ValueError("array has no nparray: %s" % name)
 
-        result = nm_math.histogram(d.nparray, bins=bins, xrange=xrange,
-                                   density=density)
+        result = nm_math.histogram_round_edges(d.nparray, bins=bins, binwidth=binwidth,
+                                           xrange=xrange, pad=pad, output=output)
 
         if save_to_numpy:
-            edges = result["edges"]
+            edges, width = result["edges"], result["width"]
+            units = d.yscale.units
             xscale = {"start": float(edges[0]),
-                      "delta": float(edges[1] - edges[0]),
-                      "label": d.yscale.label, "units": d.yscale.units}
-            yscale = {"label": "density" if density else "count"}
-            for suffix in ("counts", "edges"):  # replace an earlier histogram's
-                if "H_%s_%s" % (name, suffix) in toolfolder.data:
-                    toolfolder.data.pop("H_%s_%s" % (name, suffix))
-            toolfolder.data.new(
-                "H_%s_counts" % name,
-                nparray=result["counts"].astype(float),
-                xscale=xscale,
-                yscale=yscale,
-            )
-            toolfolder.data.new(
-                "H_%s_edges" % name,
-                nparray=edges,
-                yscale={"label": d.yscale.label, "units": d.yscale.units},
-            )
+                      "delta": float(width if width is not None else edges[1] - edges[0]),
+                      "label": d.yscale.label, "units": units}
+            yscale = {"label": output,
+                      "units": "1/%s" % units if output == "density" and units else None}
+            hname = "H_%s" % name
+            for old in (hname, hname + "_edges"):  # replace an earlier histogram's
+                if old in toolfolder.data:
+                    toolfolder.data.pop(old)
+            h = toolfolder.data.new(hname, nparray=result["counts"], xscale=xscale,
+                                    yscale=yscale)
+            how = ("binwidth=%g" % binwidth if binwidth is not None
+                   else "bins=%s" % (bins if isinstance(bins, (str, int, np.integer))
+                                     else "edges"))
+            h.notes.add("NMHistogram(array=%s, %s, nbins=%d, xbgn=%g, xend=%g, pad=%d, "
+                        "output=%s, n=%d)" % (name, how, len(result["counts"]), edges[0],
+                                              edges[-1], pad if xrange is None else 0,
+                                              output, result["n"]))
+            if width is None:  # unequal bins: the x scale can't hold them
+                toolfolder.data.new(hname + "_edges", nparray=np.asarray(edges, dtype=float),
+                                    yscale={"label": d.yscale.label, "units": units})
 
         return result
 

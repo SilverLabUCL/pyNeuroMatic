@@ -1068,6 +1068,71 @@ class TestHistogram:
             nm_math.histogram([1.0, 2.0, 3.0])
 
 
+class TestHistogramRoundEdges:
+    """Stats2's histogram bins (#492): edges on multiples of the width,
+    padded with empty bins, or over a range as given."""
+
+    Y = np.array([-55.3, -52.0, -50.0, -48.0, -44.1])
+
+    def test_edges_on_multiples_of_the_width_and_padded(self):
+        r = nm_math.histogram_round_edges(self.Y, binwidth=2, pad=1)
+        assert list(r["edges"]) == list(np.arange(-58.0, -41.0, 2.0))  # -58 ... -42
+        assert r["counts"][0] == 0 and r["counts"][-1] == 0
+        assert r["counts"].sum() == 5 and r["width"] == 2.0
+
+    def test_same_width_same_bins(self):
+        # Control and drug: bins line up, so they compare bin by bin
+        a = nm_math.histogram_round_edges(self.Y, binwidth=2)["edges"]
+        b = nm_math.histogram_round_edges(self.Y + 0.5, binwidth=2)["edges"]
+        assert set(a) & set(b) and all(e % 2 == 0 for e in np.concatenate([a, b]))
+
+    def test_max_on_an_edge_stays_in_a_counted_bin(self):
+        r = nm_math.histogram_round_edges(np.array([-56.0, -44.0]), binwidth=2, pad=1)
+        assert r["counts"][0] == 0 and r["counts"][-1] == 0
+        assert r["counts"].sum() == 2
+
+    def test_widths_of_a_tenth_are_exact(self):
+        r = nm_math.histogram_round_edges(np.array([0.3, 0.5]), binwidth=0.1)
+        assert list(r["edges"]) == [0.3, 0.4, 0.5]
+        assert list(r["counts"]) == [1, 1] and r["width"] == 0.1
+
+    def test_auto_is_not_capped(self):
+        y = np.random.default_rng(0).normal(size=1000)
+        r = nm_math.histogram_round_edges(y, pad=1)
+        assert len(r["counts"]) > 22  # more than 20 bins and the 2 empty
+        assert r["counts"][0] == 0 and r["counts"][-1] == 0 and r["counts"].sum() == 1000
+
+    def test_number_of_bins_and_empty_bins(self):
+        r = nm_math.histogram_round_edges(self.Y, bins=5, pad=2)
+        assert len(r["counts"]) == 9
+        assert list(r["counts"][:2]) == [0, 0] and list(r["counts"][-2:]) == [0, 0]
+        assert r["edges"][2] == -55.3 and r["edges"][-3] == -44.1  # over the values
+
+    def test_xrange_as_given(self):
+        r = nm_math.histogram_round_edges(self.Y, binwidth=5, xrange=(-60, -40), pad=1)
+        assert list(r["edges"]) == [-60, -55, -50, -45, -40]  # no padding
+        r = nm_math.histogram_round_edges(self.Y, bins=2, xrange=(-60, -50))
+        assert r["n"] == 3  # -44.1 and -48 are outside
+
+    def test_unequal_bins(self):
+        r = nm_math.histogram_round_edges(self.Y, bins=[-60, -50, -45, -40], pad=1)
+        assert list(r["counts"]) == [2, 2, 1] and r["width"] is None  # no padding
+
+    def test_outputs(self):
+        p = nm_math.histogram_round_edges(self.Y, binwidth=2, output="probability")
+        assert abs(p["counts"].sum() - 1) < 1e-12
+        d = nm_math.histogram_round_edges(self.Y, binwidth=2, output="density")
+        assert abs((d["counts"] * np.diff(d["edges"])).sum() - 1) < 1e-12
+
+    def test_bad_arguments(self):
+        for kwargs in ({"binwidth": 0}, {"bins": 0}, {"output": "counts"},
+                       {"xrange": (1, 1)}):
+            with pytest.raises(ValueError):
+                nm_math.histogram_round_edges(self.Y, **kwargs)
+        with pytest.raises(ValueError):
+            nm_math.histogram_round_edges(np.array([np.nan]))
+
+
 # =============================================================================
 # ks_test
 # =============================================================================

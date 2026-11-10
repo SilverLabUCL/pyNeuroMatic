@@ -1736,6 +1736,138 @@ def histogram(
     return {"counts": counts, "edges": edges}
 
 
+HISTOGRAM_OUTPUTS = ("count", "probability", "density")
+
+
+def histogram_round_edges(
+    y: np.ndarray,
+    bins: int | str | list = "auto",
+    binwidth: float | None = None,
+    xrange: tuple | None = None,
+    pad: int = 0,
+    output: str = "count",
+) -> dict:
+    """A histogram whose bin edges are on round numbers (multiples of the bin
+    width), with empty bins at each end, as Stats2 makes them (#492). NaN and
+    Inf values are excluded.
+
+    The bins:
+
+    * *binwidth*, or *bins* ``"auto"`` (numpy's "auto" width: the larger of
+      Freedman–Diaconis and Sturges): without *xrange*, they start at a
+      multiple of the width (the largest at or below the values' min, e.g.
+      width 2 from -55.3: -56, -54, ...), so the same width gives the same
+      bins for any values; the last bin extends to a whole bin past the max.
+    * *bins* an int: that many equal bins over the values' range.
+    * *bins* a list: the bins' edges, as given (equal or not).
+    * With *xrange* ``(min, max)``: the bins start at its min (a width's last
+      bin extends to a whole bin past its max); values outside are left out.
+
+    *pad* empty bins are added at each end (not with *xrange* or a list of
+    edges), so the histogram starts and ends at zero.
+
+    Args:
+        y: 1-D numpy array of values.
+        bins: ``"auto"``, a number of bins, or a list of bin edges.
+        binwidth: The bins' width (instead of *bins*).
+        xrange: ``(min, max)`` the bins span, or None (the values' range).
+        pad: Empty bins added at each end.
+        output: ``"count"``; ``"probability"`` (count ÷ number of values
+            counted: the heights add up to 1); or ``"density"`` (count ÷
+            (number of values × bin width): the areas add up to 1).
+
+    Returns:
+        Dict with keys ``"counts"`` (the output, float), ``"edges"`` (length
+        bins + 1), ``"width"`` (None if the bins differ in width) and ``"n"``
+        (the number of values counted).
+
+    Raises:
+        TypeError: If *y* is not a numpy ndarray.
+        ValueError: For no finite values (and no *xrange*), a width or
+            number of bins below 1, a range with max <= min, or an unknown
+            *output*.
+    """
+    if not isinstance(y, np.ndarray):
+        raise TypeError(nmu.type_error_str(y, "y", "numpy.ndarray"))
+    if output not in HISTOGRAM_OUTPUTS:
+        raise ValueError("output: %r (%s)" % (output, ", ".join(HISTOGRAM_OUTPUTS)))
+    arr = y.astype(float)
+    arr = arr[np.isfinite(arr)]
+    edges_given = binwidth is None and not isinstance(bins, (str, int, np.integer))
+    if not edges_given and xrange is None and arr.size == 0:
+        raise ValueError("no finite values to histogram")
+    if binwidth is not None and not binwidth > 0:
+        raise ValueError("binwidth: %r (must be > 0)" % binwidth)
+    if isinstance(bins, (int, np.integer)) and binwidth is None and bins < 1:
+        raise ValueError("bins: %r (must be >= 1)" % bins)
+
+    def snap(x, width: float):
+        """*x* rounded to *width*'s precision (12 significant digits), so
+        multiples of e.g. 0.1 are 0.3, not 0.30000000000000004."""
+        return np.round(x, 12 - math.floor(math.log10(width)))
+
+    def whole_bins(start: float, end: float, width: float) -> np.ndarray:
+        """Bins of *width* from *start*, the last reaching *end*."""
+        n = max(1, math.ceil((end - start) / width - 1e-9))
+        while start + n * width < end:  # rounding
+            n += 1
+        return snap(start + width * np.arange(n + 1), width)
+
+    def auto_width(values: np.ndarray) -> float:
+        if values.size < 2 or values.min() == values.max():
+            return 1.0
+        auto = np.histogram_bin_edges(values, bins="auto")
+        return float(auto[1] - auto[0])
+
+    if edges_given:
+        edges = np.asarray(bins, dtype=float)
+        pad = 0
+    elif xrange is not None:
+        lo, hi = float(xrange[0]), float(xrange[1])
+        if not hi > lo:
+            raise ValueError("xrange: %r (max must be > min)" % (xrange,))
+        if binwidth is None and bins != "auto":
+            edges = np.linspace(lo, hi, int(bins) + 1)
+        else:
+            inside = arr[(arr >= lo) & (arr <= hi)]
+            width = binwidth if binwidth is not None else auto_width(inside)
+            edges = whole_bins(lo, hi, width)
+        pad = 0  # the range as given
+    else:
+        lo, hi = float(arr.min()), float(arr.max())
+        if binwidth is None and bins != "auto":
+            if hi == lo:  # one value: a bin either side of it, as numpy
+                lo, hi = lo - 0.5, hi + 0.5
+            edges = np.linspace(lo, hi, int(bins) + 1)
+        else:
+            width = binwidth if binwidth is not None else auto_width(arr)
+            start = snap(math.floor(lo / width + 1e-9) * width, width)
+            while start > lo:  # rounding
+                start = snap(start - width, width)
+            edges = whole_bins(start, hi, width)
+
+    counts, edges = np.histogram(arr, bins=edges)
+    counts = counts.astype(float)
+    widths = np.diff(edges)
+    if pad > 0:  # empty bins outside those counted (the max stays in its bin)
+        width = float(widths[0])
+        edges = np.concatenate([snap(edges[0] - width * np.arange(pad, 0, -1), width), edges,
+                                snap(edges[-1] + width * np.arange(1, pad + 1), width)])
+        counts = np.concatenate([np.zeros(pad), counts, np.zeros(pad)])
+        widths = np.diff(edges)
+    n = float(counts.sum())
+    if output == "probability":
+        counts = counts / n if n else counts
+    elif output == "density":
+        counts = counts / (n * widths) if n else counts
+    equal = bool(np.allclose(widths, widths[0], rtol=1e-9, atol=0)) if widths.size else True
+    return {"counts": counts, "edges": edges,
+            "width": (None if not equal or not widths.size
+                      else float(binwidth) if binwidth is not None
+                      else float(snap(widths[0], widths[0]))),
+            "n": int(n)}
+
+
 def ks_test(
     y1: np.ndarray,
     y2: np.ndarray,
