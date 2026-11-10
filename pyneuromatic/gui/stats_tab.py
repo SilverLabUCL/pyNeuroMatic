@@ -571,6 +571,9 @@ class StatsToolTab(ToolTabWidget):
     def has_results(self) -> bool:
         return self.stats2.has_results()
 
+    def set_folder_actions(self, actions) -> None:
+        self.stats2.set_folder_actions(actions)  # its Folder ⋯ menu (#494)
+
     def refresh(self) -> None:
         self.stats2.refresh()
 

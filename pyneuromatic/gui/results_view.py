@@ -13,7 +13,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
-from pyneuromatic.tools.nm_tool_stats import NMToolStats2
+from pyneuromatic.tools.nm_tool_stats import NMToolStats, NMToolStats2
 
 
 def display_name(name: str) -> str:
@@ -537,7 +537,7 @@ class Stats2Panel(QtWidgets.QWidget):
     Table tab.
     """
 
-    TOOLFOLDER_PREFIX = "Stats_"
+    TOOLFOLDER_PREFIX = NMToolStats.TOOLFOLDER_PREFIX  # "Stats_" (#494)
 
     # title, y values, x values (or None), x label, y label, style
     plot_requested = QtCore.pyqtSignal(str, object, object, str, str, str)
@@ -569,12 +569,33 @@ class Stats2Panel(QtWidgets.QWidget):
         folder_row = QtWidgets.QHBoxLayout()
         self.folder_combo = QtWidgets.QComboBox(self)
         self.folder_combo.setObjectName("stats2Folder")
-        # As wide as its subfolder names (refresh); Delete... is the menu's
-        # last item: choose which subfolder (or confirm, if there's one)
+        # As wide as its subfolder names (refresh)
         folder_row.addWidget(self.folder_combo)
+        # The subfolder's actions, as the strip's Subfolder ⋯ (#494): the
+        # app's folder actions (set_folder_actions), starting on the one shown
+        self.folder_menu = QtWidgets.QMenu("Folder", self)
+        self.folder_menu.setToolTipsVisible(True)
+        self.rename_folder_action = self.folder_menu.addAction("Rename…")
+        self.rename_folder_action.setToolTip("Rename the subfolder (its name keeps Stats_)")
+        self.copy_folder_action = self.folder_menu.addAction("Copy…")
+        self.copy_folder_action.setToolTip("Copy the subfolder")
+        self.delete_folder_action = self.folder_menu.addAction("Delete…")
+        self.delete_folder_action.setToolTip("Delete the subfolder and its data")
+        self.folder_menu.addSeparator()
+        self.browse_folder_action = self.folder_menu.addAction("Show in Browser")
+        self.browse_folder_action.setToolTip("Show the subfolder in the browser")
+        self.folder_menu_button = QtWidgets.QToolButton(self)
+        self.folder_menu_button.setText("⋯")
+        self.folder_menu_button.setToolTip("Subfolder actions")
+        self.folder_menu_button.setMenu(self.folder_menu)
+        self.folder_menu_button.setPopupMode(
+            QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.folder_menu_button.setStyleSheet(
+            "QToolButton::menu-indicator { image: none; width: 0px; }")
+        folder_row.addWidget(self.folder_menu_button)
         folder_row.addStretch(1)
+        self._folder_actions: Any = None
         self._folder_names: list[str] = []
-        self._shown_name: str | None = None  # the subfolder shown (not Delete)
         form.addRow("Folder", folder_row)
 
         window_row = QtWidgets.QHBoxLayout()
@@ -614,6 +635,9 @@ class Stats2Panel(QtWidgets.QWidget):
         self.histogram_dialog_action.setToolTip(
             "Make a histogram of the chosen array, saved in the Stats subfolder "
             "as H_<array> and listed with its arrays")
+        self.plot_menu.addSeparator()
+        self.browse_array_action = self.plot_menu.addAction("Show in Browser")
+        self.browse_array_action.setToolTip("Show the chosen array in the browser")
         self.plot_menu_button = QtWidgets.QToolButton(self)
         self.plot_menu_button.setText("⋯")
         self.plot_menu_button.setToolTip("Plot options")
@@ -662,6 +686,11 @@ class Stats2Panel(QtWidgets.QWidget):
         self.plot_button.clicked.connect(self.plot_selected)
         self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
         self.histogram_dialog_action.triggered.connect(self.histogram_dialog)
+        self.rename_folder_action.triggered.connect(self.rename_folder)
+        self.copy_folder_action.triggered.connect(self.copy_folder)
+        self.delete_folder_action.triggered.connect(self.delete_folder)
+        self.browse_folder_action.triggered.connect(self.show_folder_in_browser)
+        self.browse_array_action.triggered.connect(self.show_array_in_browser)
         self._histogram_settings: dict = {}  # the dialog's, shown again next time
 
         self.refresh()
@@ -688,16 +717,11 @@ class Stats2Panel(QtWidgets.QWidget):
 
     # --- folder and window lists ------------------------------------------
 
-    DELETE_FOLDER_ACTION = "__delete_stats_folder__"
-
     def toolfolder(self) -> NMToolFolder | None:
-        """The Stats toolfolder chosen in the Folder list (the one shown, while
-        its Delete item is chosen)."""
+        """The Stats toolfolder chosen in the Folder list."""
         if self._folder is None:
             return None
         name = self.folder_combo.currentData()
-        if name == self.DELETE_FOLDER_ACTION:
-            name = self._shown_name
         if name is None:
             return None
         return self._folder.toolfolders.get(name)
@@ -708,7 +732,7 @@ class Stats2Panel(QtWidgets.QWidget):
         Otherwise the current choice is kept, or the newest folder is chosen.
         """
         self._folder = self._current_folder()
-        previous = select or self._shown_name
+        previous = select or self.folder_combo.currentData()
         names: list[str] = []
         if self._folder is not None:
             names = [
@@ -721,14 +745,11 @@ class Stats2Panel(QtWidgets.QWidget):
         for name in names:
             self.folder_combo.addItem(name, name)
         self._folder_names = names
-        if names:  # Delete...: choose which (or confirm the only one)
-            self.folder_combo.insertSeparator(self.folder_combo.count())
-            self.folder_combo.addItem("Delete...", self.DELETE_FOLDER_ACTION)
         metrics = self.folder_combo.fontMetrics()
         longest = max(names, key=metrics.horizontalAdvance) if names else "Stats_Record_A_All_0"
         self.folder_combo.setFixedWidth(metrics.horizontalAdvance(longest) + 44)
 
-        # The one before, else the newest (not the divider, whose data is None)
+        # The one before, else the newest
         index = names.index(previous) if previous in names else len(names) - 1
         self.folder_combo.setCurrentIndex(index)
         self.folder_combo.blockSignals(False)
@@ -761,11 +782,7 @@ class Stats2Panel(QtWidgets.QWidget):
         return windows
 
     def _on_folder_changed(self, *_args) -> None:
-        name = self.folder_combo.currentData()
-        if name == self.DELETE_FOLDER_ACTION:
-            self.delete_folder()
-            return
-        self._shown_name = name
+        self._update_folder_actions()
         previous = self.window_combo.currentData()
         self.window_combo.blockSignals(True)
         self.window_combo.clear()
@@ -994,6 +1011,7 @@ class Stats2Panel(QtWidgets.QWidget):
         name = self.selected_array()
         self.plot_button.setEnabled(name is not None)
         self.histogram_dialog_action.setEnabled(name is not None and not self.is_histogram(name))
+        self.browse_array_action.setEnabled(name is not None and self._folder_actions is not None)
 
     def _axis_label(self, name: str) -> str:
         units = self.toolfolder().data.get(name).yscale.units
@@ -1077,42 +1095,60 @@ class Stats2Panel(QtWidgets.QWidget):
         self.select_array(f"H_{name}")
         self.plot_selected()
 
-    def _confirm_delete(self, name: str) -> bool:
-        answer = QtWidgets.QMessageBox.question(
-            self,
-            "Delete Stats folder",
-            f"Delete {name} and all its Stats arrays?",
-        )
-        return answer == QtWidgets.QMessageBox.StandardButton.Yes
+    # --- the Folder ⋯ menu (#494) -------------------------------------------
 
-    def _choose_delete(self, names: list[str], shown: str | None) -> str | None:
-        """Which subfolder to delete, from a list (the one *shown* chosen
-        first), or None if cancelled (replaced in tests)."""
-        dialog = QtWidgets.QInputDialog(self)
-        dialog.setWindowTitle("Delete Stats folder")
-        dialog.setLabelText("Delete Stats folder and all its Stats arrays?")
-        dialog.setComboBoxItems(names)
-        if shown in names:
-            dialog.setTextValue(shown)
-        dialog.setOkButtonText("Delete")
-        return dialog.textValue() if dialog.exec() else None
+    def set_folder_actions(self, actions) -> None:
+        """The app's folder actions (:class:`FolderActions`), whose subfolder
+        actions the Folder ⋯ menu uses."""
+        self._folder_actions = actions
+        self._update_folder_actions()
+        self._update_buttons()
+
+    def _update_folder_actions(self) -> None:
+        usable = self._folder_actions is not None and self.toolfolder() is not None
+        for action in (self.rename_folder_action, self.copy_folder_action,
+                       self.delete_folder_action, self.browse_folder_action):
+            action.setEnabled(usable)
+
+    def rename_folder(self) -> None:
+        """Rename… (the strip's prompt, starting on the subfolder shown); then
+        show its new name."""
+        toolfolder = self.toolfolder()
+        if toolfolder is not None and self._folder_actions is not None:
+            name = self._folder_actions.rename_subfolder(toolfolder)
+            self.refresh(select=name)
+
+    def copy_folder(self) -> None:
+        """Copy… (the strip's prompt, starting on the subfolder shown); then
+        show the copy."""
+        toolfolder = self.toolfolder()
+        if toolfolder is not None and self._folder_actions is not None:
+            name = self._folder_actions.duplicate_subfolder(toolfolder)
+            self.refresh(select=name)
 
     def delete_folder(self) -> None:
-        """Delete... (Folder menu): with several subfolders, choose which; with
-        one, confirm it."""
-        if self._folder is None or not self._folder_names:
+        """Delete… (the strip's prompt, starting on the subfolder shown); then
+        the one shown, or else the newest."""
+        toolfolder = self.toolfolder()
+        if toolfolder is not None and self._folder_actions is not None:
+            self._folder_actions.delete_subfolder(toolfolder)
             self.refresh()
+
+    def show_folder_in_browser(self) -> None:
+        toolfolder = self.toolfolder()
+        if toolfolder is not None and self._folder_actions is not None:
+            self._folder_actions.subfolder_in_browser(toolfolder)
+
+    def show_array_in_browser(self) -> None:
+        """Show in Browser (Plot ⋯): the chosen array (an ST_ array or a
+        histogram), in its Stats subfolder."""
+        name = self.selected_array()
+        toolfolder = self.toolfolder()
+        if name is None or toolfolder is None or self._folder_actions is None:
             return
-        names = self._folder_names
-        if len(names) > 1:
-            name = self._choose_delete(names, self._shown_name)
-        else:
-            name = names[0] if self._confirm_delete(names[0]) else None
-        if name is not None and name in self._folder.toolfolders:
-            self._folder.toolfolders.pop(name)
-            if name == self._shown_name:
-                self._shown_name = None  # the newest is shown next
-        self.refresh()  # back from the Delete... item to the subfolder shown
+        data = toolfolder.data.get(name)
+        if data is not None:
+            self._folder_actions.browse_requested.emit(data)
 
 
 __all__ = ["Stats2Panel", "StatsTables"]

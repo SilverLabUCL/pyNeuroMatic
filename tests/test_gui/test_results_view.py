@@ -67,10 +67,12 @@ def _column(table, label):
     return [table.item(r, column).text() for r in range(table.rowCount())]
 
 
-def _delete(stats2):
-    """Folder menu > Delete <the subfolder shown>."""
-    stats2.folder_combo.setCurrentIndex(
-        stats2.folder_combo.findData(stats2.DELETE_FOLDER_ACTION))
+def _delete(stats2, confirm=True):
+    """Folder ⋯ > Delete… the subfolder shown (the strip's Delete Subfolder
+    prompt, #494), confirmed or cancelled."""
+    stats2._folder_actions._choose = (
+        lambda title, **options: (options["current"], None) if confirm else None)
+    stats2.delete_folder_action.trigger()
 
 
 def _tab_texts(tabs):
@@ -101,7 +103,6 @@ def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
 
     # Deleting the only Stats folder removes the tabs
     stats2 = window.tool_tabs["Stats"].stats2
-    stats2._confirm_delete = lambda name: True
     _delete(stats2)
     assert _tab_texts(plot.view_tabs) == ["A"]
     assert _tab_texts(table.view_tabs) == ["A"]
@@ -283,7 +284,6 @@ def test_stats_plot_follows_the_stats2_array(qtbot):
     assert window.context_panel.currentWidget() is window.table_panel  # a choice doesn't switch
 
     # Deleting the folder: nothing chosen, the hint again
-    tab.stats2._confirm_delete = lambda name: True
     _delete(tab.stats2)
     assert not plot_item.listDataItems()
     assert plot_item.titleLabel.text == ValuesPlot.EMPTY_TITLE
@@ -349,8 +349,16 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
     stats2 = window.tool_tabs["Stats"].stats2
     assert stats2.plot_menu_button.menu() is stats2.plot_menu
     texts = [a.text() for a in stats2.plot_menu.actions() if a.text()]
-    assert texts == ["x: epoch", "Histogram..."]  # no toggle or Save Histogram (#492)
+    assert texts == ["x: epoch", "Histogram...", "Show in Browser"]  # #492, #494
     assert stats2.plot_menu.actions()[1].isSeparator()
+    assert stats2.plot_menu.actions()[3].isSeparator()
+    # Show in Browser: the chosen array, in the Browser
+    stats2.array_combo.setCurrentText("ST_w0_max_y")
+    shown = []
+    stats2._folder_actions.browse_requested.connect(shown.append)
+    stats2.browse_array_action.trigger()
+    assert shown == [window.tool_tabs["Stats"].stats_tool.toolfolder.data["ST_w0_max_y"]]
+    assert window.tool_rail.current_tool_name == "Browser"
     # The Array row: the dropdown (its width back), Plot and ⋯ only (#485)
     assert _field_widgets(stats2, "Array") == [
         stats2.array_combo, stats2.plot_button, stats2.plot_menu_button]
@@ -467,11 +475,9 @@ def test_delete_folder_after_confirmation(qtbot, monkeypatch):
     window.tool_tabs["Stats"].run_button.click()
     stats2 = window.tool_tabs["Stats"].stats2
 
-    monkeypatch.setattr(stats2, "_confirm_delete", lambda name: False)
-    _delete(stats2)
+    _delete(stats2, confirm=False)
     assert "Stats_Record_A_S1_0" in folder.toolfolders
 
-    monkeypatch.setattr(stats2, "_confirm_delete", lambda name: True)
     _delete(stats2)
     assert "Stats_Record_A_S1_0" not in folder.toolfolders
     assert stats2.folder_combo.count() == 0
@@ -536,35 +542,61 @@ def test_a_run_chooses_its_measurement_again(qtbot):
 
 
 
-def test_delete_is_in_the_folder_menu(qtbot):
-    """No Delete folder button: the Folder menu ends with Delete...; with
-    several subfolders, choose which; with one, confirm it."""
+def test_folder_menu(qtbot):
+    """A ⋯ menu beside the Folder list, as the strip's Subfolder ⋯ (#494):
+    its prompts start on the subfolder shown; Stats2 then shows the result."""
     _manager, folder, window = _stats_window(qtbot)
     tab = window.tool_tabs["Stats"]
     tab.run_button.click()
     tab.run_button.click()
     stats2 = tab.stats2
     combo = stats2.folder_combo
-    assert not hasattr(stats2, "delete_button")
+    assert stats2.folder_menu_button.menu() is stats2.folder_menu
+    texts = [a.text() for a in stats2.folder_menu.actions()]
+    assert texts == ["Rename…", "Copy…", "Delete…", "", "Show in Browser"]
     items = [combo.itemText(i) for i in range(combo.count())]
-    assert items == ["Stats_Record_A_S1_0", "Stats_Record_A_S1_1", "", "Delete..."]
-    combo.setCurrentIndex(0)  # shown: _0
+    assert items == ["Stats_Record_A_S1_0", "Stats_Record_A_S1_1"]  # no Delete... item
+    combo.setCurrentIndex(0)
+
     asked = []
-    stats2._confirm_delete = lambda name: asked.append(name) or True  # not used: several
+    actions = stats2._folder_actions
 
-    stats2._choose_delete = lambda names, shown: asked.append((names, shown)) and None
-    _delete(stats2)  # cancelled
-    assert asked == [(["Stats_Record_A_S1_0", "Stats_Record_A_S1_1"], "Stats_Record_A_S1_0")]
-    assert combo.currentText() == "Stats_Record_A_S1_0"  # back to it
-    assert len(folder.toolfolders) == 2
+    def answer(new):
+        def choose(title, **options):
+            asked.append((title, options["current"], options))
+            return (options["current"], new) if new else None
+        actions._choose = choose
 
-    stats2._choose_delete = lambda names, shown: "Stats_Record_A_S1_1"  # not the one shown
-    _delete(stats2)
-    assert "Stats_Record_A_S1_1" not in folder.toolfolders
-    assert combo.currentText() == "Stats_Record_A_S1_0"  # still shown
+    answer("Stats_Control")
+    stats2.rename_folder_action.trigger()
+    assert asked[-1][:2] == ("Rename Subfolder", "Stats_Record_A_S1_0")
+    assert combo.currentText() == "Stats_Control"
+    # The name must keep Stats_ (Stats2 lists only those)
+    validate = asked[-1][2]["validate"]
+    assert "must start with Stats_" in validate("Stats_Control", "Control")
+    assert validate("Stats_Control", "Stats_Drug") is None
 
-    stats2._choose_delete = lambda names, shown: pytest.fail("one: confirm, not choose")
-    asked.clear()
-    _delete(stats2)  # only one left: confirm it
-    assert asked == ["Stats_Record_A_S1_0"]
-    assert combo.count() == 0  # none left: no Delete... either
+    answer(None)  # cancelled
+    stats2.copy_folder_action.trigger()
+    assert asked[-1][:2] == ("Copy Subfolder", "Stats_Control")
+    assert combo.currentText() == "Stats_Control"
+    answer("Stats_Control_copy")
+    stats2.copy_folder_action.trigger()
+    assert combo.currentText() == "Stats_Control_copy"
+    assert "must start with Stats_" in asked[-1][2]["validate"]("Stats_Control", "Copy1")
+
+    _delete(stats2)  # the one shown: then the newest
+    assert "Stats_Control_copy" not in folder.toolfolders
+    assert combo.currentText() == "Stats_Record_A_S1_1"
+
+    shown = []
+    actions.browse_requested.connect(shown.append)
+    stats2.browse_folder_action.trigger()
+    assert shown == [folder.toolfolders["Stats_Record_A_S1_1"]]
+
+
+def test_folder_menu_greyed_out_without_a_subfolder(qtbot):
+    _manager, _folder, window = _stats_window(qtbot)
+    stats2 = window.tool_tabs["Stats"].stats2
+    assert stats2.folder_combo.count() == 0
+    assert not any(a.isEnabled() for a in stats2.folder_menu.actions() if a.text())

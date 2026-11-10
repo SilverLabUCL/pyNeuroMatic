@@ -22,6 +22,7 @@ from pyneuromatic.core.nm_folder import (
     FILE_INFO, FILE_READERS, NMFolder, clear_file_cache, file_info,
 )
 from pyneuromatic.gui.selection_model import RESERVED_EPOCH_SET_NAMES, SelectionModel
+from pyneuromatic.tools.nm_tool import toolfolder_prefix
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
 
 
@@ -1132,8 +1133,9 @@ class FolderActions(TierActions):
         if folder is not None:
             self.browse_requested.emit(folder)
 
-    def subfolder_in_browser(self) -> None:
-        subfolder = self._selection.selection.get("toolfolder")
+    def subfolder_in_browser(self, subfolder=None) -> None:
+        if subfolder is None:
+            subfolder = self._selection.selection.get("toolfolder")
         if subfolder is not None:
             self.browse_requested.emit(subfolder)
 
@@ -1163,8 +1165,10 @@ class FolderActions(TierActions):
     def _subfolder(self):
         return self._selection.selection.get("toolfolder")
 
-    def _choose_and_name(self, container, title, item_label, current, default_name):
-        """Choose an item of *container* and a new, unused name for it."""
+    def _choose_and_name(self, container, title, item_label, current, default_name,
+                         check=None):
+        """Choose an item of *container* and a new, unused name for it.
+        *check(item, name)*: a further reason the name can't be used, or None."""
         if len(container) == 0:
             return None
         return self._choose(
@@ -1177,6 +1181,7 @@ class FolderActions(TierActions):
             validate=lambda item, name: (
                 None if name == item and title.startswith("Rename")
                 else name_error(container, name)
+                or (check(item, name) if check is not None else None)
             ),
         )
 
@@ -1320,34 +1325,49 @@ class FolderActions(TierActions):
             return subfolder._folder, subfolder.name
         return self._folder(), self._current_name("toolfolder")
 
-    def duplicate_subfolder(self, subfolder=None) -> None:
+    @staticmethod
+    def _subfolder_name_error(item: str, name: str) -> str | None:
+        """Why *item* can't be renamed or copied to *name*: it would lose the
+        prefix its tool lists subfolders by (e.g. Stats2: "Stats_", #494)."""
+        prefix = toolfolder_prefix(item)
+        if prefix and not name.startswith(prefix):
+            return f"The new subfolder name must start with {prefix}"
+        return None
+
+    def duplicate_subfolder(self, subfolder=None) -> str | None:
+        """Copy a subfolder; returns the copy's name, or None if cancelled."""
         folder, current = self._subfolder_target(subfolder)
         if folder is None:
-            return
+            return None
         container = folder.toolfolders
         answer = self._choose_and_name(
             container, "Copy Subfolder", "Subfolder", current,
             lambda item: unique_name(container, f"{item}_copy"),
+            check=self._subfolder_name_error,
         )
         if answer is None:
-            return
+            return None
         copy = container.duplicate(answer[0], answer[1])
         if folder is self._folder():
             self._select(toolfolder=copy)
         self._changed()
+        return copy.name
 
-    def rename_subfolder(self, subfolder=None) -> None:
+    def rename_subfolder(self, subfolder=None) -> str | None:
+        """Rename a subfolder; returns its new name, or None if cancelled."""
         folder, current = self._subfolder_target(subfolder)
         if folder is None:
-            return
+            return None
         container = folder.toolfolders
         answer = self._choose_and_name(
             container, "Rename Subfolder", "Subfolder", current, lambda item: item,
+            check=self._subfolder_name_error,
         )
         if answer is None or answer[0] == answer[1]:
-            return
+            return None
         container.rename(answer[0], answer[1])
         self._changed()
+        return answer[1]
 
     def delete_subfolder(self, subfolder=None) -> None:
         folder, current = self._subfolder_target(subfolder)

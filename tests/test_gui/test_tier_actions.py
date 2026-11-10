@@ -269,7 +269,15 @@ def test_subfolder_duplicate_rename_and_delete(app):
     # Stats2 lists the renamed results folder
     stats2 = app.tool_tabs["Stats"].stats2
     items = [stats2.folder_combo.itemText(i) for i in range(stats2.folder_combo.count())]
-    assert items[:2] == ["Stats_0", "Stats_1"]  # then Delete (the one shown)
+    assert items == ["Stats_0", "Stats_1"]
+    # A new name must keep its tool's prefix (Stats2 lists only Stats_..., #494)
+    app.answers = []
+    actions.rename_subfolder()
+    validate = app.dialogs[-1][1]["validate"]
+    assert "must start with Stats_" in validate("Stats_1", "Control")
+    assert validate("Stats_1", "Stats_Control") is None
+    actions.duplicate_subfolder()
+    assert "must start with Stats_" in app.dialogs[-1][1]["validate"]("Stats_1", "Copy")
 
     app.answers = [("Stats_1", None)]
     actions.delete_subfolder()

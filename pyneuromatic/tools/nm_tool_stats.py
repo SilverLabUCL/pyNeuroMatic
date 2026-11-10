@@ -90,6 +90,8 @@ class NMToolStats(NMTool):
             point per epoch of the series (NaN where not analysed).
     """
 
+    TOOLFOLDER_PREFIX = "Stats_"  # Stats2 lists these subfolders (#494)
+
     def __init__(self) -> None:
         super().__init__(name="stats")
         self._config = NMToolStatsConfig()
@@ -603,7 +605,7 @@ class NMToolStats(NMTool):
         if not self.__results:
             raise RuntimeError("there are no results to save")
 
-        f = self._make_toolfolder("Stats", overwrite=self._overwrite)
+        f = self._make_toolfolder(self.TOOLFOLDER_PREFIX.rstrip("_"), overwrite=self._overwrite)
         transform = self._transform_note()  # on the folder and each array's note
         f.notes.add(self._run_note())  # how the results were made
         transform_str = ", transform=%s" % transform if transform else ""
