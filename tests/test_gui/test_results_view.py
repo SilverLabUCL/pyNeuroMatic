@@ -5,10 +5,12 @@ import pytest
 
 pytest.importorskip("PyQt6")
 from PyQt6 import QtWidgets
+from PyQt6.QtTest import QTest
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
 from pyneuromatic.gui.context_views import ValuesPlot
+from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.gui.results_view import Stats2Panel, StatsTables
 
 pytestmark = pytest.mark.gui
@@ -309,24 +311,21 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     # The trace plot is untouched
     assert plot.plot_widget.getPlotItem().listDataItems()
 
-    # Histogram (⋯ menu, #485): Plot draws it, a preview (nothing saved)
-    stats2.histogram_action.setChecked(True)
-    assert not stats2.epoch_x_action.isEnabled()  # its x is the bin edges
-    stats2.plot_button.click()
-    _title, counts, edges, _xlabel, _ylabel, style = plots[-1]
-    assert style == "histogram"
-    assert sum(counts) == len(PEAKS)
-    assert len(edges) == len(counts) + 1
+    # Histogram... (⋯ menu, #492): saved as H_<array>, chosen and drawn as bars
+    stats2._ask_histogram = lambda name, values, units: {"binwidth": 2}
+    stats2.histogram_dialog_action.trigger()
     subfolder = window.tool_tabs["Stats"].stats_tool.toolfolder
-    assert "H_ST_w0_max_dy_counts" not in subfolder.data
-    # Save Histogram saves what's shown, and replaces it when saved again
-    stats2.save_histogram_action.trigger()
-    assert list(subfolder.data.get("H_ST_w0_max_dy_counts").nparray) == list(counts)
-    assert list(subfolder.data.get("H_ST_w0_max_dy_edges").nparray) == list(edges)
-    stats2.save_histogram_action.trigger()
-    assert "H_ST_w0_max_dy_counts" in subfolder.data
-    # Off: points again, x: epoch back
-    stats2.histogram_action.setChecked(False)
+    assert "H_ST_w0_max_dy" in subfolder.data and "H_ST_w0_max_dy_edges" not in subfolder.data
+    assert stats2.selected_array() == "H_ST_w0_max_dy"
+    title, counts, edges, xlabel, ylabel, style = plots[-1]
+    assert title == "Stats_Record_A_S1_0: H_ST_w0_max_dy" and style == "histogram"
+    assert sum(counts) == len(PEAKS) and counts[0] == 0 and counts[-1] == 0
+    assert len(edges) == len(counts) + 1 and list(np.diff(edges)) == [2.0] * len(counts)
+    assert (xlabel, ylabel) == ("ST_w0_max_dy (mV)", "count")
+    assert not stats2.epoch_x_action.isEnabled()  # its x is the bin edges
+    assert not stats2.histogram_dialog_action.isEnabled()  # not of a histogram
+    # Back to an ST_ array: points, x: epoch
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
     assert stats2.epoch_x_action.isEnabled()
     stats2.plot_button.click()
     assert plots[-1][5] == "points"
@@ -350,8 +349,8 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
     stats2 = window.tool_tabs["Stats"].stats2
     assert stats2.plot_menu_button.menu() is stats2.plot_menu
     texts = [a.text() for a in stats2.plot_menu.actions() if a.text()]
-    assert texts == ["Histogram", "x: epoch", "Save Histogram"]
-    assert not stats2.histogram_action.isChecked()  # points, until turned on
+    assert texts == ["x: epoch", "Histogram..."]  # no toggle or Save Histogram (#492)
+    assert stats2.plot_menu.actions()[1].isSeparator()
     # The Array row: the dropdown (its width back), Plot and ⋯ only (#485)
     assert _field_widgets(stats2, "Array") == [
         stats2.array_combo, stats2.plot_button, stats2.plot_menu_button]
@@ -377,20 +376,75 @@ def test_array_list_spans_its_row(qtbot, style):
     assert menu.geometry().right() >= panel.width() - 20
 
 
-def test_histogram_follows_the_chosen_array_without_saving(qtbot):
+def test_histograms_are_listed_after_the_windows_arrays(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
     tab = window.tool_tabs["Stats"]
     tab.run_button.click()
     stats2 = tab.stats2
-    stats2.histogram_action.setChecked(True)
-    drawn = []
-    stats2.array_changed.connect(lambda: drawn.append(stats2.selected_plot()[5]))
-    for i in range(stats2.array_combo.count()):  # browsing
-        stats2.array_combo.setCurrentIndex(i)
-    assert drawn and set(drawn) == {"histogram"}
-    assert not any(name.startswith("H_") for name in tab.stats_tool.toolfolder.data)
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
+    stats2._ask_histogram = lambda name, values, units: {"bins": 3, "output": "probability"}
+    stats2.histogram_dialog_action.trigger()
+    names = [stats2.array_combo.itemText(i) for i in range(stats2.array_combo.count())]
+    assert names[-1] == "H_ST_w0_max_dy" and names[:-1] == stats2.tables.columns
+    assert "H_ST_w0_max_dy" not in stats2.tables.columns  # not in the Stats tables
+    assert tab.stats_tool.toolfolder.data["H_ST_w0_max_dy"].nparray.sum() == pytest.approx(1)
+    # Summary: its notes (source, bins, output)
+    text = stats2.details.toPlainText()
+    assert text.startswith("H_ST_w0_max_dy  (probability, x in mV)")
+    assert "NMHistogram(array=ST_w0_max_dy, bins=3, nbins=5" in text
+    # Listed again after a refresh, and chosen again
     stats2.refresh()
-    assert stats2.histogram_action.isChecked()  # on until turned off
+    assert stats2.array_combo.findText("H_ST_w0_max_dy") >= 0
+
+
+def test_histogram_cancelled_saves_nothing(qtbot):
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    tab.stats2._ask_histogram = lambda name, values, units: None
+    tab.stats2.histogram_dialog_action.trigger()
+    assert not [n for n in tab.stats_tool.toolfolder.data if n.startswith("H_")]
+
+
+def test_histogram_dialog(qtbot):
+    values = np.array([-55.3, -52.0, -50.0, -48.0, -44.1, np.nan])
+    dialog = HistogramDialog("ST_w0_max_y", values, "mV")
+    qtbot.addWidget(dialog)
+    assert dialog.auto_radio.isChecked() and dialog.kwargs() == {"pad": 1, "output": "count"}
+    assert dialog.pad_box.value() == 1 and not dialog.width_edit.isEnabled()
+    dialog.width_radio.setChecked(True)
+    dialog.width_edit.setText("2")
+    dialog.output_combo.setCurrentIndex(dialog.output_combo.findData("density"))
+    assert dialog.kwargs() == {"binwidth": 2.0, "pad": 1, "output": "density"}
+    # A range is used as given: no empty bins
+    dialog.range_checkbox.setChecked(True)
+    assert not dialog.pad_box.isEnabled()
+    dialog.min_edit.setText("-60")
+    dialog.max_edit.setText("-40")
+    assert dialog.kwargs() == {"binwidth": 2.0, "xrange": (-60.0, -40.0), "output": "density"}
+    # Bad values keep it open, saying why
+    dialog.width_edit.setText("0")
+    dialog.accept()
+    assert dialog.result() == 0 and "more than 0" in dialog.error_label.text()
+    # Number of bins: at least 2 (one bin isn't a histogram)
+    dialog.number_radio.setChecked(True)
+    assert dialog.number_box.minimum() == 2
+    dialog.number_box.setValue(1)
+    assert dialog.number_box.value() == 2
+    assert dialog.kwargs()["bins"] == 2
+    # Typed 0: an error, not the box's last good value
+    dialog.number_box.lineEdit().selectAll()
+    QTest.keyClicks(dialog.number_box, "0")
+    assert dialog.number_box.text() == "0"
+    dialog.accept()
+    assert dialog.result() == 0 and "at least 2" in dialog.error_label.text()
+    dialog.number_box.setValue(3)
+    # Shown again next time
+    again = HistogramDialog("ST_w0_max_y", values, "mV", dialog.settings())
+    qtbot.addWidget(again)
+    assert again.number_radio.isChecked() and again.number_box.value() == 3
+    assert again.range_checkbox.isChecked()
+    assert again.output_combo.currentData() == "density"
 
 
 def test_copy_all_stats_tables_from_the_table_panel(qtbot):

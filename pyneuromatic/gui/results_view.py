@@ -11,6 +11,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
+from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.tools.nm_tool_stats import NMToolStats2
 
@@ -601,11 +602,6 @@ class Stats2Panel(QtWidgets.QWidget):
         # Plot's options, in a ⋯ menu beside it (#485)
         self.plot_menu = QtWidgets.QMenu("Plot", self)
         self.plot_menu.setToolTipsVisible(True)
-        self.histogram_action = self.plot_menu.addAction("Histogram")
-        self.histogram_action.setCheckable(True)
-        self.histogram_action.setToolTip(
-            "Plot a histogram of the chosen array instead of its points "
-            "(a preview: Save Histogram saves it)")
         # Plot against the rows' epoch numbers (ST_epoch_num, #476), not the index
         self.epoch_x_action = self.plot_menu.addAction("x: epoch")
         self.epoch_x_action.setCheckable(True)
@@ -613,10 +609,11 @@ class Stats2Panel(QtWidgets.QWidget):
         self.epoch_x_action.setToolTip(
             "Plot against the epoch numbers (ST_epoch_num); off: the row index")
         self.plot_menu.addSeparator()
-        self.save_histogram_action = self.plot_menu.addAction("Save Histogram")
-        self.save_histogram_action.setToolTip(
-            "Save the chosen array's histogram in the Stats subfolder "
-            "(H_<array>_counts, H_<array>_edges)")
+        # Saved as H_<array>, listed with the ST_ arrays to plot (#492)
+        self.histogram_dialog_action = self.plot_menu.addAction("Histogram...")
+        self.histogram_dialog_action.setToolTip(
+            "Make a histogram of the chosen array, saved in the Stats subfolder "
+            "as H_<array> and listed with its arrays")
         self.plot_menu_button = QtWidgets.QToolButton(self)
         self.plot_menu_button.setText("⋯")
         self.plot_menu_button.setToolTip("Plot options")
@@ -664,8 +661,8 @@ class Stats2Panel(QtWidgets.QWidget):
         self.results_combo.currentIndexChanged.connect(self._update_details)
         self.plot_button.clicked.connect(self.plot_selected)
         self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
-        self.histogram_action.toggled.connect(lambda _on: self.array_changed.emit())
-        self.save_histogram_action.triggered.connect(self.save_histogram)
+        self.histogram_dialog_action.triggered.connect(self.histogram_dialog)
+        self._histogram_settings: dict = {}  # the dialog's, shown again next time
 
         self.refresh()
 
@@ -830,7 +827,7 @@ class Stats2Panel(QtWidgets.QWidget):
         previous = self.array_combo.currentData()
         self.array_combo.blockSignals(True)
         self.array_combo.clear()
-        for name in self.tables.columns:
+        for name in self.tables.columns + self._histograms():
             self.array_combo.addItem(name, name)
         index = self.array_combo.findData(previous)
         if index < 0:  # not in these results: their measurement
@@ -838,6 +835,22 @@ class Stats2Panel(QtWidgets.QWidget):
         self.array_combo.setCurrentIndex(max(index, 0) if self.array_combo.count() else -1)
         self.array_combo.blockSignals(False)
         self._on_array_changed()
+
+    def _histograms(self) -> list[str]:
+        """The window's histograms (H_ST_<window>_..., #492), listed after
+        its ST_ arrays; not their bin edges (H_..._edges)."""
+        toolfolder = self.toolfolder()
+        window = self.window_combo.currentData()
+        if toolfolder is None or window is None:
+            return []
+        prefix = f"H_ST_{window}_"
+        return [name for name in toolfolder.data.keys()
+                if name.startswith(prefix) and not name.endswith("_edges")]
+
+    @staticmethod
+    def is_histogram(name: str | None) -> bool:
+        """True if *name* is a saved histogram (H_<array>, #492)."""
+        return bool(name) and name.startswith("H_")
 
     def _on_array_changed(self, *_args) -> None:
         name = self.selected_array()
@@ -945,9 +958,18 @@ class Stats2Panel(QtWidgets.QWidget):
     @staticmethod
     def array_details(toolfolder: NMToolFolder, window: str, name: str,
                       xunits: str = "") -> str:
-        """Text describing ST_ array *name*: units, notes, summary, NaN rows."""
+        """Text describing ST_ array *name*: units, notes, summary, NaN rows.
+        A histogram (H_<array>): its units and notes (source, bins, output)."""
         data = toolfolder.data.get(name)
         units = data.yscale.units
+        if Stats2Panel.is_histogram(name):
+            # e.g. "(probability, x in mV)" or "(density in 1/mV, x in mV)"
+            output = data.yscale.label or "count"
+            given = [f"{output} in {units}" if units else output]
+            if data.xscale.units:
+                given.append(f"x in {data.xscale.units}")
+            lines = [f"{name}  ({', '.join(given)})"]
+            return "\n".join(lines + [note["note"] for note in data.notes])
         # Units as in All epochs: "(values in mV, x in ms)"
         given = [f"{axis} in {u}" for axis, u in (("values", units), ("x", xunits)) if u]
         lines = [f"{name}  ({', '.join(given)})" if given else name]
@@ -971,39 +993,45 @@ class Stats2Panel(QtWidgets.QWidget):
     def _update_buttons(self) -> None:
         name = self.selected_array()
         self.plot_button.setEnabled(name is not None)
-        self.save_histogram_action.setEnabled(name is not None)
+        self.histogram_dialog_action.setEnabled(name is not None and not self.is_histogram(name))
 
     def _axis_label(self, name: str) -> str:
         units = self.toolfolder().data.get(name).yscale.units
         return f"{name} ({units})" if units else name
 
     def selected_plot(self) -> tuple | None:
-        """The chosen ST_ array as :attr:`plot_requested` values (title, y,
-        x, x label, y label, style): its points, or with Histogram on its
-        histogram (a preview, not saved). None if no array is chosen, or
-        nothing to histogram."""
+        """The chosen array as :attr:`plot_requested` values (title, y, x,
+        x label, y label, style): an ST_ array's points, or a histogram's bars
+        (H_<array>, #492). None if no array is chosen."""
         name = self.selected_array()
         toolfolder = self.toolfolder()
         if name is None or toolfolder is None:
             return None
-        y = toolfolder.data.get(name).nparray
+        data = toolfolder.data.get(name)
+        if self.is_histogram(name):
+            self.epoch_x_action.setEnabled(False)  # its x is the bin edges
+            counts = data.nparray
+            edges = toolfolder.data.get(f"{name}_edges")  # unequal bins only
+            if edges is not None:
+                x = edges.nparray
+            else:
+                x = data.xscale.start + data.xscale.delta * np.arange(len(counts) + 1)
+            source = name[len("H_"):]
+            xlabel = f"{source} ({data.xscale.units})" if data.xscale.units else source
+            ylabel = data.yscale.label or "count"
+            if data.yscale.units:
+                ylabel += f" ({data.yscale.units})"
+            return (f"{toolfolder.name}: {name}", counts, x, xlabel, ylabel, "histogram")
+        y = data.nparray
         x, xlabel = self.epoch_x(toolfolder, len(y))
-        if self.histogram_action.isChecked():
-            result = self._histogram(toolfolder, name, save=False)
-            if result is None:
-                return None
-            return (f"{toolfolder.name}: {name} histogram", result["counts"],
-                    result["edges"], self._axis_label(name), "count", "histogram")
-        self._show_histogram_note("")
         return (f"{toolfolder.name}: {name}", y, x, xlabel, self._axis_label(name), "points")
 
     def epoch_x(self, toolfolder: NMToolFolder, n: int) -> tuple:
         """The Plot's x: the rows' epoch numbers (ST_epoch_num, #476) if there
-        are and "x: epoch" is on, else the row index (None). Greyed out with
-        Histogram on (its x is the bin edges)."""
+        are and "x: epoch" is on, else the row index (None)."""
         epochs = toolfolder.data.get("ST_epoch_num")
         usable = epochs is not None and epochs.nparray is not None and len(epochs.nparray) == n
-        self.epoch_x_action.setEnabled(usable and not self.histogram_action.isChecked())
+        self.epoch_x_action.setEnabled(usable)
         if usable and self.epoch_x_action.isChecked():
             return epochs.nparray, "epoch"
         return None, "data index"
@@ -1013,40 +1041,41 @@ class Stats2Panel(QtWidgets.QWidget):
         if values is not None:
             self.plot_requested.emit(*values)
 
-    def _show_histogram_note(self, text: str) -> None:
-        """Why there's no histogram (or "": none), in the message line,
-        without hiding another message there."""
-        if text or self.message_label.text() == self._histogram_note:
-            self.message_label.setText(text)
-            self.message_label.setVisible(bool(text))
-        self._histogram_note = text
-
-    _histogram_note = ""
-
-    def _histogram(self, toolfolder: NMToolFolder, name: str,
-                   save: bool) -> dict | None:
-        """The histogram of ST_ array *name* (None: no finite values): a
-        preview, or saved in the Stats subfolder (H_<array>_counts,
-        H_<array>_edges) as one command."""
-        values = toolfolder.data.get(name).nparray
-        finite = int(np.count_nonzero(np.isfinite(values)))
-        if finite == 0:
-            self._show_histogram_note(f"{name} has no finite values to histogram.")
+    def _ask_histogram(self, name: str, values: np.ndarray, units: str) -> dict | None:
+        """The Histogram... dialog's ``nm.stats.histogram`` arguments, or
+        None if cancelled (replaced in tests)."""
+        dialog = HistogramDialog(name, values, units, self._histogram_settings, self)
+        if not dialog.exec():
             return None
-        self._show_histogram_note("")
-        # Square-root rule, capped so small result sets stay readable
-        bins = max(1, min(20, math.ceil(math.sqrt(finite))))
-        if save:
-            return self._manager.stats.histogram(toolfolder, name, bins=bins)
-        return NMToolStats2.histogram(toolfolder, name, bins=bins, save_to_numpy=False)
+        self._histogram_settings = dialog.settings()
+        return dialog.kwargs()
 
-    def save_histogram(self) -> None:
-        """Save Histogram (⋯ menu): the chosen array's histogram, with the
-        bins shown, in the Stats subfolder, as one command."""
+    def histogram_dialog(self) -> None:
+        """Histogram... (⋯ menu, #492): the chosen array's histogram, saved in
+        the Stats subfolder as H_<array> (one command), then chosen, so it's
+        plotted."""
         name = self.selected_array()
         toolfolder = self.toolfolder()
-        if name is not None and toolfolder is not None:
-            self._histogram(toolfolder, name, save=True)
+        if name is None or toolfolder is None or self.is_histogram(name):
+            return
+        data = toolfolder.data.get(name)
+        values = np.asarray(data.nparray, dtype=float)
+        if not np.isfinite(values).any():
+            self.message_label.setText(f"{name} has no finite values to histogram.")
+            self.message_label.show()
+            return
+        kwargs = self._ask_histogram(name, values, data.yscale.units or "")
+        if kwargs is None:
+            return
+        try:
+            self._manager.stats.histogram(toolfolder, name, **kwargs)
+        except ValueError as error:
+            self.message_label.setText(f"No histogram of {name}: {error}")
+            self.message_label.show()
+            return
+        self._refresh_array_combo()
+        self.select_array(f"H_{name}")
+        self.plot_selected()
 
     def _confirm_delete(self, name: str) -> bool:
         answer = QtWidgets.QMessageBox.question(

@@ -790,28 +790,29 @@ def test_deleting_a_stats_subfolder_is_a_command(series_app):
 
 
 def test_stats2_histogram_is_one_command_saved_in_the_subfolder(series_app):
-    """Saved as H_ arrays in the Stats subfolder; its steps (replacing the
-    arrays) aren't commands of their own; the command repeats it (#448)."""
+    """Saved as H_<array> in the Stats subfolder (#492); its steps (replacing
+    the array) aren't commands of their own; the command repeats it (#448)."""
     tab, manager = series_app.tool_tabs["Stats"], series_app.manager
     tab.measurement_combo.setCurrentText("mean")
     series_app.selection_model.update(epoch_set="All")
     tab.run_button.click()
     tab.stats2.array_combo.setCurrentText("ST_w0_mean_y")
     start = len(_history(series_app))
-    tab.stats2.histogram_action.setChecked(True)  # browsing: a preview, no command
-    assert _history(series_app, start) == []
-    tab.stats2.save_histogram_action.trigger()
-    tab.stats2.save_histogram_action.trigger()  # again: replaced
+    tab.stats2._ask_histogram = lambda name, values, units: {"binwidth": 0.5,
+                                                              "output": "probability"}
+    tab.stats2.histogram_dialog_action.trigger()
+    tab.stats2.array_combo.setCurrentText("ST_w0_mean_y")
+    tab.stats2.histogram_dialog_action.trigger()  # again: replaced
     command = ("nm.stats.histogram(nm.folders['Demo'].toolfolders['Stats_Record_A_All_0'], "
-               "'ST_w0_mean_y', bins=2)")
+               "'ST_w0_mean_y', binwidth=0.5, output='probability')")
     assert _history(series_app, start) == [("command", command)] * 2
     subfolder = manager.stats.toolfolder
-    counts = list(subfolder.data["H_ST_w0_mean_y_counts"].nparray)
-    assert sum(counts) == 4
+    values = list(subfolder.data["H_ST_w0_mean_y"].nparray)
+    assert sum(values) == pytest.approx(1)
 
-    subfolder.data.pop("H_ST_w0_mean_y_counts")
+    subfolder.data.pop("H_ST_w0_mean_y")
     exec(command, {"nm": manager})
-    assert list(subfolder.data["H_ST_w0_mean_y_counts"].nparray) == counts
+    assert list(subfolder.data["H_ST_w0_mean_y"].nparray) == values
 
 
 # --- Reset: the window back to its defaults ------------------------------------

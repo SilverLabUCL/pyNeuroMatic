@@ -486,46 +486,87 @@ class TestNMToolStats2Histogram(unittest.TestCase):
         arr = np.array([1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0])
         self.tf.data.new("ST_w0_mean_y", nparray=arr)
 
-    # --- save_to_numpy ---
+    # --- saved as H_<array> (#492) ---
 
-    def test_histogram_saves_counts_array(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        self.assertIn("H_ST_w0_mean_y_counts", self.tf.data)
+    def H(self, name="H_ST_w0_mean_y"):
+        return self.tf.data.get(name)
 
-    def test_histogram_saves_edges_array(self):
+    def test_histogram_saves_one_array(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        self.assertIn("H_ST_w0_mean_y_edges", self.tf.data)
+        self.assertIn("H_ST_w0_mean_y", self.tf.data)
+        self.assertNotIn("H_ST_w0_mean_y_edges", self.tf.data)  # equal bins
+        self.assertNotIn("H_ST_w0_mean_y_counts", self.tf.data)
 
-    def test_histogram_xscale_start(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        d = self.tf.data.get("H_ST_w0_mean_y_counts")
-        self.assertAlmostEqual(d.xscale.start, 1.0)
+    def test_histogram_number_of_bins_and_empty_bins(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, pad=0)
+        self.assertEqual(list(self.H().nparray), [1, 2, 3, 3])  # 1 to 5
+        self.assertAlmostEqual(self.H().xscale.start, 1.0)
+        self.assertAlmostEqual(self.H().xscale.delta, 1.0)  # (5 - 1) / 4
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)  # 1 empty each end
+        self.assertEqual(list(self.H().nparray), [0, 1, 2, 3, 3, 0])
+        self.assertAlmostEqual(self.H().xscale.start, 0.0)
 
-    def test_histogram_xscale_delta(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        d = self.tf.data.get("H_ST_w0_mean_y_counts")
-        self.assertAlmostEqual(d.xscale.delta, 1.0)  # (5 - 1) / 4 = 1.0
+    def test_histogram_binwidth_round_edges_and_padded(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", binwidth=2)
+        # 1 to 5 in bins of 2 from 0 (a multiple of 2), and an empty bin each end
+        self.assertEqual(list(self.H().nparray), [0, 1, 5, 3, 0])
+        self.assertAlmostEqual(self.H().xscale.start, -2.0)
+        self.assertAlmostEqual(self.H().xscale.delta, 2.0)
 
-    def test_histogram_again_replaces_the_arrays(self):
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
+    def test_histogram_auto(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y")
+        counts = self.H().nparray
+        self.assertEqual((counts[0], counts[-1]), (0, 0))
+        self.assertEqual(counts.sum(), 9)
+
+    def test_histogram_xrange_as_given(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=5, xrange=(0, 10))
+        self.assertEqual(list(self.H().nparray), [1, 5, 3, 0, 0])  # 0, 2, ... 10; no padding
+        self.assertAlmostEqual(self.H().xscale.start, 0.0)
+
+    def test_histogram_unequal_bins_save_edges(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=[0, 2, 3, 6])
+        self.assertEqual(list(self.H("H_ST_w0_mean_y_edges").nparray), [0, 2, 3, 6])
+        self.assertEqual(list(self.H().nparray), [1, 2, 6])
+        # Made again with equal bins: the edges are no longer needed
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=2)
-        self.assertEqual(len(self.tf.data.get("H_ST_w0_mean_y_counts").nparray), 2)
-        self.assertEqual(len(self.tf.data.get("H_ST_w0_mean_y_edges").nparray), 3)
+        self.assertNotIn("H_ST_w0_mean_y_edges", self.tf.data)
 
-    def test_histogram_scales(self):
+    def test_histogram_again_replaces_it(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, pad=0)
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=2, pad=0)
+        self.assertEqual(len(self.H().nparray), 2)
+
+    def test_histogram_outputs_and_scales(self):
         self.tf.data.get("ST_w0_mean_y").yscale.label = "Vm"
         self.tf.data.get("ST_w0_mean_y").yscale.units = "mV"
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4)
-        counts = self.tf.data.get("H_ST_w0_mean_y_counts")
-        self.assertEqual((counts.xscale.label, counts.xscale.units), ("Vm", "mV"))
-        self.assertEqual(counts.yscale.label, "count")
-        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, density=True)
-        self.assertEqual(self.tf.data.get("H_ST_w0_mean_y_counts").yscale.label, "density")
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", binwidth=0.5)
+        self.assertEqual((self.H().xscale.label, self.H().xscale.units), ("Vm", "mV"))
+        self.assertEqual((self.H().yscale.label, self.H().yscale.units), ("count", ""))
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", binwidth=0.5,
+                                   output="probability")
+        self.assertAlmostEqual(self.H().nparray.sum(), 1.0)  # heights
+        self.assertEqual((self.H().yscale.label, self.H().yscale.units), ("probability", ""))
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", binwidth=0.5, output="density")
+        self.assertAlmostEqual(self.H().nparray.sum() * 0.5, 1.0)  # areas
+        self.assertEqual((self.H().yscale.label, self.H().yscale.units), ("density", "1/mV"))
+
+    def test_histogram_note(self):
+        nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", binwidth=2)
+        self.assertEqual([n["note"] for n in self.H().notes], [
+            "NMHistogram(array=ST_w0_mean_y, binwidth=2, nbins=5, xbgn=-2, xend=8, "
+            "pad=1, output=count, n=9)"])
 
     def test_histogram_no_save_skips_arrays(self):
         nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", bins=4, save_to_numpy=False)
-        self.assertNotIn("H_ST_w0_mean_y_counts", self.tf.data)
-        self.assertNotIn("H_ST_w0_mean_y_edges", self.tf.data)
+        self.assertNotIn("H_ST_w0_mean_y", self.tf.data)
+
+    def test_histogram_bad_values(self):
+        with self.assertRaises(ValueError):
+            nms.NMToolStats2.histogram(self.tf, "ST_w0_mean_y", output="counts")
+        self.tf.data.new("ST_w0_nan_y", nparray=np.array([np.nan, np.nan]))
+        with self.assertRaises(ValueError):
+            nms.NMToolStats2.histogram(self.tf, "ST_w0_nan_y")
 
     # --- type and key validation ---
 
