@@ -172,7 +172,7 @@ def test_stats_arrays_are_a_setting_and_no_cache(qtbot):
                  "output_arrays_checkbox"):
         assert not hasattr(tab, name)
     options = {option[0]: option for option in tab.config_options()}
-    assert options["results_to_numpy"][1:3] == ("Save Stats arrays (ST_)", True)
+    assert options["results_to_numpy"][1:3] == ("Save ST_ arrays", True)
 
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()

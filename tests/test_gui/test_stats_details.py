@@ -146,7 +146,7 @@ def test_details_are_selectable_and_short(app):
 
 
 def test_digits_shown_in_settings(app, qtbot):
-    """Settings › Stats › Digits shown: Stats1's Details and Stats2's tables
+    """Settings › Stats › Digits displayed (the last option): Stats1's Details and Stats2's tables
     and Details; saved with the settings."""
     tab = app.stats
     tab.measurement_combo.setCurrentText("mean")
@@ -167,3 +167,29 @@ def test_digits_shown_in_settings(app, qtbot):
     assert StatsTables.digits == 3
     text = tables.arrays_table.item(0, 0).text()
     assert len(text.lstrip("-").replace(".", "")) <= 3
+
+
+def test_index_and_count_arrays_in_settings(app, qtbot):
+    """Settings › Stats › Show index and count ST_ arrays, before Digits displayed,
+    off by default: Stats2's tables and Array list; saved with the settings;
+    no All columns checkbox in Stats2 (#496)."""
+    tab = app.stats
+    tab.measurement_combo.setCurrentText("mean")
+    tab.run_button.click()
+    stats2 = tab.stats2
+    assert not hasattr(stats2, "all_columns_checkbox")
+    keys = [option[0] for option in tab.config_options()]
+    assert keys[-2:] == ["detail_arrays", "digits"]  # Digits displayed last
+    dialog = app.settings_dialog()
+    qtbot.addWidget(dialog)
+    box = dialog.tool_checkboxes["Stats"]["detail_arrays"]
+    assert box.text() == "Show index and count ST_ arrays" and not box.isChecked()
+    names = [stats2.array_combo.itemText(i) for i in range(stats2.array_combo.count())]
+    assert "ST_w0_mean_y" in names
+    assert not [n for n in names if n.rsplit("_", 1)[-1] in ("i", "n", "nans") or
+                n == "ST_epoch_num"]
+    box.setChecked(True)
+    assert app.manager.settings.stats_detail_arrays is True
+    names = [stats2.array_combo.itemText(i) for i in range(stats2.array_combo.count())]
+    assert "ST_epoch_num" in names and "ST_w0_mean_n" in names
+    assert "ST_epoch_num" in stats2.tables.columns

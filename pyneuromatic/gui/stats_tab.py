@@ -436,7 +436,7 @@ class StatsToolTab(ToolTabWidget):
         self._config_labels = {
             "ignore_nans": "Ignore NaNs",
             "overwrite": "Overwrite Stats tool folder",
-            "results_to_numpy": "Save Stats arrays (ST_)",
+            "results_to_numpy": "Save ST_ arrays",
             "results_all_epochs": "ST_ arrays: one point per epoch",
         }
         self._config_tips = {
@@ -580,6 +580,7 @@ class StatsToolTab(ToolTabWidget):
     def apply_settings(self) -> None:
         super().apply_settings()  # the Display control
         StatsTables.digits = self.digits()
+        self.stats2.set_detail_arrays(self.detail_arrays())
         self.stats2.tables.refresh()
         self.stats2.refresh_details()
         self._show_details()
@@ -706,10 +707,15 @@ class StatsToolTab(ToolTabWidget):
         options: list[tuple] = [
             (key, self._config_labels[key], bool(getattr(self._tool, key)),
              self._config_tips[key]) for key in self._config_keys]
-        if self._settings is not None:
+        if self._settings is not None:  # how values show: the app's settings
+            options.append((
+                "detail_arrays", "Show index and count ST_ arrays", self.detail_arrays(),
+                "Also list the index and point-count arrays (i, i0, i1, n, nans, "
+                "infs) and the epoch numbers, in the Stats tables and Stats2's "
+                "Array list"))
             spec = self._settings._schema["stats_digits"]
             options.append((
-                "digits", "Digits shown", self.digits(),
+                "digits", "Digits displayed", self.digits(),
                 "Significant digits of the values in Stats1's Results and "
                 "Stats2's tables and Results (copying keeps them all)",
                 (spec["min"], spec["max"])))
@@ -717,8 +723,11 @@ class StatsToolTab(ToolTabWidget):
 
     def set_config_option(self, key: str, value) -> None:
         """Set an option from Settings › Stats (used from the next run)."""
-        if key == "digits":  # how values show (a setting, not the tool's)
-            self._settings.stats_digits = int(value)
+        if key in ("digits", "detail_arrays"):  # how values show (settings, not the tool's)
+            if key == "digits":
+                self._settings.stats_digits = int(value)
+            else:
+                self._settings.stats_detail_arrays = bool(value)
             self._settings.save_user()  # only if loaded from the user's file
             self.apply_settings()
             return
@@ -728,6 +737,10 @@ class StatsToolTab(ToolTabWidget):
     def digits(self) -> int:
         """Significant digits of the values shown (Settings: stats_digits)."""
         return getattr(self._settings, "stats_digits", 6)
+
+    def detail_arrays(self) -> bool:
+        """Show the index and count arrays (Settings: stats_detail_arrays)."""
+        return bool(getattr(self._settings, "stats_detail_arrays", False))
 
     def set_settings(self, settings) -> None:
         super().set_settings(settings)

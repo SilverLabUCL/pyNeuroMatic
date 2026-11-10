@@ -225,9 +225,12 @@ def test_array_dropdown_selects_column_and_shows_details(qtbot):
     assert "mean  23" in details
     assert "N     4" in details
 
-    stats2.all_columns_checkbox.setChecked(True)
-    assert stats2.array_combo.currentText() == "ST_w0_max_dy"
+    assert stats2.array_combo.findText("ST_w0_max_n") < 0
+    window.tool_tabs["Stats"].set_config_option("detail_arrays", True)  # Settings › Stats (#496)
+    assert stats2.array_combo.currentText() == "ST_w0_max_dy"  # still chosen
     assert stats2.array_combo.findText("ST_w0_max_n") >= 0
+    window.tool_tabs["Stats"].set_config_option("detail_arrays", False)
+    assert stats2.array_combo.findText("ST_w0_max_n") < 0
 
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice:RuntimeWarning")
@@ -240,7 +243,7 @@ def test_details_list_nan_rows(qtbot):
     assert stats2.details.toPlainText().splitlines()[-1] == "NaN for: RecordA2"
 
 
-def test_all_columns_and_window_switch(qtbot):
+def test_index_and_count_arrays_and_window_switch(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
     tab = window.tool_tabs["Stats"]
     tab.window_combo.setCurrentIndex(tab.window_combo.findData(tab.NEW_WINDOW_ACTION))
@@ -253,7 +256,7 @@ def test_all_columns_and_window_switch(qtbot):
         "w0", "w1",
     ]
     assert "max_n" not in _headers(tables.arrays_table)
-    stats2.all_columns_checkbox.setChecked(True)
+    tab.set_config_option("detail_arrays", True)
     assert {"max_i", "max_n", "bsln_n"} <= set(_headers(tables.arrays_table))
 
     stats2.window_combo.setCurrentText("w1")
@@ -365,23 +368,26 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
 
 
 @pytest.mark.parametrize("style", ["macos", "fusion"])
-def test_array_list_spans_its_row(qtbot, style):
-    """The rows span the panel, so array names aren't cut off, also with
-    macOS's style (its forms keep fields at their size hint)."""
+def test_array_list_fits_its_names(qtbot, style):
+    """The Array list is as wide as its longest array name (not cut off, also
+    with macOS's style), then Plot and ⋯; the row's space is after them."""
     if style not in [key.lower() for key in QtWidgets.QStyleFactory.keys()]:
         pytest.skip(f"no {style} style here")
-    panel = Stats2Panel(NMManager(quiet=True))
+    _manager, _folder, window = _stats_window(qtbot)
+    window.tool_tabs["Stats"].run_button.click()
+    panel = window.tool_tabs["Stats"].stats2
+    panel.setStyle(QtWidgets.QStyleFactory.create(style))
+    panel.setParent(None)
     qtbot.addWidget(panel)
-    qt_style = QtWidgets.QStyleFactory.create(style)
-    panel.setStyle(qt_style)
-    panel.resize(420, 600)
+    panel.resize(600, 600)
     panel.show()
     qtbot.waitExposed(panel)
     combo, plot, menu = panel.array_combo, panel.plot_button, panel.plot_menu_button
-    assert combo.width() > panel.width() // 2
-    # Up to Plot and ⋯, at the row's end
-    assert combo.geometry().right() < plot.geometry().left()
-    assert menu.geometry().right() >= panel.width() - 20
+    names = [combo.itemText(i) for i in range(combo.count())]
+    longest = max(combo.fontMetrics().horizontalAdvance(n) for n in names)
+    assert longest < combo.width() < longest + 60  # fits its names, no more
+    assert combo.geometry().right() < plot.geometry().left() < menu.geometry().left()
+    assert menu.geometry().right() < panel.width() - 100  # not stretched to the end
 
 
 def test_histograms_are_listed_after_the_windows_arrays(qtbot):
@@ -493,7 +499,7 @@ def test_without_stats_arrays_table_explains(qtbot):
     assert window.tool_tabs["Stats"].status_label.text() == "Complete"
     assert window.context_panel.currentWidget() is window.plot_widget
     assert stats2.folder_combo.count() == 0
-    assert "Run Stats1 with 'Stats arrays' on" in stats2.message_label.text()
+    assert "Run Stats1 with Settings › Stats › 'Save ST_ arrays' on" in stats2.message_label.text()
 
 
 def test_browser_shows_new_results_folder_after_run(qtbot):

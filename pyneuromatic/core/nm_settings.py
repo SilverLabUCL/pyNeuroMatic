@@ -65,6 +65,9 @@ class NMSettings(NMToolConfig):
         run_delay: Seconds to wait after showing each epoch ("each").
         stats_digits: Significant digits of Stats values shown (Stats1's
             Details, Stats2's tables and Details); copying keeps them all.
+        stats_detail_arrays: Also show the index and point-count arrays
+            (i, i0, i1, n, nans, infs) and the epoch numbers, in the Stats
+            tables and Stats2's Array list (#496).
     """
 
     _TOML_TYPE = "nm_settings"
@@ -86,6 +89,7 @@ class NMSettings(NMToolConfig):
         "run_delay": {"type": float, "default": 0.0, "min": 0.0, "max": 10.0},
         # Stats values shown (#471)
         "stats_digits": {"type": int, "default": 6, "min": 2, "max": 10},
+        "stats_detail_arrays": {"type": bool, "default": False},
     }
 
     def __init__(self) -> None:

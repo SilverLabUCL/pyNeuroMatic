@@ -310,7 +310,7 @@ class StatsTables(QtWidgets.QWidget):
         self,
         toolfolder: NMToolFolder | None,
         window: str | None,
-        all_columns: bool = False,
+        detail_arrays: bool = False,
         message: str = "",
     ) -> None:
         """Fill both tables from *window*'s ST_ arrays in *toolfolder*."""
@@ -329,7 +329,7 @@ class StatsTables(QtWidgets.QWidget):
         self.title_label.setText(f"{toolfolder.name}  {window}")
 
         prefix = f"ST_{window}_"
-        self._columns = self._window_arrays(toolfolder, window, all_columns)
+        self._columns = self._window_arrays(toolfolder, window, detail_arrays)
         rows = self._row_labels(toolfolder, window)
         self.arrays_table.setColumnCount(len(self._columns))
         self.arrays_table.setRowCount(len(rows))
@@ -393,7 +393,7 @@ class StatsTables(QtWidgets.QWidget):
 
     @classmethod
     def _window_arrays(
-        cls, toolfolder: NMToolFolder, window: str, all_columns: bool
+        cls, toolfolder: NMToolFolder, window: str, detail_arrays: bool
     ) -> list[str]:
         prefix = f"ST_{window}_"
         names = []
@@ -403,10 +403,10 @@ class StatsTables(QtWidgets.QWidget):
             values = data.nparray
             if not isinstance(values, np.ndarray) or values.dtype.kind not in "fiu":
                 continue  # e.g. warning text arrays
-            if name.rsplit("_", 1)[-1] in cls._DETAIL_SUFFIXES and not all_columns:
+            if name.rsplit("_", 1)[-1] in cls._DETAIL_SUFFIXES and not detail_arrays:
                 continue
             names.append(name)
-        if all_columns and "ST_epoch_num" in toolfolder.data:  # the rows' epochs (#476)
+        if detail_arrays and "ST_epoch_num" in toolfolder.data:  # the rows' epochs (#476)
             names.insert(0, "ST_epoch_num")
         return names
 
@@ -605,18 +605,16 @@ class Stats2Panel(QtWidgets.QWidget):
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents
         )
         window_row.addWidget(self.window_combo)
-        self.all_columns_checkbox = QtWidgets.QCheckBox("All columns", self)
-        self.all_columns_checkbox.setToolTip(
-            "Also list index and point-count arrays (i, i0, i1, n, nans, infs)"
-        )
-        window_row.addWidget(self.all_columns_checkbox)
         window_row.addStretch(1)
+        # Settings › Stats: also show the index and count arrays (#496)
+        self._detail_arrays = False
         form.addRow("Window", window_row)
 
         array_row = QtWidgets.QHBoxLayout()
         self.array_combo = QtWidgets.QComboBox(self)
         self.array_combo.setObjectName("stats2Array")
-        array_row.addWidget(self.array_combo, stretch=1)
+        # As wide as its array names (_refresh_array_combo), as the Folder list
+        array_row.addWidget(self.array_combo)
         self.plot_button = QtWidgets.QPushButton("Plot", self)
         self.plot_button.setToolTip("Show the chosen array in the Plot panel")
         array_row.addWidget(self.plot_button)
@@ -647,6 +645,7 @@ class Stats2Panel(QtWidgets.QWidget):
         self.plot_menu_button.setStyleSheet(
             "QToolButton::menu-indicator { image: none; width: 0px; }")
         array_row.addWidget(self.plot_menu_button)
+        array_row.addStretch(1)
         form.addRow("Array", array_row)
         layout.addLayout(form)
 
@@ -679,7 +678,6 @@ class Stats2Panel(QtWidgets.QWidget):
 
         self.folder_combo.currentIndexChanged.connect(self._on_folder_changed)
         self.window_combo.currentIndexChanged.connect(self._show_tables)
-        self.all_columns_checkbox.toggled.connect(self._show_tables)
         self.array_combo.currentIndexChanged.connect(self._on_array_changed)
         self.tables.column_selected.connect(self._on_table_column_selected)
         self.results_combo.currentIndexChanged.connect(self._update_details)
@@ -802,7 +800,7 @@ class Stats2Panel(QtWidgets.QWidget):
         elif toolfolder is None:
             message = (
                 f"No saved Stats results in {self._folder.name}. "
-                "Run Stats1 with 'Stats arrays' on."
+                "Run Stats1 with Settings › Stats › 'Save ST_ arrays' on."
             )
         else:
             message = ""
@@ -811,10 +809,18 @@ class Stats2Panel(QtWidgets.QWidget):
         self.tables.show_window(
             toolfolder,
             self.window_combo.currentData(),
-            all_columns=self.all_columns_checkbox.isChecked(),
+            detail_arrays=self._detail_arrays,
             message=message,
         )
         self._refresh_array_combo()
+
+    def set_detail_arrays(self, on: bool) -> None:
+        """Also show the index and point-count arrays (i, i0, i1, n, nans,
+        infs) and the epoch numbers, in the tables and the Array list
+        (Settings › Stats, #496); the array chosen stays if still listed."""
+        if bool(on) != self._detail_arrays:
+            self._detail_arrays = bool(on)
+            self._show_tables()
 
     # --- array selection --------------------------------------------------
 
@@ -844,8 +850,12 @@ class Stats2Panel(QtWidgets.QWidget):
         previous = self.array_combo.currentData()
         self.array_combo.blockSignals(True)
         self.array_combo.clear()
-        for name in self.tables.columns + self._histograms():
+        names = self.tables.columns + self._histograms()
+        for name in names:
             self.array_combo.addItem(name, name)
+        metrics = self.array_combo.fontMetrics()
+        longest = max(names, key=metrics.horizontalAdvance) if names else "ST_w0_max_y"
+        self.array_combo.setFixedWidth(metrics.horizontalAdvance(longest) + 44)
         index = self.array_combo.findData(previous)
         if index < 0:  # not in these results: their measurement
             index = self.array_combo.findData(self.measure_array())

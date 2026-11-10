@@ -167,11 +167,11 @@ def test_an_older_subfolder_still_reads(qtbot):
     assert not stats2.epoch_x_action.isEnabled()
 
 
-def test_epoch_numbers_under_all_columns(qtbot):
+def test_epoch_numbers_with_the_index_and_count_arrays(qtbot):
     app = _app(qtbot, "max")
     stats2 = app.stats.stats2
     assert "ST_epoch_num" not in stats2.tables.columns
-    stats2.all_columns_checkbox.setChecked(True)
+    app.stats.set_config_option("detail_arrays", True)  # Settings › Stats (#496)
     assert stats2.tables.columns[0] == "ST_epoch_num"
     assert stats2.measure_array() == "ST_w0_max_y"  # never the rows' epochs
 
@@ -179,7 +179,7 @@ def test_epoch_numbers_under_all_columns(qtbot):
 def test_the_epoch_column_is_headed_epoch(qtbot):
     app = _app(qtbot, "max")
     stats2 = app.stats.stats2
-    stats2.all_columns_checkbox.setChecked(True)
+    app.stats.set_config_option("detail_arrays", True)  # Settings › Stats (#496)
     table = stats2.tables.arrays_table
     headers = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
     assert headers[0] == "epoch"  # not "ch_num" (ST_epoch_num cut as a window's array)
