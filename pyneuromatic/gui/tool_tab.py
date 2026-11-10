@@ -329,6 +329,10 @@ class ToolTabWidget(QtWidgets.QWidget):
         """The trace the Plot shows (as plotted; None for none), e.g. to
         describe its measurement (Stats' Results, #471)."""
 
+    def set_folder_actions(self, actions) -> None:
+        """The app's folder actions, e.g. for a menu of the tool's subfolders
+        (Stats2's Folder ⋯, #494)."""
+
     @property
     def asking(self) -> bool:
         """True while the prompt waits for an answer."""

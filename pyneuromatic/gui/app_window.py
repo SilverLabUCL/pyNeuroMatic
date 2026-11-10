@@ -1834,6 +1834,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.plot_widget.trace_drawn.connect(tab.set_trace)
         tab.set_trace(self.plot_widget.shown_trace)
         tab.settings_requested.connect(self.open_settings)
+        tab.set_folder_actions(self.folder_actions)  # e.g. Stats2's Folder ⋯ (#494)
         tab.history_entry.connect(lambda kind, text: self.history_panel.add(kind, text))
         # Its views appear in both panels while the folder has its results
         if tab.plot_view is not None:

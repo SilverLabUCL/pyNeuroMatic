@@ -39,6 +39,20 @@ from pyneuromatic.tools.nm_tool_config import NMToolConfig
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 
 
+def toolfolder_prefix(name: str) -> str | None:
+    """The prefix of the tool whose subfolders *name* is one of (e.g.
+    ``"Stats_"`` for ``Stats_Record_A_All_0``), or None (#494). From each
+    tool's :attr:`NMTool.TOOLFOLDER_PREFIX`."""
+    tools = list(NMTool.__subclasses__())
+    while tools:
+        tool = tools.pop()
+        tools.extend(tool.__subclasses__())
+        prefix = tool.TOOLFOLDER_PREFIX
+        if prefix and name.startswith(prefix):
+            return prefix
+    return None
+
+
 def set_code(name: str) -> str:
     """A set's short code for subfolder names: ``Set1`` -> ``S1``, ``SetX``
     -> ``SX``; other names are cut to 8 characters (e.g. imported sets)."""
@@ -66,6 +80,11 @@ class NMTool:
                 # analyze data...
                 return True
     """
+
+    # The start of the names of the subfolders a tool lists (e.g. Stats2
+    # lists "Stats_..."), or None if it lists none. A subfolder can't be
+    # renamed or copied to a name without it (#494).
+    TOOLFOLDER_PREFIX: str | None = None
 
     def __init__(self, name: str = "") -> None:
         self._name = name

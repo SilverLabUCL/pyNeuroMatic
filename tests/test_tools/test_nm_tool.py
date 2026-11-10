@@ -36,6 +36,19 @@ class TestNMToolInit(unittest.TestCase):
             self.assertIsNone(tool._select[tier])
 
 
+class TestToolfolderPrefix(unittest.TestCase):
+    """Each tool says the prefix of the subfolders it lists (#494)."""
+
+    def test_stats_prefix(self):
+        from pyneuromatic.tools.nm_tool import toolfolder_prefix
+        from pyneuromatic.tools.nm_tool_stats import NMToolStats
+        self.assertEqual(NMToolStats.TOOLFOLDER_PREFIX, "Stats_")
+        self.assertEqual(toolfolder_prefix("Stats_Record_A_All_0"), "Stats_")
+        self.assertIsNone(toolfolder_prefix("Spike_Record_A_0"))  # Spike lists none yet
+        self.assertIsNone(toolfolder_prefix("Results"))
+        self.assertIsNone(NMTool.TOOLFOLDER_PREFIX)
+
+
 class TestNMToolProperties(unittest.TestCase):
     """Tests for NMTool read-only properties."""
 
