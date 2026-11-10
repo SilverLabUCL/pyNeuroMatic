@@ -382,15 +382,12 @@ class NMToolStats(NMTool):
         "sem":  ("sem",  "sunits"),
         "b":    ("b",    "bunits"),
         "dx":   ("dx",   "xunits"),
-        "Δs":   ("ds",   "sunits"),
+        "Δs":   ("dy",   "sunits"),  # the value minus the baseline's (#488)
     }
 
     # Maps stat function names containing special chars or long names to
     # NMData-safe abbreviations (alphanumeric + underscores only).
     _FUNC_NAME_MAP: dict[str, str] = {
-        "mean+std":       "mean_std",
-        "mean+var":       "mean_var",
-        "mean+sem":       "mean_sem",
         "mean@max":       "mean_max",
         "mean@min":       "mean_min",
         "value@xbgn":     "val_xbgn",
@@ -469,7 +466,8 @@ class NMToolStats(NMTool):
         * ``"main"`` id → omitted; sanitized func name embedded instead.
         * ``"bsln"`` id → ``"bsln"`` component; func name omitted.
         * Compound funcs (``mean+std/var/sem``) → split into separate arrays:
-          ``ST_{w}_mean_y`` and ``ST_{w}_std_y`` (etc.).
+          ``ST_{w}_mean_y`` and ``ST_{w}_std_y`` (etc.); their other keys
+          are the mean's, e.g. ``ST_{w}_mean_dy``, ``ST_{w}_mean_n``.
         * Complex func ids (``risetime+``, etc.) → sanitized and used directly.
 
         Args:
@@ -485,7 +483,7 @@ class NMToolStats(NMTool):
         Returns:
             Array name string (e.g. ``"ST_w0_mean_y"``).
         """
-        suffix = "y" if rkey == "s" else "ds" if rkey == "Δs" else rkey
+        suffix = "y" if rkey == "s" else "dy" if rkey == "Δs" else rkey
 
         if id_str == "bsln":
             return "ST_%s_bsln_%s" % (wname, suffix)
@@ -496,9 +494,8 @@ class NMToolStats(NMTool):
                 return "ST_%s_%s_y" % (wname, base)
             if rkey == sec_key:
                 return "ST_%s_%s_y" % (wname, sec_key)
-            # other keys (n, nans, etc.): use sanitized compound func name
-            safe = NMToolStats._sanitize_func_name(func_name)
-            return "ST_%s_%s_%s" % (wname, safe, suffix)
+            # other keys (Δs, n, nans, etc.): the mean's, e.g. ST_w0_mean_dy
+            return "ST_%s_%s_%s" % (wname, base, suffix)
 
         safe = NMToolStats._sanitize_func_name(
             func_name if id_str == "main" else id_str
@@ -583,7 +580,8 @@ class NMToolStats(NMTool):
         * Primary stat value (``"s"`` key): ``ST_{w}_{func}_y``
           e.g. ``ST_w0_mean_y``, ``ST_w0_max_y``.
         * Compound funcs split into two: ``mean+std`` →
-          ``ST_{w}_mean_y`` and ``ST_{w}_std_y``.
+          ``ST_{w}_mean_y`` and ``ST_{w}_std_y``; their other keys are
+          the mean's (``ST_{w}_mean_dy``, ``ST_{w}_mean_n``, ...).
         * Baseline results: ``ST_{w}_bsln_y``, ``ST_{w}_bsln_std``, etc.
         * Other keys keep their descriptive suffix: ``ST_{w}_{func}_x``,
           ``ST_{w}_{func}_dx``, ``ST_{w}_{func}_n``, etc.
