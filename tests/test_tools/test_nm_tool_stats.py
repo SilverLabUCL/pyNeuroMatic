@@ -196,6 +196,21 @@ class TestNMToolStats(unittest.TestCase):
         self.assertIn("ST_w0_mean_y", f.data)
         self.assertIn("ST_w0_std_y", f.data)
         self.assertNotIn("ST_w0_mean_std_y", f.data)
+        # Its other arrays are the mean's: ST_w0_mean_n, not ST_w0_mean_std_n
+        self.assertFalse([n for n in f.data if "mean_std" in n])
+        self.assertIn("ST_w0_mean_n", f.data)
+
+    def test_results_to_numpy_compound_delta_is_the_means(self):
+        # mean+std/var/sem with a baseline: Δ is ST_w0_mean_dy, not ST_w0_mean_std_ds
+        for func in ("mean+std", "mean+var", "mean+sem"):
+            self.setUp()
+            self._setup_folder()
+            self._run_compute_with_bsln(func=func)
+            f = self.tool._write_results_to_numpy()
+            self.assertIn("ST_w0_mean_dy", f.data, func)
+            self.assertIn("ST_w0_%s_y" % func[len("mean+"):], f.data, func)
+            self.assertFalse([n for n in f.data if n.startswith("ST_w0_mean_" + func[5:])],
+                             func)
 
     def test_results_to_numpy_bsln_uses_bsln_prefix(self):
         # baseline result → ST_w0_bsln_y
@@ -229,8 +244,47 @@ class TestNMToolStats(unittest.TestCase):
             [self._ramp(height=h) for h in (50.0, 51.0, 52.0)],
         )
         f = self.tool._write_results_to_numpy()
-        self.assertEqual(list(f.data.get("ST_w0_max_ds").nparray),
+        self.assertEqual(list(f.data.get("ST_w0_max_dy").nparray),
                          [50.0, 51.0, 52.0])
+        # Δ is _dy (as _y and _dx), in the baseline's units (#488)
+        self.assertFalse([n for n in f.data if n.endswith("_ds")])
+        self.assertEqual(f.data.get("ST_w0_max_dy").yscale.units,
+                         f.data.get("ST_w0_bsln_y").yscale.units)
+
+    def test_delta_only_for_a_point_or_average_on_the_trace(self):
+        # Decided by measurement, not units (#488): std, sum... are in y
+        # units but their Δ means nothing; data without units can't compare
+        from pyneuromatic.tools.nm_stat_func import (
+            FUNC_NAMES_BASIC, FUNC_NAMES_BASIC_DELTA)
+        no_delta = ("var", "std", "sem", "rms", "sum", "pathlength", "area",
+                    "slope", "count", "count_nans", "count_infs")
+        self.assertEqual(set(FUNC_NAMES_BASIC),
+                         set(FUNC_NAMES_BASIC_DELTA) | set(no_delta))
+        for units in (True, False):
+            for func in FUNC_NAMES_BASIC + ("max", "min", "level+"):
+                self.setUp()
+                self._setup_folder()
+                w = list(self.tool.windows)[0]
+                win = {"func": func, "bsln_on": True, "bsln_func": "mean",
+                       "bsln_xbgn": 0.0, "bsln_xend": 9.0}
+                if func == "level+":
+                    win["func"] = {"name": "level+", "ylevel": 0.5}
+                w._win_set(win, quiet=True)
+                data = _make_data(units=units)
+                if func == "pathlength":  # needs x and y in the same units
+                    u = "mV" if units else ""
+                    data = NMData(NM, name="recordA0", nparray=data.nparray,
+                                  xscale={"units": u, "start": 0, "delta": 1},
+                                  yscale={"units": u})
+                w.compute(data)
+                self.tool._NMToolStats__results[w.name] = [w.results]
+                f = self.tool._write_results_to_numpy()
+                saved = [n for n in f.data if n.endswith("_dy")]
+                if func in no_delta:
+                    self.assertEqual(saved, [], (func, units))
+                    self.assertFalse(any("Δs" in r for r in w.results), (func, units))
+                else:
+                    self.assertEqual(len(saved), 1, (func, units, saved))
 
     def test_results_to_numpy_multistep_arrays_one_value_per_data(self):
         # Rise time records peak, p0 and p1 results per data array; each step
@@ -250,7 +304,7 @@ class TestNMToolStats(unittest.TestCase):
             self.assertEqual(len(f.data.get(name).nparray), 3, name)
         np.testing.assert_allclose(f.data.get("ST_w0_rt_p_y").nparray[:2],
                                    [-20.0, -10.0])
-        np.testing.assert_allclose(f.data.get("ST_w0_rt_p_ds").nparray[:2],
+        np.testing.assert_allclose(f.data.get("ST_w0_rt_p_dy").nparray[:2],
                                    [50.0, 60.0])
         p0_x = f.data.get("ST_w0_rt_p_p0_x").nparray
         p1_x = f.data.get("ST_w0_rt_p_p1_x").nparray
@@ -315,7 +369,7 @@ class TestNMToolStats(unittest.TestCase):
         # dx is recorded by a single step, so it keeps the plain name
         self.assertEqual(name("w0", "level+", "risetime+", "dx", "p1"),
                          "ST_w0_rt_p_dx")
-        self.assertEqual(name("w0", "max", "main", "Δs"), "ST_w0_max_ds")
+        self.assertEqual(name("w0", "max", "main", "Δs"), "ST_w0_max_dy")
 
     def test_results_to_numpy_no_folder_returns_none(self):
         from pyneuromatic.tools.nm_tool import HIERARCHY_SELECT_KEYS
