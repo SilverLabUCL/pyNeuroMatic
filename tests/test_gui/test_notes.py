@@ -72,9 +72,9 @@ def test_notes_editor(qtbot):
 
 def test_notes_dialog(qtbot):
     notes = NMNotes()
-    dialog = NotesDialog(notes, "Set2 (Record)")
+    dialog = NotesDialog(notes, "Set2 (Demo / Record)")
     qtbot.addWidget(dialog)
-    assert dialog.windowTitle() == "Notes: Set2 (Record)"
+    assert dialog.windowTitle() == "Notes: Set2 (Demo / Record)"
     assert not dialog.editor.header.isVisibleTo(dialog)  # the title says whose
     dialog.editor._ask_note = lambda title, text="": "Responses > 10 mV"
     dialog.editor.add_button.click()
@@ -118,14 +118,15 @@ def test_notes_in_every_strip_menu(app):
     model.update(dataseries=series, source="dataseries")
     model.update(epoch_set="Set1", group=0)
     expected = {
-        # "Name (Parent)": a folder's name; its folder; an epoch's... data series
+        # "Name (Parent)": a folder's name; its folder; an epoch's... folder and
+        # data series
         "folder": (demo.notes, "Demo"),
         "data": (demo.data["Single"].notes, "Single (Demo)"),
         "data_set": (demo.data.sets.notes("Mine"), "Mine (Demo)"),
         "dataseries": (series.notes, "Record (Demo)"),
-        "channel": (series.channels["A"].notes, "A (Record)"),
-        "epoch_set": (series.epochs.sets.notes("Set1"), "Set1 (Record)"),
-        "group": (series.epochs.groups.notes(0), "Group 0 (Record)"),
+        "channel": (series.channels["A"].notes, "A (Demo / Record)"),
+        "epoch_set": (series.epochs.sets.notes("Set1"), "Set1 (Demo / Record)"),
+        "group": (series.epochs.groups.notes(0), "Group 0 (Demo / Record)"),
     }
     for key, (notes, owner) in expected.items():
         actions = getattr(app, TIERS[key])
@@ -181,8 +182,8 @@ def test_a_note_added_from_the_strip_is_in_the_browser(app, qtbot):
 
 def test_notes_titles_are_name_then_parent(qtbot):
     """"Notes: Name (Parent)": the folder for a subfolder, data array, Data Set
-    or data series ("Folder / Subfolder" inside one); the data series for an
-    epoch, channel, Epoch Set or group."""
+    or data series ("Folder / Subfolder" inside one); the folder and data
+    series for an epoch, channel, Epoch Set or group ("Folder / Series")."""
     from pyneuromatic.gui.notes_view import group_owner, notes_owner, set_owner
     manager = NMManager(quiet=True)
     folder = manager.folders.new("Demo", select=False)
@@ -194,11 +195,71 @@ def test_notes_titles_are_name_then_parent(qtbot):
     assert notes_owner(series) == "Record (Demo)"
     assert notes_owner(subfolder) == "Stats_0 (Demo)"
     assert notes_owner(array) == "ST_w0_max_y (Demo / Stats_0)"
-    assert notes_owner(series.epochs["E0"]) == "E0 (Record)"
-    assert notes_owner(series.channels["A"]) == "A (Record)"
-    assert set_owner("Set1", series.epochs) == "Set1 (Record)"
+    assert notes_owner(series.epochs["E0"]) == "E0 (Demo / Record)"
+    assert notes_owner(series.channels["A"]) == "A (Demo / Record)"
+    assert set_owner("Set1", series.epochs) == "Set1 (Demo / Record)"
     assert set_owner("Mine", folder.data) == "Mine (Demo)"
-    assert group_owner(0, series) == "Group 0 (Record)"
+    assert group_owner(0, series) == "Group 0 (Demo / Record)"
+    # The same series name in another folder: which folder's, e.g. in the history
+    other = manager.folders.new("Demo2", select=False)
+    other_series = other.new_dataseries("Record", n_channels=1, n_epochs=1, n_points=5)
+    assert notes_owner(other_series.epochs["E0"]) == "E0 (Demo2 / Record)"
     dialog = NotesDialog(series.epochs["E0"].notes, notes_owner(series.epochs["E0"]))
     qtbot.addWidget(dialog)
-    assert dialog.windowTitle() == "Notes: E0 (Record)"
+    assert dialog.windowTitle() == "Notes: E0 (Demo / Record)"
+
+
+# --- notes in the history: messages, not commands (#507) -------------------------------
+
+def _history(app, start=0):
+    QtWidgets.QApplication.processEvents()
+    app.history_panel.flush()
+    return [(e.kind, e.text) for e in app.history_panel.model.entries[start:]]
+
+
+def test_notes_are_history_messages(app, qtbot):
+    series = app.series
+    dialog = NotesDialog(series.epochs.sets.notes("Set1"), "Set1 (Demo / Record)")
+    qtbot.addWidget(dialog)
+    editor = dialog.editor
+    start = len(_history(app))
+    editor._ask_note = lambda title, text="": None  # cancelled: no message
+    editor.add_button.click()
+    assert _history(app, start) == []
+    editor._ask_note = lambda title, text="": "Responses > 10 mV"
+    editor.add_button.click()
+    editor._ask_note = lambda title, text="": "Responses > 12 mV"
+    editor.edit_button.click()  # the new note is chosen
+    editor._confirm_delete = lambda count: True
+    editor.delete_button.click()
+    assert _history(app, start) == [
+        ("message", "Set1 (Demo / Record): added note 'Responses > 10 mV'"),
+        ("message", "Set1 (Demo / Record): edited note 1: 'Responses > 12 mV'"),
+        ("message", "Set1 (Demo / Record): deleted note 1: 'Responses > 12 mV'"),
+    ]  # no commands
+
+
+def test_a_long_note_is_cut_in_its_message(app, qtbot):
+    from pyneuromatic.gui.notes_view import short_text
+    text = "Responses were measured after the drug washed in; " * 3
+    assert len(short_text(text)) == 60 and short_text(text).endswith("…")
+    assert short_text("two\nlines") == "two lines"
+    editor = NotesEditor()
+    qtbot.addWidget(editor)
+    editor.set_notes(app.series.notes, "Record (Demo)")
+    start = len(_history(app))
+    editor._ask_note = lambda title, txt="": text
+    editor.add_button.click()
+    assert _history(app, start) == [
+        ("message", f"Record (Demo): added note '{short_text(text)}'")]
+    assert app.series.notes[-1]["note"] == text.strip()  # in full in the notes
+
+
+def test_notes_written_by_pynm_are_not_messages(app):
+    """A Stats run's note (read-only) is written without a message."""
+    tab = app.tool_tabs["Stats"]
+    tab.measurement_combo.setCurrentText("mean")
+    start = len(_history(app))
+    tab.run_button.click()
+    assert tab.stats_tool.toolfolder.notes[0]["note"].startswith("NMStats:")
+    assert not [text for _kind, text in _history(app, start) if "added note" in text]

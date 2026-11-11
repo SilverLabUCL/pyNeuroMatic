@@ -242,7 +242,8 @@ def test_notes_of_the_current_epoch(app):
     assert panel.notes_action.isEnabled()
     panel.notes_action.trigger()
     epoch = panel._current_item
-    assert opened == [(epoch.notes, f"{epoch.name} ({panel._plot_dataseries.name})")]
+    series = panel._plot_dataseries
+    assert opened == [(epoch.notes, f"{epoch.name} ({series._folder.name} / {series.name})")]
     panel.trace_next_button.click()
     panel.notes_action.trigger()
     assert opened[-1][0] is panel._current_item.notes and panel._current_item is not epoch
