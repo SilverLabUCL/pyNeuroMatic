@@ -2401,7 +2401,7 @@ class SeriesActions(TierActions):
         self.add_epochs_action = action(
             "Add Epochs…", self.add_epochs,
             tip="Add epochs after the last one: a new array for each channel")
-        # Shown in the Channel menu, titled "Channels": Delete…
+        # Shown in the Channel menu (titled "Channel"): Delete…
         self.remove_channel_action = action("Delete…", self.remove_channel,
                                             tip="Remove a channel from the series")
         self.renumber_action = action(
@@ -3874,7 +3874,7 @@ class ChannelActions(TierActions):
     def channel_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Channel", parent)
         # Titled, then a divider (as the epoch ⋯ menu)
-        title = menu.addAction("Channels")
+        title = menu.addAction("Channel")
         title.setEnabled(False)
         menu.addSeparator()
         menu.addAction(self.add_action)

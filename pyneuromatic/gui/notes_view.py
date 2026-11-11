@@ -1,20 +1,32 @@
 """Notes of an object (a folder, data array, set...), one editor everywhere
 (#505): Date, then Note, with Add…, Edit… and Delete….
 
-Used by the browser's info panel (and a set's or group's notes), Stats2's
-Results › Notes and the strip's Notes… dialog. An edited note keeps its date;
+Used by the Notes window (the strip's Notes…, the epoch ⋯ menu, Stats2's
+Folder ⋯ › Notes…) and the browser's info panel (and a set's or group's notes). An edited note keeps its date;
 Delete… asks first. Notes pyNeuroMatic wrote itself (read-only, e.g. how a
-run's results were made) can't be edited or deleted.
+run's results were made) can't be edited or deleted. Adding, editing and
+deleting a note is a history message, not a command (#507).
 """
 from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
+import pyneuromatic.core.nm_history as nmh
+
+MESSAGE_LENGTH = 60  # a note's text in a history message, at most (then "…")
+
+
+def short_text(text: str, length: int = MESSAGE_LENGTH) -> str:
+    """*text* on one line, cut to *length* characters with "…" (#507)."""
+    line = " ".join(str(text).split())
+    return line if len(line) <= length else line[:length - 1].rstrip() + "…"
+
 
 # --- whose notes: "Name (Parent)", the Notes window's title -------------------------
 # A folder: its name. A subfolder, data array, Data Set or data series: its
 # folder ("Demo / Stats_0" inside a subfolder). An epoch, channel, Epoch Set
-# or group: its data series.
+# or group: its folder and data series ("Demo / Record"), so it's clear which
+# folder's (e.g. in the history, #507).
 
 def context_text(owner) -> str:
     """A folder's name, or "Folder / Subfolder" for a subfolder."""
@@ -24,9 +36,16 @@ def context_text(owner) -> str:
     return f"{folder.name} / {owner.name}"
 
 
+def series_text(series) -> str:
+    """A data series with its folder, e.g. "Demo / Record" ("Demo / Stats_0 /
+    Record" inside a subfolder)."""
+    parent = getattr(series, "_parent", None)
+    return f"{context_text(parent)} / {series.name}" if parent is not None else series.name
+
+
 def notes_owner(obj) -> str:
     """Whose notes, for the Notes window's title: e.g. "Demo", "Record (Demo)",
-    "E3 (Record)", "A (Record)", "ST_w0_max_y (Demo / Stats_0)"."""
+    "E3 (Demo / Record)", "A (Demo / Record)", "ST_w0_max_y (Demo / Stats_0)"."""
     from pyneuromatic.core.nm_dataseries import NMDataSeries
     from pyneuromatic.tools.nm_tool_folder import NMToolFolder
     parent = getattr(obj, "_parent", None)
@@ -34,23 +53,23 @@ def notes_owner(obj) -> str:
     if folder is None or folder is obj:  # a folder
         return obj.name
     if isinstance(parent, NMDataSeries):  # an epoch or channel
-        return f"{obj.name} ({parent.name})"
+        return f"{obj.name} ({series_text(parent)})"
     if isinstance(obj, NMToolFolder):
         return f"{obj.name} ({folder.name})"
     return f"{obj.name} ({context_text(parent if parent is not None else folder)})"
 
 
 def set_owner(name: str, container) -> str:
-    """A set's: its data series (an Epoch Set), or folder (a Data Set)."""
+    """A set's: its folder and data series (an Epoch Set), or folder (a Data Set)."""
     from pyneuromatic.core.nm_dataseries import NMDataSeries
     parent = getattr(container, "_parent", None)
     if isinstance(parent, NMDataSeries):
-        return f"{name} ({parent.name})"
+        return f"{name} ({series_text(parent)})"
     return f"{name} ({context_text(parent)})" if parent is not None else name
 
 
 def group_owner(number: int, series) -> str:
-    return f"Group {number} ({series.name})"
+    return f"Group {number} ({series_text(series)})"
 
 
 class NotesTable(QtWidgets.QTableWidget):
@@ -174,6 +193,13 @@ class NotesEditor(QtWidgets.QWidget):
 
     # --- actions ------------------------------------------------------------------
 
+    def _message(self, what: str, number: int | None, text: str) -> None:
+        """A history message (not a command, #507), e.g. "Stats_Control
+        (Demo): edited note 2: 'E8 excluded: noisy'"; numbered from 1."""
+        note = f"note {number}:" if number is not None else "note"
+        nmh.history(f"{what} {note} '{short_text(text)}'",
+                    path=self._owner or "Notes", quiet=False)
+
     def _changed(self, select: int | None = None) -> None:
         # Announced first: what's told (e.g. Stats2, the browser) may show the
         # notes again, so the note is chosen after
@@ -190,6 +216,7 @@ class NotesEditor(QtWidgets.QWidget):
         if text is None or not text.strip():
             return
         self._notes.add(text.strip())
+        self._message("added", None, text.strip())
         self._changed(select=len(self._notes) - 1)
 
     def edit_note(self) -> None:
@@ -201,6 +228,7 @@ class NotesEditor(QtWidgets.QWidget):
         if text is None or not text.strip():
             return
         self._notes.edit(rows[0], text.strip())
+        self._message("edited", rows[0] + 1, text.strip())
         self._changed(select=rows[0])
 
     def delete_notes(self) -> None:
@@ -210,8 +238,11 @@ class NotesEditor(QtWidgets.QWidget):
             return
         if not self._confirm_delete(len(rows)):
             return
+        texts = [self._notes[row]["note"] for row in rows]
         for row in reversed(rows):
             self._notes.remove(row)
+        for row, text in zip(rows, texts):  # numbered as they were
+            self._message("deleted", row + 1, text)
         self._changed()
 
 
@@ -234,4 +265,4 @@ class NotesDialog(QtWidgets.QDialog):
 
 
 __all__ = ["NotesDialog", "NotesEditor", "NotesTable", "context_text", "group_owner",
-           "notes_owner", "set_owner"]
+           "notes_owner", "series_text", "set_owner"]

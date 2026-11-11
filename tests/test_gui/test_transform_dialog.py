@@ -428,7 +428,7 @@ def _texts(menu):
 def test_channel_menu_in_strip_and_menu_bar(app):
     button = app.selection_strip.action_button("channel")
     assert button.isEnabled()
-    texts = ["Channels", "New…", "Notes…", "Delete…", "Filter && Transform...",
+    texts = ["Channel", "New…", "Notes…", "Delete…", "Filter && Transform...",
              "Show in Browser"]
     assert _texts(button.menu()) == texts
     # Titled (greyed out), then a divider
