@@ -30,7 +30,9 @@ from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.plot_marks import PlotMark
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.tools.nm_stat_win import NMStatWin
-from pyneuromatic.gui.results_view import Stats2Panel, StatsTables, display_name
+from pyneuromatic.gui.results_view import (
+    Stats2Panel, StatsTables, display_name, points_text, shows_points,
+)
 from pyneuromatic.gui.selection_model import (
     ALL_EPOCHS,
     SelectionModel,
@@ -146,17 +148,25 @@ def _limits(xbgn, xend, x_limits: tuple[float, float] | None) -> tuple:
 
 def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
                  x_limits: tuple[float, float] | None = None,
-                 known_units: tuple[str, ...] = ()) -> list[str]:
+                 known_units: tuple[str, ...] = (),
+                 window_x: tuple | None = None) -> list[str]:
     """A window's ``compute()`` *results* as text, a line per step (#471), e.g.
 
-        bsln mean = -70 mV  (x 0 to 40)
+        bsln mean = -70 mV  (x 0 to 40, n = 41)
         max = -55 mV at 80 ms  (Δ = 15 mV)
         level+ 10% = -68.5 mV at 61.77 ms
         level+ 90% = -56.5 mV at 76.12 ms
-        risetime+ = 14.34 ms
+        risetime+ = 14.34 ms  (x 60 to 120)
+
+    *window_x*, the window's X range (xbgn, xend), is shown on the
+    measurement's line, as the baseline's, with its number of points:
+    "mean = -64.8  (x 60 to 120, n = 61)"; for a measurement of several
+    steps (e.g. a rise time), on its result's line.
 
     Δ (the difference from the baseline) is shown when it's in the
-    baseline's units (not, e.g., for a slope). Values in *known_units*
+    baseline's units (not, e.g., for a slope). A measurement from many
+    points (a mean, std, slope...; not a point found) ends with how many,
+    e.g. "(n = 15)", and the NaNs left out, if any (#498). Values in *known_units*
     (given once, on the top line) are shown without them; others (e.g. a
     slope's intercept) keep theirs.
     """
@@ -168,8 +178,14 @@ def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
             return number(value)
         return f"{number(value)} {units}"
 
+    def window_text(points: str = "") -> str:
+        xbgn, xend = window_x
+        return (f"  (x {number(xbgn)} to {_value(xend, xunits)}"
+                + (f", {points}" if points else "") + ")")
+
     lines: list[str] = []
     bsln_units = None
+    window_line = None  # the line the window's X range is on
     for r in results:
         func = r.get("func") or {}
         name = func.get("name", "")
@@ -181,8 +197,9 @@ def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
                 for key in ("std", "sem", "var") if key in r)
             # Its value is the mean (a spread follows): "bsln mean", as the mean's
             label = "mean" if name.startswith("mean+") else name
+            points = f", {points_text(r['n'], r.get('nans', 0))}" if "n" in r else ""
             lines.append(f"bsln {label} = {_value(r.get('s'), bsln_units)}"
-                         f"{spread}  (x {number(xbgn)} to {_value(xend, xunits)})")
+                         f"{spread}  (x {number(xbgn)} to {_value(xend, xunits)}{points})")
             continue
         # mean+std's value is the mean (its std follows): not "mean+std = ..."
         label = "mean" if name.startswith("mean+") else name
@@ -205,9 +222,24 @@ def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
             line = f"{label}: no value"
         if (_finite(r.get("Δs")) and bsln_units is not None and units == bsln_units):
             line += f"  (Δ = {_value(r['Δs'], units)})"
+        points = (points_text(r["n"], r.get("nans", 0))
+                  if "n" in r and "s" in r and shows_points(name) else "")
+        if window_x is not None and r.get("id") == "main":
+            line += window_text(points)  # e.g. "(x 60 to 120, n = 61)" (#498)
+            window_line = len(lines)
+        elif points:
+            line += f"  ({points})"
         lines.append(line)
         if "dx" in r:  # e.g. the rise time: the crossings' difference
             lines.append(f"{r.get('id')} = {_value(r['dx'], r.get('xunits', ''))}")
+            if window_x is not None and window_line is None:
+                lines[-1] += window_text()
+                window_line = len(lines) - 1
+    if window_x is not None and window_line is None:  # e.g. a rise time not found
+        last = next((i for i in range(len(lines) - 1, -1, -1)
+                     if not lines[i].startswith("bsln ")), None)
+        if last is not None:
+            lines[last] += window_text()
     return lines
 
 
@@ -878,7 +910,7 @@ class StatsToolTab(ToolTabWidget):
         elif not optional:
             tip = "Baseline is not used by this measurement"
         else:
-            tip = "Subtract a baseline to add Δs to the results"
+            tip = "Measure baseline and report Δ (value − baseline)"
         self.bsln_checkbox.setToolTip(tip)
 
         model = self.bsln_combo.model()
@@ -1041,8 +1073,8 @@ class StatsToolTab(ToolTabWidget):
         last = data.nparray.size - 1  # an unbounded edge: the trace's start or end
         first_x, last_x = data.get_xvalue(0), data.get_xvalue(last)
         x_limits = (first_x, last_x) if first_x is not None and last_x is not None else None
-        xbgn, xend = _limits(window.xbgn, window.xend, x_limits)
-        header += f"  (x {_number(xbgn, digits)} to {_number(xend, digits)})"
+        # The window's X range: on the measurement's line, as the baseline's (#498)
+        window_x = _limits(window.xbgn, window.xend, x_limits)
         # Units once, here, as Stats2's: "(values in mV, x in ms)"
         yunits = data.yscale.units or ""
         known = tuple(u for u in (yunits, xunits) if u)
@@ -1052,7 +1084,8 @@ class StatsToolTab(ToolTabWidget):
         if not window.on:
             return f"{header}\nWindow off"
         try:
-            lines = result_lines(self._measure(window, data), digits, xunits, x_limits, known)
+            lines = result_lines(self._measure(window, data), digits, xunits, x_limits, known,
+                                 window_x)
         except Exception as error:  # e.g. the window outside the trace
             lines = [f"no value: {error}"]
         return "\n".join([header, *lines])

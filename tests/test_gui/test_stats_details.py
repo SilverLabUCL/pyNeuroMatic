@@ -47,6 +47,13 @@ def test_a_pipeline_a_line_per_step_then_its_measure():
         "risetime+ = 14.342 ms",
     ]
     assert result_lines(steps, digits=3)[-1] == "risetime+ = 14.3 ms"
+    # The window's X range: on the measurement's result line, not each step's (#498)
+    assert result_lines(steps, window_x=(60, 120))[1:] == [
+        "max = -55 mV at 80 ms  (Δ = 15 mV)",
+        "level+ 10% = -68.5 mV at 61.774 ms",
+        "level+ 90% = -56.5 mV at 76.116 ms",
+        "risetime+ = 14.342 ms  (x 60 to 120)",
+    ]
 
 
 def test_other_results():
@@ -62,6 +69,28 @@ def test_other_results():
         "max: no value",
         "mean = NaN mV",
     ]
+
+
+def test_the_number_of_points():  # #498
+    from pyneuromatic.gui.results_view import points_text
+    assert points_text(15) == "n = 15"
+    assert points_text(15, 1) == "n = 15, 1 NaN"
+    assert points_text(15, 2) == "n = 15, 2 NaNs"
+    bsln = dict(BSLN, n=41, nans=0)
+    mean = {"id": "main", "func": {"name": "mean+std"}, "s": -64.8, "sunits": "mV",
+            "std": 5.3, "Δs": 5.2, "n": 15, "nans": 2}
+    max_ = {"id": "main", "func": {"name": "max"}, "s": -55.0, "sunits": "mV",
+            "x": 80.0, "xunits": "ms", "n": 61}
+    assert result_lines([bsln, mean, max_]) == [
+        "bsln mean = -70 mV  (x 0 to 40, n = 41)",
+        "mean = -64.8 mV, ±std 5.3 mV  (Δ = 5.2 mV)  (n = 15, 2 NaNs)",
+        "max = -55 mV at 80 ms",  # a point found: no n
+    ]
+    # mean@max: the points averaged around the peak
+    mean_at_max = {"id": "main", "func": {"name": "mean@max", "n_mean": 5}, "s": -55.2,
+                   "sunits": "mV", "x": 80.0, "xunits": "ms", "n": 5, "nans": 0}
+    assert result_lines([mean_at_max], window_x=(60, 120)) == [
+        "mean@max = -55.2 mV at 80 ms  (x 60 to 120, n = 5)"]
 
 
 # --- in the app ------------------------------------------------------------------
@@ -96,19 +125,22 @@ def test_details_follow_the_window_and_the_trace(app):
     tab = app.stats
     assert _lines(app) == ["RecordA0  w0", "Choose a measurement"]
     tab.measurement_combo.setCurrentText("max")
-    assert _lines(app)[0] == "RecordA0  w0 max  (x 0 to 199)"  # its X range: the trace (-inf to inf)
+    # Its X range on the measurement's line, as the baseline's (#498): here
+    # the trace's (-inf to inf)
+    assert _lines(app) == ["RecordA0  w0 max", "max = -55 at 80  (x 0 to 199)"]
     _type(tab.xbgn_edit, "60")
     _type(tab.xend_edit, "120")
-    assert _lines(app) == ["RecordA0  w0 max  (x 60 to 120)", "max = -55 at 80"]
+    assert _lines(app) == ["RecordA0  w0 max", "max = -55 at 80  (x 60 to 120)"]
     app.selection_model.update(epoch=app.series.epochs["E1"])
-    assert _lines(app) == ["RecordA1  w0 max  (x 60 to 120)", "max = -55 at 90"]
+    assert _lines(app) == ["RecordA1  w0 max", "max = -55 at 90  (x 60 to 120)"]
     tab.bsln_checkbox.setChecked(True)
     _type(tab.bsln_xbgn_edit, "0")
     _type(tab.bsln_xend_edit, "40")
-    assert _lines(app) == ["RecordA1  w0 max  (x 60 to 120)", "bsln mean = -70  (x 0 to 40)",
-                           "max = -55 at 90  (Δ = 15)"]
+    assert _lines(app) == ["RecordA1  w0 max",
+                           "bsln mean = -70  (x 0 to 40, n = 41)",
+                           "max = -55 at 90  (Δ = 15)  (x 60 to 120)"]  # a point: no n
     tab.window_enabled.setChecked(False)
-    assert _lines(app) == ["RecordA1  w0 max  (x 60 to 120)", "Window off"]
+    assert _lines(app) == ["RecordA1  w0 max", "Window off"]
 
 
 def test_details_with_tool_measures_off_and_another_tool(app):
@@ -117,7 +149,7 @@ def test_details_with_tool_measures_off_and_another_tool(app):
     app.plot_widget.measures_action.setChecked(False)
     app.tool_rail.select_tool("Browser")
     app.selection_model.update(epoch=app.series.epochs["E1"])
-    assert _lines(app)[1] == "max = -55 at 90"
+    assert _lines(app)[1] == "max = -55 at 90  (x 0 to 199)"
 
 
 def test_a_measurement_that_fails_says_so(app):
@@ -125,7 +157,7 @@ def test_a_measurement_that_fails_says_so(app):
     tab.measurement_combo.setCurrentText("max")
     _type(tab.xend_edit, "600")
     _type(tab.xbgn_edit, "500")  # outside the trace (x 0..199)
-    assert _lines(app)[1] == "max: no value"
+    assert _lines(app)[1] == "max: no value  (x 500 to 600)"
 
 
 def test_details_write_no_commands_or_notes(app):
@@ -160,7 +192,7 @@ def test_digits_shown_in_settings(app, qtbot):
     assert (spin.value(), spin.minimum(), spin.maximum()) == (6, 2, 10)
     spin.setValue(3)
     assert app.manager.settings.stats_digits == 3
-    assert _lines(app)[1] == f"mean = {float(mean.split()[2]):.3g}"
+    assert _lines(app)[1] == f"mean = {float(mean.split()[2]):.3g}  (x 60 to 100, n = 41)"
     # Stats2: its tables, after a run
     tab.run_button.click()
     tables = tab.stats2.tables
