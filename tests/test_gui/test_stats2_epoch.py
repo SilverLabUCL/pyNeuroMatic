@@ -290,3 +290,12 @@ def test_an_epoch_with_nans_shows_its_own_n(qtbot):
     assert lines[1].startswith("RecordA0: bsln mean = -70 (n = 41); mean = ")
     assert lines[2].startswith("RecordA1: bsln mean = -70 (n = 39, 2 NaNs); mean = ")
     assert lines[2].split("; ")[1].endswith("(n = 61)")
+
+
+def test_mean_at_max_shows_the_points_averaged(qtbot):
+    """mean@max: n is the points averaged around the peak, not the window's,
+    in Stats1 and from the saved arrays in Stats2 (#498)."""
+    app = _app(qtbot, {"name": "mean@max", "n_mean": 5})
+    assert app.stats.details.toPlainText().splitlines()[-1].endswith("(x 60 to 120, n = 5)")
+    assert re.match(r"RecordA1: bsln mean = -70 \(n = 41\); mean@max = \S+ at 80 \(n = 5\); Δ",
+                    _epochs(app)[2])

@@ -86,6 +86,11 @@ def test_the_number_of_points():  # #498
         "mean = -64.8 mV, ±std 5.3 mV  (Δ = 5.2 mV)  (n = 15, 2 NaNs)",
         "max = -55 mV at 80 ms",  # a point found: no n
     ]
+    # mean@max: the points averaged around the peak
+    mean_at_max = {"id": "main", "func": {"name": "mean@max", "n_mean": 5}, "s": -55.2,
+                   "sunits": "mV", "x": 80.0, "xunits": "ms", "n": 5, "nans": 0}
+    assert result_lines([mean_at_max], window_x=(60, 120)) == [
+        "mean@max = -55.2 mV at 80 ms  (x 60 to 120, n = 5)"]
 
 
 # --- in the app ------------------------------------------------------------------

@@ -38,7 +38,10 @@ def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
     """Compute max or min value and its location.
 
     For mean@max and mean@min, also compute the mean of n_mean points centred
-    on the peak index (func["n_mean"] key, optional).
+    on the peak index (func["n_mean"] key, optional). Their n, nans and infs
+    are then of the points the value comes from (#498): those averaged
+    (fewer at the trace's ends; NaNs left out with ignore_nans), or the
+    peak alone if none are; not the window's.
     """
     if "max" in f:
         index = np.nanargmax(yarray) if ignore_nans else np.argmax(yarray)
@@ -73,6 +76,13 @@ def _stat_maxmin(f, func, yarray, data, i0, ysize, ignore_nans, results,
         else:
             yarr = data.nparray[i0_m:i1_m+1]
         results["s"] = np.nanmean(yarr) if ignore_nans else np.mean(yarr)
+
+    if f in ("mean@max", "mean@min"):  # the points its value comes from (#498)
+        used = yarr if n_mean > 1 else yarray[index:index + 1]
+        nans = int(np.count_nonzero(np.isnan(used)))
+        results["n"] = used.size - nans if ignore_nans else used.size
+        results["nans"] = nans
+        results["infs"] = int(np.count_nonzero(np.isinf(used)))
 
     return results
 

@@ -433,6 +433,36 @@ class TestStat(unittest.TestCase):
 # stats()
 # =========================================================================
 
+class TestMeanAtPeakPoints(unittest.TestCase):
+    """mean@max / mean@min: n, nans and infs of the points the value comes
+    from, not the window's (#498)."""
+
+    def setUp(self):
+        y = np.arange(20.0)
+        y[18] = np.nan
+        self.data = NMData(NM, name="a", nparray=y)
+
+    def test_the_points_averaged(self):
+        r = nsmm.stat(self.data, {"name": "mean@max", "n_mean": 5}, xend=10,
+                      ignore_nans=True)
+        self.assertEqual((r["s"], r["n"], r["nans"]), (10.0, 5, 0))  # 8 to 12
+
+    def test_fewer_at_the_traces_end_and_nans_left_out(self):
+        r = nsmm.stat(self.data, {"name": "mean@max", "n_mean": 5}, ignore_nans=True)
+        # The peak (19) is the last point: 17, 18 (NaN), 19
+        self.assertEqual((r["s"], r["n"], r["nans"]), (18.0, 2, 1))
+        r = nsmm.stat(self.data, {"name": "mean@min", "n_mean": 5}, ignore_nans=True)
+        self.assertEqual((r["s"], r["n"]), (1.0, 3))  # 0, 1, 2
+
+    def test_none_averaged_is_the_peak_alone(self):
+        r = nsmm.stat(self.data, {"name": "mean@max", "n_mean": 0}, ignore_nans=True)
+        self.assertEqual((r["s"], r["n"], r["nans"]), (19.0, 1, 0))
+
+    def test_max_keeps_the_windows(self):
+        r = nsmm.stat(self.data, {"name": "max"}, ignore_nans=True)
+        self.assertEqual((r["n"], r["nans"]), (19, 1))
+
+
 class TestStats(unittest.TestCase):
     """Tests for the stats() summary statistics function."""
 

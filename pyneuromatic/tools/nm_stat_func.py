@@ -55,10 +55,11 @@ FUNC_NAMES_BASIC_DELTA = (
 )
 
 # Functions computed from many points, so Stats shows how many (n, #498);
-# not a point found (max, min, value@x, a level crossing) or a count
+# not a point found (max, min, value@x, a level crossing) or a count.
+# mean@max and mean@min: the points averaged around the peak (their n)
 FUNC_NAMES_N = (
     "median", "mean", "mean+var", "mean+std", "mean+sem", "var", "std", "sem",
-    "rms", "sum", "pathlength", "area", "slope",
+    "rms", "sum", "pathlength", "area", "slope", "mean@max", "mean@min",
 )
 
 FUNC_NAMES_MAXMIN = (

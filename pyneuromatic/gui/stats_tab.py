@@ -910,7 +910,7 @@ class StatsToolTab(ToolTabWidget):
         elif not optional:
             tip = "Baseline is not used by this measurement"
         else:
-            tip = "Subtract a baseline to add Δs to the results"
+            tip = "Measure baseline and report Δ (value − baseline)"
         self.bsln_checkbox.setToolTip(tip)
 
         model = self.bsln_combo.model()
