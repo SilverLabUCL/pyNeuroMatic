@@ -393,7 +393,7 @@ class TestNMSetsNew(NMSetsTestBase):
 
 
 class TestNMSetsRename(NMSetsTestBase):
-    """Tests for rename and reorder operations."""
+    """Tests for rename operations."""
 
     def test_rename(self):
         self.sets.add("set0", ["obj0"])
@@ -421,13 +421,33 @@ class TestNMSetsRename(NMSetsTestBase):
         eq = self.sets.get_items("setC", get_equation=True)
         self.assertEqual(eq, ("or", "setA", "setY"))
 
-    def test_reorder(self):
-        self.sets.add("set0", [])
-        self.sets.add("set1", [])
-        self.sets.add("set2", [])
-        self.sets.reorder(["set2", "set1", "set0"])
-        keys = list(self.sets.keys())
-        self.assertEqual(keys, ["set2", "set1", "set0"])
+
+class TestNMSetsOrder(NMSetsTestBase):
+    """Sets listed in set order, not the order they were made (#503)."""
+
+    def test_numbered_named_then_setx(self):
+        for name in ("Set2", "Drug", "SetX", "Set0", "control", "Set10", "Set1", "Big2",
+                     "Big10"):
+            self.sets.add(name, [])
+        order = ["Set0", "Set1", "Set2", "Set10", "Big2", "Big10", "control", "Drug", "SetX"]
+        self.assertEqual(self.sets.keys(), order)
+        self.assertEqual(list(self.sets), order)
+        self.assertEqual([k for k, _v in self.sets.items()], order)
+        self.assertEqual(len(self.sets.values()), len(order))
+
+    def test_a_set_made_again_keeps_its_place(self):
+        for name in ("Set0", "Set1", "Set2"):
+            self.sets.add(name, [])
+        self.sets.pop("Set1")
+        self.sets.add("Set1", [])
+        self.assertEqual(self.sets.keys(), ["Set0", "Set1", "Set2"])
+
+    def test_set_order(self):
+        from pyneuromatic.core.nm_sets import set_order
+        self.assertLess(set_order("Set9"), set_order("Set10"))
+        self.assertLess(set_order("Set99"), set_order("Alpha"))  # numbered first
+        self.assertLess(set_order("zeta"), set_order("SetX"))  # SetX last
+        self.assertLess(set_order("set3"), set_order("Set4"))  # any case
 
 
 class TestNMSetsEmpty(NMSetsTestBase):
@@ -676,20 +696,6 @@ class TestNMSetsHistory(unittest.TestCase):
         msg = self._last_message()
         self.assertIn("setA", msg)
         self.assertIn("setA_copy", msg)
-
-    def test_reorder_logs(self):
-        self.sets.add("s1", ["obj0"])
-        self.sets.add("s2", ["obj1"])
-        self.nm.history.clear()
-        self.sets.reorder(["s2", "s1"], quiet=False)
-        self.assertIn("reordered", self._last_message())
-
-    def test_reorder_same_order_no_log(self):
-        self.sets.add("s1", ["obj0"])
-        self.sets.add("s2", ["obj1"])
-        self.nm.history.clear()
-        self.sets.reorder(["s1", "s2"], quiet=False)
-        self.assertEqual(len(self.nm.history.buffer), 0)
 
     def test_empty_logs(self):
         self.sets.add("setA", ["obj0", "obj1"])

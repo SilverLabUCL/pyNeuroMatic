@@ -32,10 +32,10 @@ from pyneuromatic.core.nm_object_container import NMObjectContainer, RunMode
 from pyneuromatic.core.nm_group import NMGroups
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
+from pyneuromatic.core.nm_sets import EXCLUDE_SET  # with the sets' order (#503)
 
 # Epoch sets every data series starts with. Epochs in EXCLUDE_SET are left
 # out of every run (as in Igor NeuroMatic's SetX).
-EXCLUDE_SET = "SetX"
 DEFAULT_EPOCH_SETS = ("Set0", "Set1", EXCLUDE_SET)  # numbered from 0, like groups
 
 

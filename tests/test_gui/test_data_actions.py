@@ -216,7 +216,7 @@ def test_combine_sets_starts_with_two_different_sets(app):
     assert options["current"] == "Set1"
     assert options["extras"][:2] == [
         ("Operator", ["AND", "OR"], "OR"),
-        ("With", ["DataSet", "Set1"], "DataSet"),
+        ("With", ["Set1", "DataSet"], "DataSet"),  # in order (#503)
     ]
     label, spin = options["extras"][2]
     assert label == "New Set number" and spin.value == 0
