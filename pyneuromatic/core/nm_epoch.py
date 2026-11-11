@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_data import NMData
     from pyneuromatic.core.nm_folder import NMFolder
 
+from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer, RunMode
 from pyneuromatic.core.nm_group import NMGroups
@@ -88,6 +89,15 @@ class NMEpoch(NMObject):
             raise TypeError(e)
 
         self.__number: int = number
+        self.__notes = NMNotes()  # e.g. "noisy", across its channels (#505)
+
+    @property
+    def notes(self) -> NMNotes:
+        """Notes for this epoch (e.g. why it's excluded), across its channels."""
+        notes = getattr(self, "_NMEpoch__notes", None)
+        if notes is None:  # e.g. made before epochs kept notes
+            notes = self.__notes = NMNotes()
+        return notes
 
     # override
     def __eq__(self, other: object) -> bool:

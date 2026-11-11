@@ -32,7 +32,8 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
-from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel, NotesWidget
+from pyneuromatic.gui.info_panel import INFO_TYPES, InfoPanel
+from pyneuromatic.gui.notes_view import NotesEditor, group_owner, set_owner
 from pyneuromatic.gui.membership import ChoiceModel, MembershipModel, unassign_from_group
 from pyneuromatic.gui.transform_dialog import MENU_TEXT
 from pyneuromatic.gui.folder_model import (
@@ -290,7 +291,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         right_layout.addWidget(self._edit_bar)
-        self._target_notes = NotesWidget(self)
+        self._target_notes = NotesEditor(self)
         self._target_notes.hide()
         self._detail_split = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical, self)
         self._detail_split.addWidget(self._detail_stack)
@@ -365,7 +366,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         return self._detail_stack.currentWidget() is self._info_panel
 
     @property
-    def target_notes(self) -> NotesWidget:
+    def target_notes(self) -> NotesEditor:
         """The notes of the set or group chosen in the tree (below its list)."""
         return self._target_notes
 
@@ -450,9 +451,9 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             return None
         container, set_name, group, _note = target
         if set_name is not None and set_name in container.sets:
-            return container.sets.notes(set_name), set_name
+            return container.sets.notes(set_name), set_owner(set_name, container)
         if group is not None and group in container.groups.group_numbers:
-            return container.groups.notes(group), f"Group {group}"
+            return container.groups.notes(group), group_owner(group, container._parent)
         return None
 
     def _update_target_notes(self, *_args) -> None:

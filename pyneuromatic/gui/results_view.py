@@ -13,6 +13,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.gui.inequality_dialog import InequalityDialog
+from pyneuromatic.gui.notes_view import NotesDialog, notes_owner
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.tools.nm_stat_func import FUNC_NAMES_BSLN, FUNC_NAMES_N
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
@@ -26,48 +27,6 @@ def display_name(name: str) -> str:
     if name and name.startswith("mean+"):
         return "mean \u00b1 " + name[len("mean+"):]
     return name
-
-
-def is_run_note(note) -> bool:
-    """True for the note a Stats run adds to its subfolder (how the results
-    were made, "NMStats: ..."): read-only in Stats2's Notes (#501)."""
-    return str(note.get("note", "")).startswith("NMStats:")
-
-
-class NotesTable(QtWidgets.QTableWidget):
-    """A subfolder's notes, a row each: Date, then Note (wrapped). Edit ›
-    Copy (⌘C) copies the chosen rows, tab-separated (#501)."""
-
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(0, 2, parent)
-        self.setHorizontalHeaderLabels(["Date", "Note"])
-        self.horizontalHeader().setStretchLastSection(True)
-        self.verticalHeader().hide()
-        self.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
-        self.setWordWrap(True)
-
-    def show_notes(self, notes) -> None:
-        self.setRowCount(0)
-        for row, note in enumerate(notes or []):
-            self.insertRow(row)
-            for column, key in enumerate(("date", "note")):
-                item = QtWidgets.QTableWidgetItem(str(note.get(key, "")))
-                if is_run_note(note):
-                    item.setToolTip("How the results were made (read-only)")
-                self.setItem(row, column, item)
-        self.resizeColumnToContents(0)
-        self.resizeRowsToContents()
-
-    def chosen_rows(self) -> list[int]:
-        return sorted({index.row() for index in self.selectionModel().selectedRows()})
-
-    def copy_selection(self) -> None:
-        """The chosen notes, "date<TAB>note" a line each, to the clipboard."""
-        lines = ["\t".join(self.item(row, column).text() for column in (0, 1))
-                 for row in self.chosen_rows()]
-        if lines:
-            QtWidgets.QApplication.clipboard().setText("\n".join(lines))
 
 
 def runs_text(names: list[str]) -> str:
@@ -685,9 +644,10 @@ class Stats2Panel(QtWidgets.QWidget):
         self.rename_folder_action.setToolTip("Rename the subfolder (its name keeps Stats_)")
         self.copy_folder_action = self.folder_menu.addAction("Copy…")
         self.copy_folder_action.setToolTip("Copy the subfolder")
-        # The subfolder's notes: Results › Notes, to add, edit and delete (#501)
+        # The subfolder's notes, in the Notes window every object's use (#501, #505)
         self.notes_folder_action = self.folder_menu.addAction("Notes…")
-        self.notes_folder_action.setToolTip("Show the subfolder's notes (Results › Notes)")
+        self.notes_folder_action.setToolTip(
+            "Show, add, edit and delete the subfolder's notes")
         self.delete_folder_action = self.folder_menu.addAction("Delete…")
         self.delete_folder_action.setToolTip("Delete the subfolder and its data")
         self.folder_menu.addSeparator()
@@ -777,11 +737,9 @@ class Stats2Panel(QtWidgets.QWidget):
         self.results_combo = QtWidgets.QComboBox(details_group)
         self.results_combo.addItem("Summary", "summary")
         self.results_combo.addItem("All epochs", "epochs")
-        self.results_combo.addItem("Notes", "notes")
         self.results_combo.setToolTip(
             "Summary: the chosen array (units, notes, mean, std...). All epochs: "
-            "result of every epoch. "
-            "Notes: the subfolder's notes, to add, edit, delete")
+            "result of every epoch.")
         show_row.addWidget(self.results_combo)
         show_row.addStretch(1)
         details_layout.addLayout(show_row)
@@ -791,25 +749,6 @@ class Stats2Panel(QtWidgets.QWidget):
             QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont)
         )
         details_layout.addWidget(self.details)
-        # Notes (#501): the subfolder's notes, the run's first (read-only)
-        self.notes_view = QtWidgets.QWidget(details_group)
-        notes_layout = QtWidgets.QVBoxLayout(self.notes_view)
-        notes_layout.setContentsMargins(0, 0, 0, 0)
-        self.notes_table = NotesTable(self.notes_view)
-        notes_layout.addWidget(self.notes_table)
-        notes_row = QtWidgets.QHBoxLayout()
-        self.add_note_button = QtWidgets.QPushButton("Add…", self.notes_view)
-        self.add_note_button.setToolTip("Add a note to the subfolder")
-        self.edit_note_button = QtWidgets.QPushButton("Edit…", self.notes_view)
-        self.edit_note_button.setToolTip("Change the chosen note's text (its date stays)")
-        self.delete_note_button = QtWidgets.QPushButton("Delete…", self.notes_view)
-        self.delete_note_button.setToolTip("Delete the chosen notes")
-        for button in (self.add_note_button, self.edit_note_button, self.delete_note_button):
-            notes_row.addWidget(button)
-        notes_row.addStretch(1)
-        notes_layout.addLayout(notes_row)
-        self.notes_view.hide()
-        details_layout.addWidget(self.notes_view)
         layout.addWidget(details_group, stretch=1)
 
         self.folder_combo.currentIndexChanged.connect(self._on_folder_changed)
@@ -817,10 +756,6 @@ class Stats2Panel(QtWidgets.QWidget):
         self.array_combo.currentIndexChanged.connect(self._on_array_changed)
         self.tables.column_selected.connect(self._on_table_column_selected)
         self.results_combo.currentIndexChanged.connect(self._update_details)
-        self.add_note_button.clicked.connect(self.add_note)
-        self.edit_note_button.clicked.connect(self.edit_note)
-        self.delete_note_button.clicked.connect(self.delete_notes)
-        self.notes_table.itemSelectionChanged.connect(self._update_note_buttons)
         self.plot_button.clicked.connect(self.plot_selected)
         self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
         self.histogram_dialog_action.triggered.connect(self.histogram_dialog)
@@ -1043,12 +978,6 @@ class Stats2Panel(QtWidgets.QWidget):
 
     def _update_details(self, *_args) -> None:
         toolfolder = self.toolfolder()
-        notes = self.results_combo.currentData() == "notes"
-        self.details.setVisible(not notes)
-        self.notes_view.setVisible(notes)
-        if notes:
-            self.show_notes()
-            return
         if self.results_combo.currentData() == "epochs":
             self.details.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
             self.details.setPlainText(self.epochs_text() if toolfolder is not None else "")
@@ -1353,75 +1282,9 @@ class Stats2Panel(QtWidgets.QWidget):
 
     # --- Notes (#501) -------------------------------------------------------------
 
-    def show_notes(self) -> None:
-        """The subfolder's notes in the Notes table, oldest first."""
-        toolfolder = self.toolfolder()
-        self.notes_table.show_notes(toolfolder.notes if toolfolder is not None else None)
-        self._update_note_buttons()
-
-    def _update_note_buttons(self) -> None:
-        toolfolder = self.toolfolder()
-        rows = self.notes_table.chosen_rows()
-        notes = toolfolder.notes if toolfolder is not None else []
-        editable = [row for row in rows if row < len(notes) and not is_run_note(notes[row])]
-        self.add_note_button.setEnabled(toolfolder is not None)
-        # The run's note (how the results were made) stays as made
-        self.edit_note_button.setEnabled(len(rows) == 1 and len(editable) == 1)
-        self.delete_note_button.setEnabled(bool(rows) and len(editable) == len(rows))
-
-    def _ask_note(self, title: str, text: str = "") -> str | None:
-        """A note's text from a prompt, or None if cancelled (replaced in tests)."""
-        answer, ok = QtWidgets.QInputDialog.getMultiLineText(self, title, "Note:", text)
-        return answer if ok else None
-
-    def _confirm_delete_notes(self, count: int) -> bool:
-        """Ask before deleting *count* notes (replaced in tests)."""
-        answer = QtWidgets.QMessageBox.question(
-            self, "Delete Notes", f"Delete {'this note' if count == 1 else f'{count} notes'}?")
-        return answer == QtWidgets.QMessageBox.StandardButton.Yes
-
     def _notes_changed(self) -> None:
-        self.show_notes()
         if self._folder_actions is not None:  # e.g. the browser's info panel
             self._folder_actions.content_changed.emit()
-
-    def add_note(self) -> None:
-        """Add… a note to the subfolder (dated now)."""
-        toolfolder = self.toolfolder()
-        if toolfolder is None:
-            return
-        text = self._ask_note("Add Note")
-        if text is None or not text.strip():
-            return
-        toolfolder.notes.add(text.strip())
-        self._notes_changed()
-        self.notes_table.selectRow(len(toolfolder.notes) - 1)
-
-    def edit_note(self) -> None:
-        """Edit… the chosen note's text; its date stays. Not the run's note."""
-        toolfolder = self.toolfolder()
-        rows = self.notes_table.chosen_rows()
-        if toolfolder is None or len(rows) != 1 or is_run_note(toolfolder.notes[rows[0]]):
-            return
-        text = self._ask_note("Edit Note", toolfolder.notes[rows[0]]["note"])
-        if text is None or not text.strip():
-            return
-        toolfolder.notes.edit(rows[0], text.strip())
-        self._notes_changed()
-        self.notes_table.selectRow(rows[0])
-
-    def delete_notes(self) -> None:
-        """Delete… the chosen notes, after asking. Not the run's note."""
-        toolfolder = self.toolfolder()
-        rows = self.notes_table.chosen_rows()
-        if (toolfolder is None or not rows
-                or any(is_run_note(toolfolder.notes[row]) for row in rows)):
-            return
-        if not self._confirm_delete_notes(len(rows)):
-            return
-        for row in reversed(rows):
-            toolfolder.notes.remove(row)
-        self._notes_changed()
 
     # --- the Folder ⋯ menu (#494) -------------------------------------------
 
@@ -1464,8 +1327,17 @@ class Stats2Panel(QtWidgets.QWidget):
             self.refresh()
 
     def show_folder_notes(self) -> None:
-        """Notes… (Folder ⋯): Results › Notes, the subfolder's notes (#501)."""
-        self.results_combo.setCurrentIndex(self.results_combo.findData("notes"))
+        """Notes… (Folder ⋯): the subfolder's notes, in the Notes window
+        (#501, #505); the run's own note is first, read-only."""
+        toolfolder = self.toolfolder()
+        if toolfolder is not None:
+            self._open_notes(toolfolder.notes, notes_owner(toolfolder))
+
+    def _open_notes(self, notes, owner: str) -> None:
+        """The Notes window (replaced in tests)."""
+        dialog = NotesDialog(notes, owner, self)
+        dialog.editor.notes_changed.connect(self._notes_changed)
+        dialog.exec()
 
     def show_folder_in_browser(self) -> None:
         toolfolder = self.toolfolder()

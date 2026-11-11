@@ -683,7 +683,7 @@ class NMToolEvent(NMTool):
     def _add_note(self, data: NMData, text: str) -> None:
         notes = getattr(data, "notes", None)
         if notes is not None:
-            notes.add(text)
+            notes.add(text, readonly=True)  # a record of what was done (#505)
 
     # ------------------------------------------------------------------
     # Lifecycle

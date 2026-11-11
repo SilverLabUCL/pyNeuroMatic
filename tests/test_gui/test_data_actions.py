@@ -60,11 +60,11 @@ def test_data_menus_in_strip_and_menu_bar(app):
     strip = app.selection_strip
     assert _menu_texts(strip.action_button("data").menu()) == [
         "New…", "Edit Scales…", "Rename…", "Copy…", "Move…",
-        "Delete…", "Show in Browser",
+        "Notes…", "Delete…", "Show in Browser",  # Notes… before Delete… (#505)
     ]
     assert _menu_texts(strip.action_button("data_set").menu()) == [
         "New Set…", "Add to Set…", "Remove from Set…", "Renumber…", "Copy…", "Invert…",
-        "Combine…", "Clear…", "Delete…", "Show in Browser",
+        "Combine…", "Clear…", "Notes…", "Delete…", "Show in Browser",
     ]
     menus = {action.text(): action.menu() for action in app.menuBar().actions()}
     assert "Data" in menus

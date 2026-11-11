@@ -63,7 +63,7 @@ def _series_values(**changes):
 def test_prefix_menu_in_strip_and_menu_bar(app):
     expected = [
         "New Series…", "Series from Data…", "Update from Data",
-        "Edit Scales…", "Rename…", "Copy…", "Move…", "Append…", "Delete…",
+        "Edit Scales…", "Rename…", "Copy…", "Move…", "Append…", "Notes…", "Delete…",
         "Add Epochs…", "Remove Epochs…", "Renumber Epochs…",
         "Lock", "Show in Browser",
     ]

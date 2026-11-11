@@ -228,7 +228,7 @@ class NMMainOp:
         """Append a timestamped note to data.notes if available."""
         notes = getattr(data, "notes", None)
         if notes is not None:
-            notes.add(text)
+            notes.add(text, readonly=True)  # a record of what was done (#505)
 
     def _add_op_note(self, data: NMData, body: str = "") -> None:
         """Append a note in the form ``OpName(body)`` to *data*.

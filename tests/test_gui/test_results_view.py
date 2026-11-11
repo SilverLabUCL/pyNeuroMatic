@@ -14,6 +14,7 @@ from pyneuromatic.gui.app_window import NMAppWindow
 from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.gui.inequality_dialog import InequalityDialog
+from pyneuromatic.gui.notes_view import NotesDialog
 from pyneuromatic.gui.results_view import Stats2Panel, StatsTables
 
 pytestmark = pytest.mark.gui
@@ -753,10 +754,24 @@ def test_nan_rows_are_shortened():
 
 
 
-# --- Results › Notes (#501) -------------------------------------------------------
+# --- Notes (#501, #505): Folder ⋯ › Notes…, the Notes window ---------------------
 
-def _notes(stats2):
-    table = stats2.notes_table
+def _open_notes(stats2, qtbot):
+    """Folder ⋯ › Notes…: the Notes window (not shown modally), its editor."""
+    opened = []
+
+    def open_notes(notes, owner):
+        dialog = NotesDialog(notes, owner, stats2)
+        qtbot.addWidget(dialog)
+        dialog.editor.notes_changed.connect(stats2._notes_changed)
+        opened.append(dialog)
+    stats2._open_notes = open_notes
+    stats2.notes_folder_action.trigger()
+    return opened[-1]
+
+
+def _notes(editor):
+    table = editor.table
     return [table.item(row, 1).text() for row in range(table.rowCount())]
 
 
@@ -766,50 +781,49 @@ def test_notes_add_edit_and_delete(qtbot):
     tab.run_button.click()
     stats2 = tab.stats2
     texts = [stats2.results_combo.itemText(i) for i in range(stats2.results_combo.count())]
-    assert texts == ["Summary", "All epochs", "Notes"]
-    stats2.notes_folder_action.trigger()  # Folder ⋯ › Notes…: Results › Notes
-    assert stats2.results_combo.currentData() == "notes"
-    assert stats2.notes_view.isVisibleTo(stats2) and not stats2.details.isVisibleTo(stats2)
+    assert texts == ["Summary", "All epochs"]  # notes: in their own window
+    dialog = _open_notes(stats2, qtbot)
+    editor = dialog.editor
     subfolder = tab.stats_tool.toolfolder
+    assert dialog.windowTitle() == f"Notes: {subfolder.name} (Demo)"
     run_note = subfolder.notes[0]["note"]
-    assert run_note.startswith("NMStats:") and _notes(stats2) == [run_note]
+    assert run_note.startswith("NMStats:") and _notes(editor) == [run_note]
     # The run's note is read-only
-    stats2.notes_table.selectRow(0)
-    assert not stats2.edit_note_button.isEnabled()
-    assert not stats2.delete_note_button.isEnabled()
+    editor.table.selectRow(0)
+    assert not editor.edit_button.isEnabled() and not editor.delete_button.isEnabled()
 
-    stats2._ask_note = lambda title, text="": "E7 excluded: noisy"
-    stats2.add_note_button.click()
-    assert _notes(stats2) == [run_note, "E7 excluded: noisy"]
+    editor._ask_note = lambda title, text="": "E7 excluded: noisy"
+    editor.add_button.click()
+    assert _notes(editor) == [run_note, "E7 excluded: noisy"]
     assert subfolder.notes[1]["note"] == "E7 excluded: noisy"  # the browser's too
-    assert stats2.edit_note_button.isEnabled() and stats2.delete_note_button.isEnabled()
+    assert editor.edit_button.isEnabled() and editor.delete_button.isEnabled()
     date = subfolder.notes[1]["date"]
-    stats2._ask_note = lambda title, text="": None  # cancelled
-    stats2.edit_note_button.click()
+    editor._ask_note = lambda title, text="": None  # cancelled
+    editor.edit_button.click()
     assert subfolder.notes[1]["note"] == "E7 excluded: noisy"
-    stats2._ask_note = lambda title, text="": text.replace("E7", "E8")
-    stats2.edit_note_button.click()
+    editor._ask_note = lambda title, text="": text.replace("E7", "E8")
+    editor.edit_button.click()
     assert subfolder.notes[1] == {"date": date, "note": "E8 excluded: noisy"}
 
     # Copy (Edit › Copy, while the notes have focus): date, tab, note
-    stats2.notes_table.selectRow(1)
+    editor.table.selectRow(1)
     focus = QtWidgets.QApplication.focusWidget
-    QtWidgets.QApplication.focusWidget = staticmethod(lambda: stats2.notes_table)
+    QtWidgets.QApplication.focusWidget = staticmethod(lambda: editor.table)
     try:
-        assert window._edit_target() == ("view", stats2.notes_table)
+        assert window._edit_target() == ("view", editor.table)
         window.edit_copy()
     finally:
         QtWidgets.QApplication.focusWidget = focus
     assert QtWidgets.QApplication.clipboard().text() == f"{date}\tE8 excluded: noisy"
 
     asked = []
-    stats2._confirm_delete_notes = lambda count: asked.append(count) or False
-    stats2.delete_note_button.click()
+    editor._confirm_delete = lambda count: asked.append(count) or False
+    editor.delete_button.click()
     assert asked == [1] and len(subfolder.notes) == 2  # cancelled
-    stats2._confirm_delete_notes = lambda count: True
-    stats2.delete_note_button.click()
-    assert _notes(stats2) == [run_note]
-    assert not stats2.edit_note_button.isEnabled()  # nothing chosen
+    editor._confirm_delete = lambda count: True
+    editor.delete_button.click()
+    assert _notes(editor) == [run_note]
+    assert not editor.edit_button.isEnabled()  # nothing chosen
 
 
 def test_notes_follow_the_subfolder(qtbot):
@@ -818,14 +832,14 @@ def test_notes_follow_the_subfolder(qtbot):
     tab.run_button.click()
     tab.run_button.click()  # Stats_Record_A_S1_0 and _1
     stats2 = tab.stats2
-    stats2.results_combo.setCurrentIndex(stats2.results_combo.findData("notes"))
     stats2.folder_combo.setCurrentText("Stats_Record_A_S1_0")
-    stats2._ask_note = lambda title, text="": "control"
-    stats2.add_note_button.click()
+    editor = _open_notes(stats2, qtbot).editor
+    editor._ask_note = lambda title, text="": "control"
+    editor.add_button.click()
     stats2.folder_combo.setCurrentText("Stats_Record_A_S1_1")
-    assert "control" not in _notes(stats2)  # its own notes
+    assert "control" not in _notes(_open_notes(stats2, qtbot).editor)  # its own notes
     stats2.folder_combo.setCurrentText("Stats_Record_A_S1_0")
-    assert _notes(stats2)[-1] == "control"
+    assert _notes(_open_notes(stats2, qtbot).editor)[-1] == "control"
     # A copy keeps the notes
     copy = folder.toolfolders.duplicate("Stats_Record_A_S1_0", "Stats_Copy")
     assert copy.notes[-1]["note"] == "control"

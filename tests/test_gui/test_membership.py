@@ -490,7 +490,7 @@ def test_set_notes_below_the_list(qtbot, series, monkeypatch):
     browser.show_data_of(series, sets=True, select="Set1", kind="epochs")
     assert notes.isVisibleTo(browser) and notes.table.rowCount() == 0
 
-    monkeypatch.setattr(notes, "_ask_note", lambda: "Cells with stable access")
+    monkeypatch.setattr(notes, "_ask_note", lambda *_args: "Cells with stable access")
     notes.add_button.click()
     assert series.epochs.sets.notes("Set1").note == "Cells with stable access"
     assert notes.table.item(0, 1).text() == "Cells with stable access"
@@ -535,7 +535,7 @@ def test_group_notes_below_the_list(qtbot, series, monkeypatch):
     notes = browser.target_notes
     browser.show_groups_of(series, 1)
     assert notes.isVisibleTo(browser) and notes.table.rowCount() == 0
-    monkeypatch.setattr(notes, "_ask_note", lambda: "-80 mV steps")
+    monkeypatch.setattr(notes, "_ask_note", lambda *_args: "-80 mV steps")
     notes.add_button.click()
     assert series.epochs.groups.notes(1).note == "-80 mV steps"
     assert notes.table.item(0, 1).text() == "-80 mV steps"
