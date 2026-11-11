@@ -24,10 +24,11 @@ import datetime
 
 
 class NMNotes:
-    """Timestamped append-only notes.
+    """Timestamped notes.
 
     Each note is stored as a dict with 'date' (ISO timestamp) and 'note' (text).
-    Used by NMFolder (session notes) and NMData (transformation logs).
+    Used by NMFolder (session notes) and NMData (transformation logs). A
+    note's text can be edited (its date stays) and a note removed (#501).
     """
 
     def __init__(self) -> None:
@@ -74,6 +75,21 @@ class NMNotes:
             "note": text,
         }
         self._entries.append(entry)
+
+    def edit(self, index: int, text: str) -> None:
+        """Change note *index*'s text; its date (when written) stays.
+
+        :raises IndexError: If there is no note *index*.
+        """
+        entry = self._entries[index]
+        entry["note"] = text if isinstance(text, str) else str(text)
+
+    def remove(self, index: int) -> dict:
+        """Remove note *index*, returning it.
+
+        :raises IndexError: If there is no note *index*.
+        """
+        return self._entries.pop(index)
 
     def clear(self) -> None:
         """Clear all notes."""
