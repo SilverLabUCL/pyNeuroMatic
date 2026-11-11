@@ -1,5 +1,7 @@
 """Tests for the Table context tab and the Stats2 panel."""
 
+import math
+
 import numpy as np
 import pytest
 
@@ -11,6 +13,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
 from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
+from pyneuromatic.gui.inequality_dialog import InequalityDialog
 from pyneuromatic.gui.results_view import Stats2Panel, StatsTables
 
 pytestmark = pytest.mark.gui
@@ -352,9 +355,10 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
     stats2 = window.tool_tabs["Stats"].stats2
     assert stats2.plot_menu_button.menu() is stats2.plot_menu
     texts = [a.text() for a in stats2.plot_menu.actions() if a.text()]
-    assert texts == ["x: epoch", "Histogram...", "Show in Browser"]  # #492, #494
+    assert texts == ["x: epoch", "Histogram...", "Inequality...",  # #492, #499
+                     "Show in Browser"]  # #494
     assert stats2.plot_menu.actions()[1].isSeparator()
-    assert stats2.plot_menu.actions()[3].isSeparator()
+    assert stats2.plot_menu.actions()[4].isSeparator()
     # Show in Browser: the chosen array, in the Browser
     stats2.array_combo.setCurrentText("ST_w0_max_y")
     shown = []
@@ -606,3 +610,143 @@ def test_folder_menu_greyed_out_without_a_subfolder(qtbot):
     stats2 = window.tool_tabs["Stats"].stats2
     assert stats2.folder_combo.count() == 0
     assert not any(a.isEnabled() for a in stats2.folder_menu.actions() if a.text())
+
+
+# --- Inequality... (#499) ---------------------------------------------------------
+
+def test_inequality_saves_an_iq_array_and_epoch_sets(qtbot):
+    _manager, folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    stats2 = tab.stats2
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")  # 20, 22, 24, 26
+    asked = []
+
+    def ask(name, set_names):
+        asked.append((name, set_names))
+        return {"op": ">", "a": 23.0, "binary_output": True,
+                "set_name_success": set_names[0], "set_name_failure": set_names[1]}
+    stats2._ask_inequality = ask
+    stats2.inequality_dialog_action.trigger()
+    # The next free Epoch Sets (the fixture has Set0 and Set1)
+    assert asked == [("ST_w0_max_dy", ("Set2", "Set3"))]
+    subfolder = tab.stats_tool.toolfolder
+    assert list(subfolder.data["IQ_ST_w0_max_dy"].nparray) == [0, 0, 1, 1]
+    series = folder.dataseries["Record"]
+    items = lambda key: [e.name for e in series.epochs.sets.get_items(key)]
+    assert (items("Set2"), items("Set3")) == (["E2", "E3"], ["E0", "E1"])
+    # Chosen and plotted; a column of the Stats tables, after the ST_ arrays
+    assert stats2.selected_array() == "IQ_ST_w0_max_dy"
+    assert stats2.selected_plot()[5] == "points"
+    assert stats2.tables.columns[-1] == "IQ_ST_w0_max_dy"
+    assert _headers(stats2.tables.arrays_table)[-1] == "IQ_max_dy"
+    assert stats2.measure_array() == "ST_w0_max_y"  # never an IQ_
+    # Summary: its condition and counts
+    assert stats2.details.toPlainText().splitlines()[1] == (
+        "ST_w0_max_dy > 23: 2 pass, 2 fail (of 4)")
+    assert not stats2.inequality_dialog_action.isEnabled()  # not of an IQ_
+    # Value or NaN: its fails are NaN, counted above, not listed again
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
+    stats2._ask_inequality = lambda name, set_names: {"op": ">", "a": 23.0,
+                                                      "binary_output": False}
+    stats2.inequality_dialog_action.trigger()
+    assert "NaN for:" not in stats2.details.toPlainText()
+    # The strip lists the new Epoch Sets
+    combo = window.selection_strip.combo("epoch_set")
+    names = [combo.itemText(i) for i in range(combo.count())]
+    assert "Set2" in names and "Set3" in names
+
+
+def test_inequality_asks_before_replacing_an_epoch_set(qtbot):
+    _manager, folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    stats2 = tab.stats2
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
+    stats2._ask_inequality = lambda name, set_names: {
+        "op": "<=<=", "a": 21.0, "b": 25.0, "set_name_success": "Set1"}
+    asked = []
+    stats2._confirm_replace_sets = lambda names, series: asked.append(names) or False
+    stats2.inequality_dialog_action.trigger()
+    assert asked == [["Set1"]]
+    subfolder = tab.stats_tool.toolfolder
+    assert "IQ_ST_w0_max_dy" not in subfolder.data  # cancelled: nothing made
+    series = folder.dataseries["Record"]
+    assert len(series.epochs.sets.get_items("Set1")) == 4
+    stats2._confirm_replace_sets = lambda names, series: True
+    stats2.inequality_dialog_action.trigger()
+    assert [e.name for e in series.epochs.sets.get_items("Set1")] == ["E1", "E2"]  # 22, 24
+    assert list(subfolder.data["IQ_ST_w0_max_dy"].nparray) == [0, 1, 1, 0]
+
+
+def test_inequality_without_epoch_numbers_has_no_epoch_sets(qtbot):
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    stats2 = tab.stats2
+    tab.stats_tool.toolfolder.data.pop("ST_epoch_num")  # e.g. a Data Set run
+    stats2.array_combo.setCurrentText("ST_w0_max_dy")
+    asked = []
+    stats2._ask_inequality = lambda name, set_names: asked.append(set_names) or None
+    stats2.inequality_dialog_action.trigger()
+    assert asked == [None]  # the dialog's Epoch Sets greyed out
+
+
+def test_inequality_dialog(qtbot):
+    dialog = InequalityDialog("ST_w0_max_y", ("Set0", "Set1"))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    labels = [dialog.op_combo.itemText(i) for i in range(dialog.op_combo.count())]
+    assert labels == ["y > a", "y ≥ a", "y < a", "y ≤ a", "y = a", "y ≠ a",
+                      "a < y < b", "a ≤ y ≤ b", "a ≤ y < b", "a < y ≤ b"]
+    assert not dialog.b_edit.isVisible()  # b: ranges only
+    dialog.a_edit.setText("10")
+    assert dialog.kwargs() == {"op": ">", "a": 10.0, "binary_output": True}
+    dialog.op_combo.setCurrentIndex(dialog.op_combo.findData("<=<"))
+    assert dialog.b_edit.isVisible()
+    dialog.b_edit.setText("5")
+    dialog.accept()  # b must be greater than a: stays open
+    assert dialog.result() == 0 and "Parameter b must be greater than a" in dialog.error_label.text()
+    dialog.b_edit.setText("20")
+    dialog.output_combo.setCurrentIndex(1)  # value or NaN
+    dialog.pass_checkbox.setChecked(True)
+    dialog.fail_checkbox.setChecked(True)
+    assert dialog.kwargs() == {"op": "<=<", "a": 10.0, "b": 20.0, "binary_output": False,
+                               "set_name_success": "Set0", "set_name_failure": "Set1"}
+    dialog.fail_edit.setText("set0")
+    with pytest.raises(ValueError, match="different"):
+        dialog.kwargs()
+    dialog.fail_edit.setText("no good")
+    with pytest.raises(ValueError, match="valid Epoch Set name"):
+        dialog.kwargs()
+    dialog.fail_edit.setText("Set1")
+    dialog.a_edit.setText("x")
+    with pytest.raises(ValueError, match="Parameter a isn't a number"):
+        dialog.kwargs()
+    # NaN: nothing passes or fails against it; ±inf is fine (a ≤ y < inf)
+    dialog.a_edit.setText("NaN")
+    dialog.accept()
+    assert dialog.result() == 0 and "Parameter a must be a number, not NaN" in dialog.error_label.text()
+    dialog.a_edit.setText("10")
+    dialog.b_edit.setText("nan")
+    with pytest.raises(ValueError, match="Parameter b must be a number, not NaN"):
+        dialog.kwargs()
+    dialog.b_edit.setText("inf")
+    assert dialog.kwargs()["b"] == math.inf
+    # Without epoch numbers: no Epoch Sets
+    other = InequalityDialog("ST_w0_max_y", None, dialog.settings())
+    qtbot.addWidget(other)
+    assert other.op_combo.currentData() == "<=<"  # the last settings
+    other.a_edit.setText("1")
+    other.b_edit.setText("2")
+    assert "set_name_success" not in other.kwargs()
+
+
+def test_nan_rows_are_shortened():
+    """Summary's "NaN for:": consecutive data names as a range, e.g. RecordA0-3."""
+    from pyneuromatic.gui.results_view import runs_text
+    assert runs_text(["RecordA0", "RecordA1", "RecordA2", "RecordA3"]) == "RecordA0-3"
+    assert runs_text(["RecordA0", "RecordA1", "RecordA3", "RecordA5", "RecordA6",
+                      "RecordB7", "RecordB8"]) == "RecordA0-1, RecordA3, RecordA5-6, RecordB7-8"
+    assert runs_text(["RecordA2"]) == "RecordA2"
+    assert runs_text(["notes", "7"]) == "notes, 7"  # not prefix + channel + number
