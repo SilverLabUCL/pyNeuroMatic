@@ -2,7 +2,7 @@
 
 A folder, data array, data series, channel, epoch or results folder is shown
 as a short form (created date, sizes, scales, which sets it is in...) with
-its notes, if it keeps any, and an Add Note... button.
+its notes, if it keeps any, to add, edit and delete (the notes editor, #505).
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_math import array_stats
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+from pyneuromatic.gui.notes_view import NotesEditor, notes_owner
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT, step_text
 
 LOCKED_COLOR = MARK_COLOR  # the app's red (as SetX and the ƒ mark)
@@ -177,7 +178,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.metadata_tree.setMaximumHeight(160)
         layout.addWidget(self.metadata_tree)
 
-        self.notes_view = NotesWidget(self._body)
+        self.notes_view = NotesEditor(self._body)  # add, edit, delete (#505)
         self.notes_view.notes_changed.connect(self.notes_changed)
         layout.addWidget(self.notes_view)
         layout.addStretch(1)
@@ -470,7 +471,7 @@ class InfoPanel(QtWidgets.QScrollArea):
 
     def _show_notes(self, notes) -> None:
         self.notes_view.setVisible(notes is not None)
-        self.notes_view.set_notes(notes, self._object.name if self._object else "")
+        self.notes_view.set_notes(notes, notes_owner(self._object) if self._object else "")
 
     # The notes widgets, by their old names
     @property
@@ -485,73 +486,4 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.notes_view.add_note()
 
 
-class NotesWidget(QtWidgets.QWidget):
-    """Timestamped notes (date over time, then the note) with Add Note...
-
-    Used by the info panel and for the notes of a set or group.
-    """
-
-    # A note was added
-    notes_changed = QtCore.pyqtSignal()
-
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._notes = None
-        self._owner = ""
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.header = QtWidgets.QLabel("Notes", self)
-        self.header.setStyleSheet("font-weight: bold;")
-        layout.addWidget(self.header)
-        self.table = QtWidgets.QTableWidget(0, 2, self)
-        self.table.setHorizontalHeaderLabels(["Date", "Note"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.verticalHeader().hide()
-        self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setWordWrap(True)
-        # The Note column takes whatever width the Date column leaves
-        self.table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.table.setMinimumHeight(100)
-        layout.addWidget(self.table)
-        self.add_button = QtWidgets.QPushButton("Add Note...", self)
-        self.add_button.clicked.connect(self.add_note)
-        button_row = QtWidgets.QHBoxLayout()
-        button_row.addWidget(self.add_button)
-        button_row.addStretch(1)
-        layout.addLayout(button_row)
-
-    def set_notes(self, notes, owner: str) -> None:
-        """Show *notes* (an NMNotes, or None) of *owner* (e.g. "Set1")."""
-        self._notes, self._owner = notes, owner
-        self.table.setRowCount(0)
-        for entry in notes or []:
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            date = str(entry.get("date", ""))
-            # Date over time, so the column stays narrow
-            date_item = QtWidgets.QTableWidgetItem(date.replace(" ", "\n", 1))
-            date_item.setToolTip(date)
-            self.table.setItem(row, 0, date_item)
-            self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(entry.get("note", ""))))
-        self.table.resizeColumnToContents(0)
-        self.table.resizeRowsToContents()
-
-    def _ask_note(self) -> str | None:
-        """The Add Note dialog (replaced in tests)."""
-        text, accepted = QtWidgets.QInputDialog.getMultiLineText(
-            self, "Add Note", f"Note for {self._owner}:"
-        )
-        return text if accepted else None
-
-    def add_note(self) -> None:
-        if self._notes is None:
-            return
-        text = self._ask_note()
-        if not text or not text.strip():
-            return
-        self._notes.add(text.strip())
-        self.set_notes(self._notes, self._owner)
-        self.notes_changed.emit()
-
-
-__all__ = ["INFO_TYPES", "InfoPanel", "NotesWidget"]
+__all__ = ["INFO_TYPES", "InfoPanel"]

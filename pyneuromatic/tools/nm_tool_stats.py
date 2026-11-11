@@ -223,7 +223,7 @@ class NMToolStats(NMTool):
         """Append a note to *data*.notes if available."""
         notes = getattr(data, "notes", None)
         if notes is not None:
-            notes.add(text)
+            notes.add(text, readonly=True)  # a record of what was done (#505)
 
     # override, no super
     def run_init(self) -> bool:
@@ -646,7 +646,7 @@ class NMToolStats(NMTool):
 
         f = self._make_toolfolder(self.TOOLFOLDER_PREFIX.rstrip("_"), overwrite=self._overwrite)
         transform = self._transform_note()  # on the folder and each array's note
-        f.notes.add(self._run_note())  # how the results were made
+        f.notes.add(self._run_note(), readonly=True)  # how the results were made
         transform_str = ", transform=%s" % transform if transform else ""
 
         # The rows, shared by all windows (#476). Results set directly (not by
@@ -973,7 +973,7 @@ class NMToolStats2:
             h.notes.add("NMHistogram(array=%s, %s, nbins=%d, xbgn=%g, xend=%g, pad=%d, "
                         "output=%s, n=%d)" % (name, how, len(result["counts"]), edges[0],
                                               edges[-1], pad if xrange is None else 0,
-                                              output, result["n"]))
+                                              output, result["n"]), readonly=True)
             if width is None:  # unequal bins: the x scale can't hold them
                 toolfolder.data.new(hname + "_edges", nparray=np.asarray(edges, dtype=float),
                                     yscale={"label": d.yscale.label, "units": units})
@@ -1094,7 +1094,7 @@ class NMToolStats2:
             iq.notes.add("NMInequality(array=%s, condition=%s, output=%s, pass=%d, "
                          "fail=%d, nan=%d)" % (name, condition,
                                                "binary" if binary_output else "value",
-                                               successes, failures, nans))
+                                               successes, failures, nans), readonly=True)
 
         # Create epoch sets if dataseries and set names are given
         if isinstance(dataseries, NMDataSeries) and (

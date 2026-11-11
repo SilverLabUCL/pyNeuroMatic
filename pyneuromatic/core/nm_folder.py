@@ -452,7 +452,7 @@ class NMFolder(NMObject):
         ds = self.dataseries[prefix]
         if empty:
             self.remove_dataseries_epoch(prefix, empty, quiet=True)
-            ds.notes.add("removed empty epochs: %s" % ", ".join(empty))
+            ds.notes.add("removed empty epochs: %s" % ", ".join(empty), readonly=True)
         if not epochs:
             return {}
         groups = ds.epochs.groups
@@ -464,7 +464,7 @@ class NMFolder(NMObject):
         for old, tmp in temp.items():
             NMObjectContainer.rename(self.data, tmp, arrays[old], quiet=True)
             self.data[arrays[old]].notes.add(
-                "renamed from '%s' (Renumber Epochs)" % old)
+                "renamed from '%s' (Renumber Epochs)" % old, readonly=True)
         temp_epochs = {old: "%s_renumber" % old for old in epochs}
         for old, tmp in temp_epochs.items():
             ds.epochs._rename_locked(old, tmp, quiet=True)  # sets follow
@@ -475,7 +475,7 @@ class NMFolder(NMObject):
             groups.rename_item(tmp, epochs[old])
             ds.epochs[epochs[old]].number = int(epochs[old][len(epoch_prefix):])
         changes = ", ".join("%s → %s" % item for item in epochs.items())
-        ds.notes.add("renumbered epochs: %s" % changes)
+        ds.notes.add("renumbered epochs: %s" % changes, readonly=True)
         nmh.history(
             "renumbered epochs of dataseries '%s': %s (%d arrays renamed)"
             % (prefix, changes, len(arrays)),

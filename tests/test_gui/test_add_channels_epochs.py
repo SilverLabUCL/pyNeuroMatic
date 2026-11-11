@@ -131,7 +131,7 @@ def test_remove_channel_from_the_channel_menu(app, monkeypatch):
     monkeypatch.setattr(app.series_actions, "_choose", choose)
     app.selection_model.update(channel=app.series.channels["B"])
     menu = app.selection_strip.action_button("channel").menu()
-    action = next(a for a in menu.actions() if a.text() == "Remove Channel…")
+    action = next(a for a in menu.actions() if a.text() == "Delete…")
     assert action is app.series_actions.remove_channel_action  # the series' action
     action.trigger()
     title, options = asked[0]

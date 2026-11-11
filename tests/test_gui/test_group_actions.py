@@ -45,7 +45,7 @@ def test_cyclic_groups():
 
 def test_group_menu_in_strip_and_series_menu(app):
     texts = ["New Groups…", "Assign Cyclic…", "Add to Group…", "Remove from Group…",
-             "Clear Group…", "Delete Group…", "Show in Browser"]
+             "Clear…", "Notes…", "Delete…", "Show in Browser"]
     button = app.selection_strip.action_button("group")
     assert button.isEnabled()
     assert [a.text() for a in button.menu().actions() if a.text()] == texts

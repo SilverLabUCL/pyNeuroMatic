@@ -63,7 +63,7 @@ def test_actions_appear_in_strip_and_menu_bar(app):
     folder_button = strip.action_button("folder")
     assert folder_button.isEnabled()
     assert [a.text() for a in folder_button.menu().actions() if a.text()] == [
-        "New Folder…", "Open / Import…", "Rename…", "Copy…", "Save…", "Delete…",
+        "New Folder…", "Open / Import…", "Rename…", "Copy…", "Save…", "Notes…", "Delete…",
         "Show in Browser",
     ]
     assert strip.action_button("toolfolder").isEnabled()

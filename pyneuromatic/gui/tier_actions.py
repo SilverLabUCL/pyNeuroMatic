@@ -922,6 +922,8 @@ class TierActions(QtCore.QObject):
         self._selection = selection_model
         self._parent_widget = parent
         self._start: dict = {}  # see starting_on
+        self._notes_actions: dict[str, QtGui.QAction] = {}  # Notes…, per kind (#505)
+        selection_model.selection_changed.connect(self._update_notes_actions)
 
     def _action(self, text, slot, shortcut=None, tip="") -> QtGui.QAction:
         item = QtGui.QAction(text, self)
@@ -934,6 +936,39 @@ class TierActions(QtCore.QObject):
 
     def update_enabled(self, *_args) -> None:
         """Enable the actions that apply to the current selection."""
+
+    # --- Notes… (#505) ----------------------------------------------------------
+
+    def notes_action(self, kind: str = "") -> QtGui.QAction:
+        """The Notes… action of a menu (*kind*, e.g. "subfolder" for a menu
+        of two): the notes of what the strip has chosen, in the notes editor."""
+        if kind not in self._notes_actions:
+            self._notes_actions[kind] = self._action(
+                "Notes…", lambda: self.show_notes(kind),
+                tip="Show, add, edit and delete its notes")
+        self._update_notes_actions()
+        return self._notes_actions[kind]
+
+    def notes_target(self, kind: str = "") -> tuple | None:
+        """(notes, owner text) of what the strip has chosen for *kind*, or
+        None if nothing (greying out Notes…). Each tier says its own."""
+        return None
+
+    def _update_notes_actions(self, *_args) -> None:
+        for kind, item in self._notes_actions.items():
+            item.setEnabled(self.notes_target(kind) is not None)
+
+    def show_notes(self, kind: str = "") -> None:
+        target = self.notes_target(kind)
+        if target is not None:
+            self._open_notes(*target)
+
+    def _open_notes(self, notes, owner: str) -> None:
+        """The Notes dialog of *owner*'s *notes* (replaced in tests)."""
+        from pyneuromatic.gui.notes_view import NotesDialog
+        dialog = NotesDialog(notes, owner, self._parent_widget)
+        dialog.editor.notes_changed.connect(self.content_changed)  # e.g. the browser
+        dialog.exec()
 
     # --- dialogs (replaced in tests) ----------------------------------------
 
@@ -1099,6 +1134,7 @@ class FolderActions(TierActions):
         menu.addAction(self.rename_action)
         menu.addAction(self.duplicate_action)
         menu.addAction(self.save_action)
+        menu.addAction(self.notes_action("folder"))
         menu.addAction(self.delete_action)
         menu.addSeparator()
         menu.addAction(self.browse_action)
@@ -1108,6 +1144,7 @@ class FolderActions(TierActions):
         menu = QtWidgets.QMenu("Subfolder", parent)
         menu.addAction(self.subfolder_rename_action)
         menu.addAction(self.subfolder_duplicate_action)
+        menu.addAction(self.notes_action("subfolder"))
         menu.addAction(self.subfolder_delete_action)
         menu.addSeparator()
         menu.addAction(self.subfolder_browse_action)
@@ -1127,6 +1164,14 @@ class FolderActions(TierActions):
         self.browse_action.setEnabled(folder is not None)
         self.subfolder_browse_action.setEnabled(
             self._selection.selection.get("toolfolder") is not None)
+
+    def notes_target(self, kind: str = "") -> tuple | None:
+        from pyneuromatic.gui.notes_view import notes_owner
+        folder = self._folder()
+        if kind == "subfolder":
+            subfolder = self._selection.selection.get("toolfolder")
+            return (subfolder.notes, notes_owner(subfolder)) if subfolder is not None else None
+        return (folder.notes, notes_owner(folder)) if folder is not None else None
 
     def folder_in_browser(self) -> None:
         folder = self._folder()
@@ -1721,7 +1766,7 @@ class DataActions(TierActions):
         menu.addAction(self.scales_action)
         menu.addSeparator()
         for item in (self.rename_action, self.copy_action, self.move_action,
-                     self.delete_action):
+                     self.notes_action("data"), self.delete_action):
             menu.addAction(item)
         menu.addSeparator()
         menu.addAction(self.browse_action)
@@ -1739,6 +1784,7 @@ class DataActions(TierActions):
         menu.addAction(self.set_invert_action)
         menu.addAction(self.set_combine_action)
         menu.addAction(self.set_clear_action)
+        menu.addAction(self.notes_action("data_set"))
         menu.addAction(self.set_delete_action)
         menu.addSeparator()
         menu.addAction(self.set_browse_action)
@@ -1780,6 +1826,17 @@ class DataActions(TierActions):
     def _data_container(self):
         context = self._context()
         return context.data if context is not None else None
+
+    def notes_target(self, kind: str = "") -> tuple | None:
+        from pyneuromatic.gui.notes_view import notes_owner, set_owner
+        selection = self._selection.selection
+        if kind == "data_set":
+            container, name = self._data_container(), selection.get("data_set")
+            if container is None or not isinstance(name, str) or name not in container.sets:
+                return None
+            return container.sets.notes(name), set_owner(name, container)
+        data = selection.get("data")
+        return (data.notes, notes_owner(data)) if data is not None else None
 
     def _data_target(self, data=None) -> tuple:
         """(container, owner, folder text, current name) for a data prompt:
@@ -2344,7 +2401,8 @@ class SeriesActions(TierActions):
         self.add_epochs_action = action(
             "Add Epochs…", self.add_epochs,
             tip="Add epochs after the last one: a new array for each channel")
-        self.remove_channel_action = action("Remove Channel…", self.remove_channel,
+        # Shown in the Channel menu, titled "Channels": Delete…
+        self.remove_channel_action = action("Delete…", self.remove_channel,
                                             tip="Remove a channel from the series")
         self.renumber_action = action(
             "Renumber Epochs…", self.renumber_epochs,
@@ -2365,7 +2423,8 @@ class SeriesActions(TierActions):
         for item in (self.new_action, self.from_data_action, self.update_action, None,
                      self.scales_action, None,
                      self.rename_action, self.copy_action,
-                     self.move_action, self.append_action, self.delete_action, None,
+                     self.move_action, self.append_action, self.notes_action(),
+                     self.delete_action, None,
                      self.add_epochs_action, self.remove_epoch_action,
                      self.renumber_action, None,
                      self.lock_action, None, self.browse_action):
@@ -2390,6 +2449,11 @@ class SeriesActions(TierActions):
         if series is None or owner is None or series.name not in owner.dataseries:
             return None
         return series
+
+    def notes_target(self, kind: str = "") -> tuple | None:
+        from pyneuromatic.gui.notes_view import notes_owner
+        series = self._series()
+        return (series.notes, notes_owner(series)) if series is not None else None
 
     def _candidate_prefixes(self) -> list[str]:
         owner = self._owner()
@@ -3180,8 +3244,8 @@ class EpochSetActions(TierActions):
         menu = QtWidgets.QMenu("Epoch Set", parent)
         for item in (self.new_action, None, self.add_action, self.remove_action, None,
                      self.rename_action, self.copy_action, self.invert_action,
-                     self.combine_action, self.clear_action, self.delete_action, None,
-                     self.browse_action):
+                     self.combine_action, self.clear_action, self.notes_action(),
+                     self.delete_action, None, self.browse_action):
             if item is None:
                 menu.addSeparator()
             else:
@@ -3202,6 +3266,14 @@ class EpochSetActions(TierActions):
     def _set_names(self) -> list[str]:
         series = self._series()
         return list(series.epochs.sets.keys()) if series is not None else []
+
+    def notes_target(self, kind: str = "") -> tuple | None:
+        series, name = self._series(), self._selection.selection.get("epoch_set")
+        # Not a built-in choice (All, All Sets...): those have no notes
+        if series is None or not isinstance(name, str) or name not in series.epochs.sets:
+            return None
+        from pyneuromatic.gui.notes_view import set_owner
+        return series.epochs.sets.notes(name), set_owner(name, series.epochs)
 
     def update_enabled(self, *_args) -> None:
         series = self._series()
@@ -3462,10 +3534,10 @@ class GroupActions(TierActions):
         self.unassign_action = action("Remove from Group…", self.unassign_epochs,
                                       tip="Remove an epoch, or a range of epochs, from their group")
         self.clear_action = action(
-            "Clear Group…", self.clear_group,
+            "Clear…", self.clear_group,
             tip="Take the epochs out of a group, or all groups (the groups are kept)")
         self.delete_action = action(
-            "Delete Group…", self.delete_group,
+            "Delete…", self.delete_group,
             tip="Delete a group, or all groups; their epochs are kept, with no group")
         self.browse_action = action("Show in Browser", self.choose_in_browser,
                                     tip="Show the series' epochs in the browser")
@@ -3475,8 +3547,8 @@ class GroupActions(TierActions):
     def group_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Group", parent)
         for item in (self.new_action, self.cyclic_action, None, self.assign_action,
-                     self.unassign_action, None, self.clear_action, self.delete_action, None,
-                     self.browse_action):
+                     self.unassign_action, None, self.clear_action, self.notes_action(),
+                     self.delete_action, None, self.browse_action):
             if item is None:
                 menu.addSeparator()
             else:
@@ -3493,6 +3565,15 @@ class GroupActions(TierActions):
         if series is None or context is None or series.name not in context.dataseries:
             return None
         return series
+
+    def notes_target(self, kind: str = "") -> tuple | None:
+        series, group = self._series(), self._selection.selection.get("group")
+        # A group number (not All Groups)
+        if (series is None or isinstance(group, bool) or not isinstance(group, int)
+                or group not in series.epochs.groups.group_numbers):
+            return None
+        from pyneuromatic.gui.notes_view import group_owner
+        return series.epochs.groups.notes(group), group_owner(group, series)
 
     def _assigned(self, series) -> dict[str, int]:
         groups = series.epochs.groups
@@ -3779,7 +3860,7 @@ class ChannelActions(TierActions):
         # Epochs and the browser), shown in this menu
         self.remove_action = remove_action
         self.add_action = action(
-            "Add Channels…", self.add_channels,
+            "New…", self.add_channels,
             tip="Add channels after the last one: a new array for each epoch")
         self.transform_action = action(
             MENU_TEXT, self.edit_transforms,
@@ -3792,7 +3873,12 @@ class ChannelActions(TierActions):
 
     def channel_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
         menu = QtWidgets.QMenu("Channel", parent)
+        # Titled, then a divider (as the epoch ⋯ menu)
+        title = menu.addAction("Channels")
+        title.setEnabled(False)
+        menu.addSeparator()
         menu.addAction(self.add_action)
+        menu.addAction(self.notes_action())  # Notes… just before Delete… (#505)
         if self.remove_action is not None:
             menu.addAction(self.remove_action)
         menu.addSeparator()
@@ -3800,6 +3886,11 @@ class ChannelActions(TierActions):
         menu.addSeparator()
         menu.addAction(self.browse_action)
         return menu
+
+    def notes_target(self, kind: str = "") -> tuple | None:
+        from pyneuromatic.gui.notes_view import notes_owner
+        channel = self._channel()
+        return (channel.notes, notes_owner(channel)) if channel is not None else None
 
     def _channel(self):
         """The selected channel of the selected data series, or None."""

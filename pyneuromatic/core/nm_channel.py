@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pyneuromatic.core.nm_data import NMData
 
+from pyneuromatic.core.nm_notes import NMNotes
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_object_container import NMObjectContainer
 from pyneuromatic.core.nm_scale import NMScaleX, NMScaleY, _xscale_from_dict, _yscale_from_dict
@@ -96,6 +97,15 @@ class NMChannel(NMObject):
         self.__transform: list[NMTransform] = []
         if transform is not None:
             self._transform_set(transform, quiet=True)
+        self.__notes = NMNotes()  # e.g. what it recorded (#505)
+
+    @property
+    def notes(self) -> NMNotes:
+        """Notes for this channel (e.g. what it recorded)."""
+        notes = getattr(self, "_NMChannel__notes", None)
+        if notes is None:  # e.g. made before channels kept notes
+            notes = self.__notes = NMNotes()
+        return notes
 
     # override
     def __eq__(self, other: object) -> bool:

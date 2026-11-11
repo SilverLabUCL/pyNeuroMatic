@@ -26,9 +26,11 @@ import datetime
 class NMNotes:
     """Timestamped notes.
 
-    Each note is stored as a dict with 'date' (ISO timestamp) and 'note' (text).
-    Used by NMFolder (session notes) and NMData (transformation logs). A
-    note's text can be edited (its date stays) and a note removed (#501).
+    Each note is stored as a dict with 'date' (ISO timestamp) and 'note' (text),
+    and 'readonly': True for a note written by pyNeuroMatic itself (e.g. how a
+    run's results were made, a transform log), which can't be edited or
+    removed (#505). Used by NMFolder (session notes) and NMData (transformation
+    logs). A note's text can be edited (its date stays) and a note removed (#501).
     """
 
     def __init__(self) -> None:
@@ -60,11 +62,13 @@ class NMNotes:
         """Add a new note with the given text."""
         self.add(text)
 
-    def add(self, text: str) -> None:
+    def add(self, text: str, readonly: bool = False) -> None:
         """Add a timestamped note.
 
         :param text: The note text to add
         :type text: str
+        :param readonly: True for a note written by pyNeuroMatic (a record of
+            what it did): it can't be edited or removed.
         """
         if text is None:
             return
@@ -74,21 +78,33 @@ class NMNotes:
             "date": datetime.datetime.now().isoformat(" ", "seconds"),
             "note": text,
         }
+        if readonly:
+            entry["readonly"] = True
         self._entries.append(entry)
+
+    def is_readonly(self, index: int) -> bool:
+        """True if note *index* was written by pyNeuroMatic (read-only)."""
+        return bool(self._entries[index].get("readonly", False))
 
     def edit(self, index: int, text: str) -> None:
         """Change note *index*'s text; its date (when written) stays.
 
         :raises IndexError: If there is no note *index*.
+        :raises ValueError: If note *index* is read-only.
         """
         entry = self._entries[index]
+        if entry.get("readonly"):
+            raise ValueError("note %d is read-only" % index)
         entry["note"] = text if isinstance(text, str) else str(text)
 
     def remove(self, index: int) -> dict:
         """Remove note *index*, returning it.
 
         :raises IndexError: If there is no note *index*.
+        :raises ValueError: If note *index* is read-only.
         """
+        if self._entries[index].get("readonly"):
+            raise ValueError("note %d is read-only" % index)
         return self._entries.pop(index)
 
     def clear(self) -> None:
@@ -116,9 +132,11 @@ class NMNotes:
         for n in notes:
             if not isinstance(n, dict):
                 return False
-            keys = n.keys()
-            if len(keys) != 2 or "date" not in keys or "note" not in keys:
+            keys = set(n.keys())
+            if not {"date", "note"} <= keys <= {"date", "note", "readonly"}:
                 return False
             if not isinstance(n["date"], str) or not isinstance(n["note"], str):
+                return False
+            if not isinstance(n.get("readonly", False), bool):
                 return False
         return True

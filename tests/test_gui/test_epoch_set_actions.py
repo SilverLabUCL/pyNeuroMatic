@@ -52,7 +52,7 @@ def test_range_helpers():
 def test_epoch_set_menu_in_strip_and_series_menu(app):
     texts = [
         "New Set…", "Add to Set…", "Remove from Set…", "Renumber…", "Copy…", "Invert…",
-        "Combine…", "Clear…", "Delete…", "Show in Browser",
+        "Combine…", "Clear…", "Notes…", "Delete…", "Show in Browser",
     ]
     button = app.selection_strip.action_button("epoch_set")
     assert button.isEnabled()

@@ -257,6 +257,8 @@ class PlotPanel(QtWidgets.QWidget):
 
     # The current epoch or data array was added to (or removed from) a set or group
     membership_changed = QtCore.pyqtSignal()
+    # A note of the current epoch (or data array) was added, edited or deleted
+    notes_changed = QtCore.pyqtSignal()
     # A channel's filters or transforms changed (Filter & Transform...)
     transforms_changed = QtCore.pyqtSignal()
     # Trace Style...: open Settings at its Plot page
@@ -370,6 +372,15 @@ class PlotPanel(QtWidgets.QWidget):
         overlay_action = QtWidgets.QWidgetAction(self.step_menu)
         overlay_action.setDefaultWidget(overlay_row)
         self.step_menu.addAction(overlay_action)
+        # The current epoch's notes (or data array's, for a Data Set) (#505)
+        self.step_menu.addSeparator()
+        self.notes_action = self.step_menu.addAction("Notes…")
+        self.notes_action.setToolTip(
+            "Show, add, edit and delete the current epoch's notes (a Data Set: "
+            "the current data array's)")
+        self.notes_action.triggered.connect(self.show_current_notes)
+        self.notes_action.setEnabled(False)
+        self._current_item = None  # the epoch (or data array) shown
         self.step_button = QtWidgets.QToolButton(self)
         self.step_button.setText("⋯")
         self.step_button.setToolTip("Stepping options")
@@ -664,6 +675,8 @@ class PlotPanel(QtWidgets.QWidget):
             self.trace_name_label.setText("No trace")
             self.trace_name_label.setToolTip("")
             self.current_trace = None
+            self._current_item = None
+            self.notes_action.setEnabled(False)
             self._render_current_traces()
             self._update_membership()
             return
@@ -674,6 +687,8 @@ class PlotPanel(QtWidgets.QWidget):
         )
         self._sync_trace_controls(current_index)
         item, self.current_trace = entries[current_index]
+        self._current_item = item
+        self.notes_action.setEnabled(getattr(item, "notes", None) is not None)
         name = (self.current_trace.name if self.current_trace is not None
                 else f"{item.name} (no data)")
         # ƒ: plotted with the channel's filters or transforms
@@ -682,6 +697,26 @@ class PlotPanel(QtWidgets.QWidget):
         self.trace_name_label.setToolTip(tip)
         self._render_current_traces()
         self._update_membership()
+
+    def notes_target(self) -> tuple | None:
+        """(notes, owner text) of the epoch (or data array) shown, or None."""
+        from pyneuromatic.gui.notes_view import notes_owner
+        item = self._current_item
+        notes = getattr(item, "notes", None)
+        return (notes, notes_owner(item)) if notes is not None else None
+
+    def show_current_notes(self) -> None:
+        """Notes… (the epoch ⋯ menu): the current epoch's notes (#505)."""
+        target = self.notes_target()
+        if target is not None:
+            self._open_notes(*target)
+
+    def _open_notes(self, notes, owner: str) -> None:
+        """The Notes dialog (replaced in tests)."""
+        from pyneuromatic.gui.notes_view import NotesDialog
+        dialog = NotesDialog(notes, owner, self)
+        dialog.editor.notes_changed.connect(self.notes_changed)
+        dialog.exec()
 
     def _sync_trace_controls(self, current_value: int) -> None:
         count = len(self._trace_entries)
@@ -1440,6 +1475,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.plot_widget = PlotPanel(self.context_panel, view_tabs=self.view_tabs)
         self.plot_widget.bind_selection_model(self.selection_model)
         self.plot_widget.membership_changed.connect(self._on_content_changed)
+        self.plot_widget.notes_changed.connect(self._on_content_changed)
         self.plot_widget.transforms_changed.connect(self._on_transforms_changed)
         self.plot_widget.trace_style_requested.connect(lambda: self.open_settings("Plot"))
         self.plot_widget.trace_style_set.connect(self._set_trace_style)

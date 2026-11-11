@@ -173,6 +173,10 @@ def test_selection_only_for_data_arrays(qtbot):
 
     window.selection_model.update(data_set="Mine")
     assert panel.step_menu_title.text() == "Data"  # data arrays
+    # Notes…: the current data array's (#505)
+    notes, owner = panel.notes_target()
+    assert notes is panel._current_item.notes
+    assert owner == f"{panel._current_item.name} ({folder.name})"  # its folder
     assert panel.selection_only_action.text() == "Selected Only"
     panel.selection_only_action.setChecked(True)
     assert panel.selection_scope_label.text() == "(Mine: 2)"
@@ -187,16 +191,18 @@ def test_stepping_options_are_in_a_menu_beside_the_buttons(app):
     panel = app.plot_widget
     assert panel.step_button.menu() is panel.step_menu
     texts = [a.text() for a in panel.step_menu.actions() if a.text()]
-    assert texts == ["Epoch", "Selected Only"]
+    assert texts == ["Epoch", "Selected Only", "Notes…"]
     # Titled, then a divider
     actions = panel.step_menu.actions()
     assert actions[0] is panel.step_menu_title and not actions[0].isEnabled()
     assert actions[1].isSeparator()
     assert panel.step_size.window() is panel.step_menu
-    # Overlay, last, after a divider (#483); not in the Plot menu
+    # Overlay after a divider (#483), not in the Plot menu; then Notes…
+    # after its own divider (#505)
     actions = panel.step_menu.actions()
-    assert actions[-2].isSeparator()
-    assert actions[-1].defaultWidget().isAncestorOf(panel.overlay_count)
+    assert actions[-4].isSeparator()
+    assert actions[-3].defaultWidget().isAncestorOf(panel.overlay_count)
+    assert actions[-2].isSeparator() and actions[-1] is panel.notes_action
     assert panel.overlay_count.window() is panel.step_menu
     # Turning Selection only off hides the reminder
     panel.selection_only_action.setChecked(True)
@@ -224,3 +230,19 @@ def test_stepping_adds_no_repeated_selection_entries(app):
     assert entries() == before  # stepping: no new, identical entries
     app.selection_model.update(epoch_set="Set1")
     assert entries()[-1] == "Selection: Demo / Record / A / Epoch Set1"
+
+
+
+def test_notes_of_the_current_epoch(app):
+    """Notes… (epoch ⋯ menu, #505): the current epoch's notes, across its
+    channels; the current data array's for a Data Set."""
+    panel = app.plot_widget
+    opened = []
+    panel._open_notes = lambda notes, owner: opened.append((notes, owner))
+    assert panel.notes_action.isEnabled()
+    panel.notes_action.trigger()
+    epoch = panel._current_item
+    assert opened == [(epoch.notes, f"{epoch.name} ({panel._plot_dataseries.name})")]
+    panel.trace_next_button.click()
+    panel.notes_action.trigger()
+    assert opened[-1][0] is panel._current_item.notes and panel._current_item is not epoch

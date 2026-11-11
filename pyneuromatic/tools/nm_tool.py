@@ -693,10 +693,11 @@ class NMTool:
         finished = self.run_finish()  # a stopped run keeps what it did
         if self._omitted:
             for folder in self._made_toolfolders:
-                folder.notes.add("omitted: %s" % ", ".join(self._omitted))
+                folder.notes.add("omitted: %s" % ", ".join(self._omitted), readonly=True)
         if self._stopped is not None:
             for folder in self._made_toolfolders:
-                folder.notes.add("cancelled after %d of %d: partial results" % self._stopped)
+                folder.notes.add("cancelled after %d of %d: partial results" % self._stopped,
+                                 readonly=True)
         return finished
 
     @property
