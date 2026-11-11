@@ -1568,14 +1568,11 @@ def set_uses(sets, name: str, target: str) -> bool:
 
 
 def replace_set(sets, name: str, fill: Callable[[], object]) -> None:
-    """Make set *name* with *fill()*, replacing it (in its place in the list)
-    if it exists."""
-    order = sets.keys()
+    """Make set *name* with *fill()*, replacing it if it exists (it's listed
+    in set order, #503, so in the same place)."""
     if name in sets:
         sets.pop(name, quiet=True)
     fill()
-    if len(order) == len(sets):
-        sets.reorder(order)
 
 
 def copy_set_options(sets) -> dict:

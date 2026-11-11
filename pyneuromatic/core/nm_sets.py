@@ -20,6 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 import copy
+import re
 from typing import Callable, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,6 +31,23 @@ import pyneuromatic.core.nm_history as nmh
 from pyneuromatic.core.nm_notes import NMNotes
 import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
+
+# The set of epochs left out of analysis (nm_epoch's EXCLUDE_SET)
+EXCLUDE_SET = "SetX"
+_NUMBERED_SET = re.compile(r"set(\d+)", re.IGNORECASE)
+
+
+def set_order(name: str) -> tuple:
+    """Sort key of set *name* (#503): the numbered sets by their number
+    (Set0, Set1, Set2, ..., Set10), then named sets (e.g. Big, Control; any
+    numbers in them as numbers), then the exclude set, SetX, last."""
+    if name.lower() == EXCLUDE_SET.lower():
+        return (2,)
+    match = _NUMBERED_SET.fullmatch(name)
+    if match:
+        return (0, int(match.group(1)), name.lower())
+    parts = re.split(r"(\d+)", name.lower())
+    return (1, tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in parts if p))
 
 
 # Valid equation operators for set combinations
@@ -192,20 +210,26 @@ class NMSets:
     def __delitem__(self, key: str) -> None:
         self.pop(key)
 
+    # Listed in set order (#503): Set0, Set1, ..., Set10, then named sets,
+    # then SetX; not the order they were made
+
+    def _ordered(self) -> list[str]:
+        return sorted(self._map, key=set_order)
+
     def __iter__(self):
-        return iter(self._map)
+        return iter(self._ordered())
 
     def __len__(self):
         return len(self._map)
 
     def keys(self):
-        return list(self._map.keys())
+        return self._ordered()
 
     def values(self):
-        return list(self._map.values())
+        return [self._map[key] for key in self._ordered()]
 
     def items(self):
-        return list(self._map.items())
+        return [(key, self._map[key]) for key in self._ordered()]
 
     def update(self, mapping: dict) -> None:
         """Add/replace sets from a dict of {set_name: item_list}."""
@@ -658,25 +682,6 @@ class NMSets:
         return newkey
 
     @nmch.records_command
-    def reorder(self, name_order: list[str], quiet: bool = nmc.QUIET) -> None:
-        if not isinstance(name_order, list):
-            raise TypeError(nmu.type_error_str(name_order, "newkeyorder", "list"))
-        if len(name_order) != len(self._map):
-            raise KeyError(
-                "number of keys mismatch: '%s' != '%s'"
-                % (len(name_order), len(self._map))
-            )
-        old_keys = list(self._map.keys())
-        new_map: dict[str, Any] = {}
-        for n in name_order:
-            actual = self._getkey(n)
-            new_map[actual] = self._map[actual]
-        self._map.clear()
-        self._map.update(new_map)
-        if list(self._map.keys()) != old_keys:
-            self._echo("reordered sets", quiet)
-            self._record("reorder(%r)" % (list(self._map.keys()),))
-
     def notes(self, key: str) -> NMNotes:
         """Notes for set *key* (e.g. what it contains); kept when the set is
         emptied, moved when it is renamed and dropped when it is removed.

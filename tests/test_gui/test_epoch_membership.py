@@ -201,7 +201,7 @@ def data_app(qtbot):
 def test_data_set_boxes_are_the_first_three_sets(data_app):
     panel = data_app.plot_widget
     assert panel.membership_row.isVisibleTo(panel)
-    assert list(panel.set_checkboxes) == ["Control", "Drug", "Washout"]
+    assert list(panel.set_checkboxes) == ["Control", "Drug", "Mine"]  # in order (#503)
     assert not panel.group_combo.isVisibleTo(panel)  # groups are for epochs
     assert _checked(panel) == []
     panel._step_trace(1)  # A1
@@ -210,13 +210,13 @@ def test_data_set_boxes_are_the_first_three_sets(data_app):
 
 def test_the_strip_data_set_gets_a_box_too(data_app):
     panel = data_app.plot_widget
-    data_app.selection_model.update(data_set="Mine")
-    assert list(panel.set_checkboxes) == ["Control", "Drug", "Washout", "Mine"]
+    data_app.selection_model.update(data_set="Washout")
+    assert list(panel.set_checkboxes) == ["Control", "Drug", "Mine", "Washout"]
     data_app.selection_model.update(data_set="Drug")  # already shown
-    assert list(panel.set_checkboxes) == ["Control", "Drug", "Washout"]
+    assert list(panel.set_checkboxes) == ["Control", "Drug", "Mine"]
     # The old boxes are gone at once, not left drawn underneath
     boxes = panel.membership_row.findChildren(QtWidgets.QCheckBox)
-    assert sorted(box.text() for box in boxes) == ["Control", "Drug", "Washout"]
+    assert sorted(box.text() for box in boxes) == ["Control", "Drug", "Mine"]
 
 
 def test_ticking_adds_the_current_data_array(data_app):
@@ -252,7 +252,7 @@ def test_switching_between_data_and_epochs(data_app):
     data_app.selection_model.update(dataseries=series, source="dataseries")
     assert list(panel.set_checkboxes) == ["Set0", "Set1", "SetX"]
     data_app.selection_model.update(source="data")
-    assert list(panel.set_checkboxes) == ["Control", "Drug", "Washout"]
+    assert list(panel.set_checkboxes) == ["Control", "Drug", "Mine"]
 
 
 def test_the_strip_epoch_set_gets_a_box_too(app):
