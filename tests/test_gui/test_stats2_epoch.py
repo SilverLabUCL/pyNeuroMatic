@@ -60,21 +60,21 @@ def test_every_epoch_a_line(qtbot):
     assert _epochs(app) == [
         "Stats_Record_A_All_0  w0 max  (x 60 to 120)  bsln mean (x 0 to 40)"
         "  (values in mV, x in ms)",
-        "RecordA0: bsln mean = -70; max = -55 at 80; Δ = 15",
-        "RecordA1: bsln mean = -70; max = -54 at 80; Δ = 16",
-        "RecordA2: bsln mean = -70; max = -53 at 80; Δ = 17",
+        "RecordA0: bsln mean = -70 (n = 41); max = -55 at 80; Δ = 15",
+        "RecordA1: bsln mean = -70 (n = 41); max = -54 at 80; Δ = 16",
+        "RecordA2: bsln mean = -70 (n = 41); max = -53 at 80; Δ = 17",
     ]
 
 
 @pytest.mark.parametrize("func, line", [
     ({"name": "risetime+", "p0": 10, "p1": 90},
-     "RecordA1: bsln mean = -70; max = -54 at 80; Δ = 16; "
+     "RecordA1: bsln mean = -70 (n = 41); max = -54 at 80; Δ = 16; "
      "level+ 10% = -68.4 at 61.774; level+ 90% = -55.6 at 76.1158; "
      "risetime+ = 14.3418"),
-    ("mean+std", "RecordA1: bsln mean = -70; mean = -64.4647, ±std 5.69728; "
-                 "Δ = 5.53524"),
+    ("mean+std", "RecordA1: bsln mean = -70 (n = 41); mean = -64.4647, ±std 5.69728 "
+                 "(n = 61); Δ = 5.53524"),
     ({"name": "level+", "ylevel": -60},
-     "RecordA1: bsln mean = -70; level+ = -60 at 71.7734; Δ = 9.99999"),
+     "RecordA1: bsln mean = -70 (n = 41); level+ = -60 at 71.7734; Δ = 9.99999"),
 ])
 def test_each_kind_of_result(qtbot, func, line):
     assert _epochs(_app(qtbot, func))[2] == line
@@ -83,7 +83,7 @@ def test_each_kind_of_result(qtbot, func, line):
 def test_slope_without_baseline(qtbot):
     assert _epochs(_app(qtbot, "slope", bsln=False)) [:2] == [
         "Stats_Record_A_All_0  w0 slope  (x 60 to 120)  (values in mV/ms, x in ms)",
-        "RecordA0: slope = -0.164321, intercept -50.0218 mV",  # not in the header's units
+        "RecordA0: slope = -0.164321, intercept -50.0218 mV (n = 61)",  # not in the header's units
     ]
 
 
@@ -116,7 +116,7 @@ def test_summary_is_still_there_and_digits_apply(qtbot):
 def test_stats1_results_after_a_run_and_no_history_checkbox(qtbot):
     app = _app(qtbot, "max")
     tab = app.stats
-    assert tab.details.toPlainText().splitlines()[-1] == "max = -54 at 80  (Δ = 16)"
+    assert tab.details.toPlainText().splitlines()[-1] == "max = -54 at 80  (Δ = 16)  (x 60 to 120)"
     assert not hasattr(tab, "output_history_checkbox")
     assert hasattr(app.selection_model.manager.stats, "results_to_history")  # for scripts
 
@@ -132,9 +132,14 @@ def test_all_epochs_matches_stats1(qtbot, func):
     stats1 = app.stats.details.toPlainText().splitlines()[1:]  # E1 (shown), a preview
     line = _epochs(app)[2]  # RecordA1
     # Both give their units once, on the top line
-    # Stats1's "  (Δ = 16)" is All epochs' "; Δ = 16"
-    steps = [re.sub(r"  \(Δ = ([^)]*)\)", r"; Δ = \1", step.split("  (x ")[0])
-             for step in stats1]
+    # Stats1's "  (x 0 to 40, n = 41)" is All epochs' " (n = 41)" (its range is in
+    # the header); "  (Δ = 16)  (n = 61)" is " (n = 61); Δ = 16" (#498)
+    def as_all_epochs(step):
+        step = re.sub(r"  \(x [^)]*?(?:, (n = [^)]*))?\)$",
+                      lambda m: f" ({m.group(1)})" if m.group(1) else "", step)
+        step = re.sub(r"  \((n = [^)]*)\)$", r" (\1)", step)
+        return re.sub(r"  \(Δ = ([^)]*)\)( \(n = [^)]*\))?", r"\2; Δ = \1", step)
+    steps = [as_all_epochs(step) for step in stats1]
     assert line == "RecordA1: " + "; ".join(steps)  # its bsln range is in the header
 
 
@@ -232,8 +237,9 @@ def test_stats1_x_ranges_have_x_units(qtbot):
     app = _app(qtbot, "max")
     lines = app.stats.details.toPlainText().splitlines()
     # Units once, on the top line, as Stats2's
-    assert lines[0] == "RecordA1  w0 max  (x 60 to 120)  (values in mV, x in ms)"
-    assert lines[1] == "bsln mean = -70  (x 0 to 40)"
+    assert lines[0] == "RecordA1  w0 max  (values in mV, x in ms)"
+    assert lines[-1] == "max = -54 at 80  (Δ = 16)  (x 60 to 120)"  # its X range (#498)
+    assert lines[1] == "bsln mean = -70  (x 0 to 40, n = 41)"
 
 
 def test_an_unbounded_range_shows_the_traces_limits(qtbot):
@@ -244,8 +250,8 @@ def test_an_unbounded_range_shows_the_traces_limits(qtbot):
     for edit in (tab.xbgn_edit, tab.xend_edit):
         edit.setText("")  # -inf, inf
         edit.editingFinished.emit()
-    assert tab.details.toPlainText().splitlines()[0] == (
-        "RecordA1  w0 max  (x 0 to 199)  (values in mV, x in ms)")
+    assert tab.details.toPlainText().splitlines() == [
+        "RecordA1  w0 max  (values in mV, x in ms)", "max = -54 at 80  (x 0 to 199)"]
     tab.run_button.click()
     assert _epochs(app)[0] == "Stats_Record_A_All_1  w0 max  (x 0 to 199)  (values in mV, x in ms)"
 
@@ -258,9 +264,10 @@ def test_a_baselines_spread_is_shown(qtbot):
     tab.bsln_combo.setCurrentIndex(tab.bsln_combo.findData("mean+std"))
     import re
     stats1 = tab.details.toPlainText().splitlines()[1]
-    assert re.match(r"bsln mean = -70, \u00b1std \S+  \(x 0 to 40\)$", stats1)
+    assert re.match(r"bsln mean = -70, \u00b1std \S+  \(x 0 to 40, n = 41\)$", stats1)
     tab.run_button.click()
-    assert re.match(r"RecordA0: bsln mean = -70, \u00b1std \S+; max", _epochs(app)[1])
+    assert re.match(r"RecordA0: bsln mean = -70, \u00b1std \S+ \(n = 41\); max",
+                    _epochs(app)[1])
 
 
 def test_summary_gives_values_and_x_units(qtbot):
@@ -271,3 +278,15 @@ def test_summary_gives_values_and_x_units(qtbot):
     stats2.array_combo.setCurrentText("ST_w0_max_x")  # an x array: in ms
     assert stats2.details.toPlainText().splitlines()[0] == (
         "ST_w0_max_x  (values in ms, x in ms)")
+
+
+def test_an_epoch_with_nans_shows_its_own_n(qtbot):
+    """All epochs: each epoch's n from the saved ST_..._n arrays, and the NaNs
+    left out (Ignore NaNs, #498)."""
+    app = _app(qtbot, "mean")
+    app.series.channels["A"].data[1].nparray[[5, 6]] = np.nan  # in E1's baseline
+    app.stats.run_button.click()
+    lines = _epochs(app)
+    assert lines[1].startswith("RecordA0: bsln mean = -70 (n = 41); mean = ")
+    assert lines[2].startswith("RecordA1: bsln mean = -70 (n = 39, 2 NaNs); mean = ")
+    assert lines[2].split("; ")[1].endswith("(n = 61)")

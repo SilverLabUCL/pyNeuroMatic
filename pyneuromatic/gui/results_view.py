@@ -12,6 +12,7 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
+from pyneuromatic.tools.nm_stat_func import FUNC_NAMES_BSLN, FUNC_NAMES_N
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.tools.nm_tool_stats import NMToolStats, NMToolStats2
 
@@ -23,6 +24,28 @@ def display_name(name: str) -> str:
     if name and name.startswith("mean+"):
         return "mean \u00b1 " + name[len("mean+"):]
     return name
+
+
+def points_text(n, nans=0) -> str:
+    """The number of points a measurement used (#498), e.g. "n = 15", and the
+    NaNs left out if any: "n = 15, 2 NaNs"."""
+    try:
+        text = f"n = {int(n)}"
+    except (TypeError, ValueError):
+        return "n = NaN"
+    try:
+        nans = int(nans)
+    except (TypeError, ValueError):
+        nans = 0
+    if nans > 0:
+        text += f", {nans} NaN" + ("s" if nans > 1 else "")
+    return text
+
+
+def shows_points(func: str) -> bool:
+    """True if Stats shows the number of points of measurement *func* (#498):
+    one computed from many points (a mean, std, slope...), not a point found."""
+    return func in FUNC_NAMES_N or func in FUNC_NAMES_BSLN
 
 
 _NOTE_PAIR = re.compile(r"(\w+)=([^,()]+)")
@@ -97,17 +120,26 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
         units = data.yscale.units
         return f"{text} {units}".strip() if units and units not in known_units else text
 
+    def at_row(data):
+        values = data.nparray if data is not None else None
+        return values[row] if values is not None and row < len(values) else None
+
     prefix = f"ST_{window}_"
     groups: dict[tuple[str, str], list[tuple[str, object]]] = {}
     fields: dict[tuple[str, str], dict[str, str]] = {}
+    counts: dict[tuple[str, str], dict[str, object]] = {}  # its n and nans arrays
     for name, data in toolfolder.data.items():
         if not name.startswith(prefix) or name == f"{prefix}data":
             continue
         suffix = name.rsplit("_", 1)[-1]
-        if suffix in StatsTables._DETAIL_SUFFIXES or not isinstance(data.nparray, np.ndarray):
+        if not isinstance(data.nparray, np.ndarray):
             continue
         note = _note_fields(data)
         key = (note.get("id", ""), note.get("step", ""))
+        if suffix in ("n", "nans"):
+            counts.setdefault(key, {})[suffix] = data
+        if suffix in StatsTables._DETAIL_SUFFIXES:
+            continue
         groups.setdefault(key, []).append((name[len(prefix):], data))
         fields.setdefault(key, note)
     lines: list[str] = []
@@ -156,6 +188,9 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
         if step_id == "bsln":
             bsln_units = arrays[0][1].yscale.units if arrays else None
         line = (main if main is not None else label) + "".join(parts)
+        n = counts.get(key, {})
+        if "n" in n and shows_points(func if step_id in ("main", "bsln") else stepfunc or ""):
+            line += f" ({points_text(at_row(n['n']), at_row(n.get('nans')))})"
         if step_id == "bsln":
             xbgn, xend = _note_limits(note, x_limits)
             line += f"  (x {xbgn} to {_with(xend, xunits if xunits not in known_units else '')})"

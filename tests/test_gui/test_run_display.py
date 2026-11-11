@@ -328,11 +328,11 @@ def test_details_show_the_runs_result_at_the_prompt(app):
         lambda _text: (details.append(app.stats.details.toPlainText()),
                        QtCore.QTimer.singleShot(0, lambda: app.stats.answer_prompt("continue"))))
     app.stats.run_button.click()
-    assert details[2].splitlines() == ["RecordA2  w0 mean  (x 0 to 4)",
-                                       "mean = 2"]  # E2's, from the run
+    assert details[2].splitlines() == ["RecordA2  w0 mean",
+                                       "mean = 2  (x 0 to 4, n = 5)"]  # E2's, from the run
     # After the run: E0 again (the Plot's), measured as a preview
     assert app.stats.details.toPlainText().splitlines() == [
-        "RecordA0  w0 mean  (x 0 to 4)", "mean = 0"]
+        "RecordA0  w0 mean", "mean = 0  (x 0 to 4, n = 5)"]
 
 
 # --- Omit the epoch shown (#472) --------------------------------------------------

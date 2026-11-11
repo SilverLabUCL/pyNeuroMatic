@@ -54,6 +54,13 @@ FUNC_NAMES_BASIC_DELTA = (
     "median", "mean", "mean+var", "mean+std", "mean+sem", "value@xbgn", "value@xend",
 )
 
+# Functions computed from many points, so Stats shows how many (n, #498);
+# not a point found (max, min, value@x, a level crossing) or a count
+FUNC_NAMES_N = (
+    "median", "mean", "mean+var", "mean+std", "mean+sem", "var", "std", "sem",
+    "rms", "sum", "pathlength", "area", "slope",
+)
+
 FUNC_NAMES_MAXMIN = (
     "max",          # np.argmax
     "min",          # np.argmin
