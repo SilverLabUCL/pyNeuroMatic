@@ -719,17 +719,48 @@ class TestNMToolStats2Inequality(unittest.TestCase):
         )
         self.assertEqual(r["successes"], 4)
 
-    def test_nan_in_array_counts_as_failure(self):
+    def test_nan_neither_passes_nor_fails(self):
+        # A row without a value: NaN in the result, in neither set (#499)
         self.tf.data.new(
             "ST_w0_nan_y",
             nparray=np.array([1.0, np.nan, 3.0, 4.0, 5.0])
         )
         r = nms.NMToolStats2.inequality(
-            self.tf, "ST_w0_nan_y", ">", 0, save_to_numpy=False
+            self.tf, "ST_w0_nan_y", ">", 3, save_to_numpy=False,
+            dataseries=self.ds, set_name_success="Pass", set_name_failure="Fail",
         )
-        # NaN > 0 is False
-        self.assertEqual(r["successes"], 4)
-        self.assertEqual(r["failures"], 1)
+        self.assertEqual((r["successes"], r["failures"], r["nans"]), (2, 2, 1))
+        np.testing.assert_array_equal(r["result"], [0.0, np.nan, 0.0, 1.0, 1.0])
+        names = lambda key: [ep.name for ep in self.ds.epochs.sets.get_items(key)]
+        self.assertEqual(names("Pass"), ["E3", "E4"])
+        self.assertEqual(names("Fail"), ["E0", "E2"])  # not E1
+
+    def test_command_writes_numpy_numbers_plainly(self):
+        from pyneuromatic.tools.nm_tool_stats import NMToolStats
+        import pyneuromatic.core.nm_command_history as nmch
+        tool = NMToolStats()
+        written = []
+        original = nmch.add_nm_command
+        nmch.add_nm_command = written.append
+        try:
+            tool.inequality(self.tf, "ST_w0_mean_y", ">", np.float64(3.0))
+        finally:
+            nmch.add_nm_command = original
+        # A numpy number (e.g. from an array) is written plainly: replays without numpy
+        self.assertTrue(written and "'>', 3.0" in written[0] and "np." not in written[0])
+
+    def test_again_replaces_the_array_and_the_sets(self):
+        nms.NMToolStats2.inequality(self.tf, "ST_w0_mean_y", ">", 3,
+                                    dataseries=self.ds, set_name_success="Pass")
+        nms.NMToolStats2.inequality(self.tf, "ST_w0_mean_y", ">", 1,
+                                    dataseries=self.ds, set_name_success="Pass")
+        iq = self.tf.data.get("IQ_ST_w0_mean_y")
+        self.assertEqual(list(iq.nparray), [0, 1, 1, 1, 1])
+        names = [ep.name for ep in self.ds.epochs.sets.get_items("Pass")]
+        self.assertEqual(names, ["E1", "E2", "E3", "E4"])  # replaced, not added to
+        self.assertEqual([n["note"] for n in iq.notes], [
+            "NMInequality(array=ST_w0_mean_y, condition=y > 1, output=binary, "
+            "pass=4, fail=1, nan=0)"])
 
     # --- result array ---
 

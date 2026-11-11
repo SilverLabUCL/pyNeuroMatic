@@ -12,6 +12,8 @@ from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
+from pyneuromatic.gui.inequality_dialog import InequalityDialog
+import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.tools.nm_stat_func import FUNC_NAMES_BSLN, FUNC_NAMES_N
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.tools.nm_tool_stats import NMToolStats, NMToolStats2
@@ -24,6 +26,28 @@ def display_name(name: str) -> str:
     if name and name.startswith("mean+"):
         return "mean \u00b1 " + name[len("mean+"):]
     return name
+
+
+def runs_text(names: list[str]) -> str:
+    """Data names with consecutive numbers shortened, e.g. "RecordA0,
+    RecordA1, RecordA2, RecordA3, RecordA5" -> "RecordA0-3, RecordA5"; a name
+    that isn't prefix + channel + number is shown as it is."""
+    runs: list[list] = []  # [prefix + channel, first, last] or [name]
+    for name in names:
+        parsed = nmu.parse_data_name(name)
+        if parsed is None:
+            runs.append([name])
+            continue
+        stem, number = parsed[0] + parsed[1], parsed[2]
+        last = runs[-1] if runs else None
+        if last is not None and len(last) == 3 and last[0] == stem and last[2] == number - 1:
+            last[2] = number
+        else:
+            runs.append([stem, number, number])
+    return ", ".join(
+        run[0] if len(run) == 1
+        else f"{run[0]}{run[1]}" if run[1] == run[2]
+        else f"{run[0]}{run[1]}-{run[2]}" for run in runs)
 
 
 def points_text(n, nans=0) -> str:
@@ -382,7 +406,9 @@ class StatsTables(QtWidgets.QWidget):
                 # The window's arrays by their own part (max_y); the rows'
                 # epoch numbers (ST_epoch_num, no window prefix) as "epoch"
                 label = name[len(prefix):] if name.startswith(prefix) else (
-                    "epoch" if name == "ST_epoch_num" else name)
+                    "epoch" if name == "ST_epoch_num"
+                    else "IQ_" + name[len("IQ_") + len(prefix):]
+                    if name.startswith(f"IQ_{prefix}") else name)
                 header = QtWidgets.QTableWidgetItem(label)
                 header.setToolTip(f"{name} ({units})" if units else name)
                 table.setHorizontalHeaderItem(column, header)
@@ -443,6 +469,9 @@ class StatsTables(QtWidgets.QWidget):
             names.append(name)
         if detail_arrays and "ST_epoch_num" in toolfolder.data:  # the rows' epochs (#476)
             names.insert(0, "ST_epoch_num")
+        # Inequalities of the window's arrays (IQ_ST_<window>_..., #499): a row
+        # per epoch, as the ST_ arrays
+        names += [name for name in toolfolder.data.keys() if name.startswith(f"IQ_{prefix}")]
         return names
 
     @staticmethod
@@ -668,6 +697,12 @@ class Stats2Panel(QtWidgets.QWidget):
         self.histogram_dialog_action.setToolTip(
             "Make a histogram of the chosen array, saved in the Stats subfolder "
             "as H_<array> and listed with its arrays")
+        # Saved as IQ_<array>, a column of the Stats tables (#499)
+        self.inequality_dialog_action = self.plot_menu.addAction("Inequality...")
+        self.inequality_dialog_action.setToolTip(
+            "Test the chosen array's values against a condition (e.g. y > 10): "
+            "1 or 0 per epoch, saved as IQ_<array>; optionally Epoch Sets of the "
+            "epochs that pass and fail")
         self.plot_menu.addSeparator()
         self.browse_array_action = self.plot_menu.addAction("Show in Browser")
         self.browse_array_action.setToolTip("Show the chosen array in the browser")
@@ -725,6 +760,8 @@ class Stats2Panel(QtWidgets.QWidget):
         self.browse_folder_action.triggered.connect(self.show_folder_in_browser)
         self.browse_array_action.triggered.connect(self.show_array_in_browser)
         self._histogram_settings: dict = {}  # the dialog's, shown again next time
+        self.inequality_dialog_action.triggered.connect(self.inequality_dialog)
+        self._inequality_settings: dict = {}
 
         self.refresh()
 
@@ -867,7 +904,8 @@ class Stats2Panel(QtWidgets.QWidget):
         """The window's measurement among its arrays: a rise time, decay time
         or FWHM's result (``_dx``), else the first that isn't the baseline,
         e.g. ST_w0_max_y rather than ST_w0_bsln_y."""
-        names = [n for n in self.tables.columns if n != "ST_epoch_num"]
+        names = [n for n in self.tables.columns
+                 if n.startswith("ST_") and n != "ST_epoch_num"]  # not IQ_ (#499)
         for name in names:
             if name.endswith("_dx"):
                 return name
@@ -1035,19 +1073,23 @@ class Stats2Panel(QtWidgets.QWidget):
         # Units as in All epochs: "(values in mV, x in ms)"
         given = [f"{axis} in {u}" for axis, u in (("values", units), ("x", xunits)) if u]
         lines = [f"{name}  ({', '.join(given)})" if given else name]
+        if name.startswith("IQ_"):  # its condition and counts (#499)
+            lines.append(Stats2Panel.inequality_text(data))
         lines += [note["note"] for note in data.notes]
         lines.append("")
         summary = NMToolStats2.stats(toolfolder, select=name).get(name, {})
         for key, label in StatsTables.SUMMARY_ROWS:
             value = summary.get(key, math.nan)
             lines.append(f"{label:<6}{StatsTables._value_text(value)}")
+        if name.startswith("IQ_"):  # its NaNs: in the counts above (#499)
+            return "\n".join(lines)
         rows = StatsTables._row_labels(toolfolder, window)
         missing = [
             rows[index] if index < len(rows) else str(index)
             for index in np.flatnonzero(np.isnan(data.nparray))
         ]
         if missing:
-            lines += ["", "NaN for: " + ", ".join(missing)]
+            lines += ["", "NaN for: " + runs_text(missing)]  # e.g. RecordA0-3
         return "\n".join(lines)
 
     # --- actions ----------------------------------------------------------
@@ -1056,6 +1098,8 @@ class Stats2Panel(QtWidgets.QWidget):
         name = self.selected_array()
         self.plot_button.setEnabled(name is not None)
         self.histogram_dialog_action.setEnabled(name is not None and not self.is_histogram(name))
+        self.inequality_dialog_action.setEnabled(
+            name is not None and not self.is_histogram(name) and not name.startswith("IQ_"))
         self.browse_array_action.setEnabled(name is not None and self._folder_actions is not None)
 
     def _axis_label(self, name: str) -> str:
@@ -1138,6 +1182,96 @@ class Stats2Panel(QtWidgets.QWidget):
             return
         self._refresh_array_combo()
         self.select_array(f"H_{name}")
+        self.plot_selected()
+
+    # --- Inequality... (#499) --------------------------------------------------
+
+    @staticmethod
+    def inequality_text(data) -> str:
+        """An IQ_ array's condition and counts, from its note, e.g.
+        "ST_w0_max_dy > 10: 12 pass, 3 fail (of 15)"."""
+        for note in data.notes:
+            text = str(note["note"])
+            if not text.startswith("NMInequality("):
+                continue
+            fields = dict(_NOTE_PAIR.findall(text))
+            array = fields.get("array", "").strip()
+            condition = re.sub(r"\by\b", array, fields.get("condition", "").strip())
+            counts = {k: int(fields.get(k, 0)) for k in ("pass", "fail", "nan")}
+            line = f"{condition}: {counts['pass']} pass, {counts['fail']} fail"
+            if counts["nan"]:
+                line += f", {counts['nan']} NaN"
+            return line + f" (of {sum(counts.values())})"
+        return ""
+
+    def _series_of(self, toolfolder: NMToolFolder):
+        """The data series whose epochs *toolfolder*'s rows are (for Epoch
+        Sets): from its rows' data names and epoch numbers; None if it has
+        none (e.g. a Data Set run)."""
+        if self._folder is None or "ST_epoch_num" not in toolfolder.data:
+            return None
+        names = toolfolder.data.get("ST_data_names")
+        for path in (names.nparray if names is not None else []):
+            parsed = nmu.parse_data_name(str(path).rsplit(".", 1)[-1]) if path else None
+            if parsed is not None:
+                return self._folder.dataseries.get(parsed[0])
+        return None
+
+    def _ask_inequality(self, name: str, set_names) -> dict | None:
+        """The Inequality... dialog's ``nm.stats.inequality`` arguments, or
+        None if cancelled (replaced in tests)."""
+        dialog = InequalityDialog(name, set_names, self._inequality_settings, self)
+        if not dialog.exec():
+            return None
+        self._inequality_settings = dialog.settings()
+        return dialog.kwargs()
+
+    def _confirm_replace_sets(self, names: list[str], series) -> bool:
+        """Ask before replacing Epoch Sets *names* (replaced in tests)."""
+        answer = QtWidgets.QMessageBox.question(
+            self, "Replace Epoch Set",
+            f"Replace Epoch Set{'s' * (len(names) > 1)} {', '.join(names)} "
+            f"of {series.name}?")
+        return answer == QtWidgets.QMessageBox.StandardButton.Yes
+
+    def inequality_dialog(self) -> None:
+        """Inequality... (⋯ menu, #499): the chosen array tested against a
+        condition, saved in the Stats subfolder as IQ_<array> (one command),
+        with Epoch Sets of the passes and fails if chosen; then chosen, so
+        it's plotted."""
+        name = self.selected_array()
+        toolfolder = self.toolfolder()
+        if (name is None or toolfolder is None or self.is_histogram(name)
+                or name.startswith("IQ_")):
+            return
+        series = self._series_of(toolfolder)
+        set_names = None
+        if series is not None:  # the next free: Set0, Set1...
+            sets = series.epochs.sets
+            first = sets.auto_name_next()
+            number = int(first[len("Set"):]) + 1
+            while f"Set{number}" in sets:
+                number += 1
+            set_names = (first, f"Set{number}")
+        kwargs = self._ask_inequality(name, set_names)
+        if kwargs is None:
+            return
+        chosen = [kwargs[k] for k in ("set_name_success", "set_name_failure") if k in kwargs]
+        if chosen:
+            existing = [n for n in chosen if n in series.epochs.sets]
+            if existing and not self._confirm_replace_sets(existing, series):
+                return
+            kwargs["dataseries"] = series
+        try:
+            self._manager.stats.inequality(toolfolder, name, **kwargs)
+        except (KeyError, ValueError) as error:
+            self.message_label.setText(f"No inequality of {name}: {error}")
+            self.message_label.show()
+            return
+        if chosen and self._folder_actions is not None:
+            self._folder_actions.content_changed.emit()  # e.g. the strip's Epoch Sets
+        self._show_tables()
+        self.select_array(f"IQ_{name}")
         self.plot_selected()
 
     # --- the Folder ⋯ menu (#494) -------------------------------------------

@@ -162,6 +162,45 @@ class NMToolStats(NMTool):
                             % (self._name, nm_ref(toolfolder), name, call))
         return result
 
+    @nmch.records_command
+    def inequality(
+        self,
+        toolfolder: NMToolFolder,
+        name: str,
+        op: str,
+        a: float,
+        b: float | None = None,
+        binary_output: bool = True,
+        dataseries: NMDataSeries | None = None,
+        set_name_success: str | None = None,
+        set_name_failure: str | None = None,
+    ) -> dict[str, Any]:
+        """Inequality of ST_ array *name* (e.g. y > a), saved in *toolfolder*
+        as ``IQ_{name}`` (replacing an earlier one), optionally with Epoch
+        Sets of the passes and fails, as one command (#499), e.g.::
+
+            nm.stats.inequality(nm.folders['Demo'].toolfolders['Stats_Record_A_All_0'],
+                                'ST_w0_max_dy', '>', 10)
+
+        See :meth:`NMToolStats2.inequality` for the arguments.
+        """
+        # A numpy number (e.g. from an array) as a plain one, so the command
+        # replays without numpy
+        a = a.item() if isinstance(a, np.generic) else a
+        b = b.item() if isinstance(b, np.generic) else b
+        result = NMToolStats2.inequality(
+            toolfolder, name, op, a, b=b, binary_output=binary_output,
+            dataseries=dataseries, set_name_success=set_name_success,
+            set_name_failure=set_name_failure)
+        call = nmu.kwargs_repr(
+            self.inequality,
+            {"b": b, "binary_output": binary_output, "dataseries": dataseries,
+             "set_name_success": set_name_success, "set_name_failure": set_name_failure},
+            text={"dataseries": nm_ref(dataseries)})
+        nmch.add_nm_command("%s.inequality(%s, %r, %r, %r%s)"
+                            % (self._name, nm_ref(toolfolder), name, op, a, call))
+        return result
+
     @property
     def windows(self) -> NMStatWinContainer:
         """Return the container of NMStatWin objects for this tool."""
@@ -974,14 +1013,17 @@ class NMToolStats2:
             binary_output: If True (default), result array contains 1.0
                 (pass) or 0.0 (fail).  If False, result contains the
                 original value where the condition is met and NaN elsewhere.
+                A row without a value (NaN) is NaN either way, and neither
+                passes nor fails (#499).
             dataseries: NMDataSeries to use when creating epoch sets.
                 Required if set_name_success or set_name_failure is given.
-            set_name_success: Name of the epoch set to populate with passing
-                epochs.  Requires dataseries.
-            set_name_failure: Name of the epoch set to populate with failing
-                epochs.  Requires dataseries.
+            set_name_success: Name of the epoch set of the passing epochs
+                (replacing a set of that name).  Requires dataseries.
+            set_name_failure: Name of the epoch set of the failing epochs
+                (replacing a set of that name).  Requires dataseries.
             save_to_numpy: If True (default), save the result array as
-                ``IQ_{name}`` in toolfolder.
+                ``IQ_{name}`` in toolfolder (replacing an earlier one), with
+                a note of the condition and the counts.
 
         Returns:
             Dict with keys:
@@ -989,7 +1031,8 @@ class NMToolStats2:
             - ``"result"``: numpy array (binary 0/1 or value/NaN).
             - ``"mask"``: boolean numpy array, True where condition is met.
             - ``"successes"``: number of values that passed.
-            - ``"failures"``: number of values that failed.
+            - ``"failures"``: number of values that failed (not NaN).
+            - ``"nans"``: number of rows without a value (NaN).
             - ``"condition"``: human-readable condition string.
 
         Raises:
@@ -1023,19 +1066,30 @@ class NMToolStats2:
         arr = d.nparray.astype(float)
 
         mask = nm_math.inequality_mask(arr, op, a, b)
+        # A row without a value (NaN) neither passes nor fails (#499): NaN in
+        # the result, in neither epoch set
+        valid = ~np.isnan(arr)
 
         if binary_output:
-            result = mask.astype(float)
+            result = np.where(valid, mask.astype(float), np.nan)
         else:
             result = np.where(mask, arr, np.nan)
 
-        successes = int(np.sum(mask))
-        failures = len(mask) - successes
+        successes = int(np.sum(mask & valid))
+        nans = int(np.sum(~valid))
+        failures = len(mask) - successes - nans
 
         condition = nm_math.inequality_condition_str(op, a, b)
 
         if save_to_numpy and toolfolder.data is not None:
-            toolfolder.data.new("IQ_%s" % name, nparray=result)
+            iq_name = "IQ_%s" % name
+            if iq_name in toolfolder.data:  # replace an earlier one's
+                toolfolder.data.pop(iq_name)
+            iq = toolfolder.data.new(iq_name, nparray=result)
+            iq.notes.add("NMInequality(array=%s, condition=%s, output=%s, pass=%d, "
+                         "fail=%d, nan=%d)" % (name, condition,
+                                               "binary" if binary_output else "value",
+                                               successes, failures, nans))
 
         # Create epoch sets if dataseries and set names are given
         if isinstance(dataseries, NMDataSeries) and (
@@ -1045,6 +1099,7 @@ class NMToolStats2:
                 toolfolder, name, dataseries, mask,
                 set_name_true=set_name_success,
                 set_name_false=set_name_failure,
+                valid=valid, replace=True,
             )
 
         return {
@@ -1052,6 +1107,7 @@ class NMToolStats2:
             "mask": mask,
             "successes": successes,
             "failures": failures,
+            "nans": nans,
             "condition": condition,
         }
 
@@ -1063,8 +1119,13 @@ class NMToolStats2:
         mask: np.ndarray,
         set_name_true: str | None = None,
         set_name_false: str | None = None,
+        valid: np.ndarray | None = None,
+        replace: bool = False,
     ) -> None:
         """Populate epoch sets from a boolean mask aligned to an ST_ array.
+
+        *valid*: rows to use (False: in neither set, e.g. a NaN row). With
+        *replace*, a set that exists is replaced, not added to.
 
         Looks up the ``ST_{wname}_data`` array name in *toolfolder*,
         maps each index to an epoch via *dataseries*, and adds matching
@@ -1109,7 +1170,7 @@ class NMToolStats2:
         for i, number in enumerate(numbers):
             if i >= len(mask):
                 break
-            if number is None:
+            if number is None or (valid is not None and not valid[i]):
                 continue
             ep_name = epoch_map.get(number)
             if ep_name is None:
@@ -1119,10 +1180,14 @@ class NMToolStats2:
             else:
                 false_epochs.append(ep_name)
 
-        if set_name_true and true_epochs:
-            dataseries.epochs.sets.add(set_name_true, true_epochs)
-        if set_name_false and false_epochs:
-            dataseries.epochs.sets.add(set_name_false, false_epochs)
+        sets = dataseries.epochs.sets
+        for set_name, epochs in ((set_name_true, true_epochs), (set_name_false, false_epochs)):
+            if not set_name:
+                continue
+            if replace and set_name in sets:
+                sets.pop(set_name)
+            if epochs or replace:  # replaced: made even if empty (none pass)
+                sets.add(set_name, epochs)
 
     @staticmethod
     def ks_test(

@@ -967,3 +967,30 @@ def test_a_required_baseline_is_shown_on_and_cant_be_turned_off(qtbot, click):
     before = box.isChecked()
     click(box)
     assert box.isChecked() != before  # takes the click
+
+
+def test_stats2_inequality_is_one_command(series_app):
+    """Saved as IQ_<array> in the Stats subfolder, with Epoch Sets of the
+    passes and fails, as one command that repeats it (#499)."""
+    tab, manager = series_app.tool_tabs["Stats"], series_app.manager
+    tab.measurement_combo.setCurrentText("mean")
+    series_app.selection_model.update(epoch_set="All")
+    tab.run_button.click()
+    tab.stats2.array_combo.setCurrentText("ST_w0_mean_y")
+    start = len(_history(series_app))
+    values = list(manager.stats.toolfolder.data["ST_w0_mean_y"].nparray)
+    middle = float(sorted(values)[len(values) // 2])
+    tab.stats2._ask_inequality = lambda name, set_names: {
+        "op": ">=", "a": middle, "set_name_success": "Big"}
+    tab.stats2.inequality_dialog_action.trigger()
+    command = ("nm.stats.inequality(nm.folders['Demo'].toolfolders['Stats_Record_A_All_0'], "
+               f"'ST_w0_mean_y', '>=', {middle!r}, "
+               "dataseries=nm.folders['Demo'].dataseries['Record'], set_name_success='Big')")
+    assert _history(series_app, start) == [("command", command)]
+    subfolder = manager.stats.toolfolder
+    result = list(subfolder.data["IQ_ST_w0_mean_y"].nparray)
+    assert result == [1.0 if v >= middle else 0.0 for v in values]
+
+    subfolder.data.pop("IQ_ST_w0_mean_y")
+    exec(command, {"nm": manager})
+    assert list(subfolder.data["IQ_ST_w0_mean_y"].nparray) == result
