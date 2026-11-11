@@ -5,6 +5,33 @@ import unittest
 from pyneuromatic.core.nm_notes import NMNotes
 
 
+class TestNMNotesEditRemove(unittest.TestCase):
+    """A note's text edited (its date stays), a note removed (#501)."""
+
+    def setUp(self):
+        self.notes = NMNotes()
+        self.notes.add("first")
+        self.notes.add("second")
+
+    def test_edit_keeps_the_date(self):
+        date = self.notes[0]["date"]
+        self.notes.edit(0, "first, corrected")
+        self.assertEqual(self.notes[0], {"date": date, "note": "first, corrected"})
+        self.assertEqual(self.notes[1]["note"], "second")
+
+    def test_remove(self):
+        removed = self.notes.remove(0)
+        self.assertEqual(removed["note"], "first")
+        self.assertEqual([n["note"] for n in self.notes], ["second"])
+
+    def test_bad_index_raises(self):
+        with self.assertRaises(IndexError):
+            self.notes.edit(2, "x")
+        with self.assertRaises(IndexError):
+            self.notes.remove(5)
+        self.assertEqual(len(self.notes), 2)
+
+
 class TestNMNotes(unittest.TestCase):
     """Tests for NMNotes class."""
 

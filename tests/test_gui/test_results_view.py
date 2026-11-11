@@ -563,7 +563,7 @@ def test_folder_menu(qtbot):
     combo = stats2.folder_combo
     assert stats2.folder_menu_button.menu() is stats2.folder_menu
     texts = [a.text() for a in stats2.folder_menu.actions()]
-    assert texts == ["Rename…", "Copy…", "Delete…", "", "Show in Browser"]
+    assert texts == ["Rename…", "Copy…", "Notes…", "Delete…", "", "Show in Browser"]
     items = [combo.itemText(i) for i in range(combo.count())]
     assert items == ["Stats_Record_A_S1_0", "Stats_Record_A_S1_1"]  # no Delete... item
     combo.setCurrentIndex(0)
@@ -750,3 +750,82 @@ def test_nan_rows_are_shortened():
                       "RecordB7", "RecordB8"]) == "RecordA0-1, RecordA3, RecordA5-6, RecordB7-8"
     assert runs_text(["RecordA2"]) == "RecordA2"
     assert runs_text(["notes", "7"]) == "notes, 7"  # not prefix + channel + number
+
+
+
+# --- Results › Notes (#501) -------------------------------------------------------
+
+def _notes(stats2):
+    table = stats2.notes_table
+    return [table.item(row, 1).text() for row in range(table.rowCount())]
+
+
+def test_notes_add_edit_and_delete(qtbot):
+    _manager, folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    stats2 = tab.stats2
+    texts = [stats2.results_combo.itemText(i) for i in range(stats2.results_combo.count())]
+    assert texts == ["Summary", "All epochs", "Notes"]
+    stats2.notes_folder_action.trigger()  # Folder ⋯ › Notes…: Results › Notes
+    assert stats2.results_combo.currentData() == "notes"
+    assert stats2.notes_view.isVisibleTo(stats2) and not stats2.details.isVisibleTo(stats2)
+    subfolder = tab.stats_tool.toolfolder
+    run_note = subfolder.notes[0]["note"]
+    assert run_note.startswith("NMStats:") and _notes(stats2) == [run_note]
+    # The run's note is read-only
+    stats2.notes_table.selectRow(0)
+    assert not stats2.edit_note_button.isEnabled()
+    assert not stats2.delete_note_button.isEnabled()
+
+    stats2._ask_note = lambda title, text="": "E7 excluded: noisy"
+    stats2.add_note_button.click()
+    assert _notes(stats2) == [run_note, "E7 excluded: noisy"]
+    assert subfolder.notes[1]["note"] == "E7 excluded: noisy"  # the browser's too
+    assert stats2.edit_note_button.isEnabled() and stats2.delete_note_button.isEnabled()
+    date = subfolder.notes[1]["date"]
+    stats2._ask_note = lambda title, text="": None  # cancelled
+    stats2.edit_note_button.click()
+    assert subfolder.notes[1]["note"] == "E7 excluded: noisy"
+    stats2._ask_note = lambda title, text="": text.replace("E7", "E8")
+    stats2.edit_note_button.click()
+    assert subfolder.notes[1] == {"date": date, "note": "E8 excluded: noisy"}
+
+    # Copy (Edit › Copy, while the notes have focus): date, tab, note
+    stats2.notes_table.selectRow(1)
+    focus = QtWidgets.QApplication.focusWidget
+    QtWidgets.QApplication.focusWidget = staticmethod(lambda: stats2.notes_table)
+    try:
+        assert window._edit_target() == ("view", stats2.notes_table)
+        window.edit_copy()
+    finally:
+        QtWidgets.QApplication.focusWidget = focus
+    assert QtWidgets.QApplication.clipboard().text() == f"{date}\tE8 excluded: noisy"
+
+    asked = []
+    stats2._confirm_delete_notes = lambda count: asked.append(count) or False
+    stats2.delete_note_button.click()
+    assert asked == [1] and len(subfolder.notes) == 2  # cancelled
+    stats2._confirm_delete_notes = lambda count: True
+    stats2.delete_note_button.click()
+    assert _notes(stats2) == [run_note]
+    assert not stats2.edit_note_button.isEnabled()  # nothing chosen
+
+
+def test_notes_follow_the_subfolder(qtbot):
+    _manager, folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    tab.run_button.click()  # Stats_Record_A_S1_0 and _1
+    stats2 = tab.stats2
+    stats2.results_combo.setCurrentIndex(stats2.results_combo.findData("notes"))
+    stats2.folder_combo.setCurrentText("Stats_Record_A_S1_0")
+    stats2._ask_note = lambda title, text="": "control"
+    stats2.add_note_button.click()
+    stats2.folder_combo.setCurrentText("Stats_Record_A_S1_1")
+    assert "control" not in _notes(stats2)  # its own notes
+    stats2.folder_combo.setCurrentText("Stats_Record_A_S1_0")
+    assert _notes(stats2)[-1] == "control"
+    # A copy keeps the notes
+    copy = folder.toolfolders.duplicate("Stats_Record_A_S1_0", "Stats_Copy")
+    assert copy.notes[-1]["note"] == "control"

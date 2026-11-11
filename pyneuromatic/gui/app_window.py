@@ -1347,6 +1347,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
             return "table", widget
         if widget is not None and widget is self.history_panel.view:
             return "history", widget
+        if isinstance(widget, QtWidgets.QAbstractItemView) and callable(
+                getattr(widget, "copy_selection", None)):  # e.g. Stats2's notes (#501)
+            return "view", widget
         return None, None
 
     def edit_copy(self) -> None:
@@ -1355,6 +1358,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self.table_panel.copy_selection()
         elif kind == "history":
             self.history_panel.copy_selection()
+        elif kind == "view":
+            widget.copy_selection()
         elif kind == "text":
             widget.copy()
 
@@ -1372,7 +1377,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
             selection = widget.selectionModel()
             can_copy = selection is not None and selection.hasSelection()
             can_paste = has_text and self.table_panel.can_paste()
-        elif kind == "history":
+        elif kind in ("history", "view"):
             can_copy = widget.selectionModel().hasSelection()
             can_paste = False
         elif kind == "text":
