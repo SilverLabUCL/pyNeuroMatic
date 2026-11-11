@@ -749,6 +749,16 @@ class TestNMToolStats2Inequality(unittest.TestCase):
         # A numpy number (e.g. from an array) is written plainly: replays without numpy
         self.assertTrue(written and "'>', 3.0" in written[0] and "np." not in written[0])
 
+    def test_nan_a_or_b_refused_inf_allowed(self):
+        for a, b, op in ((math.nan, None, ">"), (math.nan, None, "!="),
+                         (1.0, math.nan, "<<"), (math.nan, 3.0, "<=<=")):
+            with self.assertRaises(ValueError):
+                nms.NMToolStats2.inequality(self.tf, "ST_w0_mean_y", op, a, b,
+                                            save_to_numpy=False)
+        r = nms.NMToolStats2.inequality(self.tf, "ST_w0_mean_y", "<=<", 3, math.inf,
+                                        save_to_numpy=False)
+        self.assertEqual(list(r["result"]), [0, 0, 1, 1, 1])  # a <= y < inf
+
     def test_again_replaces_the_array_and_the_sets(self):
         nms.NMToolStats2.inequality(self.tf, "ST_w0_mean_y", ">", 3,
                                     dataseries=self.ds, set_name_success="Pass")

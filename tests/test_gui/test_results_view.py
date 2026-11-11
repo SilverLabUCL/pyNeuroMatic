@@ -1,5 +1,7 @@
 """Tests for the Table context tab and the Stats2 panel."""
 
+import math
+
 import numpy as np
 import pytest
 
@@ -703,8 +705,8 @@ def test_inequality_dialog(qtbot):
     dialog.op_combo.setCurrentIndex(dialog.op_combo.findData("<=<"))
     assert dialog.b_edit.isVisible()
     dialog.b_edit.setText("5")
-    dialog.accept()  # b must be more than a: stays open
-    assert dialog.result() == 0 and "more than a" in dialog.error_label.text()
+    dialog.accept()  # b must be greater than a: stays open
+    assert dialog.result() == 0 and "Parameter b must be greater than a" in dialog.error_label.text()
     dialog.b_edit.setText("20")
     dialog.output_combo.setCurrentIndex(1)  # value or NaN
     dialog.pass_checkbox.setChecked(True)
@@ -717,9 +719,20 @@ def test_inequality_dialog(qtbot):
     dialog.fail_edit.setText("no good")
     with pytest.raises(ValueError, match="valid Epoch Set name"):
         dialog.kwargs()
+    dialog.fail_edit.setText("Set1")
     dialog.a_edit.setText("x")
-    with pytest.raises(ValueError, match="a isn't a number"):
+    with pytest.raises(ValueError, match="Parameter a isn't a number"):
         dialog.kwargs()
+    # NaN: nothing passes or fails against it; ±inf is fine (a ≤ y < inf)
+    dialog.a_edit.setText("NaN")
+    dialog.accept()
+    assert dialog.result() == 0 and "Parameter a must be a number, not NaN" in dialog.error_label.text()
+    dialog.a_edit.setText("10")
+    dialog.b_edit.setText("nan")
+    with pytest.raises(ValueError, match="Parameter b must be a number, not NaN"):
+        dialog.kwargs()
+    dialog.b_edit.setText("inf")
+    assert dialog.kwargs()["b"] == math.inf
     # Without epoch numbers: no Epoch Sets
     other = InequalityDialog("ST_w0_max_y", None, dialog.settings())
     qtbot.addWidget(other)

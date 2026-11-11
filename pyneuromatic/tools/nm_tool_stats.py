@@ -1039,7 +1039,7 @@ class NMToolStats2:
             TypeError: If toolfolder is not NMToolFolder or name is not str.
             KeyError: If name is not found in toolfolder.
             ValueError: If the named array has no data, op is unrecognised,
-                or a range op is given without b.
+                a range op is given without b, or a or b is NaN.
         """
         if not isinstance(toolfolder, NMToolFolder):
             raise TypeError(
@@ -1056,6 +1056,11 @@ class NMToolStats2:
             raise ValueError(
                 "range operator %r requires b to be specified" % op
             )
+        # Against NaN nothing passes (or, for !=, everything does): refused
+        # (±inf is fine, e.g. a <= y < inf)
+        for label, value in (("a", a), ("b", b)):
+            if value is not None and math.isnan(float(value)):
+                raise ValueError("parameter %s must be a number, not NaN" % label)
 
         d = toolfolder.data.get(name)
         if d is None:

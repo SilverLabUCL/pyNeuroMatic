@@ -6,6 +6,8 @@ epochs that pass and fail become Epoch Sets of the data series.
 """
 from __future__ import annotations
 
+import math
+
 from PyQt6 import QtWidgets
 
 import pyneuromatic.core.nm_utilities as nmu
@@ -127,18 +129,12 @@ class InequalityDialog(QtWidgets.QDialog):
         """``nm.stats.inequality`` arguments for what's chosen (op, a, b,
         binary_output, set_name_success, set_name_failure; the data series
         is the caller's). Raises ValueError if they're bad."""
-        try:
-            a = float(self.a_edit.text())
-        except ValueError:
-            raise ValueError("a isn't a number.") from None
+        a = self._number(self.a_edit, "a")
         kwargs: dict = {"op": self.op_combo.currentData(), "a": a}
         if self.is_range():
-            try:
-                b = float(self.b_edit.text())
-            except ValueError:
-                raise ValueError("b isn't a number.") from None
+            b = self._number(self.b_edit, "b")
             if not b > a:
-                raise ValueError("b must be more than a.")
+                raise ValueError("Parameter b must be greater than a.")
             kwargs["b"] = b
         kwargs["binary_output"] = bool(self.output_combo.currentData())
         names = []
@@ -155,6 +151,18 @@ class InequalityDialog(QtWidgets.QDialog):
         if len(names) == 2 and names[0] == names[1]:
             raise ValueError("The passes and fails need different Epoch Sets.")
         return kwargs
+
+    @staticmethod
+    def _number(edit: QtWidgets.QLineEdit, label: str) -> float:
+        """*edit*'s number (±inf allowed: e.g. a ≤ y < inf); NaN or text
+        raises ValueError (no value passes or fails against NaN)."""
+        try:
+            value = float(edit.text())
+        except ValueError:
+            raise ValueError(f"Parameter {label} isn't a number.") from None
+        if math.isnan(value):
+            raise ValueError(f"Parameter {label} must be a number, not NaN.")
+        return value
 
     def accept(self) -> None:
         try:
