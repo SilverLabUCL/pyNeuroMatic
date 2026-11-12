@@ -5,12 +5,14 @@ Used by the Notes window (the strip's Notes…, the epoch ⋯ menu, Stats2's
 Folder ⋯ › Notes…) and the browser's info panel (and a set's or group's notes). An edited note keeps its date;
 Delete… asks first. Notes pyNeuroMatic wrote itself (read-only, e.g. how a
 run's results were made) can't be edited or deleted. Adding, editing and
-deleting a note is a history message, not a command (#507).
+deleting a note is a history message (#507), or with "Record notes as
+commands" (the app's setting, also a checkbox here) a command (#510).
 """
 from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
+import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
 
 MESSAGE_LENGTH = 60  # a note's text in a history message, at most (then "…")
@@ -122,6 +124,9 @@ class NotesEditor(QtWidgets.QWidget):
     """
 
     notes_changed = QtCore.pyqtSignal()
+    # The app's settings (NMSettings), for "Record notes as commands" (#510);
+    # set by the app. None: messages, and no checkbox
+    settings = None
 
     def __init__(self, parent: QtWidgets.QWidget | None = None,
                  header: bool = True) -> None:
@@ -146,7 +151,15 @@ class NotesEditor(QtWidgets.QWidget):
         for button in (self.add_button, self.edit_button, self.delete_button):
             row.addWidget(button)
         row.addStretch(1)
+        # The app's setting (Settings › General), shown where notes are written
+        self.commands_checkbox = QtWidgets.QCheckBox("Record as commands", self)
+        self.commands_checkbox.setToolTip(
+            "Adding, editing and deleting a note is a command (replayed, and in an "
+            "exported command history), not a history message. The same as "
+            "Settings › General › Record notes as commands")
+        self.commands_checkbox.toggled.connect(self._set_as_commands)
         layout.addLayout(row)
+        layout.addWidget(self.commands_checkbox)  # below Add…, on its own line
         self.add_button.clicked.connect(self.add_note)
         self.edit_button.clicked.connect(self.edit_note)
         self.delete_button.clicked.connect(self.delete_notes)
@@ -165,6 +178,29 @@ class NotesEditor(QtWidgets.QWidget):
     def refresh(self) -> None:
         self.table.show_notes(self._notes)
         self._update_buttons()
+        settings = type(self).settings
+        self.commands_checkbox.setVisible(settings is not None)
+        self.commands_checkbox.blockSignals(True)
+        self.commands_checkbox.setChecked(self.as_commands())
+        self.commands_checkbox.blockSignals(False)
+
+    def as_commands(self) -> bool:
+        """True if notes are recorded as commands (the app's setting, #510)."""
+        return bool(getattr(type(self).settings, "notes_as_commands", False))
+
+    def _commands_recorded(self) -> bool:
+        """True if a change is recorded as a command: the setting's on, the
+        notes have a command path, and commands are being recorded (else a
+        message, so it's in the history either way)."""
+        return (self.as_commands() and self._notes is not None
+                and self._notes.command_path is not None
+                and nmch.get_command_history().enabled)
+
+    def _set_as_commands(self, on: bool) -> None:
+        settings = type(self).settings
+        if settings is not None:
+            settings.notes_as_commands = bool(on)
+            settings.save_user()  # only if loaded from the user's file
 
     def _editable(self, rows: list[int]) -> list[int]:
         notes = self._notes if self._notes is not None else []
@@ -193,10 +229,16 @@ class NotesEditor(QtWidgets.QWidget):
 
     # --- actions ------------------------------------------------------------------
 
-    def _message(self, what: str, number: int | None, text: str) -> None:
-        """A history message (not a command, #507), e.g. "Stats_Control
-        (Demo): edited note 2: 'E8 excluded: noisy'"; numbered from 1."""
-        note = f"note {number}:" if number is not None else "note"
+    def _record(self, what: str, row: int | None, text: str, call: str) -> None:
+        """What was done, in the history: a command (*call* on the notes, e.g.
+        "edit(1, 'E8 excluded')", #510) with "Record notes as commands" when
+        the notes have a command path; else a message (#507), e.g.
+        "Stats_Control (Demo): edited note 2: 'E8 excluded: noisy'" (numbered
+        from 1)."""
+        if self._commands_recorded():
+            nmch.get_command_history().add(f"{self._notes.command_path}.{call}")
+            return
+        note = f"note {row + 1}:" if row is not None else "note"
         nmh.history(f"{what} {note} '{short_text(text)}'",
                     path=self._owner or "Notes", quiet=False)
 
@@ -216,7 +258,7 @@ class NotesEditor(QtWidgets.QWidget):
         if text is None or not text.strip():
             return
         self._notes.add(text.strip())
-        self._message("added", None, text.strip())
+        self._record("added", None, text.strip(), f"add({text.strip()!r})")
         self._changed(select=len(self._notes) - 1)
 
     def edit_note(self) -> None:
@@ -228,7 +270,7 @@ class NotesEditor(QtWidgets.QWidget):
         if text is None or not text.strip():
             return
         self._notes.edit(rows[0], text.strip())
-        self._message("edited", rows[0] + 1, text.strip())
+        self._record("edited", rows[0], text.strip(), f"edit({rows[0]}, {text.strip()!r})")
         self._changed(select=rows[0])
 
     def delete_notes(self) -> None:
@@ -241,8 +283,12 @@ class NotesEditor(QtWidgets.QWidget):
         texts = [self._notes[row]["note"] for row in rows]
         for row in reversed(rows):
             self._notes.remove(row)
-        for row, text in zip(rows, texts):  # numbered as they were
-            self._message("deleted", row + 1, text)
+        if self._commands_recorded():
+            for row in reversed(rows):  # as done, so a replay removes the same
+                self._record("deleted", row, texts[rows.index(row)], f"remove({row})")
+        else:
+            for row, text in zip(rows, texts):  # numbered as they were
+                self._record("deleted", row, text, f"remove({row})")
         self._changed()
 
 

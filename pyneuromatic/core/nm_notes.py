@@ -20,6 +20,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
+import copy
 import datetime
 
 
@@ -35,11 +36,54 @@ class NMNotes:
 
     def __init__(self) -> None:
         self._entries: list[dict] = []
+        # Whose notes, for a command's path (#510): (an NMObject, None), or
+        # (its NMSets or NMGroups, the set's name or group's number). Set by
+        # the owner each time its notes are asked for, so names are current
+        self._owner: tuple | None = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NMNotes):
             return NotImplemented
         return self._entries == other._entries
+
+    def __deepcopy__(self, memo: dict) -> NMNotes:
+        """A copy of the notes, not of their owner (a copy's owner sets its own)."""
+        result = NMNotes()
+        result._entries = copy.deepcopy(self._entries, memo)
+        return result
+
+    def set_owner(self, owner, key=None) -> NMNotes:
+        """Whose notes these are (see :attr:`command_path`); returns them."""
+        self._owner = (owner, key)
+        return self
+
+    @property
+    def command_path(self) -> str | None:
+        """These notes as written in a command (#510), e.g.
+        "nm.folders['Demo'].dataseries['Record'].epochs['E0'].notes" or
+        "nm.folders['Demo'].data.sets.notes('Mine')"; None if their owner
+        isn't in the manager (a command couldn't find them)."""
+        if self._owner is None:
+            return None
+        from pyneuromatic.core.nm_data import nm_ref
+        import pyneuromatic.core.nm_command_history as nmch
+        owner, key = self._owner
+        if key is not None:  # a set's or group's: its NMSets / NMGroups
+            path = getattr(owner, "_nm_cmd_path", None)
+            if path is None:
+                return None
+            return "%s.%s.notes(%r)" % (nmch.get_command_history().nm_name, path, key)
+        ref = nm_ref(owner)
+        if ref == "None":  # an epoch or channel: through its data series
+            series = getattr(owner, "_parent", None)
+            series_ref = nm_ref(series) if series is not None else "None"
+            kind = ("epochs" if owner in getattr(series, "epochs", {}).values()
+                    else "channels" if owner in getattr(series, "channels", {}).values()
+                    else None)
+            if series_ref == "None" or kind is None:
+                return None
+            ref = "%s.%s[%r]" % (series_ref, kind, owner.name)
+        return ref + ".notes"
 
     def __len__(self) -> int:
         return len(self._entries)

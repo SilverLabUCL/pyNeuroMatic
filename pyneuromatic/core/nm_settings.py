@@ -54,6 +54,9 @@ class NMSettings(NMToolConfig):
             history to lose.
         ask_import_options: Before importing a file, ask what to import
             (folder name, prefix, channels, epochs, X range).
+        notes_as_commands: Adding, editing and deleting a note is a command
+            (replayed, and in an exported command history), not a history
+            message (#510).
         plot_trace_color, plot_trace_width, plot_trace_line,
         plot_trace_symbol, plot_trace_symbol_size: How the Plot draws the
             current trace: colour (e.g. "#000000"), line width (pixels),
@@ -76,6 +79,7 @@ class NMSettings(NMToolConfig):
                       "choices": [TABLE_NAN_TEXT, TABLE_NAN_GREY, TABLE_NAN_BLANK]},
         "confirm_quit": {"type": bool, "default": True},
         "ask_import_options": {"type": bool, "default": True},
+        "notes_as_commands": {"type": bool, "default": False},  # #510
         # The Plot's traces (#465)
         "plot_trace_color": {"type": str, "default": "#000000"},
         "plot_trace_width": {"type": float, "default": 2.0, "min": 0.5, "max": 10.0},

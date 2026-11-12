@@ -1237,6 +1237,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self._manager = manager or NMManager(quiet=True)
         # Tables show NaN as the general settings say
         table_format.set_nan_mode(self._manager.settings.table_nan)
+        # Notes as commands, or messages, as the settings say (#510)
+        from pyneuromatic.gui.notes_view import NotesEditor
+        NotesEditor.settings = self._manager.settings
         self.selection_model = SelectionModel(self._manager, self)
         self.current_tool_name = "Browser"
 

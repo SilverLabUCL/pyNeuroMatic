@@ -457,7 +457,7 @@ class NMGroups:
             )
         if group not in self._notes:
             self._notes[group] = NMNotes()
-        return self._notes[group]
+        return self._notes[group].set_owner(self, group)  # a command's path (#510)
 
     def rename_item(self, old_name: str, new_name: str) -> None:
         """Rename an item across all group assignments.

@@ -285,7 +285,7 @@ class NMFolder(NMObject):
     @property
     def notes(self) -> NMNotes:
         """Return notes for this folder."""
-        return self.__notes
+        return self.__notes.set_owner(self)
 
     # Metadata - structured key-value data from imported files
 

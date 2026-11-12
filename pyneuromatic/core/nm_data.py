@@ -251,7 +251,7 @@ class NMData(NMObject):
     @property
     def notes(self) -> NMNotes:
         """Return notes for this data."""
-        return self.__notes
+        return self.__notes.set_owner(self)
 
     # =========================================================================
     # Data array properties
