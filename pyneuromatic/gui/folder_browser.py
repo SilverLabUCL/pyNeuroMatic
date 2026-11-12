@@ -24,6 +24,7 @@ import fnmatch
 
 from PyQt6 import QtCore, QtWidgets
 
+from pyneuromatic.core.nm_group import group_name
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData, NMDataContainer
 from pyneuromatic.core.nm_dataseries import NMDataSeries
@@ -883,7 +884,7 @@ class FolderBrowserWidget(QtWidgets.QWidget):
             group_menu = menu.addMenu("Add to Group")
             for number in container.groups.group_numbers:
                 group_menu.addAction(
-                    f"Group {number}",
+                    group_name(number),
                     lambda checked=False, n=number:
                     self._assign_selected_to_group(container, epochs, n),
                 )

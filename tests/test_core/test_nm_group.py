@@ -258,10 +258,10 @@ class TestNMGroupsUnassign(unittest.TestCase):
         self.g.unassign("E0", quiet=QUIET)
         self.assertIsNone(self.g.get_group("E0"))
 
-    def test_unassign_reduces_len(self):
-        before = len(self.g)
+    def test_unassign_reduces_its_groups_len(self):
+        before = len(self.g["Group0"])
         self.g.unassign("E0", quiet=QUIET)
-        self.assertEqual(len(self.g), before - 1)
+        self.assertEqual(len(self.g["Group0"]), before - 1)
 
     def test_unassign_unknown_error_true_raises(self):
         with self.assertRaises(KeyError):
@@ -448,7 +448,8 @@ class TestNMGroupsGroupNumbers(unittest.TestCase):
         self.assertEqual(g.get_group("E1"), None)
         g.clear_group([0, 2], quiet=QUIET)
         self.assertEqual(g.group_numbers, [0, 1, 2])
-        self.assertEqual(len(g), 0)
+        self.assertEqual(len(g), 3)  # the groups are kept (#509: len counts groups)
+        self.assertEqual([len(g[name]) for name in g], [0, 0, 0])
         with self.assertRaises(KeyError):
             g.clear_group(7, quiet=QUIET)
 
@@ -475,58 +476,87 @@ class TestNMGroupsNGroups(unittest.TestCase):
 # =========================================================================
 
 class TestNMGroupsCollectionProtocol(unittest.TestCase):
+    """By group (#509), as NMSets is by set: len counts groups, iterating gives
+    their names, ``in`` asks if a group exists (by name or number)."""
 
     def setUp(self):
-        self.g, self.names = _make_groups(n=3)
+        self.g, self.names = _make_groups(n=3)  # E0→0, E1→1, E2→2
 
-    def test_contains_assigned(self):
-        self.assertIn("E0", self.g)
-
-    def test_not_contains_unassigned(self):
-        self.assertNotIn("E99", self.g)
-
-    def test_contains_non_string_false(self):
-        self.assertNotIn(0, self.g)
+    def test_contains_a_group(self):
+        self.assertIn("Group0", self.g)
+        self.assertIn("group 1", self.g)
+        self.assertIn(2, self.g)
+        self.assertNotIn("Group7", self.g)
+        self.assertNotIn("E0", self.g)  # an item, not a group
+        self.assertNotIn(True, self.g)
 
     def test_len(self):
         self.assertEqual(len(self.g), 3)
 
     def test_iter(self):
-        self.assertEqual(set(self.g), {"E0", "E1", "E2"})
+        self.assertEqual(list(self.g), ["Group0", "Group1", "Group2"])
 
 
 # =========================================================================
-# NMGroups — dict-like dunder access
+# NMGroups — a group by name (#509)
 # =========================================================================
 
 class TestNMGroupsDunderAccess(unittest.TestCase):
 
     def setUp(self):
-        self.g, self.names = _make_groups(n=3)  # E0→0, E1→1, E2→2
+        self.g, self.names = _make_groups(n=6)  # E0, E3 → 0; E1, E4 → 1; E2, E5 → 2
 
-    def test_getitem_returns_group(self):
-        self.assertEqual(self.g["E0"], 0)
-        self.assertEqual(self.g["E1"], 1)
+    def test_getitem_returns_the_group(self):
+        group = self.g["Group0"]
+        self.assertEqual((group.name, group.number), ("Group0", 0))
+        self.assertEqual(group.names, ["E0", "E3"])
+        self.assertEqual(group.items, ["E0", "E3"])  # no container: names
+        self.assertEqual(self.g[0], group)  # the number too
+        self.assertEqual(self.g["G0"], group)  # and the shorthand
+        self.assertIn("G2", self.g)
+        self.assertEqual(len(group), 2)
+        self.assertIn("E3", group)
+        self.assertNotIn("E1", group)
+        self.assertEqual(list(group), ["E0", "E3"])
+        self.assertEqual(repr(group), "NMGroup('Group0', n=2)")
 
     def test_getitem_missing_raises_key_error(self):
+        for key in ("Group7", 7, "E0", "Set0", -1):
+            with self.assertRaises(KeyError):
+                _ = self.g[key]
+
+    def test_an_items_group(self):
+        self.assertEqual(self.g.get_group("E3"), 0)
+
+    def test_setitem_sets_its_items(self):
+        self.g["Group0"] = ["E1", "E3"]  # E0 out, E1 moved in
+        self.assertEqual(self.g["Group0"].names, ["E1", "E3"])
+        self.assertIsNone(self.g.get_group("E0"))
+        self.g["Group5"] = []  # a new, empty group
+        self.assertIn("Group5", self.g)
         with self.assertRaises(KeyError):
-            _ = self.g["E99"]
+            self.g["E0"] = ["E1"]
 
-    def test_setitem_assigns(self):
-        self.g["E0"] = 2
-        self.assertEqual(self.g.get_group("E0"), 2)
-
-    def test_setitem_bad_group_raises(self):
-        with self.assertRaises((TypeError, ValueError)):
-            self.g["E0"] = -1
-
-    def test_delitem_unassigns(self):
-        del self.g["E0"]
-        self.assertNotIn("E0", self.g)
-
-    def test_delitem_missing_raises_key_error(self):
+    def test_delitem_deletes_the_group(self):
+        del self.g["Group1"]
+        self.assertNotIn("Group1", self.g)
+        self.assertIsNone(self.g.get_group("E1"))  # the items are kept, unassigned
         with self.assertRaises(KeyError):
-            del self.g["E99"]
+            del self.g["Group9"]
+
+    def test_group_names(self):
+        from pyneuromatic.core.nm_group import group_name, group_names, group_number
+        self.assertEqual(group_name(0), "Group0")
+        self.assertEqual(group_names([0, 1, 2, 3]), "Group0–Group3")
+        self.assertEqual(group_names([0, 2]), "Group0, Group2")
+        self.assertEqual(group_number("Group12"), 12)
+        self.assertEqual(group_number("G3"), 3)  # shorthand, for scripts
+        self.assertEqual(group_number("g 3"), 3)
+        self.assertIsNone(group_number("E3"))
+        self.assertEqual(group_number(3), 3)
+        self.assertIsNone(group_number("Set0"))
+        self.assertIsNone(group_number(True))
+
 
 
 # =========================================================================

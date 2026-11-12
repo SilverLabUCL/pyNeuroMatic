@@ -143,7 +143,7 @@ def test_selection_summary_lists_the_active_source(qtbot):
     assert selection_summary(selection.selection) == ["Folder", "Data DataSet"]
     selection.update(source="dataseries")
     assert selection_summary(selection.selection) == [
-        "Folder", "Record", "A", "Epoch Set1 AND Group 0",
+        "Folder", "Record", "A", "Epoch Set1 AND Group0",
     ]
     selection.update(group=None)
     assert selection_summary(selection.selection)[-1] == "Epoch Set1"
@@ -155,7 +155,7 @@ def test_selection_summary_lists_the_active_source(qtbot):
     assert selection.selection["epoch_set"] is None
     assert selection_summary(selection.selection)[-1] == "E0"
     selection.update(epoch_set=None, group=0)
-    assert selection_summary(selection.selection)[-1] == "Group 0"
+    assert selection_summary(selection.selection)[-1] == "Group0"
 
 
 def test_epoch_set_and_group_are_either_or_unless_combined(qtbot):

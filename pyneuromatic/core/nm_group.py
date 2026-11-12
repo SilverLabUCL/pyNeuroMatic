@@ -21,6 +21,7 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 from __future__ import annotations
 
 import copy
+import re
 
 import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_history as nmh
@@ -29,8 +30,106 @@ import pyneuromatic.core.nm_configurations as nmc
 import pyneuromatic.core.nm_utilities as nmu
 
 
+GROUP_PREFIX = "Group"
+_GROUP_NAME = re.compile(r"(?:group|g)\s*(\d+)", re.IGNORECASE)  # Group0, G0
+
+
+def group_name(number: int) -> str:
+    """A group's name, as sets are named Set0, Set1...: e.g. "Group0" (#509)."""
+    return "%s%d" % (GROUP_PREFIX, number)
+
+
+def group_number(key) -> int | None:
+    """The group number of *key*: a number (0), or a name ("Group0"; any case,
+    "Group 0" too; or the shorthand "G0", for scripts); None if neither."""
+    if isinstance(key, bool):
+        return None
+    if isinstance(key, int):
+        return key if key >= 0 else None
+    if isinstance(key, str):
+        match = _GROUP_NAME.fullmatch(key.strip())
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def group_names(numbers) -> str:
+    """Groups as text: "Group0", "Group0, Group2" or a run "Group0–Group3"."""
+    numbers = sorted(numbers)
+    if len(numbers) > 2 and numbers == list(range(numbers[0], numbers[-1] + 1)):
+        return "%s–%s" % (group_name(numbers[0]), group_name(numbers[-1]))
+    return ", ".join(group_name(n) for n in numbers)
+
+
+class NMGroup:
+    """One group of an NMGroups, as ``groups['Group0']`` (or ``groups[0]``)
+    gives it (#509), like ``epochs['E0']``: its name, its items (the epochs)
+    and its notes. A read-only list of its items: iterate, ``len``, ``in`` (by
+    name or object). Its items change through the groups' methods (``assign``,
+    ``unassign``...), which are recorded.
+    """
+
+    def __init__(self, groups: NMGroups, number: int) -> None:
+        self._groups = groups
+        self._number = number
+
+    @property
+    def name(self) -> str:
+        return group_name(self._number)
+
+    @property
+    def number(self) -> int:
+        return self._number
+
+    @property
+    def names(self) -> list[str]:
+        """Its items' names (e.g. epochs "E0", "E2")."""
+        return self._groups.get_items(self._number)
+
+    @property
+    def items(self) -> list:
+        """Its items: the epochs (or names, outside a container)."""
+        parent = self._groups._parent
+        names = self.names
+        try:
+            return [parent[name] for name in names] if parent is not None else names
+        except (KeyError, TypeError):
+            return names
+
+    @property
+    def notes(self) -> NMNotes:
+        return self._groups.notes(self._number)
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __len__(self) -> int:
+        return len(self.names)
+
+    def __contains__(self, item: object) -> bool:
+        name = item if isinstance(item, str) else getattr(item, "name", None)
+        return name in self.names
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMGroup):
+            return NotImplemented
+        return other._groups is self._groups and other._number == self._number
+
+    def __hash__(self) -> int:
+        return hash((id(self._groups), self._number))
+
+    def __repr__(self) -> str:
+        return "NMGroup(%r, n=%d)" % (self.name, len(self))
+
+
 class NMGroups:
     """Mutually exclusive integer group assignments for container item names.
+
+    By group (#509), as NMSets is by set: ``groups['Group0']`` (or
+    ``groups[0]``) is a group (:class:`NMGroup`), ``len(groups)`` the number
+    of groups, iterating gives their names (Group0, Group1...) and
+    ``'Group0' in groups`` asks if a group exists. An item's group:
+    ``get_group('E0')``.
 
     Stores a mapping ``{item_name: group_number}`` where each name belongs
     to at most one group, along with explicitly created group numbers that
@@ -82,28 +181,47 @@ class NMGroups:
         parent = getattr(self._parent, "history_path", None)
         return parent + ".groups" if parent else self._name
 
+    # By group (#509): groups['Group0'] / groups[0], len, iteration, in
+
     def __len__(self) -> int:
-        return len(self._map)
+        return len(self.group_numbers)
 
     def __iter__(self):
-        return iter(self._map)
+        return iter([group_name(n) for n in self.group_numbers])
 
-    def __contains__(self, item_name: object) -> bool:
-        if not isinstance(item_name, str):
-            return False
-        return item_name in self._map
+    def __contains__(self, key: object) -> bool:
+        number = group_number(key)
+        return number is not None and number in self.group_numbers
 
-    def __getitem__(self, item_name: str) -> int:
-        result = self.get_group(item_name)
-        if result is None:
-            raise KeyError(item_name)
-        return result
+    def __getitem__(self, key) -> NMGroup:
+        number = group_number(key)
+        if number is None or number not in self.group_numbers:
+            raise KeyError("group %r does not exist; existing groups: %s"
+                           % (key, ", ".join(self) or "none"))
+        return NMGroup(self, number)
 
-    def __setitem__(self, item_name: str, group: int) -> None:
-        self.assign(item_name, group)
+    def __setitem__(self, key, item_names) -> None:
+        """``groups['Group0'] = ['E0', 'E3']``: the group's items are these
+        (others of it unassigned), as ``sets['Set0'] = [...]`` (#509)."""
+        number = group_number(key)
+        if number is None:
+            raise KeyError("not a group: %r (e.g. 'Group0' or 0)" % (key,))
+        names = [item_names] if isinstance(item_names, str) else list(item_names)
+        if number in self.group_numbers:
+            others = [n for n in self.get_items(number) if n not in names]
+            if others:
+                self.unassign(others)
+        if names:
+            self.assign(names, number)
+        elif number not in self.group_numbers:
+            self.add_group(number)
 
-    def __delitem__(self, item_name: str) -> None:
-        self.unassign(item_name)
+    def __delitem__(self, key) -> None:
+        """``del groups['Group0']``: delete the group (its items are kept)."""
+        number = group_number(key)
+        if number is None or number not in self.group_numbers:
+            raise KeyError("group %r does not exist" % (key,))
+        self.delete_group(number)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NMGroups):
@@ -204,8 +322,7 @@ class NMGroups:
             if number in self.group_numbers:
                 raise ValueError("group %d already exists" % number)
         self._declared_groups.update(numbers)
-        self._echo("created group%s %s" % ("s" if len(numbers) > 1 else "",
-                                       ", ".join(map(str, numbers))), quiet)
+        self._echo("created %s" % group_names(numbers), quiet)
         self._record("add_group(%r)" % (numbers if many else numbers[0],))
 
     @nmch.records_command
@@ -236,7 +353,7 @@ class NMGroups:
         self._declared_groups.update(self._map[n] for n in names if n in self._map)
         for name in names:
             self._map[name] = group
-        self._echo("%s → %d" % (self._names_text(names), group), quiet)
+        self._echo("%s → %s" % (self._names_text(names), group_name(group)), quiet)
         self._record("assign(%s, %r)" % (nmu.names_repr(names) if many else repr(names[0]), group))
 
     @nmch.records_command
@@ -364,8 +481,8 @@ class NMGroups:
             return
         groups = sorted({self._map.pop(name) for name in names})
         self._declared_groups.update(groups)  # kept, even if empty (until deleted)
-        self._echo("unassigned %s from group %s"
-                   % (self._names_text(names), ", ".join(map(str, groups))), quiet)
+        self._echo("unassigned %s from %s"
+                   % (self._names_text(names), group_names(groups)), quiet)
         self._record("unassign(%s)" % (nmu.names_repr(names) if many else repr(names[0])))
 
     @nmch.records_command
@@ -408,8 +525,7 @@ class NMGroups:
             for name in [n for n, g in self._map.items() if g == number]:
                 del self._map[name]
         self._declared_groups.update(numbers)
-        self._echo("cleared group%s %s" % ("s" if len(numbers) > 1 else "",
-                                       ", ".join(map(str, numbers))), quiet)
+        self._echo("cleared %s" % group_names(numbers), quiet)
         self._record("clear_group(%r)" % (numbers if many else numbers[0],))
 
     @nmch.records_command
@@ -437,8 +553,7 @@ class NMGroups:
                 del self._map[name]
             self._declared_groups.discard(number)
             self._notes.pop(number, None)
-        self._echo("deleted group%s %s" % ("s" if len(numbers) > 1 else "",
-                                       ", ".join(map(str, numbers))), quiet)
+        self._echo("deleted %s" % group_names(numbers), quiet)
         self._record("delete_group(%r)" % (numbers if many else numbers[0],))
 
     def notes(self, group: int) -> NMNotes:

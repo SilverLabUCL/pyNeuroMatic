@@ -287,7 +287,7 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "AlphaA0"
     # Numbered sets, then named ones, then SetX (#503)
-    assert _combo_values(set_menu) == ["", "All", "All Sets", "Set0", "Set1", "Demo1Set", "SetX"]
+    assert _combo_values(set_menu) == ["", "All Epochs", "All Sets", "Set0", "Set1", "Demo1Set", "SetX"]
     assert _combo_values(group_menu) == ["", "All", "0", "1"]
     assert _combo_values(operator_menu) == ["", "AND", "OR"]  # always: choose it first
 
@@ -303,8 +303,8 @@ def test_selection_menus_follow_folder_and_series(qtbot, nm):
     assert _combo_values(series_menu) == ["", "Gamma"]
     assert channel_menu.currentText() == "A"
     assert win.plot_widget.trace_name_label.text() == "GammaA0"
-    assert _combo_values(set_menu) == ["", "All", "All Sets", "Set0", "Set1", "Demo2Set", "SetX"]
-    assert set_menu.currentText() == "All"
+    assert _combo_values(set_menu) == ["", "All Epochs", "All Sets", "Set0", "Set1", "Demo2Set", "SetX"]
+    assert set_menu.currentText() == "All Epochs"
     assert _combo_values(group_menu) == ["", "All", "0", "1"]
     assert group_menu.currentText() == ""
     assert operator_menu.currentText() == ""
@@ -383,7 +383,7 @@ def test_selection_memory_is_independent_per_dataseries(qtbot, nm):
     assert nm.select_values["dataseries"] is beta
     assert channel_menu.currentText() == "A"
     assert trace_navigator.trace_index.value() == 0
-    assert set_menu.currentText() == "All"
+    assert set_menu.currentText() == "All Epochs"
     assert group_menu.currentText() == ""
     assert operator_menu.currentText() == ""
 
@@ -435,7 +435,7 @@ def test_data_and_dataseries_sections_are_independent(qtbot, nm):
     assert strip.is_active_section("dataseries")
     assert strip.source_button("data").isEnabled()  # a data array is selected too
     assert _combo_values(data_set_menu) == ["", "DataSet", "FlatSet"]  # in order (#503)
-    assert _combo_values(epoch_set_menu) == ["", "All", "All Sets", "Set0", "Set1", "EpochSet", "SetX"]
+    assert _combo_values(epoch_set_menu) == ["", "All Epochs", "All Sets", "Set0", "Set1", "EpochSet", "SetX"]
     assert _combo_values(group_menu) == ["", "All", "0", "1"]
 
     channel_menu.setCurrentText("B")
@@ -603,4 +603,4 @@ def test_epoch_sets_listed_in_order(qtbot, nm):
     qtbot.addWidget(win)
     values = _combo_values(win.selection_strip.combo("epoch_set"))
     assert values[values.index("Set0"):] == ["Set0", "Set1", "Set2", "Set10", "Drug", "SetX"]
-    assert values[1:3] == ["All", "All Sets"]  # built-in choices first
+    assert values[1:3] == ["All Epochs", "All Sets"]  # built-in choices first

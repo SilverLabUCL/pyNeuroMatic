@@ -20,6 +20,7 @@ try:
 except ImportError:  # pragma: no cover - optional GUI dependency
     pg = None
 
+from pyneuromatic.core.nm_group import group_name
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_folder import NMFolder
@@ -159,7 +160,7 @@ def _scope_text(selection: dict) -> str:
     if group == ALL_GROUPS:
         parts.append(ALL_GROUPS)
     elif group is not None:
-        parts.append(f"Group {group}")
+        parts.append(group_name(group))
     operator = selection.get("group_operator") or "+"
     return f" {operator} ".join(parts)
 
@@ -422,7 +423,7 @@ class PlotPanel(QtWidgets.QWidget):
         self.group_combo.setSizeAdjustPolicy(
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
-        self.group_combo.setFixedWidth(56)  # holds a group number
+        self.group_combo.setFixedWidth(56)  # holds a group number (as the strip's)
         self.group_combo.currentIndexChanged.connect(self._on_group_combo_changed)
         membership_layout.addWidget(self.group_combo)
         membership_layout.addStretch(1)
@@ -709,12 +710,24 @@ class PlotPanel(QtWidgets.QWidget):
         """Notes… (the epoch ⋯ menu): the current epoch's notes (#505)."""
         target = self.notes_target()
         if target is not None:
-            self._open_notes(*target)
+            self._open_notes(*target, choices=self.notes_choices())
 
-    def _open_notes(self, notes, owner: str) -> None:
+    def notes_choices(self):
+        """The other epochs (or a Data Set's arrays) stepped through, to
+        switch to in the Notes window (#509)."""
+        from pyneuromatic.gui.notes_view import NotesChoices, notes_owner
+        if self._current_item is None:
+            return None
+        items = {item.name: item for item, _data in self._trace_entries
+                 if getattr(item, "notes", None) is not None}
+        return NotesChoices("Data" if self._trace_mode == "data" else "Epoch", list(items),
+                            self._current_item.name,
+                            lambda name: (items[name].notes, notes_owner(items[name])))
+
+    def _open_notes(self, notes, owner: str, choices=None) -> None:
         """The Notes dialog (replaced in tests)."""
         from pyneuromatic.gui.notes_view import NotesDialog
-        dialog = NotesDialog(notes, owner, self)
+        dialog = NotesDialog(notes, owner, self, choices)
         dialog.editor.notes_changed.connect(self.notes_changed)
         dialog.exec()
 
@@ -1791,6 +1804,11 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.refresh()
         self._on_browser_content_changed()
+        # Notes… in each strip menu: available if there's now one to choose
+        # (e.g. Epoch Sets made by Stats2's Inequality)
+        for actions in (self.folder_actions, self.data_actions, self.series_actions,
+                        self.channel_actions, self.epoch_set_actions, self.group_actions):
+            actions._update_notes_actions()
 
     def _on_browser_content_changed(self) -> None:
         selection = self.selection_model.selection

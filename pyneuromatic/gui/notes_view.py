@@ -10,6 +10,9 @@ commands" (the app's setting, also a checkbox here) a command (#510).
 """
 from __future__ import annotations
 
+import dataclasses
+from collections.abc import Callable
+
 from PyQt6 import QtCore, QtWidgets
 
 import pyneuromatic.core.nm_command_history as nmch
@@ -71,7 +74,8 @@ def set_owner(name: str, container) -> str:
 
 
 def group_owner(number: int, series) -> str:
-    return f"Group {number} ({series_text(series)})"
+    from pyneuromatic.core.nm_group import group_name
+    return f"{group_name(number)} ({series_text(series)})"
 
 
 class NotesTable(QtWidgets.QTableWidget):
@@ -292,16 +296,51 @@ class NotesEditor(QtWidgets.QWidget):
         self._changed()
 
 
-class NotesDialog(QtWidgets.QDialog):
-    """An object's notes on their own (the strip's Notes…), closed with Close."""
+@dataclasses.dataclass
+class NotesChoices:
+    """What a Notes window can switch to (#509), as a prompt's chooser: e.g.
+    *label* "Epoch Set", *names* ["Set0", "Set1"], *current* "Set1", and
+    *target*(name) → (notes, owner) for the one chosen (asked only then).
+    With no *current* (e.g. All Epochs chosen in the strip), the chooser
+    starts blank, as a prompt's does."""
 
-    def __init__(self, notes, owner: str,
-                 parent: QtWidgets.QWidget | None = None) -> None:
+    label: str
+    names: list[str]
+    current: str | None
+    target: Callable[[str], tuple]
+
+
+class NotesDialog(QtWidgets.QDialog):
+    """An object's notes on their own (the strip's Notes…), closed with Close.
+    With *choices*, a chooser above them switches to another's (e.g. another
+    Epoch Set's), as a prompt's does; with no *notes* (None), it starts
+    blank, to choose."""
+
+    BLANK = ""
+
+    def __init__(self, notes, owner: str | None,
+                 parent: QtWidgets.QWidget | None = None,
+                 choices: NotesChoices | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Notes: {owner}")
+        self._set_title(owner)
         layout = QtWidgets.QVBoxLayout(self)
+        self._choices = choices
+        self.choice_combo: QtWidgets.QComboBox | None = None
+        if choices is not None and choices.names:
+            row = QtWidgets.QHBoxLayout()
+            row.addWidget(QtWidgets.QLabel(choices.label, self))
+            self.choice_combo = QtWidgets.QComboBox(self)
+            blank = notes is None or choices.current not in choices.names
+            self.choice_combo.addItems(([self.BLANK] if blank else []) + list(choices.names))
+            if not blank:
+                self.choice_combo.setCurrentText(choices.current)
+            self.choice_combo.setToolTip(f"Whose notes: another {choices.label}")
+            self.choice_combo.currentTextChanged.connect(self.show_choice)
+            row.addWidget(self.choice_combo)
+            row.addStretch(1)
+            layout.addLayout(row)
         self.editor = NotesEditor(self, header=False)
-        self.editor.set_notes(notes, owner)
+        self.editor.set_notes(notes, owner or "")
         layout.addWidget(self.editor)
         buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Close, self)
@@ -309,6 +348,21 @@ class NotesDialog(QtWidgets.QDialog):
         layout.addWidget(buttons)
         self.resize(520, 320)
 
+    def show_choice(self, name: str) -> None:
+        """Another's notes (the chooser), e.g. Set2's; the title follows."""
+        if self._choices is None:
+            return
+        if name not in self._choices.names:  # the blank choice: none yet
+            notes, owner = None, None
+        else:
+            notes, owner = self._choices.target(name)
+        self._set_title(owner)
+        self.editor.set_notes(notes, owner or "")
 
-__all__ = ["NotesDialog", "NotesEditor", "NotesTable", "context_text", "group_owner",
+    def _set_title(self, owner: str | None) -> None:
+        self.setWindowTitle(f"Notes: {owner}" if owner else "Notes")
+
+
+__all__ = ["NotesChoices", "NotesDialog", "NotesEditor", "NotesTable", "context_text",
+           "group_owner",
            "notes_owner", "series_text", "set_owner"]

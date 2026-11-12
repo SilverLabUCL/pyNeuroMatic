@@ -106,15 +106,15 @@ def test_selection_only_with_a_group_and_and(app):
     panel = app.plot_widget
     app.selection_model.update(epoch_set=None, group=1)
     panel.selection_only_action.setChecked(True)
-    assert panel.selection_scope_label.text() == "(Group 1: 5)"
+    assert panel.selection_scope_label.text() == "(Group1: 5)"
     panel.trace_last_button.click()
     assert _at(panel) == "E9"
     panel.trace_previous_button.click()
     assert _at(panel) == "E7"
 
-    # Set1 AND Group 1 = E1, E3, E7 (all odd)
+    # Set1 AND Group1 = E1, E3, E7 (all odd)
     app.selection_model.update(epoch_set="Set1", group=1, group_operator="AND")
-    assert panel.selection_scope_label.text() == "(Set1 AND Group 1: 3)"
+    assert panel.selection_scope_label.text() == "(Set1 AND Group1: 3)"
 
 
 def test_selection_only_skips_setx(app):
@@ -238,7 +238,7 @@ def test_notes_of_the_current_epoch(app):
     channels; the current data array's for a Data Set."""
     panel = app.plot_widget
     opened = []
-    panel._open_notes = lambda notes, owner: opened.append((notes, owner))
+    panel._open_notes = lambda notes, owner, choices=None: opened.append((notes, owner))
     assert panel.notes_action.isEnabled()
     panel.notes_action.trigger()
     epoch = panel._current_item

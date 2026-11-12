@@ -31,6 +31,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, steps_tooltip
+from pyneuromatic.core.nm_group import group_name
 
 
 class _GroupNode:
@@ -167,7 +168,7 @@ class _GroupNumberNode:
 
     @property
     def label(self) -> str:
-        return f"Group {self.number}"
+        return group_name(self.number)
 
     @property
     def container(self):

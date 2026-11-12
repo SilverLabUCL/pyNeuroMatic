@@ -706,3 +706,53 @@ class TestNMSetsHistory(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestNMSetObject(unittest.TestCase):
+    """sets['Set0'] is a set (#509), as epochs['E0'] is an epoch: its name,
+    items (the epochs), notes; a read-only list of its items."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+        nm = NMManager(quiet=True)
+        folder = nm.folders.new("Demo", quiet=True)
+        self.series = folder.new_dataseries("Record", n_channels=1, n_epochs=4, n_points=5)
+        self.sets = self.series.epochs.sets
+        self.sets.add("Set1", ["E1", "E3"], quiet=True)
+
+    def test_a_set(self):
+        from pyneuromatic.core.nm_sets import NMSet
+        epochs = self.series.epochs
+        s = self.sets["Set1"]
+        self.assertIsInstance(s, NMSet)
+        self.assertEqual(s.name, "Set1")
+        self.assertEqual(s.names, ["E1", "E3"])
+        self.assertEqual(s.items, [epochs["E1"], epochs["E3"]])  # the epochs
+        self.assertEqual(list(s), [epochs["E1"], epochs["E3"]])
+        self.assertEqual(len(s), 2)
+        self.assertIn("E3", s)
+        self.assertIn(epochs["E1"], s)
+        self.assertNotIn("E0", s)
+        self.assertIs(s.notes, self.sets.notes("Set1"))
+        self.assertEqual(self.sets["set1"], s)  # any case
+        self.assertEqual(repr(s), "NMSet('Set1', n=2)")
+
+    def test_missing_raises_key_error(self):
+        with self.assertRaises(KeyError):
+            _ = self.sets["Set9"]
+
+    def test_an_equation_sets_items_are_worked_out(self):
+        self.sets.add("Set2", ["E1", "E2"], quiet=True)
+        self.sets.define_and("Both", "Set1", "Set2", quiet=True)
+        self.assertTrue(self.sets["Both"].is_equation)
+        self.assertEqual(self.sets["Both"].names, ["E1"])
+
+    def test_set_and_delete_by_name_as_before(self):
+        self.sets["Set1"] = ["E0"]
+        self.assertEqual(self.sets["Set1"].names, ["E0"])
+        del self.sets["Set1"]
+        self.assertNotIn("Set1", self.sets)
+
+    def test_read_only(self):
+        s = self.sets["Set1"]
+        self.assertFalse(hasattr(s, "append") or hasattr(s, "remove"))

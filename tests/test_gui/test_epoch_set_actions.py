@@ -203,8 +203,9 @@ def test_epoch_set_list_starts_with_blank_and_all(app):
     combo = app.selection_strip.combo("epoch_set")
     texts = [combo.itemText(i) for i in range(combo.count())]
     # Blank is the current epoch, like Data Set's blank: no "Current Epoch" (#444)
-    assert texts == ["", "All", "All Sets", "Set0", "Set1", "SetX"]  # sets in order
-    assert combo.currentText() == "All"  # the default for a series
+    assert texts == ["", "All Epochs", "All Sets", "Set0", "Set1", "SetX"]  # sets in order
+    assert combo.currentText() == "All Epochs"  # the default for a series
+    assert combo.currentData() == "All"  # the value kept: only the label (#509)
     assert app.selection_strip.combo("group_operator").isEnabled()  # AND/OR: always
 
 
@@ -385,3 +386,11 @@ def test_overwrite_checkbox_follows_the_set_number(qtbot):
     spin.setValue(3)  # free again: the box is cleared
     assert not check.isEnabled() and not check.isChecked()
     assert dialog.message_label.text() == "Copy 'Set0' to 'Set3'."
+
+
+def test_with_all_epochs_chosen_the_prompt_starts_blank(app):
+    """All Epochs isn't a set to clear: the prompt starts blank, to choose."""
+    app.selection_model.update(epoch_set="All")
+    app.epoch_set_actions.clear_set()  # cancelled
+    assert app.dialogs[-1][1]["current"] == "All"  # not a set: the dropdown is blank
+    assert "All" not in app.dialogs[-1][1]["items"]

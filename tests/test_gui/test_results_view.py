@@ -760,8 +760,8 @@ def _open_notes(stats2, qtbot):
     """Folder ⋯ › Notes…: the Notes window (not shown modally), its editor."""
     opened = []
 
-    def open_notes(notes, owner):
-        dialog = NotesDialog(notes, owner, stats2)
+    def open_notes(notes, owner, choices=None):
+        dialog = NotesDialog(notes, owner, stats2, choices)
         qtbot.addWidget(dialog)
         dialog.editor.notes_changed.connect(stats2._notes_changed)
         opened.append(dialog)
@@ -833,7 +833,12 @@ def test_notes_follow_the_subfolder(qtbot):
     tab.run_button.click()  # Stats_Record_A_S1_0 and _1
     stats2 = tab.stats2
     stats2.folder_combo.setCurrentText("Stats_Record_A_S1_0")
-    editor = _open_notes(stats2, qtbot).editor
+    dialog = _open_notes(stats2, qtbot)
+    combo = dialog.choice_combo  # the Stats subfolders, to switch to (#509)
+    assert [combo.itemText(i) for i in range(combo.count())] == [
+        "Stats_Record_A_S1_0", "Stats_Record_A_S1_1"]
+    assert combo.currentText() == "Stats_Record_A_S1_0"
+    editor = dialog.editor
     editor._ask_note = lambda title, text="": "control"
     editor.add_button.click()
     stats2.folder_combo.setCurrentText("Stats_Record_A_S1_1")

@@ -54,6 +54,64 @@ def set_order(name: str) -> tuple:
 EQUATION_OPERATORS = ("and", "or")
 
 
+class NMSet:
+    """One set of an NMSets, as ``sets['Set0']`` gives it (#509), like
+    ``epochs['E0']``: its name, its items (the epochs or data arrays) and its
+    notes. A read-only list of its items: iterate, ``len``, ``in`` (by name or
+    object); an equation set's (e.g. Set0 AND Set1) are worked out when read.
+    Its items change through the sets' methods (``add``, ``remove``, or
+    ``sets['Set0'] = [...]``), which are recorded.
+    """
+
+    def __init__(self, sets: NMSets, name: str) -> None:
+        self._sets = sets
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def items(self) -> list:
+        """Its items (the epochs or data arrays)."""
+        return list(self._sets.get_items(self._name) or [])
+
+    @property
+    def names(self) -> list[str]:
+        """Its items' names."""
+        return list(self._sets.get_items(self._name, get_keys=True) or [])
+
+    @property
+    def notes(self) -> NMNotes:
+        return self._sets.notes(self._name)
+
+    @property
+    def is_equation(self) -> bool:
+        """True for a set defined from two others (AND, OR)."""
+        return NMSets.tuple_is_equation(self._sets.get_items(self._name, get_equation=True))
+
+    def __iter__(self):
+        return iter(self.items)
+
+    def __len__(self) -> int:
+        return len(self.names)
+
+    def __contains__(self, item: object) -> bool:
+        name = item if isinstance(item, str) else getattr(item, "name", None)
+        return name in self.names
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NMSet):
+            return NotImplemented
+        return other._sets is self._sets and other._name == self._name
+
+    def __hash__(self) -> int:
+        return hash((id(self._sets), self._name))
+
+    def __repr__(self) -> str:
+        return "NMSet(%r, n=%d)" % (self._name, len(self))
+
+
 class NMSets:
     """Named groups of items within a container, with AND/OR set algebra.
 
@@ -191,8 +249,12 @@ class NMSets:
         result._resolve_fxn = result._nmobjects_default
         return result
 
-    def __getitem__(self, key: str) -> Any:
-        return self.get_items(key)
+    def __getitem__(self, key: str) -> NMSet:
+        """Set *key* (:class:`NMSet`, #509), as ``epochs['E0']`` is an epoch."""
+        actual = self._getkey(key) if isinstance(key, str) else None
+        if actual is None:
+            raise KeyError("key name '%s' does not exist" % key)
+        return NMSet(self, actual)
 
     @nmch.records_command
     def __setitem__(
