@@ -105,7 +105,7 @@ class NMChannel(NMObject):
         notes = getattr(self, "_NMChannel__notes", None)
         if notes is None:  # e.g. made before channels kept notes
             notes = self.__notes = NMNotes()
-        return notes
+        return notes.set_owner(self)  # for a command's path (#510)
 
     # override
     def __eq__(self, other: object) -> bool:

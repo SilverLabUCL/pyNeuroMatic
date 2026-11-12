@@ -263,3 +263,131 @@ def test_notes_written_by_pynm_are_not_messages(app):
     tab.run_button.click()
     assert tab.stats_tool.toolfolder.notes[0]["note"].startswith("NMStats:")
     assert not [text for _kind, text in _history(app, start) if "added note" in text]
+
+
+# --- notes as commands: a setting, off by default (#510) ------------------------------
+
+@pytest.fixture
+def cmd_app(qtbot):
+    """As app, with commands recorded."""
+    manager = NMManager(quiet=True, command_history=True)
+    folder = manager.folders.new("Demo", select=False)
+    series = folder.new_dataseries("Record", n_channels=1, n_epochs=2, n_points=10)
+    series.epochs.groups.assign("E0", 0)
+    folder.data.new("Single", nparray=np.array([1.0, 2.0]))
+    folder.data.sets.add("Mine", [folder.data["Single"]])
+    folder.toolfolders.new("Stats_0")
+    manager.select_keys = {"folder": "Demo", "dataseries": "Record", "channel": "A",
+                           "epoch": "E0"}
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.demo, window.series, window.manager = folder, series, manager
+    return window
+
+
+def _commands(app, start=0):
+    return [text for kind, text in _history(app, start) if kind == "command"]
+
+
+def _edit(editor):
+    """Add two notes, edit the first, delete the second."""
+    editor._ask_note = lambda title, text="": "first"
+    editor.add_button.click()
+    editor._ask_note = lambda title, text="": "second"
+    editor.add_button.click()
+    editor.table.selectRow(len(editor.notes) - 2)
+    editor._ask_note = lambda title, text="": text + ", corrected"
+    editor.edit_button.click()
+    editor.table.selectRow(len(editor.notes) - 1)
+    editor._confirm_delete = lambda count: True
+    editor.delete_button.click()
+
+
+def test_notes_as_commands_off_by_default(cmd_app, qtbot):
+    settings = cmd_app.manager.settings
+    assert settings.notes_as_commands is False
+    editor = NotesEditor()
+    qtbot.addWidget(editor)
+    editor.set_notes(cmd_app.series.notes, "Record (Demo)")
+    assert not editor.commands_checkbox.isHidden()  # shown: the app has settings
+    assert not editor.commands_checkbox.isChecked()
+    start = len(_history(cmd_app))
+    _edit(editor)
+    assert _commands(cmd_app, start) == []  # messages (#507)
+    assert len([k for k, _t in _history(cmd_app, start) if k == "message"]) == 4
+
+
+def test_notes_as_commands_replay(cmd_app, qtbot):
+    """On: each note added, edited or deleted is a command, no message; the
+    commands replayed recreate the notes, for every kind of owner."""
+    demo, series, manager = cmd_app.demo, cmd_app.series, cmd_app.manager
+    manager.settings.notes_as_commands = True
+    owners = [demo.notes, demo.toolfolders["Stats_0"].notes, demo.data["Single"].notes,
+              series.notes, series.channels["A"].notes, series.epochs["E0"].notes,
+              demo.data.sets.notes("Mine"), series.epochs.sets.notes("Set1"),
+              series.epochs.groups.notes(0)]
+    for notes in owners:
+        editor = NotesEditor()
+        qtbot.addWidget(editor)
+        editor.set_notes(notes, "owner")
+        assert editor.commands_checkbox.isChecked()
+        start = len(_history(cmd_app))
+        _edit(editor)
+        commands = _commands(cmd_app, start)
+        path = notes.command_path
+        assert commands == [f"{path}.add('first')", f"{path}.add('second')",
+                            f"{path}.edit(0, 'first, corrected')", f"{path}.remove(1)"]
+        assert not [k for k, _t in _history(cmd_app, start) if k == "message"]
+        made = [n["note"] for n in notes]
+        notes.clear()
+        for command in commands:
+            exec(command, {"nm": manager})
+        assert [n["note"] for n in notes] == made == ["first, corrected"]
+
+
+def test_the_editors_checkbox_is_the_setting(cmd_app, qtbot):
+    settings = cmd_app.manager.settings
+    editor = NotesEditor()
+    qtbot.addWidget(editor)
+    editor.set_notes(cmd_app.series.notes, "Record (Demo)")
+    editor.commands_checkbox.setChecked(True)
+    assert settings.notes_as_commands is True
+    dialog = cmd_app.settings_dialog()
+    qtbot.addWidget(dialog)
+    assert dialog.notes_commands_checkbox.isChecked()  # Settings › General
+    dialog.notes_commands_checkbox.setChecked(False)
+    assert settings.notes_as_commands is False
+    other = NotesDialog(cmd_app.series.notes, "Record (Demo)")
+    qtbot.addWidget(other)
+    assert not other.editor.commands_checkbox.isChecked()  # one setting
+
+
+def test_readonly_notes_give_no_command(cmd_app, qtbot):
+    cmd_app.manager.settings.notes_as_commands = True
+    notes = cmd_app.series.notes
+    notes.add("renumbered epochs", readonly=True)
+    editor = NotesEditor()
+    qtbot.addWidget(editor)
+    editor.set_notes(notes, "Record (Demo)")
+    editor.table.selectRow(0)
+    assert not editor.edit_button.isEnabled() and not editor.delete_button.isEnabled()
+
+
+
+def test_notes_as_messages_when_commands_arent_recorded(app, qtbot):
+    """The setting on, but commands not recorded (e.g. history off): a
+    message, so it's in the history either way."""
+    import pyneuromatic.core.nm_command_history as nmch
+    history = nmch.get_command_history()
+    NotesEditor.settings.notes_as_commands = True
+    editor = NotesEditor()
+    qtbot.addWidget(editor)
+    editor.set_notes(app.series.notes, "Record (Demo)")
+    start = len(_history(app))
+    enabled, history.enabled = history.enabled, False
+    try:
+        editor._ask_note = lambda title, text="": "first"
+        editor.add_button.click()
+    finally:
+        history.enabled = enabled
+    assert _history(app, start) == [("message", "Record (Demo): added note 'first'")]

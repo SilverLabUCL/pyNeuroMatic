@@ -96,6 +96,15 @@ class SettingsDialog(QtWidgets.QDialog):
         self.import_options_checkbox.toggled.connect(
             lambda checked: self._set("ask_import_options", checked))
         general_layout.addWidget(self.import_options_checkbox)
+        # Also in the notes editor (#510): one setting
+        self.notes_commands_checkbox = QtWidgets.QCheckBox("Record notes as commands", general)
+        self.notes_commands_checkbox.setToolTip(
+            "Adding, editing and deleting a note is a command (replayed, and in an "
+            "exported command history), not a history message")
+        self.notes_commands_checkbox.setChecked(settings.notes_as_commands)
+        self.notes_commands_checkbox.toggled.connect(
+            lambda checked: self._set("notes_as_commands", checked))
+        general_layout.addWidget(self.notes_commands_checkbox)
 
         general_layout.addSpacing(8)
         runs = QtWidgets.QGroupBox(general)  # titled by the heading above it

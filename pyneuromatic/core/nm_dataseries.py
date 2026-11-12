@@ -202,7 +202,7 @@ class NMDataSeries(NMObject):
     @property
     def notes(self) -> NMNotes:
         """Return notes for this data series."""
-        return self.__notes
+        return self.__notes.set_owner(self)
 
     @property
     def channels(self) -> NMChannelContainer:

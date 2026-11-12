@@ -694,7 +694,7 @@ class NMSets:
             raise KeyError("key name '%s' does not exist" % key)
         if actual not in self._notes:
             self._notes[actual] = NMNotes()
-        return self._notes[actual]
+        return self._notes[actual].set_owner(self, actual)  # a command's path (#510)
 
     @nmch.records_command
     def empty(self, key: str, quiet: bool = nmc.QUIET) -> None:
