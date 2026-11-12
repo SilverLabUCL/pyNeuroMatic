@@ -97,7 +97,7 @@ def test_assign_and_unassign_a_range(app):
     # From / To at the current epoch (E3), Every 1
     assert [spin.value for _label, spin in options["extras"][1:]] == [3, 3, 1]
     assert options["message"](None, "0", "E2", "E8", "2") == (
-        "Adds 4 epochs (E2–E8, every 2nd) to group 0."
+        "Adds 4 epochs (E2–E8, every 2nd) to Group0."
     )
 
     app.answers = [(None, None, "0", "E0", "E4", "1")]
@@ -185,8 +185,8 @@ def test_browser_lists_groups_under_epochs(app):
     epochs = _child(model, _child(model, folder, "Record"), "Epochs")
     assert _labels(model, epochs)[:2] == ["Sets", "Groups"]
     groups = _child(model, epochs, "Groups")
-    assert _labels(model, groups) == ["Group 0", "Group 1"]
-    group1 = _child(model, groups, "Group 1")
+    assert _labels(model, groups) == ["Group0", "Group1"]
+    group1 = _child(model, groups, "Group1")
     assert _labels(model, group1) == ["E1", "E3", "E5"]
     assert model.parent(model.index(0, 0, group1)) == group1  # unambiguous parents
 
@@ -245,18 +245,19 @@ def test_new_groups_creates_empty_groups(app):
     assert options["context"][0] == "Data Series"
     assert options["extras"][0][0] == "Number of Groups"
     assert options["extras"][0][1].value == 2
-    assert options["message"](None, "3") == "Creates Groups 0–2, with no epoch assignments."
+    assert options["message"](None, "3") == "Creates Group0–Group2, with no epoch assignments."
 
     app.answers = [(None, None, "3")]
     actions.new_action.trigger()
     assert app.groups.group_numbers == [0, 1, 2]
     assert all(app.groups.get_items(n) == [] for n in range(3))
     combo = app.selection_strip.combo("group")
-    assert [combo.itemText(i) for i in range(combo.count())] == ["", "All", "0", "1", "2"]
+    assert [combo.itemText(i) for i in range(combo.count())] == ["", "All", "0", "1",
+                                                                 "2"]
 
     actions.new_groups()
     options = app.dialogs[-1][1]
-    assert options["message"](None, "4") == "Creates Group 3, with no epoch assignments."
+    assert options["message"](None, "4") == "Creates Group3, with no epoch assignments."
     assert options["validate"](None, None, "3") == "Groups 0–2 already exist"
 
 
@@ -307,7 +308,7 @@ def test_delete_group_one_or_all(app, monkeypatch):
     title, options, message = asked[0]
     assert title == "Delete Epoch Group" and options["items"] == ["0", "1", "2", "All"]
     assert options["current"] == "1"  # the strip's group
-    assert message.startswith("Group 1 will be deleted; its ")
+    assert message.startswith("Group1 will be deleted; its ")
     assert groups.group_numbers == [0, 2]
     assert app.selection_model.selection["group"] is None  # the strip's group went
     actions.delete_action.trigger()
@@ -372,5 +373,16 @@ def test_assign_epochs_refuses_a_missing_group(app):
         app.groups.add_group(number)
     app.group_actions.assign_epochs()
     validate = app.dialogs[-1][1]["validate"]
-    assert validate(None, None, "1", "0", "5", "1") == "Group 1 doesn't exist; New Groups… makes it"
+    assert validate(None, None, "1", "0", "5", "1") == "Group1 doesn't exist; New Groups… makes it"
     assert validate(None, None, "2", "0", "5", "1") is None
+
+
+def test_with_all_groups_chosen_the_prompt_starts_blank(app):
+    """Clear / Delete don't start on All when All Groups is chosen in the
+    strip: the prompt starts blank, so All is a choice made in it."""
+    from pyneuromatic.gui.selection_model import ALL_GROUPS
+    app.groups.assign_cyclic([f"E{i}" for i in range(15)], n_groups=2)
+    app.selection_model.update(group=ALL_GROUPS)
+    app.group_actions.clear_group()  # cancelled
+    assert app.dialogs[-1][1]["current"] is None
+    assert len(app.groups.get_items(0)) == 8  # nothing cleared

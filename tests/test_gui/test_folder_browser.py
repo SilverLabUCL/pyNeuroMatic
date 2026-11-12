@@ -468,7 +468,7 @@ class TestTreeContextMenu:
             for action in captured["menu"].actions()
             if action.text() == "Add to Group"
         )
-        assert [action.text() for action in add_to_group.actions()] == ["Group 3"]
+        assert [action.text() for action in add_to_group.actions()] == ["Group3"]
         add_to_group.actions()[0].trigger()
 
         assert epoch_container.groups.get_group("E0") == 3
@@ -492,7 +492,7 @@ class TestTreeContextMenu:
             for action in captured["menu"].actions()
             if action.text() == "Add to Group"
         )
-        next(action for action in add_to_group.actions() if action.text() == "Group 1").trigger()
+        next(action for action in add_to_group.actions() if action.text() == "Group1").trigger()
 
         assert epoch_container.groups.get_group("E0") == 1
         assert epoch_container.groups.get_items(0) == []

@@ -61,15 +61,15 @@ def test_set_membership_model(series):
 def test_group_membership_model_moves_epochs(series):
     groups = series.epochs.groups
     model = MembershipModel(series.epochs, group=1)
-    assert model.columnCount() == 3 and model.target_label == "Group 1"  # Name, Data, Group
+    assert model.columnCount() == 3 and model.target_label == "Group1"  # Name, Data, Group
     assert _checked(model) == [1, 3]
     assert model.data(model.index(0, 1)) == "RecordA0"
-    assert model.data(model.index(0, 2)) == "0"
+    assert model.data(model.index(0, 2)) == "Group0"
     assert model.data(model.index(5, 2)) == ""
 
     model.setData(model.index(0, 0), CHECKED, CHECK_ROLE)  # E0: group 0 -> 1
     assert groups.get_group("E0") == 1
-    assert model.data(model.index(0, 2)) == "1"
+    assert model.data(model.index(0, 2)) == "Group1"
     model.setData(model.index(3, 0), UNCHECKED, CHECK_ROLE)  # E3: out of groups
     assert groups.get_group("E3") is None
     assert groups.get_items(1) == ["E0", "E1"]
@@ -138,7 +138,7 @@ def test_edit_mode_moves_between_sets_and_groups(qtbot, series):
 
     browser.show_groups_of(series, 1)
     model = browser.membership_model
-    assert browser.is_editing and model.target_label == "Group 1"
+    assert browser.is_editing and model.target_label == "Group1"
     model.setData(model.index(9, 0), CHECKED, CHECK_ROLE)
     assert series.epochs.groups.get_group("E9") == 1
 
@@ -261,9 +261,9 @@ def test_no_remove_from_group_menu_without_selection(qtbot, series, monkeypatch)
 def test_emptied_groups_are_kept(series):
     groups = series.epochs.groups
     model = MembershipModel(series.epochs, group=1)
-    model.check_none()  # Group 1 was made by assigning epochs
+    model.check_none()  # Group1 was made by assigning epochs
     assert groups.group_numbers == [0, 1] and groups.get_items(1) == []
-    model.check_all()  # moves Group 0's epochs here; Group 0 stays
+    model.check_all()  # moves Group0's epochs here; Group0 stays
     assert groups.group_numbers == [0, 1] and groups.get_items(0) == []
 
 
@@ -301,7 +301,7 @@ def test_group_edit_buttons(qtbot, series):
     assert browser._all_button.text() == "Ungrouped"
     assert not browser._invert_button.isVisibleTo(browser)
 
-    # Ungrouped takes E4-E9 and leaves Group 0 alone
+    # Ungrouped takes E4-E9 and leaves Group0 alone
     browser._all_button.click()
     groups = series.epochs.groups
     assert groups.get_items(0) == ["E0", "E2"]
@@ -382,7 +382,7 @@ def test_clear_group_in_detail_pane(qtbot, series, monkeypatch):
     monkeypatch.setattr(window.group_actions, "_choose",
                         lambda title, **o: (o["current"], None))
     browser.show_groups_of(series)
-    actions = _detail_menu(browser, monkeypatch, ["Group 0"])
+    actions = _detail_menu(browser, monkeypatch, ["Group0"])
     assert list(actions) == ["Select", "Clear Group...", "Delete Group..."]
     actions["Clear Group..."].trigger()
     assert groups.get_items(0) == [] and groups.get_items(1) == ["E1", "E3"]
@@ -419,10 +419,10 @@ def test_select_group_in_detail_pane(qtbot, series, monkeypatch):
     window = _app_for(qtbot, series)
     browser = window.browser_widget
     browser.show_groups_of(series)
-    _detail_menu(browser, monkeypatch, ["Group 1"])["Select"].trigger()
+    _detail_menu(browser, monkeypatch, ["Group1"])["Select"].trigger()
     assert window.selection_model.selection["group"] == 1
     # No Select Group with two groups selected
-    assert "Select" not in _detail_menu(browser, monkeypatch, ["Group 0"])
+    assert "Select" not in _detail_menu(browser, monkeypatch, ["Group0"])
 
 
 def test_delete_group(qtbot, series, monkeypatch):
@@ -457,7 +457,7 @@ def test_delete_group(qtbot, series, monkeypatch):
     groups.add_group(1)
     browser.refresh()
     browser.show_groups_of(series)
-    _detail_menu(browser, monkeypatch, ["Group 0", "Group 1"])["Delete..."].trigger()
+    _detail_menu(browser, monkeypatch, ["Group0", "Group1"])["Delete..."].trigger()
     assert groups.group_numbers == []
     assert browser.tree.model().rowCount(browser.tree.currentIndex()) == 0
 def test_epochs_list_shows_only_epochs(qtbot, series):

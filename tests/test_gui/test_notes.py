@@ -126,12 +126,12 @@ def test_notes_in_every_strip_menu(app):
         "dataseries": (series.notes, "Record (Demo)"),
         "channel": (series.channels["A"].notes, "A (Demo / Record)"),
         "epoch_set": (series.epochs.sets.notes("Set1"), "Set1 (Demo / Record)"),
-        "group": (series.epochs.groups.notes(0), "Group 0 (Demo / Record)"),
+        "group": (series.epochs.groups.notes(0), "Group0 (Demo / Record)"),
     }
     for key, (notes, owner) in expected.items():
         actions = getattr(app, TIERS[key])
         opened = []
-        actions._open_notes = lambda n, o, opened=opened: opened.append((n, o))
+        actions._open_notes = lambda n, o, choices=None, opened=opened: opened.append((n, o))
         item = _notes_action(app, key)
         assert item.isEnabled(), key
         item.trigger()
@@ -143,26 +143,47 @@ def test_notes_in_every_strip_menu(app):
     # A subfolder
     model.update(toolfolder=demo.toolfolders["Stats_0"])
     opened = []
-    app.folder_actions._open_notes = lambda n, o: opened.append((n, o))
+    app.folder_actions._open_notes = lambda n, o, choices=None: opened.append((n, o))
     _notes_action(app, "toolfolder").trigger()
     assert opened == [(demo.toolfolders["Stats_0"].notes, "Stats_0 (Demo)")]
 
 
-def test_notes_greyed_out_without_a_choice(app):
-    model = app.selection_model
-    model.update(epoch_set="All", group=None)  # built-in choices: no notes
-    assert not _notes_action(app, "epoch_set").isEnabled()
+def test_notes_without_a_choice_start_blank(app, qtbot):
+    """No set or group chosen (e.g. All Epochs, All Groups): Notes… is still
+    there, its window starting blank, to choose in it, as Clear… and
+    Delete… (#509); greyed out only when there's none."""
+    model, series = app.selection_model, app.series
+    model.update(epoch_set="All", group=None)  # built-in choices
+    opened = []
+    for key in ("epoch_set", "group"):
+        actions = getattr(app, TIERS[key])
+        actions._open_notes = lambda n, o, choices=None: opened.append((n, o, choices))
+        item = _notes_action(app, key)
+        assert item.isEnabled(), key
+        item.trigger()
+    assert [(n, o, c.current) for n, o, c in opened] == [(None, None, None)] * 2
+    # The window: blank, nothing to add to, until one's chosen
+    dialog = NotesDialog(None, None, choices=opened[1][2])
+    qtbot.addWidget(dialog)
+    combo = dialog.choice_combo
+    assert [combo.itemText(i) for i in range(combo.count())] == ["", "0"]
+    assert dialog.windowTitle() == "Notes"
+    assert not dialog.editor.add_button.isEnabled()
+    combo.setCurrentText("0")
+    assert dialog.windowTitle() == "Notes: Group0 (Demo / Record)"
+    assert dialog.editor.add_button.isEnabled()
+    combo.setCurrentIndex(0)  # back to blank
+    assert dialog.windowTitle() == "Notes" and not dialog.editor.add_button.isEnabled()
+    # No groups: nothing to choose, greyed out
+    series.epochs.groups.delete_group(series.epochs.groups.group_numbers)
+    app.group_actions._update_notes_actions()
     assert not _notes_action(app, "group").isEnabled()
-    assert not _notes_action(app, "toolfolder").isEnabled()  # no subfolder chosen
-    model.update(epoch_set="Set0")
-    assert _notes_action(app, "epoch_set").isEnabled()
-
 
 def test_a_note_added_from_the_strip_is_in_the_browser(app, qtbot):
     """The strip's dialog and the browser's info panel show the same notes,
     in the same editor."""
-    def open_notes(notes, owner):
-        dialog = NotesDialog(notes, owner)
+    def open_notes(notes, owner, choices=None):
+        dialog = NotesDialog(notes, owner, choices=choices)
         qtbot.addWidget(dialog)
         dialog.editor.notes_changed.connect(app.series_actions.content_changed)
         dialog.editor._ask_note = lambda title, text="": "20 Hz train"
@@ -199,7 +220,7 @@ def test_notes_titles_are_name_then_parent(qtbot):
     assert notes_owner(series.channels["A"]) == "A (Demo / Record)"
     assert set_owner("Set1", series.epochs) == "Set1 (Demo / Record)"
     assert set_owner("Mine", folder.data) == "Mine (Demo)"
-    assert group_owner(0, series) == "Group 0 (Demo / Record)"
+    assert group_owner(0, series) == "Group0 (Demo / Record)"
     # The same series name in another folder: which folder's, e.g. in the history
     other = manager.folders.new("Demo2", select=False)
     other_series = other.new_dataseries("Record", n_channels=1, n_epochs=1, n_points=5)
@@ -391,3 +412,106 @@ def test_notes_as_messages_when_commands_arent_recorded(app, qtbot):
     finally:
         history.enabled = enabled
     assert _history(app, start) == [("message", "Record (Demo): added note 'first'")]
+
+
+def test_set_and_group_notes_commands_read_like_epochs(cmd_app):
+    """sets['Set1'].notes and groups['Group0'].notes, as epochs['E0'].notes (#509)."""
+    demo, series = cmd_app.demo, cmd_app.series
+    base = "nm.folders['Demo'].dataseries['Record']"
+    assert series.epochs["E0"].notes.command_path == f"{base}.epochs['E0'].notes"
+    assert series.epochs.sets.notes("Set1").command_path == f"{base}.epochs.sets['Set1'].notes"
+    assert series.epochs.groups.notes(0).command_path == f"{base}.epochs.groups['Group0'].notes"
+    assert demo.data.sets.notes("Mine").command_path == "nm.folders['Demo'].data.sets['Mine'].notes"
+    # The same notes, by name
+    assert series.epochs.sets["Set1"].notes is series.epochs.sets.notes("Set1")
+    assert series.epochs.groups["Group0"].notes is series.epochs.groups.notes(0)
+
+
+# --- the Notes window's chooser: another's notes (#509) -------------------------------
+
+def test_choose_another_in_the_notes_window(app, qtbot):
+    """Each strip menu's Notes… window can switch to the chosen one's
+    siblings (as a prompt's chooser), starting on the strip's choice."""
+    demo, series = app.demo, app.series
+    model = app.selection_model
+    series.epochs.groups.assign("E1", 1)
+    demo.data.sets.add("Other", [])
+    model.update(data=demo.data["Single"], data_set="Mine", source="data")
+    model.update(dataseries=series, source="dataseries")
+    model.update(epoch_set="Set1", group=0)
+    expected = {  # label, names, current
+        "folder": ("Folder", ["Demo"], "Demo"),
+        "data": ("Data", list(demo.data.keys()), "Single"),
+        "data_set": ("Data Set", ["Mine", "Other"], "Mine"),
+        "dataseries": ("Prefix", ["Record"], "Record"),
+        "channel": ("Channel", ["A"], "A"),
+        "epoch_set": ("Epoch Set", list(series.epochs.sets.keys()), "Set1"),
+        "group": ("Group", ["0", "1"], "0"),
+    }
+    for key, (label, names, current) in expected.items():
+        actions = getattr(app, TIERS[key])
+        kind = {"folder": "folder", "toolfolder": "subfolder", "data": "data",
+                "data_set": "data_set"}.get(key, "")
+        choices = actions.notes_choices(kind)
+        assert (choices.label, list(choices.names), choices.current) == (label, names, current), key
+    # A subfolder chosen (the strip then works inside it): the subfolders
+    model.update(toolfolder=demo.toolfolders["Stats_0"])
+    choices = app.folder_actions.notes_choices("subfolder")
+    assert (choices.label, list(choices.names), choices.current) == (
+        "Subfolder", ["Stats_0"], "Stats_0")
+    model.update(toolfolder=None)
+
+    # Switching: the other's notes and title; a note goes to the one chosen
+    choices = app.epoch_set_actions.notes_choices()
+    dialog = NotesDialog(*app.epoch_set_actions.notes_target(), choices=choices)
+    qtbot.addWidget(dialog)
+    assert dialog.choice_combo.currentText() == "Set1"
+    dialog.choice_combo.setCurrentText("Set0")
+    assert dialog.windowTitle() == "Notes: Set0 (Demo / Record)"
+    dialog.editor._ask_note = lambda title, text="": "for Set0"
+    dialog.editor.add_button.click()
+    assert series.epochs.sets.notes("Set0")[-1]["note"] == "for Set0"
+    assert not len(series.epochs.sets.notes("Set1"))
+
+    # Groups: their numbers, as the other Group lists
+    choices = app.group_actions.notes_choices()
+    assert choices.target("1") == (series.epochs.groups.notes(1), "Group1 (Demo / Record)")
+
+
+def test_choose_another_epoch(app, qtbot):
+    panel = app.plot_widget
+    choices = panel.notes_choices()
+    assert choices.label == "Epoch" and choices.names == ["E0", "E1"]
+    assert choices.current == panel._current_item.name
+    assert choices.target("E1")[1] == "E1 (Demo / Record)"
+    dialog = NotesDialog(*panel.notes_target(), choices=choices)
+    qtbot.addWidget(dialog)
+    dialog.choice_combo.setCurrentText("E1")
+    assert dialog.editor.notes is app.series.epochs["E1"].notes
+
+
+def test_no_chooser_without_choices(qtbot):
+    dialog = NotesDialog(NMNotes(), "Demo")
+    qtbot.addWidget(dialog)
+    assert dialog.choice_combo is None
+
+
+def test_notes_available_once_there_is_one_to_choose(app):
+    """Not only after the selection changes: New Groups makes groups to choose
+    from (no group chosen), and Epoch Sets made elsewhere (e.g. Stats2's
+    Inequality) are noticed with the content."""
+    series, groups = app.series, app.series.epochs.groups
+    groups.delete_group(groups.group_numbers)
+    app._on_content_changed()  # as an action does after a change
+    assert not _notes_action(app, "group").isEnabled()
+    app.group_actions._choose = lambda title, **options: ("", None, "2")  # New Groups: 2
+    app.group_actions.new_action.trigger()
+    assert groups.group_numbers == [0, 1]
+    assert _notes_action(app, "group").isEnabled()  # no group chosen yet
+    for name in list(series.epochs.sets.keys()):
+        series.epochs.sets.pop(name)
+    app._on_content_changed()
+    assert not _notes_action(app, "epoch_set").isEnabled()
+    series.epochs.sets.add("Big", [])  # e.g. by Inequality, in Stats2
+    app._on_content_changed()  # as Stats2 says (its folder actions' content_changed)
+    assert _notes_action(app, "epoch_set").isEnabled()

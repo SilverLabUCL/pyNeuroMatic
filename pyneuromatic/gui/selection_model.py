@@ -15,6 +15,7 @@ from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS, NMManager
 from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.core.nm_utilities import combine_scope_names
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+from pyneuromatic.core.nm_group import group_name
 
 
 # Built-in Epoch Set choice (not a stored set): every epoch (Igor
@@ -406,7 +407,7 @@ def scope_runs(dataseries: NMDataSeries, selection: Mapping[str, Any]) -> list[t
     if all_sets:
         return [(name, {**selection, "epoch_set": name}) for name in all_set_names(dataseries)]
     if all_groups:
-        return [(f"Group {n}", {**selection, "group": n})
+        return [(group_name(n), {**selection, "group": n})
                 for n in dataseries.epochs.groups.group_numbers]
     return None
 
@@ -490,7 +491,7 @@ def _epochs_summary(selection: Mapping[str, Any], name) -> str | None:
     epoch_set = selection.get("epoch_set")
     group = selection.get("group")
     group_text = (ALL_GROUPS if group == ALL_GROUPS
-                  else f"Group {group}" if group is not None else None)
+                  else group_name(group) if group is not None else None)
     if is_stored_epoch_set(epoch_set) or epoch_set == ALL_SETS:
         set_text = ALL_SETS if epoch_set == ALL_SETS else f"Epoch {epoch_set}"
         if group_text is None:
@@ -523,7 +524,7 @@ def epoch_scope_label(selection: Mapping[str, Any]) -> str:
     if group == ALL_GROUPS:
         parts.append(ALL_GROUPS)
     elif group is not None:
-        parts.append(f"Group {group}")
+        parts.append(group_name(group))
     operator = selection.get("group_operator") or "?"  # "?": AND or OR not chosen
     return f" {operator} ".join(parts)
 

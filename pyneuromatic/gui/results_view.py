@@ -13,7 +13,7 @@ from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.gui.inequality_dialog import InequalityDialog
-from pyneuromatic.gui.notes_view import NotesDialog, notes_owner
+from pyneuromatic.gui.notes_view import NotesChoices, NotesDialog, notes_owner
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.tools.nm_stat_func import FUNC_NAMES_BSLN, FUNC_NAMES_N
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
@@ -1331,11 +1331,16 @@ class Stats2Panel(QtWidgets.QWidget):
         (#501, #505); the run's own note is first, read-only."""
         toolfolder = self.toolfolder()
         if toolfolder is not None:
-            self._open_notes(toolfolder.notes, notes_owner(toolfolder))
+            folders = self._folder.toolfolders
+            # The other Stats subfolders listed here, to switch to (#509)
+            choices = NotesChoices(
+                "Folder", list(self._folder_names), toolfolder.name,
+                lambda name: (folders[name].notes, notes_owner(folders[name])))
+            self._open_notes(toolfolder.notes, notes_owner(toolfolder), choices=choices)
 
-    def _open_notes(self, notes, owner: str) -> None:
+    def _open_notes(self, notes, owner: str, choices=None) -> None:
         """The Notes window (replaced in tests)."""
-        dialog = NotesDialog(notes, owner, self)
+        dialog = NotesDialog(notes, owner, self, choices)
         dialog.editor.notes_changed.connect(self._notes_changed)
         dialog.exec()
 

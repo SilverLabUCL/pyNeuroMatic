@@ -8,6 +8,7 @@ from PyQt6 import QtCore, QtWidgets
 from pyneuromatic.gui.transform_dialog import MARK, MARK_STYLE, steps_tooltip
 from pyneuromatic.gui.selection_model import (
     ALL_CHANNELS,
+    ALL_EPOCHS,
     ALL_GROUPS,
     ALL_SETS,
     BUILTIN_EPOCH_SETS,
@@ -20,6 +21,10 @@ from pyneuromatic.gui.selection_model import (
 # Shown for "no subfolder", i.e. the folder itself
 NO_SUBFOLDER = "—"
 
+
+
+# What the Epoch Set list shows for a built-in choice (its value is kept)
+EPOCH_SET_LABELS = {ALL_EPOCHS: "All Epochs"}
 
 class FlowLayout(QtWidgets.QLayout):
     """Lay items out left to right, wrapping onto new lines when out of room."""
@@ -126,7 +131,8 @@ class SelectionStrip(QtWidgets.QWidget):
     }
 
     # Narrower than the style's smallest dropdown: they hold "A" or "12"
-    _FIXED_WIDTH = {"channel": 66, "group": 66}  # room for "All"
+    # Short, as Channel: All, 0, 1 (All, A, B); the "Group" label says what
+    _FIXED_WIDTH = {"channel": 66, "group": 66}
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -422,11 +428,14 @@ class SelectionStrip(QtWidgets.QWidget):
             ]
             # All Sets runs once per set (there must be one besides SetX)
             all_sets = [(ALL_SETS, ALL_SETS)] if all_set_names(dataseries) else []
-            options["epoch_set"] = [(name, name) for name in BUILTIN_EPOCH_SETS] + all_sets + [
+            # "All Epochs" (value "All"): every epoch, one run; not All Sets
+            builtin = [(EPOCH_SET_LABELS.get(name, name), name) for name in BUILTIN_EPOCH_SETS]
+            options["epoch_set"] = builtin + all_sets + [
                 (name, name) for name in dataseries.epochs.sets.keys()
             ]
             numbers = dataseries.epochs.groups.group_numbers
-            # "All" here is All Groups: once per group (fits the narrow box)
+            # "All" here is All Groups: once per group. Numbers, short as
+            # Channel's letters (the label says Group); Group0 elsewhere
             options["group"] = ([("All", ALL_GROUPS)] if numbers else []) + [
                 (str(number), number) for number in numbers
             ]

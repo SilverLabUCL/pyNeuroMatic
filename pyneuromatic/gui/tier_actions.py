@@ -24,6 +24,7 @@ from pyneuromatic.core.nm_folder import (
 from pyneuromatic.gui.selection_model import RESERVED_EPOCH_SET_NAMES, SelectionModel
 from pyneuromatic.tools.nm_tool import toolfolder_prefix
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT
+from pyneuromatic.core.nm_group import group_name, group_names
 
 
 OPEN_FILTER = (
@@ -101,7 +102,9 @@ class Check:
 class ChooseItemDialog(QtWidgets.QDialog):
     """Choose an item (e.g. a folder) and/or enter a name, in one dialog.
 
-    *items* adds an item dropdown, starting at *current*. *name_label* adds a
+    *items* adds an item dropdown, starting at *current*; with no *current*
+    (e.g. nothing chosen in the strip, or All), it starts blank and OK waits
+    for a choice, so nothing is cleared or deleted by accident. *name_label* adds a
     name field; *default_name(item, *extras)* fills it whenever the item or
     an extra choice changes.
     *extras* adds further dropdowns, as ``(label, items, current)``,
@@ -154,9 +157,11 @@ class ChooseItemDialog(QtWidgets.QDialog):
             form.addRow(context[0], self.context_label)
 
         self.item_combo: QtWidgets.QComboBox | None = None
+        # A blank first choice, while nothing is chosen to start on
+        self._blank = items is not None and current not in items
         if items is not None:
             self.item_combo = QtWidgets.QComboBox(self)
-            self.item_combo.addItems(items)
+            self.item_combo.addItems(([self.BLANK] if self._blank else []) + list(items))
             if current in items:
                 self.item_combo.setCurrentText(current)
             form.addRow("Item" if item_label is None else item_label, self.item_combo)
@@ -206,6 +211,7 @@ class ChooseItemDialog(QtWidgets.QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self.ok_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
 
         if self.item_combo is not None:
             self.item_combo.currentTextChanged.connect(self._refill_extras)
@@ -226,8 +232,17 @@ class ChooseItemDialog(QtWidgets.QDialog):
             self.name_edit.setFocus()
         set_dialog_width(self)
 
+    BLANK = ""
+
     def item(self) -> str | None:
-        return self.item_combo.currentText() if self.item_combo is not None else None
+        """The item chosen; None while the blank first choice is."""
+        if self.item_combo is None or self.unchosen():
+            return None
+        return self.item_combo.currentText()
+
+    def unchosen(self) -> bool:
+        """True while the item dropdown is on its blank first choice."""
+        return self._blank and self.item_combo is not None and self.item_combo.currentIndex() == 0
 
     def name(self) -> str | None:
         return self.name_edit.text().strip() if self.name_edit is not None else None
@@ -251,7 +266,7 @@ class ChooseItemDialog(QtWidgets.QDialog):
         for widget, spec in self._checks:
             if spec.enabled is None:
                 continue
-            on = bool(spec.enabled(self.item(), *self.extras()))
+            on = not self.unchosen() and bool(spec.enabled(self.item(), *self.extras()))
             widget.blockSignals(True)
             if not on:
                 widget.setChecked(False)
@@ -266,7 +281,7 @@ class ChooseItemDialog(QtWidgets.QDialog):
             current = combo.currentText()
             combo.blockSignals(True)
             combo.clear()
-            choices = choices_for(self.item())
+            choices = [] if self.unchosen() else choices_for(self.item())
             combo.addItems(choices)
             if current in choices:
                 combo.setCurrentText(current)
@@ -275,10 +290,14 @@ class ChooseItemDialog(QtWidgets.QDialog):
 
     def _fill_default_name(self, *_args) -> None:
         self._enable_checks()
+        unchosen = self.unchosen()
+        self.ok_button.setEnabled(not unchosen)
         if self.name_edit is not None and self._default_name is not None:
-            self.name_edit.setText(self._default_name(self.item(), *self.extras()))
+            self.name_edit.setText(
+                "" if unchosen else self._default_name(self.item(), *self.extras()))
         message = (
-            self._message(self.item(), *self.extras())
+            "" if unchosen and callable(self._message)
+            else self._message(self.item(), *self.extras())
             if callable(self._message) else self._message
         )
         self.message_label.setText(message)
@@ -287,13 +306,15 @@ class ChooseItemDialog(QtWidgets.QDialog):
         self._show_live_error()
 
     def _show_live_error(self, *_args) -> None:
-        if not self._validate_live or self._validate is None:
+        if not self._validate_live or self._validate is None or self.unchosen():
             return
         error = self._validate(self.item(), self.name(), *self.extras())
         self.error_label.setText(error or "")
         self.error_label.setVisible(bool(error))
 
     def accept(self) -> None:
+        if self.unchosen():
+            return  # OK waits for a choice
         error = (
             self._validate(self.item(), self.name(), *self.extras())
             if self._validate else None
@@ -923,7 +944,10 @@ class TierActions(QtCore.QObject):
         self._parent_widget = parent
         self._start: dict = {}  # see starting_on
         self._notes_actions: dict[str, QtGui.QAction] = {}  # Notes…, per kind (#505)
+        # Available when there's something to choose: after the selection or
+        # the content changes (e.g. New Groups makes groups to choose from)
         selection_model.selection_changed.connect(self._update_notes_actions)
+        self.content_changed.connect(self._update_notes_actions)
 
     def _action(self, text, slot, shortcut=None, tip="") -> QtGui.QAction:
         item = QtGui.QAction(text, self)
@@ -954,19 +978,53 @@ class TierActions(QtCore.QObject):
         None if nothing (greying out Notes…). Each tier says its own."""
         return None
 
-    def _update_notes_actions(self, *_args) -> None:
-        for kind, item in self._notes_actions.items():
-            item.setEnabled(self.notes_target(kind) is not None)
+    def notes_choices(self, kind: str = ""):
+        """What the Notes window can switch to (a NotesChoices: the chosen
+        one's siblings, e.g. the other Epoch Sets, #509), or None."""
+        return None
 
-    def show_notes(self, kind: str = "") -> None:
+    @staticmethod
+    def _object_choices(label: str, container, current):
+        """NotesChoices of *container*'s objects (folders, data, series...),
+        starting on *current* (or blank, if none is chosen)."""
+        from pyneuromatic.gui.notes_view import NotesChoices, notes_owner
+        names = list(container.keys()) if container is not None else []
+        if not names:
+            return None
+        name = getattr(current, "name", None)
+        return NotesChoices(label, names, name if name in names else None,
+                            lambda n: (container[n].notes, notes_owner(container[n])))
+
+    def _notes_to_open(self, kind: str = "") -> tuple | None:
+        """(notes, owner, choices) for Notes…: the strip's choice, or else
+        none yet, to choose in the window (e.g. All Groups chosen: notes and
+        owner None, the chooser blank, as Clear… and Delete… start); None if
+        there's nothing to choose."""
+        choices = self.notes_choices(kind)
+        if choices is not None and not choices.names:
+            choices = None
         target = self.notes_target(kind)
         if target is not None:
-            self._open_notes(*target)
+            return target[0], target[1], choices
+        if choices is not None:
+            return None, None, choices
+        return None
 
-    def _open_notes(self, notes, owner: str) -> None:
-        """The Notes dialog of *owner*'s *notes* (replaced in tests)."""
+    def _update_notes_actions(self, *_args) -> None:
+        for kind, item in self._notes_actions.items():
+            item.setEnabled(self._notes_to_open(kind) is not None)
+
+    def show_notes(self, kind: str = "") -> None:
+        found = self._notes_to_open(kind)
+        if found is not None:
+            notes, owner, choices = found
+            self._open_notes(notes, owner, choices=choices)
+
+    def _open_notes(self, notes, owner: str, choices=None) -> None:
+        """The Notes dialog of *owner*'s *notes* (replaced in tests); with
+        none (None), it starts blank, to choose with *choices*."""
         from pyneuromatic.gui.notes_view import NotesDialog
-        dialog = NotesDialog(notes, owner, self._parent_widget)
+        dialog = NotesDialog(notes, owner, self._parent_widget, choices)
         dialog.editor.notes_changed.connect(self.content_changed)  # e.g. the browser
         dialog.exec()
 
@@ -1172,6 +1230,13 @@ class FolderActions(TierActions):
             subfolder = self._selection.selection.get("toolfolder")
             return (subfolder.notes, notes_owner(subfolder)) if subfolder is not None else None
         return (folder.notes, notes_owner(folder)) if folder is not None else None
+
+    def notes_choices(self, kind: str = ""):
+        if kind == "subfolder":
+            folder = self._folder()
+            return self._object_choices("Subfolder", folder.toolfolders if folder else None,
+                                        self._selection.selection.get("toolfolder"))
+        return self._object_choices("Folder", self._folders, self._folder())
 
     def folder_in_browser(self) -> None:
         folder = self._folder()
@@ -1838,6 +1903,20 @@ class DataActions(TierActions):
         data = selection.get("data")
         return (data.notes, notes_owner(data)) if data is not None else None
 
+    def notes_choices(self, kind: str = ""):
+        from pyneuromatic.gui.notes_view import NotesChoices, set_owner
+        container = self._data_container()
+        selection = self._selection.selection
+        if kind == "data_set":
+            if container is None or not container.sets.keys():
+                return None
+            sets, name = container.sets, selection.get("data_set")
+            names = sets.keys()
+            current = sets._getkey(name) if isinstance(name, str) else None
+            return NotesChoices("Data Set", names, current if current in names else None,
+                                lambda n: (sets.notes(n), set_owner(n, container)))
+        return self._object_choices("Data", container, selection.get("data"))
+
     def _data_target(self, data=None) -> tuple:
         """(container, owner, folder text, current name) for a data prompt:
         *data*'s (e.g. an array right-clicked in the browser), or the strip's
@@ -2454,6 +2533,11 @@ class SeriesActions(TierActions):
         from pyneuromatic.gui.notes_view import notes_owner
         series = self._series()
         return (series.notes, notes_owner(series)) if series is not None else None
+
+    def notes_choices(self, kind: str = ""):
+        owner = self._owner()
+        return self._object_choices("Prefix", owner.dataseries if owner else None,
+                                    self._series())
 
     def _candidate_prefixes(self) -> list[str]:
         owner = self._owner()
@@ -3275,6 +3359,19 @@ class EpochSetActions(TierActions):
         from pyneuromatic.gui.notes_view import set_owner
         return series.epochs.sets.notes(name), set_owner(name, series.epochs)
 
+    def notes_choices(self, kind: str = ""):
+        from pyneuromatic.gui.notes_view import NotesChoices, set_owner
+        series = self._series()
+        if series is None or not series.epochs.sets.keys():
+            return None
+        epochs = series.epochs
+        sets, name = epochs.sets, self._selection.selection.get("epoch_set")
+        names = sets.keys()
+        # The strip's set, else blank, to choose (e.g. All Epochs chosen)
+        current = sets._getkey(name) if isinstance(name, str) else None
+        return NotesChoices("Epoch Set", names, current if current in names else None,
+                            lambda n: (sets.notes(n), set_owner(n, epochs)))
+
     def update_enabled(self, *_args) -> None:
         series = self._series()
         sets = self._set_names()
@@ -3308,7 +3405,7 @@ class EpochSetActions(TierActions):
         options.setdefault("item_label", "")  # the names say it: Set0, Set1...
         return self._choose(
             title, context=self._series_context(series),
-            items=sets, current=current if current in sets else sets[0], **options,
+            items=sets, current=current, **options,
         )
 
     def _range_extras(self, series) -> list:
@@ -3575,6 +3672,19 @@ class GroupActions(TierActions):
         from pyneuromatic.gui.notes_view import group_owner
         return series.epochs.groups.notes(group), group_owner(group, series)
 
+    def notes_choices(self, kind: str = ""):
+        from pyneuromatic.gui.notes_view import NotesChoices, group_owner
+        series = self._series()
+        if series is None or not series.epochs.groups.group_numbers:
+            return None
+        groups = series.epochs.groups
+        # Numbers, as the other Group lists (the label says Group); the
+        # strip's group, else blank, to choose (e.g. All Groups chosen)
+        names = [str(n) for n in groups.group_numbers]
+        current = str(self._selection.selection.get("group"))
+        return NotesChoices("Group", names, current if current in names else None,
+                            lambda n: (groups.notes(int(n)), group_owner(int(n), series)))
+
     def _assigned(self, series) -> dict[str, int]:
         groups = series.epochs.groups
         return {name: groups.get_group(name) for name in series.epochs.keys()
@@ -3622,7 +3732,7 @@ class GroupActions(TierActions):
             new = missing(count)
             if not new:
                 return ""
-            span = f"Group {new[0]}" if len(new) == 1 else f"Groups {new[0]}–{new[-1]}"
+            span = group_names(new)  # e.g. Group0–Group3 (#509)
             return f"Creates {span}, with no epoch assignments."
 
         # The smallest number that creates a group: one past the first unused
@@ -3710,10 +3820,10 @@ class GroupActions(TierActions):
             extras=extras,
             message=lambda _item, group, first, last, every: (
                 range_summary("Adds", chosen(first, last, every), int(every))[:-1]
-                + f" to group {group}." if chosen(first, last, every) else ""
+                + f" to {group_name(int(group))}." if chosen(first, last, every) else ""
             ),
             validate=lambda _item, _name, group, first, last, every: (
-                (f"Group {group} doesn't exist; New Groups… makes it"
+                (f"{group_name(int(group))} doesn't exist; New Groups… makes it"
                  if existing and int(group) not in existing else None)
                 or range_error(names, first, last, int(every))
             ),
@@ -3768,9 +3878,11 @@ class GroupActions(TierActions):
         numbers = groups.group_numbers
         if not numbers:
             return None
+        # Numbers, as the strip's Group list (its label says Group); the
+        # description names it (Group1)
         items = [str(n) for n in numbers] + [self.ALL]
         start = self._start.get("group", self._selection.selection.get("group"))
-        current = str(start) if str(start) in items else self.ALL
+        current = str(start) if str(start) in items else None  # All: blank, to choose
 
         def chosen(item):
             if item == self.ALL:
@@ -3786,7 +3898,7 @@ class GroupActions(TierActions):
     def _groups_text(self, numbers: list[int]) -> tuple[str, str]:
         groups = self._series().epochs.groups
         count = sum(len(groups.get_items(n)) for n in numbers)
-        which = (f"group {numbers[0]}" if len(numbers) == 1
+        which = (group_name(numbers[0]) if len(numbers) == 1
                  else f"all {len(numbers)} groups")
         return which, f"{count} epoch{'s' * (count != 1)}"
 
@@ -3891,6 +4003,11 @@ class ChannelActions(TierActions):
         from pyneuromatic.gui.notes_view import notes_owner
         channel = self._channel()
         return (channel.notes, notes_owner(channel)) if channel is not None else None
+
+    def notes_choices(self, kind: str = ""):
+        series = self._selection.selection.get("dataseries")
+        return self._object_choices("Channel", series.channels if series is not None else None,
+                                    self._channel())
 
     def _channel(self):
         """The selected channel of the selected data series, or None."""

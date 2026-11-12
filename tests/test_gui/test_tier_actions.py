@@ -343,3 +343,44 @@ def test_dialogs_share_a_minimum_width(qtbot):
                                   items=["x"])
     qtbot.addWidget(long_title)
     assert long_title.minimumWidth() > DIALOG_WIDTH  # wide enough for its title
+
+
+def test_dialog_with_nothing_chosen_starts_blank(qtbot):
+    """With no item to start on (e.g. nothing, or All, chosen in the strip),
+    the item dropdown starts on a blank choice and OK waits for one, so
+    nothing is cleared or deleted by accident."""
+    from pyneuromatic.gui.tier_actions import ChooseItemDialog, Check
+
+    def message(item, *_):
+        assert item is not None  # not asked while blank
+        return f"Delete '{item}'."
+
+    dialog = ChooseItemDialog(
+        "Delete Folder", item_label="Folder", items=["Demo", "Other"],
+        name_label="New name", default_name=lambda item, *_: item + "_copy",
+        message=message, validate=lambda item, name, *_: None, validate_live=True,
+        extras=[("Keep", Check("Keep", enabled=lambda item, *_: item is not None))],
+    )
+    qtbot.addWidget(dialog)
+    combo = dialog.item_combo
+    assert [combo.itemText(i) for i in range(combo.count())] == ["", "Demo", "Other"]
+    assert dialog.item() is None and dialog.unchosen()
+    assert not dialog.ok_button.isEnabled()
+    assert dialog.name() == "" and dialog.message_label.isHidden()
+    assert not dialog.extra_widgets[0].isEnabled()
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted
+
+    combo.setCurrentText("Other")
+    assert dialog.item() == "Other" and dialog.ok_button.isEnabled()
+    assert dialog.name() == "Other_copy" and dialog.message_label.text() == "Delete 'Other'."
+    assert dialog.extra_widgets[0].isEnabled()
+    dialog.accept()
+    assert dialog.result() == dialog.DialogCode.Accepted
+
+    # With an item to start on, there's no blank choice
+    chosen = ChooseItemDialog("Delete Folder", item_label="Folder",
+                              items=["Demo", "Other"], current="Demo")
+    qtbot.addWidget(chosen)
+    assert chosen.item_combo.count() == 2 and chosen.item() == "Demo"
+    assert chosen.ok_button.isEnabled()

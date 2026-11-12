@@ -61,18 +61,20 @@ class NMNotes:
     def command_path(self) -> str | None:
         """These notes as written in a command (#510), e.g.
         "nm.folders['Demo'].dataseries['Record'].epochs['E0'].notes" or
-        "nm.folders['Demo'].data.sets.notes('Mine')"; None if their owner
+        "nm.folders['Demo'].data.sets['Set3'].notes"; None if their owner
         isn't in the manager (a command couldn't find them)."""
         if self._owner is None:
             return None
         from pyneuromatic.core.nm_data import nm_ref
         import pyneuromatic.core.nm_command_history as nmch
         owner, key = self._owner
-        if key is not None:  # a set's or group's: its NMSets / NMGroups
+        if key is not None:  # a set's or group's (#509): sets['Set1'], groups['Group0']
+            from pyneuromatic.core.nm_group import NMGroups, group_name
             path = getattr(owner, "_nm_cmd_path", None)
             if path is None:
                 return None
-            return "%s.%s.notes(%r)" % (nmch.get_command_history().nm_name, path, key)
+            name = group_name(key) if isinstance(owner, NMGroups) else key
+            return "%s.%s[%r].notes" % (nmch.get_command_history().nm_name, path, name)
         ref = nm_ref(owner)
         if ref == "None":  # an epoch or channel: through its data series
             series = getattr(owner, "_parent", None)

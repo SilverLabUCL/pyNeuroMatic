@@ -20,6 +20,7 @@ from pyneuromatic.core.nm_object import NMObject
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.gui.notes_view import NotesEditor, notes_owner
 from pyneuromatic.gui.transform_dialog import MARK_COLOR, MENU_TEXT, step_text
+from pyneuromatic.core.nm_group import group_name
 
 LOCKED_COLOR = MARK_COLOR  # the app's red (as SetX and the ƒ mark)
 
@@ -448,7 +449,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         self._add_row("Sets", _names(_sets_of(container, epoch.name)))
         groups = getattr(container, "groups", None)
         group = groups.get_group(epoch.name) if groups is not None else None
-        self._add_row("Group", "—" if group is None else str(group))
+        self._add_row("Group", "—" if group is None else group_name(group))
 
     # --- metadata and notes ------------------------------------------------
 

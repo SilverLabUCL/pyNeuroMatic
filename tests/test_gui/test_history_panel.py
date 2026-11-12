@@ -252,9 +252,9 @@ def test_selection_says_when_and_or_is_not_chosen(app):
     series.epochs.groups.assign_cyclic(list(series.epochs.keys()), 2)
     app.selection_model.update(dataseries=series, epoch_set="Set0", group=0)
     assert _entries(app, "selection")[-1] == (
-        "Selection: Demo / Rec / A / Epoch Set0 ? Group 0 (choose AND or OR)")
+        "Selection: Demo / Rec / A / Epoch Set0 ? Group0 (choose AND or OR)")
     app.selection_model.update(group_operator="AND")
-    assert _entries(app, "selection")[-1] == "Selection: Demo / Rec / A / Epoch Set0 AND Group 0"
+    assert _entries(app, "selection")[-1] == "Selection: Demo / Rec / A / Epoch Set0 AND Group0"
 
 
 def test_select_commands_are_not_shown(app):

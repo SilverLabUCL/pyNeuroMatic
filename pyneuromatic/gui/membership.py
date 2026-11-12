@@ -11,6 +11,7 @@ from typing import Any
 from PyQt6 import QtCore
 
 from pyneuromatic.core.nm_object_container import NMObjectContainer
+from pyneuromatic.core.nm_group import group_name
 
 
 def unassign_from_group(groups, names, group: int) -> None:
@@ -83,7 +84,7 @@ class MembershipModel(QtCore.QAbstractTableModel):
 
     @property
     def target_label(self) -> str:
-        return f"Group {self.group}" if self.is_group else str(self.set_name)
+        return group_name(self.group) if self.is_group else str(self.set_name)
 
     def same_target(self, container, set_name=None, group=None) -> bool:
         return (container is self.container and set_name == self.set_name
@@ -158,7 +159,7 @@ class MembershipModel(QtCore.QAbstractTableModel):
             if key == "data":
                 return _arrays_text(self.container, name)
             group = self.container.groups.get_group(name)
-            return "" if group is None else str(group)
+            return "" if group is None else group_name(group)
         return None
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlag:
