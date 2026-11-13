@@ -390,7 +390,8 @@ class SelectionStrip(QtWidgets.QWidget):
             self.epoch_count_label.setToolTip("")
         source = selection.get("source")
         for name, button in self._source_buttons.items():
-            button.setEnabled(selection.get(name) is not None)
+            # The source stays enabled with nothing chosen in it (#521)
+            button.setEnabled(selection.get(name) is not None or name == source)
             self._source_group.setExclusive(False)
             button.setChecked(name == source)
             self._source_group.setExclusive(True)

@@ -196,8 +196,12 @@ class SelectionModel(QtCore.QObject):
             self._source = updates["source"]
         else:
             # The last section the user chose an item in becomes the source
+            # (one with an item: e.g. an Epoch Set alone, without a data
+            # series, doesn't move it)
+            values = self._manager.select_values
             for key, source in self._SOURCE_FOR_KEY.items():
-                if key in updates and updates[key] is not None:
+                if (key in updates and updates[key] is not None
+                        and values.get(source) is not None):
                     self._source = source
         self._normalize_source()
         self._remember_context()
@@ -218,12 +222,19 @@ class SelectionModel(QtCore.QObject):
             self._group = None
 
     def _normalize_source(self) -> None:
-        """Keep ``source`` pointing at a selected data array or data series."""
+        """Choose a source while there's none yet (the data series if one is
+        selected, as the analysis default). Once chosen, it stays where it
+        is, even with nothing selected in it (e.g. Data Series blanked or
+        deleted, #521): only choosing an item in a section, or the toggle,
+        changes it, so the tools don't quietly switch to the other one."""
         values = self._manager.select_values
+        if values.get("folder") is None:
+            self._source = None  # no folder: nothing in either; chosen again
+            return
+        if self._source in self.SOURCES:
+            return
         available = [tier for tier in self.SOURCES if values.get(tier) is not None]
-        if self._source not in available:
-            # Prefer the data series, as the analysis default
-            self._source = available[-1] if available else None
+        self._source = available[-1] if available else None
 
     def clear(self, *tiers: str) -> None:
         """Clear all selection, or the requested tiers and their descendants."""
@@ -237,6 +248,8 @@ class SelectionModel(QtCore.QObject):
         previous_scopes = self._data_scope(), self._epoch_scope()
         if {"all_channels", "channel", "dataseries"} & set(tiers):
             self._all_channels = False
+        if "source" in tiers:
+            self._source = None  # e.g. clearing everything: chosen again
         if "data_set" in tiers:
             self._data_set = None
             self._data_set_memory.pop(previous_scopes[0], None)

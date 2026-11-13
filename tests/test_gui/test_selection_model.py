@@ -90,10 +90,17 @@ def test_data_and_dataseries_stay_selected_and_source_follows_choice(qtbot):
     assert selection.selection["source"] == "dataseries"
     assert selection.selection["data"] is folder.data["Other0"]
 
-    # Clearing the source's selection falls back to the other one
+    # Blanking the source's selection keeps it (#521): no switch to the other
     selection.update(dataseries=None)
+    assert selection.selection["source"] == "dataseries"
+    assert selection.selection["data"] is folder.data["Other0"]
+    selection.update(source="data")  # the toggle, by the user
     assert selection.selection["source"] == "data"
     selection.update(data=None)
+    assert selection.selection["source"] == "data"
+    selection.update(dataseries=series)  # choosing an item still moves it
+    assert selection.selection["source"] == "dataseries"
+    selection.update(folder=None)  # nothing in either: none
     assert selection.selection["source"] is None
 
 
