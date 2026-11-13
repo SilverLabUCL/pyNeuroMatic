@@ -1156,3 +1156,34 @@ def test_stats2_inequality_is_one_command(series_app):
     subfolder.data.pop("IQ_ST_w0_mean_y")
     exec(command, {"nm": manager})
     assert list(subfolder.data["IQ_ST_w0_mean_y"].nparray) == result
+
+
+def test_blanking_the_source_keeps_it_with_nothing_to_run(qtbot):
+    """#521: blanking Data Series doesn't switch the source to Data (with a
+    data array selected); the plot and Run say there's nothing; the toggle
+    switches it."""
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo")
+    series = folder.new_dataseries("Record", n_channels=1, n_epochs=3, n_points=5)
+    folder.data.new("Other", nparray=np.arange(5.0))
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    model, strip = window.selection_model, window.selection_strip
+    model.update(folder=folder, data=folder.data["Other"])
+    model.update(dataseries=series)
+    strip.combo("dataseries").setCurrentIndex(0)  # blank
+    selection = model.selection
+    assert selection["source"] == "dataseries" and selection["dataseries"] is None
+    assert selection["data"] is folder.data["Other"]  # still selected, not used
+    button = strip.source_button("dataseries")
+    assert button.isChecked() and button.isEnabled()
+    assert window.plot_widget.trace_name_label.text() == "No trace"
+    tab = window.tool_tabs["Stats"]
+    assert tab.run_info_label.text() == "Choose a data series"
+    strip.source_button("data").click()  # the user switches it
+    assert model.selection["source"] == "data"
+    assert tab.run_info_label.text() == "n=1"
+    # And the other way: blanking Data keeps Data, with nothing to run
+    strip.combo("data").setCurrentIndex(0)
+    assert model.selection["source"] == "data"
+    assert tab.run_info_label.text() == "Choose a data array or Data Set"

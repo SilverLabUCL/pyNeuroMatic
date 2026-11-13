@@ -1326,6 +1326,8 @@ class StatsToolTab(ToolTabWidget):
 
         if source == "dataseries":
             dataseries = selection.get("dataseries")
+            if dataseries is None:  # the source, with nothing chosen (#521)
+                raise RuntimeError("Choose a data series")
             channel = selection.get("channel")
             if not isinstance(channel, NMChannel):
                 raise RuntimeError("Select a channel before running Stats")
@@ -1365,6 +1367,8 @@ class StatsToolTab(ToolTabWidget):
                 return []
             data_set = selection.get("data_set")
             if data_set is None:
+                if data is None:  # the source, with nothing chosen (#521)
+                    raise RuntimeError("Choose a data array or Data Set")
                 data_names = [data.name]
             else:
                 members = context.data.sets.get_items(data_set, get_keys=True) or []

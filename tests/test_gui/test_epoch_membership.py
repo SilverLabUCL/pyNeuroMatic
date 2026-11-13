@@ -277,20 +277,21 @@ def test_narrow_group_and_channel_dropdowns(app):
 
 
 def test_assign_label_names_what_is_changed(app):
-    """#519: "Assign E3", following the epoch shown, so the boxes read as
-    changing it (not choosing, as the strip's Epoch Set / Group)."""
+    """#519: "Assign to:", its tooltip naming the epoch shown, so the boxes
+    read as changing it (not choosing, as the strip's Epoch Set / Group)."""
     panel = app.plot_widget
     layout = panel.membership_row.layout()
     assert layout.itemAt(0).widget() is panel.assign_label  # first in the row
-    assert panel.assign_label.text() == "Assign E0:"
-    assert "sets and group of the epoch shown" in panel.assign_label.toolTip()
+    assert panel.assign_label.text() == "Assign to:"
+    assert panel.assign_label.toolTip() == "Change the sets and group of the epoch shown (E0)"
     panel._step_trace(3)
-    assert panel.assign_label.text() == "Assign E3:"
+    assert panel.assign_label.text() == "Assign to:"
+    assert panel.assign_label.toolTip().endswith("(E3)")
 
 
 def test_assign_label_names_the_data_array(data_app):
     panel = data_app.plot_widget
-    assert panel.assign_label.text() == "Assign A0:"
-    assert "sets of the data array shown" in panel.assign_label.toolTip()
+    assert panel.assign_label.text() == "Assign to:"
+    assert panel.assign_label.toolTip() == "Change the sets of the data array shown (A0)"
     panel._step_trace(1)
-    assert panel.assign_label.text() == "Assign A1:"
+    assert panel.assign_label.toolTip().endswith("(A1)")
