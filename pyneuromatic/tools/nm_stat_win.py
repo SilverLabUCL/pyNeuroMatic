@@ -516,7 +516,9 @@ class NMStatWinContainer:
     """Ordered container of NMStatWin objects with auto-naming.
 
     Windows are created via ``new()`` and named ``{prefix}0``, ``{prefix}1``,
-    etc. ``selected_name`` is the window currently shown for editing.
+    etc. ``selected_name`` is the window currently shown for editing. Any
+    window can be deleted (one is always kept); the others keep their names
+    (e.g. w0, w2), as results and run notes name them.
 
     Args:
         name_prefix: Prefix for auto-generated window names (default ``"w"``).
@@ -549,29 +551,104 @@ class NMStatWinContainer:
         add_nm_command("%s.selected_name = %r" % (self._nm_path, name))
 
     @records_command
-    def new(self, select: bool = False, quiet: bool = nmc.QUIET) -> NMStatWin:
-        """Create, register, and return a new NMStatWin with an auto-name.
+    def new(self, select: bool = False, quiet: bool = nmc.QUIET,
+            number: int | None = None) -> NMStatWin:
+        """Create, register, and return a new NMStatWin with an auto-name:
+        the number after the highest (w0, w2 → w3), or *number* (e.g. 1, to
+        fill a gap). Windows are kept in order of number.
 
         Args:
             select: If True, select it (the first window is always selected).
+            number: The window's number (e.g. 1 → w1), unused; None for the
+                number after the highest.
+
+        Raises:
+            ValueError: If *number* is negative or already used.
         """
-        name = "%s%d" % (self._prefix, self._count)
-        self._count += 1
+        default = self._count  # the number after the highest
+        if number is None:
+            number = default
+        else:
+            number = int(number)
+            if number < 0:
+                raise ValueError("a stat window number must be 0 or more")
+            if "%s%d" % (self._prefix, number) in self._windows:
+                raise ValueError("stat window '%s%d' exists" % (self._prefix, number))
+        name = "%s%d" % (self._prefix, number)
         w = NMStatWin(name=name, nm_path=self._nm_path)
         self._windows[name] = w
+        self._sort()
+        self._count = self._next_count()
         if select or self._selected_name is None:
             self._selected_name = name
-        # The command doesn't name the window (it is named for you)
+        # The command names the number only if it isn't the one after the highest
+        args = [] if number == default else ["number=%d" % number]
         nmh.history("new window %s" % name, path=self._nm_path, quiet=quiet)
-        add_nm_command("%s.new(%s)" % (self._nm_path, "select=True" if select else ""))
+        add_nm_command("%s.new(%s)" % (self._nm_path, ", ".join(
+            args + (["select=True"] if select else []))))
         return w
+
+    @property
+    def next_number(self) -> int:
+        """The number ``new()`` gives without one: after the highest (w0,
+        w2 → 3)."""
+        return self._count
+
+    def _sort(self) -> None:
+        """Keep the windows in order of number (a gap filled: w0, w1, w3)."""
+        def number(name: str) -> float:
+            digits = name[len(self._prefix):]
+            return int(digits) if name.startswith(self._prefix) and digits.isdigit() else math.inf
+        self._windows = dict(sorted(self._windows.items(), key=lambda item: number(item[0])))
+
+    def _next_count(self) -> int:
+        """The number after the highest window name's (w0, w2 → 3), so
+        ``new()`` doesn't reuse a name while a later window exists."""
+        numbers = [
+            int(name[len(self._prefix):]) for name in self._windows
+            if name.startswith(self._prefix) and name[len(self._prefix):].isdigit()
+        ]
+        return max(numbers) + 1 if numbers else 0
+
+    def _remove(self, name: str) -> None:
+        """Remove window *name* (no command or history): one is always kept.
+        If it was selected, the one before it is (or the next, if it was the
+        first). Deleting the last frees its number for ``new()``."""
+        if name not in self._windows:
+            raise KeyError("no stat window '%s'" % name)
+        if len(self._windows) <= 1:
+            raise RuntimeError("the only stat window can't be deleted")
+        names = list(self._windows)
+        index = names.index(name)
+        del self._windows[name]
+        if self._selected_name == name:
+            others = list(self._windows)
+            self._selected_name = others[max(index - 1, 0)]
+        self._count = self._next_count()
+
+    @records_command
+    def delete(self, name: str, quiet: bool = nmc.QUIET) -> str:
+        """Delete window *name* (e.g. "w1"); the others keep their names
+        (w0, w2), as results and run notes name them. There is always one
+        window. If *name* was selected, the one before it is selected (or
+        the next, if it was the first).
+
+        Returns:
+            The name of the window deleted.
+
+        Raises:
+            KeyError: If there is no window *name*.
+            RuntimeError: If it is the only window.
+        """
+        self._remove(name)
+        nmh.history("deleted window %s" % name, path=self._nm_path, quiet=quiet)
+        add_nm_command("%s.delete(%r)" % (self._nm_path, name))
+        return name
 
     @records_command
     def delete_last(self, quiet: bool = nmc.QUIET) -> str:
-        """Delete the last window (e.g. w2), so the names stay in sequence;
-        the next ``new()`` window takes its name again. The first window is
-        kept: there is always one. If the last window was selected, the one
-        before it is selected.
+        """Delete the last window (e.g. w2); the next ``new()`` window takes
+        its name again. As :meth:`delete`, for the last window.
 
         Returns:
             The name of the window deleted.
@@ -580,14 +657,9 @@ class NMStatWinContainer:
             RuntimeError: If there is only one window (or none).
         """
         if len(self._windows) <= 1:
-            raise RuntimeError("the first stat window can't be deleted")
+            raise RuntimeError("the only stat window can't be deleted")
         name = list(self._windows)[-1]
-        del self._windows[name]
-        number = name[len(self._prefix):]
-        if name.startswith(self._prefix) and number.isdigit():
-            self._count = int(number)  # new() makes it again
-        if self._selected_name == name:
-            self._selected_name = list(self._windows)[-1]
+        self._remove(name)
         nmh.history("deleted window %s" % name, path=self._nm_path, quiet=quiet)
         add_nm_command("%s.delete_last()" % self._nm_path)
         return name
@@ -651,7 +723,7 @@ class NMStatWinContainer:
             name = wd.get("name", "%s%d" % (prefix, container._count))
             w = NMStatWin(name=name, win=wd)
             container._windows[name] = w
-            container._count += 1
+            container._count = container._next_count()  # after the highest (w0, w2 → w3)
         container._selected_name = d.get("selected_name")
         return container
 

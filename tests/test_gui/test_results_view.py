@@ -250,7 +250,7 @@ def test_details_list_nan_rows(qtbot):
 def test_index_and_count_arrays_and_window_switch(qtbot):
     _manager, _folder, window = _stats_window(qtbot)
     tab = window.tool_tabs["Stats"]
-    tab.window_combo.setCurrentIndex(tab.window_combo.findData(tab.NEW_WINDOW_ACTION))
+    tab._add_window()
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
     stats2 = tab.stats2

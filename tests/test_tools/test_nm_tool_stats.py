@@ -1418,6 +1418,64 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
         self.assertEqual([w.name for w in windows], ["w0"])
         self.assertEqual(self._ch.buffer, [])
 
+    def test_delete_any_window_keeps_the_others_names(self):
+        """#514: any window, not only the last; no renumbering (results and
+        run notes name the windows)."""
+        windows = self.tool.windows
+        windows.new()
+        windows.new()  # w0, w1, w2; w0 selected
+        self._ch.clear()
+        self.assertEqual(windows.delete("w1"), "w1")
+        self.assertEqual([e["command"] for e in self._ch.buffer],
+                         ["nm.stats.windows.delete('w1')"])
+        self.assertEqual([w.name for w in windows], ["w0", "w2"])
+        self.assertEqual(windows.selected_name, "w0")  # unchanged
+        windows.new()
+        self.assertEqual([w.name for w in windows], ["w0", "w2", "w3"])  # after the highest
+        # The selected window: the one before it, or the next if it was the first
+        windows.selected_name = "w2"
+        windows.delete("w2")
+        self.assertEqual(windows.selected_name, "w0")
+        windows.delete("w0")
+        self.assertEqual(windows.selected_name, "w3")
+        self.assertEqual([w.name for w in windows], ["w3"])
+        with self.assertRaises(RuntimeError):
+            windows.delete("w3")  # the only one is kept
+        with self.assertRaises(KeyError):
+            windows.delete("w9")
+        windows.new()
+        self.assertEqual([w.name for w in windows], ["w3", "w4"])
+
+    def test_new_window_with_a_number_fills_a_gap(self):
+        windows = self.tool.windows
+        windows.new()
+        windows.new()
+        windows.new()
+        windows.delete("w2")  # w0, w1, w3
+        self._ch.clear()
+        windows.new(number=2)
+        self.assertEqual([w.name for w in windows], ["w0", "w1", "w2", "w3"])  # in order
+        self.assertEqual(windows.next_number, 4)
+        windows.new()  # the default: no number in the command
+        self.assertEqual([e["command"] for e in self._ch.buffer], [
+            "nm.stats.windows.new(number=2)", "nm.stats.windows.new()"])
+        self.assertEqual(windows.selected_name, "w0")  # not selected
+        with self.assertRaises(ValueError):
+            windows.new(number=3)  # exists
+        with self.assertRaises(ValueError):
+            windows.new(number=-1)
+        self.assertEqual(len(windows), 5)
+
+    def test_loading_windows_with_a_gap_continues_after_the_highest(self):
+        windows = self.tool.windows
+        windows.new()
+        windows.new()
+        windows.delete("w1")
+        loaded = nmsw.NMStatWinContainer.from_dict(windows.to_dict())
+        self.assertEqual([w.name for w in loaded], ["w0", "w2"])
+        loaded.new()
+        self.assertEqual([w.name for w in loaded], ["w0", "w2", "w3"])  # not w2 again
+
     def test_delete_last_keeps_another_selection(self):
         windows = self.tool.windows
         windows.new()  # w1, w0 still selected
