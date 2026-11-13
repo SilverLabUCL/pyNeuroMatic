@@ -410,6 +410,13 @@ class PlotPanel(QtWidgets.QWidget):
         self.membership_row = QtWidgets.QWidget(self)
         membership_layout = QtWidgets.QHBoxLayout(self.membership_row)
         membership_layout.setContentsMargins(0, 0, 0, 0)
+        # What they change: the epoch (or data array) shown, e.g. "Assign E3"
+        # (#519), unlike the strip's Epoch Set / Group, which choose
+        self.assign_label = QtWidgets.QLabel("Assign", self.membership_row)
+        self.assign_label.setObjectName("assignLabel")
+        self.assign_label.setStyleSheet("font-weight: bold;")
+        membership_layout.addWidget(self.assign_label)
+        membership_layout.addSpacing(4)
         self._sets_layout = QtWidgets.QHBoxLayout()
         self._sets_layout.setContentsMargins(0, 0, 0, 0)
         membership_layout.addLayout(self._sets_layout)
@@ -813,6 +820,12 @@ class PlotPanel(QtWidgets.QWidget):
         if not names and not has_groups:
             return
         self._updating_membership = True
+        self.assign_label.setText(f"Assign {item.name}:")
+        noun = "epoch" if self._trace_mode == "dataseries" else "data array"
+        self.assign_label.setToolTip(
+            f"Change the sets and group of the {noun} shown ({item.name})"
+            if self._trace_mode == "dataseries" else
+            f"Change the sets of the {noun} shown ({item.name})")
         self._rebuild_set_checkboxes(names)
         for set_name, box in self.set_checkboxes.items():
             box.setEnabled(not container.sets.is_equation(set_name))
