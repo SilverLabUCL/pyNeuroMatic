@@ -246,6 +246,10 @@ def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
 class StatsToolTab(ToolTabWidget):
     """Single-window Stats1 editor and runner using the project's Stats tool."""
 
+    # Its tab shows Stats2's plots and tables (#523)
+    view_label = "Stats2"
+    NO_RESULTS_TITLE = "No Stats2 results yet: Run in Stats1"
+
     # The current window's X range and its baseline range, on the Plot (#436)
     WINDOW_COLOR = "#2563eb"
     BSLN_COLOR = "#16a34a"
@@ -535,6 +539,8 @@ class StatsToolTab(ToolTabWidget):
         self.table_view = self.stats2.tables
         self.stats2.results_changed.connect(self.results_changed)
         self.stats2.plot_requested.connect(self._show_plot_values)
+        # Stats2 ⋯ › Table: its tables, the chosen array's column (#523)
+        self.stats2.table_requested.connect(lambda: self.view_requested.emit("table"))
         # The plot follows the array chosen in Stats2, e.g. after a run
         self.stats2.array_changed.connect(self._plot_selected_array)
         self._plot_selected_array()
@@ -544,6 +550,15 @@ class StatsToolTab(ToolTabWidget):
         stats1 = self.mode_tabs.currentWidget() is not self.stats2
         self.run_row.setVisible(stats1)
         self.display_row.setVisible(stats1 and self._settings is not None)
+        # The view follows (#523): Stats1, the channel (its measure on the
+        # trace); Stats2, its tab; Plot or Table stays as it is
+        self.view_requested.emit(self.preferred_view())
+
+    def preferred_view(self) -> str:
+        return "tool" if self.mode_tabs.currentWidget() is self.stats2 else "channel"
+
+    def lists_view(self) -> bool:
+        return True  # Stats2's tab, to switch to (saying so, without results)
 
     def _on_selection_changed(self, selection: dict[str, Any]) -> None:
         super()._on_selection_changed(selection)
@@ -616,7 +631,7 @@ class StatsToolTab(ToolTabWidget):
         """Draw the array chosen in Stats2 (the panel shown doesn't change)."""
         values = self.stats2.selected_plot()
         if values is None:
-            self.plot_view.clear()
+            self.plot_view.clear(None if self.has_results() else self.NO_RESULTS_TITLE)
         else:
             self.plot_view.show_values(*values)
 

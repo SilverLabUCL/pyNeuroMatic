@@ -83,7 +83,9 @@ def test_plot_trace_navigator_steps_data_and_series(qtbot, nm):
     assert navigator.trace_name_label.text() == "RecordA0"
 
 
-def test_plot_channel_tabs_are_independent_of_analysis_channel(qtbot, nm):
+def test_plot_channel_tab_is_the_strip_channel(qtbot, nm):
+    """#523: only the strip's channel is listed (A; A | Stats2 in Stats): the
+    plot shows the channel analysed; channels are chosen in the strip."""
     folder = nm.folders.new("Demo", select=False)
     for channel in ("A", "B"):
         for epoch in range(2):
@@ -107,36 +109,29 @@ def test_plot_channel_tabs_are_independent_of_analysis_channel(qtbot, nm):
     if plot.plot_widget is None:
         pytest.skip("pyqtgraph is not installed")
 
-    analysis_channel = nm.select_values["channel"]
-    assert [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())] == [
-        "A", "B"
-    ]
-    assert plot.view_tabs.currentIndex() == 0
+    def tabs():
+        return [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())]
 
-    plot.view_tabs.setCurrentIndex(1)
+    assert tabs() == ["A"]  # Browser: no Stats2 tab (#523)
+    assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "A"
+    assert plot.current_trace is dataseries.get_data(channel="A", epoch="E0")
 
-    assert nm.select_values["channel"] is analysis_channel
+    win.selection_model.update(channel=dataseries.channels["B"])
+    assert tabs() == ["B"]
+    assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "B"
     assert plot.current_trace is dataseries.get_data(channel="B", epoch="E0")
     assert plot.trace_name_label.text() == "RecordB0"
 
     plot.trace_index.setValue(1)
-    assert nm.select_values["channel"] is analysis_channel
     assert plot.current_trace is dataseries.get_data(channel="B", epoch="E1")
     assert plot.plot_widget.getPlotItem().listDataItems()
     assert "epoch" not in win.selection_strip.keys()
 
     win.selection_model.update(dataseries=stim)
     assert nm.select_values["dataseries"] is stim
-    assert [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())] == ["A"]
+    assert tabs() == ["A"]  # Browser: no Stats2 tab (#523)
     assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "A"
     assert plot.current_trace is stim.get_data(channel="A", epoch="E0")
-
-    win.selection_model.update(dataseries=dataseries)
-    assert [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())] == [
-        "A", "B"
-    ]
-    assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "A"
-    assert nm.select_values["channel"].name == "A"
 
 
 def test_plot_overlay_limits_and_downsamples_traces(qtbot, nm):

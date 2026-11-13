@@ -406,7 +406,7 @@ def test_the_prompt_is_in_the_run_row(app):
 
 def test_after_a_run_the_plot_is_back_on_its_channel(qtbot):
     """The run shows its channel's epochs; afterwards the Plot is on the
-    channel (and panel) shown before."""
+    view (and panel) shown before: e.g. Stats2's tab, on Table."""
     manager = NMManager(quiet=True)
     folder = manager.folders.new("Demo", select=False)
     series = folder.new_dataseries("Record", n_channels=2, n_epochs=2, n_points=5)
@@ -414,19 +414,20 @@ def test_after_a_run_the_plot_is_back_on_its_channel(qtbot):
                            "channel": "A", "epoch": "E0"}
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
+    window.tool_rail.select_tool("Stats")
     tab = window.tool_tabs["Stats"]
     tab.measurement_combo.setCurrentText("mean")
     tab.set_config_option("results_to_numpy", False)  # no Stats plot after it
-    window.view_tabs.select_channel("B")  # looking at B; the run is on A
+    window.view_tabs.select_tool("Stats")  # looking at Stats2; the run is on A
     window.context_panel.setCurrentWidget(window.table_panel)
     channels = []
     tab.run_trace_shown.connect(
         lambda data, _c: data is not None and channels.append(window.view_tabs.current_view()))
     tab.run_button.click()
     assert channels and all(view == ("channel", "A") for view in channels)
-    assert window.view_tabs.current_view() == ("channel", "B")
+    assert window.view_tabs.current_view() == ("tool", "Stats")
     assert window.context_panel.currentWidget() is window.table_panel
-    assert window.plot_widget.current_trace is series.get_data("B", "E0")
+    assert window.plot_widget.current_trace is series.get_data("A", "E0")
 
 
 def test_the_choice_is_labelled_progress(app, qtbot):

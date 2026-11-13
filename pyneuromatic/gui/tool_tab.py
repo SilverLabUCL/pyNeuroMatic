@@ -115,8 +115,11 @@ class ToolTabWidget(QtWidgets.QWidget):
     history_entry = QtCore.pyqtSignal(str, str)
     # Its results changed (a run, a deleted subfolder): its tabs and the Subfolder list
     results_changed = QtCore.pyqtSignal()
-    # Show its view: "plot" or "table"
+    # Show its view: "plot" or "table" (the panel too); or "tool" (its tab)
+    # or "channel" (the channel's), keeping the panel shown (#523)
     view_requested = QtCore.pyqtSignal(str)
+    # Its tab's text, if not its name (e.g. Stats: "Stats2", #523)
+    view_label: str | None = None
     # A run's progress, as shown: (done, total)
     progress_changed = QtCore.pyqtSignal(int, int)
     # Display while running: show this epoch's data (and its channel's name)
@@ -457,6 +460,16 @@ class ToolTabWidget(QtWidgets.QWidget):
     def has_results(self) -> bool:
         """Whether its views have something to show (their tabs appear)."""
         return False
+
+    def lists_view(self) -> bool:
+        """Whether its tab is listed: once it has results, unless it's always
+        listed (e.g. Stats2, to switch to, #523)."""
+        return self.has_results()
+
+    def preferred_view(self) -> str | None:
+        """The view to show when the tool is chosen: "tool" (its tab),
+        "channel", or None to leave the view as it is (#523)."""
+        return None
 
     def config_options(self) -> list[tuple[str, str, bool, str]]:
         """(key, label, value, tip) of each option in Settings; none: no page."""

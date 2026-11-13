@@ -57,7 +57,7 @@ def test_channel_table_shows_every_epoch_as_a_column(two_channel_window):
     table = window.table_panel
     model = table.channel_table.model
 
-    assert _tab_texts(table.view_tabs) == ["A", "B"]
+    assert _tab_texts(table.view_tabs) == ["A"]  # the strip's channel (#523)
     assert _headers(model) == ["x (ms)", "RecordA0", "RecordA1", "RecordA2", "RecordA3"]
     assert model.rowCount() == 5
     assert [_cell(model, 2, c) for c in range(5)] == ["3", "2", "12", "22", "32"]
@@ -75,7 +75,7 @@ def test_channel_table_shows_every_epoch_as_a_column(two_channel_window):
     assert [(i.row(), i.column()) for i in view.selectedIndexes()] == [(3, 1)]
 
 
-def test_channel_table_follows_set_and_channel_tab(two_channel_window):
+def test_channel_table_follows_set_and_the_strip_channel(two_channel_window):
     window, _folder, dataseries = two_channel_window
     dataseries.epochs.sets.add("Odd", ["E1", "E3"])
     table = window.table_panel
@@ -85,11 +85,11 @@ def test_channel_table_follows_set_and_channel_tab(two_channel_window):
     assert _headers(model) == ["x (ms)", "RecordA1", "RecordA3"]
     assert table.channel_table.title_label.text() == "Record  channel A: 2 epochs (Epoch Set: Odd)"
 
-    table.view_tabs.select_channel("B")
+    # The channel is chosen in the strip (#523): its tab is the only one
+    window.selection_model.update(channel=dataseries.channels["B"])
+    assert _tab_texts(table.view_tabs) == ["B"]
     assert _headers(model) == ["x (ms)", "RecordB1", "RecordB3"]
     assert _cell(model, 0, 1) == "1000"
-    # The analysis channel is not changed by the table's channel tab
-    assert window.selection_model.selection["channel"].name == "A"
 
 
 def test_channel_table_reports_missing_operator(two_channel_window):
@@ -148,7 +148,6 @@ def test_tool_bar_keeps_tool_selected_when_channels_change(qtbot):
     bar.set_views(["A", "B"], ["Stats"], current_channel="B")
     assert bar.select_tool("Stats")
     assert views[-1] == ("tool", "Stats")
-    assert bar.tabTextColor(2) == ChannelToolBar.TOOL_TEXT_COLOR
 
     bar.set_views(["A", "B", "C"], ["Stats"], current_channel="A")
     assert bar.current_view() == ("tool", "Stats")
