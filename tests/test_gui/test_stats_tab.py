@@ -175,7 +175,8 @@ def test_stats_tab_preserves_multiple_window_settings(qtbot):
     assert tab.window_enabled.isChecked() is False
 
 
-def test_stats_tab_uses_analysis_channel_not_plot_channel(qtbot):
+def test_stats_measures_the_channel_plotted(qtbot):
+    """#523: the plot lists only the strip's channel, the one Stats measures."""
     manager = NMManager(quiet=True)
     folder = manager.folders.new("Demo", select=False)
     folder.data.new(
@@ -199,13 +200,14 @@ def test_stats_tab_uses_analysis_channel_not_plot_channel(qtbot):
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
     tab = window.tool_tabs["Stats"]
-    window.plot_widget.view_tabs.setCurrentIndex(1)
+    window.selection_model.update(channel=dataseries.channels["B"])
+    assert window.view_tabs.channel_names == ["B"]
+    assert window.plot_widget.current_trace is dataseries.get_data("B", "E0")
     tab.measurement_combo.setCurrentText("mean")
     tab.run_button.click()
 
-    assert manager.select_values["channel"].name == "A"
-    assert window.plot_widget.current_trace is dataseries.get_data("B", "E0")
-    assert _main_result(manager)["s"] == 2.0
+    assert manager.select_values["channel"].name == "B"
+    assert _main_result(manager)["s"] == 20.0
 
 
 def test_stats_arrays_are_a_setting_and_no_cache(qtbot):

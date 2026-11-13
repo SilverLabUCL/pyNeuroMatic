@@ -491,7 +491,6 @@ class PlotPanel(QtWidgets.QWidget):
         self._updating_channel_tabs = False
         self._plot_dataseries = None
         self._plot_channel_name: str | None = None
-        self._strip_channel_name: str | None = None  # the strip's channel, last seen
         self._last_selection: dict = {}
         self.current_trace = None
         self._trace_style = dict(TRACE_STYLE_DEFAULTS)  # until set_trace_style
@@ -596,24 +595,17 @@ class PlotPanel(QtWidgets.QWidget):
             self._set_views(channels, DATA_VIEW)
             return
 
-        channel_names = list(dataseries.channels.keys())
-        previous_channel = self._plot_channel_name
+        # Only the strip's channel (#523): the plot shows the channel being
+        # analysed; channels are chosen in the strip
+        names = list(dataseries.channels.keys())
         selected_channel = selection.get("channel")
         selected_name = selected_channel.name if selected_channel is not None else None
-        # A channel chosen in the strip is shown (a tab shows another until then)
-        strip_changed = selected_name != self._strip_channel_name
-        self._strip_channel_name = selected_name
-        if strip_changed and selected_name in channel_names:
-            previous_channel = selected_name
-        if previous_channel not in channel_names:
-            previous_channel = (
-                selected_name if selected_name in channel_names
-                else channel_names[0] if channel_names else None
-            )
+        channel = selected_name if selected_name in names else (names[0] if names else None)
+        channel_names = [channel] if channel is not None else []
 
         self._plot_dataseries = dataseries
-        self._plot_channel_name = previous_channel
-        self._set_views(channel_names, previous_channel)
+        self._plot_channel_name = channel
+        self._set_views(channel_names, channel)
         self.view_tabs.mark_channels(
             {name: steps_tooltip(channel) for name, channel in dataseries.channels.items()}
         )
@@ -1607,6 +1599,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
         action = getattr(self, "tool_view_actions", {}).get(tool_name)
         if action is not None:
             action.setChecked(True)  # View › the tool, as the rail
+        # Only this tool's results tab (e.g. Stats: A | Stats2; Browser: A)
+        self._update_tool_tabs()
+        tab = self.tool_tabs.get(tool_name)
+        view = tab.preferred_view() if tab is not None else None
+        if view is not None:  # e.g. Stats1: the channel; Stats2: its tab (#523)
+            self._show_tool_view(tool_name, view)
 
     def has_session_to_lose(self) -> bool:
         """True when quitting would lose something: a folder, or commands
@@ -1922,6 +1920,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         tab.set_folder_actions(self.folder_actions)  # e.g. Stats2's Folder ⋯ (#494)
         tab.history_entry.connect(lambda kind, text: self.history_panel.add(kind, text))
         # Its views appear in both panels while the folder has its results
+        if tab.view_label:
+            self.view_tabs.tool_labels[name] = tab.view_label  # e.g. Stats2
         if tab.plot_view is not None:
             self.plot_widget.register_tool(name, tab.plot_view)
         if tab.table_view is not None:
@@ -1939,8 +1939,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self._before_run_display = (self.context_panel.currentWidget(),
                                         self.view_tabs.current_view())
             self.context_panel.setCurrentWidget(self.plot_widget)
-            if channel in self.view_tabs.channel_names:
-                self.view_tabs.select_channel(channel)
+            channels = self.view_tabs.channel_names
+            if channels:  # the strip's channel (the run's, unless All channels)
+                self.view_tabs.select_channel(channel if channel in channels else channels[0])
         self.plot_widget.show_run_trace(data)
         before = getattr(self, "_before_run_display", None)
         if data is None and before is not None:
@@ -1953,13 +1954,28 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self.context_panel.setCurrentWidget(panel)
 
     def _update_tool_tabs(self) -> None:
-        tools = [name for name, tab in self.tool_tabs.items() if tab.has_results()]
+        """The view tabs: the channel, then the current tool's results tab,
+        if it has one (Stats: A | Stats2; Browser: A, #523); leaving the
+        tool while on its tab shows the channel."""
+        current = getattr(self, "current_tool_name", None)
+        tools = [name for name, tab in self.tool_tabs.items()
+                 if name == current and tab.lists_view()]
         self.plot_widget.set_tools(tools)
         self.table_panel.set_tools(tools)
         self._update_panel_tabs()
 
     def _show_tool_view(self, name: str, view: str) -> None:
-        """Show tool *name*'s "plot" or "table" view."""
+        """Show tool *name*'s "plot" or "table" view; or with "tool" its tab
+        and "channel" the channel's, keeping the panel shown (Plot or
+        Table, e.g. following Stats1 / Stats2, #523)."""
+        if view == "tool":
+            self.view_tabs.select_tool(name)
+            return
+        if view == "channel":
+            channels = self.view_tabs.channel_names
+            if channels:
+                self.view_tabs.select_channel(channels[0])  # the strip's only
+            return
         panel = self.plot_widget if view == "plot" else self.table_panel
         panel.show_tool(name)
         self.context_panel.setCurrentWidget(panel)

@@ -76,7 +76,10 @@ def test_a_tool_that_provides_nothing(window):
 
 
 def test_views_appear_while_the_tool_has_results(window):
+    """A tool's tab is listed while it's the tool chosen and has results
+    (Stats: A | Stats2; Browser: A, #523)."""
     full = window.tool_tabs["Spike"]
+    window.tool_rail.select_tool("Spike")
     assert window.plot_widget.tool_page("Spike") is full.plot_view
     assert window.table_panel.tool_page("Spike") is full.table_view
     assert "Spike" not in window.plot_widget.view_tabs.tool_names
@@ -84,10 +87,13 @@ def test_views_appear_while_the_tool_has_results(window):
     full.results_changed.emit()
     assert "Spike" in window.plot_widget.view_tabs.tool_names
     assert "Spike" in window.table_panel.view_tabs.tool_names
+    window.tool_rail.select_tool("Browser")  # another tool: its tab goes
+    assert window.plot_widget.view_tabs.tool_names == []
 
 
 def test_view_requested_shows_the_view(window):
     full = window.tool_tabs["Spike"]
+    window.tool_rail.select_tool("Spike")
     full.results = True
     full.results_changed.emit()
     full.view_requested.emit("table")

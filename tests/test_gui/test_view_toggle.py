@@ -39,6 +39,7 @@ def app(qtbot, monkeypatch):
                            "channel": "A", "epoch": "E0"}
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
+    window.series = series
     return window
 
 
@@ -63,7 +64,11 @@ def _enabled(window, name):
 
 def test_one_bar_on_the_left_and_the_toggle_on_the_right(app):
     assert app.plot_widget.view_tabs is app.table_panel.view_tabs is app.view_tabs
-    assert _tabs(app) == ["A", "B", "Spike"]
+    assert _tabs(app) == ["A"]  # the strip's channel; Browser: no tool's tab (#523)
+    app.tool_rail.select_tool("Spike")
+    assert _tabs(app) == ["A", "Spike"]  # the tool chosen's
+    app.tool_rail.select_tool("Stats")
+    assert _tabs(app) == ["A", "Stats2"]
     header = app.context_area.layout().itemAt(0).layout()
     widgets = [header.itemAt(i).widget() for i in range(header.count())]
     assert widgets[0] is app.view_tabs
@@ -75,7 +80,7 @@ def test_one_bar_on_the_left_and_the_toggle_on_the_right(app):
 
 
 def test_switching_plot_and_table_keeps_the_channel(app):
-    app.view_tabs.select_channel("B")
+    app.selection_model.update(channel=app.series.channels["B"])
     _choose(app, "Table")
     assert app.context_panel.currentWidget() is app.table_panel
     assert app.view_tabs.current_view() == ("channel", "B")
@@ -98,12 +103,14 @@ def test_view_menu_and_toggle_agree(app):
 def test_showing_a_view_from_elsewhere_moves_the_toggle(app):
     app._show_data_table()  # e.g. the Data menu's Show in Table
     assert _shown(app) == "Table"
+    app.tool_rail.select_tool("Spike")
     app.tool_tabs["Spike"].view_requested.emit("table")
     assert app.view_tabs.current_view() == ("tool", "Spike")
     assert _shown(app) == "Table"
 
 
 def test_a_tool_without_a_plot(app):
+    app.tool_rail.select_tool("Spike")
     app.view_tabs.select_tool("Spike")
     # On Plot, choosing a tool with only tables shows its tables
     assert app.context_panel.currentWidget() is app.table_panel

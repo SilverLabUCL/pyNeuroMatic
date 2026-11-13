@@ -34,12 +34,11 @@ class ChannelToolBar(QtWidgets.QTabBar):
     """Tab bar of channel views followed by tool views.
 
     Each tab carries ``(kind, name)`` with kind ``"channel"`` or ``"tool"``.
-    Tool tabs are drawn in a different colour so the two groups stand apart.
+    Tabs are drawn natively (no colour of their own: a coloured tool tab
+    couldn't be read when selected, #523).
     """
 
     view_changed = QtCore.pyqtSignal(str, str)  # kind, name
-
-    TOOL_TEXT_COLOR = QtGui.QColor("#1d4ed8")
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -48,6 +47,12 @@ class ChannelToolBar(QtWidgets.QTabBar):
         self.setExpanding(False)
         self._channels: list[str] = []
         self._tools: list[str] = []
+        # A tool's tab text, if not its name (e.g. Stats: "Stats2", the
+        # results it shows, #523)
+        self.tool_labels: dict[str, str] = {}
+        # A tool tab selected only because there was no channel (e.g. Stats2,
+        # always listed, #523): a channel is selected once there is one
+        self._tool_by_default = False
         self.currentChanged.connect(self._on_current_changed)
         self.hide()
 
@@ -88,13 +93,18 @@ class ChannelToolBar(QtWidgets.QTabBar):
             for name in channels:
                 self.setTabData(self.addTab(name), ("channel", name))
             for name in tools:
-                index = self.addTab(name)
+                label = self.tool_labels.get(name, name)
+                index = self.addTab(label)
                 self.setTabData(index, ("tool", name))
-                self.setTabTextColor(index, self.TOOL_TEXT_COLOR)
-                self.setTabToolTip(index, f"{name} results")
+                self.setTabToolTip(index, f"{label} results")
             self._channels = list(channels)
             self._tools = list(tools)
-        if previous is not None and previous[0] == "tool" and previous[1] in tools:
+        kept_tool = (previous is not None and previous[0] == "tool" and previous[1] in tools
+                     and not (self._tool_by_default and channels))
+        # Still by default while kept with no channel (the plot and table
+        # panels both set the shared bar's views)
+        self._tool_by_default = self._tool_by_default and kept_tool
+        if kept_tool:
             target = previous
         elif current_channel in channels:
             target = ("channel", current_channel)
@@ -102,6 +112,7 @@ class ChannelToolBar(QtWidgets.QTabBar):
             target = ("channel", channels[0])
         elif tools:
             target = ("tool", tools[0])
+            self._tool_by_default = True
         else:
             target = None
         if target is not None:
@@ -125,6 +136,9 @@ class ChannelToolBar(QtWidgets.QTabBar):
         index = self._index_of(("tool", name))
         if index < 0:
             return False
+        # Chosen, even if it's already selected (e.g. Stats2 followed while
+        # it was the only tab): kept once a channel appears
+        self._tool_by_default = False
         self.setCurrentIndex(index)
         return True
 
@@ -132,6 +146,7 @@ class ChannelToolBar(QtWidgets.QTabBar):
         index = self._index_of(("channel", name))
         if index < 0:
             return False
+        self._tool_by_default = False
         self.setCurrentIndex(index)
         return True
 
@@ -142,6 +157,7 @@ class ChannelToolBar(QtWidgets.QTabBar):
         return -1
 
     def _on_current_changed(self, index: int) -> None:
+        self._tool_by_default = False  # chosen (a click, select_tool): kept
         if index >= 0:
             kind, name = self.tabData(index)
             self.view_changed.emit(kind, name)
@@ -272,14 +288,14 @@ class ValuesPlot(QtWidgets.QWidget):
         self.plot_widget.setLabel("left", ylabel)
         self.plot_widget.setTitle(title)
 
-    def clear(self) -> None:
-        """Nothing plotted: the hint again."""
+    def clear(self, title: str | None = None) -> None:
+        """Nothing plotted: the hint again (or *title*, e.g. no results yet)."""
         if self.plot_widget is None:
             return
         self.plot_widget.clear()
         self.plot_widget.setLabel("bottom", "")
         self.plot_widget.setLabel("left", "")
-        self.plot_widget.setTitle(self.EMPTY_TITLE)
+        self.plot_widget.setTitle(self.EMPTY_TITLE if title is None else title)
 
 
 def _is_number(text: str) -> bool:
@@ -677,7 +693,6 @@ class TablePanel(QtWidgets.QWidget):
         self._selection_model: Any = None
         self._last_selection: dict = {}
         self._channel_name: str | None = None
-        self._strip_channel_name: str | None = None  # the strip's channel, last seen
         self._tool_pages: dict[str, QtWidgets.QWidget] = {}
         self._tools: list[str] = []
         self._updating = False
@@ -818,19 +833,13 @@ class TablePanel(QtWidgets.QWidget):
     def _channels(self, selection: dict) -> list[str]:
         dataseries = source_object(selection, "dataseries")
         if isinstance(dataseries, NMDataSeries):
+            # Only the strip's channel (#523): the one analysed; channels
+            # are chosen in the strip
             names = list(dataseries.channels.keys())
             channel = selection.get("channel")
             selected = channel.name if channel is not None else None
-            # A channel chosen in the strip is shown (a tab shows another until then)
-            strip_changed = selected != self._strip_channel_name
-            self._strip_channel_name = selected
-            if strip_changed and selected in names:
-                self._channel_name = selected
-            if self._channel_name not in names:
-                self._channel_name = (
-                    selected if selected in names else names[0] if names else None
-                )
-            return names
+            self._channel_name = selected if selected in names else (names[0] if names else None)
+            return [self._channel_name] if self._channel_name is not None else []
         self._channel_name = None
         if isinstance(source_object(selection, "data"), NMData):
             return [DATA_VIEW]

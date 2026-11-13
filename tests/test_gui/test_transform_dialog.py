@@ -91,7 +91,7 @@ def test_add_a_step_redraws_and_marks(app):
     assert list(channel.data[0].nparray) == [1.0, 2.0, 3.0, 4.0]  # unchanged
     # ƒ on the tab, the trace name and the strip's channel
     panel = app.plot_widget
-    assert _tab_texts(panel.view_tabs)[:2] == [f"A {MARK}", "B"]
+    assert _tab_texts(panel.view_tabs) == [f"A {MARK}"]  # the strip's (#523)
     assert "Invert" in panel.view_tabs.tabToolTip(0)
     label = panel.trace_name_label.text()
     assert label.startswith("RecordA0") and f'{MARK_STYLE}">{MARK}' in label  # red, bold ƒ
@@ -103,7 +103,7 @@ def test_add_a_step_redraws_and_marks(app):
     combo = strip.combo("channel")
     assert "A" in _combo_texts(combo) and combo.currentData() == "A"
     assert "1. Invert" in combo.toolTip()
-    assert _tab_texts(app.table_panel.view_tabs)[:2] == [f"A {MARK}", "B"]
+    assert _tab_texts(app.table_panel.view_tabs) == [f"A {MARK}"]
 
 
 def test_turn_a_step_off(app):
@@ -212,7 +212,7 @@ def test_smooth_settings_follow_the_method(app):
 def test_window_follows_the_plotted_channel(app):
     dialog = _open(app)
     panel = app.plot_widget
-    panel.view_tabs.select_channel("B")
+    app.selection_model.update(channel=app.series.channels["B"])  # the strip's (#523)
     assert dialog.channel is app.series.channels["B"]
     assert dialog.title_label.text() == "Record  channel B"
 
@@ -281,15 +281,11 @@ def test_plot_and_table_follow_the_strip_channel(app):
     assert _shown(plot.view_tabs) == ("channel", "B") == _shown(table.view_tabs)
     assert plot.current_trace.name == "RecordB0"
     assert table.channel_table.model.arrays[0].name == "RecordB0"
-    # A tab shows another channel, until the strip's channel changes again;
-    # Plot and Table share the tab (#460)
-    plot.view_tabs.select_channel("A")
-    app.selection_model.update(epoch=series.epochs["E1"])
-    assert _shown(plot.view_tabs) == ("channel", "A") == _shown(table.view_tabs)
-    assert table.channel_table.model.arrays[0].name == "RecordA0"  # channel A's table
+    # Only the strip's channel is listed (#523); Plot and Table share the tab (#460)
+    assert plot.view_tabs.channel_names == ["B"] == table.view_tabs.channel_names
     app.selection_model.update(channel=series.channels["A"])
-    app.selection_model.update(channel=series.channels["B"])
-    assert _shown(plot.view_tabs) == ("channel", "B")
+    assert _shown(plot.view_tabs) == ("channel", "A") == _shown(table.view_tabs)
+    assert table.channel_table.model.arrays[0].name == "RecordA0"
 
 
 # --- typing values, and filter messages ---------------------------------------

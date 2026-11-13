@@ -45,6 +45,7 @@ def _stats_window(qtbot, *, arrays=True):
     window = NMAppWindow(manager)
     qtbot.addWidget(window)
     window.selection_model.update(epoch_set="Set1")
+    window.tool_rail.select_tool("Stats")  # its Stats2 tab is listed (#523)
 
     tab = window.tool_tabs["Stats"]
     tab.set_config_option("results_to_numpy", arrays)  # Settings › Stats (#480)
@@ -83,15 +84,18 @@ def _tab_texts(tabs):
     return [tabs.tabText(i) for i in range(tabs.count())]
 
 
-def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
+def test_stats2_tab_in_plot_and_table(qtbot):
+    """The Stats tool's tab is "Stats2" (its plots and tables, #523), listed
+    before a run too (saying there are no results yet)."""
     _manager, folder, window = _stats_window(qtbot)
     plot, table = window.plot_widget, window.table_panel
-    assert _tab_texts(plot.view_tabs) == ["A"]
-    assert _tab_texts(table.view_tabs) == ["A"]
+    assert _tab_texts(plot.view_tabs) == ["A", "Stats2"]
+    assert _tab_texts(table.view_tabs) == ["A", "Stats2"]
+    assert plot.view_tabs.current_view() == ("channel", "A")
 
     window.tool_tabs["Stats"].run_button.click()
-    assert _tab_texts(plot.view_tabs) == ["A", "Stats"]
-    assert _tab_texts(table.view_tabs) == ["A", "Stats"]
+    assert _tab_texts(plot.view_tabs) == ["A", "Stats2"]
+    assert _tab_texts(table.view_tabs) == ["A", "Stats2"]
     assert table.view_tabs.current_view() == ("tool", "Stats")
     assert isinstance(table.stack.currentWidget(), StatsTables)
     # One bar (#460): the Plot panel shows Stats too, its plot
@@ -105,11 +109,11 @@ def test_stats_tabs_appear_in_plot_and_table_with_results(qtbot):
     table.view_tabs.select_channel("A")
     assert table.stack.currentWidget() is table.channel_table
 
-    # Deleting the only Stats folder removes the tabs
+    # Deleting the only Stats folder keeps the tab, with no results (#523)
     stats2 = window.tool_tabs["Stats"].stats2
     _delete(stats2)
-    assert _tab_texts(plot.view_tabs) == ["A"]
-    assert _tab_texts(table.view_tabs) == ["A"]
+    assert _tab_texts(plot.view_tabs) == ["A", "Stats2"]
+    assert _tab_texts(table.view_tabs) == ["A", "Stats2"]
     assert table.stack.currentWidget() is table.channel_table
 
 
@@ -205,7 +209,7 @@ def test_column_selection_is_shared_between_tables(qtbot):
     # Only the clicked cell is highlighted, not its column
     assert [(i.row(), i.column()) for i in tables.summary_table.selectedIndexes()] == [(1, 3)]
     assert tables.arrays_table.selectedIndexes() == []
-    assert stats2.plot_button.isEnabled()
+    assert stats2.plot_action.isEnabled()
     assert stats2.array_combo.currentText() == "ST_w0_max_dy"
 
 
@@ -274,7 +278,7 @@ def test_stats_plot_follows_the_stats2_array(qtbot):
     tab = window.tool_tabs["Stats"]
     plot_item = tab.plot_view.plot_widget.getPlotItem()
     assert not plot_item.listDataItems()
-    assert plot_item.titleLabel.text == ValuesPlot.EMPTY_TITLE
+    assert plot_item.titleLabel.text == tab.NO_RESULTS_TITLE  # before a run (#523)
     tab.run_button.click()
     assert window.context_panel.currentWidget() is window.plot_widget  # shown after a run
     assert window.plot_widget.stack.currentWidget() is tab.plot_view
@@ -290,10 +294,10 @@ def test_stats_plot_follows_the_stats2_array(qtbot):
     tab.stats2.array_combo.setCurrentText("ST_w0_max_y")
     assert window.context_panel.currentWidget() is window.table_panel  # a choice doesn't switch
 
-    # Deleting the folder: nothing chosen, the hint again
+    # Deleting the folder: no results again
     _delete(tab.stats2)
     assert not plot_item.listDataItems()
-    assert plot_item.titleLabel.text == ValuesPlot.EMPTY_TITLE
+    assert plot_item.titleLabel.text == tab.NO_RESULTS_TITLE
 
 
 def test_plot_and_histogram_draw_in_plot_tab(qtbot):
@@ -304,7 +308,7 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
 
     plots = []
     stats2.plot_requested.connect(lambda *args: plots.append(args))
-    stats2.plot_button.click()
+    stats2.plot_action.trigger()
     title, y, x, _xlabel, ylabel, style = plots[-1]
     assert title == "Stats_Record_A_S1_0: ST_w0_max_dy"
     assert list(y) == list(PEAKS) and style == "points"
@@ -334,7 +338,7 @@ def test_plot_and_histogram_draw_in_plot_tab(qtbot):
     # Back to an ST_ array: points, x: epoch
     stats2.array_combo.setCurrentText("ST_w0_max_dy")
     assert stats2.epoch_x_action.isEnabled()
-    stats2.plot_button.click()
+    stats2.plot_action.trigger()
     assert plots[-1][5] == "points"
 
 
@@ -356,10 +360,11 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
     stats2 = window.tool_tabs["Stats"].stats2
     assert stats2.plot_menu_button.menu() is stats2.plot_menu
     texts = [a.text() for a in stats2.plot_menu.actions() if a.text()]
-    assert texts == ["x: epoch", "Histogram...", "Inequality...",  # #492, #499
+    assert texts == ["Plot", "Plot x: epoch",  # #523, #476
+                     "Table", "Histogram...", "Inequality...",  # #523, #492, #499
                      "Show in Browser"]  # #494
-    assert stats2.plot_menu.actions()[1].isSeparator()
-    assert stats2.plot_menu.actions()[4].isSeparator()
+    separators = [i for i, a in enumerate(stats2.plot_menu.actions()) if a.isSeparator()]
+    assert separators == [2, 6]
     # Show in Browser: the chosen array, in the Browser
     stats2.array_combo.setCurrentText("ST_w0_max_y")
     shown = []
@@ -367,15 +372,14 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
     stats2.browse_array_action.trigger()
     assert shown == [window.tool_tabs["Stats"].stats_tool.toolfolder.data["ST_w0_max_y"]]
     assert window.tool_rail.current_tool_name == "Browser"
-    # The Array row: the dropdown (its width back), Plot and ⋯ only (#485)
-    assert _field_widgets(stats2, "Array") == [
-        stats2.array_combo, stats2.plot_button, stats2.plot_menu_button]
+    # The Array row: the dropdown (its width back) and ⋯ only (#485; Plot in it, #523)
+    assert _field_widgets(stats2, "Array") == [stats2.array_combo, stats2.plot_menu_button]
 
 
 @pytest.mark.parametrize("style", ["macos", "fusion"])
 def test_array_list_fits_its_names(qtbot, style):
     """The Array list is as wide as its longest array name (not cut off, also
-    with macOS's style), then Plot and ⋯; the row's space is after them."""
+    with macOS's style), then ⋯; the row's space is after it."""
     if style not in [key.lower() for key in QtWidgets.QStyleFactory.keys()]:
         pytest.skip(f"no {style} style here")
     _manager, _folder, window = _stats_window(qtbot)
@@ -387,11 +391,11 @@ def test_array_list_fits_its_names(qtbot, style):
     panel.resize(600, 600)
     panel.show()
     qtbot.waitExposed(panel)
-    combo, plot, menu = panel.array_combo, panel.plot_button, panel.plot_menu_button
+    combo, menu = panel.array_combo, panel.plot_menu_button
     names = [combo.itemText(i) for i in range(combo.count())]
     longest = max(combo.fontMetrics().horizontalAdvance(n) for n in names)
     assert longest < combo.width() < longest + 60  # fits its names, no more
-    assert combo.geometry().right() < plot.geometry().left() < menu.geometry().left()
+    assert combo.geometry().right() < menu.geometry().left()
     assert menu.geometry().right() < panel.width() - 100  # not stretched to the end
 
 
@@ -848,3 +852,73 @@ def test_notes_follow_the_subfolder(qtbot):
     # A copy keeps the notes
     copy = folder.toolfolders.duplicate("Stats_Record_A_S1_0", "Stats_Copy")
     assert copy.notes[-1]["note"] == "control"
+
+
+def test_the_view_follows_stats1_and_stats2(qtbot):
+    """#523: Stats1 shows the channel (its measure on the trace), Stats2 its
+    tab, keeping Plot or Table; the tabs can still be clicked afterwards;
+    the Stats tool, chosen in the rail, does the same."""
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    window.tool_rail.select_tool("Stats")
+    assert window.view_tabs.current_view() == ("channel", "A")  # Stats1
+    tab.mode_tabs.setCurrentWidget(tab.stats2)
+    assert window.view_tabs.current_view() == ("tool", "Stats")
+    assert window.context_panel.currentWidget() is window.plot_widget  # the panel stays
+    window.view_tabs.select_channel("A")  # clicked: not undone, nor Stats1 chosen
+    assert window.view_tabs.current_view() == ("channel", "A")
+    assert tab.mode_tabs.currentWidget() is tab.stats2
+    window.context_panel.setCurrentWidget(window.table_panel)
+    tab.mode_tabs.setCurrentIndex(0)  # Stats1
+    assert window.view_tabs.current_view() == ("channel", "A")
+    tab.mode_tabs.setCurrentWidget(tab.stats2)
+    assert window.view_tabs.current_view() == ("tool", "Stats")
+    assert window.context_panel.currentWidget() is window.table_panel  # still Table
+    # Another tool: only the channel (on Stats2's tab: the channel, still
+    # Table); then Stats again (on Stats2): its tab
+    window.tool_rail.select_tool("Main")
+    assert _tab_texts(window.view_tabs) == ["A"]
+    assert window.view_tabs.current_view() == ("channel", "A")
+    assert window.context_panel.currentWidget() is window.table_panel
+    window.tool_rail.select_tool("Stats")
+    assert _tab_texts(window.view_tabs) == ["A", "Stats2"]
+    assert window.view_tabs.current_view() == ("tool", "Stats")
+
+
+def test_stats2_table_item_shows_its_tables(qtbot):
+    """#523: Stats2 ⋯ › Table shows the tables (Table, the Stats2 tab), the
+    chosen array's column selected."""
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab.run_button.click()
+    stats2 = tab.stats2
+    stats2.array_combo.setCurrentText("ST_w0_max_y")
+    window.context_panel.setCurrentWidget(window.plot_widget)
+    window.view_tabs.select_channel("A")
+    stats2.table_action.trigger()
+    assert window.context_panel.currentWidget() is window.table_panel
+    assert window.view_tabs.current_view() == ("tool", "Stats")
+    assert stats2.tables.selected_array() == "ST_w0_max_y"
+
+
+def test_stats2_stays_shown_when_data_is_chosen(qtbot):
+    """With no data, Stats2's tab is the only one; chosen with Stats2, it
+    stays shown when a data series (its channel tab) is chosen, not A."""
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo")
+    series = folder.new_dataseries("Record", n_channels=1, n_epochs=2, n_points=5)
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.selection_model.update(dataseries=None)
+    window.tool_rail.select_tool("Stats")
+    tab = window.tool_tabs["Stats"]
+    assert _tab_texts(window.view_tabs) == ["Stats2"]
+    tab.mode_tabs.setCurrentWidget(tab.stats2)
+    window.selection_model.update(dataseries=series)
+    assert _tab_texts(window.view_tabs) == ["A", "Stats2"]
+    assert window.view_tabs.current_view() == ("tool", "Stats")  # with Stats2
+    # With Stats1 instead: the channel, once there is one
+    tab.mode_tabs.setCurrentIndex(0)
+    window.selection_model.update(dataseries=None)
+    window.selection_model.update(dataseries=series)
+    assert window.view_tabs.current_view() == ("channel", "A")

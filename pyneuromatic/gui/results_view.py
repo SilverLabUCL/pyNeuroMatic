@@ -610,6 +610,8 @@ class Stats2Panel(QtWidgets.QWidget):
     results_changed = QtCore.pyqtSignal()
     # The ST_ array chosen in the Array list (or its folder or window) changed
     array_changed = QtCore.pyqtSignal()
+    # ⋯ › Table: show the tables, the chosen array's column selected (#523)
+    table_requested = QtCore.pyqtSignal()
 
     def __init__(
         self,
@@ -684,19 +686,24 @@ class Stats2Panel(QtWidgets.QWidget):
         self.array_combo.setObjectName("stats2Array")
         # As wide as its array names (_refresh_array_combo), as the Folder list
         array_row.addWidget(self.array_combo)
-        self.plot_button = QtWidgets.QPushButton("Plot", self)
-        self.plot_button.setToolTip("Show the chosen array in the Plot panel")
-        array_row.addWidget(self.plot_button)
-        # Plot's options, in a ⋯ menu beside it (#485)
-        self.plot_menu = QtWidgets.QMenu("Plot", self)
+        # The chosen array's actions, in a ⋯ menu beside it (#485): Plot and
+        # its option; Table and the tables' tools; the Browser (#523)
+        self.plot_menu = QtWidgets.QMenu("Array", self)
         self.plot_menu.setToolTipsVisible(True)
+        self.plot_action = self.plot_menu.addAction("Plot")
+        self.plot_action.setToolTip("Show the chosen array in the Plot panel")
+        self.plot_action.triggered.connect(lambda _checked=False: self.plot_selected())
         # Plot against the rows' epoch numbers (ST_epoch_num, #476), not the index
-        self.epoch_x_action = self.plot_menu.addAction("x: epoch")
+        self.epoch_x_action = self.plot_menu.addAction("Plot x: epoch")
         self.epoch_x_action.setCheckable(True)
         self.epoch_x_action.setChecked(True)
         self.epoch_x_action.setToolTip(
             "Plot against the epoch numbers (ST_epoch_num); off: the row index")
         self.plot_menu.addSeparator()
+        self.table_action = self.plot_menu.addAction("Table")
+        self.table_action.setToolTip(
+            "Show the Stats2 tables in the Table panel, the chosen array's column selected")
+        self.table_action.triggered.connect(lambda _checked=False: self.table_requested.emit())
         # Saved as H_<array>, listed with the ST_ arrays to plot (#492)
         self.histogram_dialog_action = self.plot_menu.addAction("Histogram...")
         self.histogram_dialog_action.setToolTip(
@@ -713,7 +720,7 @@ class Stats2Panel(QtWidgets.QWidget):
         self.browse_array_action.setToolTip("Show the chosen array in the browser")
         self.plot_menu_button = QtWidgets.QToolButton(self)
         self.plot_menu_button.setText("⋯")
-        self.plot_menu_button.setToolTip("Plot options")
+        self.plot_menu_button.setToolTip("Plot, Table and more, for the chosen array")
         self.plot_menu_button.setMenu(self.plot_menu)
         self.plot_menu_button.setPopupMode(
             QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -756,7 +763,6 @@ class Stats2Panel(QtWidgets.QWidget):
         self.array_combo.currentIndexChanged.connect(self._on_array_changed)
         self.tables.column_selected.connect(self._on_table_column_selected)
         self.results_combo.currentIndexChanged.connect(self._update_details)
-        self.plot_button.clicked.connect(self.plot_selected)
         self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
         self.histogram_dialog_action.triggered.connect(self.histogram_dialog)
         self.rename_folder_action.triggered.connect(self.rename_folder)
@@ -1102,7 +1108,8 @@ class Stats2Panel(QtWidgets.QWidget):
 
     def _update_buttons(self) -> None:
         name = self.selected_array()
-        self.plot_button.setEnabled(name is not None)
+        self.plot_action.setEnabled(name is not None)
+        self.table_action.setEnabled(name is not None)
         self.histogram_dialog_action.setEnabled(name is not None and not self.is_histogram(name))
         self.inequality_dialog_action.setEnabled(
             name is not None and not self.is_histogram(name) and not name.startswith("IQ_"))
@@ -1141,7 +1148,7 @@ class Stats2Panel(QtWidgets.QWidget):
 
     def epoch_x(self, toolfolder: NMToolFolder, n: int) -> tuple:
         """The Plot's x: the rows' epoch numbers (ST_epoch_num, #476) if there
-        are and "x: epoch" is on, else the row index (None)."""
+        are and "Plot x: epoch" is on, else the row index (None)."""
         epochs = toolfolder.data.get("ST_epoch_num")
         usable = epochs is not None and epochs.nparray is not None and len(epochs.nparray) == n
         self.epoch_x_action.setEnabled(usable)
