@@ -37,7 +37,7 @@ from pyneuromatic.gui.context_views import (
 )
 from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
-from pyneuromatic.gui.history_panel import SEGMENT_STYLE, HistoryPanel
+from pyneuromatic.gui.history_panel import HistoryPanel
 from pyneuromatic.gui.plot_marks import MarkOverlay
 from pyneuromatic.gui.plot_ranges import RangeOverlay
 from pyneuromatic.gui.settings_dialog import LINE_LABELS, SettingsDialog
@@ -1378,7 +1378,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
                 lambda _checked=False, p=panel: self.context_panel.setCurrentWidget(p))
             panels.addAction(action)
             self.panel_view_actions[name] = action
-        self._update_panel_buttons()  # checks these too
+        self._update_panel_tabs()  # checks these too
         menu.addSeparator()
         self.history_view_action = self.history_dock.toggleViewAction()  # checkable
         menu.addAction(self.history_view_action)
@@ -1685,28 +1685,35 @@ class NMAppWindow(QtWidgets.QMainWindow):
         header.addWidget(self.view_tabs)
         header.addStretch(1)
         header.addSpacing(8)
-        # A toggle, not tabs: Plot and Table are views of the channel or tool
-        self.panel_buttons: dict[str, QtWidgets.QToolButton] = {}
-        group = QtWidgets.QButtonGroup(self.context_area)
-        for segment, (name, panel) in zip(
-                ("first", "last"), (("Plot", self.plot_widget), ("Table", self.table_panel))):
-            button = QtWidgets.QToolButton(self.context_area)
-            button.setText(name)
-            button.setCheckable(True)
-            button.setProperty("segment", segment)
-            button.setToolTip(f"Show the {name.lower()} of the channel or tool chosen on the left")
-            button.clicked.connect(
-                lambda _checked=False, p=panel: self.context_panel.setCurrentWidget(p))
-            group.addButton(button)
-            header.addWidget(button)
-            self.panel_buttons[name] = button
-        self.context_area.setStyleSheet(SEGMENT_STYLE)
+        # Plot | Table: views of the channel or tool, as tabs like the
+        # channel/tool tabs (the one shown in blue, native style, #517)
+        self.panel_tabs = QtWidgets.QTabBar(self.context_area)
+        self.panel_tabs.setObjectName("panelTabs")
+        self.panel_tabs.setDrawBase(False)
+        self.panel_tabs.setExpanding(False)
+        self.panel_tabs.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum,
+                                      QtWidgets.QSizePolicy.Policy.Fixed)
+        for index, name in enumerate(self.PANEL_NAMES):
+            self.panel_tabs.addTab(name)
+            self.panel_tabs.setTabToolTip(
+                index, f"Show the {name.lower()} of the channel or tool chosen on the left")
+        self.panel_tabs.currentChanged.connect(self._on_panel_tab_changed)
+        header.addWidget(self.panel_tabs)
         layout.addLayout(header)
         layout.addWidget(self.context_panel, stretch=1)
-        self.context_panel.currentChanged.connect(self._update_panel_buttons)
-        self.view_tabs.view_changed.connect(self._update_panel_buttons)
-        self.selection_model.selection_changed.connect(self._update_panel_buttons)
-        self._update_panel_buttons()
+        self.context_panel.currentChanged.connect(self._update_panel_tabs)
+        self.view_tabs.view_changed.connect(self._update_panel_tabs)
+        self.selection_model.selection_changed.connect(self._update_panel_tabs)
+        self._update_panel_tabs()
+
+    PANEL_NAMES = ("Plot", "Table")
+
+    def _panels(self) -> dict[str, QtWidgets.QWidget]:
+        return {"Plot": self.plot_widget, "Table": self.table_panel}
+
+    def _on_panel_tab_changed(self, index: int) -> None:
+        if 0 <= index < len(self.PANEL_NAMES):
+            self.context_panel.setCurrentWidget(self._panels()[self.PANEL_NAMES[index]])
 
     def _panels_of_view(self) -> dict[str, bool]:
         """Whether the Plot and Table panels have a view of the current
@@ -1717,19 +1724,23 @@ class NMAppWindow(QtWidgets.QMainWindow):
         return {"Plot": self.plot_widget.tool_page(view[1]) is not None,
                 "Table": self.table_panel.tool_page(view[1]) is not None}
 
-    def _update_panel_buttons(self, *_args) -> None:
-        """Check the panel shown; a tool's missing view can't be chosen."""
+    def _update_panel_tabs(self, *_args) -> None:
+        """Show the panel shown as the current tab; a tool's missing view
+        can't be chosen."""
         available = self._panels_of_view()
-        panels = {"Plot": self.plot_widget, "Table": self.table_panel}
+        panels = self._panels()
         current = self.context_panel.currentWidget()
         if not available["Plot" if current is self.plot_widget else "Table"]:
             other = "Table" if current is self.plot_widget else "Plot"
             if available[other]:
                 self.context_panel.setCurrentWidget(panels[other])
                 return  # back here from currentChanged
-        for name, button in self.panel_buttons.items():
-            button.setEnabled(available[name])
-            button.setChecked(panels[name] is current)
+        self.panel_tabs.blockSignals(True)
+        for index, name in enumerate(self.PANEL_NAMES):
+            self.panel_tabs.setTabEnabled(index, available[name])
+            if panels[name] is current:
+                self.panel_tabs.setCurrentIndex(index)
+        self.panel_tabs.blockSignals(False)
         for name, action in getattr(self, "panel_view_actions", {}).items():
             action.setEnabled(available[name])
             action.setChecked(panels[name] is current)
@@ -1933,7 +1944,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         tools = [name for name, tab in self.tool_tabs.items() if tab.has_results()]
         self.plot_widget.set_tools(tools)
         self.table_panel.set_tools(tools)
-        self._update_panel_buttons()
+        self._update_panel_tabs()
 
     def _show_tool_view(self, name: str, view: str) -> None:
         """Show tool *name*'s "plot" or "table" view."""
