@@ -253,9 +253,6 @@ class StatsToolTab(ToolTabWidget):
     MARK_COLOR = "#dc2626"
     BSLN_MARK_COLOR = "#15803d"
 
-    NEW_WINDOW_ACTION = "__new_stats_window__"
-    DELETE_WINDOW_ACTION = "__delete_stats_window__"
-    RESET_WINDOW_ACTION = "__reset_stats_window__"
     # Dropdown groups, separated in the measurement menu
     _MEASUREMENT_GROUPS = (
         FUNC_NAMES_BASIC,
@@ -340,15 +337,39 @@ class StatsToolTab(ToolTabWidget):
         window_row = QtWidgets.QHBoxLayout()
         self.window_combo = QtWidgets.QComboBox(self)
         self.window_combo.setObjectName("statsWindowSelector")
-        # Wide enough for a window name (w0, w12): its menu opens wider to
-        # show "Delete w12"
-        self.window_combo.setFixedWidth(70)
-        self.window_combo.view().setMinimumWidth(
-            self.window_combo.fontMetrics().horizontalAdvance("Delete w00") + 40)
+        self.window_combo.setFixedWidth(70)  # a window name (w0, w12)
         window_row.addWidget(QtWidgets.QLabel("Window", self))
         window_row.addWidget(self.window_combo)
+        # Its actions under ⋯, as the strip's selectors (#514): the list
+        # holds only the windows, so moving through it can't start one
+        self.window_menu = QtWidgets.QMenu(self)
+        self.new_window_action = self.window_menu.addAction("New Window…")
+        self.new_window_action.setToolTip(
+            "Add a window and show it: the next number, or one to fill a gap")
+        self.new_window_action.triggered.connect(lambda _checked=False: self._new_window())
+        self.copy_window_action = self.window_menu.addAction("Copy…")
+        self.copy_window_action.setToolTip(
+            "A new window with a window's settings (e.g. to measure another range)")
+        self.copy_window_action.triggered.connect(lambda _checked=False: self._copy_window())
+        self.reset_window_action = self.window_menu.addAction("Reset…")
+        self.reset_window_action.setToolTip("Return a window to its defaults")
+        self.reset_window_action.triggered.connect(lambda _checked=False: self._reset_window())
+        self.delete_window_action = self.window_menu.addAction("Delete…")
+        self.delete_window_action.setToolTip("Delete a window; the others keep their names")
+        self.delete_window_action.triggered.connect(
+            lambda _checked=False: self._delete_window())
+        self.window_actions_button = QtWidgets.QToolButton(self)
+        self.window_actions_button.setText("⋯")
+        self.window_actions_button.setObjectName("statsWindowActions")
+        self.window_actions_button.setToolTip("Window actions")
+        self.window_actions_button.setStyleSheet(
+            "QToolButton::menu-indicator { image: none; width: 0px; }")
+        self.window_actions_button.setMenu(self.window_menu)
+        self.window_actions_button.setPopupMode(
+            QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        window_row.addWidget(self.window_actions_button)
         self.measurement_combo = QtWidgets.QComboBox(self)
-        self.measurement_combo.addItem("Choose measurement", None)  # none yet
+        self.measurement_combo.addItem("Choose measure", None)  # none yet
         for group in self._MEASUREMENT_GROUPS:
             names = []  # each measurement once, without its sign (#478)
             for name in group:
@@ -359,9 +380,13 @@ class StatsToolTab(ToolTabWidget):
                 self.measurement_combo.insertSeparator(self.measurement_combo.count())
             for name in names:
                 self.measurement_combo.addItem(display_name(name), name)
-        window_row.addWidget(self.measurement_combo, stretch=1)
+        # As wide as its longest item (e.g. "Choose measure"), not the row
+        self.measurement_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
+        window_row.addWidget(self.measurement_combo)
         self.window_enabled = QtWidgets.QCheckBox("On", self)
         window_row.addWidget(self.window_enabled)
+        window_row.addStretch(1)
         stats1_layout.addLayout(window_row)
 
         # Parameter row: only the inputs the current measurement needs are shown
@@ -634,25 +659,16 @@ class StatsToolTab(ToolTabWidget):
         self.window_combo.clear()
         for window in self._tool.windows:
             self.window_combo.addItem(window.name, window.name)
-        if self.window_combo.count():
-            self.window_combo.insertSeparator(self.window_combo.count())
-        # No "...": New, Reset and Delete don't ask for more (they only confirm)
-        self.window_combo.addItem("New", self.NEW_WINDOW_ACTION)
-        if selected_name is not None:  # the window shown
-            self.window_combo.addItem(f"Reset {selected_name}", self.RESET_WINDOW_ACTION)
-        windows = list(self._tool.windows)
-        if len(windows) > 1:  # only the last, so names stay in sequence (w0, w1...)
-            self.window_combo.addItem(f"Delete {windows[-1].name}",
-                                      self.DELETE_WINDOW_ACTION)
         index = self.window_combo.findData(selected_name)
-        if index < 0 and self.window_combo.count() > 1:
+        if index < 0 and self.window_combo.count():
             index = 0
         self.window_combo.setCurrentIndex(index)
         self.window_combo.blockSignals(False)
-        if index >= 0 and self.window_combo.currentData() not in (
-                self.NEW_WINDOW_ACTION, self.DELETE_WINDOW_ACTION,
-                self.RESET_WINDOW_ACTION):
+        if index >= 0:
             self._tool.windows.selected_name = self.window_combo.currentData()
+        count = len(self._tool.windows)
+        self.reset_window_action.setEnabled(count > 0)
+        self.delete_window_action.setEnabled(count > 1)  # one is always kept
 
     def _selected_window(self):
         name = self.window_combo.currentData()
@@ -662,20 +678,8 @@ class StatsToolTab(ToolTabWidget):
 
     def _on_window_changed(self, _index: int) -> None:
         name = self.window_combo.currentData()
-        if name == self.NEW_WINDOW_ACTION:
-            self._add_window()
-            return
-        if name == self.DELETE_WINDOW_ACTION:
-            self._delete_last_window()
-            return
-        if name == self.RESET_WINDOW_ACTION:
-            self._reset_window()
-            return
         if name is not None:
             self._tool.windows.selected_name = name
-            reset = self.window_combo.findData(self.RESET_WINDOW_ACTION)
-            if reset >= 0:  # Reset names the window shown
-                self.window_combo.setItemText(reset, f"Reset {name}")
         self._load_selected_window()
 
     def _load_selected_window(self) -> None:
@@ -1118,31 +1122,128 @@ class StatsToolTab(ToolTabWidget):
         if final:
             self._save_window_controls()
 
+    def _choose(self, title: str, **options) -> tuple | None:
+        """A prompt (as the strip's ⋯ menus'); returns (item, name, *extras)
+        or None if cancelled (replaced in tests)."""
+        from pyneuromatic.gui.tier_actions import ChooseItemDialog
+        dialog = ChooseItemDialog(title, parent=self, **options)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return None
+        return (dialog.item(), dialog.name(), *dialog.extras())
+
+    def _choose_window(self, title: str, message, validate=None) -> str | None:
+        """A window, chosen in a prompt starting on the window shown."""
+        self._save_window_controls()  # e.g. a range being typed
+        windows = self._tool.windows
+        answer = self._choose(
+            title, item_label="Window", items=[w.name for w in windows],
+            current=windows.selected_name, message=message,
+            validate=(lambda item, _name: validate(item)) if validate else None,
+        )
+        return None if answer is None else answer[0]
+
+    @staticmethod
+    def _has_defaults(window: NMStatWin) -> bool:
+        return window.to_dict() == NMStatWin(window.name).to_dict()
+
     def _reset_window(self) -> None:
-        """Reset (Window menu): the window shown back to its defaults (one
-        command), after asking; nothing to do if it has them."""
-        name = self._tool.windows.selected_name  # the menu shows Reset just now
-        window = self._tool.windows[name] if name is not None else None
-        if (window is not None and window.to_dict() != NMStatWin(window.name).to_dict()
-                and self._confirm(
-                    "Reset window",
-                    f"Reset {window.name} to its defaults? Its measurement, X begin / "
-                    "X end and baseline will be cleared.")):
-            window.reset()
+        """Reset… (Window ⋯): a window back to its defaults (one command)."""
+        windows = self._tool.windows
+        name = self._choose_window(
+            "Reset Stats Window",
+            message=lambda item: (
+                f"{item} already has its defaults." if self._has_defaults(windows[item])
+                else f"{item}'s measurement, X begin / X end and baseline will be cleared."),
+        )
+        if name is None or self._has_defaults(windows[name]):
+            return  # nothing to reset: no command
+        windows[name].reset()
+        if name == windows.selected_name:
             self._param_values.clear()  # parameters (e.g. rise time %) back to defaults
-        self._refresh_window_combo()  # back from the Reset item to the window
+        self._refresh_window_combo()
         self._load_selected_window()
 
-    def _delete_last_window(self) -> None:
-        """Delete: the last window (one command), after asking."""
-        last = list(self._tool.windows)[-1].name
-        if self._confirm("Delete window", f"Delete {last}? Its settings will be lost."):
-            self._tool.windows.delete_last()
-        self._refresh_window_combo()  # also back from the Delete item if cancelled
+    def _delete_window(self) -> None:
+        """Delete… (Window ⋯): any window but the only one (one command); the
+        others keep their names (w0, w2), as results and run notes name them."""
+        windows = self._tool.windows
+        if len(windows) <= 1:
+            return
+        name = self._choose_window(
+            "Delete Stats Window",
+            message=lambda item: (f"{item} will be deleted; its settings will be lost. "
+                                  "The other windows keep their names."),
+        )
+        if name is None:
+            return
+        windows.delete(name)
+        self._refresh_window_combo()
         self._load_selected_window()
 
-    def _add_window(self) -> None:
-        self._tool.windows.new(select=True)
+    def _new_window(self) -> None:
+        """New Window… (Window ⋯): a window with the number chosen, starting
+        on the one after the highest (w0, w1, w3 → w4); a gap can be filled
+        (w2)."""
+        error = self._window_number_error
+        answer = self._choose(
+            "New Stats Window",
+            extras=[self._window_number_spin("Window")],
+            message=lambda _item, number: "" if error(number) else f"Creates {number}.",
+            validate=lambda _item, _name, number: error(number),
+            validate_live=True,
+        )
+        if answer is None:
+            return
+        self._add_window(int(answer[-1][1:]))
+
+    def _window_number_spin(self, label: str) -> tuple:
+        """A number box for a new window (w4), starting after the highest."""
+        from pyneuromatic.gui.tier_actions import Spin
+        return (label, Spin(0, 9999, self._tool.windows.next_number, prefix="w"))
+
+    def _window_number_error(self, name: str) -> str | None:
+        """Why a new window can't be *name* (e.g. "w3"), or None."""
+        return f"{name} already exists." if name in self._tool.windows else None
+
+    def _copy_window(self) -> None:
+        """Copy… (Window ⋯, #515): a window with a window's settings (starting
+        on the one shown), the number chosen as New Window…'s, or an
+        existing one with Overwrite (as Copy Set); the copy is shown, ready
+        to change (e.g. another range)."""
+        from pyneuromatic.gui.tier_actions import Check, warning_html
+        self._save_window_controls()  # e.g. a range being typed
+        windows = self._tool.windows
+
+        def error(item, _name, number, overwrite):
+            if number == item:
+                return f"{item} can't be copied onto itself."
+            return None if overwrite else self._window_number_error(number)
+
+        def message(item, number, overwrite):
+            if error(item, None, number, overwrite):
+                return ""
+            if overwrite:
+                return warning_html(f"{number}'s settings will be replaced with {item}'s.")
+            return f"Copies {item}'s settings to {number}."
+
+        answer = self._choose(
+            "Copy Stats Window", item_label="Window", items=[w.name for w in windows],
+            current=windows.selected_name,
+            extras=[self._window_number_spin("To"),
+                    ("", Check("Overwrite existing window", enabled=lambda _item, number, *_:
+                               number in self._tool.windows))],
+            message=message, validate=error, validate_live=True,
+        )
+        if answer is None:
+            return
+        item, _name, number, overwrite = answer
+        windows.copy(item, number=int(number[1:]), select=True, overwrite=bool(overwrite))
+        self._refresh_window_combo()
+        self._load_selected_window()
+
+    def _add_window(self, number: int | None = None) -> None:
+        """A new window (*number*, or the one after the highest), shown."""
+        self._tool.windows.new(select=True, number=number)
         self._refresh_window_combo()
         self._load_selected_window()
 

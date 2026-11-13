@@ -46,7 +46,7 @@ def test_split_measurement():
 
 def test_each_measurement_once_and_no_counts(app):
     items = _items(app.stats)
-    assert items[0] is None  # Choose measurement
+    assert items[0] is None  # Choose measure
     names = items[1:]
     assert len(names) == len(set(names))
     for base in ("risetime", "risetimeslope", "falltime", "falltimeslope",
