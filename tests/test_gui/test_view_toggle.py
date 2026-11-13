@@ -47,24 +47,40 @@ def _tabs(window):
     return [bar.tabText(i) for i in range(bar.count())]
 
 
+def _choose(window, name):
+    """Click the Plot or Table tab."""
+    window.panel_tabs.setCurrentIndex(window.PANEL_NAMES.index(name))
+
+
+def _shown(window):
+    """The Plot | Table tab shown as current."""
+    return window.panel_tabs.tabText(window.panel_tabs.currentIndex())
+
+
+def _enabled(window, name):
+    return window.panel_tabs.isTabEnabled(window.PANEL_NAMES.index(name))
+
+
 def test_one_bar_on_the_left_and_the_toggle_on_the_right(app):
     assert app.plot_widget.view_tabs is app.table_panel.view_tabs is app.view_tabs
     assert _tabs(app) == ["A", "B", "Spike"]
     header = app.context_area.layout().itemAt(0).layout()
     widgets = [header.itemAt(i).widget() for i in range(header.count())]
     assert widgets[0] is app.view_tabs
-    assert widgets[-2:] == [app.panel_buttons["Plot"], app.panel_buttons["Table"]]
-    assert app.panel_buttons["Plot"].isChecked()
-    assert not app.panel_buttons["Table"].isChecked()
+    assert widgets[-1] is app.panel_tabs
+    assert isinstance(app.panel_tabs, QtWidgets.QTabBar)  # tabs, as A / B (#517)
+    assert [app.panel_tabs.tabText(i) for i in range(app.panel_tabs.count())] == [
+        "Plot", "Table"]
+    assert _shown(app) == "Plot"
 
 
 def test_switching_plot_and_table_keeps_the_channel(app):
     app.view_tabs.select_channel("B")
-    app.panel_buttons["Table"].click()
+    _choose(app, "Table")
     assert app.context_panel.currentWidget() is app.table_panel
     assert app.view_tabs.current_view() == ("channel", "B")
     assert app.table_panel.channel_table.model.arrays[0].name == "RecordB0"
-    app.panel_buttons["Plot"].click()
+    _choose(app, "Plot")
     assert app.context_panel.currentWidget() is app.plot_widget
     assert app.view_tabs.current_view() == ("channel", "B")
     assert app.plot_widget.current_trace.name == "RecordB0"
@@ -73,18 +89,18 @@ def test_switching_plot_and_table_keeps_the_channel(app):
 def test_view_menu_and_toggle_agree(app):
     app.panel_view_actions["Table"].trigger()
     assert app.context_panel.currentWidget() is app.table_panel
-    assert app.panel_buttons["Table"].isChecked()
-    app.panel_buttons["Plot"].click()
+    assert _shown(app) == "Table"
+    _choose(app, "Plot")
     assert app.panel_view_actions["Plot"].isChecked()
     assert not app.panel_view_actions["Table"].isChecked()
 
 
 def test_showing_a_view_from_elsewhere_moves_the_toggle(app):
     app._show_data_table()  # e.g. the Data menu's Show in Table
-    assert app.panel_buttons["Table"].isChecked()
+    assert _shown(app) == "Table"
     app.tool_tabs["Spike"].view_requested.emit("table")
     assert app.view_tabs.current_view() == ("tool", "Spike")
-    assert app.panel_buttons["Table"].isChecked()
+    assert _shown(app) == "Table"
 
 
 def test_a_tool_without_a_plot(app):
@@ -92,10 +108,10 @@ def test_a_tool_without_a_plot(app):
     # On Plot, choosing a tool with only tables shows its tables
     assert app.context_panel.currentWidget() is app.table_panel
     assert app.table_panel.stack.currentWidget() is app.tool_tabs["Spike"].table_view
-    assert not app.panel_buttons["Plot"].isEnabled()
+    assert not _enabled(app, "Plot")
     assert not app.panel_view_actions["Plot"].isEnabled()
     # The Plot panel's page for it says so
     assert app.plot_widget.stack.currentWidget() is app.plot_widget.no_view_label
     assert app.plot_widget.no_view_label.text() == "Spike has no plot"
     app.view_tabs.select_channel("A")
-    assert app.panel_buttons["Plot"].isEnabled()
+    assert _enabled(app, "Plot")
