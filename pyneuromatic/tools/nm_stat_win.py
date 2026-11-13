@@ -565,6 +565,57 @@ class NMStatWinContainer:
         Raises:
             ValueError: If *number* is negative or already used.
         """
+        name, args = self._add(NMStatWin, number, select)
+        nmh.history("new window %s" % name, path=self._nm_path, quiet=quiet)
+        add_nm_command("%s.new(%s)" % (self._nm_path, ", ".join(args)))
+        return self._windows[name]
+
+    @records_command
+    def copy(self, name: str, number: int | None = None, select: bool = False,
+             overwrite: bool = False, quiet: bool = nmc.QUIET) -> NMStatWin:
+        """A new window with *name*'s settings (on/off, measurement and its
+        parameters, x range, baseline and its range), not its results: the
+        number after the highest, or *number* (e.g. to fill a gap). With
+        *overwrite*, *number* may be an existing window: its settings are
+        replaced (and its last results cleared).
+
+        Args:
+            name: The window to copy (e.g. "w1").
+            number: The copy's number; None for the number after the highest.
+            select: If True, select the copy.
+            overwrite: If True, an existing window *number* is replaced.
+
+        Raises:
+            KeyError: If there is no window *name*.
+            ValueError: If *number* is negative, already used (without
+                *overwrite*), or *name*'s own.
+        """
+        if name not in self._windows:
+            raise KeyError("no stat window '%s'" % name)
+        if number is not None and "%s%d" % (self._prefix, int(number)) == name:
+            raise ValueError("stat window '%s' can't be copied onto itself" % name)
+        settings = {k: v for k, v in self._windows[name].to_dict().items() if k != "name"}
+
+        def make(name: str, nm_path: str) -> NMStatWin:
+            return NMStatWin(name=name, win=settings, nm_path=nm_path)
+
+        target = None if number is None else "%s%d" % (self._prefix, int(number))
+        replaced = overwrite and target in self._windows
+        new_name, args = self._add(make, number, select, overwrite=overwrite)
+        nmh.history("copied window %s to %s%s" % (
+            name, new_name, " (overwritten)" if replaced else ""),
+            path=self._nm_path, quiet=quiet)
+        if overwrite:
+            args.append("overwrite=True")
+        add_nm_command("%s.copy(%s)" % (self._nm_path, ", ".join([repr(name)] + args)))
+        return self._windows[new_name]
+
+    def _add(self, make, number: int | None, select: bool,
+             overwrite: bool = False) -> tuple[str, list[str]]:
+        """Add *make(name, nm_path)* as window *number* (or the one after the
+        highest), kept in order of number, replacing an existing one only
+        with *overwrite*; returns its name and the command arguments (the
+        number only if it isn't the one after the highest)."""
         default = self._count  # the number after the highest
         if number is None:
             number = default
@@ -572,21 +623,16 @@ class NMStatWinContainer:
             number = int(number)
             if number < 0:
                 raise ValueError("a stat window number must be 0 or more")
-            if "%s%d" % (self._prefix, number) in self._windows:
+            if "%s%d" % (self._prefix, number) in self._windows and not overwrite:
                 raise ValueError("stat window '%s%d' exists" % (self._prefix, number))
         name = "%s%d" % (self._prefix, number)
-        w = NMStatWin(name=name, nm_path=self._nm_path)
-        self._windows[name] = w
+        self._windows[name] = make(name=name, nm_path=self._nm_path)  # in its place
         self._sort()
         self._count = self._next_count()
         if select or self._selected_name is None:
             self._selected_name = name
-        # The command names the number only if it isn't the one after the highest
         args = [] if number == default else ["number=%d" % number]
-        nmh.history("new window %s" % name, path=self._nm_path, quiet=quiet)
-        add_nm_command("%s.new(%s)" % (self._nm_path, ", ".join(
-            args + (["select=True"] if select else []))))
-        return w
+        return name, args + (["select=True"] if select else [])
 
     @property
     def next_number(self) -> int:

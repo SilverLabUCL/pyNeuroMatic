@@ -1466,6 +1466,49 @@ class TestNMToolStatsCommandHistory(unittest.TestCase):
             windows.new(number=-1)
         self.assertEqual(len(windows), 5)
 
+    def test_copy_window(self):
+        """#515: a new window with the settings (not the results), after the
+        highest or with a number; the original unchanged; one command."""
+        windows, w0 = self.tool.windows, self.w0
+        w0.on = False
+        w0.func = {"name": "risetime+", "p0": 20, "p1": 80}
+        w0.xbgn, w0.xend = 2.0, 8.0
+        w0.bsln_on = True
+        w0.bsln_func = "mean"
+        w0.bsln_xbgn, w0.bsln_xend = 0.0, 1.0
+        self._ch.clear()
+        copy = windows.copy("w0", select=True)
+        self.assertEqual([e["command"] for e in self._ch.buffer],
+                         ["nm.stats.windows.copy('w0', select=True)"])
+        self.assertEqual(copy.name, "w1")
+        self.assertEqual(copy.to_dict(), {**w0.to_dict(), "name": "w1"})
+        self.assertEqual(copy.results, [])
+        self.assertEqual(windows.selected_name, "w1")
+        copy.xbgn = 3.0
+        self.assertEqual(w0.xbgn, 2.0)  # not shared
+        # With a number, e.g. filling a gap
+        windows.new()  # w2
+        windows.delete("w1")
+        self._ch.clear()
+        windows.copy("w2", number=1)
+        self.assertEqual([w.name for w in windows], ["w0", "w1", "w2"])
+        self.assertEqual([e["command"] for e in self._ch.buffer],
+                         ["nm.stats.windows.copy('w2', number=1)"])
+        self.assertEqual(windows.selected_name, "w0")  # the copy isn't selected
+        with self.assertRaises(ValueError):
+            windows.copy("w0", number=2)  # exists
+        with self.assertRaises(KeyError):
+            windows.copy("w9")
+        # Over an existing window, with overwrite (in its place; not itself)
+        self._ch.clear()
+        windows.copy("w0", number=2, overwrite=True)
+        self.assertEqual([e["command"] for e in self._ch.buffer],
+                         ["nm.stats.windows.copy('w0', number=2, overwrite=True)"])
+        self.assertEqual([w.name for w in windows], ["w0", "w1", "w2"])
+        self.assertEqual(windows["w2"].to_dict(), {**w0.to_dict(), "name": "w2"})
+        with self.assertRaises(ValueError):
+            windows.copy("w0", number=0, overwrite=True)  # onto itself
+
     def test_loading_windows_with_a_gap_continues_after_the_highest(self):
         windows = self.tool.windows
         windows.new()

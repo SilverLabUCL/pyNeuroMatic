@@ -347,6 +347,10 @@ class StatsToolTab(ToolTabWidget):
         self.new_window_action.setToolTip(
             "Add a window and show it: the next number, or one to fill a gap")
         self.new_window_action.triggered.connect(lambda _checked=False: self._new_window())
+        self.copy_window_action = self.window_menu.addAction("Copy…")
+        self.copy_window_action.setToolTip(
+            "A new window with a window's settings (e.g. to measure another range)")
+        self.copy_window_action.triggered.connect(lambda _checked=False: self._copy_window())
         self.reset_window_action = self.window_menu.addAction("Reset…")
         self.reset_window_action.setToolTip("Return a window to its defaults")
         self.reset_window_action.triggered.connect(lambda _checked=False: self._reset_window())
@@ -1180,16 +1184,10 @@ class StatsToolTab(ToolTabWidget):
         """New Window… (Window ⋯): a window with the number chosen, starting
         on the one after the highest (w0, w1, w3 → w4); a gap can be filled
         (w2)."""
-        from pyneuromatic.gui.tier_actions import Spin
-        windows = self._tool.windows
-        names = [w.name for w in windows]
-
-        def error(number: str) -> str | None:
-            return f"{number} already exists." if number in names else None
-
+        error = self._window_number_error
         answer = self._choose(
             "New Stats Window",
-            extras=[("Window", Spin(0, 9999, windows.next_number, prefix="w"))],
+            extras=[self._window_number_spin("Window")],
             message=lambda _item, number: "" if error(number) else f"Creates {number}.",
             validate=lambda _item, _name, number: error(number),
             validate_live=True,
@@ -1197,6 +1195,51 @@ class StatsToolTab(ToolTabWidget):
         if answer is None:
             return
         self._add_window(int(answer[-1][1:]))
+
+    def _window_number_spin(self, label: str) -> tuple:
+        """A number box for a new window (w4), starting after the highest."""
+        from pyneuromatic.gui.tier_actions import Spin
+        return (label, Spin(0, 9999, self._tool.windows.next_number, prefix="w"))
+
+    def _window_number_error(self, name: str) -> str | None:
+        """Why a new window can't be *name* (e.g. "w3"), or None."""
+        return f"{name} already exists." if name in self._tool.windows else None
+
+    def _copy_window(self) -> None:
+        """Copy… (Window ⋯, #515): a window with a window's settings (starting
+        on the one shown), the number chosen as New Window…'s, or an
+        existing one with Overwrite (as Copy Set); the copy is shown, ready
+        to change (e.g. another range)."""
+        from pyneuromatic.gui.tier_actions import Check, warning_html
+        self._save_window_controls()  # e.g. a range being typed
+        windows = self._tool.windows
+
+        def error(item, _name, number, overwrite):
+            if number == item:
+                return f"{item} can't be copied onto itself."
+            return None if overwrite else self._window_number_error(number)
+
+        def message(item, number, overwrite):
+            if error(item, None, number, overwrite):
+                return ""
+            if overwrite:
+                return warning_html(f"{number}'s settings will be replaced with {item}'s.")
+            return f"Copies {item}'s settings to {number}."
+
+        answer = self._choose(
+            "Copy Stats Window", item_label="Window", items=[w.name for w in windows],
+            current=windows.selected_name,
+            extras=[self._window_number_spin("To"),
+                    ("", Check("Overwrite existing window", enabled=lambda _item, number, *_:
+                               number in self._tool.windows))],
+            message=message, validate=error, validate_live=True,
+        )
+        if answer is None:
+            return
+        item, _name, number, overwrite = answer
+        windows.copy(item, number=int(number[1:]), select=True, overwrite=bool(overwrite))
+        self._refresh_window_combo()
+        self._load_selected_window()
 
     def _add_window(self, number: int | None = None) -> None:
         """A new window (*number*, or the one after the highest), shown."""

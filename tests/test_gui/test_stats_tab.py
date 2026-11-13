@@ -1,5 +1,7 @@
 """Tests for the Stats1 tool tab integration."""
 
+import html
+
 import numpy as np
 import pytest
 
@@ -84,19 +86,17 @@ def test_new_window_can_fill_a_gap(qtbot):
     tab._refresh_window_combo()
     asked = []
 
-    def choose(title, **options):
-        asked.append(options)
+    def choose(title, **options):  # its messages, while it's open
+        asked.append((options, {n: (options["message"]("", n), options["validate"]("", None, n))
+                                for n in ("w2", "w3")}))
         return ("", None, "w2")
 
     tab._choose = choose
     count = len(manager.command_history.buffer)
     tab.new_window_action.trigger()
-    options = asked[0]
+    options, shown = asked[0]
     assert options["extras"][0][1].value == 4
-    assert options["validate"]("", None, "w3") == "w3 already exists."
-    assert options["message"]("", "w3") == ""
-    assert options["validate"]("", None, "w2") is None
-    assert options["message"]("", "w2") == "Creates w2."
+    assert shown == {"w2": ("Creates w2.", None), "w3": ("", "w3 already exists.")}
     assert [e["command"] for e in manager.command_history.buffer][count:] == [
         "nm.stats.windows.new(number=2, select=True)"]
     combo = tab.window_combo
@@ -984,7 +984,7 @@ def test_the_window_list_has_only_windows_and_a_menu(qtbot):
     combo = tab.window_combo
     assert _items(combo) == ["w0"]
     assert [a.text() for a in tab.window_actions_button.menu().actions()] == [
-        "New Window…", "Reset…", "Delete…"]
+        "New Window…", "Copy…", "Reset…", "Delete…"]
     assert not tab.delete_window_action.isEnabled()  # w0, the only one, is kept
     tab._add_window()
     tab._add_window()
@@ -1018,6 +1018,81 @@ def test_delete_any_window(qtbot):
     assert manager.stats.windows.selected_name == "w2"
     tab._add_window()
     assert combo.currentData() == "w3"  # the last's name again
+
+
+def test_copy_window(qtbot):
+    """Copy… (#515): a new window with a window's settings, starting on the
+    one shown, numbered as New Window…; the copy is shown."""
+    manager, _window, tab = _reset_tab(qtbot)  # w0: max, x 2 to 8, baseline on
+    windows = manager.stats.windows
+    tab._add_window()  # w1, shown
+    tab._add_window()  # w2
+    windows.delete("w1")
+    tab._refresh_window_combo()
+    tab.window_combo.setCurrentIndex(tab.window_combo.findData("w0"))
+    asked = []
+
+    def choose(title, **options):  # its messages, while it's open
+        asked.append((title, options, options["message"]("w0", "w1", False),
+                      options["validate"]("w0", None, "w2", False)))
+        return ("w0", None, "w1", False)
+
+    tab._choose = choose
+    count = len(manager.command_history.buffer)
+    tab.copy_window_action.trigger()
+    title, options, message, error = asked[0]
+    assert title == "Copy Stats Window" and options["item_label"] == "Window"
+    assert options["items"] == ["w0", "w2"] and options["current"] == "w0"
+    assert options["extras"][0][0] == "To" and options["extras"][0][1].value == 3
+    assert message == "Copies w0's settings to w1."
+    assert error == "w2 already exists."
+    assert [e["command"] for e in manager.command_history.buffer][count:] == [
+        "nm.stats.windows.copy('w0', number=1, select=True)"]
+    copy = windows["w1"]
+    assert copy.to_dict() == {**windows["w0"].to_dict(), "name": "w1"}
+    combo = tab.window_combo
+    assert [combo.itemText(i) for i in range(combo.count())] == ["w0", "w1", "w2"]
+    assert combo.currentData() == "w1"  # the copy, shown
+    assert tab.measurement_combo.currentText() == "max"
+    assert (tab.xbgn_edit.text(), tab.xend_edit.text()) == ("2", "8")
+    assert tab.bsln_checkbox.isChecked()
+    # Cancelled: nothing
+    tab._choose = lambda title, **options: None
+    tab.copy_window_action.trigger()
+    assert len(windows) == 3
+
+
+def test_copy_window_over_an_existing_one(qtbot):
+    """With Overwrite (only while the number is a window's, as Copy Set),
+    the window's settings are replaced, with a warning; not onto itself."""
+    manager, _window, tab = _reset_tab(qtbot)  # w0: max, x 2 to 8
+    windows = manager.stats.windows
+    tab._add_window()  # w1, shown: the defaults
+    shown = {}
+
+    def choose(title, **options):  # its messages, while it's open
+        check = options["extras"][1][1]
+        shown.update(
+            enabled={n: check.enabled("w0", n, False) for n in ("w1", "w2")},
+            warning=options["message"]("w0", "w1", True),
+            without=options["validate"]("w0", None, "w1", False),
+            itself=options["validate"]("w0", None, "w0", True))
+        return ("w0", None, "w1", True)
+
+    tab._choose = choose
+    count = len(manager.command_history.buffer)
+    tab.copy_window_action.trigger()
+    assert shown["enabled"] == {"w1": True, "w2": False}  # only an existing window
+    assert "w1's settings will be replaced with w0's" in html.unescape(shown["warning"])
+    assert "color" in shown["warning"]  # in red
+    assert shown["without"] == "w1 already exists."
+    assert shown["itself"] == "w0 can't be copied onto itself."
+    assert [e["command"] for e in manager.command_history.buffer][count:] == [
+        "nm.stats.windows.copy('w0', number=1, select=True, overwrite=True)"]
+    assert [w.name for w in windows] == ["w0", "w1"]
+    assert windows["w1"].to_dict() == {**windows["w0"].to_dict(), "name": "w1"}
+    assert tab.window_combo.currentData() == "w1"
+    assert tab.measurement_combo.currentText() == "max"
 
 
 def test_delete_window_cancelled(qtbot):
