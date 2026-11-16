@@ -3,17 +3,15 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
 
 import numpy as np
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtGui, QtWidgets
 
-from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.gui import table_format
 from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.gui.inequality_dialog import InequalityDialog
-from pyneuromatic.gui.notes_view import NotesChoices, NotesDialog, notes_owner
+from pyneuromatic.gui.results_panel import _NOTE_PAIR, ResultsPanel, note_fields, runs_text
+from pyneuromatic.gui.results_tables import ResultsTables
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.tools.nm_stat_func import FUNC_NAMES_BSLN, FUNC_NAMES_N
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
@@ -27,28 +25,6 @@ def display_name(name: str) -> str:
     if name and name.startswith("mean+"):
         return "mean \u00b1 " + name[len("mean+"):]
     return name
-
-
-def runs_text(names: list[str]) -> str:
-    """Data names with consecutive numbers shortened, e.g. "RecordA0,
-    RecordA1, RecordA2, RecordA3, RecordA5" -> "RecordA0-3, RecordA5"; a name
-    that isn't prefix + channel + number is shown as it is."""
-    runs: list[list] = []  # [prefix + channel, first, last] or [name]
-    for name in names:
-        parsed = nmu.parse_data_name(name)
-        if parsed is None:
-            runs.append([name])
-            continue
-        stem, number = parsed[0] + parsed[1], parsed[2]
-        last = runs[-1] if runs else None
-        if last is not None and len(last) == 3 and last[0] == stem and last[2] == number - 1:
-            last[2] = number
-        else:
-            runs.append([stem, number, number])
-    return ", ".join(
-        run[0] if len(run) == 1
-        else f"{run[0]}{run[1]}" if run[1] == run[2]
-        else f"{run[0]}{run[1]}-{run[2]}" for run in runs)
 
 
 def points_text(n, nans=0) -> str:
@@ -73,16 +49,10 @@ def shows_points(func: str) -> bool:
     return func in FUNC_NAMES_N or func in FUNC_NAMES_BSLN
 
 
-_NOTE_PAIR = re.compile(r"(\w+)=([^,()]+)")
-
-
 def _note_fields(data) -> dict[str, str]:
     """An ST_ array's note as fields, e.g. "NMStats(win=w0, func=max,
     id=main, xbgn=60.0, xend=120.0, n=2)" -> {"func": "max", "id": "main", ...}."""
-    for note in data.notes:
-        if str(note["note"]).startswith("NMStats("):
-            return {k: v.strip() for k, v in _NOTE_PAIR.findall(note["note"])}
-    return {}
+    return note_fields(data, "NMStats")
 
 
 def _note_limits(note: dict, x_limits: tuple[float, float] | None) -> tuple[str, str]:
@@ -228,143 +198,17 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
     return lines
 
 
-class StatsTables(QtWidgets.QWidget):
+class StatsTables(ResultsTables):
     """Two aligned tables of one Stats window's saved ST_ arrays.
 
-    The upper table has one row per analysed data array (from
-    ``ST_<win>_data``); the lower table summarises each column (mean, std,
-    ...). Both tables share columns, column widths, horizontal scrolling and
-    the selected column.
+    The shared results tables (#525): the upper table has one row per
+    analysed data array (from ``ST_data_names``); the lower table
+    summarises each column (mean, std, ...). Stats' parts: the window's
+    ST_ and IQ_ arrays as columns, its detail arrays hidden unless asked.
     """
-
-    # Significant digits of the values shown (Settings › Stats, #471);
-    # copying keeps them all
-    digits = 6
 
     # Bookkeeping arrays hidden unless all columns are requested
     _DETAIL_SUFFIXES = frozenset(("i", "i0", "i1", "n", "nans", "infs"))
-    # NMToolStats2.stats key -> row label
-    SUMMARY_ROWS = (
-        ("mean", "mean"),
-        ("std", "std"),
-        ("sem", "sem"),
-        ("N", "N"),
-        ("NaNs", "NaNs"),
-        ("INFs", "INFs"),
-        ("min", "min"),
-        ("max", "max"),
-    )
-
-    column_selected = QtCore.pyqtSignal()
-
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._columns: list[str] = []  # ST_ array name per table column
-        self._syncing = False
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        self.title_label = QtWidgets.QLabel("", self)
-        self.title_label.setStyleSheet("font-weight: bold;")
-        layout.addWidget(self.title_label)
-        self.message_label = QtWidgets.QLabel("", self)
-        self.message_label.setWordWrap(True)
-        layout.addWidget(self.message_label)
-
-        self.arrays_table = self._make_table()
-        self.summary_table = self._make_table()
-        # The chosen array's header is bold in both tables (the arrays table's
-        # by Qt, as its cell is selected; the summary's here)
-        self.arrays_table.currentCellChanged.connect(lambda *_a: self._bold_summary_header())
-        # The summary is at most the height of its rows and the arrays get the
-        # rest; drag the divider to trade space between them
-        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical, self)
-        self.splitter.setChildrenCollapsible(False)
-        self.splitter.addWidget(self.arrays_table)
-        self.splitter.addWidget(self.summary_table)
-        self.splitter.setStretchFactor(0, 1)
-        self.splitter.setStretchFactor(1, 0)
-        layout.addWidget(self.splitter, stretch=1)
-        self._fit_summary_height()
-
-        for table, other in (
-            (self.arrays_table, self.summary_table),
-            (self.summary_table, self.arrays_table),
-        ):
-            table.horizontalScrollBar().valueChanged.connect(
-                other.horizontalScrollBar().setValue
-            )
-            table.horizontalHeader().sectionResized.connect(
-                lambda column, _old, size, other=other: self._sync_width(
-                    other, column, size
-                )
-            )
-            table.itemSelectionChanged.connect(
-                lambda table=table, other=other: self._sync_selection(table, other)
-            )
-
-    toolfolder = None  # the results folder shown (set by show_window)
-
-    def _make_table(self) -> QtWidgets.QTableWidget:
-        table = QtWidgets.QTableWidget(self)
-        table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
-        # One cell is highlighted, not its whole column; the current cell's
-        # column is the chosen ST_ array (its header is bold)
-        table.setSelectionBehavior(
-            QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems
-        )
-        # Cells, a header's column, or several (Shift / ⌘); ⌘C copies them
-        table.setSelectionMode(
-            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
-        )
-        return table
-
-    # --- keeping the two tables aligned -----------------------------------
-
-    def _sync_width(self, other: QtWidgets.QTableWidget, column: int, size: int) -> None:
-        if column < other.columnCount() and other.columnWidth(column) != size:
-            other.setColumnWidth(column, size)
-
-    def _sync_selection(
-        self, table: QtWidgets.QTableWidget, other: QtWidgets.QTableWidget
-    ) -> None:
-        if self._syncing:
-            return
-        self._syncing = True
-        # The other table follows the column (current, without a highlight)
-        columns = {index.column() for index in table.selectedIndexes()}
-        column = columns.pop() if len(columns) == 1 else table.currentColumn()
-        if table is self.summary_table and column >= 0:  # the arrays table names it
-            self._set_current_column(self.arrays_table, column)
-        other.clearSelection()
-        self._set_current_column(other, column)
-        self._syncing = False
-        self.column_selected.emit()
-
-    def _bold_summary_header(self) -> None:
-        """The summary table's header of the chosen array (the arrays table's
-        current column) in bold, as the arrays table's is."""
-        column = self.arrays_table.currentColumn()
-        for c in range(self.summary_table.columnCount()):
-            item = self.summary_table.horizontalHeaderItem(c)
-            if item is None:
-                continue
-            font = item.font()
-            if font.bold() != (c == column):
-                font.setBold(c == column)
-                item.setFont(font)
-
-    @staticmethod
-    def _set_current_column(table: QtWidgets.QTableWidget, column: int) -> None:
-        """Make *column* current in *table* without highlighting a cell."""
-        if 0 <= column < table.columnCount() and table.rowCount():
-            row = min(max(table.currentRow(), 0), table.rowCount() - 1)
-            table.selectionModel().setCurrentIndex(
-                table.model().index(row, column),
-                QtCore.QItemSelectionModel.SelectionFlag.NoUpdate,
-            )
-
-    # --- content ----------------------------------------------------------
 
     def show_window(
         self,
@@ -374,84 +218,27 @@ class StatsTables(QtWidgets.QWidget):
         message: str = "",
     ) -> None:
         """Fill both tables from *window*'s ST_ arrays in *toolfolder*."""
-        self.toolfolder = toolfolder  # what the tables show (Show in Browser)
-        for table in (self.arrays_table, self.summary_table):
-            table.clear()
-            table.setRowCount(0)
-            table.setColumnCount(0)
-        self._columns = []
-        self.message_label.setText(message)
-        self.message_label.setVisible(bool(message))
-        if toolfolder is None or window is None:
-            self.title_label.setText("")
-            self.column_selected.emit()
-            return
-        self.title_label.setText(f"{toolfolder.name}  {window}")
+        self.show_results(toolfolder if window is not None else None, window,
+                          message, detail_arrays=detail_arrays)
 
-        prefix = f"ST_{window}_"
-        self._columns = self._window_arrays(toolfolder, window, detail_arrays)
-        rows = self._row_labels(toolfolder, window)
-        self.arrays_table.setColumnCount(len(self._columns))
-        self.arrays_table.setRowCount(len(rows))
-        self.arrays_table.setVerticalHeaderLabels(rows)
-        self.summary_table.setColumnCount(len(self._columns))
-        self.summary_table.setRowCount(len(self.SUMMARY_ROWS))
-        self.summary_table.setVerticalHeaderLabels(
-            [label for _key, label in self.SUMMARY_ROWS]
-        )
+    def _column_names(self, toolfolder: NMToolFolder, key, detail_arrays: bool = False,
+                      **_options) -> list[str]:
+        return self._window_arrays(toolfolder, key, detail_arrays)
 
-        for column, name in enumerate(self._columns):
-            data = toolfolder.data.get(name)
-            units = data.yscale.units
-            for table in (self.arrays_table, self.summary_table):
-                # The window's arrays by their own part (max_y); the rows'
-                # epoch numbers (ST_epoch_num, no window prefix) as "epoch"
-                label = name[len(prefix):] if name.startswith(prefix) else (
-                    "epoch" if name == "ST_epoch_num"
-                    else "IQ_" + name[len("IQ_") + len(prefix):]
-                    if name.startswith(f"IQ_{prefix}") else name)
-                header = QtWidgets.QTableWidgetItem(label)
-                header.setToolTip(f"{name} ({units})" if units else name)
-                table.setHorizontalHeaderItem(column, header)
-            for row, value in enumerate(data.nparray):
-                self.arrays_table.setItem(row, column, self._value_item(value))
-            summary = NMToolStats2.stats(toolfolder, select=name).get(name, {})
-            for row, (key, _label) in enumerate(self.SUMMARY_ROWS):
-                self.summary_table.setItem(
-                    row, column, self._value_item(summary.get(key, math.nan))
-                )
-        self._align_columns()
-        self._bold_summary_header()
-        self.column_selected.emit()
+    def _rows(self, toolfolder: NMToolFolder, key) -> list[str]:
+        return self._row_labels(toolfolder, key)
 
-    def _align_columns(self) -> None:
-        for table in (self.arrays_table, self.summary_table):
-            table.resizeColumnsToContents()
-        for column in range(len(self._columns)):
-            width = max(
-                self.arrays_table.columnWidth(column),
-                self.summary_table.columnWidth(column),
-            )
-            self.arrays_table.setColumnWidth(column, width)
-            self.summary_table.setColumnWidth(column, width)
-        # Equal row-label widths keep the data columns lined up
-        label_width = max(
-            self.arrays_table.verticalHeader().sizeHint().width(),
-            self.summary_table.verticalHeader().sizeHint().width(),
-        )
-        for table in (self.arrays_table, self.summary_table):
-            table.verticalHeader().setFixedWidth(label_width)
-        self._fit_summary_height()
-
-    def _fit_summary_height(self) -> None:
-        table = self.summary_table
-        height = (
-            table.horizontalHeader().sizeHint().height()
-            + table.verticalHeader().defaultSectionSize() * len(self.SUMMARY_ROWS)
-            + table.horizontalScrollBar().sizeHint().height()
-            + 2 * table.frameWidth()
-        )
-        table.setMaximumHeight(height)
+    def _header(self, name: str, key) -> str:
+        # The window's arrays by their own part (max_y); the rows' epoch
+        # numbers (ST_epoch_num, no window prefix) as "epoch"
+        prefix = f"ST_{key}_"
+        if name.startswith(prefix):
+            return name[len(prefix):]
+        if name == "ST_epoch_num":
+            return "epoch"
+        if name.startswith(f"IQ_{prefix}"):
+            return "IQ_" + name[len("IQ_") + len(prefix):]
+        return name
 
     @classmethod
     def _window_arrays(
@@ -485,190 +272,46 @@ class StatsTables(QtWidgets.QWidget):
         # Data paths look like "nm.Folder.RecordA0"; show the data name
         return [str(path).rsplit(".", 1)[-1] for path in data.nparray]
 
-    @staticmethod
-    def _value_text(value) -> str:
-        """Plain text for a value (NaN always as "NaN"), to the digits shown."""
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            return str(value)
-        return "NaN" if math.isnan(number) else f"{number:.{StatsTables.digits}g}"
 
-    @staticmethod
-    def _value_item(value) -> QtWidgets.QTableWidgetItem:
-        """A table cell; NaN as the Settings say (NaN, grey or blank)."""
-        item = QtWidgets.QTableWidgetItem()
-        item.setData(QtCore.Qt.ItemDataRole.UserRole, value)  # for refresh()
-        StatsTables._style_item(item, value)
-        item.setTextAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
-        return item
-
-    @staticmethod
-    def _style_item(item: QtWidgets.QTableWidgetItem, value) -> None:
-        text, is_nan = table_format.cell(value, StatsTables.digits)
-        item.setText(text)
-        color = table_format.nan_foreground() if is_nan else None
-        item.setForeground(QtGui.QBrush(color) if color is not None else QtGui.QBrush())
-        item.setToolTip((table_format.nan_tooltip() or "") if is_nan else "")
-
-    def refresh(self) -> None:
-        """Restyle the cells (e.g. after the NaN setting changes)."""
-        for table in (self.arrays_table, self.summary_table):
-            for row in range(table.rowCount()):
-                for column in range(table.columnCount()):
-                    item = table.item(row, column)
-                    if item is not None:
-                        value = item.data(QtCore.Qt.ItemDataRole.UserRole)
-                        self._style_item(item, value)
-
-    # --- selection and export ---------------------------------------------
-
-    def selected_array(self) -> str | None:
-        """ST_ array name of the current cell's column, if any."""
-        column = self.arrays_table.currentColumn()
-        if not 0 <= column < len(self._columns):
-            return None
-        return self._columns[column]
-
-    def select_array(self, name: str) -> None:
-        if name in self._columns:
-            row = max(self.arrays_table.currentRow(), 0)
-            self.arrays_table.setCurrentCell(row, self._columns.index(name))
-
-    @property
-    def columns(self) -> list[str]:
-        return list(self._columns)
-
-    @staticmethod
-    def _table_lines(table: QtWidgets.QTableWidget) -> list[str]:
-        columns = range(table.columnCount())
-        lines = [
-            "\t".join([""] + [table.horizontalHeaderItem(c).text() for c in columns])
-        ]
-        for row in range(table.rowCount()):
-            cells = [table.item(row, c).text() for c in columns]
-            lines.append("\t".join([table.verticalHeaderItem(row).text()] + cells))
-        return lines
-
-    def copy_text(self, names: bool = True, row_names: bool = True) -> str:
-        """The selected cells (of the results or the summary table) as
-        tab-separated text: whole columns with their names first (*names*),
-        each row's name first (*row_names*: the data, or the statistic)."""
-        table = self.arrays_table
-        if not table.selectedIndexes() and self.summary_table.selectedIndexes():
-            table = self.summary_table
-
-        def value(row, column):
-            item = table.item(row, column)
-            if item is None:
-                return ""
-            raw = item.data(QtCore.Qt.ItemDataRole.UserRole)
-            return table_format.copy_value(raw) if raw is not None else item.text()
-
-        def header(column):
-            item = table.horizontalHeaderItem(column)
-            return item.text() if item is not None else ""
-
-        def row_label(row):
-            item = table.verticalHeaderItem(row)
-            return item.text() if item is not None else ""
-
-        # Row names with whole columns (a block of cells copies just itself)
-        selection = table.selectionModel()
-        columns = {i.column() for i in selection.selectedIndexes()}
-        whole = bool(columns) and all(
-            selection.isColumnSelected(c, QtCore.QModelIndex()) for c in columns
-        )
-        return table_format.selection_text(
-            table, value, header, row_label=row_label if row_names and whole else None,
-            names=names,
-        )
-
-    def table_text(self) -> str:
-        """Both tables, with labels, as tab-separated text (blank line between)."""
-        return "\n".join(
-            self._table_lines(self.arrays_table)
-            + [""]
-            + self._table_lines(self.summary_table)
-        )
-
-
-class Stats2Panel(QtWidgets.QWidget):
+class Stats2Panel(ResultsPanel):
     """Stats2 controls: choose saved Stats results and act on their columns.
 
-    The tables themselves are in :attr:`tables`, shown in the context panel's
+    The shared results panel (#525) plus Stats' own parts: the Window list,
+    Plot x: epoch, Histogram... and Inequality..., and the Results box. The
+    tables themselves are in :attr:`tables`, shown in the context panel's
     Table tab.
     """
 
     TOOLFOLDER_PREFIX = NMToolStats.TOOLFOLDER_PREFIX  # "Stats_" (#494)
-
-    # title, y values, x values (or None), x label, y label, style
-    plot_requested = QtCore.pyqtSignal(str, object, object, str, str, str)
-    # The list of Stats toolfolders in the current folder was reloaded
-    results_changed = QtCore.pyqtSignal()
-    # The ST_ array chosen in the Array list (or its folder or window) changed
-    array_changed = QtCore.pyqtSignal()
-    # ⋯ › Table: show the tables, the chosen array's column selected (#523)
-    table_requested = QtCore.pyqtSignal()
+    TOOL_NAME = "Stats"
+    PANEL_NAME = "Stats2"
+    OBJECT_PREFIX = "stats2"
+    EXAMPLE_ARRAY = "ST_w0_max_y"
 
     def __init__(
         self,
         manager: NMManager,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
-        super().__init__(parent)
-        self._manager = manager
-        self._selection_model: Any = None
-        self._folder: NMFolder | None = None
+        super().__init__(manager, parent)
+        self.window_combo.currentIndexChanged.connect(self._show_tables)
+        self.tables.column_selected.connect(self._on_table_column_selected)
+        self.results_combo.currentIndexChanged.connect(self._update_details)
+        self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
+        self.histogram_dialog_action.triggered.connect(self.histogram_dialog)
+        self._histogram_settings: dict = {}  # the dialog's, shown again next time
+        self.inequality_dialog_action.triggered.connect(self.inequality_dialog)
+        self._inequality_settings: dict = {}
+
+        self.refresh()
+
+    # --- Stats' parts of the panel ----------------------------------------
+
+    def _add_rows(self, form: QtWidgets.QFormLayout) -> None:
         # Owned here until a TableTab takes it (addWidget reparents it); hidden
         # so it is never drawn inside this panel
         self.tables = StatsTables(self)
         self.tables.hide()
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        form = QtWidgets.QFormLayout()
-        # Rows span the panel, so the Array list has its row's width (macOS
-        # keeps a form's fields at their size hint, cutting off array names)
-        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        folder_row = QtWidgets.QHBoxLayout()
-        self.folder_combo = QtWidgets.QComboBox(self)
-        self.folder_combo.setObjectName("stats2Folder")
-        # As wide as its subfolder names (refresh)
-        folder_row.addWidget(self.folder_combo)
-        # The subfolder's actions, as the strip's Subfolder ⋯ (#494): the
-        # app's folder actions (set_folder_actions), starting on the one shown
-        self.folder_menu = QtWidgets.QMenu("Folder", self)
-        self.folder_menu.setToolTipsVisible(True)
-        self.rename_folder_action = self.folder_menu.addAction("Rename…")
-        self.rename_folder_action.setToolTip("Rename the subfolder (its name keeps Stats_)")
-        self.copy_folder_action = self.folder_menu.addAction("Copy…")
-        self.copy_folder_action.setToolTip("Copy the subfolder")
-        # The subfolder's notes, in the Notes window every object's use (#501, #505)
-        self.notes_folder_action = self.folder_menu.addAction("Notes…")
-        self.notes_folder_action.setToolTip(
-            "Show, add, edit and delete the subfolder's notes")
-        self.delete_folder_action = self.folder_menu.addAction("Delete…")
-        self.delete_folder_action.setToolTip("Delete the subfolder and its data")
-        self.folder_menu.addSeparator()
-        self.browse_folder_action = self.folder_menu.addAction("Show in Browser")
-        self.browse_folder_action.setToolTip("Show the subfolder in the browser")
-        self.folder_menu_button = QtWidgets.QToolButton(self)
-        self.folder_menu_button.setText("⋯")
-        self.folder_menu_button.setToolTip("Subfolder actions")
-        self.folder_menu_button.setMenu(self.folder_menu)
-        self.folder_menu_button.setPopupMode(
-            QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.folder_menu_button.setStyleSheet(
-            "QToolButton::menu-indicator { image: none; width: 0px; }")
-        folder_row.addWidget(self.folder_menu_button)
-        folder_row.addStretch(1)
-        self._folder_actions: Any = None
-        self._folder_names: list[str] = []
-        form.addRow("Folder", folder_row)
-
         window_row = QtWidgets.QHBoxLayout()
         self.window_combo = QtWidgets.QComboBox(self)
         self.window_combo.setObjectName("stats2Window")
@@ -681,60 +324,28 @@ class Stats2Panel(QtWidgets.QWidget):
         self._detail_arrays = False
         form.addRow("Window", window_row)
 
-        array_row = QtWidgets.QHBoxLayout()
-        self.array_combo = QtWidgets.QComboBox(self)
-        self.array_combo.setObjectName("stats2Array")
-        # As wide as its array names (_refresh_array_combo), as the Folder list
-        array_row.addWidget(self.array_combo)
-        # The chosen array's actions, in a ⋯ menu beside it (#485): Plot and
-        # its option; Table and the tables' tools; the Browser (#523)
-        self.plot_menu = QtWidgets.QMenu("Array", self)
-        self.plot_menu.setToolTipsVisible(True)
-        self.plot_action = self.plot_menu.addAction("Plot")
-        self.plot_action.setToolTip("Show the chosen array in the Plot panel")
-        self.plot_action.triggered.connect(lambda _checked=False: self.plot_selected())
+    def _add_plot_options(self, menu: QtWidgets.QMenu) -> None:
         # Plot against the rows' epoch numbers (ST_epoch_num, #476), not the index
-        self.epoch_x_action = self.plot_menu.addAction("Plot x: epoch")
+        self.epoch_x_action = menu.addAction("Plot x: epoch")
         self.epoch_x_action.setCheckable(True)
         self.epoch_x_action.setChecked(True)
         self.epoch_x_action.setToolTip(
             "Plot against the epoch numbers (ST_epoch_num); off: the row index")
-        self.plot_menu.addSeparator()
-        self.table_action = self.plot_menu.addAction("Table")
-        self.table_action.setToolTip(
-            "Show the Stats2 tables in the Table panel, the chosen array's column selected")
-        self.table_action.triggered.connect(lambda _checked=False: self.table_requested.emit())
+
+    def _add_array_tools(self, menu: QtWidgets.QMenu) -> None:
         # Saved as H_<array>, listed with the ST_ arrays to plot (#492)
-        self.histogram_dialog_action = self.plot_menu.addAction("Histogram...")
+        self.histogram_dialog_action = menu.addAction("Histogram...")
         self.histogram_dialog_action.setToolTip(
             "Make a histogram of the chosen array, saved in the Stats subfolder "
             "as H_<array> and listed with its arrays")
         # Saved as IQ_<array>, a column of the Stats tables (#499)
-        self.inequality_dialog_action = self.plot_menu.addAction("Inequality...")
+        self.inequality_dialog_action = menu.addAction("Inequality...")
         self.inequality_dialog_action.setToolTip(
             "Test the chosen array's values against a condition (e.g. y > 10): "
             "1 or 0 per epoch, saved as IQ_<array>; optionally Epoch Sets of the "
             "epochs that pass and fail")
-        self.plot_menu.addSeparator()
-        self.browse_array_action = self.plot_menu.addAction("Show in Browser")
-        self.browse_array_action.setToolTip("Show the chosen array in the browser")
-        self.plot_menu_button = QtWidgets.QToolButton(self)
-        self.plot_menu_button.setText("⋯")
-        self.plot_menu_button.setToolTip("Plot, Table and more, for the chosen array")
-        self.plot_menu_button.setMenu(self.plot_menu)
-        self.plot_menu_button.setPopupMode(
-            QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.plot_menu_button.setStyleSheet(
-            "QToolButton::menu-indicator { image: none; width: 0px; }")
-        array_row.addWidget(self.plot_menu_button)
-        array_row.addStretch(1)
-        form.addRow("Array", array_row)
-        layout.addLayout(form)
 
-        self.message_label = QtWidgets.QLabel("", self)
-        self.message_label.setWordWrap(True)
-        layout.addWidget(self.message_label)
-
+    def _add_details(self, layout: QtWidgets.QVBoxLayout) -> None:
         details_group = QtWidgets.QGroupBox(self)  # titled by its Results choice
         details_layout = QtWidgets.QVBoxLayout(details_group)
         # Show: the chosen array's summary, or every epoch's result, a line
@@ -758,97 +369,13 @@ class Stats2Panel(QtWidgets.QWidget):
         details_layout.addWidget(self.details)
         layout.addWidget(details_group, stretch=1)
 
-        self.folder_combo.currentIndexChanged.connect(self._on_folder_changed)
-        self.window_combo.currentIndexChanged.connect(self._show_tables)
-        self.array_combo.currentIndexChanged.connect(self._on_array_changed)
-        self.tables.column_selected.connect(self._on_table_column_selected)
-        self.results_combo.currentIndexChanged.connect(self._update_details)
-        self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
-        self.histogram_dialog_action.triggered.connect(self.histogram_dialog)
-        self.rename_folder_action.triggered.connect(self.rename_folder)
-        self.copy_folder_action.triggered.connect(self.copy_folder)
-        self.delete_folder_action.triggered.connect(self.delete_folder)
-        self.browse_folder_action.triggered.connect(self.show_folder_in_browser)
-        self.notes_folder_action.triggered.connect(self.show_folder_notes)
-        self.browse_array_action.triggered.connect(self.show_array_in_browser)
-        self._histogram_settings: dict = {}  # the dialog's, shown again next time
-        self.inequality_dialog_action.triggered.connect(self.inequality_dialog)
-        self._inequality_settings: dict = {}
+    def no_results_message(self) -> str:
+        return (
+            f"No saved Stats results in {self._folder.name}. "
+            "Run Stats1 with Settings › Stats › 'Save ST_ arrays' on."
+        )
 
-        self.refresh()
-
-    # --- selection -------------------------------------------------------
-
-    def bind_selection_model(self, selection_model) -> None:
-        self._selection_model = selection_model
-        selection_model.selection_changed.connect(self._on_selection_changed)
-        self.refresh()
-
-    def _current_folder(self) -> NMFolder | None:
-        if self._selection_model is not None:
-            folder = self._selection_model.selection.get("folder")
-        else:
-            folder = self._manager.select_values.get("folder")
-        return folder if isinstance(folder, NMFolder) else None
-
-    def _on_selection_changed(self, *_args) -> None:
-        # Trace navigation changes the selection often; only a new folder
-        # changes what is shown
-        if self._current_folder() is not self._folder:
-            self.refresh()
-
-    # --- folder and window lists ------------------------------------------
-
-    def toolfolder(self) -> NMToolFolder | None:
-        """The Stats toolfolder chosen in the Folder list."""
-        if self._folder is None:
-            return None
-        name = self.folder_combo.currentData()
-        if name is None:
-            return None
-        return self._folder.toolfolders.get(name)
-
-    def refresh(self, select: str | None = None) -> None:
-        """Reload the Stats toolfolder list, choosing *select* if given.
-
-        Otherwise the current choice is kept, or the newest folder is chosen.
-        """
-        self._folder = self._current_folder()
-        previous = select or self.folder_combo.currentData()
-        names: list[str] = []
-        if self._folder is not None:
-            names = [
-                name
-                for name in self._folder.toolfolders.keys()
-                if name.startswith(self.TOOLFOLDER_PREFIX)
-            ]
-        self.folder_combo.blockSignals(True)
-        self.folder_combo.clear()
-        for name in names:
-            self.folder_combo.addItem(name, name)
-        self._folder_names = names
-        metrics = self.folder_combo.fontMetrics()
-        longest = max(names, key=metrics.horizontalAdvance) if names else "Stats_Record_A_All_0"
-        self.folder_combo.setFixedWidth(metrics.horizontalAdvance(longest) + 44)
-
-        # The one before, else the newest
-        index = names.index(previous) if previous in names else len(names) - 1
-        self.folder_combo.setCurrentIndex(index)
-        self.folder_combo.blockSignals(False)
-        self._on_folder_changed()
-        self.results_changed.emit()
-
-    def has_results(self) -> bool:
-        """True if the current folder has saved Stats results."""
-        return bool(self._folder_names)
-
-    def show_toolfolder(self, toolfolder: NMToolFolder | None) -> None:
-        """Show *toolfolder*, e.g. the one a Stats run just wrote, with its
-        measurement chosen (not its baseline)."""
-        self.refresh(select=toolfolder.name if toolfolder is not None else None)
-        measure = self.measure_array()
-        if measure is not None:
-            self.select_array(measure)
+    # --- the Window list ----------------------------------------------------
 
     @staticmethod
     def _windows(toolfolder: NMToolFolder) -> list[str]:
@@ -863,8 +390,7 @@ class Stats2Panel(QtWidgets.QWidget):
                 windows.append(window)
         return windows
 
-    def _on_folder_changed(self, *_args) -> None:
-        self._update_folder_actions()
+    def _on_toolfolder_changed(self) -> None:
         previous = self.window_combo.currentData()
         self.window_combo.blockSignals(True)
         self.window_combo.clear()
@@ -878,20 +404,9 @@ class Stats2Panel(QtWidgets.QWidget):
         self._show_tables()
 
     def _show_tables(self, *_args) -> None:
-        toolfolder = self.toolfolder()
-        if self._folder is None:
-            message = "Select a folder to see its Stats results."
-        elif toolfolder is None:
-            message = (
-                f"No saved Stats results in {self._folder.name}. "
-                "Run Stats1 with Settings › Stats › 'Save ST_ arrays' on."
-            )
-        else:
-            message = ""
-        self.message_label.setText(message)
-        self.message_label.setVisible(bool(message))
+        message = self._show_message()
         self.tables.show_window(
-            toolfolder,
+            self.toolfolder(),
             self.window_combo.currentData(),
             detail_arrays=self._detail_arrays,
             message=message,
@@ -906,11 +421,13 @@ class Stats2Panel(QtWidgets.QWidget):
             self._detail_arrays = bool(on)
             self._show_tables()
 
-    # --- array selection --------------------------------------------------
+    # --- the Array list -----------------------------------------------------
 
-    def selected_array(self) -> str | None:
-        """ST_ array name chosen in the Array list."""
-        return self.array_combo.currentData()
+    def _array_names(self) -> list[str]:
+        return self.tables.columns + self._histograms()
+
+    def default_array(self) -> str | None:
+        return self.measure_array()
 
     def measure_array(self) -> str | None:
         """The window's measurement among its arrays: a rise time, decay time
@@ -926,28 +443,6 @@ class Stats2Panel(QtWidgets.QWidget):
                 return name
         return names[0] if names else None
 
-    def select_array(self, name: str) -> None:
-        index = self.array_combo.findData(name)
-        if index >= 0:
-            self.array_combo.setCurrentIndex(index)
-
-    def _refresh_array_combo(self) -> None:
-        previous = self.array_combo.currentData()
-        self.array_combo.blockSignals(True)
-        self.array_combo.clear()
-        names = self.tables.columns + self._histograms()
-        for name in names:
-            self.array_combo.addItem(name, name)
-        metrics = self.array_combo.fontMetrics()
-        longest = max(names, key=metrics.horizontalAdvance) if names else "ST_w0_max_y"
-        self.array_combo.setFixedWidth(metrics.horizontalAdvance(longest) + 44)
-        index = self.array_combo.findData(previous)
-        if index < 0:  # not in these results: their measurement
-            index = self.array_combo.findData(self.measure_array())
-        self.array_combo.setCurrentIndex(max(index, 0) if self.array_combo.count() else -1)
-        self.array_combo.blockSignals(False)
-        self._on_array_changed()
-
     def _histograms(self) -> list[str]:
         """The window's histograms (H_ST_<window>_..., #492), listed after
         its ST_ arrays; not their bin edges (H_..._edges)."""
@@ -959,24 +454,21 @@ class Stats2Panel(QtWidgets.QWidget):
         return [name for name in toolfolder.data.keys()
                 if name.startswith(prefix) and not name.endswith("_edges")]
 
-    @staticmethod
-    def is_histogram(name: str | None) -> bool:
-        """True if *name* is a saved histogram (H_<array>, #492)."""
-        return bool(name) and name.startswith("H_")
-
-    def _on_array_changed(self, *_args) -> None:
-        name = self.selected_array()
+    def _on_array_chosen(self, name: str | None) -> None:
         if name is not None and self.tables.selected_array() != name:
             self.tables.select_array(name)
         self._update_details()
-        self._update_buttons()
-        self.array_changed.emit()
 
     def _on_table_column_selected(self) -> None:
         # Clicking a column in either table picks that array here too
         name = self.tables.selected_array()
         if name is not None and name != self.selected_array():
             self.select_array(name)
+
+    def _update_array_tools(self, name: str | None) -> None:
+        self.histogram_dialog_action.setEnabled(name is not None and not self.is_histogram(name))
+        self.inequality_dialog_action.setEnabled(
+            name is not None and not self.is_histogram(name) and not name.startswith("IQ_"))
 
     def refresh_details(self) -> None:
         """Show the Results again (e.g. with other digits)."""
@@ -1104,20 +596,7 @@ class Stats2Panel(QtWidgets.QWidget):
             lines += ["", "NaN for: " + runs_text(missing)]  # e.g. RecordA0-3
         return "\n".join(lines)
 
-    # --- actions ----------------------------------------------------------
-
-    def _update_buttons(self) -> None:
-        name = self.selected_array()
-        self.plot_action.setEnabled(name is not None)
-        self.table_action.setEnabled(name is not None)
-        self.histogram_dialog_action.setEnabled(name is not None and not self.is_histogram(name))
-        self.inequality_dialog_action.setEnabled(
-            name is not None and not self.is_histogram(name) and not name.startswith("IQ_"))
-        self.browse_array_action.setEnabled(name is not None and self._folder_actions is not None)
-
-    def _axis_label(self, name: str) -> str:
-        units = self.toolfolder().data.get(name).yscale.units
-        return f"{name} ({units})" if units else name
+    # --- Plot, Histogram... and Inequality... ----------------------------------
 
     def selected_plot(self) -> tuple | None:
         """The chosen array as :attr:`plot_requested` values (title, y, x,
@@ -1155,11 +634,6 @@ class Stats2Panel(QtWidgets.QWidget):
         if usable and self.epoch_x_action.isChecked():
             return epochs.nparray, "epoch"
         return None, "data index"
-
-    def plot_selected(self) -> None:
-        values = self.selected_plot()
-        if values is not None:
-            self.plot_requested.emit(*values)
 
     def _ask_histogram(self, name: str, values: np.ndarray, units: str) -> dict | None:
         """The Histogram... dialog's ``nm.stats.histogram`` arguments, or
@@ -1286,86 +760,6 @@ class Stats2Panel(QtWidgets.QWidget):
         self._show_tables()
         self.select_array(f"IQ_{name}")
         self.plot_selected()
-
-    # --- Notes (#501) -------------------------------------------------------------
-
-    def _notes_changed(self) -> None:
-        if self._folder_actions is not None:  # e.g. the browser's info panel
-            self._folder_actions.content_changed.emit()
-
-    # --- the Folder ⋯ menu (#494) -------------------------------------------
-
-    def set_folder_actions(self, actions) -> None:
-        """The app's folder actions (:class:`FolderActions`), whose subfolder
-        actions the Folder ⋯ menu uses."""
-        self._folder_actions = actions
-        self._update_folder_actions()
-        self._update_buttons()
-
-    def _update_folder_actions(self) -> None:
-        self.notes_folder_action.setEnabled(self.toolfolder() is not None)
-        usable = self._folder_actions is not None and self.toolfolder() is not None
-        for action in (self.rename_folder_action, self.copy_folder_action,
-                       self.delete_folder_action, self.browse_folder_action):
-            action.setEnabled(usable)
-
-    def rename_folder(self) -> None:
-        """Rename… (the strip's prompt, starting on the subfolder shown); then
-        show its new name."""
-        toolfolder = self.toolfolder()
-        if toolfolder is not None and self._folder_actions is not None:
-            name = self._folder_actions.rename_subfolder(toolfolder)
-            self.refresh(select=name)
-
-    def copy_folder(self) -> None:
-        """Copy… (the strip's prompt, starting on the subfolder shown); then
-        show the copy."""
-        toolfolder = self.toolfolder()
-        if toolfolder is not None and self._folder_actions is not None:
-            name = self._folder_actions.duplicate_subfolder(toolfolder)
-            self.refresh(select=name)
-
-    def delete_folder(self) -> None:
-        """Delete… (the strip's prompt, starting on the subfolder shown); then
-        the one shown, or else the newest."""
-        toolfolder = self.toolfolder()
-        if toolfolder is not None and self._folder_actions is not None:
-            self._folder_actions.delete_subfolder(toolfolder)
-            self.refresh()
-
-    def show_folder_notes(self) -> None:
-        """Notes… (Folder ⋯): the subfolder's notes, in the Notes window
-        (#501, #505); the run's own note is first, read-only."""
-        toolfolder = self.toolfolder()
-        if toolfolder is not None:
-            folders = self._folder.toolfolders
-            # The other Stats subfolders listed here, to switch to (#509)
-            choices = NotesChoices(
-                "Folder", list(self._folder_names), toolfolder.name,
-                lambda name: (folders[name].notes, notes_owner(folders[name])))
-            self._open_notes(toolfolder.notes, notes_owner(toolfolder), choices=choices)
-
-    def _open_notes(self, notes, owner: str, choices=None) -> None:
-        """The Notes window (replaced in tests)."""
-        dialog = NotesDialog(notes, owner, self, choices)
-        dialog.editor.notes_changed.connect(self._notes_changed)
-        dialog.exec()
-
-    def show_folder_in_browser(self) -> None:
-        toolfolder = self.toolfolder()
-        if toolfolder is not None and self._folder_actions is not None:
-            self._folder_actions.subfolder_in_browser(toolfolder)
-
-    def show_array_in_browser(self) -> None:
-        """Show in Browser (Plot ⋯): the chosen array (an ST_ array or a
-        histogram), in its Stats subfolder."""
-        name = self.selected_array()
-        toolfolder = self.toolfolder()
-        if name is None or toolfolder is None or self._folder_actions is None:
-            return
-        data = toolfolder.data.get(name)
-        if data is not None:
-            self._folder_actions.browse_requested.emit(data)
 
 
 __all__ = ["Stats2Panel", "StatsTables"]
