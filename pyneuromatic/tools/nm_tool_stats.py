@@ -334,25 +334,7 @@ class NMToolStats(NMTool):
         """How the run was made, for its results folder, e.g. "NMStats:
         Record, channel A, epochs all (n=3); w0: mean, x 0 to inf, baseline
         mean x 0 to 10; channel transform: Invert()"."""
-        meta = self._run_meta if isinstance(getattr(self, "_run_meta", None), dict) else {}
-        keys = meta.get("run_keys") or {}
-        n = self.__n_analysed
-        series, channels = meta.get("dataseries") or [], meta.get("channels") or []
-        if series:
-            what = ", ".join(series)
-            if channels:
-                what += ", channel%s %s" % ("s" * (len(channels) > 1), ", ".join(channels))
-            epochs = keys.get("epoch")
-            if keys.get("group") is not None:
-                group = "group %s" % keys["group"]
-                epochs = ("%s %s %s" % (epochs, keys.get("group_operator") or "AND", group)
-                          if epochs else group)
-            what += ", epochs %s (n=%d)" % (epochs or "selected", n)
-        else:
-            what = "%d data array%s" % (n, "s" * (n != 1))
-            if keys.get("data"):
-                what += " (data set %s)" % keys["data"]
-        parts = ["NMStats: " + what]
+        parts = ["NMStats: " + self._run_scope(self.__n_analysed)]
 
         def x_range(xbgn, xend) -> str:
             return "x %g to %g" % (xbgn, xend)

@@ -44,7 +44,7 @@ class TestToolfolderPrefix(unittest.TestCase):
         from pyneuromatic.tools.nm_tool_stats import NMToolStats
         self.assertEqual(NMToolStats.TOOLFOLDER_PREFIX, "Stats_")
         self.assertEqual(toolfolder_prefix("Stats_Record_A_All_0"), "Stats_")
-        self.assertIsNone(toolfolder_prefix("Spike_Record_A_0"))  # Spike lists none yet
+        self.assertEqual(toolfolder_prefix("Spike_Record_A_0"), "Spike_")  # #526
         self.assertIsNone(toolfolder_prefix("Results"))
         self.assertIsNone(NMTool.TOOLFOLDER_PREFIX)
 
