@@ -409,6 +409,28 @@ class NMTool:
             made.append(folder)
         return folder
 
+    def _run_scope(self, n: int) -> str:
+        """What the run analysed, for its results folder's note, e.g.
+        "Record, channel A, epochs all (n=3)" or "2 data arrays (data set
+        Set1)"; *n* the number of arrays analysed."""
+        meta = self._run_meta if isinstance(getattr(self, "_run_meta", None), dict) else {}
+        keys = meta.get("run_keys") or {}
+        series, channels = meta.get("dataseries") or [], meta.get("channels") or []
+        if series:
+            what = ", ".join(series)
+            if channels:
+                what += ", channel%s %s" % ("s" * (len(channels) > 1), ", ".join(channels))
+            epochs = keys.get("epoch")
+            if keys.get("group") is not None:
+                group = "group %s" % keys["group"]
+                epochs = ("%s %s %s" % (epochs, keys.get("group_operator") or "AND", group)
+                          if epochs else group)
+            return what + ", epochs %s (n=%d)" % (epochs or "selected", n)
+        what = "%d data array%s" % (n, "s" * (n != 1))
+        if keys.get("data"):
+            what += " (data set %s)" % keys["data"]
+        return what
+
     def _selection_code(self) -> str | None:
         """A short code for what the run analysed, from its ``run_keys``.
 

@@ -200,12 +200,24 @@ class TestNMToolSpikeDetection(unittest.TestCase):
         f = folder.toolfolders.get("Spike_0")
         self.assertEqual(int(f.data.get("SP_count").nparray[0]), 0)
 
-    def test_per_epoch_sp_arrays_created(self):
+    def test_raster_arrays_created(self):
+        data = [_sine_data(name="recA%d" % i) for i in range(3)]
+        folder = _run(self.tool, data)
+        f = folder.toolfolders.get("Spike_0")
+        self.assertIn("SP_RX", f.data)
+        self.assertIn("SP_RY", f.data)
+        for i in range(3):  # no array per epoch
+            self.assertNotIn("SP_recA%d" % i, f.data)
+
+    def test_epochs_format_writes_an_array_per_epoch(self):
+        self.tool.results_format = "epochs"
         data = [_sine_data(name="recA%d" % i) for i in range(3)]
         folder = _run(self.tool, data)
         f = folder.toolfolders.get("Spike_0")
         for i in range(3):
             self.assertIn("SP_recA%d" % i, f.data)
+        self.assertNotIn("SP_RX", f.data)
+        self.assertIn("SP_count", f.data)
 
     def test_sp_count_length_equals_epoch_count(self):
         data = [_sine_data(name="recA%d" % i) for i in range(5)]
@@ -218,9 +230,10 @@ class TestNMToolSpikeDetection(unittest.TestCase):
         folder = _run(self.tool, data)
         f = folder.toolfolders.get("Spike_0")
         counts = f.data.get("SP_count").nparray
+        ry = f.data.get("SP_RY").nparray
         for i, d in enumerate(data):
-            times = f.data.get("SP_recA%d" % i).nparray
-            self.assertEqual(int(counts[i]), len(times))
+            self.assertEqual(int(counts[i]), int(np.sum(ry == i)))
+        self.assertEqual(len(f.data.get("SP_RX").nparray), int(counts.sum()))
 
     def test_epoch_with_no_crossings(self):
         # Constant signal — no crossings
@@ -230,7 +243,8 @@ class TestNMToolSpikeDetection(unittest.TestCase):
         folder = _run(self.tool, [d])
         f = folder.toolfolders.get("Spike_0")
         self.assertEqual(int(f.data.get("SP_count").nparray[0]), 0)
-        self.assertEqual(len(f.data.get("SP_flat").nparray), 0)
+        self.assertEqual(len(f.data.get("SP_RX").nparray), 0)
+        self.assertTrue(np.isnan(f.data.get("SP_first").nparray[0]))
 
     def test_none_nparray_skipped(self):
         d = NMData(NM, name="empty",
@@ -244,7 +258,7 @@ class TestNMToolSpikeDetection(unittest.TestCase):
         d = _sine_data()
         folder = _run(self.tool, [d])
         f = folder.toolfolders.get("Spike_0")
-        times = f.data.get("SP_recordA0").nparray
+        times = f.data.get("SP_RX").nparray
         self.assertEqual(times.dtype.kind, "f")
 
     def test_xscale_units_captured(self):
@@ -389,27 +403,27 @@ class TestNMToolSpikePST(unittest.TestCase):
     def test_pst_written_to_subfolder(self):
         self.tool.pst(bins=50)
         f = self.folder.toolfolders.get("Spike_0")
-        self.assertIn("SP_PST_0", f.data)
+        self.assertIn("H_SP_PST", f.data)
 
     def test_pst_overwrite_true_reuses_sp_pst_0(self):
         self.tool.pst(bins=50)
         self.tool.pst(bins=100)  # overwrites SP_PST_0
         f = self.folder.toolfolders.get("Spike_0")
-        self.assertIn("SP_PST_0", f.data)
-        self.assertNotIn("SP_PST_1", f.data)
+        self.assertIn("H_SP_PST", f.data)
+        self.assertNotIn("H_SP_PST_1", f.data)
 
     def test_pst_overwrite_false_creates_new_numbered_arrays(self):
         self.tool.pst(bins=50, overwrite=False)
         self.tool.pst(bins=100, overwrite=False)
         f = self.folder.toolfolders.get("Spike_0")
-        self.assertIn("SP_PST_0", f.data)
-        self.assertIn("SP_PST_1", f.data)
+        self.assertIn("H_SP_PST", f.data)
+        self.assertIn("H_SP_PST_1", f.data)
 
     def test_pst_result_name_matches_array_in_folder(self):
         d = self.tool.pst(bins=50, overwrite=False)
-        self.assertEqual(d.name, "SP_PST_0")
+        self.assertEqual(d.name, "H_SP_PST")
         d2 = self.tool.pst(bins=50, overwrite=False)
-        self.assertEqual(d2.name, "SP_PST_1")
+        self.assertEqual(d2.name, "H_SP_PST_1")
 
 
 class TestNMToolSpikeISI(unittest.TestCase):
@@ -459,7 +473,7 @@ class TestNMToolSpikeISI(unittest.TestCase):
     def test_isi_written_to_subfolder(self):
         self.tool.isi(bins=50)
         f = self.folder.toolfolders.get("Spike_0")
-        self.assertIn("SP_ISI_0", f.data)
+        self.assertIn("H_SP_ISI", f.data)
 
     def test_isi_total_intervals_correct(self):
         # Each epoch: 10 spikes → 9 ISIs; 3 epochs → 27 total ISIs
@@ -505,7 +519,7 @@ class TestNMToolSpikeISI(unittest.TestCase):
         self.tool.isi(bins=50, xbgn=0.0, xend=0.08, min_isi=0.001, max_isi=0.05,
                       output_mode="probability")
         f = self.folder.toolfolders.get("Spike_0")
-        note = f.data.get("SP_ISI_0").notes.note
+        note = f.data.get("H_SP_ISI").notes.note
         self.assertIn("xbgn=", note)
         self.assertIn("xend=", note)
         self.assertIn("min_isi=", note)
@@ -516,21 +530,21 @@ class TestNMToolSpikeISI(unittest.TestCase):
         self.tool.isi(bins=50)
         self.tool.isi(bins=100)  # overwrites SP_ISI_0
         f = self.folder.toolfolders.get("Spike_0")
-        self.assertIn("SP_ISI_0", f.data)
-        self.assertNotIn("SP_ISI_1", f.data)
+        self.assertIn("H_SP_ISI", f.data)
+        self.assertNotIn("H_SP_ISI_1", f.data)
 
     def test_isi_overwrite_false_creates_new_numbered_arrays(self):
         self.tool.isi(bins=50, overwrite=False)
         self.tool.isi(bins=100, overwrite=False)
         f = self.folder.toolfolders.get("Spike_0")
-        self.assertIn("SP_ISI_0", f.data)
-        self.assertIn("SP_ISI_1", f.data)
+        self.assertIn("H_SP_ISI", f.data)
+        self.assertIn("H_SP_ISI_1", f.data)
 
     def test_isi_result_name_matches_array_in_folder(self):
         d = self.tool.isi(bins=50, overwrite=False)
-        self.assertEqual(d.name, "SP_ISI_0")
+        self.assertEqual(d.name, "H_SP_ISI")
         d2 = self.tool.isi(bins=50, overwrite=False)
-        self.assertEqual(d2.name, "SP_ISI_1")
+        self.assertEqual(d2.name, "H_SP_ISI_1")
 
 
 class TestNMToolSpikeIntervals(unittest.TestCase):
@@ -1170,7 +1184,7 @@ class TestNMToolSpikeResultsToCache(unittest.TestCase):
 
 
 class TestNMToolSpikeNotes(unittest.TestCase):
-    """Notes are written to SP_ output arrays."""
+    """The run's note is on its results folder; histograms have their own."""
 
     def setUp(self):
         self.tool = NMToolSpike()
@@ -1180,85 +1194,59 @@ class TestNMToolSpikeNotes(unittest.TestCase):
         self.folder = _run(self.tool, data)
         self.f = self.folder.toolfolders.get("Spike_0")
 
-    def test_sp_epoch_note_contains_nmspike(self):
-        note = self.f.data.get("SP_recA0").notes.note
-        self.assertIn("NMSpike", note)
-
-    def test_sp_epoch_note_contains_source(self):
-        note = self.f.data.get("SP_recA0").notes.note
-        self.assertIn("recA0", note)
-
-    def test_sp_epoch_note_contains_ylevel(self):
-        note = self.f.data.get("SP_recA0").notes.note
-        self.assertIn("ylevel=", note)
-
-    def test_sp_epoch_note_contains_func_name(self):
-        note = self.f.data.get("SP_recA0").notes.note
-        self.assertIn("func_name=", note)
-
-    def test_sp_epoch_note_contains_spike_count(self):
-        note = self.f.data.get("SP_recA0").notes.note
-        self.assertIn("n=", note)
-
-    def test_sp_epoch_note_contains_xbgn_xend(self):
-        note = self.f.data.get("SP_recA0").notes.note
-        self.assertIn("xbgn=", note)
-        self.assertIn("xend=", note)
-
-    def test_sp_count_note_contains_xbgn_xend(self):
-        note = self.f.data.get("SP_count").notes.note
-        self.assertIn("xbgn=", note)
-        self.assertIn("xend=", note)
-
-    def test_sp_count_note_contains_n_epochs(self):
-        note = self.f.data.get("SP_count").notes.note
-        self.assertIn("n_epochs=2", note)
+    def test_one_run_note_on_the_folder(self):
+        note = self.f.notes.note
+        self.assertIn("NMSpike: 2 data arrays", note)
+        self.assertIn("level+ 0, x -inf to inf", note)
+        self.assertIn("format raster", note)
+        for name in ("SP_RX", "SP_RY", "SP_count", "SP_rate"):  # none on the arrays
+            self.assertFalse(self.f.data.get(name).notes.note)
 
     def test_pst_note_contains_nmspike_pst(self):
         self.tool.pst(bins=50)
-        note = self.f.data.get("SP_PST_0").notes.note
+        note = self.f.data.get("H_SP_PST").notes.note
         self.assertIn("NMSpike.pst", note)
 
     def test_pst_note_contains_bins(self):
         self.tool.pst(bins=50)
-        note = self.f.data.get("SP_PST_0").notes.note
+        note = self.f.data.get("H_SP_PST").notes.note
         self.assertIn("bins=50", note)
 
     def test_pst_note_contains_n_spikes(self):
         self.tool.pst(bins=50)
-        note = self.f.data.get("SP_PST_0").notes.note
+        note = self.f.data.get("H_SP_PST").notes.note
         self.assertIn("n_spikes=", note)
 
     def test_pst_note_contains_output_mode(self):
         self.tool.pst(bins=50, output_mode="rate")
-        note = self.f.data.get("SP_PST_0").notes.note
+        note = self.f.data.get("H_SP_PST").notes.note
         self.assertIn("output_mode=", note)
         self.assertIn("rate", note)
 
     def test_pst_note_contains_xbgn_xend(self):
         self.tool.pst(bins=50, xbgn=0.0, xend=0.05)
-        note = self.f.data.get("SP_PST_0").notes.note
+        note = self.f.data.get("H_SP_PST").notes.note
         self.assertIn("xbgn=", note)
         self.assertIn("xend=", note)
 
     def test_isi_note_contains_nmspike_isi(self):
         self.tool.isi(bins=50)
-        note = self.f.data.get("SP_ISI_0").notes.note
+        note = self.f.data.get("H_SP_ISI").notes.note
         self.assertIn("NMSpike.isi", note)
 
     def test_isi_note_contains_bins(self):
         self.tool.isi(bins=50)
-        note = self.f.data.get("SP_ISI_0").notes.note
+        note = self.f.data.get("H_SP_ISI").notes.note
         self.assertIn("bins=50", note)
 
     def test_isi_note_contains_n_intervals(self):
         self.tool.isi(bins=50)
-        note = self.f.data.get("SP_ISI_0").notes.note
+        note = self.f.data.get("H_SP_ISI").notes.note
         self.assertIn("n_intervals=", note)
 
     def test_isi_note_contains_xbgn_xend(self):
         self.tool.isi(bins=50, xbgn=0.0, xend=0.05)
-        note = self.f.data.get("SP_ISI_0").notes.note
+        note = self.f.data.get("H_SP_ISI").notes.note
         self.assertIn("xbgn=", note)
         self.assertIn("xend=", note)
 
@@ -1386,8 +1374,8 @@ class TestNMToolSpikePSTFromToolfolder(unittest.TestCase):
     def test_pst_writes_into_first_toolfolder(self):
         d = self.tool.pst(toolfolder=self.tf1)
         self.assertIsNotNone(d)
-        self.assertEqual(d.name, "SP_PST_0")
-        self.assertIn("SP_PST_0", self.tf1.data)
+        self.assertEqual(d.name, "H_SP_PST")
+        self.assertIn("H_SP_PST", self.tf1.data)
 
     def test_pst_result_independent_of_second_run(self):
         # Default pst() operates on second run (recB epochs, 200 Hz)
@@ -1423,8 +1411,8 @@ class TestNMToolSpikeISIFromToolfolder(unittest.TestCase):
     def test_isi_writes_into_first_toolfolder(self):
         d = self.tool.isi(toolfolder=self.tf1)
         self.assertIsNotNone(d)
-        self.assertEqual(d.name, "SP_ISI_0")
-        self.assertIn("SP_ISI_0", self.tf1.data)
+        self.assertEqual(d.name, "H_SP_ISI")
+        self.assertIn("H_SP_ISI", self.tf1.data)
 
     def test_isi_raises_if_toolfolder_has_no_sp_arrays(self):
         from pyneuromatic.tools.nm_tool_folder import NMToolFolder
@@ -1490,7 +1478,8 @@ class TestNMToolSpikeExtractWaveformsFromToolfolder(unittest.TestCase):
 
 
 class TestNMToolSpikeEpochNamesArray(unittest.TestCase):
-    """SP_epoch_names is written to the toolfolder and used by _spike_times_from_toolfolder."""
+    """SP_data_names is written to the toolfolder and used by
+    _spike_times_from_toolfolder; SP_epoch_names (saved before #526) is read."""
 
     def setUp(self):
         self.tool = NMToolSpike()
@@ -1499,16 +1488,17 @@ class TestNMToolSpikeEpochNamesArray(unittest.TestCase):
         _run(self.tool, self.data, folder=self.folder)
         self.tf = self.tool._toolfolder
 
-    def test_sp_epoch_names_written_to_toolfolder(self):
-        self.assertIn("SP_epoch_names", self.tf.data)
+    def test_sp_data_names_written_to_toolfolder(self):
+        self.assertIn("SP_data_names", self.tf.data)
+        self.assertNotIn("SP_epoch_names", self.tf.data)
 
-    def test_sp_epoch_names_values_match_epoch_names(self):
-        d = self.tf.data.get("SP_epoch_names")
+    def test_sp_data_names_values_match_epoch_names(self):
+        d = self.tf.data.get("SP_data_names")
         names = [str(n) for n in d.nparray]
         self.assertEqual(names, ["recA0", "recA1", "recA2"])
 
-    def test_sp_epoch_names_length_matches_epoch_count(self):
-        d = self.tf.data.get("SP_epoch_names")
+    def test_sp_data_names_length_matches_epoch_count(self):
+        d = self.tf.data.get("SP_data_names")
         self.assertEqual(len(d.nparray), 3)
 
     def test_spike_times_from_toolfolder_uses_epoch_names_array(self):
@@ -1648,3 +1638,168 @@ class TestNMToolSpikeRegistry(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# #526: the raster (SP_RX, SP_RY), per-epoch measures, results_format
+# ---------------------------------------------------------------------------
+
+
+def _times_data(name, n=1000):
+    """A trace (x 0 to 0.0999 s) of pulses crossing 0.5 at 10, 30 and 70 ms."""
+    y = np.zeros(n)
+    for i in (100, 300, 700):
+        y[i:i + 20] = 1.0
+    return NMData(NM, name=name, nparray=y,
+                  xscale={"start": 0.0, "delta": _DELTA, "units": "s"})
+
+
+class TestNMToolSpikeRowMeasures(unittest.TestCase):
+    """SP_count, SP_rate, SP_first, SP_isi, SP_epoch_num: a row per epoch."""
+
+    def setUp(self):
+        self.tool = NMToolSpike()
+        self.tool.ylevel = 0.5
+        flat = NMData(NM, name="flat", nparray=np.zeros(1000),
+                      xscale={"start": 0.0, "delta": _DELTA, "units": "s"})
+        self.folder = _run(self.tool, [_times_data("rec0"), flat, _times_data("rec2")])
+        self.f = self.folder.toolfolders.get("Spike_0")
+
+    def _values(self, name):
+        return self.f.data.get(name).nparray
+
+    def test_count(self):
+        self.assertEqual(list(self._values("SP_count")), [3, 0, 3])
+
+    def test_rate_in_hz(self):
+        # 3 spikes in the 0.0999 s searched (the trace's x range)
+        rate = self._values("SP_rate")
+        self.assertAlmostEqual(rate[0], 3 / 0.0999, places=6)
+        self.assertEqual(rate[1], 0.0)
+        self.assertEqual(self.f.data.get("SP_rate").yscale.units, "Hz")
+
+    def test_rate_uses_the_x_range_searched(self):
+        tool = NMToolSpike()
+        tool.ylevel = 0.5
+        tool.xbgn, tool.xend = 0.0, 0.05
+        folder = _run(tool, [_times_data("rec0")])
+        rate = folder.toolfolders.get("Spike_0").data.get("SP_rate").nparray
+        self.assertAlmostEqual(rate[0], 2 / 0.05, places=6)  # 10 and 30 ms
+
+    def test_first_spike_and_mean_isi(self):
+        first, isi = self._values("SP_first"), self._values("SP_isi")
+        self.assertAlmostEqual(first[0], 0.00995, places=4)
+        self.assertAlmostEqual(isi[0], 0.03, places=4)  # (20 + 40 ms) / 2
+        self.assertTrue(np.isnan(first[1]) and np.isnan(isi[1]))  # no spikes
+        self.assertEqual(self.f.data.get("SP_first").yscale.units, "s")
+
+    def test_rows_without_a_data_series_are_numbered(self):
+        self.assertEqual(list(self._values("SP_epoch_num")), [0, 1, 2])
+        self.assertEqual(list(self._values("SP_RY")), [0, 0, 0, 2, 2, 2])
+        self.assertEqual([str(n) for n in self._values("SP_data_names")],
+                         ["rec0", "flat", "rec2"])
+
+    def test_raster_x_is_every_spike(self):
+        rx = self._values("SP_RX")
+        self.assertEqual(len(rx), 6)
+        self.assertEqual(self.f.data.get("SP_RX").yscale.units, "s")
+
+
+class TestNMToolSpikeRasterRoundTrip(unittest.TestCase):
+    """Reading a subfolder back: raster(), intervals(), pst() and isi()."""
+
+    def _run(self, results_format):
+        tool = NMToolSpike()
+        tool.ylevel = 0.5
+        tool.results_format = results_format
+        flat = NMData(NM, name="flat", nparray=np.zeros(1000),
+                      xscale={"start": 0.0, "delta": _DELTA, "units": "s"})
+        _run(tool, [_times_data("rec0"), flat, _times_data("count")])
+        return tool
+
+    def test_both_formats_read_back_as_run(self):
+        for results_format in ("raster", "epochs"):
+            tool = self._run(results_format)
+            times, names = tool.raster(toolfolder=tool._toolfolder)
+            self.assertEqual(names, ["rec0", "flat", "count"])
+            self.assertEqual([len(t) for t in times], [3, 0, 3])
+            for read, run in zip(times, tool._spike_times):
+                np.testing.assert_array_equal(read, run)
+            _, _, units = tool._spike_times_from_toolfolder(tool._toolfolder)
+            self.assertEqual(units, "s")
+
+    def test_epochs_format_data_named_as_a_measure(self):
+        # Data "count": its times can't be SP_count (the counts)
+        tool = self._run("epochs")
+        f = tool._toolfolder
+        self.assertEqual(list(f.data.get("SP_count").nparray), [3, 0, 3])
+        self.assertEqual(len(f.data.get("SP_count_times").nparray), 3)
+
+    def test_histograms_from_the_raster(self):
+        tool = self._run("raster")
+        pst = tool.pst(bins=10, toolfolder=tool._toolfolder)
+        self.assertEqual(pst.name, "H_SP_PST")
+        self.assertEqual(int(pst.nparray.sum()), 6)
+        isi = tool.isi(bins=10, toolfolder=tool._toolfolder)
+        self.assertEqual(isi.name, "H_SP_ISI")
+        self.assertEqual(int(isi.nparray.sum()), 4)
+
+    def test_legacy_epoch_names_folder_still_read(self):
+        from pyneuromatic.tools.nm_tool_folder import NMToolFolder
+        tf = NMToolFolder(NM, name="legacy")
+        tf.data.new("SP_recA0", nparray=np.array([0.01, 0.02]))
+        tf.data.new("SP_recA1", nparray=np.array([]))
+        tf.data.new("SP_count", nparray=np.array([2.0, 0.0]))
+        tf.data.new("SP_epoch_names", nparray=np.array(["recA0", "recA1"], dtype=object))
+        times, names = NMToolSpike().raster(toolfolder=tf)
+        self.assertEqual(names, ["recA0", "recA1"])
+        self.assertEqual([len(t) for t in times], [2, 0])
+
+
+class TestNMToolSpikeDataSeries(unittest.TestCase):
+    """On a data series: rows are its epochs, SP_RY their numbers; one run note."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True, command_history=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_epochs=4, n_points=1000)
+        for data in self.folder.data.values():
+            data.nparray[:] = _times_data("x").nparray
+        self.nm.tool_add("spike")
+        self.tool = self.nm.spike
+        self.tool.ylevel = 0.5
+
+    def test_epoch_numbers(self):
+        self.tool.run_selection(self.series, channel="A", epochs=["E1", "E3"])
+        f = self.tool._toolfolder
+        self.assertEqual(f.name, "Spike_Record_A_0")
+        self.assertEqual(list(f.data.get("SP_epoch_num").nparray), [1, 3])
+        self.assertEqual(list(f.data.get("SP_RY").nparray), [1, 1, 1, 3, 3, 3])
+        times, names = self.tool.raster(toolfolder=f)
+        self.assertEqual(names, ["RecordA1", "RecordA3"])
+        self.assertEqual([len(t) for t in times], [3, 3])
+
+    def test_run_note(self):
+        self.tool.run_selection(self.series, channel="A", epochs="all")
+        note = self.tool._toolfolder.notes.note
+        self.assertIn("NMSpike: Record, channel A, epochs all (n=4)", note)
+
+
+class TestNMToolSpikeResultsFormat(unittest.TestCase):
+
+    def setUp(self):
+        self.tool = NMToolSpike()
+
+    def test_default_raster(self):
+        self.assertEqual(self.tool.results_format, "raster")
+        self.assertEqual(NMToolSpikeConfig().results_format, "raster")
+
+    def test_set(self):
+        self.tool.results_format = "epochs"
+        self.assertEqual(self.tool.results_format, "epochs")
+
+    def test_rejects_bad_values(self):
+        with self.assertRaises(ValueError):
+            self.tool.results_format = "table"
+        with self.assertRaises(TypeError):
+            self.tool.results_format = 1
