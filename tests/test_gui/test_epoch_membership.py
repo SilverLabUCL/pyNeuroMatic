@@ -136,7 +136,7 @@ def test_graph_menu(app):
         pytest.skip("needs pyqtgraph")
     menu = panel.graph_button.menu()
     texts = [a.text() for a in menu.actions() if a.text()]
-    assert texts == ["Grid", "Rescale", "Tool Ranges", "Tool Measures",
+    assert texts == ["Grid", "Rescale", "Tool Ranges && Levels", "Tool Measures",
                      "Trace Style...",
                      "Filter && Transform...", "Axes", "Export..."]  # shows "&"
     assert panel.overlay_count.isEnabled() and panel.overlay_count.value() == 0
