@@ -39,6 +39,7 @@ from pyneuromatic.gui import table_format
 from pyneuromatic.gui.folder_browser import FolderBrowserWidget
 from pyneuromatic.gui.history_panel import HistoryPanel
 from pyneuromatic.gui.plot_marks import MarkOverlay
+from pyneuromatic.gui.plot_levels import LevelOverlay
 from pyneuromatic.gui.plot_ranges import RangeOverlay
 from pyneuromatic.gui.settings_dialog import LINE_LABELS, SettingsDialog
 from pyneuromatic.gui.membership import set_item_group
@@ -445,15 +446,17 @@ class PlotPanel(QtWidgets.QWidget):
         self.grid_action.setCheckable(True)
         self.rescale_action = self.graph_menu.addAction("Rescale")
         self.rescale_action.setToolTip("Fit the axes to the data")
-        # The chosen tool's X ranges (e.g. a Stats window): on, frozen or off
-        self.ranges_menu = self.graph_menu.addMenu("Tool Ranges")
+        # The chosen tool's X ranges (e.g. a Stats window) and Y levels (e.g.
+        # its level): draggable, locked or hidden
+        self.ranges_menu = self.graph_menu.addMenu("Tool Ranges && Levels")  # shows "&"
         self.ranges_menu.setToolTipsVisible(True)
         self.range_mode_actions: dict[str, QtGui.QAction] = {}
         modes = QtGui.QActionGroup(self.ranges_menu)
         for mode, text, tip in (
-                ("on", "On", "Shown; drag an edge, or the middle to move both"),
-                ("frozen", "Frozen", "Shown, but can't be dragged"),
-                ("off", "Off", "Hidden")):
+                ("on", "Draggable", "Shown; drag a range's edge, or its middle to move both; "
+                 "drag a level up or down"),
+                ("frozen", "Locked", "Shown, but can't be dragged"),
+                ("off", "Hidden", "Not shown")):
             action = self.ranges_menu.addAction(text)
             action.setCheckable(True)
             action.setToolTip(tip)
@@ -519,6 +522,8 @@ class PlotPanel(QtWidgets.QWidget):
             self.plot_widget = pg.PlotWidget(self)
             # The chosen tool's X ranges, with draggable edges (#436)
             self.range_overlay = RangeOverlay(self.plot_widget, self)
+            # ... its Y levels, as draggable lines (#527)
+            self.level_overlay = LevelOverlay(self.plot_widget, self)
             # ... and its measurements of the trace shown (#463)
             self.mark_overlay = MarkOverlay(self.plot_widget, self)
             self.plot_widget.setBackground("w")
@@ -543,6 +548,7 @@ class PlotPanel(QtWidgets.QWidget):
         else:
             self.plot_widget = None
             self.range_overlay = None
+            self.level_overlay = None
             self.mark_overlay = None
             self.plot_fallback_label = QtWidgets.QLabel(
                 "Plot view unavailable. Install pyqtgraph to enable preview plots."
@@ -968,6 +974,8 @@ class PlotPanel(QtWidgets.QWidget):
             self.overlay_status_label.setText("")
             self.range_overlay.set_x(None)
             self.range_overlay.redraw()
+            self.level_overlay.set_data(None)
+            self.level_overlay.redraw()
             self.mark_overlay.set_data(None)
             self.mark_overlay.redraw()
             self.shown_trace = None
@@ -1027,6 +1035,8 @@ class PlotPanel(QtWidgets.QWidget):
         self.range_overlay.set_x(self._x_values(current_data) if current_data is not None
                                  and current_data.nparray is not None else None)
         self.range_overlay.redraw()
+        self.level_overlay.set_data(shown)  # e.g. a level from its baseline
+        self.level_overlay.redraw()
         self.mark_overlay.set_data(shown)  # measured as plotted (transformed)
         self.mark_overlay.redraw()
         self.shown_trace = shown
@@ -1043,10 +1053,11 @@ class PlotPanel(QtWidgets.QWidget):
             self._transform_dialog.set_status(f"Can't apply to {error}" if error else "")
 
     def set_range_mode(self, mode: str) -> None:
-        """The tool ranges: "on" (draggable), "frozen" or "off" (hidden)."""
+        """The tool ranges and levels: "on" (draggable), "frozen" or "off" (hidden)."""
         self.range_mode_actions[mode].setChecked(True)
         if self.range_overlay is not None:
             self.range_overlay.set_mode(mode)
+            self.level_overlay.set_mode(mode)
 
     # --- right-click: a trace's style, or the Plot menu ------------------------
 
@@ -1200,10 +1211,11 @@ class PlotPanel(QtWidgets.QWidget):
         self._render_current_traces()
 
     def set_tool(self, tool) -> None:
-        """Show the X ranges (#436) and measurements (#463) of *tool* (a tool
-        tab), or none."""
+        """Show the X ranges (#436), Y levels (#527) and measurements (#463)
+        of *tool* (a tool tab), or none."""
         if self.range_overlay is not None:
             self.range_overlay.set_source(tool)
+            self.level_overlay.set_source(tool)
             self.mark_overlay.set_source(tool)
 
     def _show_measures(self, show: bool) -> None:

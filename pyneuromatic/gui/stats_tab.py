@@ -28,6 +28,7 @@ from pyneuromatic.tools.nm_stat_func import (
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
 from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.plot_marks import PlotMark
+from pyneuromatic.gui.plot_levels import PlotLevel
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.tools.nm_stat_win import NMStatWin
 from pyneuromatic.gui.results_view import (
@@ -486,6 +487,7 @@ class StatsToolTab(ToolTabWidget):
         details_layout.addWidget(self.details)
         stats1_layout.addWidget(details_group)
         self._trace = None  # the trace the Plot shows (set_trace)
+        self._level_baseline: tuple[float, float] | None = None  # (mean, std)
         self.marks_changed.connect(self._show_details)  # e.g. its function or range
         # Keep the settings at the top when Stats2 makes the tabs taller
         stats1_layout.addStretch(1)
@@ -732,6 +734,7 @@ class StatsToolTab(ToolTabWidget):
         for control in controls:
             control.blockSignals(False)
         self.ranges_changed.emit()
+        self.levels_changed.emit()
         self.marks_changed.emit()
 
     def _window_controls(self) -> list[QtWidgets.QWidget]:
@@ -783,7 +786,8 @@ class StatsToolTab(ToolTabWidget):
             self.apply_settings()
             return
         self._set_tool_option(key, value)
-        self.marks_changed.emit()  # e.g. Ignore NaNs
+        self.levels_changed.emit()  # e.g. Ignore NaNs: a level from the baseline
+        self.marks_changed.emit()
 
     def digits(self) -> int:
         """Significant digits of the values shown (Settings: stats_digits)."""
@@ -1041,6 +1045,7 @@ class StatsToolTab(ToolTabWidget):
             if getattr(window, key) != value:
                 setattr(window, key, value if value != {} else None)
         self.ranges_changed.emit()
+        self.levels_changed.emit()
         self.marks_changed.emit()
 
     # --- the window's X ranges on the Plot (#436) ----------------------------
@@ -1134,6 +1139,49 @@ class StatsToolTab(ToolTabWidget):
             edits = (self.bsln_xbgn_edit, self.bsln_xend_edit)
         for edit, value in zip(edits, (xbgn, xend)):
             edit.setText(self._format_bound(value))
+        if final:
+            self._save_window_controls()
+
+    # --- the window's level on the Plot (#527) --------------------------------
+
+    def plot_levels(self, data) -> list[PlotLevel]:
+        """The current window's level, for its level measures: its Y level,
+        or its baseline's mean + n std of *data* (the trace shown)."""
+        self._level_baseline = None
+        window = self._selected_window()
+        func = window.func if window is not None else None
+        if not func or func.get("name") not in FUNC_NAMES_LEVEL:
+            return []
+        if "n_std" not in func:
+            return [PlotLevel("level", f"{window.name} Y level", float(func.get("ylevel")),
+                              self.WINDOW_COLOR)]
+        if data is None or data.nparray is None or data.nparray.size == 0:
+            return []
+        bsln = next((r for r in self._measure(window, data) if r.get("id") == "bsln"), {})
+        mean, std = bsln.get("s"), bsln.get("std")
+        if not (_finite(mean) and _finite(std)) or float(std) == 0:
+            return []
+        mean, std = float(mean), float(std)
+        self._level_baseline = (mean, std)  # what a dragged level's n std is of
+        return [PlotLevel("level", f"{window.name} level: baseline mean + "
+                          f"{func['n_std']:g} std of {data.name}",
+                          mean + float(func["n_std"]) * std, self.WINDOW_COLOR)]
+
+    def set_plot_level(self, key: str, y: float, final: bool) -> None:
+        """The dragged level: its field follows (Y level, or n std of the
+        trace's baseline), and it is saved (one command) when released."""
+        if self.level_mode_combo.currentData() == "n_std":
+            if self._level_baseline is None:
+                return
+            mean, std = self._level_baseline
+            n_std = round((y - mean) / std, 3)
+            if n_std == 0:  # not allowed: the level stays where it was
+                if final:
+                    self.levels_changed.emit()
+                return
+            self.param_edits["n_std"].setText(f"{n_std:g}")
+        else:
+            self.param_edits["ylevel"].setText(f"{y:.10g}")
         if final:
             self._save_window_controls()
 

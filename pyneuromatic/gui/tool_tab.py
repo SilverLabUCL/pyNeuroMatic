@@ -100,10 +100,13 @@ class ToolTabWidget(QtWidgets.QWidget):
       the data, the general settings or the window change
     - :meth:`plot_ranges` / :meth:`set_plot_range`: its X ranges, drawn on the
       Plot with draggable edges while it is the tool chosen (#436)
+    - :meth:`plot_levels` / :meth:`set_plot_level`: its Y levels (e.g. a
+      threshold), drawn on the Plot as draggable lines while it is the tool
+      chosen (#527)
     - :meth:`plot_marks`: its measurements of the trace shown, drawn over it
       while it is the tool chosen (#463)
     - :attr:`results_changed`, :attr:`view_requested`, :attr:`ranges_changed`,
-      :attr:`marks_changed`: signals to the window
+      :attr:`levels_changed`, :attr:`marks_changed`: signals to the window
     """
 
     run_finished = QtCore.pyqtSignal(bool)
@@ -140,6 +143,8 @@ class ToolTabWidget(QtWidgets.QWidget):
     PROGRESS_INTERVAL = 0.1
     # Its X ranges changed (e.g. a typed X begin): the Plot moves them
     ranges_changed = QtCore.pyqtSignal()
+    # Its Y levels changed (e.g. a typed level): the Plot moves them
+    levels_changed = QtCore.pyqtSignal()
     # What it would measure changed (e.g. its function): the Plot redraws the marks
     marks_changed = QtCore.pyqtSignal()
 
@@ -492,6 +497,15 @@ class ToolTabWidget(QtWidgets.QWidget):
     def set_plot_range(self, key: str, xbgn: float, xend: float, final: bool) -> None:
         """Range *key* was dragged to *xbgn*, *xend*: shown while dragging,
         saved when released (*final*)."""
+
+    def plot_levels(self, data) -> list:
+        """Its Y levels to draw on the Plot over *data*, the trace shown
+        (:class:`~pyneuromatic.gui.plot_levels.PlotLevel`)."""
+        return []
+
+    def set_plot_level(self, key: str, y: float, final: bool) -> None:
+        """Level *key* was dragged to *y*: shown while dragging, saved when
+        released (*final*)."""
 
     def refresh(self) -> None:
         """Folders, data or sets changed."""

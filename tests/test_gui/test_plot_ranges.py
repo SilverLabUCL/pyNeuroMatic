@@ -168,7 +168,7 @@ def test_ranges_stay_when_stepping_traces(app):
 def test_tool_ranges_on_frozen_or_off(app):
     panel = app.plot_widget
     assert panel.range_mode_actions["on"].isChecked()  # on by default
-    assert [a.text() for a in panel.ranges_menu.actions()] == ["On", "Frozen", "Off"]
+    assert [a.text() for a in panel.ranges_menu.actions()] == ["Draggable", "Locked", "Hidden"]
     assert _regions(app)["window"].movable
 
     # Frozen: shown, but can't be dragged
