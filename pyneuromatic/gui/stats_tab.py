@@ -7,11 +7,7 @@ from typing import Any
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from pyneuromatic.core.nm_channel import NMChannel
-from pyneuromatic.core.nm_data import NMData
-from pyneuromatic.core.nm_epoch import EXCLUDE_SET, NMEpoch
-from pyneuromatic.core.nm_manager import HIERARCHY_SELECT_KEYS, NMManager
-from pyneuromatic.core.nm_object import NMObject
+from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.tools.nm_stat_func import (
     DECAY_TIME_DEFAULT_PCT,
     FUNC_NAMES_BASIC,
@@ -26,6 +22,7 @@ from pyneuromatic.tools.nm_stat_func import (
     _stat_func_from_dict,
 )
 from pyneuromatic.tools.nm_tool_stats import NMToolStats
+from pyneuromatic.gui import table_format
 from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.plot_marks import PlotMark
 from pyneuromatic.gui.plot_levels import PlotLevel
@@ -34,14 +31,7 @@ from pyneuromatic.tools.nm_stat_win import NMStatWin
 from pyneuromatic.gui.results_view import (
     Stats2Panel, StatsTables, display_name, points_text, shows_points,
 )
-from pyneuromatic.gui.selection_model import (
-    ALL_EPOCHS,
-    SelectionModel,
-    scope_runs,
-    combine_scope_names,
-    scoped_epoch_names,
-)
-from pyneuromatic.gui.tool_tab import ToolTabWidget
+from pyneuromatic.gui.tool_run import SelectionRunTab
 
 
 # The measurement menu lists each measurement once (#478): a peak
@@ -123,15 +113,18 @@ def result_marks(results: list[dict], x_first: float, x_last: float,
     return marks
 
 
-def _number(value, digits: int = 6) -> str:
-    """*value* to *digits* significant digits; ±inf as "-inf" / "inf"."""
+def _number(value, decimals: int | None = 3) -> str:
+    """*value* to *decimals* decimal places (None: as short as it can be,
+    e.g. an X range's bound); ±inf as "-inf" / "inf"."""
     try:
         number = float(value)
     except (TypeError, ValueError):
         return "NaN"
     if math.isinf(number):
         return "-inf" if number < 0 else "inf"
-    return "NaN" if math.isnan(number) else f"{number:.{digits}g}"
+    if math.isnan(number):
+        return "NaN"
+    return f"{number:g}" if decimals is None else table_format.fixed(number, decimals)
 
 
 def _limits(xbgn, xend, x_limits: tuple[float, float] | None) -> tuple:
@@ -147,7 +140,7 @@ def _limits(xbgn, xend, x_limits: tuple[float, float] | None) -> tuple:
     return xbgn, xend
 
 
-def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
+def result_lines(results: list[dict], decimals: int = 3, xunits: str = "",
                  x_limits: tuple[float, float] | None = None,
                  known_units: tuple[str, ...] = (),
                  window_x: tuple | None = None) -> list[str]:
@@ -171,17 +164,17 @@ def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
     (given once, on the top line) are shown without them; others (e.g. a
     slope's intercept) keep theirs.
     """
-    def number(value) -> str:
-        return _number(value, digits)
+    def _value(value, units: str = "", places: int | None = decimals) -> str:
+        text = _number(value, places)
+        return text if not units or units in known_units else f"{text} {units}"
 
-    def _value(value, units: str = "") -> str:
-        if not units or units in known_units:
-            return number(value)
-        return f"{number(value)} {units}"
+    def bounds(xbgn, xend) -> str:
+        """An X range, as typed (e.g. "x 0 to 40"), not to the decimals shown."""
+        return f"x {_number(xbgn, None)} to {_value(xend, xunits, None)}"
 
     def window_text(points: str = "") -> str:
         xbgn, xend = window_x
-        return (f"  (x {number(xbgn)} to {_value(xend, xunits)}"
+        return (f"  ({bounds(xbgn, xend)}"
                 + (f", {points}" if points else "") + ")")
 
     lines: list[str] = []
@@ -200,7 +193,7 @@ def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
             label = "mean" if name.startswith("mean+") else name
             points = f", {points_text(r['n'], r.get('nans', 0))}" if "n" in r else ""
             lines.append(f"bsln {label} = {_value(r.get('s'), bsln_units)}"
-                         f"{spread}  (x {number(xbgn)} to {_value(xend, xunits)}{points})")
+                         f"{spread}  ({bounds(xbgn, xend)}{points})")
             continue
         # mean+std's value is the mean (its std follows): not "mean+std = ..."
         label = "mean" if name.startswith("mean+") else name
@@ -244,7 +237,7 @@ def result_lines(results: list[dict], digits: int = 6, xunits: str = "",
     return lines
 
 
-class StatsToolTab(ToolTabWidget):
+class StatsToolTab(SelectionRunTab):
     """Single-window Stats1 editor and runner using the project's Stats tool."""
 
     # Its tab shows Stats2's plots and tables (#523)
@@ -311,8 +304,7 @@ class StatsToolTab(ToolTabWidget):
         manager: NMManager,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
-        super().__init__("Stats", parent)
-        self._manager = manager
+        super().__init__("Stats", manager, parent)
 
         tool = manager.stats
         if tool is None:
@@ -464,7 +456,7 @@ class StatsToolTab(ToolTabWidget):
         # measurement forces the checkbox on or off
         self._bsln_user_on = False
 
-        # Results: the current window's measurement of the trace shown (#471)
+        # Results: the current window's measurement of the current epoch (#471)
         details_group = QtWidgets.QGroupBox(self.stats1_page)  # untitled: its text says what it is
         details_layout = QtWidgets.QVBoxLayout(details_group)
         self.details = QtWidgets.QPlainTextEdit(details_group)
@@ -482,8 +474,7 @@ class StatsToolTab(ToolTabWidget):
         self.details.setFixedHeight(
             int(sample.size().height()) + 2 * self.details.frameWidth() + 2)
         self.details.setToolTip(
-            "The current window's measurement of the trace in the Plot "
-            "(as Run would make it; during a run, the run's own)")
+            "The current window's measurement of the current epoch")
         details_layout.addWidget(self.details)
         stats1_layout.addWidget(details_group)
         self._trace = None  # the trace the Plot shows (set_trace)
@@ -562,65 +553,6 @@ class StatsToolTab(ToolTabWidget):
     def lists_view(self) -> bool:
         return True  # Stats2's tab, to switch to (saying so, without results)
 
-    def _on_selection_changed(self, selection: dict[str, Any]) -> None:
-        super()._on_selection_changed(selection)
-        self._update_run_info()
-
-    def _update_run_info(self) -> None:
-        """Show beside Run how many epochs or data arrays it will analyse, e.g. "n=9"."""
-        try:
-            planned = self._run_batches()
-            targets = self._selected_targets() if planned is None else []
-        except RuntimeError as error:
-            self.run_info_label.setText(str(error))
-            return
-        if planned is not None:  # All Sets / All Groups
-            batches, skipped = planned
-            runs = len(batches)
-            self.run_info_label.setText(f"n={runs} run{'s' * (runs != 1)}")
-            tip = "Run goes once per set or group: " + ", ".join(
-                f"{label}: {len(targets)}" for label, targets, _selection in batches
-            ) if batches else "No set or group has epochs to analyze"
-            if skipped:
-                tip += f"\nSkipped (no epochs): {', '.join(skipped)}"
-            self.run_info_label.setToolTip(tip)
-            return
-        count = len(targets)
-        if self.selection.get("source") == "dataseries":
-            noun = "epoch" if count == 1 else "epochs"
-            tip = f"Run analyses {count} {noun}"
-            excluded = self._excluded_in_scope()
-            if excluded:
-                tip += f" ({excluded} excluded by SetX)"
-        else:
-            noun = "data array" if count == 1 else "data arrays"
-            tip = f"Run analyses {count} {noun}"
-        self.run_info_label.setText(f"n={count}")
-        self.run_info_label.setToolTip(tip)
-
-    @staticmethod
-    def _excluded_names(dataseries, selection) -> set[str]:
-        """Epochs left out of runs (SetX), unless SetX is the Epoch Set."""
-        if (selection.get("epoch_set") or "").lower() == EXCLUDE_SET.lower():
-            return set()
-        return dataseries.epochs.excluded_names()
-
-    def _excluded_in_scope(self) -> int:
-        """How many epochs of the Epoch Set/Group scope SetX leaves out."""
-        selection = self.selection
-        dataseries = selection.get("dataseries")
-        if dataseries is None:
-            return 0
-        excluded = self._excluded_names(dataseries, selection)
-        try:
-            names = scoped_epoch_names(dataseries, selection, exclude=False)
-        except RuntimeError:
-            return 0
-        if names is None:
-            epoch = selection.get("epoch")
-            names = [epoch.name] if epoch is not None else []
-        return sum(name in excluded for name in names)
-
     def _on_run_finished(self, succeeded: bool) -> None:
         # Results: a preview again (during the run, the run's own)
         self._show_details()
@@ -653,7 +585,7 @@ class StatsToolTab(ToolTabWidget):
 
     def apply_settings(self) -> None:
         super().apply_settings()  # the Display control
-        StatsTables.digits = self.digits()
+        StatsTables.decimals = self.decimals()
         self.stats2.set_detail_arrays(self.detail_arrays())
         self.stats2.tables.refresh()
         self.stats2.refresh_details()
@@ -666,9 +598,6 @@ class StatsToolTab(ToolTabWidget):
     @property
     def stats_tool(self) -> NMToolStats:
         return self._tool
-
-    def analysis_tool(self) -> NMToolStats:
-        return self._tool  # reports a run's progress (#450)
 
     def _refresh_window_combo(self) -> None:
         selected_name = self._tool.windows.selected_name
@@ -767,19 +696,19 @@ class StatsToolTab(ToolTabWidget):
                 "Also list the index and point-count arrays (i, i0, i1, n, nans, "
                 "infs) and the epoch numbers, in the Stats tables and Stats2's "
                 "Array list"))
-            spec = self._settings._schema["stats_digits"]
+            spec = self._settings._schema["stats_decimals"]
             options.append((
-                "digits", "Digits displayed", self.digits(),
-                "Significant digits of the values in Stats1's Results and "
+                "decimals", "Decimals displayed", self.decimals(),
+                "Decimal places of the values in Stats1's Results and "
                 "Stats2's tables and Results (copying keeps them all)",
                 (spec["min"], spec["max"])))
         return options
 
     def set_config_option(self, key: str, value) -> None:
         """Set an option from Settings › Stats (used from the next run)."""
-        if key in ("digits", "detail_arrays"):  # how values show (settings, not the tool's)
-            if key == "digits":
-                self._settings.stats_digits = int(value)
+        if key in ("decimals", "detail_arrays"):  # how values show (settings, not the tool's)
+            if key == "decimals":
+                self._settings.stats_decimals = int(value)
             else:
                 self._settings.stats_detail_arrays = bool(value)
             self._settings.save_user()  # only if loaded from the user's file
@@ -789,9 +718,9 @@ class StatsToolTab(ToolTabWidget):
         self.levels_changed.emit()  # e.g. Ignore NaNs: a level from the baseline
         self.marks_changed.emit()
 
-    def digits(self) -> int:
-        """Significant digits of the values shown (Settings: stats_digits)."""
-        return getattr(self._settings, "stats_digits", 6)
+    def decimals(self) -> int:
+        """Decimal places of the values shown (Settings: stats_decimals)."""
+        return getattr(self._settings, "stats_decimals", 3)
 
     def detail_arrays(self) -> bool:
         """Show the index and count arrays (Settings: stats_detail_arrays)."""
@@ -799,7 +728,7 @@ class StatsToolTab(ToolTabWidget):
 
     def set_settings(self, settings) -> None:
         super().set_settings(settings)
-        self.apply_settings()  # the digits shown
+        self.apply_settings()  # the decimals shown
 
     def _set_tool_option(self, key: str, value: bool) -> None:
         setattr(self._tool, key, value)
@@ -1084,7 +1013,7 @@ class StatsToolTab(ToolTabWidget):
 
     def details_text(self) -> str:
         """The Results box's text: the current window's measurement of the
-        trace shown (#471)."""
+        current epoch (#471)."""
         window, data = self._selected_window(), self._trace
         if window is None or data is None or data.nparray is None or data.nparray.size == 0:
             return ""
@@ -1092,7 +1021,7 @@ class StatsToolTab(ToolTabWidget):
         header = f"{data.name}  {window.name}" + (f" {display_name(name)}" if name else "")
         if not name:
             return f"{header}\nChoose a measurement"
-        digits = self.digits()
+        decimals = self.decimals()
         xunits = data.xscale.units or ""  # the window's X range, in x units
         last = data.nparray.size - 1  # an unbounded edge: the trace's start or end
         first_x, last_x = data.get_xvalue(0), data.get_xvalue(last)
@@ -1108,7 +1037,7 @@ class StatsToolTab(ToolTabWidget):
         if not window.on:
             return f"{header}\nWindow off"
         try:
-            lines = result_lines(self._measure(window, data), digits, xunits, x_limits, known,
+            lines = result_lines(self._measure(window, data), decimals, xunits, x_limits, known,
                                  window_x)
         except Exception as error:  # e.g. the window outside the trace
             lines = [f"no value: {error}"]
@@ -1310,157 +1239,6 @@ class StatsToolTab(ToolTabWidget):
         self._refresh_window_combo()
         self._load_selected_window()
 
-    def _run_selection_args(self, targets: list[dict], selection: dict) -> tuple[Any, dict]:
-        """The run as the Stats tool's ``run_selection`` arguments (its command,
-        #448): the data series, its channel, Epoch Set ("all", "Set1"...) or
-        the current epoch, with any Group and AND / OR; or a data array
-        run's folder and Data Set (or array)."""
-        if selection.get("source") != "dataseries":
-            data = selection.get("data_set") or targets[0]["data"].name
-            return selection.get("toolfolder") or selection.get("folder"), {"data": data}
-        series = selection["dataseries"]
-        epoch_set = selection.get("epoch_set")
-        group = selection.get("group")
-        if epoch_set == ALL_EPOCHS:
-            epochs = "all"
-        elif epoch_set is not None:
-            epochs = epoch_set
-        elif group is None:  # the current epoch
-            epochs = targets[0]["epoch"].name
-        else:
-            epochs = None  # the Group alone
-        args: dict[str, Any] = {"channel": selection["channel"].name, "epochs": epochs}
-        if group is not None:
-            args["group"] = group
-            if epochs not in (None, "all"):
-                args["group_operator"] = selection.get("group_operator")
-        return series, args
-
-    def _run_selection(self, targets: list[dict], selection: dict) -> bool:
-        source, args = self._run_selection_args(targets, selection)
-        return self._tool.run_selection(source, **args)
-
-    def _scope_runs(self) -> list[tuple[str, dict]] | None:
-        """For All Channels / All Sets / All Groups: (label, selection) per
-        run, each naming one channel, set or group; None for a single run.
-        Channels combine with sets or groups (channel x set). Raises
-        RuntimeError for All Sets with All Groups."""
-        selection = self.selection
-        series = selection.get("dataseries")
-        if selection.get("source") != "dataseries" or series is None:
-            return None
-        runs = scope_runs(series, selection)
-        if not selection.get("all_channels"):
-            return runs
-        per_channel = runs if runs is not None else [("", selection)]
-        return [
-            (f"{channel.name} {label}".strip(),
-             {**run_selection, "channel": channel, "all_channels": None})
-            for channel in series.channels.values()
-            for label, run_selection in per_channel
-        ]
-
-    def _run_batches(self) -> tuple[list[tuple[str, list, dict]], list[str]] | None:
-        """For All Sets / All Groups: the runs with epochs to analyse, as
-        (label, targets, selection), and the labels of empty ones (skipped);
-        None for a single run."""
-        runs = self._scope_runs()
-        if runs is None:
-            return None
-        batches, skipped = [], []
-        for label, run_selection in runs:
-            targets = self._selected_targets(run_selection)
-            if targets:
-                batches.append((label, targets, run_selection))
-            else:
-                skipped.append(label)
-        return batches, skipped
-
-    def _selected_targets(self, selection: dict | None = None) -> list[dict[str, NMObject]]:
-        """Data to analyse from the selection's source (data or data series).
-
-        A data series uses the epochs in the Epoch Set/Group, or the current
-        epoch when neither is chosen. A data array uses the Data Set, or the
-        current data array when none is chosen. *selection* defaults to the
-        strip's.
-        """
-        selection = self.selection if selection is None else selection
-        source = selection.get("source")
-
-        if source == "dataseries":
-            dataseries = selection.get("dataseries")
-            if dataseries is None:  # the source, with nothing chosen (#521)
-                raise RuntimeError("Choose a data series")
-            channel = selection.get("channel")
-            if not isinstance(channel, NMChannel):
-                raise RuntimeError("Select a channel before running Stats")
-            target_names = scoped_epoch_names(dataseries, selection)
-            if target_names is None:  # Current Epoch, unless it is excluded
-                epoch = selection.get("epoch")
-                target_names = (
-                    [epoch.name]
-                    if isinstance(epoch, NMEpoch)
-                    and epoch.name not in self._excluded_names(dataseries, selection)
-                    else []
-                )
-            targets = []
-            wanted = set(target_names)
-            found = dataseries.epoch_data_map(channel.name)
-            for epoch in dataseries.epochs.values():
-                if epoch.name not in wanted:
-                    continue
-                item = found.get(epoch.name)
-                if isinstance(item, NMData):
-                    target = self._manager_target(selection)
-                    target.update(
-                        {
-                            "dataseries": dataseries,
-                            "channel": channel,
-                            "epoch": epoch,
-                            "data": item,
-                        }
-                    )
-                    targets.append(target)
-            return targets
-
-        if source == "data":
-            data = selection.get("data")
-            context = selection.get("toolfolder") or selection.get("folder")
-            if context is None:
-                return []
-            data_set = selection.get("data_set")
-            if data_set is None:
-                if data is None:  # the source, with nothing chosen (#521)
-                    raise RuntimeError("Choose a data array or Data Set")
-                data_names = [data.name]
-            else:
-                members = context.data.sets.get_items(data_set, get_keys=True) or []
-                data_names = combine_scope_names(
-                    list(context.data.keys()), members, None, None
-                )
-            targets = []
-            for name in data_names:
-                item = context.data.get(name)
-                if isinstance(item, NMData):
-                    target = self._manager_target(selection)
-                    target["data"] = item
-                    # Analyse the data array, not the selected data series:
-                    # None (not left out), so an earlier series run's
-                    # selection doesn't stay in the tool (or its folder name)
-                    for tier in ("dataseries", "channel", "epoch"):
-                        target[tier] = None
-                    targets.append(target)
-            return targets
-
-        raise RuntimeError("Select a data array or a Data Series channel and epoch first")
-
-    def _manager_target(self, selection: dict[str, Any]) -> dict[str, NMObject]:
-        return {
-            tier: value
-            for tier in HIERARCHY_SELECT_KEYS
-            if isinstance((value := selection.get(tier)), NMObject)
-        }
-
     @staticmethod
     def _check_baseline(window) -> None:
         """Raise RuntimeError if *window*'s baseline settings cannot run."""
@@ -1475,12 +1253,9 @@ class StatsToolTab(ToolTabWidget):
         if window.bsln_xbgn == float("-inf") and window.bsln_xend == float("inf"):
             raise RuntimeError(f"{window.name}: set a baseline X range")
 
-    def _confirm(self, title: str, text: str) -> bool:
-        """Yes/No question (replaced in tests)."""
-        answer = QtWidgets.QMessageBox.question(self, title, text)
-        return answer == QtWidgets.QMessageBox.StandardButton.Yes
-
-    def run_tool(self) -> Any:
+    def check_run(self) -> None:
+        """Before a run: the windows saved, and one to measure, with a
+        baseline that works."""
         self._save_window_controls()
         windows = list(self._tool.windows)
         if not any(window.on and window.func for window in windows):
@@ -1488,53 +1263,13 @@ class StatsToolTab(ToolTabWidget):
         for window in windows:
             if window.on and window.func:
                 self._check_baseline(window)
-        selection = self.selection
-        if (
-            selection.get("source") == "dataseries"
-            and (selection.get("epoch_set") or "").lower() == EXCLUDE_SET.lower()
-            and not self._confirm(
-                "Run on SetX",
-                f"{EXCLUDE_SET} lists epochs excluded from analysis. Run on them anyway?",
-            )
-        ):
-            raise RuntimeError(f"Cancelled: {EXCLUDE_SET} lists excluded epochs")
 
-        planned = self._run_batches()
-        if planned is not None:  # All Sets / All Groups: once per set or group
-            return self._run_each(*planned)
-        targets = self._selected_targets()
-        if not targets:
-            raise RuntimeError("The current selection has no data to analyze")
-        # One command, naming what it runs on (the subfolder too, e.g. _S1_)
-        if not self._run_selection(targets, self.selection):
-            raise RuntimeError("Stats analysis did not complete")
-
-        records = self._tool.results
-        if not records:
+    def check_results(self) -> None:
+        if not self._tool.results:
             self.show_warning("No results were produced")
-        self.stats2.show_toolfolder(self._tool.toolfolder)
-        return None
 
-    def run_summary(self) -> str:
-        """e.g. "Complete → Stats_Record_A_S1_0" (the last run's subfolder)."""
-        folder = self._tool.toolfolder
-        status = self.status_label.text()
-        return f"{status} → {folder.name}" if folder is not None else status
-
-    def _run_each(self, batches: list[tuple[str, list, dict]], skipped: list[str]) -> None:
-        """Run once per set or group, each saved in its own subfolder."""
-        if not batches:
-            raise RuntimeError("None of the sets or groups has epochs to analyze")
-        self.set_run_total(sum(len(targets) for _label, targets, _sel in batches))
-        for _label, targets, selection in batches:  # a command each
-            if not self._run_selection(targets, selection):
-                raise RuntimeError("Stats analysis did not complete")
-            if self.stop_requested:  # Stop: not the sets or groups after it
-                break
-        if skipped:
-            self.show_warning(f"Skipped (no epochs to analyze): {', '.join(skipped)}")
+    def show_run_results(self) -> None:
         self.stats2.show_toolfolder(self._tool.toolfolder)  # the last run's
-        return None
 
 
 __all__ = ["StatsToolTab"]

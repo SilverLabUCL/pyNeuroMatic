@@ -66,11 +66,14 @@ class NMSettings(NMToolConfig):
             ``"off"`` (fastest), ``"each"`` (the default; then wait
             *run_delay*) or ``"ask"`` (then ask to continue).
         run_delay: Seconds to wait after showing each epoch ("each").
-        stats_digits: Significant digits of Stats values shown (Stats1's
-            Details, Stats2's tables and Details); copying keeps them all.
+        stats_decimals: Decimal places of Stats values shown (Stats1's
+            Results, Stats2's tables and Results), so a column lines up;
+            copying keeps them all.
         stats_detail_arrays: Also show the index and point-count arrays
             (i, i0, i1, n, nans, infs) and the epoch numbers, in the Stats
             tables and Stats2's Array list (#496).
+        spike_decimals: Decimal places of the spike times shown (Spike1's
+            Results).
     """
 
     _TOML_TYPE = "nm_settings"
@@ -92,8 +95,10 @@ class NMSettings(NMToolConfig):
         "run_display": {"type": str, "default": "each", "choices": list(RUN_DISPLAYS)},
         "run_delay": {"type": float, "default": 0.0, "min": 0.0, "max": 10.0},
         # Stats values shown (#471)
-        "stats_digits": {"type": int, "default": 6, "min": 2, "max": 10},
+        "stats_decimals": {"type": int, "default": 3, "min": 0, "max": 10},
         "stats_detail_arrays": {"type": bool, "default": False},
+        # Spike times shown
+        "spike_decimals": {"type": int, "default": 3, "min": 0, "max": 10},
     }
 
     def __init__(self) -> None:

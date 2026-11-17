@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from PyQt6 import QtCore, QtGui
 
 from pyneuromatic.core.nm_settings import TABLE_NAN_BLANK, TABLE_NAN_GREY, TABLE_NAN_TEXT
@@ -29,17 +30,30 @@ def set_nan_mode(mode: str) -> None:
     _nan_mode = mode
 
 
-def cell(value, digits: int = 6) -> tuple[str, bool]:
-    """(text, is_nan) for a table cell, to *digits* significant digits; None
-    is an empty cell."""
+def fixed(number: float, decimals: int) -> str:
+    """*number* to *decimals* decimal places, e.g. 9.5 -> "9.500" (3); no
+    "-0.000" for a small negative number."""
+    text = f"{number:.{decimals}f}"
+    return text[1:] if text.startswith("-") and float(text) == 0 else text
+
+
+def cell(value, digits: int = 6, decimals: int | None = None) -> tuple[str, bool]:
+    """(text, is_nan) for a table cell, to *digits* significant digits, or
+    to *decimals* decimal places if given (a whole number, e.g. a count, as
+    it is); None is an empty cell."""
     if value is None:
         return "", False
+    if decimals is not None and isinstance(value, (int, np.integer)) \
+            and not isinstance(value, bool):
+        return str(int(value)), False
     try:
         number = float(value)
     except (TypeError, ValueError):
         return str(value), False
     if math.isnan(number):
         return ("" if _nan_mode == TABLE_NAN_BLANK else "NaN"), True
+    if decimals is not None and math.isfinite(number):
+        return fixed(number, decimals), False
     return f"{number:.{digits}g}", False
 
 

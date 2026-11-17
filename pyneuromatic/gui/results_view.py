@@ -12,6 +12,7 @@ from pyneuromatic.gui.histogram_dialog import HistogramDialog
 from pyneuromatic.gui.inequality_dialog import InequalityDialog
 from pyneuromatic.gui.results_panel import _NOTE_PAIR, ResultsPanel, note_fields, runs_text
 from pyneuromatic.gui.results_tables import ResultsTables
+from pyneuromatic.gui import table_format
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.tools.nm_stat_func import FUNC_NAMES_BSLN, FUNC_NAMES_N
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
@@ -85,7 +86,7 @@ def _bound(text) -> str:
 
 
 def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
-                       digits: int = 6, xunits: str = "",
+                       decimals: int = 3, xunits: str = "",
                        x_limits: tuple[float, float] | None = None,
                        known_units: tuple[str, ...] = ()) -> list[str]:
     """A window's saved result for one row (epoch) of its ST_ arrays, as text
@@ -107,7 +108,9 @@ def epoch_result_lines(toolfolder: NMToolFolder, window: str, row: int,
             value = float(value)
         except (TypeError, ValueError):
             return "NaN"
-        return "NaN" if math.isnan(value) else f"{value:.{digits}g}"
+        if not math.isfinite(value):
+            return "NaN" if math.isnan(value) else ("-inf" if value < 0 else "inf")
+        return table_format.fixed(value, decimals)
 
     def value(data) -> str:
         values = data.nparray
@@ -471,7 +474,7 @@ class Stats2Panel(ResultsPanel):
             name is not None and not self.is_histogram(name) and not name.startswith("IQ_"))
 
     def refresh_details(self) -> None:
-        """Show the Results again (e.g. with other digits)."""
+        """Show the Results again (e.g. with other decimals)."""
         self._update_details()
 
     def _update_details(self, *_args) -> None:
@@ -551,7 +554,7 @@ class Stats2Panel(ResultsPanel):
         for row, label in enumerate(StatsTables._row_labels(toolfolder, window)):
             if not label:  # e.g. an epoch not analysed (one point per epoch)
                 continue
-            steps = epoch_result_lines(toolfolder, window, row, StatsTables.digits, xunits,
+            steps = epoch_result_lines(toolfolder, window, row, StatsTables.decimals, xunits,
                                        x_limits, known)
             # The baseline's X range is in the header; Δ a step of its own
             steps = [re.sub(r"  \(x [^)]*\)$", "", step).replace("   \u0394 = ", "; \u0394 = ")

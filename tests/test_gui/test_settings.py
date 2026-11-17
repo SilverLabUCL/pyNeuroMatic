@@ -44,7 +44,7 @@ def test_settings_menu_item(app):
 def test_pages(app):
     dialog = app.settings_dialog()
     pages = [dialog.page_list.item(i).text() for i in range(dialog.page_list.count())]
-    assert pages == ["General", "Plot", "Table", "Stats"]
+    assert pages == ["General", "Plot", "Table", "Stats", "Spike"]
     assert dialog.nan_buttons["NaN"].isChecked()
 
 
@@ -76,7 +76,7 @@ def test_stats_page_edits_the_stats_config(app):
     assert stats.results_all_epochs and stats.config.results_all_epochs
     options = {option[0]: option[2] for option in app.tool_tabs["Stats"].config_options()}
     assert options["results_all_epochs"] is True
-    assert options["digits"] == 6  # a number (a spin box), #471
+    assert options["decimals"] == 3  # a number (a spin box), #471
     # Each option says what it does
     assert all(box.toolTip() for box in boxes.values())
 

@@ -64,6 +64,7 @@ from pyneuromatic.gui.tier_actions import (
     SeriesActions,
 )
 from pyneuromatic.gui.stats_tab import StatsToolTab
+from pyneuromatic.gui.spike_tab import SpikeToolTab
 from pyneuromatic.gui.tool_tab import ToolTabWidget
 from pyneuromatic.gui.transform_dialog import (
     MARK,
@@ -78,7 +79,7 @@ APP_NAME = "pyNeuroMatic"
 
 # The tool tabs, in the tool rail after Browser (None: a placeholder). The app
 # window registers each the same way: see ToolTabWidget and _register_tool_tab.
-TOOL_TABS = {"Main": None, "Stats": StatsToolTab, "Spike": None}
+TOOL_TABS = {"Main": None, "Stats": StatsToolTab, "Spike": SpikeToolTab}
 
 
 def set_app_name(name: str = APP_NAME) -> None:
@@ -300,14 +301,14 @@ class PlotPanel(QtWidgets.QWidget):
         navigator_layout = QtWidgets.QHBoxLayout()
         self.trace_first_button = QtWidgets.QToolButton(self)
         self.trace_first_button.setIcon(_navigator_icon("first", self.palette()))
-        self.trace_first_button.setToolTip("First trace")
+        self.trace_first_button.setToolTip("First epoch")
         self.trace_first_button.setFixedSize(28, 28)
         self.trace_first_button.setIconSize(QtCore.QSize(22, 22))
         navigator_layout.addWidget(self.trace_first_button)
 
         self.trace_previous_button = QtWidgets.QToolButton(self)
         self.trace_previous_button.setIcon(_navigator_icon("previous", self.palette()))
-        self.trace_previous_button.setToolTip("Previous trace")
+        self.trace_previous_button.setToolTip("Previous epoch")
         self.trace_previous_button.setFixedSize(28, 28)
         self.trace_previous_button.setIconSize(QtCore.QSize(22, 22))
         navigator_layout.addWidget(self.trace_previous_button)
@@ -323,19 +324,19 @@ class PlotPanel(QtWidgets.QWidget):
 
         self.trace_next_button = QtWidgets.QToolButton(self)
         self.trace_next_button.setIcon(_navigator_icon("next", self.palette()))
-        self.trace_next_button.setToolTip("Next trace")
+        self.trace_next_button.setToolTip("Next epoch")
         self.trace_next_button.setFixedSize(28, 28)
         self.trace_next_button.setIconSize(QtCore.QSize(22, 22))
         navigator_layout.addWidget(self.trace_next_button)
 
         self.trace_last_button = QtWidgets.QToolButton(self)
         self.trace_last_button.setIcon(_navigator_icon("last", self.palette()))
-        self.trace_last_button.setToolTip("Last trace")
+        self.trace_last_button.setToolTip("Last epoch")
         self.trace_last_button.setFixedSize(28, 28)
         self.trace_last_button.setIconSize(QtCore.QSize(22, 22))
         navigator_layout.addWidget(self.trace_last_button)
 
-        # Stepping options, in a ⋯ menu beside the buttons: how far < > move,
+        # Epoch options, in a ⋯ menu beside the buttons: how far < > move,
         # whether they visit only the selected traces, and overlaid epochs
         self.step_menu = QtWidgets.QMenu("Stepping", self)
         # Its title: "Epoch" (a data series) or "Data" (a Data Set's arrays)
@@ -385,7 +386,7 @@ class PlotPanel(QtWidgets.QWidget):
         self._current_item = None  # the epoch (or data array) shown
         self.step_button = QtWidgets.QToolButton(self)
         self.step_button.setText("⋯")
-        self.step_button.setToolTip("Stepping options")
+        self.step_button.setToolTip("Epoch actions")
         self.step_button.setMenu(self.step_menu)
         self.step_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
         # Like the strip's ⋯ buttons: no menu arrow
@@ -796,7 +797,7 @@ class PlotPanel(QtWidgets.QWidget):
             box = QtWidgets.QCheckBox(set_name, self.membership_row)
             box.setToolTip(f"Add the current {noun} to {set_name}")
             if self._trace_mode == "dataseries" and set_name == EXCLUDE_SET:
-                box.setToolTip("Exclude the current epoch from analysis (SetX)")
+                box.setToolTip("Exclude the current epoch from all Run analyses (SetX)")
                 box.setStyleSheet("QCheckBox { color: #c62828; }")
             box.toggled.connect(
                 lambda checked, name=set_name: self._on_set_box_toggled(name, checked)
