@@ -1803,3 +1803,47 @@ class TestNMToolSpikeResultsFormat(unittest.TestCase):
             self.tool.results_format = "table"
         with self.assertRaises(TypeError):
             self.tool.results_format = 1
+
+
+class TestNMToolSpikeTransformsAndOmit(unittest.TestCase):
+    """Detection on the data as plotted (#528), and Omit (discard_last)."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_transform import NMTransformInvert
+        self.invert = NMTransformInvert
+        self.nm = NMManager(quiet=True)
+        folder = self.nm.folders.new("Demo")
+        self.series = folder.new_dataseries("Record", n_epochs=3, n_points=1000)
+        for data in folder.data.values():
+            data.nparray[:] = _times_data("x").nparray
+        self.nm.tool_add("spike")
+        self.tool = self.nm.spike
+        self.tool.ylevel = 0.5
+
+    def test_detects_on_the_channels_transforms(self):
+        self.series.channels["A"].transform = [self.invert()]  # pulses to -1
+        self.tool.run_selection(self.series, channel="A", epochs="all")
+        f = self.tool.toolfolder
+        self.assertEqual(list(f.data.get("SP_count").nparray), [0, 0, 0])
+        self.assertIn("channel transform:", f.notes.note)
+        self.tool.ylevel = -0.5
+        self.tool.func_name = "level-"
+        self.tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertEqual(list(self.tool.toolfolder.data.get("SP_count").nparray), [3, 3, 3])
+
+    def test_omit_drops_the_last_epoch(self):
+        self.assertTrue(self.tool.can_omit)
+        omitted = []
+
+        def progress(done, total):
+            if done == 2:
+                omitted.append(self.tool.omit_last())
+            return True
+
+        self.tool.progress = progress
+        self.tool.run_selection(self.series, channel="A", epochs="all")
+        f = self.tool.toolfolder
+        self.assertEqual(omitted, ["E1"])  # the epoch omitted
+        self.assertEqual([str(n) for n in f.data.get("SP_data_names").nparray],
+                         ["RecordA0", "RecordA2"])
+        self.assertEqual(list(f.data.get("SP_epoch_num").nparray), [0, 2])

@@ -20,12 +20,23 @@ BSLN = {"id": "bsln", "func": {"name": "mean"}, "xbgn": 0.0, "xend": 40.0,
 
 # --- the text of each kind of result -------------------------------------------
 
+def test_values_to_the_decimals_shown():
+    from pyneuromatic.gui import table_format
+    assert table_format.fixed(9.5, 3) == "9.500"
+    assert table_format.fixed(1234.56789, 2) == "1234.57"
+    assert table_format.fixed(-0.0004, 3) == "0.000"  # not "-0.000"
+    assert table_format.cell(2.5, decimals=1) == ("2.5", False)
+    assert table_format.cell(np.int64(41), decimals=3) == ("41", False)  # a count, as it is
+    assert table_format.cell(2.5) == ("2.5", False)  # no decimals: significant digits
+
+
+
 def test_a_point_found_with_baseline_and_difference():
     max_ = {"id": "main", "func": {"name": "max"}, "s": -55.0, "sunits": "mV",
             "x": 80.0, "xunits": "ms", "Δs": 15.0}
     assert result_lines([BSLN, max_]) == [
-        "bsln mean = -70 mV  (x 0 to 40)",
-        "max = -55 mV at 80 ms  (Δ = 15 mV)",
+        "bsln mean = -70.000 mV  (x 0 to 40)",
+        "max = -55.000 mV at 80.000 ms  (Δ = 15.000 mV)",
     ]
 
 
@@ -41,17 +52,17 @@ def test_a_pipeline_a_line_per_step_then_its_measure():
          "dx": 14.342},
     ]
     assert result_lines(steps)[1:] == [
-        "max = -55 mV at 80 ms  (Δ = 15 mV)",
-        "level+ 10% = -68.5 mV at 61.774 ms",
-        "level+ 90% = -56.5 mV at 76.116 ms",
+        "max = -55.000 mV at 80.000 ms  (Δ = 15.000 mV)",
+        "level+ 10% = -68.500 mV at 61.774 ms",
+        "level+ 90% = -56.500 mV at 76.116 ms",
         "risetime+ = 14.342 ms",
     ]
-    assert result_lines(steps, digits=3)[-1] == "risetime+ = 14.3 ms"
+    assert result_lines(steps, decimals=1)[-1] == "risetime+ = 14.3 ms"
     # The window's X range: on the measurement's result line, not each step's (#498)
     assert result_lines(steps, window_x=(60, 120))[1:] == [
-        "max = -55 mV at 80 ms  (Δ = 15 mV)",
-        "level+ 10% = -68.5 mV at 61.774 ms",
-        "level+ 90% = -56.5 mV at 76.116 ms",
+        "max = -55.000 mV at 80.000 ms  (Δ = 15.000 mV)",
+        "level+ 10% = -68.500 mV at 61.774 ms",
+        "level+ 90% = -56.500 mV at 76.116 ms",
         "risetime+ = 14.342 ms  (x 60 to 120)",
     ]
 
@@ -82,15 +93,15 @@ def test_the_number_of_points():  # #498
     max_ = {"id": "main", "func": {"name": "max"}, "s": -55.0, "sunits": "mV",
             "x": 80.0, "xunits": "ms", "n": 61}
     assert result_lines([bsln, mean, max_]) == [
-        "bsln mean = -70 mV  (x 0 to 40, n = 41)",
-        "mean = -64.8 mV, ±std 5.3 mV  (Δ = 5.2 mV)  (n = 15, 2 NaNs)",
-        "max = -55 mV at 80 ms",  # a point found: no n
+        "bsln mean = -70.000 mV  (x 0 to 40, n = 41)",
+        "mean = -64.800 mV, ±std 5.300 mV  (Δ = 5.200 mV)  (n = 15, 2 NaNs)",
+        "max = -55.000 mV at 80.000 ms",  # a point found: no n
     ]
     # mean@max: the points averaged around the peak
     mean_at_max = {"id": "main", "func": {"name": "mean@max", "n_mean": 5}, "s": -55.2,
                    "sunits": "mV", "x": 80.0, "xunits": "ms", "n": 5, "nans": 0}
     assert result_lines([mean_at_max], window_x=(60, 120)) == [
-        "mean@max = -55.2 mV at 80 ms  (x 60 to 120, n = 5)"]
+        "mean@max = -55.200 mV at 80.000 ms  (x 60 to 120, n = 5)"]
 
 
 # --- in the app ------------------------------------------------------------------
@@ -127,18 +138,18 @@ def test_details_follow_the_window_and_the_trace(app):
     tab.measurement_combo.setCurrentText("max")
     # Its X range on the measurement's line, as the baseline's (#498): here
     # the trace's (-inf to inf)
-    assert _lines(app) == ["RecordA0  w0 max", "max = -55 at 80  (x 0 to 199)"]
+    assert _lines(app) == ["RecordA0  w0 max", "max = -55.000 at 80.000  (x 0 to 199)"]
     _type(tab.xbgn_edit, "60")
     _type(tab.xend_edit, "120")
-    assert _lines(app) == ["RecordA0  w0 max", "max = -55 at 80  (x 60 to 120)"]
+    assert _lines(app) == ["RecordA0  w0 max", "max = -55.000 at 80.000  (x 60 to 120)"]
     app.selection_model.update(epoch=app.series.epochs["E1"])
-    assert _lines(app) == ["RecordA1  w0 max", "max = -55 at 90  (x 60 to 120)"]
+    assert _lines(app) == ["RecordA1  w0 max", "max = -55.000 at 90.000  (x 60 to 120)"]
     tab.bsln_checkbox.setChecked(True)
     _type(tab.bsln_xbgn_edit, "0")
     _type(tab.bsln_xend_edit, "40")
     assert _lines(app) == ["RecordA1  w0 max",
-                           "bsln mean = -70  (x 0 to 40, n = 41)",
-                           "max = -55 at 90  (Δ = 15)  (x 60 to 120)"]  # a point: no n
+                           "bsln mean = -70.000  (x 0 to 40, n = 41)",
+                           "max = -55.000 at 90.000  (Δ = 15.000)  (x 60 to 120)"]  # a point: no n
     tab.window_enabled.setChecked(False)
     assert _lines(app) == ["RecordA1  w0 max", "Window off"]
 
@@ -149,7 +160,7 @@ def test_details_with_tool_measures_off_and_another_tool(app):
     app.plot_widget.measures_action.setChecked(False)
     app.tool_rail.select_tool("Browser")
     app.selection_model.update(epoch=app.series.epochs["E1"])
-    assert _lines(app)[1] == "max = -55 at 90  (x 0 to 199)"
+    assert _lines(app)[1] == "max = -55.000 at 90.000  (x 0 to 199)"
 
 
 def test_a_measurement_that_fails_says_so(app):
@@ -177,32 +188,32 @@ def test_details_are_selectable_and_short(app):
     assert tab.details.height() < 10 * tab.details.fontMetrics().lineSpacing()
 
 
-def test_digits_shown_in_settings(app, qtbot):
-    """Settings › Stats › Digits displayed (the last option): Stats1's Details and Stats2's tables
-    and Details; saved with the settings."""
+def test_decimals_shown_in_settings(app, qtbot):
+    """Settings › Stats › Decimals displayed (the last option): Stats1's Details and Stats2's
+    tables and Details; saved with the settings."""
     tab = app.stats
     tab.measurement_combo.setCurrentText("mean")
     _type(tab.xbgn_edit, "60")
     _type(tab.xend_edit, "100")
     mean = _lines(app)[1]
-    assert mean.startswith("mean = -6") and len(mean.split()[2]) == len("-61.2345")  # 6 digits
+    assert mean.startswith("mean = -6") and len(mean.split()[2]) == len("-61.234")  # 3 decimals
     dialog = app.settings_dialog()
     qtbot.addWidget(dialog)
-    spin = dialog.tool_spinboxes["Stats"]["digits"]
-    assert (spin.value(), spin.minimum(), spin.maximum()) == (6, 2, 10)
-    spin.setValue(3)
-    assert app.manager.settings.stats_digits == 3
-    assert _lines(app)[1] == f"mean = {float(mean.split()[2]):.3g}  (x 60 to 100, n = 41)"
+    spin = dialog.tool_spinboxes["Stats"]["decimals"]
+    assert (spin.value(), spin.minimum(), spin.maximum()) == (3, 0, 10)
+    spin.setValue(1)
+    assert app.manager.settings.stats_decimals == 1
+    assert _lines(app)[1] == f"mean = {float(mean.split()[2]):.1f}  (x 60 to 100, n = 41)"
     # Stats2: its tables, after a run
     tab.run_button.click()
     tables = tab.stats2.tables
-    assert StatsTables.digits == 3
+    assert StatsTables.decimals == 1
     text = tables.arrays_table.item(0, 0).text()
-    assert len(text.lstrip("-").replace(".", "")) <= 3
+    assert len(text.split(".")[1]) == 1
 
 
 def test_index_and_count_arrays_in_settings(app, qtbot):
-    """Settings › Stats › Show index and count ST_ arrays, before Digits displayed,
+    """Settings › Stats › Show index and count ST_ arrays, before Decimals displayed,
     off by default: Stats2's tables and Array list; saved with the settings;
     no All columns checkbox in Stats2 (#496)."""
     tab = app.stats
@@ -211,7 +222,7 @@ def test_index_and_count_arrays_in_settings(app, qtbot):
     stats2 = tab.stats2
     assert not hasattr(stats2, "all_columns_checkbox")
     keys = [option[0] for option in tab.config_options()]
-    assert keys[-2:] == ["detail_arrays", "digits"]  # Digits displayed last
+    assert keys[-2:] == ["detail_arrays", "decimals"]  # Decimals displayed last
     dialog = app.settings_dialog()
     qtbot.addWidget(dialog)
     box = dialog.tool_checkboxes["Stats"]["detail_arrays"]

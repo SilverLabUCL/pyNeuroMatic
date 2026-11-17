@@ -198,7 +198,7 @@ class ToolTabWidget(QtWidgets.QWidget):
         run_layout = QtWidgets.QHBoxLayout(self.run_row)
         run_layout.setContentsMargins(0, 0, 0, 0)
         self.run_button = QtWidgets.QPushButton("Run", self.run_row)
-        self.run_button.setToolTip("Run (while running: Cancel, or Esc)")
+        self.run_button.setToolTip("Run (use Cancel or Esc to stop)")
         self._show_run_button(running=False)
         self.run_button.clicked.connect(self._on_run_clicked)
         run_layout.addWidget(self.run_button)
@@ -234,7 +234,7 @@ class ToolTabWidget(QtWidgets.QWidget):
         for key, label in RUN_DISPLAY_LABELS.items():
             self.display_combo.addItem(label, key)
         self.display_combo.setToolTip(
-            "While running, show each epoch in the Plot, then continue after "
+            "During Run, display results for each epoch, then continue after "
             "a delay, or ask to continue (Off: fastest)")
         self.display_combo.currentIndexChanged.connect(self._on_display_changed)
         display_layout.addWidget(self.display_combo)

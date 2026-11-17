@@ -179,9 +179,9 @@ def test_run_fills_arrays_and_summary_tables(qtbot):
     assert _row_labels(tables.summary_table) == [
         "mean", "std", "sem", "N", "NaNs", "INFs", "min", "max",
     ]
-    assert _column(tables.arrays_table, "max_dy") == ["20", "22", "24", "26"]
+    assert _column(tables.arrays_table, "max_dy") == ["20.000", "22.000", "24.000", "26.000"]
     assert _column(tables.summary_table, "max_dy") == [
-        "23", "2.58199", "1.29099", "4", "0", "0", "20", "26",
+        "23.000", "2.582", "1.291", "4", "0", "0", "20.000", "26.000",  # counts as they are
     ]
     assert "mV" in tables.arrays_table.horizontalHeaderItem(3).toolTip()
 
@@ -230,7 +230,7 @@ def test_array_dropdown_selects_column_and_shows_details(qtbot):
     details = stats2.details.toPlainText().splitlines()
     assert details[0] == "ST_w0_max_dy  (values in mV)"  # no x units in this data
     assert details[1].startswith("NMStats(win=w0, func=max")
-    assert "mean  23" in details
+    assert "mean  23.000" in details
     assert "N     4" in details
 
     assert stats2.array_combo.findText("ST_w0_max_n") < 0
@@ -479,10 +479,10 @@ def test_copy_all_stats_tables_from_the_table_panel(qtbot):
     window.table_panel.copy_all_action.trigger()
     lines = QtWidgets.QApplication.clipboard().text().splitlines()
     assert lines[0] == "\tbsln_y\tmax_y\tmax_x\tmax_dy"
-    assert lines[1] == "RecordA0\t-70\t-50\t10\t20"
+    assert lines[1] == "RecordA0\t-70.000\t-50.000\t10.000\t20.000"  # as shown
     assert lines[5] == ""
     assert lines[6] == lines[0]
-    assert lines[7].startswith("mean\t-70\t-47")
+    assert lines[7].startswith("mean\t-70.000\t-47")
 
 
 def test_delete_folder_after_confirmation(qtbot, monkeypatch):

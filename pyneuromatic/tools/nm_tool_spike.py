@@ -166,9 +166,15 @@ class NMToolSpike(NMTool):
         self._durations: list[float] = []  # the x range searched
         self._detected_xunits: str | None = None
         self._toolfolder: NMToolFolder | None = None
+        self._transforms: list[str] = []  # channel filters/transforms used
 
     # ------------------------------------------------------------------
     # Properties
+
+    @property
+    def toolfolder(self) -> NMToolFolder | None:
+        """The Spike subfolder the most recent run wrote, if any."""
+        return self._toolfolder
 
     @property
     def ylevel(self) -> float:
@@ -255,6 +261,7 @@ class NMToolSpike(NMTool):
         self._source_data: list[NMData] = []
         self._detected_xunits = None
         self._toolfolder = None
+        self._transforms = []
         return True
 
     def run(self) -> bool:
@@ -265,14 +272,23 @@ class NMToolSpike(NMTool):
         to the internal lists.  Silently skips arrays with no numpy data
         (``nparray`` is None).
 
+        Spikes are detected in the data as plotted: with its channel's
+        filters and transforms (a copy), as Stats measures (#528).
+
         Returns:
             True on success.
         """
-        data = self.data
-        if not isinstance(data, NMData):
+        self._last_added = False  # for discard_last
+        source = self.data
+        if not isinstance(source, NMData):
             raise RuntimeError("no data selected")
-        if data.nparray is None:
+        if source.nparray is None:
             return True
+        data = self.transformed_data()
+        if data is not source and self.channel is not None:
+            steps = self.channel.transform_str()
+            if steps not in self._transforms:
+                self._transforms.append(steps)
         if self._detected_xunits is None:
             self._detected_xunits = data.xscale.units
         _indexes, x_times = find_level_crossings_nmdata(
@@ -283,12 +299,24 @@ class NMToolSpike(NMTool):
             ignore_nans=self._ignore_nans,
         )
         self._spike_times.append(np.asarray(x_times, dtype=float))
-        self._epoch_names.append(data.name)
+        self._epoch_names.append(source.name)
         epoch = self.epoch if self.dataseries is not None else None
         self._epoch_numbers.append(epoch.number if epoch is not None else None)
         self._durations.append(self._searched(data))
-        self._source_data.append(data)
+        self._source_data.append(source)
+        self._last_added = True
         return True
+
+    def discard_last(self) -> None:
+        """Drop the spikes of the data array :meth:`run` just analysed (an
+        epoch omitted from the run, #472)."""
+        if not getattr(self, "_last_added", False):
+            return  # it had no data
+        self._last_added = False
+        for values in (self._spike_times, self._epoch_names, self._epoch_numbers,
+                       self._durations, self._source_data):
+            if values:
+                values.pop()
 
     def _searched(self, data: NMData) -> float:
         """The length of *data*'s x range searched: its x range within xbgn
@@ -365,6 +393,8 @@ class NMToolSpike(NMTool):
                  "%s %g, x %g to %g" % (self.__func_name, self.__ylevel,
                                         self._xbgn, self._xend),
                  "format %s" % self.__results_format]
+        if self._transforms:
+            parts.append("channel transform: %s" % "; ".join(self._transforms))
         return "; ".join(parts)
 
     def _write_results_to_numpy(self) -> NMToolFolder | None:

@@ -60,21 +60,21 @@ def test_every_epoch_a_line(qtbot):
     assert _epochs(app) == [
         "Stats_Record_A_All_0  w0 max  (x 60 to 120)  bsln mean (x 0 to 40)"
         "  (values in mV, x in ms)",
-        "RecordA0: bsln mean = -70 (n = 41); max = -55 at 80; Δ = 15",
-        "RecordA1: bsln mean = -70 (n = 41); max = -54 at 80; Δ = 16",
-        "RecordA2: bsln mean = -70 (n = 41); max = -53 at 80; Δ = 17",
+        "RecordA0: bsln mean = -70.000 (n = 41); max = -55.000 at 80.000; Δ = 15.000",
+        "RecordA1: bsln mean = -70.000 (n = 41); max = -54.000 at 80.000; Δ = 16.000",
+        "RecordA2: bsln mean = -70.000 (n = 41); max = -53.000 at 80.000; Δ = 17.000",
     ]
 
 
 @pytest.mark.parametrize("func, line", [
     ({"name": "risetime+", "p0": 10, "p1": 90},
-     "RecordA1: bsln mean = -70 (n = 41); max = -54 at 80; Δ = 16; "
-     "level+ 10% = -68.4 at 61.774; level+ 90% = -55.6 at 76.1158; "
-     "risetime+ = 14.3418"),
-    ("mean+std", "RecordA1: bsln mean = -70 (n = 41); mean = -64.4647, ±std 5.69728 "
-                 "(n = 61); Δ = 5.53524"),
+     "RecordA1: bsln mean = -70.000 (n = 41); max = -54.000 at 80.000; Δ = 16.000; "
+     "level+ 10% = -68.400 at 61.774; level+ 90% = -55.600 at 76.116; "
+     "risetime+ = 14.342"),
+    ("mean+std", "RecordA1: bsln mean = -70.000 (n = 41); mean = -64.465, ±std 5.697 "
+                 "(n = 61); Δ = 5.535"),
     ({"name": "level+", "ylevel": -60},
-     "RecordA1: bsln mean = -70 (n = 41); level+ = -60 at 71.7734; Δ = 9.99999"),
+     "RecordA1: bsln mean = -70.000 (n = 41); level+ = -60.000 at 71.773; Δ = 10.000"),
 ])
 def test_each_kind_of_result(qtbot, func, line):
     assert _epochs(_app(qtbot, func))[2] == line
@@ -83,7 +83,7 @@ def test_each_kind_of_result(qtbot, func, line):
 def test_slope_without_baseline(qtbot):
     assert _epochs(_app(qtbot, "slope", bsln=False)) [:2] == [
         "Stats_Record_A_All_0  w0 slope  (x 60 to 120)  (values in mV/ms, x in ms)",
-        "RecordA0: slope = -0.164321, intercept -50.0218 mV (n = 61)",  # not in the header's units
+        "RecordA0: slope = -0.164, intercept -50.022 mV (n = 61)",  # not in the header's units
     ]
 
 
@@ -100,15 +100,15 @@ def test_selectable_to_copy_and_no_wrapping(qtbot):
     assert details.lineWrapMode() == details.LineWrapMode.NoWrap  # a line per epoch
 
 
-def test_summary_is_still_there_and_digits_apply(qtbot):
+def test_summary_is_still_there_and_decimals_apply(qtbot):
     app = _app(qtbot, "max")
     stats2 = app.stats.stats2
     assert stats2.results_combo.currentData() == "summary"  # as before, by default
     assert stats2.details.toPlainText().startswith("ST_w0_max_y")
-    app.stats.set_config_option("digits", 3)
-    assert StatsTables.digits == 3
+    app.stats.set_config_option("decimals", 1)
+    assert StatsTables.decimals == 1
     toolfolder = stats2.toolfolder()
-    assert epoch_result_lines(toolfolder, "w0", 1, digits=2)[1] == "max = -54 mV at 80 ms   Δ = 16 mV"
+    assert epoch_result_lines(toolfolder, "w0", 1, decimals=0)[1] == "max = -54 mV at 80 ms   Δ = 16 mV"
     stats2.results_combo.setCurrentIndex(stats2.results_combo.findData("summary"))
     assert stats2.details.lineWrapMode() == stats2.details.LineWrapMode.WidgetWidth
 
@@ -116,7 +116,7 @@ def test_summary_is_still_there_and_digits_apply(qtbot):
 def test_stats1_results_after_a_run_and_no_history_checkbox(qtbot):
     app = _app(qtbot, "max")
     tab = app.stats
-    assert tab.details.toPlainText().splitlines()[-1] == "max = -54 at 80  (Δ = 16)  (x 60 to 120)"
+    assert tab.details.toPlainText().splitlines()[-1] == "max = -54.000 at 80.000  (Δ = 16.000)  (x 60 to 120)"
     assert not hasattr(tab, "output_history_checkbox")
     assert hasattr(app.selection_model.manager.stats, "results_to_history")  # for scripts
 
@@ -166,7 +166,7 @@ def test_an_older_subfolder_still_reads(qtbot):
     stats2.refresh(select="Stats_Old_0")
     assert stats2._windows(old) == ["w0"]
     assert _epochs(app) == ["Stats_Old_0  w0 max  (x 60 to 120)  (values in mV, x in ms)",
-                            "RecordA0: max = -55", "RecordA1: max = -54"]
+                            "RecordA0: max = -55.000", "RecordA1: max = -54.000"]
     title, y, x, xlabel, _yl, _style = stats2.selected_plot()
     assert x is None and xlabel == "data index"  # no epoch numbers saved
     assert not stats2.epoch_x_action.isEnabled()
@@ -238,8 +238,8 @@ def test_stats1_x_ranges_have_x_units(qtbot):
     lines = app.stats.details.toPlainText().splitlines()
     # Units once, on the top line, as Stats2's
     assert lines[0] == "RecordA1  w0 max  (values in mV, x in ms)"
-    assert lines[-1] == "max = -54 at 80  (Δ = 16)  (x 60 to 120)"  # its X range (#498)
-    assert lines[1] == "bsln mean = -70  (x 0 to 40, n = 41)"
+    assert lines[-1] == "max = -54.000 at 80.000  (Δ = 16.000)  (x 60 to 120)"  # its X range (#498)
+    assert lines[1] == "bsln mean = -70.000  (x 0 to 40, n = 41)"
 
 
 def test_an_unbounded_range_shows_the_traces_limits(qtbot):
@@ -251,7 +251,7 @@ def test_an_unbounded_range_shows_the_traces_limits(qtbot):
         edit.setText("")  # -inf, inf
         edit.editingFinished.emit()
     assert tab.details.toPlainText().splitlines() == [
-        "RecordA1  w0 max  (values in mV, x in ms)", "max = -54 at 80  (x 0 to 199)"]
+        "RecordA1  w0 max  (values in mV, x in ms)", "max = -54.000 at 80.000  (x 0 to 199)"]
     tab.run_button.click()
     assert _epochs(app)[0] == "Stats_Record_A_All_1  w0 max  (x 0 to 199)  (values in mV, x in ms)"
 
@@ -264,9 +264,9 @@ def test_a_baselines_spread_is_shown(qtbot):
     tab.bsln_combo.setCurrentIndex(tab.bsln_combo.findData("mean+std"))
     import re
     stats1 = tab.details.toPlainText().splitlines()[1]
-    assert re.match(r"bsln mean = -70, \u00b1std \S+  \(x 0 to 40, n = 41\)$", stats1)
+    assert re.match(r"bsln mean = -70\.000, \u00b1std \S+  \(x 0 to 40, n = 41\)$", stats1)
     tab.run_button.click()
-    assert re.match(r"RecordA0: bsln mean = -70, \u00b1std \S+ \(n = 41\); max",
+    assert re.match(r"RecordA0: bsln mean = -70\.000, \u00b1std \S+ \(n = 41\); max",
                     _epochs(app)[1])
 
 
@@ -287,8 +287,8 @@ def test_an_epoch_with_nans_shows_its_own_n(qtbot):
     app.series.channels["A"].data[1].nparray[[5, 6]] = np.nan  # in E1's baseline
     app.stats.run_button.click()
     lines = _epochs(app)
-    assert lines[1].startswith("RecordA0: bsln mean = -70 (n = 41); mean = ")
-    assert lines[2].startswith("RecordA1: bsln mean = -70 (n = 39, 2 NaNs); mean = ")
+    assert lines[1].startswith("RecordA0: bsln mean = -70.000 (n = 41); mean = ")
+    assert lines[2].startswith("RecordA1: bsln mean = -70.000 (n = 39, 2 NaNs); mean = ")
     assert lines[2].split("; ")[1].endswith("(n = 61)")
 
 
@@ -297,5 +297,5 @@ def test_mean_at_max_shows_the_points_averaged(qtbot):
     in Stats1 and from the saved arrays in Stats2 (#498)."""
     app = _app(qtbot, {"name": "mean@max", "n_mean": 5})
     assert app.stats.details.toPlainText().splitlines()[-1].endswith("(x 60 to 120, n = 5)")
-    assert re.match(r"RecordA1: bsln mean = -70 \(n = 41\); mean@max = \S+ at 80 \(n = 5\); Δ",
+    assert re.match(r"RecordA1: bsln mean = -70\.000 \(n = 41\); mean@max = \S+ at 80\.000 \(n = 5\); Δ",
                     _epochs(app)[2])

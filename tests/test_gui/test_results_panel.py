@@ -135,7 +135,7 @@ def test_tables_show_a_tools_arrays_with_a_summary(qtbot):
     # The summary: NaNs left out
     labels = [tables.summary_table.verticalHeaderItem(r).text()
               for r in range(tables.summary_table.rowCount())]
-    assert tables.summary_table.item(labels.index("mean"), 0).text() == "3"
+    assert tables.summary_table.item(labels.index("mean"), 0).text() == "3.000"
     assert tables.summary_table.item(labels.index("NaNs"), 0).text() == "1"
     tables.select_array("SP_rate")
     assert tables.selected_array() == "SP_rate"

@@ -141,11 +141,13 @@ class SettingsDialog(QtWidgets.QDialog):
         # One page per tool: its options
         self.tool_checkboxes: dict[str, dict[str, QtWidgets.QCheckBox]] = {}
         self.tool_spinboxes: dict[str, dict[str, QtWidgets.QSpinBox]] = {}
+        self.tool_combos: dict[str, dict[str, QtWidgets.QComboBox]] = {}
         for title, tab in tool_pages or []:
             page = QtWidgets.QWidget(self)
             page_layout = QtWidgets.QVBoxLayout(page)
             boxes = {}
             spins = {}
+            combos = {}
             for option in tab.config_options():
                 key, label, value, tip = option[:4]
                 if isinstance(value, bool):
@@ -157,6 +159,22 @@ class SettingsDialog(QtWidgets.QDialog):
                     )
                     page_layout.addWidget(box)
                     boxes[key] = box
+                    continue
+                if isinstance(option[4], dict):
+                    # A choice: (key, label, value, tip, {value: shown}) (#528)
+                    row = QtWidgets.QHBoxLayout()
+                    row.addWidget(QtWidgets.QLabel(label, page))
+                    combo = QtWidgets.QComboBox(page)
+                    for choice, shown in option[4].items():
+                        combo.addItem(shown, choice)
+                    combo.setCurrentIndex(combo.findData(value))
+                    combo.setToolTip(tip)
+                    combo.currentIndexChanged.connect(
+                        lambda _i, t=tab, k=key, c=combo: t.set_config_option(k, c.currentData()))
+                    row.addWidget(combo)
+                    row.addStretch(1)
+                    page_layout.addLayout(row)
+                    combos[key] = combo
                     continue
                 # A number: (key, label, value, tip, (minimum, maximum))
                 row = QtWidgets.QHBoxLayout()
@@ -174,6 +192,7 @@ class SettingsDialog(QtWidgets.QDialog):
             page_layout.addStretch(1)
             self.tool_checkboxes[title] = boxes
             self.tool_spinboxes[title] = spins
+            self.tool_combos[title] = combos
             self._add_page(title, page)
 
         buttons = QtWidgets.QDialogButtonBox(

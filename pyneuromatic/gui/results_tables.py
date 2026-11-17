@@ -26,9 +26,8 @@ class ResultsTables(QtWidgets.QWidget):
     text) and :meth:`_title`.
     """
 
-    # Significant digits of the values shown (Settings, #471); copying keeps
-    # them all
-    digits = 6
+    # Decimal places of the values shown (Settings); copying keeps them all
+    decimals = 3
 
     # array_stats key -> row label
     SUMMARY_ROWS = (
@@ -262,12 +261,16 @@ class ResultsTables(QtWidgets.QWidget):
 
     @classmethod
     def _value_text(cls, value) -> str:
-        """Plain text for a value (NaN always as "NaN"), to the digits shown."""
+        """Plain text for a value (NaN always as "NaN"), to the decimals shown."""
         try:
             number = float(value)
         except (TypeError, ValueError):
             return str(value)
-        return "NaN" if math.isnan(number) else f"{number:.{cls.digits}g}"
+        if isinstance(value, (int, np.integer)) and not isinstance(value, bool):
+            return str(int(value))
+        if not math.isfinite(number):
+            return "NaN" if math.isnan(number) else ("-inf" if number < 0 else "inf")
+        return table_format.fixed(number, cls.decimals)
 
     @classmethod
     def _value_item(cls, value) -> QtWidgets.QTableWidgetItem:
@@ -282,7 +285,7 @@ class ResultsTables(QtWidgets.QWidget):
 
     @classmethod
     def _style_item(cls, item: QtWidgets.QTableWidgetItem, value) -> None:
-        text, is_nan = table_format.cell(value, cls.digits)
+        text, is_nan = table_format.cell(value, decimals=cls.decimals)
         item.setText(text)
         color = table_format.nan_foreground() if is_nan else None
         item.setForeground(QtGui.QBrush(color) if color is not None else QtGui.QBrush())
