@@ -489,7 +489,7 @@ class StatsToolTab(SelectionRunTab):
                              "results_all_epochs")
         self._config_labels = {
             "ignore_nans": "Ignore NaNs",
-            "overwrite": "Overwrite Stats tool folder",
+            "overwrite": "Overwrite results",
             "results_to_numpy": "Save ST_ arrays",
             "results_all_epochs": "ST_ arrays: one point per epoch",
         }

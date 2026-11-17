@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import numpy as np
 from PyQt6 import QtCore, QtWidgets
 
 from pyneuromatic.core.nm_folder import NMFolder
@@ -77,7 +78,8 @@ class ResultsPanel(QtWidgets.QWidget):
     Subclasses set the names below and may override the hooks:
 
     - :meth:`_add_rows`: rows between Folder and Array (e.g. Stats2's Window)
-    - :meth:`_add_plot_options`: Array ⋯ items after Plot (Plot x: epoch)
+    - :meth:`_add_plot_options`: Array ⋯ items after Plot (and Plot x: epoch,
+      if :attr:`EPOCH_ARRAY` is set)
     - :meth:`_add_array_tools`: Array ⋯ items after Table (Histogram...)
     - :meth:`_add_details`: below the message (e.g. Stats2's Results box)
     - :meth:`_on_toolfolder_changed`: the subfolder chosen changed
@@ -94,6 +96,7 @@ class ResultsPanel(QtWidgets.QWidget):
     PANEL_NAME = ""  # e.g. "Stats2", in tooltips
     OBJECT_PREFIX = "results"  # the lists' object names, e.g. "stats2Folder"
     EXAMPLE_ARRAY = ""  # the Array list's width while it's empty
+    EPOCH_ARRAY = ""  # e.g. "ST_epoch_num": the rows' epochs, Plot x: epoch's x
 
     # title, y values, x values (or None), x label, y label, style
     plot_requested = QtCore.pyqtSignal(str, object, object, str, str, str)
@@ -115,6 +118,9 @@ class ResultsPanel(QtWidgets.QWidget):
         self._folder: NMFolder | None = None
         self._folder_actions: Any = None
         self._folder_names: list[str] = []
+        # The array last chosen in each subfolder (_array_key): chosen again
+        # on going back to it
+        self._chosen_arrays: dict[tuple, str] = {}
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -185,6 +191,15 @@ class ResultsPanel(QtWidgets.QWidget):
         self.plot_action = self.plot_menu.addAction("Plot")
         self.plot_action.setToolTip("Show the chosen array in the Plot panel")
         self.plot_action.triggered.connect(lambda _checked=False: self.plot_selected())
+        self.epoch_x_action = None
+        if self.EPOCH_ARRAY:
+            # Plot against the rows' epoch numbers (#476), not the row index
+            self.epoch_x_action = self.plot_menu.addAction("Plot x: epoch")
+            self.epoch_x_action.setCheckable(True)
+            self.epoch_x_action.setChecked(True)
+            self.epoch_x_action.setToolTip(
+                f"Plot against the epoch numbers ({self.EPOCH_ARRAY}); off: the row index")
+            self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
         self._add_plot_options(self.plot_menu)
         self.plot_menu.addSeparator()
         self.table_action = self.plot_menu.addAction("Table")
@@ -348,8 +363,21 @@ class ResultsPanel(QtWidgets.QWidget):
         if index >= 0:
             self.array_combo.setCurrentIndex(index)
 
+    def _toolfolder_key(self) -> tuple[str, str] | None:
+        toolfolder = self.toolfolder()
+        if self._folder is None or toolfolder is None:
+            return None
+        return (self._folder.name, toolfolder.name)
+
+    def _array_key(self) -> tuple | None:
+        """Where the chosen array is remembered: the subfolder (Stats2: and
+        its window)."""
+        return self._toolfolder_key()
+
     def _refresh_array_combo(self) -> None:
         previous = self.array_combo.currentData()
+        key = self._array_key()
+        remembered = self._chosen_arrays.get(key) if key else None
         self.array_combo.blockSignals(True)
         self.array_combo.clear()
         names = self._array_names()
@@ -358,7 +386,11 @@ class ResultsPanel(QtWidgets.QWidget):
         metrics = self.array_combo.fontMetrics()
         longest = max(names, key=metrics.horizontalAdvance) if names else self.EXAMPLE_ARRAY
         self.array_combo.setFixedWidth(metrics.horizontalAdvance(longest) + 44)
-        index = self.array_combo.findData(previous)
+        # The subfolder's own choice, else the one before (e.g. the same
+        # measure in another run's subfolder), else the default
+        index = self.array_combo.findData(remembered) if remembered else -1
+        if index < 0:
+            index = self.array_combo.findData(previous)
         if index < 0:  # not in these results: their default
             index = self.array_combo.findData(self.default_array())
         self.array_combo.setCurrentIndex(max(index, 0) if self.array_combo.count() else -1)
@@ -371,6 +403,9 @@ class ResultsPanel(QtWidgets.QWidget):
         return bool(name) and name.startswith("H_")
 
     def _on_array_changed(self, *_args) -> None:
+        key, name = self._array_key(), self.selected_array()
+        if key is not None and name is not None:
+            self._chosen_arrays[key] = name
         self._on_array_chosen(self.selected_array())
         self._update_buttons()
         self.array_changed.emit()
@@ -385,6 +420,36 @@ class ResultsPanel(QtWidgets.QWidget):
     def _axis_label(self, name: str) -> str:
         units = self.toolfolder().data.get(name).yscale.units
         return f"{name} ({units})" if units else name
+
+    @staticmethod
+    def histogram_plot(toolfolder: NMToolFolder, name: str) -> tuple:
+        """Histogram *name* (H_<array>, #492) as :attr:`plot_requested`
+        values: its bars, x its bin edges."""
+        data = toolfolder.data.get(name)
+        counts = data.nparray
+        edges = toolfolder.data.get(f"{name}_edges")  # unequal bins only
+        if edges is not None:
+            x = edges.nparray
+        else:
+            x = data.xscale.start + data.xscale.delta * np.arange(len(counts) + 1)
+        source = name[len("H_"):]
+        xlabel = f"{source} ({data.xscale.units})" if data.xscale.units else source
+        ylabel = data.yscale.label or "count"
+        if data.yscale.units:
+            ylabel += f" ({data.yscale.units})"
+        return (f"{toolfolder.name}: {name}", counts, x, xlabel, ylabel, "histogram")
+
+    def epoch_x(self, toolfolder: NMToolFolder, n: int) -> tuple:
+        """The Plot's x for *n* rows: their epoch numbers (:attr:`EPOCH_ARRAY`,
+        #476) if there are and "Plot x: epoch" is on, else the row index
+        (None); with the x axis label."""
+        epochs = toolfolder.data.get(self.EPOCH_ARRAY) if self.EPOCH_ARRAY else None
+        usable = epochs is not None and epochs.nparray is not None and len(epochs.nparray) == n
+        if self.epoch_x_action is not None:
+            self.epoch_x_action.setEnabled(usable)
+            if usable and self.epoch_x_action.isChecked():
+                return epochs.nparray, "epoch"
+        return None, "data index"
 
     def plot_selected(self) -> None:
         values = self.selected_plot()

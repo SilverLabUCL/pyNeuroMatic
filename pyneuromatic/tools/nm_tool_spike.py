@@ -89,6 +89,10 @@ class NMToolSpikeConfig(NMToolConfig):
         results_format: How spike times are saved: ``"raster"`` (default;
             ``SP_RX`` and ``SP_RY``) or ``"epochs"`` (an ``SP_{data}`` array
             per epoch).
+        results_all_epochs: If True, the row arrays of a data series run
+            have one row per epoch of the series (NaN where an epoch wasn't
+            analysed), as Stats' option (#529). Defaults to False: one row
+            per analysed epoch.
     """
 
     _TOML_TYPE = "spike_config"
@@ -99,12 +103,13 @@ class NMToolSpikeConfig(NMToolConfig):
         "xbgn":                 {"type": float, "default": -math.inf},
         "xend":                 {"type": float, "default":  math.inf},
         "ignore_nans":        {"type": bool,  "default": True},
-        "overwrite":          {"type": bool,  "default": True},
+        "overwrite":          {"type": bool,  "default": False},
         "results_to_history": {"type": bool,  "default": False},
         "results_to_cache":   {"type": bool,  "default": True},
         "results_to_numpy":   {"type": bool,  "default": True},
         "results_format":     {"type": str,   "default": "raster",
                                "choices": list(RESULTS_FORMATS)},
+        "results_all_epochs": {"type": bool,  "default": False},
     }
 
 
@@ -137,6 +142,8 @@ class NMToolSpike(NMTool):
         results_to_numpy: If True, write ``SP_`` NMData arrays to a new
             Spike subfolder after each run. Default True.
         results_format: ``"raster"`` (default) or ``"epochs"``.
+        results_all_epochs: If True, the row arrays of a data series run
+            have one row per epoch of the series (NaN where not analysed).
     """
 
     TOOLFOLDER_PREFIX = "Spike_"  # its results subfolders
@@ -152,6 +159,7 @@ class NMToolSpike(NMTool):
         self._results_to_cache = self._config.results_to_cache
         self._results_to_numpy = self._config.results_to_numpy
         self.__results_format: str = self._config.results_format
+        self._results_all_epochs: bool = self._config.results_all_epochs
 
         self._xbgn = self._config.xbgn
         self._xend = self._config.xend
@@ -163,6 +171,8 @@ class NMToolSpike(NMTool):
         self._spike_times: list[np.ndarray] = []
         self._epoch_names: list[str] = []
         self._epoch_numbers: list[int | None] = []  # in its data series
+        self._positions: list[int | None] = []  # in its series' epochs (E0 is 0)
+        self._run_epoch_numbers: list[int] | None = None  # the series' epochs
         self._durations: list[float] = []  # the x range searched
         self._detected_xunits: str | None = None
         self._toolfolder: NMToolFolder | None = None
@@ -249,6 +259,22 @@ class NMToolSpike(NMTool):
         nmh.history("set results_format=%r" % value, quiet=quiet)
         nmch.add_nm_command("%s.results_format = %r" % (self._name, value))
 
+    @property
+    def results_all_epochs(self) -> bool:
+        """If True, the row arrays (SP_count, SP_rate, SP_first, SP_isi,
+        SP_epoch_num, SP_data_names) of a data series run have one row per
+        epoch of the series, NaN (and "") where an epoch wasn't analysed, so
+        they line up with the series and its ST_ arrays (#529)."""
+        return self._results_all_epochs
+
+    @results_all_epochs.setter
+    @nmch.records_command
+    def results_all_epochs(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(nmu.type_error_str(value, "results_all_epochs", "boolean"))
+        self._results_all_epochs = value
+        nmch.add_nm_command("%s.results_all_epochs = %r" % (self._name, value))
+
     # ------------------------------------------------------------------
     # Lifecycle
 
@@ -257,6 +283,8 @@ class NMToolSpike(NMTool):
         self._spike_times = []
         self._epoch_names = []
         self._epoch_numbers = []
+        self._positions = []
+        self._run_epoch_numbers = None
         self._durations = []
         self._source_data: list[NMData] = []
         self._detected_xunits = None
@@ -302,6 +330,7 @@ class NMToolSpike(NMTool):
         self._epoch_names.append(source.name)
         epoch = self.epoch if self.dataseries is not None else None
         self._epoch_numbers.append(epoch.number if epoch is not None else None)
+        self._positions.append(self._epoch_position())
         self._durations.append(self._searched(data))
         self._source_data.append(source)
         self._last_added = True
@@ -314,9 +343,33 @@ class NMToolSpike(NMTool):
             return  # it had no data
         self._last_added = False
         for values in (self._spike_times, self._epoch_names, self._epoch_numbers,
-                       self._durations, self._source_data):
+                       self._positions, self._durations, self._source_data):
             if values:
                 values.pop()
+
+    def _epoch_position(self) -> int | None:
+        """The current epoch's position in its data series (E0 is 0), or None
+        outside a data series; notes the series' epoch numbers."""
+        series, epoch = self.dataseries, self.epoch
+        if series is None or epoch is None:
+            return None
+        names = list(series.epochs.keys())
+        if epoch.name not in names:
+            return None
+        self._run_epoch_numbers = [e.number for e in series.epochs.values()]
+        return names.index(epoch.name)
+
+    def _all_epoch_rows(self) -> list[int | None] | None:
+        """With results_all_epochs, each row's position among the series'
+        epochs, if every row has its own; else None (a row per analysed
+        epoch)."""
+        positions = self._positions
+        if (not self._results_all_epochs or not self._run_epoch_numbers
+                or len(positions) != len(self._epoch_names)
+                or any(p is None for p in positions)
+                or len(set(positions)) != len(positions)):
+            return None
+        return positions
 
     def _searched(self, data: NMData) -> float:
         """The length of *data*'s x range searched: its x range within xbgn
@@ -441,10 +494,23 @@ class NMToolSpike(NMTool):
                    "SP_rate": {"label": "Rate", "units": rate_units},
                    "SP_first": {"label": "First spike", "units": xunits},
                    "SP_isi": {"label": "Mean ISI", "units": xunits}}
-        for name, values in self._row_measures().items():
+        measures = self._row_measures()
+        names = list(self._epoch_names)
+        positions = self._all_epoch_rows()
+        if positions is not None:  # a row per epoch of the series (#529)
+            n = len(self._run_epoch_numbers)
+            for key, values in measures.items():
+                padded = np.full(n, np.nan)
+                padded[positions] = values
+                measures[key] = padded
+            padded_names = [""] * n
+            for position, name in zip(positions, names):
+                padded_names[position] = name
+            names, numbers = padded_names, list(self._run_epoch_numbers)
+        for name, values in measures.items():
             f.data.new(name, nparray=values, yscale=yscales[name])
         f.data.new("SP_epoch_num", nparray=np.array(numbers, dtype=int))
-        f.data.new("SP_data_names", nparray=np.array(self._epoch_names, dtype=object))
+        f.data.new("SP_data_names", nparray=np.array(names, dtype=object))
         return f
 
     def _write_results_to_cache(self) -> None:
@@ -497,15 +563,16 @@ class NMToolSpike(NMTool):
             names = ([str(n) for n in names_arr] if names_arr is not None
                      and len(names_arr) == len(numbers)
                      else ["E%d" % int(n) for n in numbers])
-            spike_times = [rx[ry == n] for n in numbers]
-            return spike_times, names, rx_d.yscale.units
+            rows = [(name, n) for name, n in zip(names, numbers) if name]  # analysed
+            spike_times = [rx[ry == n] for _name, n in rows]
+            return spike_times, [name for name, _n in rows], rx_d.yscale.units
         if names_arr is None:
             names_arr = self._values(toolfolder, "SP_epoch_names")  # before #526
             array_name = lambda name: "SP_" + name  # noqa: E731
         else:
             array_name = _epoch_array_name
         if names_arr is not None:
-            epoch_names = [str(n) for n in names_arr]
+            epoch_names = [str(n) for n in names_arr if str(n)]  # analysed (#529)
             spike_times: list[np.ndarray] = []
             detected_xunits: str | None = None
             for en in epoch_names:
@@ -590,6 +657,32 @@ class NMToolSpike(NMTool):
             hi = float(xend) if xend is not None else math.inf
             spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
         return spike_times, list(epoch_names)
+
+    def raster_arrays(self, toolfolder: NMToolFolder) -> tuple[np.ndarray, np.ndarray]:
+        """A results subfolder's raster: every spike's time (x) and its
+        epoch number (y), in either format (#529): ``SP_RX`` / ``SP_RY``,
+        or each epoch's ``SP_{data}`` array at its ``SP_epoch_num``.
+
+        Raises:
+            RuntimeError: If the subfolder has no spike times.
+        """
+        rx, ry = self._values(toolfolder, "SP_RX"), self._values(toolfolder, "SP_RY")
+        if rx is not None and ry is not None:
+            return np.asarray(rx, dtype=float), np.asarray(ry, dtype=float)
+        names = self._values(toolfolder, "SP_data_names")
+        numbers = self._values(toolfolder, "SP_epoch_num")
+        if names is None or numbers is None or len(names) != len(numbers):
+            raise RuntimeError("NMToolSpike.raster_arrays: no spike times in %s"
+                               % toolfolder.name)
+        xs, ys = [], []
+        for name, number in zip(names, numbers):
+            times = self._values(toolfolder, _epoch_array_name(str(name))) if name else None
+            if times is not None:
+                xs.append(np.asarray(times, dtype=float))
+                ys.append(np.full(len(times), float(number)))
+        if not xs:
+            return np.array([], dtype=float), np.array([], dtype=float)
+        return np.concatenate(xs), np.concatenate(ys)
 
     def _result_array_name(
         self, prefix: str, folder: NMToolFolder, overwrite: bool
@@ -679,7 +772,8 @@ class NMToolSpike(NMTool):
         For each spike detected during the most recent :meth:`run_all` call,
         extracts a ``[−pre, +post]`` window of samples from the source epoch
         array and writes the snippet as a new NMData array (``SPK_{ch}{n}``)
-        in the Spike subfolder.
+        in the run's Spike subfolder, replacing earlier waveforms there (its
+        SP_ arrays are kept).
 
         Pass *toolfolder* to instead reconstruct spike times from a previous
         run's ``SP_*`` arrays.  Source recordings are looked up by epoch name
@@ -796,7 +890,9 @@ class NMToolSpike(NMTool):
             spike_times_list = self._spike_times
             epoch_names_list = self._epoch_names
             source_data_list = self._source_data
-            out_folder = None
+            out_folder = self._toolfolder  # the run's subfolder, as pst() and isi()
+        if out_folder is not None:
+            self._clear_waveforms(out_folder)
 
         output: list[NMData] = []
         ch_char = self.channel.name if self.channel is not None else "A"
@@ -912,8 +1008,9 @@ class NMToolSpike(NMTool):
                     "label": source.yscale.label,
                     "units": source.yscale.units,
                 }
-                if out_folder is None:
+                if out_folder is None:  # no SP_ arrays saved: a subfolder for these
                     out_folder = self._make_toolfolder("Spike", overwrite=self._overwrite)
+                    self._toolfolder = out_folder
                 array_name = "SPK_%s%d" % (ch_char, spike_counter)
                 d = out_folder.data.new(
                     array_name,
@@ -941,6 +1038,16 @@ class NMToolSpike(NMTool):
         if out_folder is not None:
             out_folder.build_dataseries("SPK_", matches)
         return output
+
+    @staticmethod
+    def _clear_waveforms(folder: NMToolFolder) -> None:
+        """Remove *folder*'s earlier waveforms (its SPK_ arrays and SPK_ data
+        series), so extracting again replaces them; its SP_ arrays and
+        histograms are kept."""
+        if "SPK_" in folder.dataseries:
+            folder.dataseries.pop("SPK_", quiet=True)
+        for name in [n for n in folder.data.keys() if n.startswith("SPK_")]:
+            folder.data.pop(name, quiet=True)
 
     # ------------------------------------------------------------------
     # Histogram methods (called after run_all)

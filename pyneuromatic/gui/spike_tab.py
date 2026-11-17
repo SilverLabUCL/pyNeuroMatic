@@ -7,6 +7,10 @@ draggable line), and marks each crossing of the trace shown, as Run would
 find it. The Results box lists them. Run analyses the strip's selection as
 Stats1 does (epochs, Epoch Sets, Groups, All Channels; Display, Omit),
 saving SP_ arrays in a Spike subfolder (#526).
+
+Spike2 (#529) shows the saved results: a Spike subfolder's raster and row
+arrays (count, rate, first spike, mean ISI), in the Plot and Table panels'
+Spike2 tab; after a run, its raster.
 """
 from __future__ import annotations
 
@@ -17,9 +21,11 @@ from PyQt6 import QtGui, QtWidgets
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui import table_format
+from pyneuromatic.gui.context_views import ValuesPlot
 from pyneuromatic.gui.plot_levels import PlotLevel
 from pyneuromatic.gui.plot_marks import PlotMark
 from pyneuromatic.gui.plot_ranges import PlotRange
+from pyneuromatic.gui.spike2_view import Spike2Panel, SpikeTables
 from pyneuromatic.gui.tool_run import SelectionRunTab
 from pyneuromatic.tools.nm_tool_spike import NMToolSpike
 from pyneuromatic.tools.nm_tool_utilities import find_level_crossings_nmdata
@@ -30,6 +36,10 @@ SPIKE_CROSSINGS = (("rising", "level+"), ("falling", "level-"), ("any", "level")
 
 class SpikeToolTab(SelectionRunTab):
     """Spike1: set up spike detection and run it."""
+
+    # Its tab in the Plot and Table panels shows Spike2's plots and tables
+    view_label = "Spike2"
+    NO_RESULTS_TITLE = "No Spike2 results yet: Run in Spike1"
 
     # As Stats1's: its X range and level in blue, what it finds in red
     RANGE_COLOR = "#2563eb"
@@ -47,13 +57,15 @@ class SpikeToolTab(SelectionRunTab):
         self._tool = tool
         self._trace = None  # the trace the Plot shows (set_trace)
 
-        # Spike1 sets up and runs detection (Spike2, its results, to come)
+        # Spike1 sets up and runs detection; Spike2 shows its saved results
         self.parameters_group.setTitle("")
         self.mode_tabs = QtWidgets.QTabWidget(self)
         self.mode_tabs.setObjectName("spikeModeTabs")
         self.parameter_layout.addWidget(self.mode_tabs)
         self.spike1_page = QtWidgets.QWidget(self.mode_tabs)
         self.mode_tabs.addTab(self.spike1_page, "Spike1")
+        self.spike2 = Spike2Panel(manager, tool, self.mode_tabs)
+        self.mode_tabs.addTab(self.spike2, "Spike2")
         layout = QtWidgets.QVBoxLayout(self.spike1_page)
 
         level_row = QtWidgets.QHBoxLayout()
@@ -104,7 +116,18 @@ class SpikeToolTab(SelectionRunTab):
         self.xbgn_edit.editingFinished.connect(self._save_controls)
         self.xend_edit.editingFinished.connect(self._save_controls)
         self.marks_changed.connect(self._show_details)
-        self.run_finished.connect(lambda _ok: self._show_details())
+        self.run_finished.connect(self._on_run_finished)
+        self.mode_tabs.currentChanged.connect(self._on_mode_tab_changed)
+
+        # In the app window: Spike2's plots and its tables
+        self.plot_view = ValuesPlot(empty_title="Use Plot or Raster in Spike2")
+        self.table_view = self.spike2.tables
+        self.spike2.results_changed.connect(self.results_changed)
+        self.spike2.plot_requested.connect(self._show_plot_values)
+        self.spike2.table_requested.connect(lambda: self.view_requested.emit("table"))
+        # The plot follows the array chosen in Spike2
+        self.spike2.array_changed.connect(self._plot_selected_array)
+        self._plot_selected_array()
         self._load_controls()
 
     @property
@@ -176,6 +199,53 @@ class SpikeToolTab(SelectionRunTab):
 
     def refresh(self) -> None:
         self._load_controls()  # e.g. set by a command
+        self.spike2.refresh()
+
+    # --- Spike2: the saved results (#529) ------------------------------------
+
+    def _on_mode_tab_changed(self, _index: int) -> None:
+        # Run (and its Display) belong to Spike1
+        spike1 = self.mode_tabs.currentWidget() is not self.spike2
+        self.run_row.setVisible(spike1)
+        self.display_row.setVisible(spike1 and self._settings is not None)
+        # The view follows: Spike1, the channel (its spikes marked); Spike2, its tab
+        self.view_requested.emit(self.preferred_view())
+
+    def preferred_view(self) -> str:
+        return "tool" if self.mode_tabs.currentWidget() is self.spike2 else "channel"
+
+    def lists_view(self) -> bool:
+        return True  # Spike2's tab, to switch to (saying so, without results)
+
+    def has_results(self) -> bool:
+        return self.spike2.has_results()
+
+    def _on_run_finished(self, succeeded: bool) -> None:
+        self._show_details()  # Results: a preview again
+        # Saved results are viewed in Spike2: its raster
+        if succeeded and self._tool.toolfolder is not None:
+            self.mode_tabs.setCurrentWidget(self.spike2)
+            self.view_requested.emit("plot")
+
+    def _plot_selected_array(self) -> None:
+        """Draw the array chosen in Spike2 (the panel shown doesn't change)."""
+        values = self.spike2.selected_plot()
+        if values is None:
+            self.plot_view.clear(None if self.has_results() else self.NO_RESULTS_TITLE)
+        else:
+            self.plot_view.show_values(*values)
+
+    def _show_plot_values(self, title, y, x, xlabel, ylabel, style) -> None:
+        """A Spike2 plot (Plot, Raster), in the Plot panel."""
+        self.plot_view.show_values(title, y, x, xlabel, ylabel, style)
+        self.view_requested.emit("plot")
+
+    def set_folder_actions(self, actions) -> None:
+        self.spike2.set_folder_actions(actions)  # its Folder ⋯ menu
+
+    def bind_selection_model(self, model: Any) -> None:
+        super().bind_selection_model(model)
+        self.spike2.bind_selection_model(model)
 
     # --- the Plot: X range, threshold and crossings ----------------------------
 
@@ -251,6 +321,9 @@ class SpikeToolTab(SelectionRunTab):
 
     def apply_settings(self) -> None:
         super().apply_settings()  # the Display control
+        SpikeTables.decimals = self.decimals()  # Spike2's tables
+        self.spike2.tables.refresh()
+        self.spike2.refresh_details()
         self._show_details()  # e.g. other decimals
 
     def _show_details(self) -> None:
@@ -268,18 +341,32 @@ class SpikeToolTab(SelectionRunTab):
         if not any(len(times) for times in self._tool._spike_times):
             self.show_warning("No spikes found")
 
+    def show_run_results(self) -> None:
+        """The run's subfolder in Spike2, and its raster in the Plot (in
+        either results format)."""
+        self.spike2.show_toolfolder(self._tool.toolfolder)
+        values = self.spike2.raster_plot()
+        if values is not None:
+            self.plot_view.show_values(*values)
+
     # --- Settings › Spike ----------------------------------------------------
 
     _CONFIG_LABELS = {
         "ignore_nans": "Ignore NaNs",
         "overwrite": "Overwrite results",
         "results_to_numpy": "Save SP_ arrays",
+        "results_all_epochs": "SP_ arrays: one point per epoch",
     }
     _CONFIG_TIPS = {
         "ignore_nans": "Find crossings across NaN gaps (between the values either side)",
         "overwrite": "Clear and reuse the run's first Spike subfolder (…_0), "
                      "instead of making a new one each run",
-        "results_to_numpy": "Save each run's results as SP_ arrays in a Spike subfolder",
+        "results_to_numpy": "Save each run's results as SP_ arrays in a Spike subfolder "
+                            "(what Spike2, its tables and plots show)",
+        "results_all_epochs": "For a data series, one row per epoch of the series in "
+                              "SP_count, SP_rate, SP_first and SP_isi (NaN where an "
+                              "epoch wasn't analysed), so they line up with the series "
+                              "and its ST_ arrays",
     }
     _FORMATS = {
         "raster": "Raster (SP_RX, SP_RY)",
@@ -301,7 +388,8 @@ class SpikeToolTab(SelectionRunTab):
             spec = self._settings._schema["spike_decimals"]
             options.append((
                 "decimals", "Decimals displayed", self.decimals(),
-                "Decimal places of the spike times in Spike1's Results",
+                "Decimal places of the spike times in Spike1's Results, and of "
+                "the values in Spike2's tables and Results (copying keeps them all)",
                 (spec["min"], spec["max"])))
         return options
 

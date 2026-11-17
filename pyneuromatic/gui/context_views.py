@@ -181,6 +181,14 @@ def show_tool_page(stack: QtWidgets.QStackedWidget, pages: dict, note: QtWidgets
     stack.setCurrentWidget(page)
 
 
+def _tick_symbol() -> QtGui.QPainterPath:
+    """A raster's tick: a vertical line, the symbol's height (#529)."""
+    path = QtGui.QPainterPath()
+    path.moveTo(0.0, -0.5)
+    path.lineTo(0.0, 0.5)
+    return path
+
+
 def _whole_numbers(x, n: int) -> bool:
     """True if the points' x (None: their index) are all whole numbers."""
     if x is None:
@@ -223,8 +231,11 @@ class ValuesPlot(QtWidgets.QWidget):
 
     EMPTY_TITLE = "Use Plot or Histogram in Stats2"
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None,
+                 empty_title: str | None = None) -> None:
         super().__init__(parent)
+        if empty_title is not None:  # e.g. Spike2's
+            self.EMPTY_TITLE = empty_title
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         if pg is not None:
@@ -251,15 +262,16 @@ class ValuesPlot(QtWidgets.QWidget):
     ) -> None:
         """Plot *y* against *x* (or index), or as a histogram.
 
-        ``style`` is ``"points"`` or ``"histogram"`` (x holds the bin edges,
-        one more than y).
+        ``style`` is ``"points"``, ``"histogram"`` (x holds the bin edges,
+        one more than y) or ``"raster"`` (a tick at each spike: x its time,
+        y its epoch, #529).
         """
         if self.plot_widget is None:
             return
         self.plot_widget.clear()
         # A histogram's x is its bin edges; points are at whole numbers (a row
         # index or epoch number)
-        self.x_axis.whole_numbers = style != "histogram" and _whole_numbers(x, len(y))
+        self.x_axis.whole_numbers = style == "points" and _whole_numbers(x, len(y))
         self.x_axis.picture = None  # redraw the ticks
         self.x_axis.update()
         if style == "histogram":
@@ -270,6 +282,17 @@ class ValuesPlot(QtWidgets.QWidget):
                 fillLevel=0,
                 brush=pg.mkBrush("#93c5fd"),
                 pen=pg.mkPen(color="#2563eb", width=1),
+            )
+        elif style == "raster":
+            self.plot_widget.plot(
+                x,
+                y,
+                pen=None,
+                symbol=_tick_symbol(),
+                symbolSize=12,
+                # A line 1 pixel wide (pyqtgraph's "|" is a rectangle)
+                symbolPen=pg.mkPen(color="#2563eb", width=1, cosmetic=True),
+                symbolBrush=None,
             )
         else:
             if x is None:
