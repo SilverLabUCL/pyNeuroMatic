@@ -290,6 +290,7 @@ class Stats2Panel(ResultsPanel):
     PANEL_NAME = "Stats2"
     OBJECT_PREFIX = "stats2"
     EXAMPLE_ARRAY = "ST_w0_max_y"
+    EPOCH_ARRAY = "ST_epoch_num"  # Plot x: epoch (#476)
 
     def __init__(
         self,
@@ -300,11 +301,12 @@ class Stats2Panel(ResultsPanel):
         self.window_combo.currentIndexChanged.connect(self._show_tables)
         self.tables.column_selected.connect(self._on_table_column_selected)
         self.results_combo.currentIndexChanged.connect(self._update_details)
-        self.epoch_x_action.toggled.connect(lambda _on: self.array_changed.emit())
         self.histogram_dialog_action.triggered.connect(self.histogram_dialog)
         self._histogram_settings: dict = {}  # the dialog's, shown again next time
         self.inequality_dialog_action.triggered.connect(self.inequality_dialog)
         self._inequality_settings: dict = {}
+        # The window last chosen in each subfolder, as its array (ResultsPanel)
+        self._chosen_windows: dict[tuple[str, str], str] = {}
 
         self.refresh()
 
@@ -326,14 +328,6 @@ class Stats2Panel(ResultsPanel):
         # Settings › Stats: also show the index and count arrays (#496)
         self._detail_arrays = False
         form.addRow("Window", window_row)
-
-    def _add_plot_options(self, menu: QtWidgets.QMenu) -> None:
-        # Plot against the rows' epoch numbers (ST_epoch_num, #476), not the index
-        self.epoch_x_action = menu.addAction("Plot x: epoch")
-        self.epoch_x_action.setCheckable(True)
-        self.epoch_x_action.setChecked(True)
-        self.epoch_x_action.setToolTip(
-            "Plot against the epoch numbers (ST_epoch_num); off: the row index")
 
     def _add_array_tools(self, menu: QtWidgets.QMenu) -> None:
         # Saved as H_<array>, listed with the ST_ arrays to plot (#492)
@@ -393,20 +387,33 @@ class Stats2Panel(ResultsPanel):
                 windows.append(window)
         return windows
 
+    def _array_key(self) -> tuple | None:
+        # Each window's array: its arrays are the window's
+        key = self._toolfolder_key()
+        return key + (self.window_combo.currentData(),) if key else None
+
     def _on_toolfolder_changed(self) -> None:
         previous = self.window_combo.currentData()
+        key = self._toolfolder_key()
+        remembered = self._chosen_windows.get(key) if key else None
         self.window_combo.blockSignals(True)
         self.window_combo.clear()
         toolfolder = self.toolfolder()
         if toolfolder is not None:
             for window in self._windows(toolfolder):
                 self.window_combo.addItem(window, window)
-        index = self.window_combo.findData(previous)
+        # The subfolder's own window, else the one before, else the first
+        index = self.window_combo.findData(remembered) if remembered else -1
+        if index < 0:
+            index = self.window_combo.findData(previous)
         self.window_combo.setCurrentIndex(max(index, 0))
         self.window_combo.blockSignals(False)
         self._show_tables()
 
     def _show_tables(self, *_args) -> None:
+        key, window = self._toolfolder_key(), self.window_combo.currentData()
+        if key is not None and window is not None:
+            self._chosen_windows[key] = window
         message = self._show_message()
         self.tables.show_window(
             self.toolfolder(),
@@ -434,12 +441,16 @@ class Stats2Panel(ResultsPanel):
 
     def measure_array(self) -> str | None:
         """The window's measurement among its arrays: a rise time, decay time
-        or FWHM's result (``_dx``), else the first that isn't the baseline,
-        e.g. ST_w0_max_y rather than ST_w0_bsln_y."""
+        or FWHM's result (``_dx``), a level's crossing time (``_x``, e.g.
+        ST_w0_level_p_x), else the first that isn't the baseline, e.g.
+        ST_w0_max_y rather than ST_w0_bsln_y."""
         names = [n for n in self.tables.columns
                  if n.startswith("ST_") and n != "ST_epoch_num"]  # not IQ_ (#499)
         for name in names:
             if name.endswith("_dx"):
+                return name
+        for name in names:  # level, level+ (level_p), level- (level_m)
+            if re.fullmatch(r"ST_\w+?_level(_[pm])?_x", name):
                 return name
         for name in names:
             if "_bsln_" not in name:
@@ -612,31 +623,10 @@ class Stats2Panel(ResultsPanel):
         data = toolfolder.data.get(name)
         if self.is_histogram(name):
             self.epoch_x_action.setEnabled(False)  # its x is the bin edges
-            counts = data.nparray
-            edges = toolfolder.data.get(f"{name}_edges")  # unequal bins only
-            if edges is not None:
-                x = edges.nparray
-            else:
-                x = data.xscale.start + data.xscale.delta * np.arange(len(counts) + 1)
-            source = name[len("H_"):]
-            xlabel = f"{source} ({data.xscale.units})" if data.xscale.units else source
-            ylabel = data.yscale.label or "count"
-            if data.yscale.units:
-                ylabel += f" ({data.yscale.units})"
-            return (f"{toolfolder.name}: {name}", counts, x, xlabel, ylabel, "histogram")
+            return self.histogram_plot(toolfolder, name)
         y = data.nparray
         x, xlabel = self.epoch_x(toolfolder, len(y))
         return (f"{toolfolder.name}: {name}", y, x, xlabel, self._axis_label(name), "points")
-
-    def epoch_x(self, toolfolder: NMToolFolder, n: int) -> tuple:
-        """The Plot's x: the rows' epoch numbers (ST_epoch_num, #476) if there
-        are and "Plot x: epoch" is on, else the row index (None)."""
-        epochs = toolfolder.data.get("ST_epoch_num")
-        usable = epochs is not None and epochs.nparray is not None and len(epochs.nparray) == n
-        self.epoch_x_action.setEnabled(usable)
-        if usable and self.epoch_x_action.isChecked():
-            return epochs.nparray, "epoch"
-        return None, "data index"
 
     def _ask_histogram(self, name: str, values: np.ndarray, units: str) -> dict | None:
         """The Histogram... dialog's ``nm.stats.histogram`` arguments, or

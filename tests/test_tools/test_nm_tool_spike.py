@@ -6,6 +6,7 @@ Tests for nm_tool_spike: NMToolSpike.
 Part of pyNeuroMatic, a Python implementation of NeuroMatic for analyzing,
 acquiring and simulating electrophysiology data.
 """
+import math
 import unittest
 
 import numpy as np
@@ -1003,6 +1004,26 @@ class TestNMToolSpikeExtractSpikeWaveforms(unittest.TestCase):
 
     # --- build_dataseries ---
 
+    def test_written_to_the_runs_subfolder_keeping_sp_arrays(self):
+        # Whatever Overwrite is: no new subfolder, the SP_ arrays kept
+        for overwrite in (False, True):
+            self.tool.overwrite = overwrite
+            result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+            self.assertEqual(list(self.folder.toolfolders.keys()), ["Spike_0"])
+            f = self.folder.toolfolders.get("Spike_0")
+            self.assertIn("SP_count", f.data)
+            self.assertIn(result[0].name, f.data)
+
+    def test_extract_again_replaces_waveforms(self):
+        first = self.tool.extract_spike_waveforms(self._PRE, self._POST)
+        second = self.tool.extract_spike_waveforms(self._PRE / 2, self._POST)
+        f = self.folder.toolfolders.get("Spike_0")
+        names = [n for n in f.data.keys() if n.startswith("SPK_")]
+        self.assertEqual(len(names), len(second))
+        self.assertEqual(len(first), len(second))
+        ds = f.dataseries.get("SPK_")
+        self.assertEqual(len(list(ds.epochs.keys())), len(second))
+
     def test_build_dataseries_called_automatically(self):
         result = self.tool.extract_spike_waveforms(self._PRE, self._POST)
         self.assertGreater(len(result), 0)
@@ -1108,8 +1129,8 @@ class TestNMToolSpikeOverwrite(unittest.TestCase):
         targets = _make_targets([d], folder=folder)
         tool.run_all(targets)
 
-    def test_overwrite_true_default(self):
-        self.assertTrue(NMToolSpike().overwrite)
+    def test_overwrite_false_default(self):
+        self.assertFalse(NMToolSpike().overwrite)
 
     def test_overwrite_rejects_non_bool(self):
         with self.assertRaises(TypeError):
@@ -1123,6 +1144,7 @@ class TestNMToolSpikeOverwrite(unittest.TestCase):
 
     def test_overwrite_true_reuses_Spike_A_0_on_second_run(self):
         tool = NMToolSpike()
+        tool.overwrite = True
         folder = NMFolder(NM, name="F")
         self._run_once(tool, folder)
         self._run_once(tool, folder)
@@ -1132,11 +1154,13 @@ class TestNMToolSpikeOverwrite(unittest.TestCase):
     def test_overwrite_true_replaces_sp_arrays(self):
         tool = NMToolSpike()
         folder = NMFolder(NM, name="F")
+        tool.overwrite = True
         self._run_once(tool, folder, freq=100.0)
         f = folder.toolfolders.get("Spike_0")
         count_first = int(f.data.get("SP_count").nparray[0])
         # Run again with different freq — different spike count
         tool2 = NMToolSpike()
+        tool2.overwrite = True
         self._run_once(tool2, folder, freq=200.0)
         count_second = int(f.data.get("SP_count").nparray[0])
         self.assertNotEqual(count_first, count_second)
@@ -1154,12 +1178,12 @@ class TestNMToolSpikeOverwrite(unittest.TestCase):
 
     def test_config_overwrite_default(self):
         cfg = NMToolSpikeConfig()
-        self.assertTrue(cfg.overwrite)
-
-    def test_config_overwrite_set_false(self):
-        cfg = NMToolSpikeConfig()
-        cfg.overwrite = False
         self.assertFalse(cfg.overwrite)
+
+    def test_config_overwrite_set_true(self):
+        cfg = NMToolSpikeConfig()
+        cfg.overwrite = True
+        self.assertTrue(cfg.overwrite)
 
     def test_config_overwrite_rejects_non_bool(self):
         with self.assertRaises(TypeError):
@@ -1847,3 +1871,69 @@ class TestNMToolSpikeTransformsAndOmit(unittest.TestCase):
         self.assertEqual([str(n) for n in f.data.get("SP_data_names").nparray],
                          ["RecordA0", "RecordA2"])
         self.assertEqual(list(f.data.get("SP_epoch_num").nparray), [0, 2])
+
+
+class TestNMToolSpikeAllEpochs(unittest.TestCase):
+    """results_all_epochs (#529): a row per epoch of the series; and the
+    raster from either format (raster_arrays)."""
+
+    def setUp(self):
+        self.nm = NMManager(quiet=True)
+        folder = self.nm.folders.new("Demo")
+        self.series = folder.new_dataseries("Record", n_epochs=4, n_points=1000)
+        for data in folder.data.values():
+            data.nparray[:] = _times_data("x").nparray
+        self.nm.tool_add("spike")
+        self.tool = self.nm.spike
+        self.tool.ylevel = 0.5
+
+    def _row(self, name):
+        return list(self.tool.toolfolder.data.get(name).nparray)
+
+    def test_off_a_row_per_analysed_epoch(self):
+        self.assertFalse(self.tool.results_all_epochs)
+        self.tool.run_selection(self.series, channel="A", epochs=["E1", "E3"])
+        self.assertEqual(self._row("SP_count"), [3, 3])
+        self.assertEqual(self._row("SP_epoch_num"), [1, 3])
+
+    def test_on_a_row_per_epoch_nan_where_not_analysed(self):
+        self.tool.results_all_epochs = True
+        self.tool.run_selection(self.series, channel="A", epochs=["E1", "E3"])
+        count = self._row("SP_count")
+        self.assertTrue(math.isnan(count[0]) and math.isnan(count[2]))
+        self.assertEqual([count[1], count[3]], [3, 3])
+        self.assertTrue(math.isnan(self._row("SP_rate")[0]))
+        self.assertEqual(self._row("SP_epoch_num"), [0, 1, 2, 3])
+        self.assertEqual([str(n) for n in self._row("SP_data_names")],
+                         ["", "RecordA1", "", "RecordA3"])
+        # The raster lists spikes, so it's as it was: epochs 1 and 3
+        self.assertEqual(sorted(set(self._row("SP_RY"))), [1.0, 3.0])
+        # Read back: the epochs analysed only
+        times, names = self.tool.raster(toolfolder=self.tool.toolfolder)
+        self.assertEqual(names, ["RecordA1", "RecordA3"])
+        self.assertEqual([len(t) for t in times], [3, 3])
+
+    def test_on_outside_a_data_series_a_row_per_array(self):
+        self.tool.results_all_epochs = True
+        folder = self.nm.folders["Demo"]
+        self.tool.run_selection(folder, data=["RecordA0", "RecordA2"])
+        self.assertEqual(self._row("SP_count"), [3, 3])
+
+    def test_the_setting_is_a_command_and_a_config(self):
+        self.assertIn("results_all_epochs", self.tool.config._schema)
+        with self.assertRaises(TypeError):
+            self.tool.results_all_epochs = 1
+
+    def test_raster_arrays_from_either_format(self):
+        self.tool.run_selection(self.series, channel="A", epochs=["E0", "E2"])
+        x, y = self.tool.raster_arrays(self.tool.toolfolder)
+        self.assertEqual(list(y), [0, 0, 0, 2, 2, 2])
+        self.assertEqual(len(x), 6)
+        self.tool.results_format = "epochs"
+        self.tool.results_all_epochs = True
+        self.tool.run_selection(self.series, channel="A", epochs=["E0", "E2"])
+        x2, y2 = self.tool.raster_arrays(self.tool.toolfolder)
+        self.assertEqual(list(y2), [0, 0, 0, 2, 2, 2])
+        np.testing.assert_allclose(x2, x)
+        with self.assertRaises(RuntimeError):
+            self.tool.raster_arrays(self.nm.folders["Demo"].toolfolders.new("Spike_empty"))

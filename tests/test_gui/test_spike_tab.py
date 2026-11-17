@@ -155,8 +155,8 @@ def test_run_with_no_spikes_warns(app):
 def test_settings_page(app):
     tab, tool = app.spike, app.spike.spike_tool
     options = {option[0]: option for option in tab.config_options()}
-    assert list(options) == ["ignore_nans", "overwrite", "results_to_numpy", "results_format",
-                             "decimals"]
+    assert list(options) == ["ignore_nans", "overwrite", "results_to_numpy",
+                             "results_all_epochs", "results_format", "decimals"]
     assert options["results_format"][2] == "raster"
     assert list(options["results_format"][4]) == ["raster", "epochs"]
     dialog = app.settings_dialog()

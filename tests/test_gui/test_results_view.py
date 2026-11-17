@@ -534,7 +534,9 @@ def test_browser_shows_new_results_folder_after_run(qtbot):
 @pytest.mark.parametrize("names, measure", [
     (["ST_w0_bsln_y", "ST_w0_max_y", "ST_w0_max_x", "ST_w0_max_dy"], "ST_w0_max_y"),
     (["ST_w0_bsln_y", "ST_w0_rt_p_y", "ST_w0_rt_p_x", "ST_w0_rt_p_dx"], "ST_w0_rt_p_dx"),
-    (["ST_w0_bsln_y", "ST_w0_level_p_x", "ST_w0_level_p_dy"], "ST_w0_level_p_x"),
+    (["ST_w0_bsln_y", "ST_w0_level_p_y", "ST_w0_level_p_x"], "ST_w0_level_p_x"),
+    (["ST_w0_level_m_y", "ST_w0_level_m_x"], "ST_w0_level_m_x"),
+    (["ST_w0_level_y", "ST_w0_level_x"], "ST_w0_level_x"),
     (["ST_w0_mean_y"], "ST_w0_mean_y"),  # no baseline
     ([], None),
 ])
@@ -922,3 +924,39 @@ def test_stats2_stays_shown_when_data_is_chosen(qtbot):
     window.selection_model.update(dataseries=None)
     window.selection_model.update(dataseries=series)
     assert window.view_tabs.current_view() == ("channel", "A")
+
+
+def test_each_subfolder_remembers_its_window_and_array(qtbot):
+    """Back to a Stats subfolder: its window and array as chosen there;
+    each window its own array."""
+    _manager, _folder, window = _stats_window(qtbot)
+    tab = window.tool_tabs["Stats"]
+    tab._add_window()
+    tab.measurement_combo.setCurrentText("mean")
+    tab.run_button.click()
+    tab.run_button.click()  # Overwrite off: a second subfolder
+    stats2 = tab.stats2
+    names = [stats2.folder_combo.itemData(i) for i in range(stats2.folder_combo.count())]
+    first, second = names[-2], names[-1]
+    assert stats2.toolfolder().name == second
+
+    def choose(name):
+        stats2.folder_combo.setCurrentIndex(stats2.folder_combo.findData(name))
+
+    # Second: w0, ST_w0_max_x; first: w1 (its one array)
+    stats2.window_combo.setCurrentText("w0")
+    stats2.array_combo.setCurrentText("ST_w0_max_x")
+    choose(first)
+    stats2.window_combo.setCurrentText("w1")
+    assert stats2.selected_array() == "ST_w1_mean_y"
+    choose(second)
+    assert stats2.window_combo.currentText() == "w0"
+    assert stats2.selected_array() == "ST_w0_max_x"
+    # Each window its own array: w1 and back to w0
+    stats2.window_combo.setCurrentText("w1")
+    stats2.window_combo.setCurrentText("w0")
+    assert stats2.selected_array() == "ST_w0_max_x"
+    choose(first)
+    assert stats2.window_combo.currentText() == "w1"
+    stats2.window_combo.setCurrentText("w0")  # w0 here: as after its run
+    assert stats2.selected_array() == "ST_w0_max_y"

@@ -120,6 +120,10 @@ class ResultsTables(QtWidgets.QWidget):
         """A column's header text for array *name* (its name)."""
         return name
 
+    def _cell_value(self, name: str, value):
+        """A value of array *name* as its cell shows it (as it is)."""
+        return value
+
     def _title(self, toolfolder: NMToolFolder, key) -> str:
         return toolfolder.name if key is None else f"{toolfolder.name}  {key}"
 
@@ -220,7 +224,8 @@ class ResultsTables(QtWidgets.QWidget):
                 header.setToolTip(f"{name} ({units})" if units else name)
                 table.setHorizontalHeaderItem(column, header)
             for row, value in enumerate(data.nparray):
-                self.arrays_table.setItem(row, column, self._value_item(value))
+                self.arrays_table.setItem(row, column,
+                                          self._value_item(self._cell_value(name, value)))
             summary = self._summary(toolfolder, name)
             for row, (stat, _label) in enumerate(self.SUMMARY_ROWS):
                 self.summary_table.setItem(
