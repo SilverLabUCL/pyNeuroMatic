@@ -261,6 +261,8 @@ def test_select_commands_are_not_shown(app):
     """A click: the Selection entry, not also "nm.select_keys = ..." (kept in
     the command history, for scripts) (#441)."""
     series = app.folder.new_dataseries("Rec", n_epochs=4, n_points=2)
+    # The series starts with All epochs (#530): one epoch at a time instead
+    app.selection_model.update(dataseries=series, epoch_set=None)
     for epoch in ("E1", "E2"):
         app.selection_model.update(dataseries=series, epoch=series.epochs[epoch])
     assert not any("select_keys" in text for text in _entries(app, "command"))

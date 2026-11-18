@@ -151,8 +151,12 @@ class SelectionModel(QtCore.QObject):
             raise KeyError(f"unknown selection tier(s): {sorted(unknown)}")
         self._validate(updates)
         previous = self.selection
-        self._remember_context()
-        previous_scopes = self._data_scope(), self._epoch_scope()
+        # As last shown: the manager may have moved since (e.g. a first folder
+        # selects itself and its data series as it's made, #530): the context
+        # is the last shown scope's, and a new scope gets its own (a data
+        # series: All epochs)
+        previous_scopes = self._emitted_scopes()
+        self._remember_context(previous_scopes)
 
         object_updates = {
             tier: value
@@ -292,13 +296,16 @@ class SelectionModel(QtCore.QObject):
         keys = self._manager.select_keys
         return keys.get("folder"), keys.get("toolfolder"), keys.get("dataseries")
 
-    def _remember_context(self) -> None:
+    def _remember_context(self, scopes: tuple[tuple, tuple] | None = None) -> None:
+        """Remember the Data Set and Epoch Set (Group...) for *scopes* (data,
+        epoch), else the manager's."""
+        data_scope, epoch_scope = scopes or (self._data_scope(), self._epoch_scope())
         if self._data_set is not None:
-            self._data_set_memory[self._data_scope()] = self._data_set
+            self._data_set_memory[data_scope] = self._data_set
         epoch_state = (self._epoch_set, self._group, self._group_operator)
         # A data series remembers an empty Epoch Set too (not back to All)
-        if any(value is not None for value in epoch_state) or self._epoch_scope()[2] is not None:
-            self._epoch_memory[self._epoch_scope()] = epoch_state
+        if any(value is not None for value in epoch_state) or epoch_scope[2] is not None:
+            self._epoch_memory[epoch_scope] = epoch_state
 
     def _restore_context(self, previous_scopes: tuple[tuple, tuple]) -> None:
         """Restore remembered context for any scope that changed."""
@@ -325,18 +332,21 @@ class SelectionModel(QtCore.QObject):
             }
         self._manager.select_keys = {"folder": None}
 
-    def refresh(self) -> None:
-        """Notify subscribers if selection was changed directly on the manager."""
+    def _emitted_scopes(self) -> tuple[tuple, tuple]:
+        """The data and epoch scopes of the selection last emitted."""
         previous = self._last_emitted_selection()
 
         def name(tier):
             value = previous.get(tier)
             return value.name if isinstance(value, NMObject) else value
 
-        previous_scopes = (
-            (name("folder"), name("toolfolder")),
-            (name("folder"), name("toolfolder"), name("dataseries")),
-        )
+        return ((name("folder"), name("toolfolder")),
+                (name("folder"), name("toolfolder"), name("dataseries")))
+
+    def refresh(self) -> None:
+        """Notify subscribers if selection was changed directly on the manager."""
+        previous = self._last_emitted_selection()
+        previous_scopes = self._emitted_scopes()
         self._restore_context(previous_scopes)
         self._normalize_source()
         self._emit_if_changed(previous)

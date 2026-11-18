@@ -158,3 +158,17 @@ def test_import_without_a_data_series_selects_data(app, monkeypatch):
     selection = app.selection_model.selection
     assert selection["source"] == "data"
     assert len(selection["folder"].dataseries) == 0
+
+
+def test_opening_a_first_file_selects_all_epochs(qtbot):
+    """Its data series is selected with Epoch Set All, not blank (#530)."""
+    pytest.importorskip("igor2")
+    manager = NMManager(quiet=True)
+    manager.settings.ask_import_options = False
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    pxp = Path(__file__).parents[1] / "test_io" / "fixtures" / "nm02Jul04c0_002.pxp"
+    window.folder_actions.open_files([str(pxp)])
+    selection = window.selection_model.selection
+    assert selection["dataseries"].name == "Record"
+    assert selection["epoch_set"] == "All"

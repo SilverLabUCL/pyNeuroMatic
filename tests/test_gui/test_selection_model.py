@@ -198,3 +198,16 @@ def test_current_epoch_is_read_as_blank(qtbot):
     selection.update(epoch_set="Current Epoch")
     assert (selection.selection["epoch_set"], selection.selection["group"]) == (None, None)
     assert "built-in" in epoch_set_name_error(series.epochs.sets, "Current Epoch")
+
+
+def test_a_series_the_manager_selected_itself_starts_with_all_epochs(qtbot):
+    """A first folder selects itself and its data series as they're made (e.g.
+    by an import): choosing them then still gives the series All epochs (#530)."""
+    manager = NMManager(quiet=True)
+    model = SelectionModel(manager)
+    assert model.selection["epoch_set"] is None
+    folder = manager.folders.new("Imported")
+    series = folder.new_dataseries("Record", n_channels=1, n_epochs=3, n_points=5)
+    assert manager.select_values["dataseries"] is series  # already selected
+    model.update(folder=folder, dataseries=series, source="dataseries")
+    assert model.selection["epoch_set"] == "All"
