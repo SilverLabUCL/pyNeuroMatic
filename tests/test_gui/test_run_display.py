@@ -436,3 +436,29 @@ def test_the_choice_is_labelled_progress(app, qtbot):
     qtbot.addWidget(dialog)
     form = dialog.run_display_combo.parentWidget().layout()
     assert form.labelForField(dialog.run_display_combo).text() == "Progress"
+
+
+def test_what_an_epoch_lets_go_of_is_deleted_as_it_goes(app):
+    """Objects deleted later (e.g. PyQt's slot proxies, as pyqtgraph replaces
+    the Plot's items) go each epoch, not all at the end: 200,000 of them,
+    for 1921 epochs, froze the window for half a minute after a run (#530)."""
+    _display(app, "each")
+    gone_by_epoch = []
+    pending = []
+
+    def shown(data, _channel):
+        if data is None:
+            return
+        gone_by_epoch.append(sum(1 for flag in pending if flag["gone"]))
+        flag = {"gone": False}
+        obj = QtCore.QObject()
+        obj.destroyed.connect(lambda *_a, flag=flag: flag.update(gone=True))
+        obj.deleteLater()
+        pending.append(flag)
+
+    app.stats.run_trace_shown.connect(shown)
+    app.stats.run_button.click()
+    assert app.stats.status_label.text() == "Complete"
+    # Each epoch, the one before's is gone
+    assert gone_by_epoch == list(range(N))
+    assert all(flag["gone"] for flag in pending)
