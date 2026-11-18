@@ -235,9 +235,18 @@ class ResultsTables(QtWidgets.QWidget):
         self._bold_summary_header()
         self.column_selected.emit()
 
+    # More columns than this (e.g. a thousand waveforms, #530): their values
+    # are measured in the first SAMPLE_COLUMNS only (each cell measured
+    # took a second)
+    MANY_COLUMNS = 50
+    SAMPLE_COLUMNS = 20
+
     def _align_columns(self) -> None:
-        for table in (self.arrays_table, self.summary_table):
-            table.resizeColumnsToContents()
+        if len(self._columns) > self.MANY_COLUMNS:
+            self._size_many_columns()
+        else:
+            for table in (self.arrays_table, self.summary_table):
+                table.resizeColumnsToContents()
         for column in range(len(self._columns)):
             width = max(
                 self.arrays_table.columnWidth(column),
@@ -253,6 +262,25 @@ class ResultsTables(QtWidgets.QWidget):
         for table in (self.arrays_table, self.summary_table):
             table.verticalHeader().setFixedWidth(label_width)
         self._fit_summary_height()
+
+    def _size_many_columns(self) -> None:
+        """Every column as wide as the widest values of the first few (the
+        same number format), or its header if wider."""
+        widest = 0
+        for table in (self.arrays_table, self.summary_table):
+            for column in range(min(self.SAMPLE_COLUMNS, len(self._columns))):
+                table.resizeColumnToContents(column)
+                widest = max(widest, table.columnWidth(column))
+        header = self.arrays_table.horizontalHeader()
+        metrics = header.fontMetrics()
+        pad = 2 * header.style().pixelMetric(
+            QtWidgets.QStyle.PixelMetric.PM_HeaderMargin, None, header) + 8
+        for column in range(len(self._columns)):
+            item = self.arrays_table.horizontalHeaderItem(column)
+            text = item.text() if item is not None else ""
+            width = max(widest, metrics.horizontalAdvance(text) + pad)
+            for table in (self.arrays_table, self.summary_table):
+                table.setColumnWidth(column, width)
 
     def _fit_summary_height(self) -> None:
         table = self.summary_table
@@ -277,15 +305,18 @@ class ResultsTables(QtWidgets.QWidget):
             return "NaN" if math.isnan(number) else ("-inf" if number < 0 else "inf")
         return table_format.fixed(number, cls.decimals)
 
+    _ALIGN = QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+
     @classmethod
     def _value_item(cls, value) -> QtWidgets.QTableWidgetItem:
         """A table cell; NaN as the Settings say (NaN, grey or blank)."""
         item = QtWidgets.QTableWidgetItem()
         item.setData(QtCore.Qt.ItemDataRole.UserRole, value)  # for refresh()
-        cls._style_item(item, value)
-        item.setTextAlignment(
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        text, is_nan = table_format.cell(value, decimals=cls.decimals)
+        item.setText(text)
+        if is_nan:  # a new cell has no colour or tip: only a NaN's is set
+            cls._style_item(item, value)
+        item.setTextAlignment(cls._ALIGN)
         return item
 
     @classmethod

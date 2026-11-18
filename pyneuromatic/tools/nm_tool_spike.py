@@ -20,6 +20,8 @@ Paper: https://doi.org/10.3389/fninf.2018.00014
 """
 from __future__ import annotations
 
+import functools
+import inspect
 import math
 
 import numpy as np
@@ -27,7 +29,7 @@ import numpy as np
 from pyneuromatic.tools.nm_tool import NMTool
 from pyneuromatic.tools.nm_tool_config import NMToolConfig
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
-from pyneuromatic.core.nm_data import NMData
+from pyneuromatic.core.nm_data import NMData, nm_ref
 from pyneuromatic.core.nm_folder import NMFolder
 import pyneuromatic.core.nm_command_history as nmch
 import pyneuromatic.core.nm_configurations as nmc
@@ -35,6 +37,63 @@ import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
 from pyneuromatic.tools.nm_tool_utilities import find_level_crossings_nmdata
+
+
+def _bin_range(lo: float | None, hi: float | None,
+               values: np.ndarray) -> tuple[float, float] | None:
+    """A PST / ISI histogram's range: *lo* to *hi*, an end that's None or
+    infinite (no limit, e.g. -inf, as Spike1's x range) the values' min or
+    max (#530); None if neither end is a limit."""
+    lo = None if lo is None or math.isinf(float(lo)) else float(lo)
+    hi = None if hi is None or math.isinf(float(hi)) else float(hi)
+    if lo is None and hi is None:
+        return None
+    return (lo if lo is not None else float(values.min()),
+            hi if hi is not None else float(values.max()))
+
+
+def _histogram(values: np.ndarray, bins: int, binwidth: float | None,
+               xrange: tuple[float, float] | None) -> tuple[np.ndarray, np.ndarray]:
+    """(counts, edges) of a PST or ISI histogram: *bins* equal bins over
+    *xrange* (or the values' range), or bins of *binwidth* on its multiples
+    (from *xrange*'s min if given), as Stats2's (#530)."""
+    if binwidth is None:
+        result = nm_math.histogram(values, bins=bins, xrange=xrange)
+    else:
+        result = nm_math.histogram_round_edges(values, binwidth=binwidth, xrange=xrange)
+    return np.asarray(result["counts"]), np.asarray(result["edges"])
+
+
+def _bins_note(counts: np.ndarray, binwidth: float | None) -> str:
+    """The bins, for a histogram's note: "bins=20" or "binwidth=5, bins=12"."""
+    if binwidth is None:
+        return "bins=%d" % len(counts)
+    return "binwidth=%g, bins=%d" % (binwidth, len(counts))
+
+
+def _records_analysis(func):
+    """Record a Spike analysis (pst, isi, extract_spike_waveforms) as one
+    command once it's done, e.g. ``nm.spike.pst(bins=50,
+    toolfolder=nm.folders['Demo'].toolfolders['Spike_Record_A_All_0'])``
+    (#530); its required arguments first, then those not at their defaults."""
+    signature = inspect.signature(func)
+
+    @functools.wraps(func)
+    @nmch.records_command
+    def wrapper(self, *args, **kwargs):
+        result = func(self, *args, **kwargs)
+        values = dict(signature.bind(self, *args, **kwargs).arguments)
+        values.pop("self")
+        required = [name for name, p in signature.parameters.items()
+                    if name != "self" and p.default is inspect.Parameter.empty]
+        written = [repr(values.pop(name)) for name in required if name in values]
+        rest = nmu.kwargs_repr(func, values,
+                               text={"toolfolder": nm_ref(values.get("toolfolder"))})
+        call = ", ".join(written) + (rest if written else rest[len(", "):])
+        nmch.add_nm_command("%s.%s(%s)" % (self._name, func.__name__, call))
+        return result
+
+    return wrapper
 
 _VALID_FUNC_NAMES: frozenset[str] = frozenset({"level", "level+", "level-"})
 
@@ -373,14 +432,24 @@ class NMToolSpike(NMTool):
 
     def _searched(self, data: NMData) -> float:
         """The length of *data*'s x range searched: its x range within xbgn
-        to xend (NaN if unknown)."""
+        to xend (NaN if unknown). Its x range is its points × sample
+        interval: from its first point's x to one interval past its last
+        (Igor's leftx to rightx), so e.g. 100 points at 1 ms are 100 ms;
+        with an x array, the last interval is its last two points'."""
         size = data.nparray.size
         if size == 0:
             return math.nan
         first, last = data.get_xvalue(0), data.get_xvalue(size - 1)
         if first is None or last is None:
             return math.nan
+        if data.xarray is None:
+            interval = abs(float(data.xscale.delta))
+        elif size > 1:
+            interval = abs(float(last) - float(data.get_xvalue(size - 2)))
+        else:
+            return math.nan  # one x value: no interval
         lo, hi = sorted((float(first), float(last)))
+        hi += interval
         bgn, end = sorted((self._xbgn, self._xend))
         return max(min(hi, end) - max(lo, bgn), 0.0)
 
@@ -462,7 +531,8 @@ class NMToolSpike(NMTool):
           ``SP_epoch_num``), for a raster plot. Format ``"epochs"``: an
           ``SP_{data}`` array of times per epoch.
         * A row per data array analysed, as Stats' ST_ arrays:
-          ``SP_count`` (spikes), ``SP_rate`` (spikes / x range searched; Hz
+          ``SP_count`` (spikes), ``SP_rate`` (spikes / x range searched, the
+          data's points × sample interval within xbgn to xend; Hz
           for s or ms), ``SP_first`` (the first spike's time), ``SP_isi``
           (the mean interspike interval), ``SP_epoch_num`` and
           ``SP_data_names``.
@@ -756,6 +826,7 @@ class NMToolSpike(NMTool):
             spike_times = [t[(t >= lo) & (t <= hi)] for t in spike_times]
         return [np.diff(t) for t in spike_times], list(epoch_names)
 
+    @_records_analysis
     def extract_spike_waveforms(
         self,
         pre: float,
@@ -765,6 +836,8 @@ class NMToolSpike(NMTool):
         clip_to_next_spike: bool = False,
         edge: str = "skip",
         align: str = "zero",
+        spikes: tuple[int, int | None] | None = None,
+        group_by_epoch: bool = False,
         toolfolder: NMToolFolder | None = None,
     ) -> list[NMData]:
         """Extract fixed-width waveform snippets around each detected spike.
@@ -811,6 +884,14 @@ class NMToolSpike(NMTool):
                 * ``"source"`` — x values preserved from the source
                   recording; no shift is applied.
 
+            spikes:            Which spikes, as ``(first, last)``: the spikes
+                numbered 0, 1, 2, ... in order over all epochs (those within
+                *xbgn* to *xend*), both ends included; *last* None for to the
+                end (#530). E.g. ``(0, 99)``: the first 100 spikes. Default
+                None: every spike.
+            group_by_epoch:    If True, each waveform's epoch of the SPK_ data
+                series goes in the Group of the epoch its spike was found in:
+                E0's spikes in G0, E5's in G5... (#530). Default False.
             toolfolder:        Optional Spike toolfolder from a previous run.
                 When provided, spike times are read from its ``SP_*`` arrays,
                 source recordings are looked up from ``self.folder.data`` by
@@ -840,6 +921,8 @@ class NMToolSpike(NMTool):
                           ``"source"``.
             TypeError:    If *pre*, *post*, or *clip_to_next_spike* have
                           wrong types.
+            ValueError:   If *spikes* isn't ``(first, last)`` with
+                          0 <= first <= last (or last None).
         """
         _VALID_EDGES = ("skip", "pad")
         edge = edge.lower()
@@ -859,6 +942,9 @@ class NMToolSpike(NMTool):
             raise TypeError(
                 nmu.type_error_str(clip_to_next_spike, "clip_to_next_spike", "boolean")
             )
+        first_spike, last_spike = self._spike_range(spikes)
+        if not isinstance(group_by_epoch, bool):
+            raise TypeError(nmu.type_error_str(group_by_epoch, "group_by_epoch", "boolean"))
         _VALID_ALIGNS = ("zero", "spike", "source")
         if not isinstance(align, str):
             raise TypeError(nmu.type_error_str(align, "align", "str"))
@@ -873,11 +959,16 @@ class NMToolSpike(NMTool):
                 raise RuntimeError(
                     "NMToolSpike.extract_spike_waveforms: no SP_ arrays found in toolfolder"
                 )
+            # The recordings are in the subfolder's own folder (#530), else
+            # the tool's
+            folder = toolfolder._parent
+            if not isinstance(folder, NMFolder):
+                folder = self.folder
             source_data_list: list[NMData | None] = []
             for en in epoch_names_list:
                 src = (
-                    self.folder.data.get(en)
-                    if isinstance(self.folder, NMFolder)
+                    folder.data.get(en)
+                    if isinstance(folder, NMFolder)
                     else None
                 )
                 source_data_list.append(src)
@@ -896,12 +987,27 @@ class NMToolSpike(NMTool):
 
         output: list[NMData] = []
         ch_char = self.channel.name if self.channel is not None else "A"
+        if toolfolder is not None:  # the recordings' channel, not the last run's
+            ch_char = self._channel_of(toolfolder._parent, source_data_list) or ch_char
         spike_counter: int = 0
         matches: dict[tuple[str, int], NMData] = {}
 
-        for epoch_name, spike_times_arr, source in zip(
-            epoch_names_list, spike_times_list, source_data_list
+        spike_number = 0  # the spikes in order over all epochs (*spikes*)
+        # Each row's epoch number (group_by_epoch), and each waveform's
+        row_numbers = self._waveform_epoch_numbers(epoch_names_list, toolfolder)
+        waveform_groups: list[int | None] = []
+        for epoch_name, spike_times_arr, source, row_number in zip(
+            epoch_names_list, spike_times_list, source_data_list, row_numbers
         ):
+            if xbgn is not None or xend is not None:
+                lo = float(xbgn) if xbgn is not None else -math.inf
+                hi = float(xend) if xend is not None else math.inf
+                spike_times_arr = spike_times_arr[
+                    (spike_times_arr >= lo) & (spike_times_arr <= hi)
+                ]
+            # Numbered whether or not its recording is found (as the raster)
+            first_number = spike_number
+            spike_number += len(spike_times_arr)
             if source is None:
                 continue
             ydata = source.nparray
@@ -915,18 +1021,14 @@ class NMToolSpike(NMTool):
             else:
                 delta_for_samples = float(source.xscale.delta)
 
-            if xbgn is not None or xend is not None:
-                lo = float(xbgn) if xbgn is not None else -math.inf
-                hi = float(xend) if xend is not None else math.inf
-                spike_times_arr = spike_times_arr[
-                    (spike_times_arr >= lo) & (spike_times_arr <= hi)
-                ]
-
             pre_samples = int(round(pre / abs(delta_for_samples)))
 
             post_samples = max(int(round(post / abs(delta_for_samples))), 1)
 
             for n, spike_x in enumerate(spike_times_arr):
+                number = first_number + n
+                if number < first_spike or (last_spike is not None and number > last_spike):
+                    continue  # not one of *spikes* (the next spike still clips)
                 # Nearest sample index to spike
                 i_spike = source.get_xindex(spike_x, clip=False)
                 if i_spike is None:
@@ -1020,6 +1122,7 @@ class NMToolSpike(NMTool):
                     yscale=out_yscale,
                 )
                 matches[ch_char, spike_counter] = d
+                waveform_groups.append(row_number)
                 spike_counter += 1
                 note = (
                     "NMSpike.extract_spike_waveforms(source=%s, spike_x=%.6g, "
@@ -1036,8 +1139,71 @@ class NMToolSpike(NMTool):
                 output.append(d)
 
         if out_folder is not None:
-            out_folder.build_dataseries("SPK_", matches)
+            series = out_folder.build_dataseries("SPK_", matches)
+            if group_by_epoch and series is not None:
+                self._group_waveforms(series, waveform_groups)
         return output
+
+    def _waveform_epoch_numbers(self, epoch_names: list[str],
+                                toolfolder: NMToolFolder | None) -> list[int | None]:
+        """Each row's epoch number (E5: 5), for group_by_epoch: a subfolder's
+        SP_epoch_num (by SP_data_names), else the run's; None if unknown."""
+        if toolfolder is not None:
+            names = self._values(toolfolder, "SP_data_names")
+            numbers = self._values(toolfolder, "SP_epoch_num")
+            if names is None or numbers is None or len(names) != len(numbers):
+                return [None] * len(epoch_names)
+            found = {str(n): int(e) for n, e in zip(names, numbers)
+                     if str(n) and np.isfinite(e)}
+            return [found.get(str(name)) for name in epoch_names]
+        numbers = self._row_numbers()
+        if len(numbers) != len(epoch_names):
+            return [None] * len(epoch_names)
+        return list(numbers)
+
+    @staticmethod
+    def _group_waveforms(series, groups: list[int | None]) -> None:
+        """Put waveform *n*'s epoch of *series* (SPK_) in Group groups[n]:
+        one assign per group."""
+        epochs = list(series.epochs.keys())  # made in order: waveform n's is the nth
+        by_group: dict[int, list[str]] = {}
+        for name, group in zip(epochs, groups):
+            if group is not None:
+                by_group.setdefault(int(group), []).append(name)
+        for group, names in sorted(by_group.items()):
+            series.epochs.groups.assign(names, group, quiet=True)
+
+    @staticmethod
+    def _spike_range(spikes) -> tuple[int, int | None]:
+        """*spikes* (``(first, last)``, or None for all) as (first, last);
+        ValueError / TypeError if it isn't one."""
+        if spikes is None:
+            return 0, None
+        if not isinstance(spikes, (tuple, list)) or len(spikes) != 2:
+            raise TypeError(nmu.type_error_str(spikes, "spikes", "(first, last)"))
+        first, last = spikes
+
+        def whole(value) -> bool:
+            return isinstance(value, (int, np.integer)) and not isinstance(value, bool)
+
+        if not whole(first) or not (last is None or whole(last)):
+            raise TypeError(nmu.type_error_str(spikes, "spikes", "(first, last) integers"))
+        if first < 0 or (last is not None and last < first):
+            raise ValueError("spikes: %r (need 0 <= first <= last)" % (tuple(spikes),))
+        return int(first), (None if last is None else int(last))
+
+    @staticmethod
+    def _channel_of(folder, sources: list) -> str | None:
+        """The name of the data-series channel holding the first of *sources*
+        in *folder*, e.g. "B"; None if none does."""
+        source = next((s for s in sources if s is not None), None)
+        if source is None or not isinstance(folder, NMFolder):
+            return None
+        for series in folder.dataseries.values():
+            for channel in series.channels.values():
+                if any(data is source for data in channel.data):
+                    return channel.name
+        return None
 
     @staticmethod
     def _clear_waveforms(folder: NMToolFolder) -> None:
@@ -1052,9 +1218,11 @@ class NMToolSpike(NMTool):
     # ------------------------------------------------------------------
     # Histogram methods (called after run_all)
 
+    @_records_analysis
     def pst(
         self,
         bins: int = 100,
+        binwidth: float | None = None,
         xbgn: float | None = None,
         xend: float | None = None,
         output_mode: str = "count",
@@ -1074,15 +1242,20 @@ class NMToolSpike(NMTool):
 
         Args:
             bins: Number of histogram bins. Default 100.
+            binwidth: The bins' width, instead of *bins* (#530): the bins
+                start at a multiple of it (e.g. width 5 from 9.5: 5, 10,
+                ...), or at *xbgn* if given, so the same width gives the
+                same bins for any run.
             xbgn: Lower edge of the first bin (inclusive). Default None
-                (use minimum spike time).
+                (use minimum spike time); -inf as None.
             xend: Upper edge of the last bin (exclusive). Default None
-                (use maximum spike time).
+                (use maximum spike time); inf as None.
             output_mode: Controls the y-axis values:
 
                 * ``"count"`` (default) — raw spike count per bin.
-                * ``"rate"`` — mean firing rate in Hz:
-                  ``count / (n_epochs × bin_width)``.
+                * ``"rate"`` — mean firing rate,
+                  ``count / (n_epochs × bin_width)``; in Hz for times in s
+                  or ms.
                 * ``"probability"`` — fraction of epochs with a spike in
                   each bin: ``count / n_epochs`` (values in ``[0, 1]``).
 
@@ -1130,18 +1303,15 @@ class NMToolSpike(NMTool):
         all_times = np.concatenate(spike_times)
         if len(all_times) == 0:
             return None
-        xrange: tuple[float, float] | None = None
-        if xbgn is not None or xend is not None:
-            lo = float(xbgn) if xbgn is not None else float(all_times.min())
-            hi = float(xend) if xend is not None else float(all_times.max())
-            xrange = (lo, hi)
-        result = nm_math.histogram(all_times, bins=bins, xrange=xrange)
-        counts, edges = result["counts"], result["edges"]
+        xrange = _bin_range(xbgn, xend, all_times)
+        counts, edges = _histogram(all_times, bins, binwidth, xrange)
         delta = float(edges[1] - edges[0])
         n_epochs = len(spike_times)
         if output_mode == "rate":
-            ydata = counts.astype(float) / (n_epochs * delta)
-            ylabel = "Spike rate (Hz)"
+            # Spikes per second for s or ms (#530), as SP_rate
+            factor, rate_units = _rate_units(detected_xunits)
+            ydata = counts.astype(float) / (n_epochs * delta) * factor
+            ylabel = "Spike rate (%s)" % rate_units if rate_units else "Spike rate"
         elif output_mode == "probability":
             ydata = counts.astype(float) / n_epochs
             ylabel = "Spike probability"
@@ -1164,14 +1334,17 @@ class NMToolSpike(NMTool):
         )
         self._add_note(
             d,
-            "NMSpike.pst(bins=%d, xbgn=%s, xend=%s, output_mode=%r, n_epochs=%d, n_spikes=%d)"
-            % (bins, xbgn, xend, output_mode, n_epochs, int(counts.sum())),
+            "NMSpike.pst(%s, xbgn=%s, xend=%s, output_mode=%r, n_epochs=%d, n_spikes=%d)"
+            % (_bins_note(counts, binwidth), xbgn, xend, output_mode, n_epochs,
+               int(counts.sum())),
         )
         return d
 
+    @_records_analysis
     def isi(
         self,
         bins: int = 100,
+        binwidth: float | None = None,
         xbgn: float | None = None,
         xend: float | None = None,
         min_isi: float | None = None,
@@ -1196,15 +1369,18 @@ class NMToolSpike(NMTool):
 
         Args:
             bins:        Number of histogram bins. Default 100.
+            binwidth:    The bins' width, instead of *bins* (#530): they
+                         start at a multiple of it, or at *min_isi* if
+                         given.
             xbgn:          Lower bound for filtering spike times before
                          computing intervals. Default None (no lower bound).
             xend:          Upper bound for filtering spike times before
                          computing intervals. Default None (no upper bound).
             min_isi:     Lower edge of the histogram x-axis. Default None
-                         (use the minimum interval). Useful for excluding
-                         refractory-period artefacts.
+                         (use the minimum interval); -inf as None. Useful
+                         for excluding refractory-period artefacts.
             max_isi:     Upper edge of the histogram x-axis. Default None
-                         (use the maximum interval).
+                         (use the maximum interval); inf as None.
             output_mode: Controls the y-axis values (case-insensitive):
 
                          * ``"count"`` (default) — raw interval counts.
@@ -1252,17 +1428,8 @@ class NMToolSpike(NMTool):
             if self._toolfolder is None:
                 self._toolfolder = self._make_toolfolder("Spike", overwrite=self._overwrite)
             out_folder = self._toolfolder
-        lo_isi = float(min_isi) if min_isi is not None else None
-        hi_isi = float(max_isi) if max_isi is not None else None
-        if lo_isi is not None or hi_isi is not None:
-            xrange: tuple[float, float] | None = (
-                lo_isi if lo_isi is not None else float(all_isis.min()),
-                hi_isi if hi_isi is not None else float(all_isis.max()),
-            )
-        else:
-            xrange = None
-        result = nm_math.histogram(all_isis, bins=bins, xrange=xrange)
-        counts, edges = result["counts"], result["edges"]
+        xrange = _bin_range(min_isi, max_isi, all_isis)
+        counts, edges = _histogram(all_isis, bins, binwidth, xrange)
         delta = float(edges[1] - edges[0])
         n_intervals = int(counts.sum())
         if output_mode == "probability":
@@ -1288,8 +1455,9 @@ class NMToolSpike(NMTool):
         )
         self._add_note(
             d,
-            "NMSpike.isi(bins=%d, xbgn=%s, xend=%s, min_isi=%s, max_isi=%s, "
+            "NMSpike.isi(%s, xbgn=%s, xend=%s, min_isi=%s, max_isi=%s, "
             "output_mode=%r, n_intervals=%d)"
-            % (bins, xbgn, xend, min_isi, max_isi, output_mode, n_intervals),
+            % (_bins_note(counts, binwidth), xbgn, xend, min_isi, max_isi, output_mode,
+               n_intervals),
         )
         return d

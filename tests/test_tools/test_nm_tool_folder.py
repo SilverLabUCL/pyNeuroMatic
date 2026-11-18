@@ -67,6 +67,19 @@ class TestNMToolFolderContainerGetOrCreate(unittest.TestCase):
         self.assertIs(f, f2)
         self.assertEqual(len(list(f2.data)), 0)
 
+    def test_overwrite_true_clears_notes_and_dataseries(self):
+        # The earlier run's note goes with its results (#530)
+        tf = _make_container()
+        f = tf.get_or_create("spike", overwrite=True)
+        f.notes.add("NMSpike: Record, channel A; x -inf to inf", readonly=True)
+        f.notes.add("a user's note")
+        f.data.new("SPK_A0", nparray=np.zeros(5))
+        f.build_dataseries("SPK_", {("A", 0): f.data.get("SPK_A0")})
+        self.assertIn("SPK_", f.dataseries)
+        f2 = tf.get_or_create("spike", overwrite=True)
+        self.assertEqual(len(f2.notes), 0)
+        self.assertEqual(len(list(f2.dataseries)), 0)
+
     def test_overwrite_false_creates_base_0_when_absent(self):
         tf = _make_container()
         f = tf.get_or_create("spike", overwrite=False)

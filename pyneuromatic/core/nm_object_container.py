@@ -541,15 +541,24 @@ class NMObjectContainer(NMObject, MutableMapping):
         if key is None:
             key = self._newkey(nmobject.name)
         self.__map[key] = nmobject
-        self.__update_nmobject_references()
+        self.__update_nmobject_references(nmobject)
         self._echo("updated '%s'" % key, quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command('%s.update(%r)' % (self._nm_cmd_path, nmobject.name))
 
-    def __update_nmobject_references(self):
-        for o in self.__map.values():
+    def __update_nmobject_references(self, nmobject: NMObject | None = None):
+        """Point *nmobject* (else every object) at this container and its
+        parent; one, when one is added (the others already are: all of them
+        made adding thousands slow, #530)."""
+        for o in (self.__map.values() if nmobject is None else (nmobject,)):
             o._container = self
             o._parent = self._parent
+
+    def _lower_keys(self) -> list[str]:
+        """The keys in lower case, in order: lowered at once (one string),
+        much faster than a key at a time for thousands (#530). Names never
+        hold a new line."""
+        return "\n".join(self.__map.keys()).lower().split("\n") if self.__map else []
 
     # override MutableMapping mixin method
     # Sentinel value to distinguish "no default provided" from "default is None"
@@ -595,11 +604,11 @@ class NMObjectContainer(NMObject, MutableMapping):
             raise TypeError(e)
         if key in self.__map:  # exact match: avoids a scan (values() uses this)
             return key
-        lower = key.lower()
-        for k in self.__map.keys():
-            if k.lower() == lower:  # keys are case insensitive
-                return k  # return key from self.__map
-        return None
+        lower = key.lower()  # keys are case insensitive
+        try:
+            return list(self.__map.keys())[self._lower_keys().index(lower)]
+        except ValueError:
+            return None
 
     def _newkey(
         self,
@@ -612,9 +621,8 @@ class NMObjectContainer(NMObject, MutableMapping):
             raise TypeError(e)
         if not newkey or not nmu.name_ok(newkey):
             raise ValueError("newkey: %s" % newkey)
-        for k in self.__map.keys():
-            if k.lower() == newkey.lower():  # keys are case insensitive
-                raise KeyError("key name '%s' already exists" % newkey)
+        if newkey.lower() in self._lower_keys():  # keys are case insensitive
+            raise KeyError("key name '%s' already exists" % newkey)
         return newkey
 
     @nmch.records_command
@@ -731,7 +739,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         # c.name = newkey  # double history
         c._name_set(newname=newkey, quiet=True, history=False)
         self.__map[c.name] = c
-        self.__update_nmobject_references()
+        self.__update_nmobject_references(c)
         self._echo("duplicated '%s' as '%s'" % (key, c.name), quiet)
         if self._nm_cmd_path is not None:
             nmch.add_nm_command(
@@ -767,7 +775,7 @@ class NMObjectContainer(NMObject, MutableMapping):
         if not isinstance(newkey, str) or len(newkey) == 0:
             return False
         self.__map[newkey] = nmobject
-        self.__update_nmobject_references()
+        self.__update_nmobject_references(nmobject)
         if len(self.__map) == 1:
             select = True  # select first entry
         if isinstance(select, bool) and select:

@@ -369,6 +369,17 @@ class TestNMToolSpikePST(unittest.TestCase):
         total_spikes = float(f.data.get("SP_count").nparray.sum())
         self.assertAlmostEqual(reconstructed, total_spikes, places=6)
 
+    def test_pst_output_mode_rate_hz_for_ms(self):
+        # Times in ms: the rate in Hz, not spikes per ms (#530)
+        tool = NMToolSpike()
+        d = _sine_data(freq=100.0)
+        d.xscale.delta, d.xscale.units = _DELTA * 1000, "ms"
+        _run(tool, [d])
+        result = tool.pst(bins=10, output_mode="rate")
+        self.assertIn("Hz", result.yscale.label)
+        # 100 spikes in 1 s: a mean rate of 100 Hz
+        self.assertAlmostEqual(float(result.nparray.mean()), 100.0, delta=15.0)
+
     def test_pst_output_mode_probability_range(self):
         result = self.tool.pst(bins=50, output_mode="probability")
         self.assertTrue(np.all(result.nparray >= 0.0))
@@ -1165,6 +1176,17 @@ class TestNMToolSpikeOverwrite(unittest.TestCase):
         count_second = int(f.data.get("SP_count").nparray[0])
         self.assertNotEqual(count_first, count_second)
 
+    def test_overwrite_true_replaces_the_runs_note(self):
+        tool = NMToolSpike()
+        tool.overwrite = True
+        folder = NMFolder(NM, name="F")
+        self._run_once(tool, folder)
+        tool.xbgn, tool.xend = 0.05, 0.5
+        self._run_once(tool, folder)
+        notes = folder.toolfolders.get("Spike_0").notes
+        self.assertEqual(len(notes), 1)
+        self.assertIn("x 0.05 to 0.5", notes.note)
+
     def test_overwrite_false_creates_new_subfolder_each_run(self):
         tool = NMToolSpike()
         tool.overwrite = False
@@ -1670,7 +1692,8 @@ if __name__ == "__main__":
 
 
 def _times_data(name, n=1000):
-    """A trace (x 0 to 0.0999 s) of pulses crossing 0.5 at 10, 30 and 70 ms."""
+    """A trace (1000 points × 0.1 ms: 0.1 s) of pulses crossing 0.5 at 10,
+    30 and 70 ms."""
     y = np.zeros(n)
     for i in (100, 300, 700):
         y[i:i + 20] = 1.0
@@ -1696,9 +1719,9 @@ class TestNMToolSpikeRowMeasures(unittest.TestCase):
         self.assertEqual(list(self._values("SP_count")), [3, 0, 3])
 
     def test_rate_in_hz(self):
-        # 3 spikes in the 0.0999 s searched (the trace's x range)
+        # 3 spikes in the 0.1 s searched (the trace's 1000 points × 0.1 ms)
         rate = self._values("SP_rate")
-        self.assertAlmostEqual(rate[0], 3 / 0.0999, places=6)
+        self.assertAlmostEqual(rate[0], 3 / 0.1, places=6)
         self.assertEqual(rate[1], 0.0)
         self.assertEqual(self.f.data.get("SP_rate").yscale.units, "Hz")
 
@@ -1709,6 +1732,27 @@ class TestNMToolSpikeRowMeasures(unittest.TestCase):
         folder = _run(tool, [_times_data("rec0")])
         rate = folder.toolfolders.get("Spike_0").data.get("SP_rate").nparray
         self.assertAlmostEqual(rate[0], 2 / 0.05, places=6)  # 10 and 30 ms
+
+    def test_rate_range_clipped_to_the_recording(self):
+        # 0.05 s to past the end: 0.05 to 0.1 s (one interval past the last point)
+        tool = NMToolSpike()
+        tool.ylevel = 0.5
+        tool.xbgn, tool.xend = 0.05, 10.0
+        folder = _run(tool, [_times_data("rec0")])
+        rate = folder.toolfolders.get("Spike_0").data.get("SP_rate").nparray
+        self.assertAlmostEqual(rate[0], 1 / 0.05, places=6)  # 70 ms
+
+    def test_rate_with_an_x_array(self):
+        # x 0, 0.1, ... 0.9 ms... as an x array: 10 points × 0.1 ms = 1 ms
+        tool = NMToolSpike()
+        tool.ylevel = 0.5
+        y = np.zeros(10)
+        y[5:7] = 1.0
+        data = NMData(NM, name="xy", nparray=y, xarray=np.arange(10) * 0.1,
+                      xscale={"units": "ms"})
+        folder = _run(tool, [data])
+        rate = folder.toolfolders.get("Spike_0").data.get("SP_rate").nparray
+        self.assertAlmostEqual(rate[0], 1 / 1.0 * 1000, places=6)  # Hz
 
     def test_first_spike_and_mean_isi(self):
         first, isi = self._values("SP_first"), self._values("SP_isi")
@@ -1937,3 +1981,149 @@ class TestNMToolSpikeAllEpochs(unittest.TestCase):
         np.testing.assert_allclose(x2, x)
         with self.assertRaises(RuntimeError):
             self.tool.raster_arrays(self.nm.folders["Demo"].toolfolders.new("Spike_empty"))
+
+
+class TestNMToolSpikeAnalysesOfASubfolder(unittest.TestCase):
+    """pst, isi and extract_spike_waveforms of a subfolder (Spike2, #530):
+    each one command; the waveforms from the subfolder's own folder and
+    channel, whatever the tool ran last."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+        self.nm = NMManager(quiet=True, command_history=True)
+        self.folder = self.nm.folders.new("D", select=False)
+        self.series = self.folder.new_dataseries("Record", n_channels=2, n_epochs=2,
+                                                 n_points=100)
+        for channel in "AB":
+            for data in self.series.channels[channel].data:
+                y = np.zeros(100)
+                y[20:25] = y[60:65] = 1.0
+                data.nparray = y
+        self.tool = self.nm.spike
+        self.tool.ylevel = 0.5
+        self.tool.run_selection(self.series, channel="B", epochs=["E0", "E1"])
+        self.toolfolder = self.tool.toolfolder
+        other = self.nm.folders.new("Other", select=False)
+        series = other.new_dataseries("Record", n_channels=1, n_epochs=1, n_points=100)
+        series.channels["A"].data[0].nparray = np.r_[np.zeros(50), np.ones(50)]
+        self.tool.run_selection(series, channel="A", epochs=["E0"])  # last run
+
+    def _command(self):
+        import pyneuromatic.core.nm_command_history as nmch
+        return nmch.get_command_history().buffer[-1]["command"]
+
+    def test_waveforms_from_the_subfolders_folder_and_channel(self):
+        result = self.tool.extract_spike_waveforms(3, 5, toolfolder=self.toolfolder)
+        self.assertEqual([d.name for d in result], ["SPK_B0", "SPK_B1", "SPK_B2", "SPK_B3"])
+        self.assertIn("SPK_", self.toolfolder.dataseries)
+        self.assertIn("SP_RX", self.toolfolder.data)  # kept
+        self.assertEqual(
+            self._command(),
+            "nm.spike.extract_spike_waveforms(3, 5, "
+            "toolfolder=nm.folders['D'].toolfolders['%s'])" % self.toolfolder.name)
+
+    def test_waveforms_of_a_range_of_spikes(self):
+        # 4 spikes: 19.5 and 59.5 in E0 and in E1, numbered 0-3 over the epochs
+        def times(result):
+            return [round(float(d.xscale.start) + 3, 1) for d in result]  # pre 3: the spike
+
+        tf = self.toolfolder
+        everything = self.tool.extract_spike_waveforms(3, 5, align="source", toolfolder=tf)
+        self.assertEqual(len(everything), 4)
+        first = self.tool.extract_spike_waveforms(3, 5, align="source", spikes=(0, 1),
+                                                  toolfolder=tf)
+        self.assertEqual([d.name for d in first], ["SPK_B0", "SPK_B1"])
+        self.assertEqual(times(first), [20.0, 60.0])  # E0's (nearest samples)
+        later = self.tool.extract_spike_waveforms(3, 5, align="source", spikes=(1, None),
+                                                  toolfolder=tf)
+        self.assertEqual(len(later), 3)
+        self.assertEqual(self._command(),
+                         "nm.spike.extract_spike_waveforms(3, 5, align='source', "
+                         "spikes=(1, None), toolfolder=nm.folders['D'].toolfolders['%s'])"
+                         % tf.name)
+        # Numbered within Spike times: those after 40, E0's then E1's
+        after = self.tool.extract_spike_waveforms(3, 5, align="source", xbgn=40.0,
+                                                  spikes=(1, 1), toolfolder=tf)
+        self.assertEqual(len(after), 1)
+        self.assertEqual(after[0].notes[-1]["note"].count("RecordB1"), 1)
+        for bad in ((2, 1), (-1, 3), (0,), "0-9", (0.5, 2), (True, 2)):
+            with self.assertRaises((ValueError, TypeError)):
+                self.tool.extract_spike_waveforms(3, 5, spikes=bad, toolfolder=tf)
+
+    def test_a_range_still_clips_at_the_next_spike(self):
+        # The last spike chosen is clipped at the next, though it isn't chosen
+        tf = self.toolfolder
+        clipped = self.tool.extract_spike_waveforms(
+            5, 45, clip_to_next_spike=True, spikes=(0, 0), toolfolder=tf)
+        self.assertEqual(len(clipped), 1)
+        self.assertTrue(np.isnan(clipped[0].nparray[-1]))  # past 59.5: NaN
+
+    def test_waveforms_grouped_by_epoch(self):
+        # Spikes at 19.5 and 59.5 in E0 and E1: SPK_ epochs E0, E1 in G0;
+        # E2, E3 in G1; from a subfolder or the run
+        for toolfolder in (self.toolfolder, None):
+            if toolfolder is None:
+                self.tool.run_selection(self.series, channel="B", epochs=["E0", "E1"])
+            result = self.tool.extract_spike_waveforms(3, 5, group_by_epoch=True,
+                                                       toolfolder=toolfolder)
+            self.assertEqual(len(result), 4)
+            written = toolfolder or self.tool.toolfolder  # the run's, without one
+            groups = written.dataseries.get("SPK_").epochs.groups
+            self.assertEqual(groups.get_items(0), ["E0", "E1"])
+            self.assertEqual(groups.get_items(1), ["E2", "E3"])
+        # Off (the default): no groups
+        self.tool.extract_spike_waveforms(3, 5, toolfolder=self.tool.toolfolder)
+        groups = self.tool.toolfolder.dataseries.get("SPK_").epochs.groups
+        self.assertEqual(list(groups.group_numbers), [])
+        with self.assertRaises(TypeError):
+            self.tool.extract_spike_waveforms(3, 5, group_by_epoch=1,
+                                              toolfolder=self.tool.toolfolder)
+
+    def test_grouped_by_the_series_epoch_numbers(self):
+        # E1 alone: its spikes in G1 (not G0)
+        self.tool.run_selection(self.series, channel="B", epochs=["E1"])
+        self.tool.extract_spike_waveforms(3, 5, group_by_epoch=True,
+                                          toolfolder=self.tool.toolfolder)
+        groups = self.tool.toolfolder.dataseries.get("SPK_").epochs.groups
+        self.assertEqual(list(groups.group_numbers), [1])
+
+    def test_pst_and_isi_commands(self):
+        ref = "nm.folders['D'].toolfolders['%s']" % self.toolfolder.name
+        self.assertEqual(self.tool.pst(bins=10, toolfolder=self.toolfolder).name, "H_SP_PST")
+        self.assertEqual(self._command(), "nm.spike.pst(bins=10, toolfolder=%s)" % ref)
+        self.tool.isi(output_mode="probability", toolfolder=self.toolfolder)
+        self.assertEqual(self._command(),
+                         "nm.spike.isi(output_mode='probability', toolfolder=%s)" % ref)
+
+    def test_infinite_limits_are_no_limit(self):
+        # -inf / inf (as Spike1's x range): the spikes' own range
+        import math
+        for kwargs in ({"bins": 4}, {"binwidth": 10.0}):
+            free = self.tool.pst(**kwargs, toolfolder=self.toolfolder)
+            start, values = free.xscale.start, list(free.nparray)
+            d = self.tool.pst(**kwargs, xbgn=-math.inf, xend=math.inf,
+                              output_mode="count", toolfolder=self.toolfolder)
+            self.assertEqual((d.xscale.start, list(d.nparray)), (start, values))
+            d = self.tool.pst(**kwargs, xbgn=0.0, xend=math.inf, toolfolder=self.toolfolder)
+            self.assertEqual(d.xscale.start, 0.0)
+            self.assertEqual(int(d.nparray.sum()), 4)
+            isi = self.tool.isi(**kwargs, xbgn=-math.inf, xend=math.inf,
+                                min_isi=-math.inf, max_isi=math.inf,
+                                toolfolder=self.toolfolder)
+            self.assertEqual(int(isi.nparray.sum()), 2)
+        waveforms = self.tool.extract_spike_waveforms(
+            3, 5, xbgn=-math.inf, xend=math.inf, toolfolder=self.toolfolder)
+        self.assertEqual(len(waveforms), 4)
+
+    def test_binwidth(self):
+        # Spikes at 19.5 and 59.5 in each epoch: bins of 10 on its multiples
+        d = self.tool.pst(binwidth=10.0, toolfolder=self.toolfolder)
+        self.assertEqual((d.xscale.start, d.xscale.delta), (10.0, 10.0))
+        self.assertEqual(int(d.nparray.sum()), 4)
+        self.assertIn("binwidth=10", str(d.notes[-1]["note"]))
+        isi = self.tool.isi(binwidth=5.0, toolfolder=self.toolfolder)
+        self.assertEqual(isi.xscale.delta, 5.0)
+        self.assertEqual(isi.xscale.start % 5.0, 0.0)
+        self.assertEqual(int(isi.nparray.sum()), 2)  # one ISI (40) an epoch
+        with self.assertRaises(ValueError):
+            self.tool.pst(binwidth=0.0, toolfolder=self.toolfolder)

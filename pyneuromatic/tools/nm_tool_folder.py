@@ -210,13 +210,25 @@ class NMToolFolder(NMObject):
                 if ep is not None:
                     epoch_map[ep_num] = ep
 
+        # Already linked: by identity, a set each (not `in` a list, which
+        # compares arrays' contents one by one: slow for thousands, #530)
+        linked: dict[int, set[int]] = {}
+
+        def link(owner, data) -> None:
+            ids = linked.get(id(owner))
+            if ids is None:
+                ids = linked[id(owner)] = {id(d) for d in owner.data}
+            if id(data) not in ids:
+                owner.data.append(data)
+                ids.add(id(data))
+
         for (ch_char, ep_num), data in matches.items():
             ch = channel_map.get(ch_char)
             ep = epoch_map.get(ep_num)
-            if ch is not None and data not in ch.data:
-                ch.data.append(data)
-            if ep is not None and data not in ep.data:
-                ep.data.append(data)
+            if ch is not None:
+                link(ch, data)
+            if ep is not None:
+                link(ep, data)
 
         return ds
 
@@ -285,8 +297,8 @@ class NMToolFolderContainer(NMObjectContainer):
             base: Base name without trailing sequence number, e.g.
                 ``"spike_Record_A"`` or ``"stats_Record_A"``.
             overwrite: If ``True`` (default), target ``{base}_0``.  If that
-                subfolder already exists, its data container is cleared and it
-                is returned for reuse.  If it does not exist, it is created.
+                subfolder already exists, it is cleared (its data, data series
+                and notes: the earlier run's) and returned for reuse.  If it does not exist, it is created.
                 If ``False``, find the first unused name ``{base}_0``,
                 ``{base}_1``, … and create a new subfolder there.
 
@@ -297,7 +309,10 @@ class NMToolFolderContainer(NMObjectContainer):
             name = "%s_0" % base
             existing = self.get(name)
             if existing is not None:
+                # The earlier run's results and its note go (#530)
                 existing.data.clear(quiet=True)
+                existing.dataseries.clear(quiet=True)
+                existing.notes.clear()
                 return existing
             return self.new(name=name)
         i = 0
