@@ -515,3 +515,27 @@ def test_notes_available_once_there_is_one_to_choose(app):
     series.epochs.sets.add("Big", [])  # e.g. by Inequality, in Stats2
     app._on_content_changed()  # as Stats2 says (its folder actions' content_changed)
     assert _notes_action(app, "epoch_set").isEnabled()
+
+
+def test_a_long_note_wraps_in_a_narrow_column(qtbot):
+    """A tool's note (one long word first) wraps, all of it shown, not cut
+    off with "…" before its source (#530); its text stays as written."""
+    from pyneuromatic.core.nm_notes import NMNotes
+    from pyneuromatic.gui.notes_view import NotesTable, breakable
+    text = ("NMSpike.extract_spike_waveforms(source=RecordA4, spike_x=639.657, pre=1, "
+            "post=2, clip_to_next_spike=False, edge='skip', align=spike)")
+    assert breakable(text).replace("​", "") == text
+    notes = NMNotes()
+    notes.add(text, readonly=True)
+    table = NotesTable()
+    qtbot.addWidget(table)
+    table.show_notes(notes)
+    table.resize(300, 260)
+    table.show()
+    qtbot.waitUntil(lambda: table.rowHeight(0) > 3 * table.fontMetrics().height())
+    assert table.item(0, 1).text() == text
+    assert text in table.item(0, 1).toolTip()
+    # Wider: fewer lines, the row fitted again
+    tall = table.rowHeight(0)
+    table.resize(900, 260)
+    qtbot.waitUntil(lambda: table.rowHeight(0) < tall)
