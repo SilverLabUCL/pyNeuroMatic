@@ -10,6 +10,8 @@ commands" (the app's setting, also a checkbox here) a command (#510).
 """
 from __future__ import annotations
 
+import re
+
 import dataclasses
 from collections.abc import Callable
 
@@ -78,6 +80,26 @@ def group_owner(number: int, series) -> str:
     return f"{group_name(number)} ({series_text(series)})"
 
 
+# After these, a long word may break (a zero-width space, shown only): e.g. a
+# tool's "NMSpike.extract_spike_waveforms(source=RecordA4," wraps instead of
+# being cut off with "…" in a narrow column, hiding its source (#530)
+_BREAK_AFTER = re.compile(r"([(.,=_/])")
+_ZWSP = "\u200b"
+
+
+def breakable(text: str) -> str:
+    """*text* with places a long word can wrap at, for display only."""
+    return _BREAK_AFTER.sub(r"\1" + _ZWSP, text)
+
+
+class _BreakableDelegate(QtWidgets.QStyledItemDelegate):
+    """Draws (and sizes) a cell's text with :func:`breakable`'s places to
+    wrap; its text stays as written (to copy, edit, read)."""
+
+    def displayText(self, value, locale) -> str:
+        return breakable(super().displayText(value, locale))
+
+
 class NotesTable(QtWidgets.QTableWidget):
     """Notes, a row each: Date (over time, so it stays narrow), then Note
     (wrapped). Edit › Copy (⌘C) copies the chosen rows, tab-separated."""
@@ -93,6 +115,35 @@ class NotesTable(QtWidgets.QTableWidget):
         # The Note column takes whatever width the Date column leaves
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setMinimumHeight(100)
+        # Rows as tall as their wrapped notes at the Note column's width now:
+        # sized only as filled, a note shown before its panel was laid out
+        # (e.g. the Browser's Info) stayed a line, cut off with "…" (#530)
+        self.horizontalHeader().sectionResized.connect(self._on_column_resized)
+        self._rows_pending = False
+        self.setItemDelegateForColumn(1, _BreakableDelegate(self))
+
+    def _on_column_resized(self, column: int, _old: int, _new: int) -> None:
+        if column == 1:
+            self._fit_rows_soon()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._fit_rows_soon()  # its first width isn't a resize of the column
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_rows_soon()
+
+    def _fit_rows_soon(self) -> None:
+        """Fit the rows once the layout has settled (one pass for several
+        changes)."""
+        if not self._rows_pending:
+            self._rows_pending = True
+            QtCore.QTimer.singleShot(0, self._fit_rows)
+
+    def _fit_rows(self) -> None:
+        self._rows_pending = False
+        self.resizeRowsToContents()
 
     def show_notes(self, notes) -> None:
         self.setRowCount(0)
@@ -101,10 +152,11 @@ class NotesTable(QtWidgets.QTableWidget):
             date = str(note.get("date", ""))
             date_item = QtWidgets.QTableWidgetItem(date.replace(" ", "\n", 1))
             date_item.setData(QtCore.Qt.ItemDataRole.UserRole, date)  # copied on one line
-            note_item = QtWidgets.QTableWidgetItem(str(note.get("note", "")))
+            text = str(note.get("note", ""))
+            note_item = QtWidgets.QTableWidgetItem(text)  # wraps anywhere (its delegate)
             tip = "Written by pyNeuroMatic (read-only)" if note.get("readonly") else date
-            for item in (date_item, note_item):
-                item.setToolTip(tip)
+            date_item.setToolTip(tip)
+            note_item.setToolTip(f"{text}\n\n{tip}")  # all of it, however narrow
             self.setItem(row, 0, date_item)
             self.setItem(row, 1, note_item)
         self.resizeColumnToContents(0)

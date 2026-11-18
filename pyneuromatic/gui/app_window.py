@@ -188,6 +188,11 @@ class ToolRail(QtWidgets.QWidget):
             button.clicked.connect(lambda checked=False, value=name: self.select_tool(value))
             self._buttons[name] = button
             layout.addWidget(button)
+        # As wide as its widest button (e.g. "Browser"), no wider
+        if self._buttons:
+            margins = layout.contentsMargins()
+            widest = max(button.sizeHint().width() for button in self._buttons.values())
+            self.setFixedWidth(widest + margins.left() + margins.right())
 
         if self._tool_names:
             self.select_tool(self._tool_names[0], emit=False)
@@ -1559,7 +1564,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 2)
-        splitter.setSizes([120, 350, 700])
+        splitter.setSizes([self.tool_rail.width(), 350, 700])  # the rail: its fixed width
         self.workspace_splitter = splitter
 
         container = QtWidgets.QWidget(self)

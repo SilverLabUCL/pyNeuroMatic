@@ -395,6 +395,12 @@ class ToolTabWidget(QtWidgets.QWidget):
         channel = getattr(getattr(tool, "channel", None), "name", "") or ""
         self.run_trace_shown.emit(data, channel)
         QtWidgets.QApplication.processEvents()  # draw it
+        # Delete what showing it let go of, now: deleteLater waits for the
+        # main event loop, which a run doesn't return to, so thousands of
+        # epochs' (PyQt's slot proxies, ~100 an epoch as pyqtgraph replaces
+        # the Plot's items) were deleted at the end, freezing the window
+        # for half a minute (#530)
+        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete.value)
         if self.run_display() == "ask" and not self._continue_all:
             epoch = getattr(tool, "epoch", None)
             name = getattr(epoch, "name", None) or getattr(data, "name", "")

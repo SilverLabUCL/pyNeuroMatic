@@ -103,10 +103,10 @@ class SpikeToolTab(SelectionRunTab):
             QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
         self.details.setToolTip(
             "Detected spikes of the current epoch")
-        self.details.setMaximumHeight(110)
+        # The rest of the tab's height: a spike a line, so the more the better
+        self.details.setMinimumHeight(110)
         details_layout.addWidget(self.details)
-        layout.addWidget(details_group)
-        layout.addStretch(1)
+        layout.addWidget(details_group, stretch=1)
 
         # Results are listed in the Results box (and saved by Run)
         self.results_group.hide()
