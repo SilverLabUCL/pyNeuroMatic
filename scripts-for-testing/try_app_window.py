@@ -11,11 +11,16 @@ re-create them).
 """
 import sys
 
-import numpy as np
-from PyQt6 import QtWidgets
+from pyneuromatic.gui.mac_bundle import relaunch_in_bundle
 
-from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.gui.app_window import NMAppWindow, set_app_name
+# macOS: again as pyNeuroMatic.app, so the Dock says pyNeuroMatic, not Python
+relaunch_in_bundle([__file__, *sys.argv[1:]])
+
+import numpy as np  # noqa: E402
+from PyQt6 import QtWidgets  # noqa: E402
+
+from pyneuromatic.core.nm_manager import NMManager  # noqa: E402
+from pyneuromatic.gui.app_window import NMAppWindow, set_app_name  # noqa: E402
 
 
 manager = NMManager(quiet=True)
