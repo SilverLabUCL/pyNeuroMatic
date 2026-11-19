@@ -114,7 +114,7 @@ def test_the_rest_of_the_window_is_blocked(app):
     def during(done, total):
         if done == 2:
             QtTest.QTest.mouseClick(tab.window_enabled, QtCore.Qt.MouseButton.LeftButton)
-            QtTest.QTest.mouseClick(app.tool_rail._buttons["Browser"],
+            QtTest.QTest.mouseClick(app.tool_rail._buttons["Main"],
                                     QtCore.Qt.MouseButton.LeftButton)
 
     tab.progress_changed.connect(during)
@@ -123,8 +123,8 @@ def test_the_rest_of_the_window_is_blocked(app):
     assert app.current_tool_name == "Stats"  # the rail didn't change
     assert tab.status_label.text() == "Complete"
     # ... and works again afterwards
-    QtTest.QTest.mouseClick(app.tool_rail._buttons["Browser"], QtCore.Qt.MouseButton.LeftButton)
-    assert app.current_tool_name == "Browser"
+    QtTest.QTest.mouseClick(app.tool_rail._buttons["Main"], QtCore.Qt.MouseButton.LeftButton)
+    assert app.current_tool_name == "Main"
 
 
 def test_all_sets_count_together_and_stop_ends_them(app):

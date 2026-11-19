@@ -181,11 +181,11 @@ def test_app_window_builds_shell(qtbot, nm):
     assert hasattr(win, "browser_widget")
     assert hasattr(win, "plot_widget")
     assert [win.panel_tabs.tabText(i) for i in range(win.panel_tabs.count())] == [
-        "Plot", "Table"]  # a toggle (#460), as tabs (#517)
+        "Plot", "Table", "Browser"]  # a toggle (#460), as tabs (#517)
     assert win.context_panel.currentWidget() is win.plot_widget
     assert win.plot_widget.view_tabs is win.table_panel.view_tabs is win.view_tabs
     assert isinstance(win.browser_widget, FolderBrowserWidget)
-    assert win.tool_rail.tool_names() == ["Browser", "Main", "Stats", "Spike"]
+    assert win.tool_rail.tool_names() == ["Main", "Stats", "Spike"]
     win.show()
     qtbot.waitUntil(lambda: win.workspace_splitter.width() > 0)
     workspace_width, plot_width = win.workspace_splitter.sizes()[1:]
@@ -219,6 +219,40 @@ def test_browser_selection_updates_shared_gui_state(qtbot, nm):
     assert all(value is None for value in win.selection_model.selection.values())
     assert win.selection_strip.combo("data").currentText() == ""
     assert win.windowTitle() == "pyNeuroMatic"
+
+
+def test_browser_array_of_the_data_series_selects_its_channel_and_epoch(qtbot, nm):
+    """With a data series the source, an array of it chosen in the Browser
+    selects its channel and epoch, not the array as Data (#537)."""
+    folder = nm.folders.new("Demo", select=False)
+    for name in ("RecordA0", "RecordA1", "RecordB0", "RecordB1", "Other"):
+        folder.data.new(name, nparray=np.array([1.0, 2.0]))
+    series = folder.sync_dataseries("Record")
+    win = NMAppWindow(nm)
+    qtbot.addWidget(win)
+    win.selection_model.update(folder=folder, dataseries=series, source="dataseries")
+
+    win._on_browser_selection_requested({"object": folder.data["RecordB1"]})
+    selection = win.selection_model.selection
+    assert selection["source"] == "dataseries" and selection["dataseries"] is series
+    assert selection["channel"].name == "B" and selection["epoch"].name == "E1"
+    # In the Epoch Set: kept; outside it: All, so the epoch is one of them
+    series.epochs.sets.add("Set1", ["E0"])
+    win.selection_model.update(epoch_set="Set1")
+    win._on_browser_selection_requested({"object": folder.data["RecordA0"]})
+    assert win.selection_model.selection["epoch_set"] == "Set1"
+    win._on_browser_selection_requested({"object": folder.data["RecordA1"]})
+    selection = win.selection_model.selection
+    assert selection["epoch"].name == "E1" and selection["epoch_set"] == "All"
+
+    # Not one of its arrays: Data, as before
+    win._on_browser_selection_requested({"object": folder.data["Other"]})
+    selection = win.selection_model.selection
+    assert selection["source"] == "data" and selection["data"].name == "Other"
+    # Data the source: an array of the series is Data too
+    win._on_browser_selection_requested({"object": folder.data["RecordA0"]})
+    selection = win.selection_model.selection
+    assert selection["source"] == "data" and selection["data"].name == "RecordA0"
 
 
 def test_selection_menus_follow_folder_and_series(qtbot, nm):

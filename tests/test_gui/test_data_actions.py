@@ -233,7 +233,7 @@ def test_choose_sets_in_browser_shows_sets_list(app):
     app.demo.data.sets.add("Other", [])
     app.selection_model.update(data_set="DataSet")
     app.data_actions.set_browse_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     browser = app.browser_widget
     # The set is chosen in the tree, so the detail pane lists its arrays
     current = browser.tree.currentIndex()
@@ -266,7 +266,7 @@ def test_choose_sets_in_browser_shows_sets_list(app):
 def test_choose_in_browser_shows_data_list(app):
     app.selection_model.update(data=app.demo.data["RecordA1"])
     app.data_actions.browse_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     browser = app.browser_widget
     # The current data array is chosen in the tree, under an expanded Data row
     current = browser.tree.currentIndex()

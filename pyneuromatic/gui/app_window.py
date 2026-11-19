@@ -77,7 +77,8 @@ from pyneuromatic.gui.transform_dialog import (
 
 APP_NAME = "pyNeuroMatic"
 
-# The tool tabs, in the tool rail after Browser (None: a placeholder). The app
+# The tool tabs, in the tool rail (None: a placeholder; the Browser is a tab
+# of the right-hand panel, Plot | Table | Browser, #537). The app
 # window registers each the same way: see ToolTabWidget and _register_tool_tab.
 TOOL_TABS = {"Main": None, "Stats": StatsToolTab, "Spike": SpikeToolTab}
 
@@ -188,7 +189,7 @@ class ToolRail(QtWidgets.QWidget):
             button.clicked.connect(lambda checked=False, value=name: self.select_tool(value))
             self._buttons[name] = button
             layout.addWidget(button)
-        # As wide as its widest button (e.g. "Browser"), no wider
+        # As wide as its widest button, no wider
         if self._buttons:
             margins = layout.contentsMargins()
             widest = max(button.sizeHint().width() for button in self._buttons.values())
@@ -1276,7 +1277,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         from pyneuromatic.gui.notes_view import NotesEditor
         NotesEditor.settings = self._manager.settings
         self.selection_model = SelectionModel(self._manager, self)
-        self.current_tool_name = "Browser"
+        self.current_tool_name = next(iter(TOOL_TABS))  # the rail's first
 
         self.setWindowTitle("pyNeuroMatic")
         self.resize(1200, 800)
@@ -1377,8 +1378,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.about(self, f"About {APP_NAME}", self.about_text())
 
     def _build_view_menu(self) -> None:
-        """View: the tools (as the tool rail), the Plot or Table panel, and
-        the History dock."""
+        """View: the tools (as the tool rail), the Plot, Table or Browser
+        panel, and the History dock."""
         menu = self.view_menu
         self.tool_view_actions: dict[str, QtGui.QAction] = {}
         tools = QtGui.QActionGroup(self)
@@ -1393,7 +1394,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         menu.addSeparator()
         self.panel_view_actions: dict[str, QtGui.QAction] = {}
         panels = QtGui.QActionGroup(self)
-        for name, panel in (("Plot", self.plot_widget), ("Table", self.table_panel)):
+        for name, panel in self._panels().items():
             action = menu.addAction(name)
             action.setCheckable(True)
             action.triggered.connect(
@@ -1482,20 +1483,10 @@ class NMAppWindow(QtWidgets.QMainWindow):
         strip.set_actions_menu("group", self.group_actions.group_menu(strip))
 
     def _build_tool_shell(self) -> None:
-        self.tool_rail = ToolRail(["Browser", *TOOL_TABS], self)
+        self.tool_rail = ToolRail(list(TOOL_TABS), self)
         self.tool_rail.tool_selected.connect(self._on_tool_selected)
 
         self.tool_workspace = QtWidgets.QStackedWidget(self)
-        if self._manager is not None:
-            browser_widget = FolderBrowserWidget(self._manager, self.tool_workspace)
-            browser_widget.selection_requested.connect(self._on_browser_selection_requested)
-        else:
-            browser_widget = QtWidgets.QTreeWidget()
-            browser_widget.setHeaderLabels(["Browser"])
-            browser_widget.addTopLevelItem(QtWidgets.QTreeWidgetItem(["Folders"]))
-            browser_widget.addTopLevelItem(QtWidgets.QTreeWidgetItem(["Data"]))
-        self.browser_widget = browser_widget
-        self.tool_workspace.addWidget(browser_widget)
 
         # name -> tool tab (placeholders aren't tool tabs)
         self.tool_tabs: dict[str, ToolTabWidget] = {}
@@ -1524,6 +1515,17 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.table_panel.bind_selection_model(self.selection_model)
         self.table_panel.show_in_browser_requested.connect(self._show_object_in_browser)
         self.context_panel.addWidget(self.table_panel)
+        # The Browser: the panel's third tab, with room for its columns (#537)
+        if self._manager is not None:
+            browser_widget = FolderBrowserWidget(self._manager, self.context_panel)
+            browser_widget.selection_requested.connect(self._on_browser_selection_requested)
+        else:
+            browser_widget = QtWidgets.QTreeWidget()
+            browser_widget.setHeaderLabels(["Browser"])
+            browser_widget.addTopLevelItem(QtWidgets.QTreeWidgetItem(["Folders"]))
+            browser_widget.addTopLevelItem(QtWidgets.QTreeWidgetItem(["Data"]))
+        self.browser_widget = browser_widget
+        self.context_panel.addWidget(browser_widget)
         self._build_context_area()
 
         self.folder_actions.content_changed.connect(self._on_content_changed)
@@ -1536,6 +1538,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.group_actions.browse_requested.connect(self._show_epochs_in_browser)
         self.channel_actions.browse_requested.connect(self._show_object_in_browser)
         self.folder_actions.browse_requested.connect(self._show_object_in_browser)
+        self.folder_actions.folder_opened.connect(self._on_folder_opened)
         self.channel_actions.content_changed.connect(self._on_content_changed)
         self.channel_actions.transforms_requested.connect(self._edit_channel_transforms)
         self.data_actions.browse_requested.connect(self._show_in_browser)
@@ -1564,7 +1567,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 2)
-        splitter.setSizes([self.tool_rail.width(), 350, 700])  # the rail: its fixed width
+        # The rail: its fixed width; the tools: narrow, the Plot, Table or
+        # Browser the rest
+        splitter.setSizes([self.tool_rail.width(), 320, 780])
         self.workspace_splitter = splitter
 
         container = QtWidgets.QWidget(self)
@@ -1617,7 +1622,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
         action = getattr(self, "tool_view_actions", {}).get(tool_name)
         if action is not None:
             action.setChecked(True)  # View › the tool, as the rail
-        # Only this tool's results tab (e.g. Stats: A | Stats2; Browser: A)
+        # Only this tool's results tab (e.g. Stats: A | Stats2; Main: A)
         self._update_tool_tabs()
         tab = self.tool_tabs.get(tool_name)
         view = tab.preferred_view() if tab is not None else None
@@ -1724,7 +1729,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
         for index, name in enumerate(self.PANEL_NAMES):
             self.panel_tabs.addTab(name)
             self.panel_tabs.setTabToolTip(
-                index, f"Show the {name.lower()} of the channel or tool chosen on the left")
+                index, "Show the folders and their contents" if name == "Browser"
+                else f"Show the {name.lower()} of the channel or tool chosen on the left")
         self.panel_tabs.currentChanged.connect(self._on_panel_tab_changed)
         header.addWidget(self.panel_tabs)
         layout.addLayout(header)
@@ -1734,10 +1740,15 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.selection_model.selection_changed.connect(self._update_panel_tabs)
         self._update_panel_tabs()
 
-    PANEL_NAMES = ("Plot", "Table")
+    PANEL_NAMES = ("Plot", "Table", "Browser")
 
     def _panels(self) -> dict[str, QtWidgets.QWidget]:
-        return {"Plot": self.plot_widget, "Table": self.table_panel}
+        return {"Plot": self.plot_widget, "Table": self.table_panel,
+                "Browser": self.browser_widget}
+
+    def show_browser(self) -> None:
+        """Show the Browser panel (Plot | Table | Browser, #537)."""
+        self.context_panel.setCurrentWidget(self.browser_widget)
 
     def _on_panel_tab_changed(self, index: int) -> None:
         if 0 <= index < len(self.PANEL_NAMES):
@@ -1748,19 +1759,23 @@ class NMAppWindow(QtWidgets.QMainWindow):
         channel or tool: a tool may have only one (#454)."""
         view = self.view_tabs.current_view()
         if view is None or view[0] != "tool":
-            return {"Plot": True, "Table": True}
+            return {"Plot": True, "Table": True, "Browser": True}
         return {"Plot": self.plot_widget.tool_page(view[1]) is not None,
-                "Table": self.table_panel.tool_page(view[1]) is not None}
+                "Table": self.table_panel.tool_page(view[1]) is not None,
+                "Browser": True}  # not a view of the tool
 
     def _update_panel_tabs(self, *_args) -> None:
         """Show the panel shown as the current tab; a tool's missing view
-        can't be chosen."""
+        can't be chosen. The channel/tool tabs are of Plot and Table, not
+        the Browser."""
         available = self._panels_of_view()
         panels = self._panels()
         current = self.context_panel.currentWidget()
-        if not available["Plot" if current is self.plot_widget else "Table"]:
-            other = "Table" if current is self.plot_widget else "Plot"
-            if available[other]:
+        self.view_tabs.set_not_shown(current is self.browser_widget)
+        if current is self.plot_widget or current is self.table_panel:
+            shown = "Plot" if current is self.plot_widget else "Table"
+            other = "Table" if shown == "Plot" else "Plot"
+            if not available[shown] and available[other]:
                 self.context_panel.setCurrentWidget(panels[other])
                 return  # back here from currentChanged
         self.panel_tabs.blockSignals(True)
@@ -1875,7 +1890,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def _show_in_browser(self, owner, sets: bool = False) -> None:
         """Switch to the Browser showing *owner*'s Data list, or its data Sets,
         with the current data array (or Data Set) selected."""
-        self.tool_rail.select_tool("Browser")
+        self.show_browser()
         if not isinstance(self.browser_widget, FolderBrowserWidget):
             return
         selection = self.selection_model.selection
@@ -1888,22 +1903,29 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def _show_object_in_browser(self, obj) -> None:
         """Switch to the Browser with *obj* (e.g. a data series) selected."""
-        self.tool_rail.select_tool("Browser")
+        self.show_browser()
         if isinstance(self.browser_widget, FolderBrowserWidget):
             # A folder or subfolder opens, showing its contents
             self.browser_widget.show_object(
                 obj, expand=isinstance(obj, (NMFolder, NMToolFolder)))
 
+    def _on_folder_opened(self, folder) -> None:
+        """A file opened: the Plot shows its data; the Browser, a click
+        away, is at its folder, opened, with its Info (#537)."""
+        if isinstance(self.browser_widget, FolderBrowserWidget):
+            self.browser_widget.show_object(folder, expand=True)
+        self.context_panel.setCurrentWidget(self.plot_widget)
+
     def _show_epoch_sets_in_browser(self, series, set_name) -> None:
         """Switch to the Browser with *series*' epoch set (or Sets) selected."""
-        self.tool_rail.select_tool("Browser")
+        self.show_browser()
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.show_data_of(series, sets=True, select=set_name, kind="epochs")
 
     def _show_epochs_in_browser(self, series) -> None:
         """Switch to the Browser with *series*' current group (or its Groups,
         or Epochs, row) selected."""
-        self.tool_rail.select_tool("Browser")
+        self.show_browser()
         if isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.show_groups_of(series, self.selection_model.selection.get("group"))
 
@@ -1973,7 +1995,7 @@ class NMAppWindow(QtWidgets.QMainWindow):
 
     def _update_tool_tabs(self) -> None:
         """The view tabs: the channel, then the current tool's results tab,
-        if it has one (Stats: A | Stats2; Browser: A, #523); leaving the
+        if it has one (Stats: A | Stats2; Main: A, #523); leaving the
         tool while on its tab shows the channel."""
         current = getattr(self, "current_tool_name", None)
         tools = [name for name, tab in self.tool_tabs.items()
@@ -2012,6 +2034,20 @@ class NMAppWindow(QtWidgets.QMainWindow):
                 self.selection_model.update(data_set=set_name)
             return
         tier = SelectionModel.tier_for_object(obj)
+        if tier == "data" and set_name is None and "group" not in selection:
+            # An array of the data series shown (e.g. RecordA10 of Record):
+            # its channel and epoch (A, E10), the data series staying the
+            # source, rather than the array as Data (#537)
+            place = self._series_place_of(obj)
+            if place is not None:
+                changes = {"channel": place[0], "epoch": place[1]}
+                current = self.selection_model.selection
+                scoped = scoped_epoch_names(current["dataseries"], current)
+                if scoped is not None and place[1].name not in scoped:
+                    # Outside the Epoch Set or Group: All, so it's one of them
+                    changes.update(epoch_set=ALL_EPOCHS, group=None)
+                self.selection_model.update(changes)
+                return
         # Sets of a data series' epochs are epoch sets; others are data sets
         set_key = "epoch_set" if tier in ("dataseries", "channel", "epoch") else "data_set"
         changes = {tier: obj}
@@ -2020,6 +2056,24 @@ class NMAppWindow(QtWidgets.QMainWindow):
         if "group" in selection:  # a group row, or one of its epochs
             changes["group"] = selection["group"]
         self.selection_model.update(changes)
+
+    def _series_place_of(self, data) -> tuple | None:
+        """(channel, epoch) of *data* in the data series selected as the
+        source, or None (Data is the source, or it isn't one of its arrays)."""
+        selection = self.selection_model.selection
+        series = selection.get("dataseries")
+        if selection.get("source") != "dataseries" or series is None:
+            return None
+
+        def holding(container):
+            for item in container.values():
+                if any(d is data for d in item.data):
+                    return item
+            return None
+
+        channel = holding(series.channels)
+        epoch = holding(series.epochs) if channel is not None else None
+        return (channel, epoch) if epoch is not None else None
 
     def _append_selection_history(self, selection: dict) -> None:
         selected = selection_summary(selection)

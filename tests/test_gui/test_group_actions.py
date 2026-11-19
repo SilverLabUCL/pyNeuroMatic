@@ -153,7 +153,7 @@ def test_run_uses_group_minus_setx(app):
 
 def test_choose_in_browser_selects_epochs(app):
     app.group_actions.browse_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     from pyneuromatic.gui.folder_model import _GroupsNode
 
     node = app.browser_widget.tree.currentIndex().internalPointer()

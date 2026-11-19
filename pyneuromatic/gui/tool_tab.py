@@ -186,6 +186,7 @@ class ToolTabWidget(QtWidgets.QWidget):
 
         self.parameters_group = QtWidgets.QGroupBox("Parameters", self)
         self.parameter_layout = QtWidgets.QVBoxLayout(self.parameters_group)
+        self.parameter_layout.setContentsMargins(6, 6, 6, 6)  # a narrower panel (#537)
         layout.addWidget(self.parameters_group)
 
         self.preview_group = QtWidgets.QGroupBox("Preview", self)
@@ -220,6 +221,9 @@ class ToolTabWidget(QtWidgets.QWidget):
             self.prompt_buttons[answer] = button
         # What will run; while running, how far (e.g. 3 / 200), at the right
         self.run_info_label = QtWidgets.QLabel("", self.run_row)
+        # A long message (e.g. "Select a data array...") wraps, not setting
+        # the tool panel's width (#537)
+        self.run_info_label.setWordWrap(True)
         run_layout.addWidget(self.run_info_label, stretch=1)
         layout.addWidget(self.run_row)
 

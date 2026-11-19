@@ -109,7 +109,7 @@ def test_show_in_browser_shows_the_current_array(app):
     panel = app.table_panel
     app.selection_model.update(epoch=app.selection_model.selection["dataseries"].epochs["E1"])
     panel.browser_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     browser = app.browser_widget
     assert browser.tree.currentIndex().internalPointer().name == "RecordA1"
 

@@ -277,7 +277,7 @@ def test_delete_series(app):
 
 def test_choose_in_browser_selects_series(app):
     app.series_actions.browse_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     assert app.browser_widget.tree.currentIndex().internalPointer() is app.series
 
 

@@ -236,8 +236,9 @@ def test_open_imports_each_file_into_a_new_folder(app, monkeypatch, tmp_path):
     assert imports == ["nm.folders.import_file(%r)" % str(tmp_path / "my rec-1.fake")]
     assert manager.select_values["folder"] is manager.folders["my_rec_1"]
     assert app.selection_strip.combo("data").currentText() == "RecordA0"
-    # The Browser shows the imported folder, opened, with its Info (metadata)
-    assert app.tool_rail.current_tool_name == "Browser"
+    # The Plot is shown; the Browser is at the imported folder, opened, with
+    # its Info (metadata), #537
+    assert app.context_panel.currentWidget() is app.plot_widget
     browser = app.browser_widget
     tree = browser.tree
     assert tree.currentIndex().internalPointer() is manager.folders["my_rec_1"]
@@ -309,7 +310,7 @@ def test_folder_and_subfolder_show_in_browser(app):
     actions = app.folder_actions
     folder = app.selection_model.selection["folder"]
     actions.browse_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     tree = app.browser_widget.tree
     assert tree.currentIndex().internalPointer() is folder
     assert tree.isExpanded(tree.currentIndex())  # open, showing its contents

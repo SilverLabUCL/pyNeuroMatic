@@ -130,7 +130,7 @@ def test_the_window_measurement_is_drawn(app):
 
 
 def test_shown_only_for_the_chosen_tool(app):
-    app.tool_rail.select_tool("Browser")
+    app.tool_rail.select_tool("Main")
     assert _shown(app) == []
     app.tool_rail.select_tool("Stats")
     assert _shown(app) == [("points", [80.0], [-55.0])]

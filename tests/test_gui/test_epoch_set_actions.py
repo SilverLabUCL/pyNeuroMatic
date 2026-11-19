@@ -194,7 +194,7 @@ def test_choose_in_browser_selects_epoch_set(app):
 
     app.selection_model.update(epoch_set="Set0")
     app.epoch_set_actions.browse_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     node = app.browser_widget.tree.currentIndex().internalPointer()
     assert isinstance(node, _SetNode) and node.name == "Set0"
 

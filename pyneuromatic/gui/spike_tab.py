@@ -67,6 +67,7 @@ class SpikeToolTab(SelectionRunTab):
         self.spike2 = Spike2Panel(manager, tool, self.mode_tabs)
         self.mode_tabs.addTab(self.spike2, "Spike2")
         layout = QtWidgets.QVBoxLayout(self.spike1_page)
+        layout.setContentsMargins(8, 8, 8, 8)  # as Stats1's (#537)
 
         level_row = QtWidgets.QHBoxLayout()
         level_row.addWidget(QtWidgets.QLabel("Threshold", self))

@@ -817,3 +817,12 @@ class TestSetsDetailPaneContextMenu:
         captured = self._captured_menu(monkeypatch)
         widget._show_detail_context_menu(QtCore.QPoint(0, 0))
         assert "menu" not in captured
+
+
+def test_edit_bar_reads_edit_all_clear_invert(widget):
+    """Edit first, then what it acts on, at the left (#537)."""
+    row = widget._edit_bar.layout().itemAt(0).layout()
+    widgets = [row.itemAt(i).widget() for i in range(row.count())]
+    assert widgets[:4] == [widget._edit_checkbox, widget._all_button,
+                           widget._none_button, widget._invert_button]
+    assert widgets[4] is None  # the stretch, at the right

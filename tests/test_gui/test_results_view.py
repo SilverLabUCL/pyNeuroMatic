@@ -371,7 +371,7 @@ def test_plot_options_are_in_a_menu_beside_plot(qtbot):
     stats2._folder_actions.browse_requested.connect(shown.append)
     stats2.browse_array_action.trigger()
     assert shown == [window.tool_tabs["Stats"].stats_tool.toolfolder.data["ST_w0_max_y"]]
-    assert window.tool_rail.current_tool_name == "Browser"
+    assert window.context_panel.currentWidget() is window.browser_widget  # #537
     # The Array row: the dropdown (its width back) and ⋯ only (#485; Plot in it, #523)
     assert _field_widgets(stats2, "Array") == [stats2.array_combo, stats2.plot_menu_button]
 
