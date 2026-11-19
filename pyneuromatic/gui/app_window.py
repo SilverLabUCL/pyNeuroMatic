@@ -12,6 +12,7 @@ import ctypes
 import ctypes.util
 import sys
 from math import sin
+from pathlib import Path
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
@@ -81,6 +82,21 @@ APP_NAME = "pyNeuroMatic"
 # of the right-hand panel, Plot | Table | Browser, #537). The app
 # window registers each the same way: see ToolTabWidget and _register_tool_tab.
 TOOL_TABS = {"Main": None, "Stats": StatsToolTab, "Spike": SpikeToolTab}
+
+
+ICONS = Path(__file__).resolve().parent / "icons"
+
+
+def app_icon() -> QtGui.QIcon:
+    """pyNeuroMatic's icon (#545), at each size drawn: on macOS on its icon
+    grid (with a margin, as other apps in the Dock), else filling its square."""
+    prefix = "icon-macos" if sys.platform == "darwin" else "icon"
+    icon = QtGui.QIcon()
+    for size in (16, 32, 48, 64, 128, 256, 512, 1024):
+        path = ICONS / f"{prefix}-{size}.png"
+        if path.exists():
+            icon.addFile(str(path), QtCore.QSize(size, size))
+    return icon
 
 
 def set_app_name(name: str = APP_NAME) -> None:
@@ -1280,6 +1296,12 @@ class NMAppWindow(QtWidgets.QMainWindow):
         self.current_tool_name = next(iter(TOOL_TABS))  # the rail's first
 
         self.setWindowTitle("pyNeuroMatic")
+        # The icon (#545): the window's, and the app's (the Dock, app switcher)
+        icon = app_icon()
+        self.setWindowIcon(icon)
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.setWindowIcon(icon)
         self.resize(1200, 800)
 
         # Tier actions, shared by the strip's ⋯ menus and the menu bar
