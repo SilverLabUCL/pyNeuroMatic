@@ -246,11 +246,12 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._filter_edit.setPlaceholderText("Filter, e.g. RecordB*")
         self._filter_edit.setClearButtonEnabled(True)
         self._filter_edit.setToolTip("Show only names that match (* and ? are wildcards)")
+        # Edit, then what it acts on: Edit / All / Clear / Invert, at the left
         edit_row = QtWidgets.QHBoxLayout()
-        edit_row.addStretch(1)
-        for widget in (self._all_button, self._none_button, self._invert_button,
-                       self._edit_checkbox):
+        for widget in (self._edit_checkbox, self._all_button, self._none_button,
+                       self._invert_button):
             edit_row.addWidget(widget)
+        edit_row.addStretch(1)
         # The filter gets a row of its own, so a narrow column doesn't squeeze it
         bar_layout = QtWidgets.QVBoxLayout()
         bar_layout.setContentsMargins(4, 2, 4, 2)
