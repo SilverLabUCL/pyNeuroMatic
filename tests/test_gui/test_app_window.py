@@ -634,3 +634,18 @@ def test_epoch_sets_listed_in_order(qtbot, nm):
     values = _combo_values(win.selection_strip.combo("epoch_set"))
     assert values[values.index("Set0"):] == ["Set0", "Set1", "Set2", "Set10", "Drug", "SetX"]
     assert values[1:3] == ["All Epochs", "All Sets"]  # built-in choices first
+
+
+def test_window_and_app_have_the_icon(qtbot, nm):
+    """pyNeuroMatic's icon (#545), at sizes from 16 to 1024 px."""
+    from pyneuromatic.gui.app_window import ICONS, app_icon
+    for name in ("icon.svg", "icon-macos.svg", "pyneuromatic.ico", "pyneuromatic.icns",
+                 "wordmark.svg", "wordmark-dark.svg", "icon-16.png", "icon-1024.png"):
+        assert (ICONS / name).exists(), name
+    icon = app_icon()
+    sizes = {(s.width(), s.height()) for s in icon.availableSizes()}
+    assert {(16, 16), (32, 32), (512, 512), (1024, 1024)} <= sizes
+    win = NMAppWindow(nm)
+    qtbot.addWidget(win)
+    assert not win.windowIcon().isNull()
+    assert not QtWidgets.QApplication.instance().windowIcon().isNull()
