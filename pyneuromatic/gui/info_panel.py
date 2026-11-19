@@ -10,6 +10,11 @@ import numpy
 
 from PyQt6 import QtCore, QtWidgets
 
+try:
+    import pyqtgraph as pg
+except ImportError:  # pragma: no cover - optional GUI dependency
+    pg = None
+
 from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
@@ -132,8 +137,12 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.stats_button = QtWidgets.QToolButton(self._body)
         self.stats_button.setText("Stats")
         self.stats_button.setToolTip("Mean, median, SD, SEM, RMS, min and max")
+        self.plot_button = QtWidgets.QToolButton(self._body)
+        self.plot_button.setText("Plot")
+        self.plot_button.setToolTip("A preview of the array as stored (zoom and pan "
+                                    "with the mouse; no filters or transforms)")
         self._view_group = QtWidgets.QButtonGroup(self)
-        for button in (self.details_button, self.stats_button):
+        for button in (self.details_button, self.stats_button, self.plot_button):
             button.setCheckable(True)
             self._view_group.addButton(button)
         self.details_button.setChecked(True)  # kept while clicking through arrays
@@ -144,12 +153,24 @@ class InfoPanel(QtWidgets.QScrollArea):
         view_row.setSpacing(0)
         view_row.addWidget(self.details_button)
         view_row.addWidget(self.stats_button)
+        view_row.addWidget(self.plot_button)
         view_row.addStretch(1)
         layout.addLayout(view_row)
 
         self._form = QtWidgets.QFormLayout()
         self._form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
         layout.addLayout(self._form)
+
+        # Plot: the array as stored, to look at, not edit (#541): no menu,
+        # no tool marks or ranges; zoom and pan with the mouse
+        self.preview = None
+        if pg is not None:
+            self.preview = pg.PlotWidget(self._body)
+            self.preview.setBackground("w")
+            self.preview.setMenuEnabled(False)
+            self.preview.setMinimumHeight(220)
+            self.preview.hide()
+            layout.addWidget(self.preview, stretch=1)
 
         # Changes go through a dialog, as in NeuroMatic (data arrays, channels)
         self.edit_scales_button = QtWidgets.QPushButton("Edit Scales...", self._body)
@@ -193,6 +214,11 @@ class InfoPanel(QtWidgets.QScrollArea):
         """True when data arrays show statistics rather than their details."""
         return self.stats_button.isChecked()
 
+    @property
+    def showing_plot(self) -> bool:
+        """True when data arrays show a preview plot (#541)."""
+        return self.plot_button.isChecked()
+
     # --- showing an object --------------------------------------------------
 
     def show_object(self, obj: NMObject | None) -> None:
@@ -202,6 +228,9 @@ class InfoPanel(QtWidgets.QScrollArea):
         is_data = isinstance(obj, NMData)
         self.details_button.setVisible(is_data)
         self.stats_button.setVisible(is_data)
+        self.plot_button.setVisible(is_data)
+        if not (is_data and self.showing_plot):
+            self._show_preview(None)
         if obj is None:
             self.title_label.setText("")
             self.edit_scales_button.hide()
@@ -222,6 +251,8 @@ class InfoPanel(QtWidgets.QScrollArea):
         elif isinstance(obj, NMData):
             if self.showing_stats:
                 self._show_data_stats(obj)
+            elif self.showing_plot:
+                self._show_preview(obj)
             else:
                 self._show_data(obj)
         elif isinstance(obj, NMDataSeries):
@@ -231,7 +262,8 @@ class InfoPanel(QtWidgets.QScrollArea):
         elif isinstance(obj, NMEpoch):
             self._show_epoch(obj)
         can_edit = (
-            (is_data and not self.showing_stats and self._locked_series(obj) is None)
+            (is_data and not self.showing_stats and not self.showing_plot
+             and self._locked_series(obj) is None)
             or (isinstance(obj, (NMChannel, NMDataSeries))
                 and not (obj._parent.locked if isinstance(obj, NMChannel) else obj.locked))
         )
@@ -344,6 +376,51 @@ class InfoPanel(QtWidgets.QScrollArea):
                           "using start and delta", LOCKED_COLOR)
         else:
             self._add_row("X Array", names.pop())
+
+    def _show_preview(self, data: NMData | None) -> None:
+        """Plot *data* as stored, with its x values and its scales' labels
+        and units; None: hidden. What can't be plotted is said in a row."""
+        if self.preview is None:
+            if data is not None:
+                self._add_row("Plot", "Needs pyqtgraph")
+            return
+        self.preview.clear()
+        message = self._preview_problem(data) if data is not None else None
+        self.preview.setVisible(data is not None and message is None)
+        if data is None:
+            return
+        if message is not None:
+            self._add_row("Plot", message)
+            return
+        values = data.nparray.astype(float)
+        self.preview.plot(self._preview_x(data), values, pen=pg.mkPen("k", width=1))
+        for axis, scale in (("bottom", data.xscale), ("left", data.yscale)):
+            self.preview.setLabel(axis, scale.label or "", units=scale.units or None)
+        self.preview.enableAutoRange()
+
+    @staticmethod
+    def _preview_problem(data: NMData) -> str | None:
+        """Why *data* can't be plotted (e.g. text), or None."""
+        array = data.nparray
+        if array is None or array.size == 0:
+            return "No data"
+        if array.dtype.kind not in "iuf":
+            kind = "text" if array.dtype.kind in "OUS" else _type_text(array.dtype).split()[0]
+            return f"No plot for {kind} data"
+        if array.ndim != 1:
+            return f"No plot for {array.ndim}-D data"
+        if numpy.isnan(array.astype(float)).all():
+            return "Every point is NaN"
+        return None
+
+    @staticmethod
+    def _preview_x(data: NMData) -> numpy.ndarray:
+        """The x values: the x array if it fits, else from start and delta."""
+        n = data.nparray.size
+        xarray = data.xarray
+        if xarray is not None and not data.xarray_problem() and len(xarray) == n:
+            return numpy.asarray(xarray, dtype=float)
+        return data.xscale.start + data.xscale.delta * numpy.arange(n)
 
     def _show_data_stats(self, data: NMData) -> None:
         """Basic statistics, as Igor's WaveStats (NaNs ignored)."""

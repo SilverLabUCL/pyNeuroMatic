@@ -396,3 +396,50 @@ def test_tool_folder_shows_its_notes(app):
     assert panel.notes_table.isVisibleTo(panel)
     assert panel.notes_table.item(0, 1).text() == "channel transform: Invert()"
     assert panel.notes_view.add_button.isVisibleTo(panel)  # Add Note...
+
+
+def test_plot_previews_a_data_array(app):
+    """Details | Stats | Plot: the array as stored, its x values and its
+    scales' labels and units; no Edit Scales (#541)."""
+    pytest.importorskip("pyqtgraph")
+    browser = app.browser_widget
+    browser.show_object(app.folder.data["Single"])
+    panel = browser.info_panel
+    assert panel.plot_button.isVisibleTo(panel) and not panel.preview.isVisibleTo(panel)
+    panel.plot_button.click()
+    assert panel.showing_plot and panel.preview.isVisibleTo(panel)
+    curves = panel.preview.getPlotItem().listDataItems()
+    assert len(curves) == 1
+    x, y = curves[0].getData()
+    assert np.allclose(x, [0.0, 0.1, 0.2]) and np.allclose(y, [1.0, -2.5, 4.0])
+    assert panel.preview.getPlotItem().getAxis("bottom").labelText == "Time"
+    assert panel.preview.getPlotItem().getAxis("left").labelUnits == "mV"
+    assert not panel.edit_scales_button.isVisibleTo(panel)  # to look at, not edit
+    # Kept while clicking through arrays; another object hides it
+    browser.show_object(app.series.channels["A"].data[0])
+    assert panel.showing_plot and panel.preview.isVisibleTo(panel)
+    browser.show_object(app.folder)
+    assert not panel.preview.isVisibleTo(panel)
+    assert not panel.plot_button.isVisibleTo(panel)
+    # An x array gives the x values
+    data = app.folder.data["Single"]
+    data.xarray = np.array([0.0, 0.5, 2.0])
+    browser.show_object(data)
+    x, _y = panel.preview.getPlotItem().listDataItems()[0].getData()
+    assert np.allclose(x, [0.0, 0.5, 2.0])
+
+
+def test_plot_says_why_there_is_no_plot(app):
+    pytest.importorskip("pyqtgraph")
+    folder = app.folder
+    folder.data.new("Names", nparray=np.array(["a", "b"], dtype=object))
+    folder.data.new("Gaps", nparray=np.array([np.nan, np.nan]))
+    browser = app.browser_widget
+    panel = browser.info_panel
+    browser.show_object(folder.data["Single"])
+    panel.plot_button.click()
+    for name, message in (("Names", "No plot for text data"),
+                          ("Gaps", "Every point is NaN")):
+        browser.show_object(folder.data[name])
+        assert panel.row_text("Plot") == message
+        assert not panel.preview.isVisibleTo(panel)
