@@ -248,8 +248,10 @@ class FolderBrowserWidget(QtWidgets.QWidget):
         self._filter_edit.setToolTip("Show only names that match (* and ? are wildcards)")
         # Edit, then what it acts on: Edit / All / Clear / Invert, at the left
         edit_row = QtWidgets.QHBoxLayout()
-        for widget in (self._edit_checkbox, self._all_button, self._none_button,
-                       self._invert_button):
+        edit_row.setSpacing(12)  # apart, as separate choices (#539)
+        edit_row.addWidget(self._edit_checkbox)
+        edit_row.addSpacing(4)  # its text ends short of its box: as far as the others
+        for widget in (self._all_button, self._none_button, self._invert_button):
             edit_row.addWidget(widget)
         edit_row.addStretch(1)
         # The filter gets a row of its own, so a narrow column doesn't squeeze it

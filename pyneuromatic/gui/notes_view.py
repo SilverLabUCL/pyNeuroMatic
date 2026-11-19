@@ -207,15 +207,8 @@ class NotesEditor(QtWidgets.QWidget):
         for button in (self.add_button, self.edit_button, self.delete_button):
             row.addWidget(button)
         row.addStretch(1)
-        # The app's setting (Settings › General), shown where notes are written
-        self.commands_checkbox = QtWidgets.QCheckBox("Record as commands", self)
-        self.commands_checkbox.setToolTip(
-            "Adding, editing and deleting a note is a command (replayed, and in an "
-            "exported command history), not a history message. The same as "
-            "Settings › General › Record notes as commands")
-        self.commands_checkbox.toggled.connect(self._set_as_commands)
+        # Recorded as commands or messages: Settings › General only (#539)
         layout.addLayout(row)
-        layout.addWidget(self.commands_checkbox)  # below Add…, on its own line
         self.add_button.clicked.connect(self.add_note)
         self.edit_button.clicked.connect(self.edit_note)
         self.delete_button.clicked.connect(self.delete_notes)
@@ -234,11 +227,6 @@ class NotesEditor(QtWidgets.QWidget):
     def refresh(self) -> None:
         self.table.show_notes(self._notes)
         self._update_buttons()
-        settings = type(self).settings
-        self.commands_checkbox.setVisible(settings is not None)
-        self.commands_checkbox.blockSignals(True)
-        self.commands_checkbox.setChecked(self.as_commands())
-        self.commands_checkbox.blockSignals(False)
 
     def as_commands(self) -> bool:
         """True if notes are recorded as commands (the app's setting, #510)."""
@@ -252,11 +240,6 @@ class NotesEditor(QtWidgets.QWidget):
                 and self._notes.command_path is not None
                 and nmch.get_command_history().enabled)
 
-    def _set_as_commands(self, on: bool) -> None:
-        settings = type(self).settings
-        if settings is not None:
-            settings.notes_as_commands = bool(on)
-            settings.save_user()  # only if loaded from the user's file
 
     def _editable(self, rows: list[int]) -> list[int]:
         notes = self._notes if self._notes is not None else []

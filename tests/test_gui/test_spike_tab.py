@@ -179,3 +179,14 @@ def test_decimals_displayed(app):
     assert app.spike.details.toPlainText().splitlines()[1] == "2 spikes: 9.5, 39.5"
     spin.setValue(0)
     assert app.spike.details.toPlainText().splitlines()[1] == "2 spikes: 10, 40"
+
+
+def test_spike1_layout_no_outer_box_and_fitted_controls(qtbot):
+    """The Spike1 | Spike2 tabs sit in the panel, not in a box; Threshold,
+    X begin and X end are a value wide (#539)."""
+    tab = SpikeToolTab(NMManager(quiet=True))
+    qtbot.addWidget(tab)
+    assert tab.parameters_group.isHidden()
+    assert tab.mode_tabs.parentWidget() is tab
+    for edit in (tab.ylevel_edit, tab.xbgn_edit, tab.xend_edit):
+        assert edit.minimumWidth() == edit.maximumWidth() < 120
