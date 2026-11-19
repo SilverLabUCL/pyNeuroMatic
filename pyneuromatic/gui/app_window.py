@@ -1411,11 +1411,16 @@ class NMAppWindow(QtWidgets.QMainWindow):
     def _edit_target(self) -> tuple[str | None, QtWidgets.QWidget | None]:
         """What Copy and Paste act on: ("table", view) while the Table panel
         has focus, ("history", view) for the History panel's entries,
-        ("text", widget) for a text box, else (None, None)."""
+        ("text", widget) for a text box, ("label", widget) for text that
+        can be highlighted (e.g. the Browser's Details), else (None, None)."""
         widget = QtWidgets.QApplication.focusWidget()
         if isinstance(widget, (QtWidgets.QLineEdit, QtWidgets.QPlainTextEdit,
                                QtWidgets.QTextEdit)):
             return "text", widget
+        if isinstance(widget, QtWidgets.QLabel) and (
+                widget.textInteractionFlags()
+                & QtCore.Qt.TextInteractionFlag.TextSelectableByMouse):
+            return "label", widget
         if (isinstance(widget, QtWidgets.QAbstractItemView)
                 and self.table_panel.isAncestorOf(widget)):
             return "table", widget
@@ -1436,6 +1441,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
             widget.copy_selection()
         elif kind == "text":
             widget.copy()
+        elif kind == "label" and widget.hasSelectedText():
+            QtWidgets.QApplication.clipboard().setText(widget.selectedText())
 
     def edit_paste(self) -> None:
         kind, widget = self._edit_target()
@@ -1458,6 +1465,8 @@ class NMAppWindow(QtWidgets.QMainWindow):
             can_copy = (widget.hasSelectedText() if isinstance(widget, QtWidgets.QLineEdit)
                         else widget.textCursor().hasSelection())
             can_paste = has_text and not widget.isReadOnly()
+        elif kind == "label":
+            can_copy, can_paste = widget.hasSelectedText(), False
         else:
             can_copy = can_paste = False
         self.copy_action.setEnabled(can_copy)

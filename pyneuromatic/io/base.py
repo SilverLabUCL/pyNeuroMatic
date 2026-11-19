@@ -7,8 +7,10 @@ acquiring and simulating electrophysiology data.
 """
 from __future__ import annotations
 import dataclasses
+import datetime
 import math
 import re
+from pathlib import Path
 from typing import NamedTuple
 
 
@@ -171,6 +173,31 @@ def note_import(folder, channel_numbers, epoch_numbers, channels, epochs, xrange
         "epochs": list(epoch_numbers),  # the file's epoch numbers
         "xrange": list(xrange) if xrange is not None else None,
     }
+
+
+def note_file(folder, filepath) -> None:
+    """Keep in *folder* the file it was read from (#543): its name, full
+    path, size and modified date, and when it was imported."""
+    path = Path(filepath).absolute()
+    source = {"file": path.name, "path": str(path)}
+    try:
+        stat = path.stat()
+    except OSError:  # e.g. gone since it was read
+        stat = None
+    if stat is not None:
+        source["size"] = stat.st_size
+        source["modified"] = datetime.datetime.fromtimestamp(
+            stat.st_mtime).isoformat(" ", "seconds")
+    source["imported"] = datetime.datetime.now().isoformat(" ", "seconds")
+    folder.file_source = source
+
+
+def note_data_source(data, filepath, channel: str, epoch: int) -> None:
+    """Keep in *data* the file it was read from, and its channel and epoch
+    in that file (before renumbering), #543."""
+    path = Path(filepath).absolute()
+    data.file_source = {"file": path.name, "path": str(path),
+                        "channel": channel, "epoch": int(epoch)}
 
 
 def crop(y, start: float, delta: float, xrange):

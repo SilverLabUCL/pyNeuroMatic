@@ -106,6 +106,8 @@ class NMFolder(NMObject):
         self.__toolresults: dict[str, object] = {}  # tool results saved to dict
         self.__notes = NMNotes()
         self.__metadata: dict[str, dict] = {}  # nested dict by source folder
+        # The file it was read from (#543): see file_source
+        self.__file_source: dict | None = None
 
     # override
     def __eq__(
@@ -286,6 +288,20 @@ class NMFolder(NMObject):
     def notes(self) -> NMNotes:
         """Return notes for this folder."""
         return self.__notes.set_owner(self)
+
+    @property
+    def file_source(self) -> dict | None:
+        """The file this folder was read from, or None (#543), e.g.
+        ``{"file": "cell.pxp", "path": "/Users/me/Data/cell.pxp",
+        "size": 1234567, "modified": "2004-07-02 15:04:11",
+        "imported": "2026-11-19 15:10:02"}``."""
+        return getattr(self, "_NMFolder__file_source", None)
+
+    @file_source.setter
+    def file_source(self, source: dict | None) -> None:
+        if source is not None and not isinstance(source, dict):
+            raise TypeError(nmu.type_error_str(source, "file_source", "dict or None"))
+        self.__file_source = dict(source) if source is not None else None
 
     # Metadata - structured key-value data from imported files
 
@@ -2186,7 +2202,8 @@ class NMFolderContainer(NMObjectContainer):
         nmch.add_nm_command("%s.import_file(%r%s)" % (
             self._nm_cmd_path, str(path),
             nmu.kwargs_repr(self.import_file, {"name": name, **given})))
-        nmh.history(self._import_note(folder), path=folder.history_path)
+        nmh.history("%s: %s" % (file.name, self._import_note(folder)),
+                    path=folder.history_path)  # names the file (#543)
         return folder
 
     @staticmethod
