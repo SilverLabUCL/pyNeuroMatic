@@ -443,3 +443,62 @@ def test_plot_says_why_there_is_no_plot(app):
         browser.show_object(folder.data[name])
         assert panel.row_text("Plot") == message
         assert not panel.preview.isVisibleTo(panel)
+
+
+def test_info_names_the_file_a_folder_and_array_came_from(app):
+    """File, File Path (one line, shortened to fit), File Size, File Date,
+    Imported; an array's Source: the file, its channel and epoch (#543)."""
+    folder, data = app.folder, app.folder.data["Single"]
+    path = "/Users/me/Data/2004/July/cell.pxp"
+    folder.file_source = {"file": "cell.pxp", "path": path, "size": 9140511,
+                          "modified": "2004-07-02 15:04:11",
+                          "imported": "2026-11-19 15:10:02"}
+    data.file_source = {"file": "cell.pxp", "path": path, "channel": "B", "epoch": 3}
+    browser = app.browser_widget
+    panel = browser.info_panel
+    browser.show_object(folder)
+    assert panel.row_text("File") == "cell.pxp"
+    assert panel.row_text("File Path") == "/Users/me/Data/2004/July"  # in full
+    assert panel.row_text("File Size") == "8.7 MB"
+    assert panel.row_text("File Date") == "2004-07-02 15:04:11"
+    assert panel.row_text("Imported") == "2026-11-19 15:10:02"
+    browser.show_object(data)
+    assert panel.row_text("Source") == "cell.pxp, channel B, epoch 3"
+    # Made here, not read from a file: no rows
+    browser.show_object(app.series.channels["A"].data[0])
+    assert panel.row_text("Source") is None
+
+
+def test_copy_copies_the_rows_shown(app):
+    """Copy: a label and its value a line, tab-separated (#543)."""
+    from PyQt6 import QtWidgets
+    browser = app.browser_widget
+    panel = browser.info_panel
+    browser.show_object(app.folder.data["Single"])
+    panel.stats_button.click()
+    assert panel.copy_button.isVisibleTo(panel)
+    panel.copy_button.click()
+    lines = QtWidgets.QApplication.clipboard().text().splitlines()
+    assert lines[0].startswith("Created\t")
+    assert "Mean\t0.833333 mV" in lines
+    panel.show_object(None)  # nothing shown: nothing to copy
+    assert not panel.copy_button.isVisibleTo(panel)
+
+
+def test_edit_copy_copies_a_value_highlighted(app, qtbot):
+    """A value highlighted in Details is copied by Edit › Copy (Cmd+C)."""
+    from PyQt6 import QtWidgets
+    browser = app.browser_widget
+    browser.show_object(app.folder.data["Single"])
+    app.show_browser()
+    app.show()
+    panel = browser.info_panel
+    field = next(w for w in panel.findChildren(QtWidgets.QLabel)
+                 if w.text() == "Time" and w.isVisibleTo(panel))  # X Label
+    field.setFocus()
+    qtbot.waitUntil(lambda: QtWidgets.QApplication.focusWidget() is field)
+    field.setSelection(0, 2)
+    app._update_edit_actions()
+    assert app.copy_action.isEnabled()
+    app.edit_copy()
+    assert QtWidgets.QApplication.clipboard().text() == "Ti"

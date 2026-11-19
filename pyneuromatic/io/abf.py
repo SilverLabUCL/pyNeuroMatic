@@ -19,7 +19,8 @@ if TYPE_CHECKING:
     from pyneuromatic.core.nm_folder import NMFolder
 
 from pyneuromatic.io.base import (
-    FileInfo, check_options, crop, import_numbers, make_data_name, note_import,
+    FileInfo, check_options, crop, import_numbers, make_data_name, note_data_source,
+    note_file, note_import,
 )
 import pyneuromatic.core.nm_utilities as nmu
 
@@ -111,6 +112,7 @@ def read_abf(
     channel_numbers, epoch_numbers = import_numbers(
         letters, list(range(abf.sweepCount)), channels, epochs)
     note_import(folder, channel_numbers, epoch_numbers, channels, epochs, xrange)
+    note_file(folder, filepath)
 
     # Process sweeps and channels; build matches dict as we go
     matches = {}
@@ -140,6 +142,7 @@ def read_abf(
 
             # Set y data
             data.nparray = y.copy()
+            note_data_source(data, filepath, letters[channel], sweep)
 
             ch_char = nmu.channel_char(new_channel)
             if ch_char:

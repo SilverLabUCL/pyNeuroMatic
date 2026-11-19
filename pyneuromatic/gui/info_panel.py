@@ -6,6 +6,8 @@ its notes, if it keeps any, to add, edit and delete (the notes editor, #505).
 """
 from __future__ import annotations
 
+import os
+
 import numpy
 
 from PyQt6 import QtCore, QtWidgets
@@ -105,6 +107,41 @@ def _sets_of(container, name: str) -> list[str]:
     return [set_name for set_name in sets.keys() if sets.contains(set_name, name)]
 
 
+class _ElidedLabel(QtWidgets.QLabel):
+    """One line, shortened in the middle ("/Users/…/fixtures") to fit its
+    width, the whole text in its tooltip: a long path never wraps (a wrapped
+    label in a form can lose a line), #543."""
+
+    def __init__(self, text: str, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self.full_text = text
+        self.setToolTip(text)
+
+    def minimumSizeHint(self) -> QtCore.QSize:  # noqa: N802 (Qt)
+        hint = super().minimumSizeHint()
+        return QtCore.QSize(min(hint.width(), 60), hint.height())
+
+    def sizeHint(self) -> QtCore.QSize:  # noqa: N802 (Qt)
+        hint = super().sizeHint()
+        return QtCore.QSize(self.fontMetrics().horizontalAdvance(self.full_text) + 4,
+                            hint.height())
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt)
+        super().resizeEvent(event)
+        self.setText(self.fontMetrics().elidedText(
+            self.full_text, QtCore.Qt.TextElideMode.ElideMiddle, self.width()))
+
+
+def _size_text(size: int) -> str:
+    """e.g. "8.7 MB" (#543)."""
+    value = float(size)
+    for unit in ("bytes", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{size} bytes" if unit == "bytes" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{size} bytes"
+
+
 class InfoPanel(QtWidgets.QScrollArea):
     """Shows one object: a title, a form of its properties and its notes."""
 
@@ -155,6 +192,14 @@ class InfoPanel(QtWidgets.QScrollArea):
         view_row.addWidget(self.stats_button)
         view_row.addWidget(self.plot_button)
         view_row.addStretch(1)
+        # Copy: every row shown, "label<tab>value" a line (e.g. into a
+        # spreadsheet); a value highlighted is copied with Edit › Copy
+        self.copy_button = QtWidgets.QToolButton(self._body)
+        self.copy_button.setText("Copy")
+        self.copy_button.setToolTip("Copy these rows: a label and its value a line, "
+                                    "tab-separated (to paste into a spreadsheet)")
+        self.copy_button.clicked.connect(self.copy_rows)
+        view_row.addWidget(self.copy_button)
         layout.addLayout(view_row)
 
         self._form = QtWidgets.QFormLayout()
@@ -237,6 +282,7 @@ class InfoPanel(QtWidgets.QScrollArea):
             self.transforms_button.hide()
             self._show_metadata({})
             self._show_notes(None)
+            self.copy_button.hide()
             return
         kind = next((label for cls, label in _KIND.items() if isinstance(obj, cls)), "")
         self.title_label.setText(f"{obj.name}  ·  {kind}" if kind else obj.name)
@@ -271,6 +317,7 @@ class InfoPanel(QtWidgets.QScrollArea):
         self.transforms_button.setVisible(isinstance(obj, NMChannel))
         self._show_metadata(getattr(obj, "metadata", {}) if isinstance(obj, NMFolder) else {})
         self._show_notes(getattr(obj, "notes", None))
+        self.copy_button.setVisible(self._form.rowCount() > 0)
 
     def row_text(self, label: str) -> str | None:
         """The value shown for *label* (e.g. "Points"), or None."""
@@ -278,8 +325,17 @@ class InfoPanel(QtWidgets.QScrollArea):
             label_item = self._form.itemAt(row, QtWidgets.QFormLayout.ItemRole.LabelRole)
             field_item = self._form.itemAt(row, QtWidgets.QFormLayout.ItemRole.FieldRole)
             if label_item is not None and label_item.widget().text() == label:
-                return field_item.widget().text()
+                field = field_item.widget()
+                return getattr(field, "full_text", field.text())  # not shortened
         return None
+
+    def rows_text(self) -> str:
+        """The rows shown, "label<tab>value" a line, values in full."""
+        return "\n".join(f"{label}\t{self.row_text(label)}" for label in self.row_labels())
+
+    def copy_rows(self) -> None:
+        """Copy the rows shown to the clipboard (#543)."""
+        QtWidgets.QApplication.clipboard().setText(self.rows_text())
 
     def row_labels(self) -> list[str]:
         labels = []
@@ -289,8 +345,15 @@ class InfoPanel(QtWidgets.QScrollArea):
                 labels.append(item.widget().text())
         return labels
 
-    def _add_row(self, label: str, value: str, color: str | None = None) -> None:
+    def _add_row(self, label: str, value: str, color: str | None = None,
+                 tip: str = "", elide: bool = False) -> None:
+        if elide:  # one line, shortened to fit (e.g. a path)
+            field = _ElidedLabel(value, self._body)
+            field.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+            self._form.addRow(QtWidgets.QLabel(label, self._body), field)
+            return
         field = QtWidgets.QLabel(value, self._body)
+        field.setToolTip(tip)
         if color is not None:  # e.g. red: a locked data series
             field.setStyleSheet(f"color: {color};")
         # Only long values (e.g. lists of names) wrap: a wrapped label in a
@@ -317,6 +380,23 @@ class InfoPanel(QtWidgets.QScrollArea):
         self._add_row("Data Series", _names(folder.dataseries.keys()))
         self._add_row("Subfolders", _names(folder.toolfolders.keys()))
         self._add_row("Data Sets", _names(folder.data.sets.keys()))
+        self._add_file_rows(folder.file_source)
+
+    def _add_file_rows(self, source: dict | None) -> None:
+        """The file a folder was read from (#543): its name, where it is,
+        its size and date, and when it was imported."""
+        if not source:
+            return
+        path = str(source.get("path") or "")
+        self._add_row("File", str(source.get("file") or "—"), tip=path)
+        if path:
+            self._add_row("File Path", os.path.dirname(path) or path, elide=True)
+        if source.get("size") is not None:
+            self._add_row("File Size", _size_text(int(source["size"])))
+        if source.get("modified"):
+            self._add_row("File Date", str(source["modified"]))
+        if source.get("imported"):
+            self._add_row("Imported", str(source["imported"]))
 
     def _show_tool_folder(self, folder: NMToolFolder) -> None:
         self._add_row("Data", _count(len(folder.data), "array"))
@@ -355,6 +435,14 @@ class InfoPanel(QtWidgets.QScrollArea):
                            for series in container.xarray_series(data.name)]
             self._add_row("Data Series", _names(places))
         self._add_row("Sets", _names(_sets_of(container, data.name)))
+        source = data.file_source
+        if source:  # the file it was read from, and where in it (#543)
+            parts = [str(source.get("file") or "—")]
+            if source.get("channel") is not None:
+                parts.append(f"channel {source['channel']}")
+            if source.get("epoch") is not None:
+                parts.append(f"epoch {source['epoch']}")
+            self._add_row("Source", ", ".join(parts), tip=str(source.get("path") or ""))
         locked = self._locked_series(data)
         if locked is not None:
             self._add_row("Locked", f"Yes, with data series '{locked.name}'", LOCKED_COLOR)

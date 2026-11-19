@@ -21,7 +21,8 @@ if TYPE_CHECKING:
 import functools
 
 from pyneuromatic.io.base import (
-    FileInfo, check_options, crop, import_numbers, make_data_name, note_import,
+    FileInfo, check_options, crop, import_numbers, make_data_name, note_data_source,
+    note_file, note_import,
     parse_units_from_label,
 )
 import pyneuromatic.core.nm_utilities as nmu
@@ -96,6 +97,7 @@ def read_pxp(
         sorted({c for c, _e, _r in waves}), sorted({e for _c, e, _r in waves}),
         channels, epochs)
     note_import(folder, channel_numbers, epoch_numbers, channels, epochs, xrange)
+    note_file(folder, filepath)
 
     # Process data wave records; build matches dict as we go
     matches = {}
@@ -127,6 +129,7 @@ def read_pxp(
 
         # Set y data (a copy: the file's contents are kept for re-reading)
         data.nparray = y.copy()
+        note_data_source(data, filepath, channel_char, epoch_num)
 
         matches[(nmu.channel_char(new_channel), new_epoch)] = data
 

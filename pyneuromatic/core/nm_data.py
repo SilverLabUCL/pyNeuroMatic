@@ -115,6 +115,8 @@ class NMData(NMObject):
         self.__yscale: NMScaleY = _yscale_from_dict(yscale, parent=self)
 
         self.__notes = NMNotes()
+        # The file it was read from (#543): see file_source
+        self.__file_source: dict | None = None
 
         self._dataseries_set(dataseries_channel, dataseries_epoch)
 
@@ -247,6 +249,21 @@ class NMData(NMObject):
         else:
             k.update({"dataseries epoch": None})
         return k
+
+    @property
+    def file_source(self) -> dict | None:
+        """The file this array was read from, or None (#543), e.g.
+        ``{"file": "cell.pxp", "path": "/Users/me/Data/cell.pxp",
+        "channel": "A", "epoch": 12}``: the file's own channel and epoch
+        (before any renumbering). Kept by a copy, so an array copied or
+        moved to another folder still says where it came from."""
+        return getattr(self, "_NMData__file_source", None)
+
+    @file_source.setter
+    def file_source(self, source: dict | None) -> None:
+        if source is not None and not isinstance(source, dict):
+            raise TypeError(nmu.type_error_str(source, "file_source", "dict or None"))
+        self.__file_source = dict(source) if source is not None else None
 
     @property
     def notes(self) -> NMNotes:

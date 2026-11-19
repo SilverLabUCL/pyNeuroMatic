@@ -21,7 +21,8 @@ if TYPE_CHECKING:
 import functools
 
 from pyneuromatic.io.base import (
-    FileInfo, check_options, crop, import_numbers, make_data_name, note_import,
+    FileInfo, check_options, crop, import_numbers, make_data_name, note_data_source,
+    note_file, note_import,
     parse_units_from_label,
 )
 import pyneuromatic.core.nm_utilities as nmu
@@ -84,6 +85,7 @@ def read_axograph(
         [nmu.channel_char(c) for c in sorted({col["channel"] for col in data_columns})],
         sorted({col["epoch"] for col in data_columns}), channels, epochs)
     note_import(folder, channel_numbers, epoch_numbers, channels, epochs, xrange)
+    note_file(folder, filepath)
 
     # Process data columns; build matches dict as we go
     matches = {}
@@ -112,6 +114,7 @@ def read_axograph(
             continue
 
         data.nparray = y_data
+        note_data_source(data, filepath, letter, col["epoch"])
 
         ch_char = nmu.channel_char(channel)
         if ch_char:
