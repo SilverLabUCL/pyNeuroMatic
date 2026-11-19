@@ -644,11 +644,11 @@ def test_subfolder_named_after_the_epoch_selection(qtbot):
 
 
 def test_choose_measurement_is_plain(qtbot):
-    """"Choose measure" (none yet) looks like the other items: no red."""
+    """"Choose…" (none yet) looks like the other items: no red."""
     window = NMAppWindow(NMManager(quiet=True))
     qtbot.addWidget(window)
     combo = window.tool_tabs["Stats"].measurement_combo
-    assert combo.itemText(0) == "Choose measure" and combo.itemData(0) is None
+    assert combo.itemText(0) == "Choose…" and combo.itemData(0) is None
     assert combo.itemData(0, QtCore.Qt.ItemDataRole.ForegroundRole) is None
     assert combo.styleSheet() == ""
 
@@ -1189,3 +1189,23 @@ def test_blanking_the_source_keeps_it_with_nothing_to_run(qtbot):
     strip.combo("data").setCurrentIndex(0)
     assert model.selection["source"] == "data"
     assert tab.run_info_label.text() == "Choose a data array or Data Set"
+
+
+def test_stats1_layout_no_outer_box_and_fitted_controls(qtbot):
+    """The Stats1 | Stats2 tabs sit in the panel, not in a box; number
+    boxes are a value wide; the window list fits w12; Results grows (#539)."""
+    tab = StatsToolTab(NMManager(quiet=True))
+    qtbot.addWidget(tab)
+    assert tab.parameters_group.isHidden()
+    assert tab.mode_tabs.parentWidget() is tab
+    probe = QtWidgets.QComboBox()
+    probe.addItem("w12")
+    assert tab.window_combo.width() >= probe.sizeHint().width()
+    for edit in (tab.xbgn_edit, tab.xend_edit, tab.bsln_xbgn_edit, tab.bsln_xend_edit):
+        assert edit.minimumWidth() == edit.maximumWidth() < 120  # fixed, a value wide
+    assert tab.details.maximumHeight() > 10000  # no longer a fixed height
+    tab.resize(400, 900)
+    tab.show()
+    short = tab.details.height()
+    tab.resize(400, 1200)
+    qtbot.waitUntil(lambda: tab.details.height() > short)

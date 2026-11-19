@@ -11,6 +11,26 @@ from PyQt6 import QtCore, QtWidgets
 RUN_DISPLAY_LABELS = {"off": "Off", "each": "Each epoch", "ask": "Ask after each"}
 
 
+def fit_number_edit(edit: QtWidgets.QLineEdit, sample: str = "-0.00005") -> None:
+    """A number's box, as wide as *sample* (a value, e.g. -0.00005), not the
+    row's width: so a tool's rows (X begin, X end...) stay short (#539)."""
+    margins = edit.textMargins()
+    width = (edit.fontMetrics().horizontalAdvance(sample) + margins.left()
+             + margins.right() + 16)  # the frame and its padding
+    edit.setFixedWidth(width)
+
+
+def fit_combo(combo: QtWidgets.QComboBox, sample: str) -> None:
+    """A dropdown as wide as one showing *sample* (e.g. "w88"), whatever
+    its items (#539)."""
+    probe = QtWidgets.QComboBox()
+    probe.setStyle(combo.style())
+    probe.setFont(combo.font())
+    probe.addItem(sample)
+    probe.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
+    combo.setFixedWidth(probe.sizeHint().width())
+
+
 class _RunGuard(QtCore.QObject):
     """While a tool runs: the window ignores clicks, keys and closing, except
     on Cancel, the run's prompt and the Plot (to zoom an epoch shown, #468),
@@ -169,7 +189,7 @@ class ToolTabWidget(QtWidgets.QWidget):
         self._selection_model: Any = None
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(8, 8, 8, 8)  # a narrower panel (#539)
 
         # The title, then ⋯ for the tool's settings: the same place on every tool
         title_row = QtWidgets.QHBoxLayout()
@@ -188,6 +208,8 @@ class ToolTabWidget(QtWidgets.QWidget):
         self.parameter_layout = QtWidgets.QVBoxLayout(self.parameters_group)
         self.parameter_layout.setContentsMargins(6, 6, 6, 6)  # a narrower panel (#537)
         layout.addWidget(self.parameters_group)
+
+        self._layout = layout
 
         self.preview_group = QtWidgets.QGroupBox("Preview", self)
         self.preview_layout = QtWidgets.QVBoxLayout(self.preview_group)
@@ -271,6 +293,14 @@ class ToolTabWidget(QtWidgets.QWidget):
         status_layout.addWidget(self.status_label, stretch=1)
         status_layout.addWidget(self.progress_bar)
         layout.addLayout(status_layout)
+
+    def use_tabs_for_parameters(self, tabs: QtWidgets.QWidget) -> None:
+        """Show *tabs* (e.g. Stats1 | Stats2) in place of the Parameters box,
+        not inside it: no box around them, and the rest of the panel's height
+        (the Results box is hidden), #539."""
+        index = self._layout.indexOf(self.parameters_group)
+        self._layout.insertWidget(index, tabs, stretch=1)
+        self.parameters_group.hide()
 
     # --- progress and Cancel (#450) ---------------------------------------------
 

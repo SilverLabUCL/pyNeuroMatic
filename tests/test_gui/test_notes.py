@@ -330,8 +330,7 @@ def test_notes_as_commands_off_by_default(cmd_app, qtbot):
     editor = NotesEditor()
     qtbot.addWidget(editor)
     editor.set_notes(cmd_app.series.notes, "Record (Demo)")
-    assert not editor.commands_checkbox.isHidden()  # shown: the app has settings
-    assert not editor.commands_checkbox.isChecked()
+    assert not hasattr(editor, "commands_checkbox")  # Settings › General only (#539)
     start = len(_history(cmd_app))
     _edit(editor)
     assert _commands(cmd_app, start) == []  # messages (#507)
@@ -351,7 +350,7 @@ def test_notes_as_commands_replay(cmd_app, qtbot):
         editor = NotesEditor()
         qtbot.addWidget(editor)
         editor.set_notes(notes, "owner")
-        assert editor.commands_checkbox.isChecked()
+        assert editor.as_commands()
         start = len(_history(cmd_app))
         _edit(editor)
         commands = _commands(cmd_app, start)
@@ -366,21 +365,21 @@ def test_notes_as_commands_replay(cmd_app, qtbot):
         assert [n["note"] for n in notes] == made == ["first, corrected"]
 
 
-def test_the_editors_checkbox_is_the_setting(cmd_app, qtbot):
+def test_settings_sets_how_every_editor_records(cmd_app, qtbot):
+    """Only Settings › General has the choice (#539); every editor follows it."""
     settings = cmd_app.manager.settings
     editor = NotesEditor()
     qtbot.addWidget(editor)
     editor.set_notes(cmd_app.series.notes, "Record (Demo)")
-    editor.commands_checkbox.setChecked(True)
-    assert settings.notes_as_commands is True
     dialog = cmd_app.settings_dialog()
     qtbot.addWidget(dialog)
-    assert dialog.notes_commands_checkbox.isChecked()  # Settings › General
+    dialog.notes_commands_checkbox.setChecked(True)
+    assert settings.notes_as_commands is True and editor.as_commands()
     dialog.notes_commands_checkbox.setChecked(False)
     assert settings.notes_as_commands is False
     other = NotesDialog(cmd_app.series.notes, "Record (Demo)")
     qtbot.addWidget(other)
-    assert not other.editor.commands_checkbox.isChecked()  # one setting
+    assert not other.editor.as_commands() and not editor.as_commands()  # one setting
 
 
 def test_readonly_notes_give_no_command(cmd_app, qtbot):

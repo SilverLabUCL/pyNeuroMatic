@@ -27,6 +27,7 @@ from pyneuromatic.gui.plot_marks import PlotMark
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.gui.spike2_view import Spike2Panel, SpikeTables
 from pyneuromatic.gui.tool_run import SelectionRunTab
+from pyneuromatic.gui.tool_tab import fit_number_edit
 from pyneuromatic.tools.nm_tool_spike import NMToolSpike
 from pyneuromatic.tools.nm_tool_utilities import find_level_crossings_nmdata
 
@@ -58,23 +59,23 @@ class SpikeToolTab(SelectionRunTab):
         self._trace = None  # the trace the Plot shows (set_trace)
 
         # Spike1 sets up and runs detection; Spike2 shows its saved results
-        self.parameters_group.setTitle("")
         self.mode_tabs = QtWidgets.QTabWidget(self)
         self.mode_tabs.setObjectName("spikeModeTabs")
-        self.parameter_layout.addWidget(self.mode_tabs)
+        self.use_tabs_for_parameters(self.mode_tabs)  # no box around them (#539)
         self.spike1_page = QtWidgets.QWidget(self.mode_tabs)
         self.mode_tabs.addTab(self.spike1_page, "Spike1")
         self.spike2 = Spike2Panel(manager, tool, self.mode_tabs)
         self.mode_tabs.addTab(self.spike2, "Spike2")
         layout = QtWidgets.QVBoxLayout(self.spike1_page)
-        layout.setContentsMargins(8, 8, 8, 8)  # as Stats1's (#537)
+        layout.setContentsMargins(6, 8, 6, 8)  # as Stats1's (#537)
 
         level_row = QtWidgets.QHBoxLayout()
         level_row.addWidget(QtWidgets.QLabel("Threshold", self))
         self.ylevel_edit = QtWidgets.QLineEdit(self)
         self.ylevel_edit.setObjectName("spikeThreshold")
         self.ylevel_edit.setToolTip("The Y level a spike crosses (or drag its line on the Plot)")
-        level_row.addWidget(self.ylevel_edit, stretch=1)
+        fit_number_edit(self.ylevel_edit)  # a value, not the row (#539)
+        level_row.addWidget(self.ylevel_edit)
         level_row.addWidget(QtWidgets.QLabel("Crossing", self))
         self.crossing_combo = QtWidgets.QComboBox(self)
         for shown, func_name in SPIKE_CROSSINGS:
@@ -82,17 +83,21 @@ class SpikeToolTab(SelectionRunTab):
         self.crossing_combo.setToolTip(
             "The direction of the crossing: rising, falling or either")
         level_row.addWidget(self.crossing_combo)
+        level_row.addStretch(1)
         layout.addLayout(level_row)
 
         x_row = QtWidgets.QHBoxLayout()
         self.xbgn_edit = QtWidgets.QLineEdit(self)
         self.xbgn_edit.setPlaceholderText("-inf")
+        fit_number_edit(self.xbgn_edit)
         x_row.addWidget(QtWidgets.QLabel("X begin", self))
-        x_row.addWidget(self.xbgn_edit, stretch=1)
+        x_row.addWidget(self.xbgn_edit)
         self.xend_edit = QtWidgets.QLineEdit(self)
         self.xend_edit.setPlaceholderText("inf")
+        fit_number_edit(self.xend_edit)
         x_row.addWidget(QtWidgets.QLabel("X end", self))
-        x_row.addWidget(self.xend_edit, stretch=1)
+        x_row.addWidget(self.xend_edit)
+        x_row.addStretch(1)
         layout.addLayout(x_row)
 
         # Results: detected spikes of the current epoch, as Run would find them

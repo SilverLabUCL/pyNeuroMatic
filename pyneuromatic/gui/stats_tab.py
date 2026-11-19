@@ -32,6 +32,7 @@ from pyneuromatic.gui.results_view import (
     Stats2Panel, StatsTables, display_name, points_text, shows_points,
 )
 from pyneuromatic.gui.tool_run import SelectionRunTab
+from pyneuromatic.gui.tool_tab import fit_combo, fit_number_edit
 
 
 # The measurement menu lists each measurement once (#478): a peak
@@ -315,14 +316,13 @@ class StatsToolTab(SelectionRunTab):
         self._tool = tool
 
         # Stats1 configures and runs windows; Stats2 works on saved results
-        self.parameters_group.setTitle("")
         self.mode_tabs = QtWidgets.QTabWidget(self)
         self.mode_tabs.setObjectName("statsModeTabs")
-        self.parameter_layout.addWidget(self.mode_tabs)
+        self.use_tabs_for_parameters(self.mode_tabs)  # no box around them (#539)
         stats1_tab = QtWidgets.QWidget(self.mode_tabs)
         stats1_tab_layout = QtWidgets.QVBoxLayout(stats1_tab)
         # Not the style's margins (20 px on macOS): a narrower tool panel (#537)
-        stats1_tab_layout.setContentsMargins(8, 8, 8, 8)
+        stats1_tab_layout.setContentsMargins(6, 8, 6, 8)
         self.mode_tabs.addTab(stats1_tab, "Stats1")
         self.stats2 = Stats2Panel(manager, self.mode_tabs)
         self.mode_tabs.addTab(self.stats2, "Stats2")
@@ -334,9 +334,10 @@ class StatsToolTab(SelectionRunTab):
         stats1_layout.setContentsMargins(0, 0, 0, 0)
 
         window_row = QtWidgets.QHBoxLayout()
+        window_row.setSpacing(4)  # the widest row: it sets the panel's width (#539)
         self.window_combo = QtWidgets.QComboBox(self)
         self.window_combo.setObjectName("statsWindowSelector")
-        self.window_combo.setFixedWidth(60)  # a window name (w0, w12)
+        fit_combo(self.window_combo, "w88")  # a window name (w0, w12), #539
         window_row.addWidget(QtWidgets.QLabel("Window", self))
         window_row.addWidget(self.window_combo)
         # Its actions under ⋯, as the strip's selectors (#514): the list
@@ -368,7 +369,7 @@ class StatsToolTab(SelectionRunTab):
             QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
         window_row.addWidget(self.window_actions_button)
         self.measurement_combo = QtWidgets.QComboBox(self)
-        self.measurement_combo.addItem("Choose measure", None)  # none yet
+        self.measurement_combo.addItem("Choose…", None)  # none yet
         for group in self._MEASUREMENT_GROUPS:
             names = []  # each measurement once, without its sign (#478)
             for name in group:
@@ -379,7 +380,8 @@ class StatsToolTab(SelectionRunTab):
                 self.measurement_combo.insertSeparator(self.measurement_combo.count())
             for name in names:
                 self.measurement_combo.addItem(display_name(name), name)
-        # As wide as its longest item (e.g. "Choose measure"), not the row
+        # At least as wide as its longest item (e.g. "risetimeslope"); wider
+        # to end the row where the Bsln row ends (below, #539)
         self.measurement_combo.setSizeAdjustPolicy(
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
         window_row.addWidget(self.measurement_combo)
@@ -423,19 +425,25 @@ class StatsToolTab(SelectionRunTab):
             edit = QtWidgets.QLineEdit(f"{default:g}", self.param_row)
             edit.setObjectName(f"statsParam_{key}")
             self.param_edits[key] = edit
+            fit_number_edit(edit)  # a value, not the row (#539)
             param_layout.addWidget(self.param_labels[key])
-            param_layout.addWidget(edit, stretch=1)
+            param_layout.addWidget(edit)
+        param_layout.addStretch(1)
         stats1_layout.addWidget(self.param_row)
 
+        # Number boxes as wide as a value, not the row (#539)
         x_row = QtWidgets.QHBoxLayout()
         self.xbgn_edit = QtWidgets.QLineEdit(self)
         self.xbgn_edit.setPlaceholderText("-inf")
+        fit_number_edit(self.xbgn_edit)
         x_row.addWidget(QtWidgets.QLabel("X begin", self))
-        x_row.addWidget(self.xbgn_edit, stretch=1)
+        x_row.addWidget(self.xbgn_edit)
         self.xend_edit = QtWidgets.QLineEdit(self)
         self.xend_edit.setPlaceholderText("inf")
+        fit_number_edit(self.xend_edit)
         x_row.addWidget(QtWidgets.QLabel("X end", self))
-        x_row.addWidget(self.xend_edit, stretch=1)
+        x_row.addWidget(self.xend_edit)
+        x_row.addStretch(1)
         stats1_layout.addLayout(x_row)
 
         bsln_row = QtWidgets.QHBoxLayout()
@@ -451,12 +459,21 @@ class StatsToolTab(SelectionRunTab):
         bsln_row.addWidget(self.bsln_combo)
         self.bsln_xbgn_edit = QtWidgets.QLineEdit(self)
         self.bsln_xbgn_edit.setPlaceholderText("-inf")
-        bsln_row.addWidget(self.bsln_xbgn_edit, stretch=1)
+        fit_number_edit(self.bsln_xbgn_edit)
+        bsln_row.addWidget(self.bsln_xbgn_edit)
         bsln_row.addWidget(QtWidgets.QLabel("to", self))
         self.bsln_xend_edit = QtWidgets.QLineEdit(self)
         self.bsln_xend_edit.setPlaceholderText("inf")
-        bsln_row.addWidget(self.bsln_xend_edit, stretch=1)
+        fit_number_edit(self.bsln_xend_edit)
+        bsln_row.addWidget(self.bsln_xend_edit)
+        bsln_row.addStretch(1)
         stats1_layout.addLayout(bsln_row)
+        # The Window row ends where the Bsln row does: its measure list
+        # takes the difference (#539)
+        extra = bsln_row.sizeHint().width() - window_row.sizeHint().width()
+        if extra > 0:
+            self.measurement_combo.setMinimumWidth(
+                self.measurement_combo.sizeHint().width() + extra)
         # The user's own choice for an optional baseline, kept while a
         # measurement forces the checkbox on or off
         self._bsln_user_on = False
@@ -469,24 +486,22 @@ class StatsToolTab(SelectionRunTab):
         self.details.setFont(
             QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
         self.details.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
-        # Six lines (e.g. rise time with Bsln), measured as the box draws
-        # them; shorter than Stats2's, which has more to show
+        # At least six lines (e.g. rise time with Bsln), measured as the box
+        # draws them; then the rest of the tab's height (#539)
         self.details.document().setDocumentMargin(3)
         sample = QtGui.QTextDocument()
         sample.setDefaultFont(self.details.font())
         sample.setDocumentMargin(3)
         sample.setPlainText("\n".join(["x"] * 6))
-        self.details.setFixedHeight(
+        self.details.setMinimumHeight(
             int(sample.size().height()) + 2 * self.details.frameWidth() + 2)
         self.details.setToolTip(
             "The current window's measurement of the current epoch")
         details_layout.addWidget(self.details)
-        stats1_layout.addWidget(details_group)
+        stats1_layout.addWidget(details_group, stretch=1)
         self._trace = None  # the trace the Plot shows (set_trace)
         self._level_baseline: tuple[float, float] | None = None  # (mean, std)
         self.marks_changed.connect(self._show_details)  # e.g. its function or range
-        # Keep the settings at the top when Stats2 makes the tabs taller
-        stats1_layout.addStretch(1)
 
         # The options listed in Settings › Stats
         # Settings › Stats (the Stats arrays option was the panel's Output, #480)
