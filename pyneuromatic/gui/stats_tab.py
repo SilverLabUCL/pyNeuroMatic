@@ -321,6 +321,8 @@ class StatsToolTab(SelectionRunTab):
         self.parameter_layout.addWidget(self.mode_tabs)
         stats1_tab = QtWidgets.QWidget(self.mode_tabs)
         stats1_tab_layout = QtWidgets.QVBoxLayout(stats1_tab)
+        # Not the style's margins (20 px on macOS): a narrower tool panel (#537)
+        stats1_tab_layout.setContentsMargins(8, 8, 8, 8)
         self.mode_tabs.addTab(stats1_tab, "Stats1")
         self.stats2 = Stats2Panel(manager, self.mode_tabs)
         self.mode_tabs.addTab(self.stats2, "Stats2")
@@ -334,7 +336,7 @@ class StatsToolTab(SelectionRunTab):
         window_row = QtWidgets.QHBoxLayout()
         self.window_combo = QtWidgets.QComboBox(self)
         self.window_combo.setObjectName("statsWindowSelector")
-        self.window_combo.setFixedWidth(70)  # a window name (w0, w12)
+        self.window_combo.setFixedWidth(60)  # a window name (w0, w12)
         window_row.addWidget(QtWidgets.QLabel("Window", self))
         window_row.addWidget(self.window_combo)
         # Its actions under ⋯, as the strip's selectors (#514): the list
@@ -382,6 +384,9 @@ class StatsToolTab(SelectionRunTab):
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
         window_row.addWidget(self.measurement_combo)
         self.window_enabled = QtWidgets.QCheckBox("On", self)
+        # Laid out at the size macOS draws it, so the row's end isn't cut
+        # off ("Or") with the page's narrower margins (#537)
+        self.window_enabled.setAttribute(QtCore.Qt.WidgetAttribute.WA_LayoutUsesWidgetRect)
         window_row.addWidget(self.window_enabled)
         window_row.addStretch(1)
         stats1_layout.addLayout(window_row)
