@@ -43,18 +43,18 @@ def test_menus(app):
     assert _texts(app.edit_menu) == ["Copy", "Paste"]
     assert app.copy_action.shortcut() == QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Copy)
     assert app.paste_action.shortcut() == QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Paste)
-    assert _texts(app.view_menu) == ["Browser", "Main", "Stats", "Spike",
-                                     "Plot", "Table", "History"]
-    assert app.tool_view_actions["Stats"].shortcut() == QtGui.QKeySequence("Ctrl+3")
+    assert _texts(app.view_menu) == ["Main", "Stats", "Spike",
+                                     "Plot", "Table", "Browser", "History"]  # #537
+    assert app.tool_view_actions["Stats"].shortcut() == QtGui.QKeySequence("Ctrl+2")
 
 
 def test_view_switches_the_tool_as_the_rail_does(app):
     actions = app.tool_view_actions
-    assert actions["Browser"].isChecked()
+    assert actions["Main"].isChecked()  # the rail's first
     actions["Stats"].trigger()
     assert app.current_tool_name == "Stats" and app.tool_rail.current_tool_name == "Stats"
     assert app.tool_workspace.currentWidget() is app.tool_tabs["Stats"]
-    assert actions["Stats"].isChecked() and not actions["Browser"].isChecked()
+    assert actions["Stats"].isChecked() and not actions["Main"].isChecked()
     app.tool_rail.select_tool("Main")  # a rail click: the menu follows
     assert actions["Main"].isChecked() and not actions["Stats"].isChecked()
 
@@ -66,6 +66,9 @@ def test_view_switches_the_panel(app):
     assert actions["Table"].isChecked() and not actions["Plot"].isChecked()
     app.context_panel.setCurrentWidget(app.plot_widget)  # a tab click: the menu follows
     assert actions["Plot"].isChecked() and not actions["Table"].isChecked()
+    actions["Browser"].trigger()  # #537
+    assert app.context_panel.currentWidget() is app.browser_widget
+    assert actions["Browser"].isChecked() and not actions["Plot"].isChecked()
 
 
 def test_view_history_shows_and_hides_the_dock(app):

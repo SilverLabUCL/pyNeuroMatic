@@ -119,7 +119,16 @@ class ChannelToolBar(QtWidgets.QTabBar):
         if target is not None:
             self.setCurrentIndex(self._index_of(target))
         self.blockSignals(False)
-        self.setVisible(self.count() > 0)
+        self._show_if_used()
+
+    def set_not_shown(self, not_shown: bool) -> None:
+        """Hide the tabs while the panel shown isn't a view of them (the
+        Browser, #537); else shown when there are tabs."""
+        self._not_shown = not_shown
+        self._show_if_used()
+
+    def _show_if_used(self) -> None:
+        self.setVisible(self.count() > 0 and not getattr(self, "_not_shown", False))
 
     def mark_channels(self, tips: dict[str, str]) -> None:
         """Mark channels shown with filters or transforms ("A ƒ"); *tips*

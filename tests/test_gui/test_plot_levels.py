@@ -82,7 +82,7 @@ def test_a_level_measure_shows_its_level(app):
 
 def test_levels_shown_only_for_the_chosen_tool(app):
     assert list(_lines(app)) == ["level"]
-    app.tool_rail.select_tool("Browser")
+    app.tool_rail.select_tool("Main")
     assert _lines(app) == {}
     app.tool_rail.select_tool("Stats")
     assert list(_lines(app)) == ["level"]

@@ -445,7 +445,7 @@ def test_channel_menu_opens_the_window_for_the_strip_channel(app):
 def test_channel_menu_shows_the_channel_in_the_browser(app):
     app.selection_model.update(channel=app.series.channels["B"])
     app.channel_actions.browse_action.trigger()
-    assert app.tool_rail.current_tool_name == "Browser"
+    assert app.context_panel.currentWidget() is app.browser_widget  # #537
     assert app.browser_widget.tree.currentIndex().internalPointer() is app.series.channels["B"]
 
 

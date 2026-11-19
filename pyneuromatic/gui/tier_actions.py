@@ -1147,6 +1147,9 @@ class FolderActions(TierActions):
 
     # Ask the app to show a folder or subfolder in the browser
     browse_requested = QtCore.pyqtSignal(object)
+    # A folder opened (File › Open): the app plots it, the Browser ready
+    # at it (#537)
+    folder_opened = QtCore.pyqtSignal(object)
 
     def __init__(
         self,
@@ -1354,8 +1357,9 @@ class FolderActions(TierActions):
             else:
                 self._select(folder=imported, source="data")
             self._changed()
-            # Shown in the Browser, opened: its Info lists the imported metadata
-            self.browse_requested.emit(imported)
+            # Plotted; the Browser at it, opened: its Info lists the
+            # imported metadata (#537)
+            self.folder_opened.emit(imported)
         if problems:
             self._show_message("Open / Import", "\n".join(problems), warning=True)
 

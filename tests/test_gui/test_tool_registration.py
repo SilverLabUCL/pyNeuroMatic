@@ -61,7 +61,7 @@ def window(qtbot, monkeypatch):
 
 
 def test_every_tool_tab_is_registered_from_the_list(window):
-    assert window.tool_names == ["Browser", "Main", "Stats", "Spike"]
+    assert window.tool_names == ["Main", "Stats", "Spike"]
     assert list(window.tool_tabs) == ["Main", "Stats", "Spike"]
     for name, tab in window.tool_tabs.items():
         assert window.tool_workspace.indexOf(tab) == window.tool_rail.index_for_name(name)
@@ -87,7 +87,7 @@ def test_views_appear_while_the_tool_has_results(window):
     full.results_changed.emit()
     assert "Spike" in window.plot_widget.view_tabs.tool_names
     assert "Spike" in window.table_panel.view_tabs.tool_names
-    window.tool_rail.select_tool("Browser")  # another tool: its tab goes
+    window.tool_rail.select_tool("Main")  # another tool: its tab goes
     assert window.plot_widget.view_tabs.tool_names == []
 
 

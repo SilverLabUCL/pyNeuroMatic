@@ -75,8 +75,25 @@ def test_one_bar_on_the_left_and_the_toggle_on_the_right(app):
     assert widgets[-1] is app.panel_tabs
     assert isinstance(app.panel_tabs, QtWidgets.QTabBar)  # tabs, as A / B (#517)
     assert [app.panel_tabs.tabText(i) for i in range(app.panel_tabs.count())] == [
-        "Plot", "Table"]
+        "Plot", "Table", "Browser"]  # #537
     assert _shown(app) == "Plot"
+
+
+def test_the_browser_tab_shows_the_browser_without_the_channel_tabs(app):
+    """The Browser is the panel's third tab; the channel/tool tabs are of
+    Plot and Table, so they go while it's shown (#537)."""
+    app.show()
+    assert app.view_tabs.isVisible()
+    app.panel_tabs.setCurrentIndex(2)
+    assert app.context_panel.currentWidget() is app.browser_widget
+    assert not app.view_tabs.isVisible()
+    # A tool's results tab coming or going doesn't bring them back
+    app.tool_rail.select_tool("Stats")
+    assert not app.view_tabs.isVisible()
+    assert app.panel_tabs.isTabEnabled(2)
+    app.panel_tabs.setCurrentIndex(0)
+    assert app.context_panel.currentWidget() is app.plot_widget
+    assert app.view_tabs.isVisible()
 
 
 def test_switching_plot_and_table_keeps_the_channel(app):

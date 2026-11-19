@@ -307,7 +307,7 @@ def test_the_rest_of_the_window_ignores_mouse_clicks(shown_app, click):
     def shown(_text):
         QtCore.QTimer.singleShot(2000, tab.stop)  # if Cancel doesn't land: fail, not hang
         click(tab.window_enabled)
-        click(shown_app.tool_rail._buttons["Browser"])
+        click(shown_app.tool_rail._buttons["Main"])
         shown_app.close()  # refused during a run
         QtCore.QTimer.singleShot(0, lambda: click(tab.run_button))  # Cancel
 
@@ -317,8 +317,8 @@ def test_the_rest_of_the_window_ignores_mouse_clicks(shown_app, click):
     assert shown_app.current_tool_name == "Stats"
     assert shown_app.isVisible()
     assert tab.status_label.text() == f"Cancelled after 1 of {N}"
-    click(shown_app.tool_rail._buttons["Browser"])  # after the run: works again
-    assert shown_app.current_tool_name == "Browser"
+    click(shown_app.tool_rail._buttons["Main"])  # after the run: works again
+    assert shown_app.current_tool_name == "Main"
 
 
 def test_details_show_the_runs_result_at_the_prompt(app):

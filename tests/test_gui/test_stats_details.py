@@ -158,7 +158,7 @@ def test_details_with_tool_measures_off_and_another_tool(app):
     tab = app.stats
     tab.measurement_combo.setCurrentText("max")
     app.plot_widget.measures_action.setChecked(False)
-    app.tool_rail.select_tool("Browser")
+    app.tool_rail.select_tool("Main")
     app.selection_model.update(epoch=app.series.epochs["E1"])
     assert _lines(app)[1] == "max = -55.000 at 90.000  (x 0 to 199)"
 

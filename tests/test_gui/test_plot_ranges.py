@@ -73,7 +73,7 @@ def _drag(region, low, high):
 
 def test_ranges_shown_only_for_the_chosen_tool(app):
     assert list(_regions(app)) == ["window"]
-    app.tool_rail.select_tool("Browser")
+    app.tool_rail.select_tool("Main")
     assert _regions(app) == {}
     app.tool_rail.select_tool("Stats")
     assert list(_regions(app)) == ["window"]
@@ -185,7 +185,7 @@ def test_tool_ranges_on_frozen_or_off(app):
     assert not any(isinstance(item, type(region))
                    for item in panel.plot_widget.getPlotItem().items)
     app.selection_model.update(epoch=app.series.epochs["E1"])
-    app.tool_rail.select_tool("Browser")
+    app.tool_rail.select_tool("Main")
     app.tool_rail.select_tool("Stats")
     app.stats.bsln_checkbox.setChecked(True)
     assert _regions(app) == {}
