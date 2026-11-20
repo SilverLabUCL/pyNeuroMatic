@@ -66,6 +66,7 @@ from pyneuromatic.gui.tier_actions import (
 )
 from pyneuromatic.gui.stats_tab import StatsToolTab
 from pyneuromatic.gui.spike_tab import SpikeToolTab
+from pyneuromatic.gui.main_tab import MainToolTab
 from pyneuromatic.gui.tool_tab import ToolTabWidget
 from pyneuromatic.gui.transform_dialog import (
     MARK,
@@ -81,7 +82,7 @@ APP_NAME = "pyNeuroMatic"
 # The tool tabs, in the tool rail (None: a placeholder; the Browser is a tab
 # of the right-hand panel, Plot | Table | Browser, #537). The app
 # window registers each the same way: see ToolTabWidget and _register_tool_tab.
-TOOL_TABS = {"Main": None, "Stats": StatsToolTab, "Spike": SpikeToolTab}
+TOOL_TABS = {"Main": MainToolTab, "Stats": StatsToolTab, "Spike": SpikeToolTab}
 
 
 ICONS = Path(__file__).resolve().parent / "icons"

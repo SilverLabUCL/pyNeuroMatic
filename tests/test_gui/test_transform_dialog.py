@@ -91,7 +91,7 @@ def test_add_a_step_redraws_and_marks(app):
     assert list(channel.data[0].nparray) == [1.0, 2.0, 3.0, 4.0]  # unchanged
     # ƒ on the tab, the trace name and the strip's channel
     panel = app.plot_widget
-    assert _tab_texts(panel.view_tabs) == [f"A {MARK}"]  # the strip's (#523)
+    assert _tab_texts(panel.view_tabs) == [f"A {MARK}", "Main2"]  # the strip's (#523); Main's
     assert "Invert" in panel.view_tabs.tabToolTip(0)
     label = panel.trace_name_label.text()
     assert label.startswith("RecordA0") and f'{MARK_STYLE}">{MARK}' in label  # red, bold ƒ
@@ -103,7 +103,7 @@ def test_add_a_step_redraws_and_marks(app):
     combo = strip.combo("channel")
     assert "A" in _combo_texts(combo) and combo.currentData() == "A"
     assert "1. Invert" in combo.toolTip()
-    assert _tab_texts(app.table_panel.view_tabs) == [f"A {MARK}"]
+    assert _tab_texts(app.table_panel.view_tabs) == [f"A {MARK}", "Main2"]
 
 
 def test_turn_a_step_off(app):
