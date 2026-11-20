@@ -2150,6 +2150,7 @@ class NMFolderContainer(NMObjectContainer):
         epochs: list[int] | range | None = None,
         xrange: tuple[float | None, float | None] | None = None,
         make_dataseries: bool = True,
+        lock: bool = True,
     ) -> NMFolder:
         """Read a data file into a new folder, as one command (#455), e.g.
         ``nm.folders.import_file('/Users/me/Data/nm02Jul04c0_002.pxp')``.
@@ -2172,6 +2173,9 @@ class NMFolderContainer(NMObjectContainer):
             xrange: (xbgn, xend) to crop each array to, None for an open
                 end (e.g. (0.0, None)); None: the whole array.
             make_dataseries: Make a data series of the arrays.
+            lock: Lock that data series: its arrays here can't be changed
+                (e.g. by the Main tool) or deleted until it's unlocked
+                (#549). The file on disk is never changed.
 
         Returns:
             The new folder.
@@ -2188,8 +2192,8 @@ class NMFolderContainer(NMObjectContainer):
         if read is None:
             raise ValueError("unsupported file type: %s" % file.name)
         given = {"prefix": prefix, "channels": channels, "epochs": epochs,
-                 "xrange": xrange, "make_dataseries": make_dataseries}
-        defaults = {"make_dataseries": True}
+                 "xrange": xrange, "make_dataseries": make_dataseries, "lock": lock}
+        defaults = {"make_dataseries": True, "lock": True}
         options = {k: v for k, v in given.items() if v is not defaults.get(k)}
         folder = self.new(unique_name(self, file.stem) if name is None else name)
         try:

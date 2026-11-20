@@ -96,6 +96,15 @@ class SettingsDialog(QtWidgets.QDialog):
         self.import_options_checkbox.toggled.connect(
             lambda checked: self._set("ask_import_options", checked))
         general_layout.addWidget(self.import_options_checkbox)
+        self.lock_imported_checkbox = QtWidgets.QCheckBox("Lock imported data series", general)
+        self.lock_imported_checkbox.setToolTip(
+            "A data series made by Open/Import is locked: its arrays can't be "
+            "changed or deleted in pyNeuroMatic until it's unlocked (the file "
+            "is never changed)")
+        self.lock_imported_checkbox.setChecked(settings.lock_imported)
+        self.lock_imported_checkbox.toggled.connect(
+            lambda checked: self._set("lock_imported", checked))
+        general_layout.addWidget(self.lock_imported_checkbox)
         # Only here: the notes editors follow it (#510, #539)
         self.notes_commands_checkbox = QtWidgets.QCheckBox("Record notes as commands", general)
         self.notes_commands_checkbox.setToolTip(

@@ -33,6 +33,7 @@ def read_axograph(
     folder: "NMFolder | None" = None,
     prefix: str = "Record",
     make_dataseries: bool = True,
+    lock: bool = True,
     channels: list[str] | None = None,
     epochs: list[int] | range | None = None,
     xrange: tuple[float | None, float | None] | None = None,
@@ -44,6 +45,8 @@ def read_axograph(
         folder: Optional existing folder to add data to. If None, creates new.
         prefix: Prefix for data names (default "Record").
         make_dataseries: If True, automatically create dataseries from data.
+        lock: Lock the data series made (#549): its arrays cannot be
+            changed or deleted until it's unlocked (file on disk is never changed).
         channels: Channel letters to import (e.g. ["A"]); None for all.
         epochs: Epoch numbers to import; None for all. The channels and
             epochs imported are renumbered from A and 0.
@@ -124,7 +127,7 @@ def read_axograph(
     if make_dataseries and matches:
         dataseries = folder.build_dataseries(prefix, matches)
         if dataseries is not None:
-            dataseries.locked = True  # protect raw recordings
+            dataseries.locked = lock  # the arrays as read (#549)
 
     return folder
 

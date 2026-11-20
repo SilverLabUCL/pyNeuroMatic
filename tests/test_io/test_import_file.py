@@ -137,3 +137,14 @@ def test_an_array_moved_or_copied_keeps_its_file_source(nm):
     assert first.data["Y"].file_source == source
     second.data.duplicate("Y", "Y2")
     assert second.data["Y2"].file_source == source
+
+
+def test_lock_false_leaves_the_data_series_unlocked(nm):
+    """lock=False (#549): the data series made isn't locked, and the command
+    says so; the default (locked) isn't written."""
+    folder = nm.folders.import_file(str(AXGD), lock=False)
+    assert not folder.dataseries["Record"].locked
+    assert _commands(nm)[-1] == "nm.folders.import_file(%r, lock=False)" % str(AXGD)
+    folder = nm.folders.import_file(str(AXGD))
+    assert folder.dataseries["Record"].locked
+    assert _commands(nm)[-1] == "nm.folders.import_file(%r)" % str(AXGD)
