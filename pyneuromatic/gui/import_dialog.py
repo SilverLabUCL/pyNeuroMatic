@@ -76,7 +76,7 @@ class ImportOptionsDialog(QtWidgets.QDialog):
     one file; Import or Cancel."""
 
     def __init__(self, path: str | Path, info: FileInfo, folders,
-                 parent: QtWidgets.QWidget | None = None) -> None:
+                 parent: QtWidgets.QWidget | None = None, lock: bool = True) -> None:
         super().__init__(parent)
         path = Path(path)
         self.setWindowTitle(f"Import {path.name}")
@@ -132,6 +132,14 @@ class ImportOptionsDialog(QtWidgets.QDialog):
         self.dataseries_checkbox = QtWidgets.QCheckBox("Make data series", self)
         self.dataseries_checkbox.setChecked(True)
         form.addRow("", self.dataseries_checkbox)
+        # Starts as Settings › General's (#549); only with a data series
+        self.lock_checkbox = QtWidgets.QCheckBox("Lock data series", self)
+        self.lock_checkbox.setToolTip(
+            "The imported arrays cannot be changed or deleted in pyNeuroMatic "
+            "until the data series is unlocked (the file on disk is never changed)")
+        self.lock_checkbox.setChecked(lock)
+        self.dataseries_checkbox.toggled.connect(self.lock_checkbox.setEnabled)
+        form.addRow("", self.lock_checkbox)
         layout.addLayout(form)
 
         self.error_label = QtWidgets.QLabel("", self)
@@ -179,6 +187,8 @@ class ImportOptionsDialog(QtWidgets.QDialog):
             options["xrange"] = xrange
         if not self.dataseries_checkbox.isChecked():
             options["make_dataseries"] = False
+        elif not self.lock_checkbox.isChecked():
+            options["lock"] = False
         return options
 
     def _xrange(self) -> tuple[float | None, float | None] | None:

@@ -172,3 +172,62 @@ def test_opening_a_first_file_selects_all_epochs(qtbot):
     selection = window.selection_model.selection
     assert selection["dataseries"].name == "Record"
     assert selection["epoch_set"] == "All"
+
+
+# --- Lock imported data series (#549) ----------------------------------------
+
+def test_lock_starts_as_the_setting_and_needs_a_data_series(qtbot):
+    folders = NMManager(quiet=True).folders
+    locked = ImportOptionsDialog(AXGD, file_info(str(AXGD)), folders)
+    qtbot.addWidget(locked)
+    assert locked.lock_checkbox.isChecked() and locked.options() == {}
+    locked.lock_checkbox.setChecked(False)
+    assert locked.options() == {"lock": False}
+    locked.dataseries_checkbox.setChecked(False)  # no data series: nothing to lock
+    assert not locked.lock_checkbox.isEnabled()
+    assert locked.options() == {"make_dataseries": False}
+    unlocked = ImportOptionsDialog(AXGD, file_info(str(AXGD)), folders, lock=False)
+    qtbot.addWidget(unlocked)
+    assert not unlocked.lock_checkbox.isChecked()
+    assert unlocked.options() == {"lock": False}
+
+
+def test_imports_lock_as_the_setting_says(app, monkeypatch):
+    manager = app.selection_model.manager
+    manager.settings.ask_import_options = False
+    app.folder_actions.open_files([str(AXGD)])
+    assert manager.folders["Vers6_060523_004"].dataseries["Record"].locked
+    manager.settings.lock_imported = False
+    app.folder_actions.open_files([str(AXGD)])
+    folder = manager.folders["Vers6_060523_004_1"]
+    assert not folder.dataseries["Record"].locked
+    commands = [e["command"] for e in manager.command_history.buffer
+                if e["command"].startswith("nm.folders")]
+    assert commands[-1].endswith(", lock=False)")
+
+
+def test_the_prompt_starts_as_the_setting(app, monkeypatch):
+    seen = []
+
+    from PyQt6 import QtWidgets
+
+    def exec_dialog(dialog):
+        seen.append(dialog.lock_checkbox.isChecked())
+        return QtWidgets.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ImportOptionsDialog, "exec", exec_dialog)
+    app.selection_model.manager.settings.lock_imported = False
+    app.folder_actions.open_files([str(AXGD)])
+    assert seen == [False]
+    folder = app.selection_model.manager.folders["Vers6_060523_004"]
+    assert not folder.dataseries["Record"].locked
+
+
+def test_lock_setting_in_settings_general(qtbot):
+    manager = NMManager(quiet=True)
+    assert manager.settings.lock_imported is True  # on by default
+    dialog = SettingsDialog(manager.settings)
+    qtbot.addWidget(dialog)
+    assert dialog.lock_imported_checkbox.isChecked()
+    dialog.lock_imported_checkbox.setChecked(False)
+    assert manager.settings.lock_imported is False

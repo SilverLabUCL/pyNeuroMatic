@@ -1258,7 +1258,8 @@ class FolderActions(TierActions):
         """The import options for *path* (``import_file`` keywords), or None
         if cancelled."""
         from pyneuromatic.gui.import_dialog import ImportOptionsDialog
-        dialog = ImportOptionsDialog(path, info, self._folders, self._parent_widget)
+        dialog = ImportOptionsDialog(path, info, self._folders, self._parent_widget,
+                                     lock=self._selection.manager.settings.lock_imported)
         if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return None
         return dialog.options()
@@ -1325,7 +1326,10 @@ class FolderActions(TierActions):
             if path.suffix.lower() not in FILE_READERS:
                 problems.append(f"{path.name}: unsupported file type")
                 continue
-            options: dict = {}
+            # Locked, or not, as Settings › General says (#549); the import
+            # options start as it, and say for themselves
+            options: dict = {} if self._selection.manager.settings.lock_imported else {
+                "lock": False}
             if (self._selection.manager.settings.ask_import_options
                     and path.suffix.lower() in FILE_INFO):  # what to import (#456)
                 try:
