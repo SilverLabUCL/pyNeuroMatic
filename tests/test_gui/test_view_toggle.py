@@ -64,7 +64,7 @@ def _enabled(window, name):
 
 def test_one_bar_on_the_left_and_the_toggle_on_the_right(app):
     assert app.plot_widget.view_tabs is app.table_panel.view_tabs is app.view_tabs
-    assert _tabs(app) == ["A"]  # the strip's channel; Browser: no tool's tab (#523)
+    assert _tabs(app) == ["A", "Main2"]  # the strip's channel, and Main's tab (#550)
     app.tool_rail.select_tool("Spike")
     assert _tabs(app) == ["A", "Spike"]  # the tool chosen's
     app.tool_rail.select_tool("Stats")

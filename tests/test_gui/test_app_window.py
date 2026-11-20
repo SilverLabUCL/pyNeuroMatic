@@ -112,12 +112,12 @@ def test_plot_channel_tab_is_the_strip_channel(qtbot, nm):
     def tabs():
         return [plot.view_tabs.tabText(i) for i in range(plot.view_tabs.count())]
 
-    assert tabs() == ["A"]  # Browser: no Stats2 tab (#523)
+    assert tabs() == ["A", "Main2"]  # Main: its Main2 tab, no Stats2 tab (#523, #550)
     assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "A"
     assert plot.current_trace is dataseries.get_data(channel="A", epoch="E0")
 
     win.selection_model.update(channel=dataseries.channels["B"])
-    assert tabs() == ["B"]
+    assert tabs() == ["B", "Main2"]
     assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "B"
     assert plot.current_trace is dataseries.get_data(channel="B", epoch="E0")
     assert plot.trace_name_label.text() == "RecordB0"
@@ -129,7 +129,7 @@ def test_plot_channel_tab_is_the_strip_channel(qtbot, nm):
 
     win.selection_model.update(dataseries=stim)
     assert nm.select_values["dataseries"] is stim
-    assert tabs() == ["A"]  # Browser: no Stats2 tab (#523)
+    assert tabs() == ["A", "Main2"]  # Main: its Main2 tab, no Stats2 tab (#523, #550)
     assert plot.view_tabs.tabText(plot.view_tabs.currentIndex()) == "A"
     assert plot.current_trace is stim.get_data(channel="A", epoch="E0")
 

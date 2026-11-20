@@ -57,7 +57,7 @@ def test_channel_table_shows_every_epoch_as_a_column(two_channel_window):
     table = window.table_panel
     model = table.channel_table.model
 
-    assert _tab_texts(table.view_tabs) == ["A"]  # the strip's channel (#523)
+    assert _tab_texts(table.view_tabs) == ["A", "Main2"]  # the strip's channel (#523); Main's tab
     assert _headers(model) == ["x (ms)", "RecordA0", "RecordA1", "RecordA2", "RecordA3"]
     assert model.rowCount() == 5
     assert [_cell(model, 2, c) for c in range(5)] == ["3", "2", "12", "22", "32"]
@@ -87,7 +87,7 @@ def test_channel_table_follows_set_and_the_strip_channel(two_channel_window):
 
     # The channel is chosen in the strip (#523): its tab is the only one
     window.selection_model.update(channel=dataseries.channels["B"])
-    assert _tab_texts(table.view_tabs) == ["B"]
+    assert _tab_texts(table.view_tabs) == ["B", "Main2"]
     assert _headers(model) == ["x (ms)", "RecordB1", "RecordB3"]
     assert _cell(model, 0, 1) == "1000"
 
@@ -112,8 +112,8 @@ def test_data_selection_shows_data_tab(qtbot):
     qtbot.addWidget(window)
 
     table = window.table_panel
-    assert _tab_texts(table.view_tabs) == ["Data"]
-    assert _tab_texts(window.plot_widget.view_tabs) == ["Data"]
+    assert _tab_texts(table.view_tabs) == ["Data", "Main2"]
+    assert _tab_texts(window.plot_widget.view_tabs) == ["Data", "Main2"]
     assert _headers(table.channel_table.model) == ["x", "Trace0"]
     assert table.channel_table.title_label.text() == "Trace0"
 

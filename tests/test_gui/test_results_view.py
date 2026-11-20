@@ -876,10 +876,10 @@ def test_the_view_follows_stats1_and_stats2(qtbot):
     tab.mode_tabs.setCurrentWidget(tab.stats2)
     assert window.view_tabs.current_view() == ("tool", "Stats")
     assert window.context_panel.currentWidget() is window.table_panel  # still Table
-    # Another tool: only the channel (on Stats2's tab: the channel, still
-    # Table); then Stats again (on Stats2): its tab
+    # Another tool: the channel and its own tab (on Stats2's tab: the
+    # channel, still Table); then Stats again (on Stats2): its tab
     window.tool_rail.select_tool("Main")
-    assert _tab_texts(window.view_tabs) == ["A"]
+    assert _tab_texts(window.view_tabs) == ["A", "Main2"]
     assert window.view_tabs.current_view() == ("channel", "A")
     assert window.context_panel.currentWidget() is window.table_panel
     window.tool_rail.select_tool("Stats")
