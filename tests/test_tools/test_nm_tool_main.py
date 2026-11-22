@@ -4305,14 +4305,17 @@ class TestMainFunctionRangeAndSources(unittest.TestCase):
             d.xscale.delta = 0.5
 
     def test_x_range(self):
+        """The function's own x range (#555), in its command and note."""
         tool = self.nm.main
-        tool.xbgn, tool.xend = 1.0, 2.5
-        tool.op = NMMainOpAverage()
+        tool.op = NMMainOpAverage(xbgn=1.0, xend=2.5)
+        self.assertEqual(tool.op._op_params_str(),
+                         "ignore_nans=True, compute_stdv=False, compute_var=False, "
+                         "compute_sem=False, xbgn=1.0, xend=2.5")
         tool.run_selection(self.series, channel="A", epochs="all")
         out = tool.toolfolder.data["MN_Avg_RecordA"]
         np.testing.assert_array_almost_equal(out.nparray, [2.5, 3.5, 4.5, 5.5])
         self.assertEqual(out.xscale.start, 1.0)
-        self.assertIn("x 1 to 2.5", tool.toolfolder.notes[0]["note"])
+        self.assertIn("xbgn=1.0, xend=2.5", tool.toolfolder.notes[0]["note"])
         # The arrays themselves don't change
         self.assertEqual(len(self.series.get_data("A", "E0").nparray), 10)
 
@@ -4410,3 +4413,27 @@ class TestMainOmit(unittest.TestCase):
         tool = self.nm.main
         tool.op = NMMainOpArithmetic(factor=2.0)
         self.assertFalse(tool.can_omit)
+
+
+class TestFunctionParams(unittest.TestCase):
+    """Each function describes its parameters (#555)."""
+
+    def test_descriptions(self):
+        from pyneuromatic.core.nm_params import XRANGE
+        for op in (NMMainOpAverage, NMMainOpSum, NMMainOpSumSqr, NMMainOpMin,
+                   NMMainOpMax, NMMainOpConcatenate):
+            self.assertEqual(op.PARAMS[0].kind, XRANGE)
+            self.assertEqual(op.PARAMS[0].names, ("xbgn", "xend"))
+        self.assertEqual([p.name for p in NMMainOpAverage.PARAMS],
+                         ["x", "compute_stdv", "compute_var", "compute_sem"])
+
+    def test_x_range_checked(self):
+        with self.assertRaises(ValueError):
+            NMMainOpSum(xbgn=2.0, xend=1.0)
+        with self.assertRaises(ValueError):
+            NMMainOpMax(xbgn=float("nan"))
+        op = NMMainOpConcatenate(xbgn=0.0)
+        self.assertEqual((op.xbgn, op.xend), (0.0, float("inf")))
+        self.assertIn("xbgn=0.0, xend=inf", op._op_params_str())
+        self.assertNotIn("xbgn", NMMainOpMin()._op_params_str())  # all: not written
+

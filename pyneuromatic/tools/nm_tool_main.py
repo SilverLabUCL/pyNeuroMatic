@@ -45,15 +45,15 @@ class NMToolMainConfig(NMToolConfig):
         overwrite: Functions run on the same selection share its first Main
             subfolder (``..._0``), each replacing only the outputs it makes;
             off: a new subfolder each run.
-        xbgn, xend: The x range functions use (default: all of each array).
+
+    The part of each array a function uses is its own (``xbgn``, ``xend``,
+    #555), not the tool's.
     """
 
     _TOML_TYPE = "main_config"
     _schema = {
         "ignore_nans": {"type": bool, "default": True},
         "overwrite": {"type": bool, "default": False},
-        "xbgn": {"type": float, "default": -math.inf},
-        "xend": {"type": float, "default": math.inf},
     }
 
 
@@ -93,8 +93,6 @@ class NMToolMain(NMTool):
         self._config = NMToolMainConfig()
         self._ignore_nans = self._config.ignore_nans
         self._overwrite = self._config.overwrite
-        self._xbgn = self._config.xbgn
-        self._xend = self._config.xend
         self._op: NMMainOp = NMMainOpAverage()
         self._toolfolder: NMToolFolder | None = None
         self._outputs: list[str] = []
@@ -223,17 +221,19 @@ class NMToolMain(NMTool):
                     store.pop(key, None)
 
     def _in_x_range(self, data: NMData) -> NMData | None:
-        """*data* from xbgn to xend (a copy, its X start where it begins), or
-        *data* itself with no range; None if no points are in it."""
+        """*data* from the function's xbgn to xend (a copy, its X start where
+        it begins), or *data* itself with no range; None if no points are in
+        it."""
         y = data.nparray
-        if y is None or (self._xbgn == -math.inf and self._xend == math.inf):
+        xbgn, xend = self._op.xbgn, self._op.xend
+        if y is None or (xbgn == -math.inf and xend == math.inf):
             return data
         xarray = data.xarray
         if xarray is not None and len(xarray) == len(y) and not data.xarray_problem():
             x = np.asarray(xarray, dtype=float)
         else:
             x = data.xscale.start + data.xscale.delta * np.arange(len(y))
-        inside = np.nonzero((x >= self._xbgn) & (x <= self._xend))[0]
+        inside = np.nonzero((x >= xbgn) & (x <= xend))[0]
         if inside.size == 0:
             return None
         first, last = int(inside[0]), int(inside[-1])
@@ -341,9 +341,6 @@ class NMToolMain(NMTool):
         """How the outputs were made, e.g. "NMMain: Average(ignore_nans=True,
         compute_stdv=True, ...); Record, channels A, B, epochs all (n=6)"."""
         params = self._op._op_params_str() or ""
-        note = "NMMain: %s(%s); %s" % (
+        return "NMMain: %s(%s); %s" % (  # the x range, if any, in params
             type(self._op).__name__.replace("NMMainOp", ""), params,
             self._run_scope(self._run_count))
-        if self._xbgn != -math.inf or self._xend != math.inf:
-            note += "; x %g to %g" % (self._xbgn, self._xend)
-        return note

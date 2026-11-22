@@ -74,7 +74,7 @@ def _drag(region, low, high):
 def test_ranges_shown_only_for_the_chosen_tool(app):
     assert list(_regions(app)) == ["window"]
     app.tool_rail.select_tool("Main")
-    assert list(_regions(app)) == ["range"]  # Main's X range (#553), not Stats' window
+    assert _regions(app) == {}  # Main starts on Plot: no x range (#555), nor Stats' window
     app.tool_rail.select_tool("Stats")
     assert list(_regions(app)) == ["window"]
 

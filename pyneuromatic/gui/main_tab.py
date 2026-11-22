@@ -22,6 +22,8 @@ from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.context_views import ChannelTableModel, ChannelTable
+from pyneuromatic.core.nm_params import BOOLEAN, CHOICE, COLOR, NUMBER, NMParam, keywords
+from pyneuromatic.gui.param_form import ParamForm
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.gui.results_panel import ResultsPanel
 from pyneuromatic.gui.selection_model import epoch_scope_label, scoped_epoch_names
@@ -333,128 +335,51 @@ class SelectionTable(ChannelTable):
         self.title_label.setText(self.EMPTY_TITLE)
 
 
-class PlotOptionsDialog(QtWidgets.QDialog):
-    """Plot…'s prompt: the epochs' color (one, or a rainbow) and each
-    epoch's X and Y offset from the one before; Plot or Cancel."""
-
-    def __init__(self, options: PlotOptions, what: str,
-                 parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Plot")
-        self.setMinimumWidth(340)  # the heading (what's selected) on a line
-        self._color = options.color
-        layout = QtWidgets.QVBoxLayout(self)
-        heading = QtWidgets.QLabel(f"Plot {what}", self)  # what's selected
-        heading.setWordWrap(True)
-        layout.addWidget(heading)
-        form = QtWidgets.QFormLayout()
-        color_row = QtWidgets.QHBoxLayout()
-        self.color_combo = QtWidgets.QComboBox(self)
-        self.color_combo.addItem("One color", False)
-        self.color_combo.addItem("Rainbow", True)
-        self.color_combo.setToolTip("Rainbow: the epochs red to violet, in order")
-        self.color_combo.setCurrentIndex(1 if options.rainbow else 0)
-        color_row.addWidget(self.color_combo)
-        self.color_button = QtWidgets.QToolButton(self)
-        self.color_button.setToolTip("Choose the color")
-        self.color_button.setFixedSize(28, 22)
-        color_row.addWidget(self.color_button)
-        color_row.addStretch(1)
-        form.addRow("Color", color_row)
-        self.x_offset_edit = QtWidgets.QLineEdit(f"{options.x_offset:g}", self)
-        self.y_offset_edit = QtWidgets.QLineEdit(f"{options.y_offset:g}", self)
-        for label, edit, axis in (("X offset", self.x_offset_edit, "x"),
-                                  ("Y offset", self.y_offset_edit, "y")):
-            fit_number_edit(edit)
-            edit.setToolTip(
-                f"Each epoch's {axis} offset from the one before, in the plot's {axis} "
-                "units (0: overlaid). Only the plot moves: the data doesn't change")
-            form.addRow(label, edit)
-        self.reverse_checkbox = QtWidgets.QCheckBox("Reverse order", self)
-        self.reverse_checkbox.setToolTip(
-            "The last epoch first: it has no offset and the first color, and the "
-            "first epoch is drawn last, on top")
-        self.reverse_checkbox.setChecked(options.reverse)
-        form.addRow("", self.reverse_checkbox)
-        layout.addLayout(form)
-        self.error_label = QtWidgets.QLabel("", self)
-        self.error_label.setStyleSheet("color: #c62828;")
-        layout.addWidget(self.error_label)
-        buttons = QtWidgets.QDialogButtonBox(self)
-        self.plot_button = buttons.addButton(
-            "Plot", QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
-        buttons.addButton(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.color_combo.currentIndexChanged.connect(self._show_color)
-        self.color_button.clicked.connect(self._choose_color)
-        self._show_color()
-
-    def _show_color(self) -> None:
-        self.color_button.setStyleSheet(
-            f"QToolButton {{ background: {self._color}; border: 1px solid #888; "
-            "border-radius: 3px; }")
-        self.color_button.setEnabled(not self.color_combo.currentData())
-
-    def _choose_color(self) -> None:
-        color = self._ask_color(QtGui.QColor(self._color))
-        if color is not None:
-            self.set_color(color)
-
-    def _ask_color(self, current: QtGui.QColor) -> QtGui.QColor | None:
-        """The color chosen (None: cancelled); replaced in tests."""
-        color = QtWidgets.QColorDialog.getColor(current, self, "Plot color")
-        return color if color.isValid() else None
-
-    def set_color(self, color: QtGui.QColor | str) -> None:
-        self._color = QtGui.QColor(color).name()
-        self._show_color()
-
-    def options(self) -> PlotOptions:
-        """The options entered.
-
-        Raises:
-            ValueError: If an offset isn't a number (the message says which).
-        """
-        offsets = []
-        for label, edit in (("X offset", self.x_offset_edit),
-                            ("Y offset", self.y_offset_edit)):
-            text = edit.text().strip()
-            try:
-                value = float(text or 0)
-            except ValueError:
-                raise ValueError(f"{label}: {text!r} is not a number")
-            if not np.isfinite(value):
-                raise ValueError(f"{label}: {text} is not a finite number")
-            offsets.append(value)
-        return PlotOptions(color=self._color, rainbow=bool(self.color_combo.currentData()),
-                           x_offset=offsets[0], y_offset=offsets[1],
-                           reverse=self.reverse_checkbox.isChecked())
-
-    def accept(self) -> None:
-        try:
-            self.options()
-        except ValueError as error:
-            self.error_label.setText(str(error))
-            return
-        super().accept()
-
-
 # --- Functions (#553) -----------------------------------------------------
 
-# Main1's functions: (what it makes, its prompt's options as (key, label, tip))
+# Plot's options, as a form (#555): how the selected epochs are drawn
+PLOT_PARAMS = (
+    NMParam("colors", CHOICE, "Color", default="rainbow",
+            choices=(("rainbow", "Rainbow"), ("one", "One color")),
+            tip="Rainbow: the epochs red to violet, in order"),
+    NMParam("color", COLOR, "One color", default="#000000", when=("colors", "one"),
+            tip="The epochs' color"),
+    NMParam("x_offset", NUMBER, "X offset", default=0.0, finite=True,
+            tip="Each epoch's x offset from the one before, in the plot's x units "
+                "(0: overlaid). Only the plot moves: the data doesn't change"),
+    NMParam("y_offset", NUMBER, "Y offset", default=0.0, finite=True,
+            tip="Each epoch's y offset from the one before, in the plot's y units "
+                "(0: overlaid). Only the plot moves: the data doesn't change"),
+    NMParam("reverse", BOOLEAN, "Reverse order", default=False,
+            tip="The last epoch first: it has no offset and the first color, and "
+                "the first epoch is drawn last, on top"),
+)
+
+
+def plot_options(values: dict[str, Any]) -> PlotOptions:
+    """Plot's form values as :class:`PlotOptions`."""
+    return PlotOptions(color=values["color"], rainbow=values["colors"] == "rainbow",
+                       x_offset=values["x_offset"], y_offset=values["y_offset"],
+                       reverse=values["reverse"])
+
+
+# Main1's entries, in one list as Stats' measures, groups divided: (what it
+# does, its NMMainOp or None, its form's parameters)
+DISPLAY = {
+    "Plot": ("Plots every selected epoch: each channel in a plot of its own, one "
+             "above another, the epochs overlaid or offset (in Main2's tab).", PLOT_PARAMS),
+    "Table": ("Lists the selected arrays' values: an x column, then a column per "
+              "array (in Main2's tab).", ()),
+}
+
+# Main1's functions: (what it makes, its NMMainOp, whose PARAMS its form shows)
 FUNCTIONS = {
-    "Average": ("the mean of each channel's arrays (MN_Avg_)", (
-        ("compute_stdv", "Standard deviation (MN_Stdv_)", ""),
-        ("compute_var", "Variance (MN_Var_)", ""),
-        ("compute_sem", "Standard error of the mean (MN_SEM_)", ""),
-    )),
-    "Sum": ("the sum of each channel's arrays (MN_Sum_)", ()),
-    "SumSqr": ("the sum of squares of each channel's arrays (MN_SumSqr_)", ()),
-    "Min": ("each point's minimum over each channel's arrays (MN_Min_)", ()),
-    "Max": ("each point's maximum over each channel's arrays (MN_Max_)", ()),
-    "Concatenate": ("each channel's arrays joined end to end (MN_Cat_)", ()),
+    "Average": ("the mean of each channel's arrays (MN_Avg_)", NMMainOpAverage),
+    "Sum": ("the sum of each channel's arrays (MN_Sum_)", NMMainOpSum),
+    "SumSqr": ("the sum of squares of each channel's arrays (MN_SumSqr_)", NMMainOpSumSqr),
+    "Min": ("each point's minimum over each channel's arrays (MN_Min_)", NMMainOpMin),
+    "Max": ("each point's maximum over each channel's arrays (MN_Max_)", NMMainOpMax),
+    "Concatenate": ("each channel's arrays joined end to end (MN_Cat_)", NMMainOpConcatenate),
 }
 # Outputs that can be plotted with the arrays they were made from behind them
 BACKGROUND_PREFIXES = ("MN_Avg_", "MN_Min_", "MN_Max_")
@@ -468,50 +393,19 @@ def light(color: str, amount: float = 0.55) -> str:
     return QtGui.QColor(*mix).name()
 
 
-def make_function(name: str, options: dict[str, bool], ignore_nans: bool = True):
-    """*name*'s NMMainOp with *options*, and Ignore NaNs (Settings › Main)."""
-    if name == "Average":
-        return NMMainOpAverage(ignore_nans=ignore_nans, **options)
-    if name == "Concatenate":
-        return NMMainOpConcatenate()
-    return {"Sum": NMMainOpSum, "SumSqr": NMMainOpSumSqr, "Min": NMMainOpMin,
-            "Max": NMMainOpMax}[name](ignore_nans=ignore_nans)
+def entry_params(name: str) -> tuple:
+    """An entry's parameters (Plot's options, a function's PARAMS)."""
+    return DISPLAY[name][1] if name in DISPLAY else FUNCTIONS[name][1].PARAMS
 
 
-def function_option_keys(name: str) -> list[tuple[str, str, str]]:
-    """The options a function's prompt asks (none: it runs without one)."""
-    return list(FUNCTIONS[name][1])
-
-
-class FunctionDialog(QtWidgets.QDialog):
-    """A function's prompt on Run: what it makes, its options; Run or Cancel."""
-
-    def __init__(self, name: str, options: dict[str, bool], what: str,
-                 parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(name)
-        self.setMinimumWidth(340)
-        layout = QtWidgets.QVBoxLayout(self)
-        heading = QtWidgets.QLabel(f"{name} of {what}: {FUNCTIONS[name][0]}", self)
-        heading.setWordWrap(True)
-        layout.addWidget(heading)
-        self.checkboxes: dict[str, QtWidgets.QCheckBox] = {}
-        for key, label, tip in function_option_keys(name):
-            box = QtWidgets.QCheckBox(label, self)
-            box.setToolTip(tip)
-            box.setChecked(options.get(key, False))
-            layout.addWidget(box)
-            self.checkboxes[key] = box
-        buttons = QtWidgets.QDialogButtonBox(self)
-        self.run_button = buttons.addButton(
-            "Run", QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
-        buttons.addButton(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def options(self) -> dict[str, bool]:
-        return {key: box.isChecked() for key, box in self.checkboxes.items()}
+def make_function(name: str, values: dict[str, Any], ignore_nans: bool = True):
+    """*name*'s NMMainOp from its form's *values*, and Ignore NaNs (Settings ›
+    Main; Concatenate has no use for it)."""
+    op_class = FUNCTIONS[name][1]
+    kwargs = keywords(op_class.PARAMS, values)
+    if op_class is not NMMainOpConcatenate:
+        kwargs["ignore_nans"] = ignore_nans
+    return op_class(**kwargs)
 
 
 class Main2Panel(ResultsPanel):
@@ -676,7 +570,6 @@ class MainToolTab(SelectionRunTab):
     def __init__(self, manager: NMManager, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__("Main", manager, parent)
         self._tool = manager.main  # nm.main
-        self._function_options: dict[str, dict[str, bool]] = {}  # kept for next time
 
         self.mode_tabs = QtWidgets.QTabWidget(self)
         self.mode_tabs.setObjectName("mainModeTabs")
@@ -686,52 +579,45 @@ class MainToolTab(SelectionRunTab):
         self.main1_page = QtWidgets.QWidget(self.mode_tabs)
         main1 = QtWidgets.QVBoxLayout(self.main1_page)
         main1.setContentsMargins(6, 8, 6, 8)
-        main1.addWidget(self._heading("Display"))
-        # What Plot, Table and a function would use (the selection, as it changes)
-        self.selection_label = QtWidgets.QLabel("", self.main1_page)
-        self.selection_label.setWordWrap(True)
-        main1.addWidget(self.selection_label)
-        buttons = QtWidgets.QHBoxLayout()
-        self.plot_button = QtWidgets.QPushButton("Plot…", self.main1_page)
-        self.plot_button.setToolTip(
-            "Plot every selected epoch: each channel in a plot of its own, one above "
-            "another, the epochs overlaid or offset, in a color or a rainbow")
-        self.table_button = QtWidgets.QPushButton("Table", self.main1_page)
-        self.table_button.setToolTip(
-            "List the selected arrays' values: an x column, then a column per array")
-        for button in (self.plot_button, self.table_button):
-            buttons.addWidget(button)
-        buttons.addStretch(1)
-        main1.addLayout(buttons)
-        main1.addSpacing(8)
-        main1.addWidget(self._heading("Functions"))
+        # One list, as Stats' measures: Display, then Functions (then
+        # Operations...), divided
         function_row = QtWidgets.QHBoxLayout()
         self.function_combo = QtWidgets.QComboBox(self.main1_page)
         self.function_combo.setObjectName("mainFunction")
-        for name, (what, _options) in FUNCTIONS.items():
-            self.function_combo.addItem(name)
-            self.function_combo.setItemData(
-                self.function_combo.count() - 1, f"{name}: {what}",
-                QtCore.Qt.ItemDataRole.ToolTipRole)
+        self.function_combo.addItem("Choose…", None)  # nothing yet, as Stats1's
+        for group in (DISPLAY, FUNCTIONS):
+            self.function_combo.insertSeparator(self.function_combo.count())
+            for name, (what, _x) in group.items():
+                self.function_combo.addItem(name, name)
+                self.function_combo.setItemData(
+                    self.function_combo.count() - 1,
+                    what if group is DISPLAY else f"{name}: {what}",
+                    QtCore.Qt.ItemDataRole.ToolTipRole)
         self.function_combo.setToolTip(
-            "Run makes it from the selection, in a Main subfolder (viewed in Main2)")
+            "Run: Plot and Table draw the selection; a function makes its outputs "
+            "from it, in a Main subfolder (viewed in Main2)")
         function_row.addWidget(self.function_combo)
+        self.reset_button = QtWidgets.QPushButton("Reset", self.main1_page)
+        self.reset_button.setToolTip("Set its parameters back to their defaults")
+        self.reset_button.clicked.connect(lambda: self.form() and self.form().reset())
+        function_row.addWidget(self.reset_button)
         function_row.addStretch(1)
         main1.addLayout(function_row)
-        # The x range functions use, also as lines to drag on the Plot
-        x_row = QtWidgets.QHBoxLayout()
-        self.xbgn_edit = QtWidgets.QLineEdit(self.main1_page)
-        self.xbgn_edit.setPlaceholderText("-inf")
-        self.xend_edit = QtWidgets.QLineEdit(self.main1_page)
-        self.xend_edit.setPlaceholderText("inf")
-        for label, edit in (("X begin", self.xbgn_edit), ("X end", self.xend_edit)):
-            fit_number_edit(edit)
-            edit.setToolTip("The x range functions use (-inf, inf: all of each array); "
-                            "or drag its lines on the Plot")
-            x_row.addWidget(QtWidgets.QLabel(label, self.main1_page))
-            x_row.addWidget(edit)
-        x_row.addStretch(1)
-        main1.addLayout(x_row)
+        # What it makes, then its parameters: a form each, from their
+        # descriptions (#555), kept as set
+        self.function_info = QtWidgets.QLabel("", self.main1_page)
+        self.function_info.setWordWrap(True)
+        main1.addWidget(self.function_info)
+        self.forms: dict[str, ParamForm] = {}
+        self.form_stack = QtWidgets.QStackedWidget(self.main1_page)
+        self.no_form = QtWidgets.QWidget(self.form_stack)  # "Choose…": nothing
+        self.form_stack.addWidget(self.no_form)
+        for name in list(DISPLAY) + list(FUNCTIONS):
+            form = ParamForm(entry_params(name), self.form_stack)
+            form.ranges_changed.connect(self.ranges_changed)
+            self.forms[name] = form
+            self.form_stack.addWidget(form)
+        main1.addWidget(self.form_stack)
         main1.addStretch(1)
         self.mode_tabs.addTab(self.main1_page, "Main1")
 
@@ -743,19 +629,15 @@ class MainToolTab(SelectionRunTab):
         # In the app window: the plot and table (Display's, or Main2's)
         self.plot_view = SelectionPlot()
         self.table_view = SelectionTable()
-        self.plot_button.clicked.connect(self.plot_selection)
-        self.table_button.clicked.connect(self.table_selection)
         self.mode_tabs.currentChanged.connect(self._on_mode_tab_changed)
         self.main2.results_changed.connect(self.results_changed)
         self.main2.outputs_plot_requested.connect(self._plot_outputs)
         self.main2.table_requested.connect(self._table_outputs)
         self.main2.array_changed.connect(self._on_output_chosen)
         self.run_finished.connect(self._on_run_finished)
-        self.xbgn_edit.editingFinished.connect(self._save_x_range)
-        self.xend_edit.editingFinished.connect(self._save_x_range)
+        self.function_combo.currentIndexChanged.connect(self._on_function_changed)
         self.results_group.hide()
-        self._load_x_range()
-        self._show_selection()
+        self._on_function_changed()
 
     def _heading(self, text: str) -> QtWidgets.QLabel:
         label = QtWidgets.QLabel(text, self.main1_page)
@@ -777,7 +659,6 @@ class MainToolTab(SelectionRunTab):
     def bind_selection_model(self, model: Any) -> None:
         super().bind_selection_model(model)
         self.main2.bind_selection_model(model)
-        self._show_selection()
 
     def set_folder_actions(self, actions) -> None:
         self.main2.set_folder_actions(actions)  # its Folder ⋯ menu
@@ -787,6 +668,7 @@ class MainToolTab(SelectionRunTab):
         # One color starts as the Plot's trace color (Settings › Plot); an
         # average's data behind it, in the overlay color
         self.plot_view.options.color = getattr(settings, "plot_trace_color", "#000000")
+        self.forms["Plot"].set_values({"color": self.plot_view.options.color})
         self.plot_view.background_color = light(
             getattr(settings, "plot_overlay_color", "#78909c"))
         self._on_mode_tab_changed(self.mode_tabs.currentIndex())
@@ -807,12 +689,10 @@ class MainToolTab(SelectionRunTab):
     def refresh(self) -> None:
         """The data changed (e.g. arrays deleted or edited): drawn again."""
         super().refresh()
-        self._load_x_range()  # e.g. set by a command
         self.main2.refresh()
         for view in (self.plot_view, self.table_view):
             if view.shown is not None:
                 view.show_selected(self._still_there(view.shown))
-        self._show_selection()
 
     @staticmethod
     def _still_there(selected: Selected) -> Selected:
@@ -834,45 +714,23 @@ class MainToolTab(SelectionRunTab):
         # Stats2's and Spike2's tabs; the view follows
         main1 = self.mode_tabs.currentWidget() is self.main1_page
         self.run_row.setVisible(main1)
-        self.display_row.setVisible(main1 and self._settings is not None)
+        self.display_row.setVisible(main1 and self._settings is not None
+                                    and self.entry() in FUNCTIONS)
         self.view_requested.emit(self.preferred_view())
 
     # --- Display: the selection -----------------------------------------------
 
-    def _on_selection_changed(self, selection: dict[str, Any]) -> None:
-        super()._on_selection_changed(selection)
-        self._show_selection()
-
-    def _show_selection(self) -> None:
-        """Say what Plot and Table would show; they can't without a selection."""
-        try:
-            selected = selected_arrays(self.selection)
-        except RuntimeError as error:
-            self.selection_label.setText(str(error))
-            self.plot_button.setEnabled(False)
-            self.table_button.setEnabled(False)
-            return
-        self.selection_label.setText(selected.title)
-        self.plot_button.setEnabled(True)
-        self.table_button.setEnabled(True)
-
-    def _ask_plot_options(self, selected: Selected) -> PlotOptions | None:
-        """Plot…'s prompt: how to draw *selected* (None: cancelled); its
-        answer is kept for next time. Replaced in tests."""
-        dialog = PlotOptionsDialog(self.plot_view.options, selected.title, self)
-        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
-            return None
-        return dialog.options()
-
     def plot_selection(self) -> None:
-        """Plot the selection in the Main2 tab, and show it."""
+        """Plot the selection in the Main2 tab, as Plot's form says, and show it."""
         try:
             selected = selected_arrays(self.selection)
         except RuntimeError as error:
-            self.selection_label.setText(str(error))
+            self.show_warning(str(error))
             return
-        options = self._ask_plot_options(selected)
-        if options is None:  # cancelled
+        try:
+            options = plot_options(self.forms["Plot"].values())
+        except ValueError as error:  # e.g. an offset that isn't a number
+            self.show_warning(str(error))
             return
         self.plot_view.options = options
         self.plot_view.show_selected(selected)
@@ -884,96 +742,70 @@ class MainToolTab(SelectionRunTab):
         try:
             selected = selected_arrays(self.selection)
         except RuntimeError as error:
-            self.selection_label.setText(str(error))
+            self.show_warning(str(error))
             return
         self.table_view.show_selected(selected)
         self.results_changed.emit()
         self.view_requested.emit("table")
 
-    # --- X begin / X end, and its lines on the Plot -----------------------------
+    # --- the function chosen: its form, and its x ranges on the Plot -----------
 
-    @staticmethod
-    def _format_bound(value: float) -> str:
-        if value == -math.inf:
-            return "-inf"
-        if value == math.inf:
-            return "inf"
-        return f"{value:.10g}"
+    def entry(self) -> str | None:
+        """The entry chosen in Main1's list (e.g. "Plot", "Average"); None
+        for "Choose…"."""
+        return self.function_combo.currentData()
 
-    def _load_x_range(self) -> None:
-        """The X boxes show the tool's range (without saving it)."""
-        for edit, value in ((self.xbgn_edit, self._tool.xbgn),
-                            (self.xend_edit, self._tool.xend)):
-            edit.blockSignals(True)
-            edit.setText(self._format_bound(value))
-            edit.blockSignals(False)
-        self.ranges_changed.emit()
+    def form(self) -> ParamForm | None:
+        """The chosen entry's form (None: nothing chosen)."""
+        name = self.entry()
+        return self.forms[name] if name is not None else None
 
-    def _save_x_range(self) -> bool:
-        """What's typed, in the tool (a command each changed); False, with a
-        warning, if it isn't a range."""
-        values = []
-        for label, edit in (("X begin", self.xbgn_edit), ("X end", self.xend_edit)):
-            text = edit.text().strip() or ("-inf" if edit is self.xbgn_edit else "inf")
-            try:
-                value = float(text)
-            except ValueError:
-                self.show_warning(f"{label}: {text!r} is not a number")
-                return False
-            if math.isnan(value):
-                self.show_warning(f"{label}: NaN is not a number")
-                return False
-            values.append(value)
-        xbgn, xend = values
-        if not xbgn < xend:
-            self.show_warning("X begin must be less than X end")
-            return False
-        if self._tool.xbgn != xbgn:
-            self._tool.xbgn = xbgn
-        if self._tool.xend != xend:
-            self._tool.xend = xend
-        self._load_x_range()
-        return True
+    def _on_function_changed(self, *_args) -> None:
+        name = self.entry()
+        self.form_stack.setCurrentWidget(self.forms[name] if name else self.no_form)
+        self.reset_button.setEnabled(name is not None)
+        if name is None:
+            self.function_info.setText(
+                "Choose what to do with the selection: plot or table it, or make "
+                "an average, sum... of it.")
+        else:
+            self.function_info.setText(
+                DISPLAY[name][0] if name in DISPLAY else f"Makes {FUNCTIONS[name][0]}.")
+        self._on_mode_tab_changed(self.mode_tabs.currentIndex())  # Progress: functions'
+        self.ranges_changed.emit()  # its x ranges on the Plot
 
     def plot_ranges(self) -> list[PlotRange]:
-        # Draggable, locked or hidden: the Plot's ⋯ › Tool Ranges & Levels
-        return [PlotRange("range", "Main X range", self._tool.xbgn, self._tool.xend,
-                          self.RANGE_COLOR)]
+        # The chosen function's x ranges (draggable, locked or hidden: the
+        # Plot's ⋯ › Tool Ranges & Levels)
+        name, form = self.entry(), self.form()
+        if form is None:
+            return []
+        return [PlotRange(param.name, f"{name} {param.label}", begin, end, param.color)
+                for param, (begin, end) in form.x_ranges()]
 
     def set_plot_range(self, key: str, xbgn: float, xend: float, final: bool) -> None:
-        """A dragged range: X begin / X end follow, saved when released."""
-        self.xbgn_edit.setText(self._format_bound(xbgn))
-        self.xend_edit.setText(self._format_bound(xend))
-        if final:
-            self._save_x_range()
+        """A dragged range: its boxes follow."""
+        if self.form() is not None:
+            self.form().set_x_range(key, xbgn, xend)
 
     # --- Functions: run on the selection, all channels at once -----------------
 
-    def _ask_function(self, name: str) -> dict[str, bool] | None:
-        """A function's prompt: its options (None: cancelled); kept for next
-        time. Replaced in tests."""
-        try:
-            what = selected_arrays(self.selection).title
-        except RuntimeError:
-            what = "the selection"
-        dialog = FunctionDialog(name, self._function_options.get(name, {}), what, self)
-        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
-            return None
-        return dialog.options()
-
     def _on_run_clicked(self) -> None:
-        if not self._running:  # first, the x range, the function and its options
-            if not self._save_x_range():
+        name = self.entry()
+        if not self._running and name is None:
+            self.show_warning("Choose what to do: Plot, Table or a function")
+            return
+        if not self._running and name in DISPLAY:  # Plot, Table: drawn, no run
+            self.plot_selection() if name == "Plot" else self.table_selection()
+            return
+        if not self._running:  # first, the function, with its form's values
+            try:
+                values = self.form().values()
+                op = make_function(name, values, ignore_nans=self._tool.ignore_nans)
+            except ValueError as error:  # e.g. an x range's begin after its end
+                self.show_warning(str(error))
                 return
-            name = self.function_combo.currentText()
-            options: dict[str, bool] = {}
-            if function_option_keys(name):  # e.g. Average's Stdv, Var, SEM
-                options = self._ask_function(name)
-                if options is None:  # cancelled: no run
-                    return
-                self._function_options[name] = options
-            self._tool.op = make_function(  # nm.main.op = ...
-                name, options, ignore_nans=self._tool.ignore_nans)
+            self._tool.op = op  # nm.main.op = ...
         super()._on_run_clicked()
 
     def _scope_runs(self) -> list[tuple[str, dict]] | None:

@@ -29,6 +29,7 @@ import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
+from pyneuromatic.core.nm_params import BOOLEAN, X_RANGE, NMParam
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
@@ -91,6 +92,8 @@ class NMMainOp:
 
     name: str = ""
     _overwrite: bool = True  # class-level default; overridden per-instance
+    # Its parameters, described for a form (#555): a control each
+    PARAMS: tuple[NMParam, ...] = ()
 
     @property
     def overwrite(self) -> bool:
@@ -2729,18 +2732,56 @@ class NMMainOpAccumulate(NMMainOp):
     """
 
     _output_prefix: str = ""
+    # The part of each array used (#555): xbgn to xend, all by default
+    PARAMS: tuple[NMParam, ...] = (X_RANGE,)
 
-    def __init__(self, ignore_nans: bool = True) -> None:
+    def __init__(
+        self,
+        ignore_nans: bool = True,
+        xbgn: float = -math.inf,
+        xend: float = math.inf,
+    ) -> None:
         if not isinstance(ignore_nans, bool):
             raise TypeError(
                 nmu.type_error_str(ignore_nans, "ignore_nans", "boolean")
             )
         self._ignore_nans = ignore_nans
+        self._xbgn = self._xend = 0.0
+        self.set_x_range(xbgn, xend)
         self._results: dict[str, str] = {}  # channel → output name
         self._out_prefix: str = self._output_prefix  # settable per-instance
         # Before every output's name, e.g. "MN_" for the Main tool's (#553):
         # MN_Avg_RecordA, MN_SEM_RecordA
         self.name_prefix: str = ""
+
+    @property
+    def xbgn(self) -> float:
+        """Where in x each array's part used begins (-inf: its start)."""
+        return self._xbgn
+
+    @property
+    def xend(self) -> float:
+        """Where in x each array's part used ends (inf: its end)."""
+        return self._xend
+
+    def set_x_range(self, xbgn: float, xend: float) -> None:
+        """The part of each array used: x from *xbgn* to *xend* (#555)."""
+        values = []
+        for label, value in (("xbgn", xbgn), ("xend", xend)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(nmu.type_error_str(value, label, "float"))
+            if math.isnan(value):
+                raise ValueError("%s cannot be NaN" % label)
+            values.append(float(value))
+        if not values[0] < values[1]:
+            raise ValueError("xbgn must be less than xend")
+        self._xbgn, self._xend = values
+
+    def _range_str(self) -> str:
+        """The x range for the command, if not all of each array."""
+        if self._xbgn == -math.inf and self._xend == math.inf:
+            return ""
+        return ", xbgn=%r, xend=%r" % (self._xbgn, self._xend)
 
     @property
     def ignore_nans(self) -> bool:
@@ -2771,7 +2812,7 @@ class NMMainOpAccumulate(NMMainOp):
 
     def _op_params_str(self) -> str:
         """Default params for accumulate ops; includes ignore_nans."""
-        return "ignore_nans=%r" % self._ignore_nans
+        return "ignore_nans=%r" % self._ignore_nans + self._range_str()
 
     def _reduce(self, stack: np.ndarray) -> np.ndarray:
         """Reduce the stacked array to a single output array.
@@ -2947,6 +2988,15 @@ class NMMainOpAverage(NMMainOpAccumulate):
 
     name = "average"
     _output_prefix = "Avg_"
+    PARAMS = (
+        X_RANGE,
+        NMParam("compute_stdv", BOOLEAN, "Standard deviation", default=False,
+                tip="Also save each point's standard deviation (a Stdv_ array)"),
+        NMParam("compute_var", BOOLEAN, "Variance", default=False,
+                tip="Also save each point's variance (a Var_ array)"),
+        NMParam("compute_sem", BOOLEAN, "Standard error of the mean", default=False,
+                tip="Also save each point's standard error of the mean (a SEM_ array)"),
+    )
 
     def __init__(
         self,
@@ -2954,8 +3004,10 @@ class NMMainOpAverage(NMMainOpAccumulate):
         compute_stdv: bool = False,
         compute_var: bool = False,
         compute_sem: bool = False,
+        xbgn: float = -math.inf,
+        xend: float = math.inf,
     ) -> None:
-        super().__init__(ignore_nans)
+        super().__init__(ignore_nans, xbgn=xbgn, xend=xend)
         self.compute_stdv = compute_stdv  # setters validate bool
         self.compute_var = compute_var
         self.compute_sem = compute_sem
@@ -3037,7 +3089,8 @@ class NMMainOpAverage(NMMainOpAccumulate):
     def _op_params_str(self) -> str:
         return (
             "ignore_nans=%r, compute_stdv=%r, compute_var=%r, compute_sem=%r"
-        ) % (self._ignore_nans, self._compute_stdv, self._compute_var, self._compute_sem)
+        ) % (self._ignore_nans, self._compute_stdv, self._compute_var,
+             self._compute_sem) + self._range_str()
 
 
 # =========================================================================
@@ -3141,8 +3194,9 @@ class NMMainOpConcatenate(NMMainOpAccumulate):
     _output_prefix = "Cat_"
     _VALID_MODES: frozenset[str] = frozenset({"1d", "2d"})
 
-    def __init__(self, mode: str = "1d", ignore_nans: bool = True) -> None:
-        super().__init__(ignore_nans)
+    def __init__(self, mode: str = "1d", ignore_nans: bool = True,
+                 xbgn: float = -math.inf, xend: float = math.inf) -> None:
+        super().__init__(ignore_nans, xbgn=xbgn, xend=xend)
         self.mode = mode
 
     # ------------------------------------------------------------------
@@ -3200,7 +3254,7 @@ class NMMainOpConcatenate(NMMainOpAccumulate):
         self._results[cname] = out_name
 
     def _op_params_str(self) -> str:
-        return "mode=%r, ignore_nans=%r" % (self._mode, self._ignore_nans)
+        return "mode=%r, ignore_nans=%r" % (self._mode, self._ignore_nans) + self._range_str()
 
 
 # =========================================================================
