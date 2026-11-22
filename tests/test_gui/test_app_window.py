@@ -649,3 +649,21 @@ def test_window_and_app_have_the_icon(qtbot, nm):
     qtbot.addWidget(win)
     assert not win.windowIcon().isNull()
     assert not QtWidgets.QApplication.instance().windowIcon().isNull()
+
+
+def test_subfolder_fills_its_row_to_line_up_with_folder(qtbot, nm):
+    """The Subfolder dropdown is as wide as its row allows, so its ⋯ lines up
+    with Folder's."""
+    from PyQt6 import QtCore
+    win = NMAppWindow(nm)
+    qtbot.addWidget(win)
+    win.show()
+    qtbot.waitUntil(lambda: win.selection_strip.combo("toolfolder").width() > 0)
+    strip = win.selection_strip
+
+    def right(key):
+        button = strip._action_buttons[key]
+        return button.mapTo(strip, QtCore.QPoint(button.width(), 0)).x()
+
+    assert right("toolfolder") == right("folder")
+    assert strip.combo("toolfolder").width() > strip.combo("toolfolder").minimumSizeHint().width()
