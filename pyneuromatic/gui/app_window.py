@@ -1588,6 +1588,9 @@ class NMAppWindow(QtWidgets.QMainWindow):
             self.browser_widget.set_set_actions(self.epoch_set_actions, self.group_actions)
         for name, tab in self.tool_tabs.items():
             self._register_tool_tab(name, tab)
+        # The tool chosen at start (Main): its X ranges on the Plot too, as
+        # when a tool is chosen in the rail (they showed only after one was)
+        self.plot_widget.set_tool(self.tool_tabs.get(self.current_tool_name))
         self._update_tool_tabs()
         # Future: Inspector tab reserved for later development.
         self.context_area.setMinimumWidth(280)

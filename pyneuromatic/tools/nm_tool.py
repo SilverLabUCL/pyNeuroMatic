@@ -475,7 +475,7 @@ class NMTool:
     def run_selection(
         self,
         source: NMDataSeries | NMFolder | NMToolFolder,
-        channel: str | None = None,
+        channel: str | list[str] | None = None,
         epochs: str | list[str] | None = None,
         group: int | None = None,
         group_operator: str | None = None,
@@ -492,7 +492,9 @@ class NMTool:
         Args:
             source: A data series, or the folder (or tool subfolder) whose
                 data arrays to analyse.
-            channel: The data series' channel (default: its selected one).
+            channel: The data series' channel (default: its selected one);
+                ``"all"`` or a list of channels: each channel's epochs, in
+                one run (e.g. the Main tool's Average of every channel, #553).
             epochs: The data series' epochs: ``"all"``, a set (e.g.
                 ``"Set1"``), an epoch (e.g. ``"E3"``) or a list of epochs.
                 Epochs in SetX are left out, unless *epochs* is SetX.
@@ -580,16 +582,26 @@ class NMTool:
         if isinstance(source, NMDataSeries):
             if data is not None:
                 raise ValueError("data: use epochs for a data series")
-            c = source.channels.selected_value if channel is None else source.channels.get(channel)
-            if not isinstance(c, NMChannel):
-                raise KeyError("no channel '%s' in %s" % (channel, source.name))
+            if isinstance(channel, str) and channel.lower() == "all":
+                channels = list(source.channels.values())
+            elif isinstance(channel, (list, tuple)):
+                channels = [source.channels.get(c) for c in channel]
+            else:
+                channels = [source.channels.selected_value if channel is None
+                            else source.channels.get(channel)]
+            for c, name in zip(channels, channel if isinstance(channel, (list, tuple))
+                               else [channel] * len(channels)):
+                if not isinstance(c, NMChannel):
+                    raise KeyError("no channel '%s' in %s" % (name, source.name))
             names = source.epochs.scope_names(epochs, group, group_operator)
-            found = source.epoch_data_map(c.name)
-            targets = [
-                {**context, "dataseries": source, "channel": c,
-                 "epoch": source.epochs[name], "data": found[name]}
-                for name in names if isinstance(found.get(name), NMData)
-            ]
+            targets = []
+            for c in channels:  # channel by channel, each its epochs in order
+                found = source.epoch_data_map(c.name)
+                targets += [
+                    {**context, "dataseries": source, "channel": c,
+                     "epoch": source.epochs[name], "data": found[name]}
+                    for name in names if isinstance(found.get(name), NMData)
+                ]
             epoch = epochs.lower() if isinstance(epochs, str) and epochs.lower() == "all" \
                 else epochs if isinstance(epochs, str) else None
             run_keys: dict = {"epoch": epoch}

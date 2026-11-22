@@ -2738,6 +2738,9 @@ class NMMainOpAccumulate(NMMainOp):
         self._ignore_nans = ignore_nans
         self._results: dict[str, str] = {}  # channel → output name
         self._out_prefix: str = self._output_prefix  # settable per-instance
+        # Before every output's name, e.g. "MN_" for the Main tool's (#553):
+        # MN_Avg_RecordA, MN_SEM_RecordA
+        self.name_prefix: str = ""
 
     @property
     def ignore_nans(self) -> bool:
@@ -2892,7 +2895,7 @@ class NMMainOpAccumulate(NMMainOp):
         n = len(arrays)
         epoch_str = self._epoch_str(cname)
         arr = self._reduce(stack)
-        base_name = self._out_prefix + pfx + cname
+        base_name = self.name_prefix + self._out_prefix + pfx + cname
         out_name = self._make_out_name(folder, base_name)
         self._write_output_array(
             folder, out_name, arr, self._op_name, folder.name, pfx, cname, epoch_str, n
@@ -3007,7 +3010,7 @@ class NMMainOpAverage(NMMainOpAccumulate):
         # Derive sequence suffix from the main output name so companion
         # arrays always share the same suffix (e.g. _0, _1, ...).
         main_out_name = self._results[cname]
-        base_main = self._out_prefix + pfx + cname
+        base_main = self.name_prefix + self._out_prefix + pfx + cname
         suffix = main_out_name[len(base_main):]  # "" or "_0", "_1", ...
         min_len = min(len(a) for a in arrays)
         stack = np.stack([a[:min_len] for a in arrays])
@@ -3017,17 +3020,17 @@ class NMMainOpAverage(NMMainOpAccumulate):
         std = std_fn(stack, axis=0, ddof=1)
         if self._compute_stdv:
             self._write_output_array(
-                folder, "Stdv_" + pfx + cname + suffix, std,
+                folder, self.name_prefix + "Stdv_" + pfx + cname + suffix, std,
                 "NMStdv", folder.name, pfx, cname, epoch_str, n,
             )
         if self._compute_var:
             self._write_output_array(
-                folder, "Var_" + pfx + cname + suffix, std ** 2,
+                folder, self.name_prefix + "Var_" + pfx + cname + suffix, std ** 2,
                 "NMVar", folder.name, pfx, cname, epoch_str, n,
             )
         if self._compute_sem:
             self._write_output_array(
-                folder, "SEM_" + pfx + cname + suffix, std / np.sqrt(n),
+                folder, self.name_prefix + "SEM_" + pfx + cname + suffix, std / np.sqrt(n),
                 "NMSEM", folder.name, pfx, cname, epoch_str, n,
             )
 
@@ -3187,7 +3190,7 @@ class NMMainOpConcatenate(NMMainOpAccumulate):
 
         n = len(arrays)
         epoch_str = self._epoch_str(cname)
-        base_name = self._out_prefix + pfx + cname
+        base_name = self.name_prefix + self._out_prefix + pfx + cname
         out_name = self._make_out_name(folder, base_name)
         op_name = "%s_%s" % (self._op_name, self._mode)
         self._write_output_array(
