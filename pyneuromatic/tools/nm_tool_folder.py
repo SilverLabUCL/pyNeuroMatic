@@ -40,6 +40,7 @@ class NMToolFolder(NMObject):
         "_NMToolFolder__data_container",
         "_NMToolFolder__dataseries_container",
         "_NMToolFolder__dataseries",
+        "_NMToolFolder__sources",
     })
 
     def __init__(
@@ -53,6 +54,9 @@ class NMToolFolder(NMObject):
         self.__dataseries: NMDataSeriesContainer = NMDataSeriesContainer(parent=self)
         # How the results were made (e.g. a tool's settings), as on a folder
         self.__notes = NMNotes()
+        # The arrays each result was made from, by its name (e.g. a Main
+        # average's epochs, to plot behind it, #553)
+        self.__sources: dict[str, list[NMData]] = {}
 
     # override
     def __eq__(
@@ -113,6 +117,10 @@ class NMToolFolder(NMObject):
         else:
             result._NMToolFolder__data_container = NMDataContainer(parent=result)
 
+        # __sources: the same arrays (references, not copies)
+        result._NMToolFolder__sources = {
+            name: list(arrays) for name, arrays in self.sources.items()}
+
         # __dataseries: deep copy and update parent
         if self._NMToolFolder__dataseries is not None:
             result._NMToolFolder__dataseries = copy.deepcopy(
@@ -123,6 +131,15 @@ class NMToolFolder(NMObject):
             result._NMToolFolder__dataseries = NMDataSeriesContainer(parent=result)
 
         return result
+
+    @property
+    def sources(self) -> dict[str, list[NMData]]:
+        """The arrays each result was made from, by the result's name (e.g.
+        ``{"MN_Avg_RecordA": [RecordA0, RecordA1, ...]}``, #553)."""
+        sources = getattr(self, "_NMToolFolder__sources", None)
+        if sources is None:  # e.g. made before tool folders kept them
+            sources = self.__sources = {}
+        return sources
 
     @property
     def notes(self) -> NMNotes:
@@ -313,6 +330,7 @@ class NMToolFolderContainer(NMObjectContainer):
                 existing.data.clear(quiet=True)
                 existing.dataseries.clear(quiet=True)
                 existing.notes.clear()
+                existing.sources.clear()
                 return existing
             return self.new(name=name)
         i = 0

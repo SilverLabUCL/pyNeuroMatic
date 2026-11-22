@@ -1761,8 +1761,12 @@ class TestNMToolMain(unittest.TestCase):
         })
         self.tool.op = NMMainOpAverage()
         self.tool.run_all(targets)
-        out = folder.data.get("Avg_RecordA")
-        self.assertIsNotNone(out)
+        # In a Main subfolder (#553), not the folder
+        self.assertIsNone(folder.data.get("Avg_RecordA"))
+        sub = self.tool.toolfolder
+        self.assertIs(sub, folder.toolfolders.get(sub.name))
+        self.assertTrue(sub.name.startswith("Main_"))
+        out = sub.data.get("MN_Avg_RecordA")  # MN_, as Stats' ST_
         np.testing.assert_array_almost_equal(out.nparray, [3.0, 6.0])
 
     # --- end-to-end: arithmetic ---
@@ -3358,7 +3362,7 @@ class TestToolMainOpLogging(unittest.TestCase):
         buf = self._ch.buffer
         self.assertEqual(len(buf), 1)
         self.assertIn("NMMainOpBaseline", buf[0]["command"])
-        self.assertIn("tool_main.op", buf[0]["command"])
+        self.assertIn("main.op", buf[0]["command"])  # nm.main.op (#553)
 
     def test_op_setter_includes_params(self):
         tool = NMToolMain()
@@ -4235,3 +4239,174 @@ class TestNMMainOpPlot(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMainFunctionsInSubfolders(unittest.TestCase):
+    """A function's outputs in a Main subfolder, made a data series (#553)."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_channels=2, n_epochs=3,
+                                                 n_points=4)
+        for c in "AB":
+            for e in range(3):
+                self.series.get_data(c, "E%d" % e).nparray = np.arange(4.0) + 10 * e
+
+    def test_all_channels_one_subfolder_one_series(self):
+        tool = self.nm.main
+        tool.op = NMMainOpAverage(compute_var=True)
+        tool.run_selection(self.series, channel="all", epochs="all")
+        sub = tool.toolfolder
+        self.assertEqual(sub.name, "Main_Record_AB_All_0")
+        self.assertEqual(list(sub.data.keys()),
+                         ["MN_Avg_RecordA", "MN_Var_RecordA", "MN_Avg_RecordB", "MN_Var_RecordB"])
+        self.assertEqual(sorted(sub.dataseries.keys()), ["MN_Avg_Record", "MN_Var_Record"])
+        avg = sub.dataseries["MN_Avg_Record"]
+        self.assertEqual(list(avg.channels.keys()), ["A", "B"])
+        self.assertIs(avg.get_data("B", "E0"), sub.data["MN_Avg_RecordB"])
+        self.assertIn("channels A, B, epochs all (n=6)", sub.notes[0]["note"])
+        self.assertEqual(len(self.folder.data), 6)  # nothing added to the folder
+
+    def test_channel_list_and_overwrite(self):
+        tool = self.nm.main
+        tool.op = NMMainOpConcatenate()
+        tool.run_selection(self.series, channel=["B"], epochs="all")
+        self.assertEqual(tool.toolfolder.name, "Main_Record_B_All_0")
+        self.assertEqual(len(tool.toolfolder.data["MN_Cat_RecordB"].nparray), 12)
+        tool.overwrite = True
+        tool.run_selection(self.series, channel=["B"], epochs="all")
+        self.assertEqual(list(self.folder.toolfolders.keys()), ["Main_Record_B_All_0"])
+        with self.assertRaises(KeyError):
+            tool.run_selection(self.series, channel=["C"], epochs="all")
+
+    def test_operations_still_change_the_arrays(self):
+        tool = self.nm.main
+        tool.op = NMMainOpArithmetic(factor=2.0)
+        tool.run_selection(self.series, channel="A", epochs="E1")
+        np.testing.assert_array_almost_equal(
+            self.series.get_data("A", "E1").nparray, (np.arange(4.0) + 10) * 2)
+        self.assertEqual(len(self.folder.toolfolders), 0)
+
+
+class TestMainFunctionRangeAndSources(unittest.TestCase):
+    """Functions use xbgn to xend; a subfolder keeps each output's sources (#553)."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_channels=1, n_epochs=2,
+                                                 n_points=10)
+        for e in range(2):
+            d = self.series.get_data("A", "E%d" % e)
+            d.nparray = np.arange(10.0) + e
+            d.xscale.delta = 0.5
+
+    def test_x_range(self):
+        tool = self.nm.main
+        tool.xbgn, tool.xend = 1.0, 2.5
+        tool.op = NMMainOpAverage()
+        tool.run_selection(self.series, channel="A", epochs="all")
+        out = tool.toolfolder.data["MN_Avg_RecordA"]
+        np.testing.assert_array_almost_equal(out.nparray, [2.5, 3.5, 4.5, 5.5])
+        self.assertEqual(out.xscale.start, 1.0)
+        self.assertIn("x 1 to 2.5", tool.toolfolder.notes[0]["note"])
+        # The arrays themselves don't change
+        self.assertEqual(len(self.series.get_data("A", "E0").nparray), 10)
+
+    def test_sources_kept_and_copied_by_reference(self):
+        import copy
+        tool = self.nm.main
+        tool.op = NMMainOpAverage(compute_sem=True)
+        tool.run_selection(self.series, channel="A", epochs="all")
+        sub = tool.toolfolder
+        sources = sub.sources["MN_Avg_RecordA"]
+        self.assertEqual([d.name for d in sources], ["RecordA0", "RecordA1"])
+        self.assertIs(sources[0], self.folder.data["RecordA0"])
+        self.assertIs(copy.deepcopy(sub).sources["MN_Avg_RecordA"][0], sources[0])
+        tool.overwrite = True  # the same subfolder: only this run's outputs replaced
+        tool.op = NMMainOpAverage()
+        tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertIs(tool.toolfolder, sub)
+        self.assertEqual(sorted(sub.sources), ["MN_Avg_RecordA", "MN_SEM_RecordA"])
+
+    def test_ignore_nans_from_the_config(self):
+        self.assertTrue(self.nm.main.ignore_nans)
+        self.assertTrue(self.nm.main.config.ignore_nans)
+
+
+class TestMainOverwriteSharesTheSubfolder(unittest.TestCase):
+    """Overwrite: functions on one selection share ..._0, each replacing only
+    its own outputs; off, a new subfolder each run (#553)."""
+
+    def test_functions_share_and_replace_their_own(self):
+        from pyneuromatic.core.nm_manager import NMManager
+        nm = NMManager(quiet=True)
+        folder = nm.folders.new("Demo")
+        series = folder.new_dataseries("Record", n_channels=1, n_epochs=2, n_points=3)
+        for e in range(2):
+            series.get_data("A", "E%d" % e).nparray = np.arange(3.0) + e
+        tool = nm.main
+        tool.op = NMMainOpAverage()
+        tool.run_selection(series, channel="A", epochs="all")
+        tool.run_selection(series, channel="A", epochs="all")
+        self.assertEqual(list(folder.toolfolders.keys()),
+                         ["Main_Record_A_All_0", "Main_Record_A_All_1"])
+        tool.overwrite = True
+        tool.op = NMMainOpMax()
+        tool.run_selection(series, channel="A", epochs="all")
+        sub = folder.toolfolders["Main_Record_A_All_0"]
+        self.assertIs(tool.toolfolder, sub)
+        self.assertEqual(list(sub.data.keys()), ["MN_Avg_RecordA", "MN_Max_RecordA"])
+        self.assertEqual(sorted(sub.dataseries.keys()), ["MN_Avg_Record", "MN_Max_Record"])
+        series.get_data("A", "E1").nparray = np.arange(3.0) + 10
+        tool.op = NMMainOpAverage()
+        tool.run_selection(series, channel="A", epochs="all")
+        np.testing.assert_array_almost_equal(sub.data["MN_Avg_RecordA"].nparray,
+                                             [5.0, 6.0, 7.0])  # replaced
+        np.testing.assert_array_almost_equal(sub.data["MN_Max_RecordA"].nparray,
+                                             [1.0, 2.0, 3.0])  # kept
+        self.assertEqual(len(folder.toolfolders), 2)
+
+
+
+class TestMainOmit(unittest.TestCase):
+    """Omit: a function leaves out the epoch just added (#553)."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+        self.nm = NMManager(quiet=True)
+        folder = self.nm.folders.new("Demo")
+        self.series = folder.new_dataseries("Record", n_channels=1, n_epochs=3, n_points=2)
+        for e in range(3):
+            self.series.get_data("A", "E%d" % e).nparray = np.array([1.0, 2.0]) * 10 ** e
+        tool = self.nm.main
+        omitted = []
+
+        def run_and_omit_e1():
+            ran = NMToolMain.run(tool)
+            if tool.epoch is not None and tool.epoch.name == "E1":
+                omitted.append(tool.omit_last())
+            return ran
+        tool.run = run_and_omit_e1
+        self.omitted = omitted
+
+    def test_average_without_the_omitted_epoch(self):
+        tool = self.nm.main
+        tool.op = NMMainOpAverage()
+        self.assertTrue(tool.can_omit)
+        tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertEqual(self.omitted, ["E1"])
+        sub = tool.toolfolder
+        np.testing.assert_array_almost_equal(sub.data["MN_Avg_RecordA"].nparray,
+                                             [50.5, 101.0])  # E0 and E2
+        self.assertEqual([d.name for d in sub.sources["MN_Avg_RecordA"]],
+                         ["RecordA0", "RecordA2"])
+        self.assertIn("(n=2)", sub.notes[0]["note"])
+
+    def test_operations_cannot_omit(self):
+        tool = self.nm.main
+        tool.op = NMMainOpArithmetic(factor=2.0)
+        self.assertFalse(tool.can_omit)

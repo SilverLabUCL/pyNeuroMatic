@@ -133,6 +133,9 @@ class SelectionStrip(QtWidgets.QWidget):
     # Narrower than the style's smallest dropdown: they hold "A" or "12"
     # Short, as Channel: All, 0, 1 (All, A, B); the "Group" label says what
     _FIXED_WIDTH = {"channel": 66, "group": 66}
+    # Fill their row, so their ⋯ lines up with the row above's (Subfolder's
+    # with Folder's)
+    _FILL_ROW = {"toolfolder"}
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -190,6 +193,9 @@ class SelectionStrip(QtWidgets.QWidget):
                 )
                 if key in self._FIXED_WIDTH:
                     combo.setFixedWidth(self._FIXED_WIDTH[key])
+                if key in self._FILL_ROW:
+                    combo.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                        QtWidgets.QSizePolicy.Policy.Fixed)
                 if key == "group_operator":
                     combo.setToolTip("Combine the Epoch Set and Group with AND or OR")
                 if key == "group":
@@ -223,7 +229,8 @@ class SelectionStrip(QtWidgets.QWidget):
                     self.epoch_count_label.setObjectName("epochCount")
                     self.epoch_count_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
                     row_layout.addWidget(self.epoch_count_label)
-            row_layout.addStretch(1)
+            if not any(key in self._FILL_ROW for key, _label, _actions in row):
+                row_layout.addStretch(1)
             layout.addLayout(row_layout)
         return frame
 
