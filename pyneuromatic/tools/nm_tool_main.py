@@ -40,8 +40,10 @@ class NMToolMainConfig(NMToolConfig):
     """Settings › Main: the Main tool's options (#553).
 
     Parameters:
-        ignore_nans: Functions leave NaN values out (otherwise a NaN in any
-            array gives NaN there).
+        ignore_nans: Functions ignore NaNs (otherwise a NaN input results
+            in a NaN output).
+        ask_before_changing: The app asks before an operation changes the
+            arrays themselves (#557).
         overwrite: Functions run on the same selection share its first Main
             subfolder (``..._0``), each replacing only the outputs it makes;
             off: a new subfolder each run.
@@ -54,6 +56,7 @@ class NMToolMainConfig(NMToolConfig):
     _schema = {
         "ignore_nans": {"type": bool, "default": True},
         "overwrite": {"type": bool, "default": False},
+        "ask_before_changing": {"type": bool, "default": True},  # #557
     }
 
 
@@ -93,6 +96,8 @@ class NMToolMain(NMTool):
         self._config = NMToolMainConfig()
         self._ignore_nans = self._config.ignore_nans
         self._overwrite = self._config.overwrite
+        # The app asks before an operation changes the arrays (#557)
+        self.ask_before_changing = self._config.ask_before_changing
         self._op: NMMainOp = NMMainOpAverage()
         self._toolfolder: NMToolFolder | None = None
         self._outputs: list[str] = []
@@ -142,6 +147,38 @@ class NMToolMain(NMTool):
         if params is None:
             params = ""
         add_nm_command("%s.op = %s(%s)" % (self._name, type(self._op).__name__, params))
+
+    # ------------------------------------------------------------------
+    # Operations change the arrays themselves: never a locked series' (#557)
+
+    @staticmethod
+    def locked_series(targets: list[dict]):
+        """The locked data series one of *targets*' arrays belongs to (an
+        operation can't change it), or None."""
+        for target in targets:
+            series = target.get("dataseries")
+            if series is not None and getattr(series, "locked", False):
+                return series
+            data = target.get("data")
+            container = getattr(data, "_container", None)
+            find = getattr(container, "locked_dataseries_for_name", None)
+            if data is not None and find is not None:
+                series = find(data.name)
+                if series is not None:
+                    return series
+        return None
+
+    def run_all(self, targets, run_keys=None) -> bool:
+        """As :meth:`NMTool.run_all`; an operation refuses arrays of a locked
+        data series, changing none (unlock it, or copy it and run on the
+        copy)."""
+        if self._op.CHANGES_DATA:
+            series = self.locked_series(targets)
+            if series is not None:
+                raise RuntimeError(
+                    "%s is locked: unlock it, or copy it and run on the copy"
+                    % series.name)
+        return super().run_all(targets, run_keys=run_keys)
 
     # ------------------------------------------------------------------
     # Lifecycle hooks

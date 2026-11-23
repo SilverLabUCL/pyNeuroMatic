@@ -16,7 +16,7 @@ from typing import Any
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from pyneuromatic.core.nm_params import (
-    ARRAY, BOOLEAN, CHOICE, COLOR, INTEGER, NUMBER, XRANGE, NMParam)
+    ARRAY, BOOLEAN, CHOICE, COLOR, INTEGER, NUMBER, TEXT, XRANGE, NMParam)
 from pyneuromatic.gui.tool_tab import fit_number_edit
 
 
@@ -79,9 +79,8 @@ class ParamForm(QtWidgets.QWidget):
                 current[param.name] = control.isChecked()
         for param in self.params:
             if param.when:
-                name, value = param.when
                 for widget in self._rows[param.name]:
-                    widget.setEnabled(current.get(name) == value)
+                    widget.setEnabled(param.enabled(current))
 
     def _control(self, param: NMParam) -> QtWidgets.QWidget:
         if param.kind == BOOLEAN:
@@ -98,6 +97,13 @@ class ParamForm(QtWidgets.QWidget):
             self._controls[param.name] = button
             self._show_color(param.name, param.default or "#000000")
             return button
+        if param.kind == TEXT:
+            edit = QtWidgets.QLineEdit(self)
+            edit.setToolTip(param.tip)
+            edit.setMaximumWidth(120)
+            edit.editingFinished.connect(self.changed)
+            self._controls[param.name] = edit
+            return edit
         if param.kind in (CHOICE, ARRAY):
             combo = QtWidgets.QComboBox(self)
             combo.setToolTip(param.tip)
@@ -215,6 +221,8 @@ class ParamForm(QtWidgets.QWidget):
             elif param.kind in (NUMBER, INTEGER):
                 control.setText(bound_text(float(value)) if param.kind == NUMBER
                                 else str(int(value)))
+            elif param.kind == TEXT:
+                control.setText(str(value or ""))
         self._enable()
 
     # --- x ranges, on the Plot -------------------------------------------------

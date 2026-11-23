@@ -221,7 +221,7 @@ class ToolTabWidget(QtWidgets.QWidget):
         run_layout = QtWidgets.QHBoxLayout(self.run_row)
         run_layout.setContentsMargins(0, 0, 0, 0)
         self.run_button = QtWidgets.QPushButton("Run", self.run_row)
-        self.run_button.setToolTip("Run (use Cancel or Esc to stop)")
+        self.run_button.setToolTip("Run (use Esc or Progress Cancel to stop)")
         self._show_run_button(running=False)
         self.run_button.clicked.connect(self._on_run_clicked)
         run_layout.addWidget(self.run_button)

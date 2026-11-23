@@ -245,7 +245,7 @@ class StatsToolTab(SelectionRunTab):
     view_label = "Stats2"
     NO_RESULTS_TITLE = "No Stats2 results yet: Run in Stats1"
 
-    # The current window's X range and its baseline range, on the Plot (#436)
+    # The current Stats window's X range and its baseline range, on the Plot (#436)
     WINDOW_COLOR = "#2563eb"
     BSLN_COLOR = "#16a34a"
     # Its measurements of the trace shown (#463)
@@ -496,7 +496,7 @@ class StatsToolTab(SelectionRunTab):
         self.details.setMinimumHeight(
             int(sample.size().height()) + 2 * self.details.frameWidth() + 2)
         self.details.setToolTip(
-            "The current window's measurement of the current epoch")
+            "The current Stats window's measurement of the current epoch")
         details_layout.addWidget(self.details)
         stats1_layout.addWidget(details_group, stretch=1)
         self._trace = None  # the trace the Plot shows (set_trace)
@@ -1000,7 +1000,7 @@ class StatsToolTab(SelectionRunTab):
     # --- the window's X ranges on the Plot (#436) ----------------------------
 
     def plot_marks(self, data) -> list[PlotMark]:
-        """The current window's measurement of *data*, as Run would make it.
+        """The current Stats window's measurement of *data*, as Run would make it.
 
         A copy of the window measures, so nothing is recorded and the
         window's results are kept. During a run, the run's own results for
@@ -1032,7 +1032,7 @@ class StatsToolTab(SelectionRunTab):
         self._show_details()
 
     def details_text(self) -> str:
-        """The Results box's text: the current window's measurement of the
+        """Results box: current Stats window's measurement of the
         current epoch (#471)."""
         window, data = self._selected_window(), self._trace
         if window is None or data is None or data.nparray is None or data.nparray.size == 0:
@@ -1069,7 +1069,7 @@ class StatsToolTab(SelectionRunTab):
             self.details.setPlainText(text)
 
     def plot_ranges(self) -> list[PlotRange]:
-        """The current window's X range, and its baseline range while Bsln is on."""
+        """The current Stats window's X range, and its baseline range while Bsln is on."""
         window = self._selected_window()
         if window is None:
             return []
@@ -1094,7 +1094,7 @@ class StatsToolTab(SelectionRunTab):
     # --- the window's level on the Plot (#527) --------------------------------
 
     def plot_levels(self, data) -> list[PlotLevel]:
-        """The current window's level, for its level measures: its Y level,
+        """The current Stats window's level, for its level measures: its Y level,
         or its baseline's mean + n std of *data* (the trace shown)."""
         self._level_baseline = None
         window = self._selected_window()

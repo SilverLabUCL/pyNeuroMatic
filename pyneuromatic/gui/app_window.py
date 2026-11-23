@@ -2059,6 +2059,10 @@ class NMAppWindow(QtWidgets.QMainWindow):
         # A run may add a results subfolder: show it in the browser too
         if succeeded and isinstance(self.browser_widget, FolderBrowserWidget):
             self.browser_widget.refresh()
+        # ... or change the arrays (e.g. Main's Baseline, #557): drawn again
+        if succeeded:
+            self.plot_widget.update_selection(self.selection_model.selection)
+            self.table_panel.channel_table.model.refresh()
 
     def _on_browser_selection_requested(self, selection: dict) -> None:
         obj = selection.get("object")

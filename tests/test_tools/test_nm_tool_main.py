@@ -4437,3 +4437,52 @@ class TestFunctionParams(unittest.TestCase):
         self.assertIn("xbgn=0.0, xend=inf", op._op_params_str())
         self.assertNotIn("xbgn", NMMainOpMin()._op_params_str())  # all: not written
 
+
+
+class TestMainOperations(unittest.TestCase):
+    """Operations change the arrays themselves; never a locked series' (#557)."""
+
+    def setUp(self):
+        from pyneuromatic.core.nm_manager import NMManager
+        self.nm = NMManager(quiet=True)
+        self.folder = self.nm.folders.new("Demo")
+        self.series = self.folder.new_dataseries("Record", n_channels=1, n_epochs=2,
+                                                 n_points=4)
+        for e in range(2):
+            self.series.get_data("A", "E%d" % e).nparray = np.arange(4.0) + 10 * e
+
+    def test_locked_series_refused_nothing_changed(self):
+        tool = self.nm.main
+        self.series.locked = True
+        tool.op = NMMainOpArithmetic(factor=2.0)
+        with self.assertRaisesRegex(RuntimeError, "Record is locked: unlock it, or copy it"):
+            tool.run_selection(self.series, channel="A", epochs="all")
+        np.testing.assert_array_equal(self.series.get_data("A", "E1").nparray,
+                                      np.arange(4.0) + 10)
+        # Its arrays as Data too
+        with self.assertRaisesRegex(RuntimeError, "Record is locked"):
+            tool.run_selection(self.folder, data="RecordA0")
+        # A function makes new arrays: allowed
+        tool.op = NMMainOpAverage()
+        tool.run_selection(self.series, channel="A", epochs="all")
+
+    def test_baseline_changes_the_arrays(self):
+        tool = self.nm.main
+        tool.op = NMMainOpBaseline(xbgn=0.0, xend=1.0)
+        tool.run_selection(self.series, channel="A", epochs="all")
+        np.testing.assert_array_almost_equal(self.series.get_data("A", "E1").nparray,
+                                             [-0.5, 0.5, 1.5, 2.5])
+        self.assertIsNone(tool.toolfolder)  # no subfolder: the arrays changed
+
+    def test_descriptions(self):
+        from pyneuromatic.core.nm_params import keywords
+        self.assertEqual([p.name for p in NMMainOpBaseline.PARAMS], ["window", "mode"])
+        kwargs = keywords(NMMainOpFilter.PARAMS, {
+            "filter_type": "butterworth", "btype": "bandpass", "cutoff": 10,
+            "cutoff_high": 200, "order": 2, "q": 30})
+        self.assertEqual(NMMainOpFilter.form_keywords(kwargs)["cutoff"], [10.0, 200.0])
+        self.assertIsNone(keywords(NMMainOpRescale.PARAMS,
+                                   {"to_units": "nA", "from_units": ""})["from_units"])
+        for op in (NMMainOpAverage, NMMainOpSum):
+            self.assertFalse(op.CHANGES_DATA)
+        self.assertTrue(NMMainOpSmooth.CHANGES_DATA)
