@@ -30,7 +30,8 @@ CHOICE = "choice"  # one of :attr:`NMParam.choices`
 ARRAY = "array"  # a data array's name
 XRANGE = "xrange"  # an x range: two values, :attr:`NMParam.names` (begin, end)
 COLOR = "color"  # e.g. "#1d4ed8"
-KINDS = (NUMBER, INTEGER, BOOLEAN, CHOICE, ARRAY, XRANGE, COLOR)
+TEXT = "text"  # e.g. units, "nA"
+KINDS = (NUMBER, INTEGER, BOOLEAN, CHOICE, ARRAY, XRANGE, COLOR, TEXT)
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -56,7 +57,10 @@ class NMParam:
         color: An x range's lines on the Plot.
         finite: A number must be finite (not inf or -inf).
         when: ``(name, value)``: shown enabled only while parameter *name*
-            has *value* (e.g. a color only with "One color").
+            has *value*, or one of them if a tuple (e.g. a color only with
+            "One color"; Smooth's window with boxcar or Savitzky-Golay).
+        required: Text that can't be left blank (blank text that isn't
+            required is None, e.g. "the data's units").
     """
 
     name: str
@@ -72,6 +76,7 @@ class NMParam:
     color: str = "#2563eb"
     finite: bool = False
     when: tuple = ()
+    required: bool = False
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -96,6 +101,11 @@ class NMParam:
             if not isinstance(value, str) or not value:
                 raise ValueError("%s: choose an array" % label)
             return value
+        if self.kind == TEXT:
+            text = str(value if value is not None else "").strip()
+            if self.required and not text:
+                raise ValueError("%s: enter it" % label)
+            return text
         if self.kind == COLOR:
             if not isinstance(value, str) or not _COLOR.match(value):
                 raise ValueError("%s: %r is not a color (#rrggbb)" % (label, value))
@@ -119,7 +129,17 @@ class NMParam:
         """The function's keyword arguments for *value* (an x range's two)."""
         if self.kind == XRANGE:
             return {self.names[0]: value[0], self.names[1]: value[1]}
+        if self.kind == TEXT and not value:
+            return {self.name: None}  # e.g. the data's own units
         return {self.name: value}
+
+    def enabled(self, current: dict[str, Any]) -> bool:
+        """Whether it applies, given the other parameters' *current* values
+        (see :attr:`when`)."""
+        if not self.when:
+            return True
+        name, value = self.when
+        return current.get(name) in (value if isinstance(value, tuple) else (value,))
 
 
 def _number(label: str, value: Any, whole: bool = False) -> float | int:

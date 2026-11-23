@@ -29,7 +29,17 @@ import numpy as np
 
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
-from pyneuromatic.core.nm_params import BOOLEAN, X_RANGE, NMParam
+from pyneuromatic.core.nm_params import (
+    BOOLEAN, CHOICE, INTEGER, NUMBER, TEXT, X_RANGE, XRANGE, NMParam)
+
+# Operations' common parameters (#557)
+_WHOLE = (-math.inf, math.inf)
+_BASELINE_COLOR = "#16a34a"  # a baseline window on the Plot (the function's x range: blue)
+_PEAK_COLOR = "#dc2626"
+_MODE = NMParam("mode", CHOICE, "Measure from", default="per_array",
+                choices=(("per_array", "each array"), ("average", "average of all arrays")),
+                tip="Use each array's own measure, or the average of the measures "
+                    "of all selected arrays (per channel)")
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
@@ -94,6 +104,15 @@ class NMMainOp:
     _overwrite: bool = True  # class-level default; overridden per-instance
     # Its parameters, described for a form (#555): a control each
     PARAMS: tuple[NMParam, ...] = ()
+    # It changes the arrays themselves (an operation); a function or display
+    # makes new ones, or nothing (#557)
+    CHANGES_DATA: bool = True
+
+    @classmethod
+    def form_keywords(cls, kwargs: dict) -> dict:
+        """Its form's keyword arguments, as its constructor takes them
+        (e.g. Filter's two band-pass cutoffs, one list)."""
+        return kwargs
 
     @property
     def overwrite(self) -> bool:
@@ -322,6 +341,13 @@ class NMMainOpArithmetic(NMMainOp):
     """
 
     name = "arithmetic"
+    PARAMS = (
+        NMParam("op", CHOICE, "Operation", default="x",
+                choices=(("x", "× multiply"), ("/", "÷ divide"), ("+", "+ add"),
+                         ("-", "− subtract"), ("=", "= set to"), ("**", "^ power")),
+                tip="Each point, with the value"),
+        NMParam("factor", NUMBER, "Value", default=1.0, finite=True),
+    )
 
     def __init__(
         self,
@@ -851,6 +877,10 @@ class NMMainOpIntegrate(NMMainOp):
     """
 
     name = "integrate"
+    PARAMS = (
+        NMParam("method", CHOICE, "Method", default="rectangular",
+                choices=(("rectangular", "rectangular"), ("trapezoid", "trapezoid"))),
+    )
 
     _VALID_METHODS = {"rectangular", "trapezoid"}
 
@@ -1115,6 +1145,13 @@ class NMMainOpBaseline(NMMainOp):
     """
 
     name = "baseline"
+    PARAMS = (
+        NMParam("window", XRANGE, "Baseline", default=_WHOLE, names=("xbgn", "xend"),
+                color=_BASELINE_COLOR,
+                tip="Its mean is subtracted (-inf, inf: the whole array); or drag its "
+                    "lines on the Plot"),
+        _MODE,
+    )
 
     _VALID_MODES = {"per_array", "average"}
 
@@ -1293,6 +1330,17 @@ class NMMainOpSmooth(NMMainOp):
     """
 
     name = "smooth"
+    PARAMS = (
+        NMParam("method", CHOICE, "Method", default="boxcar",
+                choices=(("boxcar", "boxcar"), ("binomial", "binomial"),
+                         ("savgol", "Savitzky-Golay"))),
+        NMParam("window", INTEGER, "Window", default=5, minimum=3, units="points",
+                when=("method", ("boxcar", "savgol")), tip="An odd number of points"),
+        NMParam("passes", INTEGER, "Passes", default=1, minimum=1,
+                when=("method", ("boxcar", "binomial"))),
+        NMParam("polyorder", INTEGER, "Polynomial order", default=2, minimum=1,
+                when=("method", "savgol")),
+    )
 
     def __init__(
         self,
@@ -1438,6 +1486,35 @@ class NMMainOpFilter(NMMainOp):
     """
 
     name = "filter"
+    PARAMS = (
+        NMParam("filter_type", CHOICE, "Filter", default="butterworth",
+                choices=(("butterworth", "Butterworth"), ("bessel", "Bessel"),
+                         ("notch", "notch"))),
+        NMParam("btype", CHOICE, "Pass", default="low",
+                choices=(("low", "low-pass"), ("high", "high-pass"),
+                         ("bandpass", "band-pass")),
+                when=("filter_type", ("butterworth", "bessel"))),
+        NMParam("cutoff", NUMBER, "Cutoff", default=1000.0, minimum=0.0, units="Hz",
+                finite=True, tip="Low or high cutoff; band-pass: its low edge; "
+                                 "notch: the frequency removed"),
+        NMParam("cutoff_high", NUMBER, "High cutoff", default=2000.0, minimum=0.0,
+                units="Hz", finite=True, when=("btype", "bandpass"),
+                tip="Band-pass: its high edge"),
+        NMParam("order", INTEGER, "Order", default=4, minimum=1,
+                when=("filter_type", ("butterworth", "bessel"))),
+        NMParam("q", NUMBER, "Q", default=30.0, minimum=0.0, finite=True,
+                when=("filter_type", "notch"),
+                tip="Center frequency / bandwidth: higher, a narrower notch"),
+    )
+
+    @classmethod
+    def form_keywords(cls, kwargs: dict) -> dict:
+        """Band-pass: its two cutoffs, one list; otherwise one cutoff."""
+        kwargs = dict(kwargs)
+        high = kwargs.pop("cutoff_high", None)
+        if kwargs.get("btype") == "bandpass" and kwargs.get("filter_type") != "notch":
+            kwargs["cutoff"] = [kwargs["cutoff"], high]
+        return kwargs
 
     def __init__(
         self,
@@ -2046,6 +2123,27 @@ class NMMainOpNormalize(NMMainOp):
     """
 
     name = "normalize"
+    PARAMS = (
+        NMParam("low", XRANGE, "Low window", default=_WHOLE,
+                names=("min_xbgn", "min_xend"), color=_BASELINE_COLOR,
+                tip="Window for computing the low value"),
+        NMParam("min_fxn", CHOICE, "Low function", default="min",
+                choices=(("min", "min"), ("mean", "mean"), ("mean@min", "mean@min")),
+                tip="min, mean, or mean@min: the mean of points about the minimum"),
+        NMParam("min_mean_n", INTEGER, "Points about it", default=1, minimum=1,
+                when=("min_fxn", "mean@min")),
+        NMParam("high", XRANGE, "High window", default=_WHOLE,
+                names=("max_xbgn", "max_xend"), color=_PEAK_COLOR,
+                tip="Window for computing the high value"),
+        NMParam("max_fxn", CHOICE, "High function", default="max",
+                choices=(("max", "max"), ("mean", "mean"), ("mean@max", "mean@max")),
+                tip="max, mean, or mean@max: the mean of points about the maximum"),
+        NMParam("max_mean_n", INTEGER, "Points about it", default=1, minimum=1,
+                when=("max_fxn", "mean@max")),
+        NMParam("norm_min", NUMBER, "Low", default=0.0, finite=True),
+        NMParam("norm_max", NUMBER, "High", default=1.0, finite=True),
+        _MODE,
+    )
 
     _VALID_FXN1 = {"mean", "min", "mean@min"}
     _VALID_FXN2 = {"mean", "max", "mean@max"}
@@ -2361,6 +2459,12 @@ class NMMainOpDFOF(NMMainOp):
     """
 
     name = "dfof"
+    PARAMS = (
+        NMParam("window", XRANGE, "Baseline (F0)", default=_WHOLE, names=("xbgn", "xend"),
+                color=_BASELINE_COLOR,
+                tip="Its mean is F0: each point becomes (F - F0) / F0"),
+        _MODE,
+    )
 
     _VALID_MODES = {"per_array", "average"}
 
@@ -2553,6 +2657,12 @@ class NMMainOpRescale(NMMainOp):
     """
 
     name = "rescale"
+    PARAMS = (
+        NMParam("to_units", TEXT, "To units", required=True,
+                tip="e.g. nA, mV: the values are scaled to them"),
+        NMParam("from_units", TEXT, "From units",
+                tip="Blank: each array's own units"),
+    )
 
     def __init__(
         self,
@@ -2732,6 +2842,7 @@ class NMMainOpAccumulate(NMMainOp):
     """
 
     _output_prefix: str = ""
+    CHANGES_DATA = False  # makes new arrays (#557)
     # The part of each array used (#555): xbgn to xend, all by default
     PARAMS: tuple[NMParam, ...] = (X_RANGE,)
 
@@ -3279,6 +3390,7 @@ class NMMainOpInequality(NMMainOp):
     """
 
     name = "inequality"
+    CHANGES_DATA = False  # makes new arrays, or a figure
 
     def __init__(
         self,
@@ -3446,6 +3558,7 @@ class NMMainOpHistogram(NMMainOp):
     """
 
     name = "histogram"
+    CHANGES_DATA = False  # makes new arrays, or a figure
 
     def __init__(
         self,
@@ -3641,6 +3754,7 @@ class NMMainOpPlot(NMMainOp):
     """
 
     name = "plot"
+    CHANGES_DATA = False  # makes new arrays, or a figure
 
     def __init__(self, alpha: float = 0.7, show: bool = True) -> None:
         self.alpha = alpha  # setters validate

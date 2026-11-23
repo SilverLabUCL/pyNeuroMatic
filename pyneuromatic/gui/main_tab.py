@@ -30,7 +30,9 @@ from pyneuromatic.gui.selection_model import epoch_scope_label, scoped_epoch_nam
 from pyneuromatic.gui.tool_run import SelectionRunTab
 from pyneuromatic.gui.tool_tab import fit_number_edit
 from pyneuromatic.tools.nm_main_op import (
-    NMMainOpAverage, NMMainOpConcatenate, NMMainOpMax, NMMainOpMin, NMMainOpSum,
+    NMMainOpArithmetic, NMMainOpAverage, NMMainOpBaseline, NMMainOpConcatenate,
+    NMMainOpDFOF, NMMainOpDifferentiate, NMMainOpFilter, NMMainOpIntegrate, NMMainOpMax,
+    NMMainOpMin, NMMainOpNormalize, NMMainOpRescale, NMMainOpSmooth, NMMainOpSum,
     NMMainOpSumSqr)
 
 try:
@@ -341,18 +343,15 @@ class SelectionTable(ChannelTable):
 PLOT_PARAMS = (
     NMParam("colors", CHOICE, "Color", default="rainbow",
             choices=(("rainbow", "Rainbow"), ("one", "One color")),
-            tip="Rainbow: the epochs red to violet, in order"),
+            tip="Plot epochs from red to violet"),
     NMParam("color", COLOR, "One color", default="#000000", when=("colors", "one"),
-            tip="The epochs' color"),
+            tip="Plot epochs in one color"),
     NMParam("x_offset", NUMBER, "X offset", default=0.0, finite=True,
-            tip="Each epoch's x offset from the one before, in the plot's x units "
-                "(0: overlaid). Only the plot moves: the data doesn't change"),
+            tip="Apply a virtual offset to each epoch's x-value (0: overlaid)"),
     NMParam("y_offset", NUMBER, "Y offset", default=0.0, finite=True,
-            tip="Each epoch's y offset from the one before, in the plot's y units "
-                "(0: overlaid). Only the plot moves: the data doesn't change"),
+            tip="Apply a virtual offset to each epoch's y-value (0: overlaid)"),
     NMParam("reverse", BOOLEAN, "Reverse order", default=False,
-            tip="The last epoch first: it has no offset and the first color, and "
-                "the first epoch is drawn last, on top"),
+            tip="Plot the last epoch first, the first epoch last"),
 )
 
 
@@ -366,20 +365,39 @@ def plot_options(values: dict[str, Any]) -> PlotOptions:
 # Main1's entries, in one list as Stats' measures, groups divided: (what it
 # does, its NMMainOp or None, its form's parameters)
 DISPLAY = {
-    "Plot": ("Plots every selected epoch: each channel in a plot of its own, one "
-             "above another, the epochs overlaid or offset (in Main2's tab).", PLOT_PARAMS),
-    "Table": ("Lists the selected arrays' values: an x column, then a column per "
-              "array (in Main2's tab).", ()),
+    "Plot": ("Plot selected arrays", PLOT_PARAMS),
+    "Table": ("Create a table of selected arrays", ()),
 }
 
-# Main1's functions: (what it makes, its NMMainOp, whose PARAMS its form shows)
+# Main1's functions: (what it makes, its NMMainOp, whose PARAMS its form shows).
+# They work point by point across the selected arrays (a channel's epochs,
+# or a Data Set's arrays), not along one array: e.g. Sum's first point is the
+# sum of the arrays' first points
+POINTWISE = "Compute the {} along each data point of the selected arrays"
 FUNCTIONS = {
-    "Average": ("the mean of each channel's arrays (MN_Avg_)", NMMainOpAverage),
-    "Sum": ("the sum of each channel's arrays (MN_Sum_)", NMMainOpSum),
-    "SumSqr": ("the sum of squares of each channel's arrays (MN_SumSqr_)", NMMainOpSumSqr),
-    "Min": ("each point's minimum over each channel's arrays (MN_Min_)", NMMainOpMin),
-    "Max": ("each point's maximum over each channel's arrays (MN_Max_)", NMMainOpMax),
-    "Concatenate": ("each channel's arrays joined end to end (MN_Cat_)", NMMainOpConcatenate),
+    "Average": (POINTWISE.format("average"), NMMainOpAverage),
+    "Sum": (POINTWISE.format("sum"), NMMainOpSum),
+    "SumSqr": (POINTWISE.format("sum of squares"), NMMainOpSumSqr),
+    "Min": (POINTWISE.format("minimum"), NMMainOpMin),
+    "Max": (POINTWISE.format("maximum"), NMMainOpMax),
+    "Concatenate": ("Compute one long array of the selected arrays joined end to end",
+                    NMMainOpConcatenate),
+}
+
+# Main1's operations (#557): they change the selected arrays themselves
+# (what each does, its NMMainOp)
+OPERATIONS = {
+    "Arithmetic": ("apply an arithmetic operation to the selected arrays, e.g. + 1 or * 2",
+                   NMMainOpArithmetic),
+    "Baseline": ("subtract a baseline window's mean", NMMainOpBaseline),
+    "Normalize": ("scale selected arrays so they span from Low to High "
+                  "(0 to 1 by default)", NMMainOpNormalize),
+    "dF/F": ("ΔF over F0, (F - F0) / F0, where F0 is a baseline mean", NMMainOpDFOF),
+    "Rescale": ("rescale selected arrays to new units (e.g. pA to nA)", NMMainOpRescale),
+    "Smooth": ("smooth selected arrays (boxcar, binomial, Savitzky-Golay)", NMMainOpSmooth),
+    "Filter": ("filter selected arrays (Butterworth, Bessel, notch)", NMMainOpFilter),
+    "Differentiate": ("compute each array's derivative", NMMainOpDifferentiate),
+    "Integrate": ("compute each array's running integral", NMMainOpIntegrate),
 }
 # Outputs that can be plotted with the arrays they were made from behind them
 BACKGROUND_PREFIXES = ("MN_Avg_", "MN_Min_", "MN_Max_")
@@ -393,17 +411,31 @@ def light(color: str, amount: float = 0.55) -> str:
     return QtGui.QColor(*mix).name()
 
 
+# Main1's list: its groups, in order, divided (an entry runs as its table
+# says, DISPLAY, FUNCTIONS or OPERATIONS, whatever its group): Concatenate
+# apart, with the Points (Insert, Delete...) to come
+LIST_GROUPS = (
+    tuple(DISPLAY),
+    ("Average", "Sum", "SumSqr", "Min", "Max"),
+    ("Concatenate",),
+    tuple(OPERATIONS),
+)
+
 def entry_params(name: str) -> tuple:
-    """An entry's parameters (Plot's options, a function's PARAMS)."""
-    return DISPLAY[name][1] if name in DISPLAY else FUNCTIONS[name][1].PARAMS
+    """An entry's parameters (Plot's options, an NMMainOp's PARAMS)."""
+    if name in DISPLAY:
+        return DISPLAY[name][1]
+    return (FUNCTIONS.get(name) or OPERATIONS[name])[1].PARAMS
 
 
 def make_function(name: str, values: dict[str, Any], ignore_nans: bool = True):
-    """*name*'s NMMainOp from its form's *values*, and Ignore NaNs (Settings ›
-    Main; Concatenate has no use for it)."""
-    op_class = FUNCTIONS[name][1]
-    kwargs = keywords(op_class.PARAMS, values)
-    if op_class is not NMMainOpConcatenate:
+    """Function or operation *name*'s NMMainOp from its form's *values*, and
+    Ignore NaNs (Settings › Main) if it has a use for it."""
+    import inspect
+    op_class = (FUNCTIONS.get(name) or OPERATIONS[name])[1]
+    kwargs = op_class.form_keywords(keywords(op_class.PARAMS, values))
+    if (op_class is not NMMainOpConcatenate
+            and "ignore_nans" in inspect.signature(op_class.__init__).parameters):
         kwargs["ignore_nans"] = ignore_nans
     return op_class(**kwargs)
 
@@ -423,10 +455,9 @@ class Main2Panel(ResultsPanel):
     def __init__(self, manager: NMManager, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(manager, parent)
         self.plot_action.setToolTip(
-            "Plot the chosen output, with the rest of its data series (each channel's)")
+            "Plot selected array")
         self.table_action.setToolTip(
-            "List the subfolder's outputs in the Table panel, the chosen one's column "
-            "selected")
+            "List subfolder arrays in the Table panel")
         self.refresh()
 
     def _add_plot_options(self, menu: QtWidgets.QMenu) -> None:
@@ -435,8 +466,7 @@ class Main2Panel(ResultsPanel):
         self.background_action.setCheckable(True)
         self.background_action.setChecked(True)
         self.background_action.setToolTip(
-            "Plot an average, minimum or maximum over the arrays it was made from, "
-            "in the light overlay color")
+            "Plot Average, Min or Max overlaid with their input data")
         self.background_action.toggled.connect(lambda _on: self.array_changed.emit())
         # An average with a band of its spread: ± Stdv (or from Var) or ± SEM;
         # one or neither
@@ -445,8 +475,7 @@ class Main2Panel(ResultsPanel):
             action = menu.addAction(label)
             action.setCheckable(True)
             action.setToolTip(
-                f"Plot an average with a shaded band from mean - {label[7:]} to mean + "
-                f"{label[7:]} (Average… with {label[7:]} saved, or Var for Stdv)")
+                f"Plot Average ± {label[7:]} with a shaded band")
             action.toggled.connect(lambda on, k=kind: self._on_error_toggled(k, on))
             self.error_actions[kind] = action
 
@@ -557,13 +586,14 @@ class MainToolTab(SelectionRunTab):
     # Its tab in the Plot and Table panels shows Main's plots and tables
     view_label = "Main2"
 
-    _CONFIG_LABELS = {"ignore_nans": "Ignore NaNs", "overwrite": "Overwrite results"}
+    _CONFIG_LABELS = {"ignore_nans": "Ignore NaNs", "overwrite": "Overwrite results",
+                      "ask_before_changing": "Ask before changing arrays"}
     _CONFIG_TIPS = {
-        "ignore_nans": "Functions leave NaN values out (otherwise a NaN in any array "
-                       "gives NaN there)",
-        "overwrite": "Functions on the same selection share its first Main "
-                     "subfolder (…_0), each run replacing only the outputs it "
-                     "makes; off: a new subfolder each run",
+        "ignore_nans": "Functions ignore NaNs (otherwise a NaN input results "
+                       "in a NaN output)",
+        "ask_before_changing": "Ask before executing permanent operations on selected data (Baseline, Smooth...) ",
+        "overwrite": "For a given selection, functions overwrite their Main "
+                     "subfolder (on), or create a new subfolder for each run (off)",
     }
     RANGE_COLOR = "#2563eb"  # as Stats' and Spike's
 
@@ -585,20 +615,20 @@ class MainToolTab(SelectionRunTab):
         self.function_combo = QtWidgets.QComboBox(self.main1_page)
         self.function_combo.setObjectName("mainFunction")
         self.function_combo.addItem("Choose…", None)  # nothing yet, as Stats1's
-        for group in (DISPLAY, FUNCTIONS):
+        for group in LIST_GROUPS:
             self.function_combo.insertSeparator(self.function_combo.count())
-            for name, (what, _x) in group.items():
+            for name in group:
+                what = (DISPLAY.get(name) or FUNCTIONS.get(name) or OPERATIONS[name])[0]
                 self.function_combo.addItem(name, name)
                 self.function_combo.setItemData(
                     self.function_combo.count() - 1,
-                    what if group is DISPLAY else f"{name}: {what}",
+                    what if name in DISPLAY else f"{name}: {what}",
                     QtCore.Qt.ItemDataRole.ToolTipRole)
         self.function_combo.setToolTip(
-            "Run: Plot and Table draw the selection; a function makes its outputs "
-            "from it, in a Main subfolder (viewed in Main2)")
+            "1) Choose function, 2) Set function parameters, 3) Run function on selected arrays")
         function_row.addWidget(self.function_combo)
         self.reset_button = QtWidgets.QPushButton("Reset", self.main1_page)
-        self.reset_button.setToolTip("Set its parameters back to their defaults")
+        self.reset_button.setToolTip("Reset function parameters to default values")
         self.reset_button.clicked.connect(lambda: self.form() and self.form().reset())
         function_row.addWidget(self.reset_button)
         function_row.addStretch(1)
@@ -612,7 +642,7 @@ class MainToolTab(SelectionRunTab):
         self.form_stack = QtWidgets.QStackedWidget(self.main1_page)
         self.no_form = QtWidgets.QWidget(self.form_stack)  # "Choose…": nothing
         self.form_stack.addWidget(self.no_form)
-        for name in list(DISPLAY) + list(FUNCTIONS):
+        for name in list(DISPLAY) + list(FUNCTIONS) + list(OPERATIONS):
             form = ParamForm(entry_params(name), self.form_stack)
             form.ranges_changed.connect(self.ranges_changed)
             self.forms[name] = form
@@ -715,7 +745,8 @@ class MainToolTab(SelectionRunTab):
         main1 = self.mode_tabs.currentWidget() is self.main1_page
         self.run_row.setVisible(main1)
         self.display_row.setVisible(main1 and self._settings is not None
-                                    and self.entry() in FUNCTIONS)
+                                    and (self.entry() in FUNCTIONS
+                                         or self.entry() in OPERATIONS))
         self.view_requested.emit(self.preferred_view())
 
     # --- Display: the selection -----------------------------------------------
@@ -766,11 +797,15 @@ class MainToolTab(SelectionRunTab):
         self.reset_button.setEnabled(name is not None)
         if name is None:
             self.function_info.setText(
-                "Choose what to do with the selection: plot or table it, or make "
-                "an average, sum... of it.")
+                "Choose function: Plot, Average, Baseline, Filter…")
+        elif name in DISPLAY:
+            self.function_info.setText(DISPLAY[name][0])
+        elif name in FUNCTIONS:
+            self.function_info.setText(f"{FUNCTIONS[name][0]}.")
         else:
             self.function_info.setText(
-                DISPLAY[name][0] if name in DISPLAY else f"Makes {FUNCTIONS[name][0]}.")
+                f"Permanent operation: {OPERATIONS[name][0]}. "
+                "See channel Filter & Transform to apply virtual operations.")
         self._on_mode_tab_changed(self.mode_tabs.currentIndex())  # Progress: functions'
         self.ranges_changed.emit()  # its x ranges on the Plot
 
@@ -780,7 +815,10 @@ class MainToolTab(SelectionRunTab):
         name, form = self.entry(), self.form()
         if form is None:
             return []
-        return [PlotRange(param.name, f"{name} {param.label}", begin, end, param.color)
+        return [PlotRange(param.name,
+                          param.label if param.label.startswith(name)
+                          else f"{name} {param.label}",  # e.g. "Average X range"
+                          begin, end, param.color)
                 for param, (begin, end) in form.x_ranges()]
 
     def set_plot_range(self, key: str, xbgn: float, xend: float, final: bool) -> None:
@@ -793,7 +831,7 @@ class MainToolTab(SelectionRunTab):
     def _on_run_clicked(self) -> None:
         name = self.entry()
         if not self._running and name is None:
-            self.show_warning("Choose what to do: Plot, Table or a function")
+            self.show_warning("Choose function: Plot, Average, Baseline, Filter…")
             return
         if not self._running and name in DISPLAY:  # Plot, Table: drawn, no run
             self.plot_selection() if name == "Plot" else self.table_selection()
@@ -805,8 +843,39 @@ class MainToolTab(SelectionRunTab):
             except ValueError as error:  # e.g. an x range's begin after its end
                 self.show_warning(str(error))
                 return
+            if op.CHANGES_DATA and not self._may_change(name):
+                return
             self._tool.op = op  # nm.main.op = ...
         super()._on_run_clicked()
+
+    def _all_targets(self) -> list[dict]:
+        """Every array the run would use (all of All Sets' runs too)."""
+        planned = self._run_batches()
+        if planned is not None:
+            return [t for _label, targets, _sel in planned[0] for t in targets]
+        return self._selected_targets()
+
+    def _may_change(self, name: str) -> bool:
+        """Before an operation: not a locked series' arrays (refused, as nm.main
+        would); then, with Settings › Main's "Ask before changing arrays",
+        asked first."""
+        try:
+            targets = self._all_targets()
+        except RuntimeError:
+            return True  # the run says why
+        series = self._tool.locked_series(targets)
+        if series is not None:
+            self.show_warning(
+                f"{series.name} is locked: unlock it, or copy it and run on the copy")
+            return False
+        if not targets or not self._tool.ask_before_changing:
+            return True
+        what = self.selection.get("dataseries")
+        source = what.name if what is not None and self.selection.get(
+            "source") == "dataseries" else "the selection"
+        n = len(targets)
+        return self._confirm(
+            name, f"{name} changes {n} array{'s' * (n != 1)} of {source}. Continue?")
 
     def _scope_runs(self) -> list[tuple[str, dict]] | None:
         """All Sets / All Groups: a run each; All Channels doesn't split a

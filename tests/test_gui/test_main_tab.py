@@ -214,12 +214,14 @@ def test_one_list_with_plot_and_its_form(app):
     combo = tab.function_combo
     items = [combo.itemText(i) or "---" for i in range(combo.count())]
     assert items == ["Choose…", "---", "Plot", "Table", "---", "Average", "Sum",
-                     "SumSqr", "Min", "Max", "Concatenate"]
+                     "SumSqr", "Min", "Max", "---", "Concatenate", "---", "Arithmetic",
+                     "Baseline", "Normalize", "dF/F", "Rescale", "Smooth", "Filter",
+                     "Differentiate", "Integrate"]
     assert tab.entry() is None  # "Choose…", as Stats1's
     assert tab.form() is None and tab.plot_ranges() == []
     assert not tab.reset_button.isEnabled()
     tab.run_button.click()  # nothing chosen: nothing done, and why
-    assert tab.status_label.text().endswith("Choose what to do: Plot, Table or a function")
+    assert tab.status_label.text().endswith("Choose function: Plot, Average, Baseline, Filter…")
     combo.setCurrentText("Plot")
     form = tab.forms["Plot"]
     assert [p.name for p in form.params] == ["colors", "color", "x_offset", "y_offset",
@@ -319,7 +321,8 @@ def test_each_function_shows_and_keeps_its_own_form(app):
     assert [p.name for p in form.params] == ["x", "compute_stdv", "compute_var",
                                               "compute_sem"]
     form.control("compute_stdv").setChecked(True)
-    assert tab.function_info.text().startswith("Makes the mean")
+    assert tab.function_info.text().startswith(
+        "Compute the average along each data point of the selected arrays")
     tab.function_combo.setCurrentText("Max")
     assert [p.name for p in tab.form().params] == ["x"]
     tab.function_combo.setCurrentText("Average")
@@ -329,7 +332,8 @@ def test_each_function_shows_and_keeps_its_own_form(app):
 def test_overwrite_in_settings_reuses_the_subfolder(app):
     tab = app.main
     assert [o[:3] for o in tab.config_options()] == [
-        ("ignore_nans", "Ignore NaNs", True), ("overwrite", "Overwrite results", False)]
+        ("ignore_nans", "Ignore NaNs", True), ("overwrite", "Overwrite results", False),
+        ("ask_before_changing", "Ask before changing arrays", True)]
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, "Sum")
     _run(app, "Sum")
@@ -552,3 +556,69 @@ def test_reset_sets_the_chosen_functions_form_back(app):
                                    "compute_var": False, "compute_sem": False}
     assert tab.plot_ranges()[0].xbgn == -np.inf  # its lines follow
     assert tab.forms["Max"].values()["x"] == (1.0, 2.0)
+
+
+# --- Operations (#557) ---------------------------------------------------------
+
+def test_baseline_changes_the_arrays_after_asking(app):
+    """An operation changes the selected arrays themselves, asked first
+    (Settings › Main); its window on the Plot in its own color."""
+    manager = app.selection_model.manager
+    manager.command_history.enabled = True
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    tab.function_combo.setCurrentText("Baseline")
+    assert tab.function_info.text().startswith("Permanent operation")
+    tab.form().set_values({"window": (0.0, 0.5)})
+    (window,) = tab.plot_ranges()
+    assert (window.label, window.xbgn, window.xend, window.color) == (
+        "Baseline", 0.0, 0.5, "#16a34a")
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or False  # No
+    tab.run_button.click()
+    assert asked == ["Baseline changes 3 arrays of Record. Continue?"]
+    assert np.allclose(app.series.get_data("A", "E1").nparray, np.arange(4.0) + 10)
+    tab._confirm = lambda title, text: True
+    tab.run_button.click()
+    assert np.allclose(app.series.get_data("A", "E1").nparray, [-0.5, 0.5, 1.5, 2.5])
+    commands = [e["command"] for e in manager.command_history.buffer]
+    assert commands[-2].startswith("nm.main.op = NMMainOpBaseline(xbgn=0.0, xend=0.5")
+    assert len(app.folder.toolfolders) == 0  # no subfolder: the arrays changed
+    assert np.allclose(app.plot_widget.current_trace.nparray, [-0.5, 0.5, 1.5, 2.5])
+
+
+def test_a_locked_series_is_refused(app):
+    tab = app.main
+    app.series.locked = True
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    tab.set_config_option("ask_before_changing", False)
+    tab.function_combo.setCurrentText("Smooth")
+    tab.run_button.click()
+    assert tab.status_label.text().endswith(
+        "Record is locked: unlock it, or copy it and run on the copy")
+    assert np.allclose(app.series.get_data("A", "E1").nparray, np.arange(4.0) + 10)
+
+
+def test_operation_forms(app):
+    """Filter's and Smooth's settings apply by method; Rescale needs units."""
+    tab = app.main
+    tab.set_config_option("ask_before_changing", False)
+    form = tab.forms["Filter"]
+    high, q = form._rows["cutoff_high"][1], form._rows["q"][1]
+    assert not high.isEnabled() and not q.isEnabled()  # low-pass Butterworth
+    form.set_values({"btype": "bandpass"})
+    assert high.isEnabled()
+    form.set_values({"filter_type": "notch"})
+    assert q.isEnabled() and not form._rows["order"][1].isEnabled()
+    smooth = tab.forms["Smooth"]
+    smooth.set_values({"method": "binomial"})
+    assert not smooth._rows["window"][1].isEnabled()
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    tab.function_combo.setCurrentText("Rescale")
+    tab.run_button.click()  # no units: nothing changed, and why
+    assert tab.status_label.text().endswith("To units: enter it")
+    tab.function_combo.setCurrentText("Arithmetic")
+    tab.form().set_values({"op": "+", "factor": 1.0})
+    tab.run_button.click()
+    assert np.allclose(app.series.get_data("A", "E0").nparray, np.arange(4.0) + 1)
+
