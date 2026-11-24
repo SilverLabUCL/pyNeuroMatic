@@ -786,9 +786,8 @@ class NMMainOpDeletePoints(NMMainOp):
             return
         if self._index >= len(data.nparray):
             return  # nothing to delete
-        data.nparray = np.delete(
-            data.nparray, np.arange(self._index, self._index + self._n_points)
-        )
+        end = min(self._index + self._n_points, len(data.nparray))  # to its end
+        data.nparray = np.delete(data.nparray, np.arange(self._index, end))
         self._add_op_note(data, self._op_params_str())
 
     def _op_params_str(self) -> str:

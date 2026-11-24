@@ -996,14 +996,34 @@ class MainToolTab(SelectionRunTab):
             self.show_warning(
                 f"{series.name} is locked: unlock it, or copy it and run on the copy")
             return False
-        if not targets or not self._tool.ask_before_changing:
+        x_warning = self._xarray_warning(name, targets)
+        if not targets or (not self._tool.ask_before_changing and not x_warning):
             return True
         what = self.selection.get("dataseries")
         source = what.name if what is not None and self.selection.get(
             "source") == "dataseries" else "the selection"
         n = len(targets)
         return self._confirm(
-            name, f"{name} changes {n} array{'s' * (n != 1)} of {source}. Continue?")
+            name, f"{name} changes {n} array{'s' * (n != 1)} of {source}.{x_warning} "
+            "Continue?")
+
+    @staticmethod
+    def _xarray_warning(name: str, targets: list[dict]) -> str:
+        """A Points operation on arrays with an x array: their x values aren't
+        changed with their points (#559); asked first, whatever Settings."""
+        if name not in POINTS:
+            return ""
+        names = {d.xarray_name or "its own x values"
+                 for d in (t.get("data") for t in targets)
+                 if d is not None and d.xarray is not None}
+        if not names:
+            return ""
+        what = (f"Their x array ({names.pop()}) isn't" if len(names) == 1
+                else "Their x arrays aren't")
+        if name in ("Reverse", "Rotate"):
+            return f" {what} changed: each point will be at a different x."
+        return (f" {what} changed: it won't fit their new number of points, so "
+                "x values will come from the x scale's start and delta.")
 
     def _scope_runs(self) -> list[tuple[str, dict]] | None:
         """All Sets / All Groups: a run each; All Channels doesn't split a

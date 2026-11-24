@@ -4509,5 +4509,7 @@ class TestMainOperations(unittest.TestCase):
         a1 = self.series.get_data("A", "E1")
         NMMainOpInsertPoints(index=9, n_points=1, fill=-1.0).run(a1)  # past the end
         np.testing.assert_array_equal(a1.nparray, [10.0, 13.0, -1.0])
+        NMMainOpDeletePoints(index=1, n_points=9).run(a0)  # past its end: to it
+        np.testing.assert_array_equal(a0.nparray, [0.0])
         with self.assertRaisesRegex(ValueError, "Choose Delete NaNs, Delete ±inf"):
             NMMainOpDeleteNaNs.form_keywords({"delete_nans": False, "delete_infs": False})

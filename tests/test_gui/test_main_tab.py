@@ -753,12 +753,34 @@ def test_delete_and_insert_points_on_the_plot(app):
     assert tab.form().values()["index"] == 3
 
 
+def test_points_operations_warn_of_an_x_array_first(app):
+    """Arrays with an x array: asked first, even without "Ask before
+    changing arrays", as their x values aren't changed."""
+    xs = app.folder.data.new("Xs", nparray=np.array([0.0, 1.0, 4.0, 9.0]))
+    for epoch in ("E0", "E1", "E2"):
+        app.series.get_data("A", epoch).set_xarray_from(xs)
+    tab = app.main
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or False  # No
+    _operate(app, "Delete Points", index=0, n_points=1)
+    assert asked == ["Delete Points changes 3 arrays of Record. Their x array (Xs) "
+                     "isn't changed: it won't fit their new number of points, so x "
+                     "values will come from the x scale's start and delta. Continue?"]
+    assert np.allclose(_a1(app), np.arange(4.0) + 10)  # No: nothing changed
+    _operate(app, "Rotate")
+    assert asked[-1].endswith("isn't changed: each point will be at a "
+                              "different x. Continue?")
+    _operate(app, "Arithmetic")  # not a Points operation: not asked
+    assert len(asked) == 2
+
+
 def test_an_x_array_that_no_longer_fits_is_said(app):
     """Points deleted from arrays with an x array: their x values are from
     start and delta, and the status says so."""
     xs = app.folder.data.new("Xs", nparray=np.array([0.0, 1.0, 4.0, 9.0]))
     for epoch in ("E0", "E1"):
         app.series.get_data("A", epoch).set_xarray_from(xs)
+    app.main._confirm = lambda title, text: True  # Yes, despite the x array
     _operate(app, "Delete Points", index=0, n_points=1)
     assert app.main.status_label.text() == (
         "Warning: The x array of RecordA0 (and 1 more) no longer fits its points; "
