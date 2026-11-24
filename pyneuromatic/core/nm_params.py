@@ -56,11 +56,16 @@ class NMParam:
         names: An x range's two keyword arguments, (begin, end).
         color: An x range's lines on the Plot.
         finite: A number must be finite (not inf or -inf).
+        nan: A number may be NaN (e.g. Replace Values' value to find); typed
+            "nan".
         when: ``(name, value)``: shown enabled only while parameter *name*
             has *value*, or one of them if a tuple (e.g. a color only with
             "One color"; Smooth's window with boxcar or Savitzky-Golay).
         required: Text that can't be left blank (blank text that isn't
             required is None, e.g. "the data's units").
+        as_x: A number of points shown in x too, by the arrays' x scale
+            (#559): "length", a number of points (e.g. 10 points = 5 ms), or
+            "position", a point number (e.g. point 4 is at x = 2 ms).
     """
 
     name: str
@@ -75,12 +80,16 @@ class NMParam:
     names: tuple[str, str] = ()
     color: str = "#2563eb"
     finite: bool = False
+    nan: bool = False
     when: tuple = ()
     required: bool = False
+    as_x: str = ""
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
             raise ValueError("kind must be one of %s, not %r" % (KINDS, self.kind))
+        if self.as_x not in ("", "length", "position"):
+            raise ValueError("as_x must be 'length' or 'position', not %r" % self.as_x)
         if self.kind == XRANGE and len(self.names) != 2:
             raise ValueError("an x range needs names=(begin, end)")
         if self.kind == CHOICE and not self.choices:
@@ -116,7 +125,10 @@ class NMParam:
             if not begin < end:
                 raise ValueError("%s: begin must be less than end" % label)
             return begin, end
-        number = _number(label, value, whole=self.kind == INTEGER)
+        number = _number(label, value, whole=self.kind == INTEGER,
+                         nan=self.nan and self.kind == NUMBER)
+        if math.isnan(number):
+            return number
         if self.finite and not math.isfinite(number):
             raise ValueError("%s: %s is not a finite number" % (label, value))
         if self.minimum is not None and number < self.minimum:
@@ -142,13 +154,19 @@ class NMParam:
         return current.get(name) in (value if isinstance(value, tuple) else (value,))
 
 
-def _number(label: str, value: Any, whole: bool = False) -> float | int:
-    """*value* as a number (text too: "inf", "-inf"); raises ValueError."""
+def _number(label: str, value: Any, whole: bool = False,
+            nan: bool = False) -> float | int:
+    """*value* as a number (text too: "inf", "-inf"; "nan" if *nan*);
+    raises ValueError."""
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("%s: enter a number" % label)
     try:
         number = float(str(value).strip()) if isinstance(value, str) else float(value)
     except (TypeError, ValueError):
         raise ValueError("%s: %r is not a number" % (label, value)) from None
     if math.isnan(number):
+        if nan:
+            return number
         raise ValueError("%s: NaN is not a number" % label)
     if whole:
         if not number.is_integer():

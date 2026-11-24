@@ -23,17 +23,19 @@ from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.context_views import ChannelTableModel, ChannelTable
 from pyneuromatic.core.nm_params import BOOLEAN, CHOICE, COLOR, NUMBER, NMParam, keywords
-from pyneuromatic.gui.param_form import ParamForm
+from pyneuromatic.gui.param_form import ParamForm, XScale
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.gui.results_panel import ResultsPanel
 from pyneuromatic.gui.selection_model import epoch_scope_label, scoped_epoch_names
 from pyneuromatic.gui.tool_run import SelectionRunTab
 from pyneuromatic.gui.tool_tab import fit_number_edit
+from pyneuromatic.tools.nm_tool_main import NMToolMain
 from pyneuromatic.tools.nm_main_op import (
     NMMainOpArithmetic, NMMainOpAverage, NMMainOpBaseline, NMMainOpConcatenate,
-    NMMainOpDFOF, NMMainOpDifferentiate, NMMainOpFilter, NMMainOpIntegrate, NMMainOpMax,
-    NMMainOpMin, NMMainOpNormalize, NMMainOpRescale, NMMainOpSmooth, NMMainOpSum,
-    NMMainOpSumSqr)
+    NMMainOpDeleteNaNs, NMMainOpDeletePoints, NMMainOpDFOF, NMMainOpDifferentiate,
+    NMMainOpFilter, NMMainOpInsertPoints, NMMainOpIntegrate, NMMainOpMax, NMMainOpMin,
+    NMMainOpNormalize, NMMainOpRedimension, NMMainOpReplaceValues, NMMainOpRescale,
+    NMMainOpReverse, NMMainOpRotate, NMMainOpSmooth, NMMainOpSum, NMMainOpSumSqr)
 
 try:
     import pyqtgraph as pg
@@ -389,6 +391,8 @@ FUNCTIONS = {
 OPERATIONS = {
     "Arithmetic": ("apply an arithmetic operation to the selected arrays, e.g. + 1 or * 2",
                    NMMainOpArithmetic),
+    "Replace Values": ("replace a value in the selected arrays with another, "
+                       "e.g. NaN with 0", NMMainOpReplaceValues),
     "Baseline": ("subtract a baseline window's mean", NMMainOpBaseline),
     "Normalize": ("scale selected arrays so they span from Low to High "
                   "(0 to 1 by default)", NMMainOpNormalize),
@@ -398,9 +402,46 @@ OPERATIONS = {
     "Filter": ("filter selected arrays (Butterworth, Bessel, notch)", NMMainOpFilter),
     "Differentiate": ("compute each array's derivative", NMMainOpDifferentiate),
     "Integrate": ("compute each array's running integral", NMMainOpIntegrate),
+    # The Points operations (#559), listed apart (POINTS)
+    "Insert Points": ("insert points into the selected arrays",
+                      NMMainOpInsertPoints),
+    "Delete Points": ("delete points from the selected arrays",
+                      NMMainOpDeletePoints),
+    "Delete NaNs": ("delete NaN (or ±inf) points from the selected arrays "
+                    "(they get shorter)", NMMainOpDeleteNaNs),
+    "Redimension": ("set the number of points of the selected arrays "
+                    "(cut or padded at the end)", NMMainOpRedimension),
+    "Reverse": ("reverse the order of the points of the selected arrays",
+                NMMainOpReverse),
+    "Rotate": ("rotate points of the selected arrays, wrapping round: "
+               "rotated by 1, each point moves one later and the last becomes "
+               "the first; by -1, each moves one earlier and the first becomes "
+               "the last", NMMainOpRotate),
+}
+# Operations a channel's Filter & Transform also has, applied virtually
+# (pyneuromatic.core.nm_transform): Main1 points to it
+ALSO_VIRTUAL = ("Baseline", "Normalize", "dF/F", "Smooth", "Filter",
+                "Differentiate", "Integrate")
+POINTS = ("Insert Points", "Delete Points", "Delete NaNs", "Redimension",
+          "Reverse", "Rotate")
+# Points operations drawn on the Plot (#559): Delete Points' points, a range
+# (first point, number of points); Insert Points' place, a line (its point)
+POINT_RANGES = {
+    "Delete Points": ("index", "n_points", "#dc2626"),
+    "Insert Points": ("index", None, "#16a34a"),
 }
 # Outputs that can be plotted with the arrays they were made from behind them
-BACKGROUND_PREFIXES = ("MN_Avg_", "MN_Min_", "MN_Max_")
+# (after MN_, if outputs are prefixed: Settings › Main)
+BACKGROUND_PREFIXES = ("Avg_", "Min_", "Max_")
+
+
+def output_kind(name: str) -> tuple[str, str]:
+    """An output's name as (its MN_ prefix or "", the rest), e.g.
+    ("MN_", "Avg_RecordA"), or ("", "Avg_RecordA") unprefixed."""
+    prefix = NMToolMain.OUTPUT_PREFIX
+    if name.startswith(prefix):
+        return prefix, name[len(prefix):]
+    return "", name
 
 
 def light(color: str, amount: float = 0.55) -> str:
@@ -411,14 +452,14 @@ def light(color: str, amount: float = 0.55) -> str:
     return QtGui.QColor(*mix).name()
 
 
-# Main1's list: its groups, in order, divided (an entry runs as its table
-# says, DISPLAY, FUNCTIONS or OPERATIONS, whatever its group): Concatenate
-# apart, with the Points (Insert, Delete...) to come
+# Main1's list: its groups, in order, divided: Display; the functions, which
+# make MN_ arrays shown in Main2; the Points operations, which change an
+# array's points (#559); the other operations
 LIST_GROUPS = (
     tuple(DISPLAY),
-    ("Average", "Sum", "SumSqr", "Min", "Max"),
-    ("Concatenate",),
-    tuple(OPERATIONS),
+    tuple(FUNCTIONS),
+    POINTS,
+    tuple(name for name in OPERATIONS if name not in POINTS),
 )
 
 def entry_params(name: str) -> tuple:
@@ -496,15 +537,20 @@ class Main2Panel(ResultsPanel):
     def _error_of(self, name: str | None, kind: str) -> np.ndarray | None:
         """Average *name*'s Stdv (or the root of its Var) or SEM, if saved."""
         folder = self.toolfolder()
-        if folder is None or not name or not name.startswith("MN_Avg_"):
+        if folder is None or not name:
             return None
+        prefix, rest = output_kind(name)
+        if not rest.startswith("Avg_"):
+            return None
+        def companion(kind_prefix):  # e.g. MN_SEM_RecordA, or SEM_RecordA
+            return folder.data.get(prefix + rest.replace("Avg_", kind_prefix, 1))
         if kind == "sem":
-            sem = folder.data.get(name.replace("MN_Avg_", "MN_SEM_", 1))
+            sem = companion("SEM_")
             return sem.nparray if sem is not None else None
-        stdv = folder.data.get(name.replace("MN_Avg_", "MN_Stdv_", 1))
+        stdv = companion("Stdv_")
         if stdv is not None:
             return stdv.nparray
-        var = folder.data.get(name.replace("MN_Avg_", "MN_Var_", 1))
+        var = companion("Var_")
         return np.sqrt(var.nparray) if var is not None else None
 
     def _errors(self, outputs) -> list:
@@ -533,7 +579,8 @@ class Main2Panel(ResultsPanel):
         """The arrays output *name* was made from, if it's an average (or
         Min, Max) and they're still there."""
         folder = self.toolfolder()
-        if folder is None or not name or not name.startswith(BACKGROUND_PREFIXES):
+        if (folder is None or not name
+                or not output_kind(name)[1].startswith(BACKGROUND_PREFIXES)):
             return []
         return [d for d in folder.sources.get(name, [])
                 if getattr(d, "_container", None) is not None
@@ -587,11 +634,14 @@ class MainToolTab(SelectionRunTab):
     view_label = "Main2"
 
     _CONFIG_LABELS = {"ignore_nans": "Ignore NaNs", "overwrite": "Overwrite results",
-                      "ask_before_changing": "Ask before changing arrays"}
+                      "ask_before_changing": "Ask before changing arrays",
+                      "prefix_outputs": "Prefix outputs with MN_"}
     _CONFIG_TIPS = {
         "ignore_nans": "Functions ignore NaNs (otherwise a NaN input results "
                        "in a NaN output)",
         "ask_before_changing": "Ask before executing permanent operations on selected data (Baseline, Smooth...) ",
+        "prefix_outputs": "Function output arrays start with MN_ (e.g. "
+                          "MN_Avg_RecordA); off: Avg_RecordA",
         "overwrite": "For a given selection, functions overwrite their Main "
                      "subfolder (on), or create a new subfolder for each run (off)",
     }
@@ -645,6 +695,8 @@ class MainToolTab(SelectionRunTab):
         for name in list(DISPLAY) + list(FUNCTIONS) + list(OPERATIONS):
             form = ParamForm(entry_params(name), self.form_stack)
             form.ranges_changed.connect(self.ranges_changed)
+            if name in POINT_RANGES:  # typed point numbers: the Plot's lines follow
+                form.changed.connect(self.ranges_changed)
             self.forms[name] = form
             self.form_stack.addWidget(form)
         main1.addWidget(self.form_stack)
@@ -716,9 +768,37 @@ class MainToolTab(SelectionRunTab):
         if config is not None and key in config._schema:
             setattr(config, key, value)
 
+    def _on_selection_changed(self, selection: dict[str, Any]) -> None:
+        super()._on_selection_changed(selection)
+        self._show_x_scale()
+
+    def _show_x_scale(self) -> None:
+        """The forms' points in x (e.g. Rotate by 10 points "(= 5 ms)"), by
+        the first selected array's x scale (#559)."""
+        try:
+            targets = self._selected_targets()
+        except RuntimeError:
+            targets = []
+        arrays = [t["data"] for t in targets if t.get("data") is not None]
+        data = arrays[0] if arrays else None
+        scale = XScale.of(data) if data is not None else None
+        # Redimension: the arrays' number of points now
+        sizes = sorted({int(d.nparray.size) for d in arrays
+                        if hasattr(d.nparray, "size")})
+        if "Redimension" in getattr(self, "forms", {}):
+            self.forms["Redimension"].set_note("n_points", (
+                "" if not sizes else f"currently {sizes[0]} points" if len(sizes) == 1
+                else f"currently {sizes[0]} to {sizes[-1]} points"))
+        self._x_scale = scale
+        for form in getattr(self, "forms", {}).values():
+            form.set_x_scale(scale)
+        if hasattr(self, "forms"):
+            self.ranges_changed.emit()  # Delete / Insert Points' x follow
+
     def refresh(self) -> None:
         """The data changed (e.g. arrays deleted or edited): drawn again."""
         super().refresh()
+        self._show_x_scale()
         self.main2.refresh()
         for view in (self.plot_view, self.table_view):
             if view.shown is not None:
@@ -803,9 +883,10 @@ class MainToolTab(SelectionRunTab):
         elif name in FUNCTIONS:
             self.function_info.setText(f"{FUNCTIONS[name][0]}.")
         else:
-            self.function_info.setText(
-                f"Permanent operation: {OPERATIONS[name][0]}. "
-                "See channel Filter & Transform to apply virtual operations.")
+            info = f"Permanent operation: {OPERATIONS[name][0]}."
+            if name in ALSO_VIRTUAL:
+                info += " See channel Filter & Transform to apply virtual operations."
+            self.function_info.setText(info)
         self._on_mode_tab_changed(self.mode_tabs.currentIndex())  # Progress: functions'
         self.ranges_changed.emit()  # its x ranges on the Plot
 
@@ -815,16 +896,55 @@ class MainToolTab(SelectionRunTab):
         name, form = self.entry(), self.form()
         if form is None:
             return []
-        return [PlotRange(param.name,
-                          param.label if param.label.startswith(name)
-                          else f"{name} {param.label}",  # e.g. "Average X range"
-                          begin, end, param.color)
-                for param, (begin, end) in form.x_ranges()]
+        ranges = [PlotRange(param.name,
+                            param.label if param.label.startswith(name)
+                            else f"{name} {param.label}",  # e.g. "Average X range"
+                            begin, end, param.color)
+                  for param, (begin, end) in form.x_ranges()]
+        points = self._points_range(name, form)
+        return ranges + ([points] if points is not None else [])
+
+    def _points_range(self, name: str, form: ParamForm) -> PlotRange | None:
+        """Delete Points' points as a range, or Insert Points' place as a
+        line, by the first selected array's x scale (#559)."""
+        scale = getattr(self, "_x_scale", None)
+        if name not in POINT_RANGES or scale is None:
+            return None
+        at, count, color = POINT_RANGES[name]
+        index = form.int_value(at)
+        if index is None or index < 0:
+            return None
+        if count is None:  # a line: where the points go
+            x = scale.x(min(index, scale.points or index), "position")
+            return None if x is None else PlotRange(
+                "points", f"{name} at point {index}", x, x, color, line=True)
+        n = form.int_value(count)
+        last = index + n - 1 if n is not None and n >= 1 else None
+        if last is None or (scale.points is not None and index >= scale.points):
+            return None
+        if scale.points is not None:
+            last = min(last, scale.points - 1)
+        bgn, end = scale.x(index, "position"), scale.x(last, "position")
+        if bgn is None or end is None:
+            return None
+        return PlotRange("points", f"{name} {index} to {last}", bgn, end, color)
 
     def set_plot_range(self, key: str, xbgn: float, xend: float, final: bool) -> None:
-        """A dragged range: its boxes follow."""
-        if self.form() is not None:
-            self.form().set_x_range(key, xbgn, xend)
+        """A dragged range: its boxes follow (Delete / Insert Points': its
+        point numbers)."""
+        form, name = self.form(), self.entry()
+        if form is None:
+            return
+        scale = getattr(self, "_x_scale", None)
+        if key == "points" and name in POINT_RANGES and scale is not None:
+            at, count, _color = POINT_RANGES[name]
+            first = scale.index(xbgn)
+            values = {at: first}
+            if count is not None:
+                values[count] = max(scale.index(xend) - first + 1, 1)
+            form.set_values(values)
+            return
+        form.set_x_range(key, xbgn, xend)
 
     # --- Functions: run on the selection, all channels at once -----------------
 
@@ -845,6 +965,7 @@ class MainToolTab(SelectionRunTab):
                 return
             if op.CHANGES_DATA and not self._may_change(name):
                 return
+            self._changing = self._run_targets() if op.CHANGES_DATA else []
             self._tool.op = op  # nm.main.op = ...
         super()._on_run_clicked()
 
@@ -854,6 +975,13 @@ class MainToolTab(SelectionRunTab):
         if planned is not None:
             return [t for _label, targets, _sel in planned[0] for t in targets]
         return self._selected_targets()
+
+    def _run_targets(self) -> list[dict]:
+        """The arrays an operation is about to change (none: the run says why)."""
+        try:
+            return self._all_targets()
+        except RuntimeError:
+            return []
 
     def _may_change(self, name: str) -> bool:
         """Before an operation: not a locked series' arrays (refused, as nm.main
@@ -918,6 +1046,17 @@ class MainToolTab(SelectionRunTab):
                 self.main2.select_array(outputs[0])
 
     def _on_run_finished(self, succeeded: bool) -> None:
+        self._show_x_scale()  # e.g. Delete Points: the arrays' new lengths
+        # An operation that changed the arrays' points (e.g. Delete Points,
+        # #559): an x array that no longer fits is said (start and delta
+        # are used until it's fixed)
+        changed, self._changing = getattr(self, "_changing", []), []
+        unfit = self._tool.unfit_xarrays(changed) if succeeded else []
+        if unfit:
+            more = f" (and {len(unfit) - 1} more)" if len(unfit) > 1 else ""
+            self.show_warning(
+                f"The x array of {unfit[0].name}{more} no longer fits its points; "
+                "x values come from the x scale's start and delta")
         # After the Plot is back as it was before the run: Main2, the run's
         # first output plotted, as Stats2 and Spike2 show theirs
         if succeeded and self._tool.toolfolder is not None:

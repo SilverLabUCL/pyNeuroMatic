@@ -2,6 +2,8 @@
 
 import math
 
+import numpy as np
+
 import pytest
 
 pytest.importorskip("PyQt6")
@@ -9,7 +11,7 @@ from PyQt6 import QtWidgets
 
 from pyneuromatic.core.nm_params import (
     ARRAY, BOOLEAN, CHOICE, INTEGER, NUMBER, X_RANGE, XRANGE, NMParam)
-from pyneuromatic.gui.param_form import ParamForm, bound_text
+from pyneuromatic.gui.param_form import ParamForm, XScale, bound_text
 
 PARAMS = (
     X_RANGE,
@@ -110,3 +112,35 @@ def test_rows_at_the_left():
     assert alignment & QtCore.Qt.AlignmentFlag.AlignLeft
     assert not alignment & QtCore.Qt.AlignmentFlag.AlignHCenter
     form.deleteLater()
+
+
+def test_points_shown_in_x(qtbot):
+    """A number of points or a point number, in x by the arrays' x scale
+    (#559): updated as it's typed; not shown for plain point numbers."""
+    form = ParamForm((
+        NMParam("n", INTEGER, "Points", default=10, as_x="length"),
+        NMParam("at", INTEGER, "At point", default=4, as_x="position"),
+        NMParam("other", INTEGER, "Other", default=1)))
+    qtbot.addWidget(form)
+    assert form.x_text("n") == ""  # no x scale yet
+    form.set_x_scale(XScale(start=1.0, delta=0.5, units="ms"))
+    assert (form.x_text("n"), form.x_text("at")) == ("(= 5 ms)", "(x = 3 ms)")
+    form.control("n").setText("3")
+    assert form.x_text("n") == "(= 1.5 ms)"
+    form.control("n").setText("")
+    assert form.x_text("n") == ""
+    form.set_x_scale(XScale())  # 0, 1, no units: just point numbers
+    assert form.x_text("at") == ""
+    form.set_x_scale(XScale(units="s", xarray=np.array([0.0, 1.0, 4.0, 9.0, 16.0])))
+    assert (form.x_text("n"), form.x_text("at")) == ("", "(x = 16 s)")
+    assert "other" not in form._x_labels
+    with pytest.raises(ValueError):
+        NMParam("n", INTEGER, "Points", as_x="width")
+
+
+
+def test_x_scale_back_to_point_numbers():
+    scale = XScale(start=1.0, delta=0.5, points=4)
+    assert [scale.index(x) for x in (0.0, 1.0, 1.6, 2.6)] == [0, 0, 1, 3]
+    uneven = XScale(xarray=np.array([0.0, 1.0, 4.0, 9.0]))
+    assert [uneven.index(x) for x in (0.4, 3.0, 20.0)] == [0, 2, 3]

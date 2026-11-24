@@ -41,3 +41,15 @@ def test_bad_descriptions():
         NMParam("x", XRANGE, "X")  # no names
     with pytest.raises(ValueError):
         NMParam("m", CHOICE, "M")  # no choices
+
+
+def test_nan_only_where_allowed_and_blank_said():
+    """Replace Values' value may be NaN (#559); a blank number says to enter one."""
+    value = NMParam("old", NUMBER, "Replace", nan=True)
+    assert math.isnan(value.check("nan")) and value.check("-inf") == -math.inf
+    with pytest.raises(ValueError, match="Rate: NaN is not a number"):
+        NMParam("rate", NUMBER, "Rate").check("nan")
+    with pytest.raises(ValueError, match="Points: enter a number"):
+        NMParam("n", INTEGER, "Points").check(" ")
+    with pytest.raises(ValueError, match="NaN is not a number"):  # nor a whole one
+        NMParam("n", INTEGER, "Points", nan=True).check("nan")

@@ -4486,3 +4486,28 @@ class TestMainOperations(unittest.TestCase):
         for op in (NMMainOpAverage, NMMainOpSum):
             self.assertFalse(op.CHANGES_DATA)
         self.assertTrue(NMMainOpSmooth.CHANGES_DATA)
+
+    def test_points_operations_and_unfit_x_arrays(self):
+        """Delete Points shortens the arrays (#559); an x array that no longer
+        fits is found."""
+        from pyneuromatic.tools.nm_main_op import (
+            NMMainOpDeleteNaNs, NMMainOpDeletePoints)
+        tool = self.nm.main
+        xs = self.folder.data.new("Xs", nparray=np.array([0.0, 1.0, 4.0, 9.0]))
+        a0 = self.series.get_data("A", "E0")
+        a0.set_xarray_from(xs)
+        targets = [{"data": a0}, {"data": self.series.get_data("A", "E1")}]
+        self.assertEqual(tool.unfit_xarrays(targets), [])
+        tool.op = NMMainOpDeletePoints(index=1, n_points=2)
+        tool.run_selection(self.series, channel="A", epochs="all")
+        np.testing.assert_array_equal(a0.nparray, [0.0, 3.0])
+        self.assertEqual(tool.unfit_xarrays(targets), [a0])
+        a0.xarray = np.array([0.0, 1.0, 2.0])  # set directly: the wrong length too
+        self.assertEqual(tool.unfit_xarrays(targets), [a0])
+        self.assertTrue(NMMainOpDeletePoints.CHANGES_DATA)
+        from pyneuromatic.tools.nm_main_op import NMMainOpInsertPoints
+        a1 = self.series.get_data("A", "E1")
+        NMMainOpInsertPoints(index=9, n_points=1, fill=-1.0).run(a1)  # past the end
+        np.testing.assert_array_equal(a1.nparray, [10.0, 13.0, -1.0])
+        with self.assertRaisesRegex(ValueError, "Choose Delete NaNs, Delete ±inf"):
+            NMMainOpDeleteNaNs.form_keywords({"delete_nans": False, "delete_infs": False})
