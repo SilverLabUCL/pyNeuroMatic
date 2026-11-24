@@ -47,6 +47,8 @@ class NMToolMainConfig(NMToolConfig):
         overwrite: Functions run on the same selection share its first Main
             subfolder (``..._0``), each replacing only the outputs it makes;
             off: a new subfolder each run.
+        prefix_outputs: Output names start with ``MN_`` (e.g.
+            ``MN_Avg_RecordA``); off: ``Avg_RecordA``.
 
     The part of each array a function uses is its own (``xbgn``, ``xend``,
     #555), not the tool's.
@@ -57,6 +59,7 @@ class NMToolMainConfig(NMToolConfig):
         "ignore_nans": {"type": bool, "default": True},
         "overwrite": {"type": bool, "default": False},
         "ask_before_changing": {"type": bool, "default": True},  # #557
+        "prefix_outputs": {"type": bool, "default": True},
     }
 
 
@@ -98,6 +101,8 @@ class NMToolMain(NMTool):
         self._overwrite = self._config.overwrite
         # The app asks before an operation changes the arrays (#557)
         self.ask_before_changing = self._config.ask_before_changing
+        # Outputs named MN_Avg_RecordA..., or Avg_RecordA...
+        self.prefix_outputs = self._config.prefix_outputs
         self._op: NMMainOp = NMMainOpAverage()
         self._toolfolder: NMToolFolder | None = None
         self._outputs: list[str] = []
@@ -167,6 +172,23 @@ class NMToolMain(NMTool):
                 if series is not None:
                     return series
         return None
+
+    @staticmethod
+    def unfit_xarrays(targets: list[dict]) -> list:
+        """*targets*' arrays whose x array no longer fits, e.g. after Insert
+        or Delete Points (#559): their x values come from start and delta
+        until it's fixed."""
+        unfit = []
+        for target in targets:
+            data = target.get("data")
+            if data is None:
+                continue
+            values, xarray = data.nparray, data.xarray
+            if data.xarray_problem() or (
+                    xarray is not None and hasattr(values, "size")
+                    and xarray.size != values.size):
+                unfit.append(data)
+        return unfit
 
     def run_all(self, targets, run_keys=None) -> bool:
         """As :meth:`NMTool.run_all`; an operation refuses arrays of a locked
@@ -329,7 +351,8 @@ class NMToolMain(NMTool):
         made = getattr(self, "_made_toolfolders", None)
         if made is not None and folder not in made:
             made.append(folder)
-        self._op.name_prefix = self.OUTPUT_PREFIX  # MN_Avg_RecordA...
+        # MN_Avg_RecordA..., or Avg_RecordA...
+        self._op.name_prefix = self.OUTPUT_PREFIX if self.prefix_outputs else ""
         try:
             self._op.run_finish(folder, self._run_prefix)
         finally:

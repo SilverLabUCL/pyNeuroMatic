@@ -7,6 +7,9 @@ ranges of the tool chosen in the tool rail.
 
 The ranges are on (draggable), frozen (shown, locked) or off (hidden).
 
+A range can be one line instead (:attr:`PlotRange.line`), e.g. where Main's
+Insert Points puts its points (#559).
+
 An unbounded edge (-inf or inf) is drawn dashed at the trace's start or
 end, and stays unbounded unless it is dragged. Dragged edges snap to the
 nearest sample point.
@@ -28,13 +31,15 @@ except ImportError:  # pragma: no cover - optional GUI dependency
 
 @dataclass
 class PlotRange:
-    """One X range of a tool, e.g. ("window", "w0", 10.0, 20.0, "#2563eb")."""
+    """One X range of a tool, e.g. ("window", "w0", 10.0, 20.0, "#2563eb");
+    with *line*, one line at *xbgn* (*xend* the same)."""
 
     key: str
     label: str
     xbgn: float
     xend: float
     color: str
+    line: bool = False
 
 
 def snap(x_values: np.ndarray, value: float) -> float:
@@ -115,20 +120,24 @@ class RangeOverlay(QtCore.QObject):
         if self._plot_widget is None or pg is None or self._x.size == 0 or self._mode == "off":
             return
         for plot_range in self._ranges():
-            region = pg.LinearRegionItem(swapMode="block", movable=self._movable)
+            if plot_range.line:  # one line
+                region = pg.InfiniteLine(angle=90, movable=self._movable)
+                changed, finished = region.sigPositionChanged, region.sigPositionChangeFinished
+            else:
+                region = pg.LinearRegionItem(swapMode="block", movable=self._movable)
+                changed, finished = region.sigRegionChanged, region.sigRegionChangeFinished
             region.setZValue(-10)  # behind the traces
             self._plot_widget.addItem(region, ignoreBounds=True)
             self._items[plot_range.key] = (region, plot_range, (0.0, 0.0))
             self._show(plot_range)
-            region.sigRegionChanged.connect(
-                lambda _r, key=plot_range.key: self._on_dragged(key, final=False))
-            region.sigRegionChangeFinished.connect(
-                lambda _r, key=plot_range.key: self._on_dragged(key, final=True))
+            changed.connect(lambda _r, key=plot_range.key: self._on_dragged(key, final=False))
+            finished.connect(lambda _r, key=plot_range.key: self._on_dragged(key, final=True))
 
     def update(self) -> None:
         """The tool's ranges changed (e.g. typed values): move the edges."""
         ranges = self._ranges()
-        if [r.key for r in ranges] != list(self._items):
+        if [(r.key, r.line) for r in ranges] != [
+                (key, item[1].line) for key, item in self._items.items()]:
             self.redraw()
             return
         for plot_range in ranges:
@@ -148,6 +157,16 @@ class RangeOverlay(QtCore.QObject):
         region = self._items[plot_range.key][0]
         drawn = self._edges(plot_range)
         color = QtGui.QColor(plot_range.color)
+        if plot_range.line:
+            region.blockSignals(True)
+            region.setValue(drawn[0])
+            region.setPen(pg.mkPen(color, width=self.EDGE_WIDTH))
+            region.setHoverPen(pg.mkPen(color, width=self.EDGE_HOVER_WIDTH))
+            region.setToolTip(f"{plot_range.label}: drag it" if self._movable
+                              else plot_range.label)
+            region.blockSignals(False)
+            self._items[plot_range.key] = (region, plot_range, drawn)
+            return
         fill = QtGui.QColor(color)
         fill.setAlpha(self.BRUSH_ALPHA)
         region.blockSignals(True)
@@ -167,6 +186,12 @@ class RangeOverlay(QtCore.QObject):
         if self._source is None or key not in self._items:
             return
         region, plot_range, drawn = self._items[key]
+        if plot_range.line:
+            x = snap(self._x, region.value())
+            self._source.set_plot_range(key, x, x, final)
+            if final:
+                self.update()
+            return
         low, high = region.getRegion()
         # An edge not dragged keeps its value (so -inf / inf stay unbounded)
         xbgn = snap(self._x, low) if low != drawn[0] else plot_range.xbgn

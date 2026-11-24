@@ -545,7 +545,15 @@ class ChannelTableModel(QtCore.QAbstractTableModel):
         return table_format.cell(value)[0]
 
     def refresh(self) -> None:
-        """Redraw every cell (e.g. after the NaN setting changes)."""
+        """Redraw every cell (e.g. after the NaN setting changes); arrays
+        made longer or shorter (e.g. Main's Delete Points, #559): their rows
+        again; values changed: transformed again."""
+        self._transformed.clear()
+        rows = max((d.nparray.size for d in self._columns
+                    if d.nparray is not None), default=0)
+        if rows != self._rows:
+            self.set_arrays(self._columns)
+            return
         if self._rows and self._columns:
             self.dataChanged.emit(self.index(0, 0),
                                   self.index(self._rows - 1, len(self._columns)))

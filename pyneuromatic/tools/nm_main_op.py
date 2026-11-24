@@ -563,6 +563,13 @@ class NMMainOpRedimension(NMMainOp):
     """
 
     name = "redimension"
+    PARAMS = (
+        NMParam("n_points", INTEGER, "Points", minimum=1, as_x="length",
+                tip="The arrays' new number of points: shorter cuts points "
+                    "from the end, longer adds points there"),
+        NMParam("fill", NUMBER, "Pad value", default=0.0, nan=True,
+                tip="Value of the points added to an array made longer (or nan)"),
+    )
 
     def __init__(self, n_points: int = 0, fill: float = 0.0) -> None:
         self.n_points = n_points  # setters for validation
@@ -626,7 +633,8 @@ class NMMainOpRedimension(NMMainOp):
 class NMMainOpInsertPoints(NMMainOp):
     """Insert points into each selected array at a given index (in-place).
 
-    Points at and after ``index`` are shifted right.
+    Points at and after ``index`` are shifted right; an ``index`` past the
+    end inserts at the end.
 
     Parameters:
         index: Position at which to insert (0-based, default 0).
@@ -635,6 +643,16 @@ class NMMainOpInsertPoints(NMMainOp):
     """
 
     name = "insert_points"
+    PARAMS = (
+        NMParam("index", INTEGER, "At point", default=0, minimum=0, as_x="position",
+                tip="Point number where the new points go (0: before the "
+                    "first; past the last: at the end); the points from "
+                    "there on move along"),
+        NMParam("n_points", INTEGER, "Points", default=1, minimum=1, as_x="length",
+                tip="How many points to insert"),
+        NMParam("fill", NUMBER, "Value", default=0.0, nan=True,
+                tip="Value of the inserted points (or nan)"),
+    )
 
     def __init__(self, index: int = 0, n_points: int = 1, fill: float = 0.0) -> None:
         self.index = index  # setters for validation
@@ -691,8 +709,9 @@ class NMMainOpInsertPoints(NMMainOp):
         """
         if not isinstance(data.nparray, np.ndarray):
             return
+        index = min(self._index, len(data.nparray))  # past the end: at the end
         data.nparray = np.insert(
-            data.nparray, self._index, np.full(self._n_points, self._fill)
+            data.nparray, index, np.full(self._n_points, self._fill)
         )
         self._add_op_note(data, self._op_params_str())
 
@@ -715,6 +734,12 @@ class NMMainOpDeletePoints(NMMainOp):
     """
 
     name = "delete_points"
+    PARAMS = (
+        NMParam("index", INTEGER, "From point", default=0, minimum=0, as_x="position",
+                tip="Point number of the first point to delete (0: the first)"),
+        NMParam("n_points", INTEGER, "Points", default=1, minimum=1, as_x="length",
+                tip="How many points to delete (fewer if the array ends first)"),
+    )
 
     def __init__(self, index: int = 0, n_points: int = 1) -> None:
         self.index = index  # setters for validation
@@ -761,9 +786,8 @@ class NMMainOpDeletePoints(NMMainOp):
             return
         if self._index >= len(data.nparray):
             return  # nothing to delete
-        data.nparray = np.delete(
-            data.nparray, np.arange(self._index, self._index + self._n_points)
-        )
+        end = min(self._index + self._n_points, len(data.nparray))  # to its end
+        data.nparray = np.delete(data.nparray, np.arange(self._index, end))
         self._add_op_note(data, self._op_params_str())
 
     def _op_params_str(self) -> str:
@@ -821,6 +845,11 @@ class NMMainOpRotate(NMMainOp):
     """
 
     name = "rotate"
+    PARAMS = (
+        NMParam("n_points", INTEGER, "Rotate by", default=1, units="points", as_x="length",
+                tip="e.g. 0, 1, 2, 3 becomes 3, 0, 1, 2 rotated by 1, "
+                    "or 1, 2, 3, 0 rotated by -1"),
+    )
 
     def __init__(self, n_points: int = 1) -> None:
         self.n_points = n_points  # setter for validation
@@ -987,6 +1016,12 @@ class NMMainOpReplaceValues(NMMainOp):
     """
 
     name = "replace_values"
+    PARAMS = (
+        NMParam("old_value", NUMBER, "Replace", default=math.nan, nan=True,
+                tip="The value to find: a number, nan, inf or -inf"),
+        NMParam("new_value", NUMBER, "With", default=0.0, nan=True,
+                tip="The value it becomes: a number, nan, inf or -inf"),
+    )
 
     def __init__(self, old_value: float = 0.0, new_value: float = 0.0) -> None:
         self.old_value = old_value  # setters for validation
@@ -1061,6 +1096,18 @@ class NMMainOpDeleteNaNs(NMMainOp):
     """
 
     name = "delete_nans"
+    PARAMS = (
+        NMParam("delete_nans", BOOLEAN, "Delete NaNs", default=True,
+                tip="Delete points that are NaN"),
+        NMParam("delete_infs", BOOLEAN, "Delete ±inf", default=False,
+                tip="Delete points that are inf or -inf"),
+    )
+
+    @classmethod
+    def form_keywords(cls, kwargs: dict) -> dict:
+        if not (kwargs.get("delete_nans", True) or kwargs.get("delete_infs")):
+            raise ValueError("Choose Delete NaNs, Delete ±inf, or both")
+        return kwargs
 
     def __init__(self, delete_nans: bool = True, delete_infs: bool = False) -> None:
         self.delete_nans = delete_nans  # setters for validation

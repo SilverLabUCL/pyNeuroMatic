@@ -1311,9 +1311,15 @@ class FolderActions(TierActions):
         )
         if answer is None:
             return
-        folder = folders.new(answer[1])
+        self.add_folder(answer[1])
+
+    def add_folder(self, name: str | None = None):
+        """A new folder (*name*, or the next folder0, folder1...), chosen and
+        shown in the strip and Browser; e.g. the one the window starts with."""
+        folder = self._folders.new(name)
         self._select(folder=folder)
         self._changed()
+        return folder
 
     def open_files(self, paths: list[str] | None = None) -> None:
         """Import each file into a new folder named after it."""

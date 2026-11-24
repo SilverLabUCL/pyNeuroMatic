@@ -214,7 +214,9 @@ def test_one_list_with_plot_and_its_form(app):
     combo = tab.function_combo
     items = [combo.itemText(i) or "---" for i in range(combo.count())]
     assert items == ["Choose…", "---", "Plot", "Table", "---", "Average", "Sum",
-                     "SumSqr", "Min", "Max", "---", "Concatenate", "---", "Arithmetic",
+                     "SumSqr", "Min", "Max", "Concatenate", "---", "Insert Points",
+                     "Delete Points", "Delete NaNs", "Redimension",
+                     "Reverse", "Rotate", "---", "Arithmetic", "Replace Values",
                      "Baseline", "Normalize", "dF/F", "Rescale", "Smooth", "Filter",
                      "Differentiate", "Integrate"]
     assert tab.entry() is None  # "Choose…", as Stats1's
@@ -333,7 +335,8 @@ def test_overwrite_in_settings_reuses_the_subfolder(app):
     tab = app.main
     assert [o[:3] for o in tab.config_options()] == [
         ("ignore_nans", "Ignore NaNs", True), ("overwrite", "Overwrite results", False),
-        ("ask_before_changing", "Ask before changing arrays", True)]
+        ("ask_before_changing", "Ask before changing arrays", True),
+        ("prefix_outputs", "Prefix outputs with MN_", True)]
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, "Sum")
     _run(app, "Sum")
@@ -544,6 +547,25 @@ def test_overwrite_shows_this_runs_outputs_not_an_earlier_stdv(app):
 
 
 
+def test_outputs_without_the_mn_prefix(app):
+    """Settings › Main, Prefix outputs with MN_ off: Avg_RecordA, its SEM
+    and data series too; Main2's ± SEM and its data behind it still found."""
+    tab = app.main
+    tab.set_config_option("prefix_outputs", False)
+    assert tab._tool.config.prefix_outputs is False
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    _run(app, "Average", compute_sem=True)
+    folder = app.folder.toolfolders["Main_Record_A_All_0"]
+    assert list(folder.data.keys()) == ["Avg_RecordA", "SEM_RecordA"]
+    assert "Avg_Record" in folder.dataseries
+    main2 = tab.main2
+    assert main2.selected_array() == "Avg_RecordA"
+    assert main2.error_actions["sem"].isEnabled()
+    assert not main2.error_actions["stdv"].isEnabled()  # not computed
+    assert main2.background_action.isEnabled()
+    tab.set_config_option("prefix_outputs", True)
+
+
 def test_reset_sets_the_chosen_functions_form_back(app):
     """Reset: the chosen function's parameters back to their defaults; the
     other functions' forms keep theirs."""
@@ -622,3 +644,147 @@ def test_operation_forms(app):
     tab.run_button.click()
     assert np.allclose(app.series.get_data("A", "E0").nparray, np.arange(4.0) + 1)
 
+
+# --- Points operations (#559) ---------------------------------------------------
+
+def _operate(app, name, **values):
+    """Run operation *name* on channel A's epochs, not asked first."""
+    tab = app.main
+    tab.set_config_option("ask_before_changing", False)
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    _run(app, name, **values)
+
+
+def _a1(app):
+    return app.series.get_data("A", "E1").nparray
+
+
+def test_points_operations_change_the_arrays_points(app):
+    """Each Points operation from Main1 (A1 starts as 10, 11, 12, 13)."""
+    _operate(app, "Insert Points", index=1, n_points=2, fill=np.nan)
+    assert np.allclose(_a1(app), [10, np.nan, np.nan, 11, 12, 13], equal_nan=True)
+    assert app.main.status_label.text() == "Complete"
+    _operate(app, "Replace Values", old_value=np.nan, new_value=-1.0)
+    assert np.allclose(_a1(app), [10, -1, -1, 11, 12, 13])
+    _operate(app, "Delete Points", index=1, n_points=2)
+    assert np.allclose(_a1(app), [10, 11, 12, 13])
+    _operate(app, "Rotate", n_points=-1)
+    assert np.allclose(_a1(app), [11, 12, 13, 10])
+    _operate(app, "Reverse")
+    assert np.allclose(_a1(app), [10, 13, 12, 11])
+    _operate(app, "Redimension", n_points=6, fill=0.0)
+    assert np.allclose(_a1(app), [10, 13, 12, 11, 0, 0])
+    assert len(app.plot_widget.current_trace.nparray) == 6  # the Plot follows
+    assert app.table_panel.channel_table.model.rowCount() == 6  # and the Table
+    app.series.get_data("A", "E1").nparray = np.array([1.0, np.nan, np.inf, 2.0])
+    _operate(app, "Delete NaNs", delete_nans=True, delete_infs=True)
+    assert np.allclose(_a1(app), [1.0, 2.0])
+    assert np.allclose(app.series.get_data("B", "E1").nparray,
+                       np.arange(4.0) + 110)  # channel B wasn't selected
+
+
+def test_points_operations_forms(app):
+    """Points' own wording; what can't run says why, nothing changed."""
+    tab = app.main
+    tab.function_combo.setCurrentText("Delete Points")
+    assert tab.function_info.text().startswith(
+        "Permanent operation: delete points from the selected arrays")
+    assert "Filter & Transform" not in tab.function_info.text()  # no virtual one
+    tab.function_combo.setCurrentText("Smooth")
+    assert tab.function_info.text().endswith(
+        "See channel Filter & Transform to apply virtual operations.")
+    _operate(app, "Delete NaNs", delete_nans=False, delete_infs=False)
+    assert tab.status_label.text().endswith("Choose Delete NaNs, Delete ±inf, or both")
+    _operate(app, "Redimension")  # no number of points yet
+    assert tab.status_label.text().endswith("Points: enter a number")
+    assert np.allclose(_a1(app), np.arange(4.0) + 10)
+    assert tab.forms["Replace Values"].control("old_value").text() == "nan"
+
+
+def test_points_in_x_follow_the_selection(app):
+    """Rotate by 3 points: 1.5 ms, by the selected arrays' x scale (delta 0.5)."""
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    rotate = tab.forms["Rotate"]
+    rotate.set_values({"n_points": 3})
+    assert rotate.x_text("n_points") == "(= 1.5 ms)"
+    assert tab.forms["Insert Points"].x_text("index") == "(x = 0 ms)"
+    app.series.get_data("A", "E0").xscale.delta = 0.1  # the first selected
+    tab.refresh()
+    assert rotate.x_text("n_points") == "(= 0.3 ms)"
+
+
+def test_redimension_says_how_many_points_now(app):
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    form = tab.forms["Redimension"]
+    assert form.note("n_points") == "currently 4 points"
+    _operate(app, "Delete Points", index=0, n_points=1)  # A0, A1, A2: 3 points
+    assert form.note("n_points") == "currently 3 points"
+    app.series.get_data("A", "E1").nparray = np.arange(6.0)
+    tab.refresh()
+    assert form.note("n_points") == "currently 3 to 6 points"
+
+
+def test_delete_and_insert_points_on_the_plot(app):
+    """Delete Points' points as a range, Insert Points' place as a line
+    (x by delta 0.5); dragged, their point numbers follow."""
+    import pyqtgraph as pg
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch=app.series.epochs["E0"],
+            epoch_set="All")
+    tab.function_combo.setCurrentText("Delete Points")
+    tab.form().set_values({"index": 1, "n_points": 2})
+    (points,) = tab.plot_ranges()
+    assert (points.key, points.label, points.xbgn, points.xend, points.line) == (
+        "points", "Delete Points 1 to 2", 0.5, 1.0, False)
+    tab.form().set_values({"n_points": 9})  # past the end: to its last point
+    assert tab.plot_ranges()[0].xend == 1.5
+    tab.set_plot_range("points", 0.0, 1.0, final=True)  # dragged
+    assert (tab.form().values()["index"], tab.form().values()["n_points"]) == (0, 3)
+    tab.form().set_values({"index": 4})  # no points there: nothing drawn
+    assert tab.plot_ranges() == []
+    tab.function_combo.setCurrentText("Insert Points")
+    tab.form().set_values({"index": 2})
+    (line,) = tab.plot_ranges()
+    assert (line.label, line.xbgn, line.line) == ("Insert Points at point 2", 1.0, True)
+    assert isinstance(app.plot_widget.range_overlay.regions["points"], pg.InfiniteLine)
+    tab.set_plot_range("points", 1.5, 1.5, final=True)
+    assert tab.form().values()["index"] == 3
+
+
+def test_points_operations_warn_of_an_x_array_first(app):
+    """Arrays with an x array: asked first, even without "Ask before
+    changing arrays", as their x values aren't changed."""
+    xs = app.folder.data.new("Xs", nparray=np.array([0.0, 1.0, 4.0, 9.0]))
+    for epoch in ("E0", "E1", "E2"):
+        app.series.get_data("A", epoch).set_xarray_from(xs)
+    tab = app.main
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or False  # No
+    _operate(app, "Delete Points", index=0, n_points=1)
+    assert asked == ["Delete Points changes 3 arrays of Record. Their x array (Xs) "
+                     "isn't changed: it won't fit their new number of points, so x "
+                     "values will come from the x scale's start and delta. Continue?"]
+    assert np.allclose(_a1(app), np.arange(4.0) + 10)  # No: nothing changed
+    _operate(app, "Rotate")
+    assert asked[-1].endswith("isn't changed: each point will be at a "
+                              "different x. Continue?")
+    _operate(app, "Arithmetic")  # not a Points operation: not asked
+    assert len(asked) == 2
+
+
+def test_an_x_array_that_no_longer_fits_is_said(app):
+    """Points deleted from arrays with an x array: their x values are from
+    start and delta, and the status says so."""
+    xs = app.folder.data.new("Xs", nparray=np.array([0.0, 1.0, 4.0, 9.0]))
+    for epoch in ("E0", "E1"):
+        app.series.get_data("A", epoch).set_xarray_from(xs)
+    app.main._confirm = lambda title, text: True  # Yes, despite the x array
+    _operate(app, "Delete Points", index=0, n_points=1)
+    assert app.main.status_label.text() == (
+        "Warning: The x array of RecordA0 (and 1 more) no longer fits its points; "
+        "x values come from the x scale's start and delta")
+    app.series.get_data("A", "E2").set_xarray_from(None)
+    _operate(app, "Reverse")  # still doesn't fit: still said
+    assert app.main.status_label.text().startswith("Warning: The x array of RecordA0")

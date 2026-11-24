@@ -1,8 +1,9 @@
 """Start pyNeuroMatic's window: ``python -m pyneuromatic.gui``.
 
-The window starts with an empty manager, its settings from the user's file
-(~/.pyneuromatic/settings.toml), so the command history is complete from
-"nm = NMManager()".
+The window starts with a manager, its settings from the user's file
+(~/.pyneuromatic/settings.toml), and one empty folder, folder0, chosen, ready
+to import into or make data in; the command history is complete from
+"nm = NMManager()" (then "nm.folders.new('folder0')").
 
 On macOS it restarts as pyNeuroMatic.app, so the Dock names it pyNeuroMatic,
 with its icon, not "Python" (see mac_bundle, #545).
@@ -31,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(
         sys.argv if argv is None else argv)
     window = NMAppWindow(manager)
+    # One folder to start with, chosen and shown (as Folder › New Folder
+    # makes one; its command recorded)
+    window.folder_actions.add_folder()
     window.resize(1400, 900)
     window.show()
     return app.exec()
