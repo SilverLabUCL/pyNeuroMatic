@@ -675,9 +675,14 @@ class NMToolStats(NMTool):
                         [v if v is not None else math.nan for v in values],
                         dtype=float,
                     )
-                    units = present[0].get(units_key) if units_key else None
+                    # Units from the first result that has them: an epoch
+                    # whose step wasn't found (e.g. a rise time's p0) has
+                    # none (#561)
+                    units = next((r.get(units_key) for r in present
+                                  if r.get(units_key)), None) if units_key else None
                     if rkey in ("s", "Δs") and not units:  # a crossing's level (and Δ): y units
-                        units = present[0].get("func", {}).get("yunits")
+                        units = next((r.get("func", {}).get("yunits") for r in present
+                                      if r.get("func", {}).get("yunits")), None)
                     yscale = {"units": units} if units else None
                     dname = self._st_array_name(
                         wname, func_name, id_str, rkey, step

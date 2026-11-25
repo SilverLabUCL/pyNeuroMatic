@@ -30,7 +30,10 @@ from pyneuromatic.gui.selection_model import epoch_scope_label, scoped_epoch_nam
 from pyneuromatic.gui.tool_run import SelectionRunTab
 from pyneuromatic.gui.tool_tab import fit_number_edit
 from pyneuromatic.tools.nm_tool_main import NMToolMain
+from pyneuromatic.tools.nm_main_op import array_names, find_array
 from pyneuromatic.tools.nm_main_op import (
+    NMMainOpAlign, NMMainOpInterpolate, NMMainOpResample, NMMainOpRescaleX,
+    NMMainOpSetXStart,
     NMMainOpArithmetic, NMMainOpAverage, NMMainOpBaseline, NMMainOpConcatenate,
     NMMainOpDeleteNaNs, NMMainOpDeletePoints, NMMainOpDFOF, NMMainOpDifferentiate,
     NMMainOpFilter, NMMainOpInsertPoints, NMMainOpIntegrate, NMMainOpMax, NMMainOpMin,
@@ -161,6 +164,7 @@ class PlotOptions:
     x_offset: float = 0.0
     y_offset: float = 0.0
     reverse: bool = False  # the last epoch first: no offset, the first color
+    reverse_colors: bool = False  # the rainbow from violet to red
 
 
 class SelectionPlot(QtWidgets.QWidget):
@@ -214,7 +218,10 @@ class SelectionPlot(QtWidgets.QWidget):
                 ys += [y + i * options.y_offset, [np.nan]]
             if not xs:
                 continue
-            color = (rainbow_color((c + 0.5) / colors if colors > 1 else 0.0).name()
+            fraction = (c + 0.5) / colors if colors > 1 else 0.0
+            if options.reverse_colors:  # violet first, red last
+                fraction = 1.0 - fraction if colors > 1 else 1.0
+            color = (rainbow_color(fraction).name()
                      if options.rainbow else options.color)
             lines.append((np.concatenate(xs), np.concatenate(ys), color))
         return lines
@@ -348,6 +355,9 @@ PLOT_PARAMS = (
             tip="Plot epochs from red to violet"),
     NMParam("color", COLOR, "One color", default="#000000", when=("colors", "one"),
             tip="Plot epochs in one color"),
+    NMParam("reverse_colors", BOOLEAN, "Reverse colors", default=False,
+            when=("colors", "rainbow"),
+            tip="Rainbow from violet to red (the first epoch violet)"),
     NMParam("x_offset", NUMBER, "X offset", default=0.0, finite=True,
             tip="Apply a virtual offset to each epoch's x-value (0: overlaid)"),
     NMParam("y_offset", NUMBER, "Y offset", default=0.0, finite=True,
@@ -361,7 +371,8 @@ def plot_options(values: dict[str, Any]) -> PlotOptions:
     """Plot's form values as :class:`PlotOptions`."""
     return PlotOptions(color=values["color"], rainbow=values["colors"] == "rainbow",
                        x_offset=values["x_offset"], y_offset=values["y_offset"],
-                       reverse=values["reverse"])
+                       reverse=values["reverse"],
+                       reverse_colors=values.get("reverse_colors", False))
 
 
 # Main1's entries, in one list as Stats' measures, groups divided: (what it
@@ -397,7 +408,8 @@ OPERATIONS = {
     "Normalize": ("scale selected arrays so they span from Low to High "
                   "(0 to 1 by default)", NMMainOpNormalize),
     "dF/F": ("ΔF over F0, (F - F0) / F0, where F0 is a baseline mean", NMMainOpDFOF),
-    "Rescale": ("rescale selected arrays to new units (e.g. pA to nA)", NMMainOpRescale),
+    "Rescale Y": ("convert the y units of the selected arrays (e.g. pA to nA)",
+                  NMMainOpRescale),
     "Smooth": ("smooth selected arrays (boxcar, binomial, Savitzky-Golay)", NMMainOpSmooth),
     "Filter": ("filter selected arrays (Butterworth, Bessel, notch)", NMMainOpFilter),
     "Differentiate": ("compute each array's derivative", NMMainOpDifferentiate),
@@ -417,6 +429,18 @@ OPERATIONS = {
                "rotated by 1, each point moves one later and the last becomes "
                "the first; by -1, each moves one earlier and the first becomes "
                "the last", NMMainOpRotate),
+    # The X scale operations (#561), listed apart (XSCALE)
+    "Rescale X": ("convert the x-scale units of the selected arrays (e.g. s to ms)",
+                  NMMainOpRescaleX),
+    "Set X Start": ("set the x-scale start of the selected arrays, or shift it by a "
+                    "value (e.g. by -10 to move x = 10 to 0)", NMMainOpSetXStart),
+    "Resample": ("resample the selected arrays to a new sample interval "
+                 "(anti-aliased)", NMMainOpResample),
+    "Interpolate": ("interpolate the selected arrays onto a common x axis "
+                    "(each channel's), or onto a template array's x values",
+                    NMMainOpInterpolate),
+    "Align": ("shift the x-start of the selected arrays so their reference x values "
+              "line up (e.g. a Stats2 onset time per epoch, at x = 0)", NMMainOpAlign),
 }
 # Operations a channel's Filter & Transform also has, applied virtually
 # (pyneuromatic.core.nm_transform): Main1 points to it
@@ -424,6 +448,11 @@ ALSO_VIRTUAL = ("Baseline", "Normalize", "dF/F", "Smooth", "Filter",
                 "Differentiate", "Integrate")
 POINTS = ("Insert Points", "Delete Points", "Delete NaNs", "Redimension",
           "Reverse", "Rotate")
+XSCALE = ("Rescale X", "Set X Start", "Resample", "Interpolate", "Align")
+# Operations that change only the x scale (start, delta, units), not the
+# values: undone by running them again (e.g. s back to ms), so not
+# "permanent", nor asked about
+SCALE_ONLY = ("Rescale X", "Set X Start", "Align")
 # Points operations drawn on the Plot (#559): Delete Points' points, a range
 # (first point, number of points); Insert Points' place, a line (its point)
 POINT_RANGES = {
@@ -459,7 +488,8 @@ LIST_GROUPS = (
     tuple(DISPLAY),
     tuple(FUNCTIONS),
     POINTS,
-    tuple(name for name in OPERATIONS if name not in POINTS),
+    XSCALE,
+    tuple(name for name in OPERATIONS if name not in POINTS + XSCALE),
 )
 
 def entry_params(name: str) -> tuple:
@@ -479,6 +509,25 @@ def make_function(name: str, values: dict[str, Any], ignore_nans: bool = True):
             and "ignore_nans" in inspect.signature(op_class.__init__).parameters):
         kwargs["ignore_nans"] = ignore_nans
     return op_class(**kwargs)
+
+
+# In x units but not one x position per array, so no use to Align: the
+# Spike tool's mean ISI (a duration), all spike times (raster), first spike
+NOT_X_POSITIONS = ("SP_isi", "SP_RX", "SP_first")
+
+
+def is_x_values(data: NMData | None, xunits: str) -> bool:
+    """*data* looks like x values for Align (#561): numbers in the selected
+    arrays' x units (e.g. ms), e.g. Stats2's ST_w0_..._x; not a duration
+    (..._dx, e.g. a rise time). Without x units: any numbers but a duration.
+    A Stats ..._x array without units (saved before #561) is listed too."""
+    values = getattr(data, "nparray", None)
+    if (not isinstance(values, np.ndarray) or values.ndim != 1 or values.size == 0
+            or values.dtype.kind not in "biuf" or data.name.endswith("_dx")
+            or data.name in NOT_X_POSITIONS):
+        return False
+    units = data.yscale.units
+    return not xunits or units == xunits or (not units and data.name.endswith("_x"))
 
 
 class Main2Panel(ResultsPanel):
@@ -672,7 +721,7 @@ class MainToolTab(SelectionRunTab):
                 self.function_combo.addItem(name, name)
                 self.function_combo.setItemData(
                     self.function_combo.count() - 1,
-                    what if name in DISPLAY else f"{name}: {what}",
+                    what[:1].upper() + what[1:],  # beside its name: not repeated
                     QtCore.Qt.ItemDataRole.ToolTipRole)
         self.function_combo.setToolTip(
             "1) Choose function, 2) Set function parameters, 3) Run function on selected arrays")
@@ -697,6 +746,8 @@ class MainToolTab(SelectionRunTab):
             form.ranges_changed.connect(self.ranges_changed)
             if name in POINT_RANGES:  # typed point numbers: the Plot's lines follow
                 form.changed.connect(self.ranges_changed)
+            if name == "Resample":  # the number of points after, as typed
+                form.changed.connect(self._show_resample_note)
             self.forms[name] = form
             self.form_stack.addWidget(form)
         main1.addWidget(self.form_stack)
@@ -780,6 +831,7 @@ class MainToolTab(SelectionRunTab):
         except RuntimeError:
             targets = []
         arrays = [t["data"] for t in targets if t.get("data") is not None]
+        self._selected_arrays = arrays
         data = arrays[0] if arrays else None
         scale = XScale.of(data) if data is not None else None
         # Redimension: the arrays' number of points now
@@ -793,7 +845,52 @@ class MainToolTab(SelectionRunTab):
         for form in getattr(self, "forms", {}).values():
             form.set_x_scale(scale)
         if hasattr(self, "forms"):
+            self._show_xscale_forms()
             self.ranges_changed.emit()  # Delete / Insert Points' x follow
+
+    def _show_xscale_forms(self) -> None:
+        """The X scale operations' forms (#561): the arrays Align and
+        Interpolate can pick (the folder's and its subfolders', e.g. Stats2
+        outputs), and what the selected arrays have now."""
+        folder = self.selection.get("folder")
+        names = array_names(folder)
+        arrays = getattr(self, "_selected_arrays", [])
+        xunits = arrays[0].xscale.units if arrays else ""
+        self.forms["Align"].set_array_names("values_array", [
+            n for n in names if is_x_values(find_array(folder, n), xunits)])
+        self.forms["Interpolate"].set_array_names("template_name", names)
+        xunits = sorted({d.xscale.units or "" for d in arrays})  # Set X Start's
+        self.forms["Set X Start"].set_note(
+            "value", xunits[0] if len(xunits) == 1 else "(mixed units)" if xunits else "")
+        for name, scale in (("Rescale X", "xscale"), ("Rescale Y", "yscale")):
+            units = sorted({getattr(d, scale).units or "" for d in arrays})
+            self.forms[name].set_note("from_units", (
+                "" if not units
+                else "currently " + ", ".join(u or "(none)" for u in units)))
+        self._show_resample_note()
+
+    def _show_resample_note(self) -> None:
+        """Resample: the arrays' interval and number of points now, and
+        after (as typed)."""
+        arrays = [d for d in getattr(self, "_selected_arrays", [])
+                  if hasattr(d.nparray, "size")]
+        form, text = self.forms["Resample"], ""
+        if arrays:
+            first = arrays[0]
+            deltas = sorted({d.xscale.delta for d in arrays})
+            sizes = sorted({int(d.nparray.size) for d in arrays})
+            units = f" {first.xscale.units}" if first.xscale.units else ""
+            text = "currently " + (f"{deltas[0]:g}{units}" if len(deltas) == 1
+                                   else "mixed intervals")
+            text += (f", {sizes[0]} points" if len(sizes) == 1
+                     else f", {sizes[0]} to {sizes[-1]} points")
+            try:
+                new = float(form.control("delta").text())
+            except ValueError:
+                new = 0.0
+            if new > 0 and len(deltas) == 1 and len(sizes) == 1:
+                text += f"; then about {round(sizes[0] * deltas[0] / new)}"
+        form.set_note("delta", text)
 
     def refresh(self) -> None:
         """The data changed (e.g. arrays deleted or edited): drawn again."""
@@ -873,6 +970,8 @@ class MainToolTab(SelectionRunTab):
 
     def _on_function_changed(self, *_args) -> None:
         name = self.entry()
+        if name in XSCALE:  # its pickers: the folder's arrays now
+            self._show_xscale_forms()
         self.form_stack.setCurrentWidget(self.forms[name] if name else self.no_form)
         self.reset_button.setEnabled(name is not None)
         if name is None:
@@ -883,7 +982,9 @@ class MainToolTab(SelectionRunTab):
         elif name in FUNCTIONS:
             self.function_info.setText(f"{FUNCTIONS[name][0]}.")
         else:
-            info = f"Permanent operation: {OPERATIONS[name][0]}."
+            info = (f"X scale only: {OPERATIONS[name][0]}. The values aren't changed."
+                    if name in SCALE_ONLY
+                    else f"Permanent operation: {OPERATIONS[name][0]}.")
             if name in ALSO_VIRTUAL:
                 info += " See channel Filter & Transform to apply virtual operations."
             self.function_info.setText(info)
@@ -996,8 +1097,18 @@ class MainToolTab(SelectionRunTab):
             self.show_warning(
                 f"{series.name} is locked: unlock it, or copy it and run on the copy")
             return False
-        x_warning = self._xarray_warning(name, targets)
-        if not targets or (not self._tool.ask_before_changing and not x_warning):
+        if name in ("Rescale X", "Set X Start"):  # an x array: refused (#561)
+            with_x = next((t["data"] for t in targets if t.get("data") is not None
+                           and t["data"].xarray is not None), None)
+            if with_x is not None:
+                self.show_warning(
+                    f"{with_x.name} has an x array ({with_x.xarray_name or 'its own'}): "
+                    f"{name} changes start and delta, not its values; change "
+                    "the x array itself")
+                return False
+        x_warning = self._xarray_warning(name, targets) + self._channels_warning(name)
+        ask = self._tool.ask_before_changing and name not in SCALE_ONLY
+        if not targets or (not ask and not x_warning):
             return True
         what = self.selection.get("dataseries")
         source = what.name if what is not None and self.selection.get(
@@ -1007,11 +1118,33 @@ class MainToolTab(SelectionRunTab):
             name, f"{name} changes {n} array{'s' * (n != 1)} of {source}.{x_warning} "
             "Continue?")
 
+    def _channels_warning(self, name: str) -> str:
+        """Rescale X or Align on some of a data series' channels: the others
+        keep their x, so the channels no longer share a time base (#561);
+        asked first, whatever Settings. (Resample and Interpolate keep each
+        value at its x: no need.)"""
+        selection = self.selection
+        series, channel = selection.get("dataseries"), selection.get("channel")
+        if (name not in SCALE_ONLY or selection.get("source") != "dataseries"
+                or series is None or channel is None or selection.get("all_channels")):
+            return ""
+        others = [c for c in series.channels.keys() if c != channel.name]
+        if not others:
+            return ""
+        them = (f"Channel {others[0]} isn't" if len(others) == 1
+                else f"Channels {', '.join(others)} aren't")
+        change = ("its x units will differ from" if name == "Rescale X"
+                  else "its epochs will no longer line up in time with")
+        if len(others) > 1:
+            change = change.replace("its", "their")
+        return (f" {them} changed, so {change} {channel.name}'s "
+                "(choose All channels to change them together).")
+
     @staticmethod
     def _xarray_warning(name: str, targets: list[dict]) -> str:
         """A Points operation on arrays with an x array: their x values aren't
         changed with their points (#559); asked first, whatever Settings."""
-        if name not in POINTS:
+        if name not in POINTS and name != "Resample":
             return ""
         names = {d.xarray_name or "its own x values"
                  for d in (t.get("data") for t in targets)
@@ -1070,6 +1203,11 @@ class MainToolTab(SelectionRunTab):
         # An operation that changed the arrays' points (e.g. Delete Points,
         # #559): an x array that no longer fits is said (start and delta
         # are used until it's fixed)
+        skipped = getattr(self._tool.op, "skipped", None) if succeeded else None
+        if skipped:  # Align: no reference value (NaN)
+            more = f" (and {len(skipped) - 1} more)" if len(skipped) > 1 else ""
+            self.show_warning(f"{skipped[0]}{more} not aligned: its reference "
+                              "value is NaN")
         changed, self._changing = getattr(self, "_changing", []), []
         unfit = self._tool.unfit_xarrays(changed) if succeeded else []
         if unfit:

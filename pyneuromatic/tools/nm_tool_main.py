@@ -27,7 +27,7 @@ import numpy as np
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.tools.nm_main_op import (
     NMMainOp, NMMainOpAccumulate, NMMainOpAverage, op_from_name)
-from pyneuromatic.tools.nm_tool import NMTool
+from pyneuromatic.tools.nm_tool import NMTool, subfolder_name
 from pyneuromatic.tools.nm_tool_config import NMToolConfig
 from pyneuromatic.tools.nm_tool_folder import NMToolFolder
 from pyneuromatic.core.nm_command_history import records_command
@@ -200,7 +200,11 @@ class NMToolMain(NMTool):
                 raise RuntimeError(
                     "%s is locked: unlock it, or copy it and run on the copy"
                     % series.name)
-        return super().run_all(targets, run_keys=run_keys)
+        self._targets = targets  # the op sees them all first (_op_context)
+        try:
+            return super().run_all(targets, run_keys=run_keys)
+        finally:
+            self._targets = []
 
     # ------------------------------------------------------------------
     # Lifecycle hooks
@@ -215,8 +219,32 @@ class NMToolMain(NMTool):
         self._last: tuple[str, bool] | None = None  # (channel, added): discard_last
         self._toolfolder = None
         self._outputs = []
+        self._op_context()
         self._op.run_init()
         return True
+
+    @staticmethod
+    def _target_data(target: dict) -> tuple[NMData | None, str | None]:
+        """A target's array and channel name, as :meth:`run` finds them."""
+        series, channel, epoch = (target.get("dataseries"), target.get("channel"),
+                                  target.get("epoch"))
+        name = getattr(channel, "name", None)
+        if series is not None and channel is not None and epoch is not None:
+            return series.get_data(channel.name, epoch.name), name
+        return target.get("data"), name
+
+    def _op_context(self) -> None:
+        """What :meth:`NMMainOp.run_all` gives an op before its run_init:
+        every array of the run (e.g. Interpolate's common x axis, Align's
+        and Arithmetic's one value per array), its folder and prefix."""
+        items = [self._target_data(t) for t in getattr(self, "_targets", [])]
+        items = [(d, c) for d, c in items if d is not None]
+        first = getattr(self, "_targets", None) or [{}]
+        series = first[0].get("dataseries")
+        self._op._folder = first[0].get("folder")
+        self._op._prefix = series.name if series is not None else None
+        self._op._n_items = len(items)
+        self._op._data_items = items
 
     def run(self) -> bool:
         """Process the currently selected data item via the current op."""
@@ -308,6 +336,8 @@ class NMToolMain(NMTool):
             self._write_outputs()
         else:
             self._op.run_finish(self._run_folder, self._run_prefix)
+        if getattr(self._op, "UPDATES_TEMPLATE", False):
+            self._update_templates()
         meta = self.run_meta
         nmh.history(
             "%s: folders=%s, dataseries=%s, channels=%s, epochs=%s"
@@ -321,6 +351,26 @@ class NMToolMain(NMTool):
             path="NMToolMain.run_finish",
         )
         return True
+
+    def _update_templates(self) -> None:
+        """After Rescale X, Resample or Interpolate on all of a channel's
+        epochs: the channel's own x scale (the template for its new arrays)
+        follows, if they now agree (#561)."""
+        channels: dict[int, tuple] = {}
+        for target in getattr(self, "_targets", []):
+            channel, data = target.get("channel"), self._target_data(target)[0]
+            if channel is not None and data is not None:
+                channels.setdefault(id(channel), (channel, set()))[1].add(id(data))
+        for channel, changed in channels.values():
+            arrays = list(getattr(channel, "data", []) or [])
+            if not arrays or {id(d) for d in arrays} != changed:
+                continue  # some epochs not run: left as it is
+            scales = {(d.xscale.start, d.xscale.delta, d.xscale.units) for d in arrays}
+            if len(scales) != 1:
+                continue
+            start, delta, units = scales.pop()
+            for key, value in (("start", start), ("delta", delta), ("units", units)):
+                getattr(channel.xscale, "_set_" + key)(value, log=False)
 
     # ------------------------------------------------------------------
     # A function's outputs (#553)
@@ -336,7 +386,7 @@ class NMToolMain(NMTool):
         code = self._selection_code()
         if code:
             parts.append(code)
-        return "_".join(parts)
+        return subfolder_name(parts)
 
     def _write_outputs(self) -> None:
         """The function's outputs in a Main subfolder, noted, and made a

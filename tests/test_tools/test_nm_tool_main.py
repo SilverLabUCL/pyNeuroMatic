@@ -4487,6 +4487,64 @@ class TestMainOperations(unittest.TestCase):
             self.assertFalse(op.CHANGES_DATA)
         self.assertTrue(NMMainOpSmooth.CHANGES_DATA)
 
+    def test_subfolder_names_dont_double_underscores(self):
+        """A data series named SPK_ (Spike's): Main_SPK_A_All_0, not
+        Main_SPK__A_All_0; as Stats' and Spike's (subfolder_name)."""
+        from pyneuromatic.tools.nm_tool import subfolder_name
+        self.assertEqual(subfolder_name(["Stats", "SPK_", "A", "All"]), "Stats_SPK_A_All")
+        self.assertEqual(subfolder_name(["Main", "_X__", "", "S1"]), "Main_X_S1")
+        spk = self.folder.new_dataseries("SPK_", n_channels=1, n_epochs=2, n_points=4)
+        tool = self.nm.main
+        tool.op = NMMainOpAverage()
+        tool.run_selection(spk, channel="A", epochs="all")
+        self.assertEqual(tool.toolfolder.name, "Main_SPK_A_All_0")
+
+    def test_ops_that_need_all_arrays_run_from_nm_main(self):
+        """Align's one value per array and Interpolate's common x axis need
+        every array first: nm.main gives them (#561)."""
+        from pyneuromatic.tools.nm_main_op import (
+            NMMainOpAlign, NMMainOpInterpolate, find_array, array_names)
+        tool = self.nm.main
+        tool.op = NMMainOpAlign(xvalues=[1.0, 2.0])
+        tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertEqual([self.series.get_data("A", "E%d" % e).xscale.start
+                          for e in range(2)], [-1.0, -2.0])
+        tool.op = NMMainOpInterpolate()
+        tool.run_selection(self.series, channel="A", epochs="all")
+        a0 = self.series.get_data("A", "E0")
+        self.assertEqual((a0.xscale.start, a0.nparray.size), (-1.0, 3))
+        self.assertIsNone(find_array(self.folder, "Main_x/none"))
+        self.assertIn("RecordA0", array_names(self.folder))
+
+    def test_set_x_start_and_x_array_refusals(self):
+        """Set X Start (#561); it and Rescale X refuse an x array before
+        changing any array, through nm.main too."""
+        from pyneuromatic.tools.nm_main_op import NMMainOpRescaleX, NMMainOpSetXStart
+        tool = self.nm.main
+        tool.op = "set_xstart"  # by name
+        tool.op = NMMainOpSetXStart(value=2.5, mode="shift")
+        tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertEqual(self.series.get_data("A", "E1").xscale.start, 2.5)
+        with self.assertRaises(ValueError):
+            NMMainOpSetXStart(mode="move")
+        self.series.get_data("A", "E1").xarray = np.arange(4.0)
+        for op in (NMMainOpSetXStart(value=0.0), NMMainOpRescaleX(to_units="s")):
+            tool.op = op
+            with self.assertRaisesRegex(ValueError, "RecordA1 has an x array"):
+                tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertEqual(self.series.get_data("A", "E0").xscale.start, 2.5)  # unchanged
+
+    def test_interpolate_uses_an_x_array(self):
+        """Its x values are the x array's; then evenly spaced, no x array."""
+        from pyneuromatic.tools.nm_main_op import NMMainOpInterpolate
+        a0 = self.series.get_data("A", "E0")
+        a0.xarray = np.array([0.0, 1.0, 3.0, 4.0])
+        a0.nparray = np.array([0.0, 1.0, 3.0, 4.0])
+        NMMainOpInterpolate().run_all([(a0, "A")], self.folder)
+        np.testing.assert_array_almost_equal(a0.nparray, [0, 1, 2, 3, 4])
+        self.assertIsNone(a0.xarray)
+        self.assertEqual((a0.xscale.start, a0.xscale.delta), (0.0, 1.0))
+
     def test_points_operations_and_unfit_x_arrays(self):
         """Delete Points shortens the arrays (#559); an x array that no longer
         fits is found."""
