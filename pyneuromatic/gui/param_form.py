@@ -122,13 +122,7 @@ class ParamForm(QtWidgets.QWidget):
     def _enable(self) -> None:
         """A parameter shown with *when*: enabled only while the other has
         its value (e.g. a color only with "One color")."""
-        current = {}
-        for param in self.params:
-            control = self._controls[param.name]
-            if param.kind == CHOICE:
-                current[param.name] = control.currentData()
-            elif param.kind == BOOLEAN:
-                current[param.name] = control.isChecked()
+        current = self._current()
         for param in self.params:
             if param.when:
                 for widget in self._rows[param.name]:
@@ -149,19 +143,33 @@ class ParamForm(QtWidgets.QWidget):
             self._controls[param.name] = button
             self._show_color(param.name, param.default or "#000000")
             return button
-        if param.kind == TEXT:
-            edit = QtWidgets.QLineEdit(self)
+        if param.kind == TEXT:  # in a row: room for a note (set_note)
+            row = QtWidgets.QWidget(self)
+            layout = QtWidgets.QHBoxLayout(row)
+            layout.setContentsMargins(0, 0, 0, 0)
+            edit = QtWidgets.QLineEdit(row)
             edit.setToolTip(param.tip)
             edit.setMaximumWidth(120)
             edit.editingFinished.connect(self.changed)
+            layout.addWidget(edit)
+            layout.addStretch(1)
             self._controls[param.name] = edit
-            return edit
+            return row
         if param.kind in (CHOICE, ARRAY):
             combo = QtWidgets.QComboBox(self)
             combo.setToolTip(param.tip)
+            if param.kind == ARRAY:  # names can be long (subfolder/name): the row's width
+                combo.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                    QtWidgets.QSizePolicy.Policy.Fixed)
+                combo.setSizeAdjustPolicy(
+                    QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+                combo.setMinimumContentsLength(16)
             for value, shown in param.choices:
                 combo.addItem(str(shown), value)
             combo.currentIndexChanged.connect(lambda _i: self.changed.emit())
+            if param.kind == ARRAY:
+                combo.currentIndexChanged.connect(
+                    lambda _i, n=param.name: self._show_array_tip(n))
             self._controls[param.name] = combo
             return combo
         row = QtWidgets.QWidget(self)
@@ -232,6 +240,7 @@ class ParamForm(QtWidgets.QWidget):
                 return
             row = self._rows[name][-1]
             label = QtWidgets.QLabel("", row)
+            label.setWordWrap(True)  # wraps, rather than widening the form
             layout = row.layout()
             layout.insertWidget(layout.count() - 1, label)  # before its stretch
             self._notes[name] = label
@@ -272,6 +281,19 @@ class ParamForm(QtWidgets.QWidget):
         index = combo.findData(current)
         combo.setCurrentIndex(max(index, 0))
         combo.blockSignals(False)
+        # The list opens wide enough for the longest name, if the row isn't
+        metrics = combo.fontMetrics()
+        widest = max((metrics.horizontalAdvance(n) for n in names), default=0)
+        combo.view().setMinimumWidth(widest + 40)
+        self._show_array_tip(name)
+
+    def _show_array_tip(self, name: str) -> None:
+        """An array picker's tooltip: its tip, then the array chosen in full
+        (cut short in the row if long)."""
+        param = next(p for p in self.params if p.name == name)
+        combo = self._controls[name]
+        chosen = combo.currentText()
+        combo.setToolTip(f"{chosen}\n\n{param.tip}" if chosen else param.tip)
 
     # --- values -----------------------------------------------------------------
 
@@ -286,11 +308,27 @@ class ParamForm(QtWidgets.QWidget):
         if any(p.kind == XRANGE for p in self.params):
             self.ranges_changed.emit()
 
+    def _current(self) -> dict[str, Any]:
+        """The choices' and checkboxes' values now (what "when" looks at)."""
+        current = {}
+        for param in self.params:
+            control = self._controls[param.name]
+            if param.kind == CHOICE:
+                current[param.name] = control.currentData()
+            elif param.kind == BOOLEAN:
+                current[param.name] = control.isChecked()
+        return current
+
     def values(self) -> dict[str, Any]:
         """Each parameter's value, checked (an x range: a (begin, end)
-        pair); raises ValueError, naming the parameter, if one isn't valid."""
+        pair); raises ValueError, naming the parameter, if one isn't valid.
+        A parameter that doesn't apply now ("when", shown disabled) isn't
+        refused: kept if valid, else left out (#561), e.g. Interpolate's
+        template, nothing to pick, on a common x axis."""
         values = {}
+        current = self._current()
         for param in self.params:
+            applies = param.enabled(current)
             control = self._controls[param.name]
             if param.kind == BOOLEAN:
                 raw = control.isChecked()
@@ -303,7 +341,11 @@ class ParamForm(QtWidgets.QWidget):
                 raw = self._colors[param.name]
             else:
                 raw = control.text()
-            values[param.name] = param.check(raw)
+            try:
+                values[param.name] = param.check(raw)
+            except ValueError:
+                if applies:
+                    raise
         return values
 
     def set_values(self, values: dict[str, Any]) -> None:

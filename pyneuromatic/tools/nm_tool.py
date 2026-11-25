@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime
 import math
+import re
 from typing import Callable
 
 import pyneuromatic.core.nm_history as nmh
@@ -60,6 +61,13 @@ def set_code(name: str) -> str:
     if name[:3].lower() == "set" and (suffix.isdigit() or suffix.upper() == "X"):
         return "S" + suffix
     return name[:8]
+
+
+def subfolder_name(parts: list[str]) -> str:
+    """A tool's subfolder name from its *parts*, joined by "_", e.g.
+    ``Stats_Record_A_All``; a part's own "_" not doubled (data series SPK_:
+    ``Stats_SPK_A_All``, not ``Stats_SPK__A_All``)."""
+    return re.sub(r"_{2,}", "_", "_".join(p for p in parts if p)).strip("_")
 
 
 class NMTool:
@@ -401,7 +409,7 @@ class NMTool:
         code = self._selection_code()
         if code:
             parts.append(code)
-        base = "_".join(parts)
+        base = subfolder_name(parts)
         folder = self.folder.toolfolders.get_or_create(base, overwrite=overwrite)
         # Noted, so run_each() can say which subfolder each run wrote
         made = getattr(self, "_made_toolfolders", None)

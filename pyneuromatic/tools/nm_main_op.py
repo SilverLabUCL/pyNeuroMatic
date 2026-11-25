@@ -30,7 +30,7 @@ import numpy as np
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_folder import NMFolder
 from pyneuromatic.core.nm_params import (
-    BOOLEAN, CHOICE, INTEGER, NUMBER, TEXT, X_RANGE, XRANGE, NMParam)
+    ARRAY, BOOLEAN, CHOICE, INTEGER, NUMBER, TEXT, X_RANGE, XRANGE, NMParam)
 
 # Operations' common parameters (#557)
 _WHOLE = (-math.inf, math.inf)
@@ -40,6 +40,42 @@ _MODE = NMParam("mode", CHOICE, "Measure from", default="per_array",
                 choices=(("per_array", "each array"), ("average", "average of all arrays")),
                 tip="Use each array's own measure, or the average of the measures "
                     "of all selected arrays (per channel)")
+
+def find_array(folder: NMFolder | None, name: str | None) -> NMData | None:
+    """Array *name* in *folder*, or in one of its subfolders as
+    ``"subfolder/name"`` (e.g. a Stats2 output, #561); None if not there."""
+    if folder is None or not name:
+        return None
+    if "/" in name:
+        sub, name = name.split("/", 1)
+        toolfolders = getattr(folder, "toolfolders", None)
+        folder = toolfolders.get(sub) if toolfolders is not None else None
+        if folder is None:
+            return None
+    return folder.data.get(name)
+
+
+def array_names(folder: NMFolder | None) -> list[str]:
+    """The arrays :func:`find_array` finds: the folder's, then each
+    subfolder's as ``"subfolder/name"``."""
+    if folder is None:
+        return []
+    names = list(folder.data.keys())
+    toolfolders = getattr(folder, "toolfolders", None)
+    for sub_name, sub in (toolfolders.items() if toolfolders is not None else ()):
+        names += ["%s/%s" % (sub_name, n) for n in sub.data.keys()]
+    return names
+
+
+def x_of(data: NMData) -> np.ndarray:
+    """*data*'s x values: its x array if it fits, else from start and delta."""
+    y, xarray = data.nparray, data.xarray
+    n = len(y) if y is not None else 0
+    if xarray is not None and xarray.size == n and not data.xarray_problem():
+        return np.asarray(xarray, dtype=float)
+    return data.xscale.start + data.xscale.delta * np.arange(n)
+
+
 import pyneuromatic.core.nm_history as nmh
 import pyneuromatic.core.nm_math as nm_math
 import pyneuromatic.core.nm_utilities as nmu
@@ -245,6 +281,16 @@ class NMMainOp:
         prefix: str | None = None,
     ) -> None:
         """Called once after the per-item loop.  Override to write results."""
+
+    def _refuse_xarrays(self, what: str) -> None:
+        """Before any array changes: refused if one of the run's arrays has
+        an x array, whose values start and delta don't change (#561)."""
+        for data, _channel in getattr(self, "_data_items", []):
+            if data.xarray is not None:
+                raise ValueError(
+                    "%s has an x array (%s): %s changes the x scale's start "
+                    "and delta, not its values; change the x array itself"
+                    % (data.name, data.xarray_name or "its own x values", what))
 
     def _add_note(self, data: NMData, text: str) -> None:
         """Append a timestamped note to data.notes if available."""
@@ -1739,6 +1785,14 @@ class NMMainOpResample(NMMainOp):
     """
 
     name = "resample"
+    PARAMS = (
+        NMParam("delta", NUMBER, "New interval", default=None, finite=True,
+                tip="The arrays' new sample interval, in their x units (e.g. "
+                    "0.1 ms): larger keeps fewer points, smaller adds points "
+                    "(anti-aliased)"),
+    )
+    # The channel's template scale follows a run on all its epochs (#561)
+    UPDATES_TEMPLATE = True
 
     def __init__(self, delta: float) -> None:
         self.delta = delta
@@ -1821,6 +1875,24 @@ class NMMainOpInterpolate(NMMainOp):
 
     name = "interpolate"
 
+    PARAMS = (
+        NMParam("x_source", CHOICE, "Onto", default="common",
+                choices=(("common", "a common x axis"), ("template", "an array's x")),
+                tip="A common x axis of each channel's selected arrays, or "
+                    "the x values of a template array"),
+        NMParam("x_extent", CHOICE, "Extent", default="overlap",
+                choices=(("overlap", "overlap"), ("expand", "expand")),
+                when=("x_source", "common"),
+                tip="Overlap: only the x range all the arrays share; Expand: "
+                    "all of their x ranges (NaN where an array has no points)"),
+        NMParam("template_name", ARRAY, "Template",
+                when=("x_source", "template"),
+                tip="The array whose x values the arrays are interpolated onto"),
+        NMParam("method", CHOICE, "Method", default="linear",
+                choices=(("linear", "linear"), ("cubic", "cubic"))),
+    )
+    UPDATES_TEMPLATE = True
+
     def __init__(
         self,
         method: str = "linear",
@@ -1832,7 +1904,7 @@ class NMMainOpInterpolate(NMMainOp):
         self.x_source = x_source
         self.x_extent = x_extent
         self.template_name = template_name
-        self._x_new: np.ndarray | None = None
+        self._x_new: dict | None = None  # channel: x axis
 
     # ------------------------------------------------------------------
     # Properties
@@ -1900,20 +1972,37 @@ class NMMainOpInterpolate(NMMainOp):
     # Core
 
     def run_init(self) -> None:
+        """The x axis to interpolate onto: a common one per channel (all the
+        channels' arrays apart, #561), or the template's."""
         self._x_new = None
+        items = getattr(self, "_data_items", None) or []
         if self._x_source == "common":
-            self._x_new = self._compute_common_x()
+            channels: dict = {}
+            for data, channel in items:
+                channels.setdefault(channel, []).append((data, channel))
+            self._x_new = {channel: self._compute_common_x(group)
+                           for channel, group in channels.items()} or None
         elif self._x_source == "template":
-            self._x_new = self._compute_template_x()
+            x = self._compute_template_x()
+            self._x_new = None if x is None else {None: x}
 
-    def _compute_common_x(self) -> np.ndarray | None:
-        """Derive common x-axis from all data items.
+    def _x_for(self, channel_name: str | None) -> np.ndarray | None:
+        if self._x_new is None:
+            return None
+        if self._x_source == "template":
+            return self._x_new[None]
+        return self._x_new.get(channel_name)
+
+    def _compute_common_x(self, items=None) -> np.ndarray | None:
+        """Derive a common x-axis from *items* (all data items by default):
+        their x values (an x array's, if they have one).
 
         ``x_extent='overlap'``: intersection of all x-ranges (no NaNs).
         ``x_extent='expand'``: union of all x-ranges (NaN where an array has
         no data).
         """
-        items = getattr(self, "_data_items", None)
+        if items is None:
+            items = getattr(self, "_data_items", None)
         if not items:
             return None
         starts, ends, deltas = [], [], []
@@ -1921,11 +2010,11 @@ class NMMainOpInterpolate(NMMainOp):
             y = data.nparray
             if y is None or len(y) == 0:
                 continue
-            s = data.xscale.start
-            d = data.xscale.delta
-            starts.append(s)
-            ends.append(s + (len(y) - 1) * d)
-            deltas.append(d)
+            x = x_of(data)
+            starts.append(float(np.nanmin(x)))
+            ends.append(float(np.nanmax(x)))
+            steps = np.diff(x)
+            deltas.append(float(np.median(steps)) if steps.size else 1.0)
         if not starts:
             return None
         if self._x_extent == "expand":
@@ -1944,18 +2033,10 @@ class NMMainOpInterpolate(NMMainOp):
         """Derive x-axis from the named template NMData array."""
         if not self._template_name:
             return None
-        folder = getattr(self, "_folder", None)
-        if folder is None:
-            return None
-        d = folder.data.get(self._template_name)
+        d = find_array(getattr(self, "_folder", None), self._template_name)
         if d is None or d.nparray is None:
             return None
-        n = len(d.nparray)
-        return np.linspace(
-            d.xscale.start,
-            d.xscale.start + (n - 1) * d.xscale.delta,
-            n,
-        )
+        return x_of(d)
 
     def run(
         self,
@@ -1971,16 +2052,18 @@ class NMMainOpInterpolate(NMMainOp):
                 "NMMainOpInterpolate: x_new not set — call run_all() or "
                 "run_init() before run(), or check x_source/template_name"
             )
-        n = len(y)
-        x_old = np.linspace(
-            data.xscale.start,
-            data.xscale.start + (n - 1) * data.xscale.delta,
-            n,
-        )
-        data.nparray = nm_math.interpolate(y, x_old, self._x_new,
-                                           method=self._method)
-        data.xscale.start = float(self._x_new[0])
-        data.xscale.delta = float(self._x_new[1] - self._x_new[0])
+        x_new = self._x_for(channel_name)
+        if x_new is None:
+            if self._x_source == "template":
+                raise ValueError("Interpolate: template array %r not found, or empty"
+                                 % self._template_name)
+            raise ValueError("Interpolate: the arrays share no x range (try Expand)")
+        x_old = x_of(data)
+        data.nparray = nm_math.interpolate(y, x_old, x_new, method=self._method)
+        data.xscale.start = float(x_new[0])
+        data.xscale.delta = float(x_new[1] - x_new[0]) if x_new.size > 1 else 1.0
+        if data.xarray is not None:  # now evenly spaced: start and delta
+            data.xarray = None
         self._add_op_note(data, self._op_params_str())
 
     def _op_params_str(self) -> str:
@@ -2023,16 +2106,32 @@ class NMMainOpAlign(NMMainOp):
     """
 
     name = "align"
+    PARAMS = (
+        NMParam("values_array", ARRAY, "Reference x",
+                tip="An array of x values, one per selected array in order "
+                    "(e.g. Stats2's onset times); NaN: that array isn't aligned. "
+                    "(To move every array by one value: Set X Start)"),
+        NMParam("target", CHOICE, "Align to", default=0.0,
+                choices=((0.0, "x = 0"), ("mean", "their mean"),
+                         ("min", "their minimum"), ("max", "their maximum")),
+                tip="Where the arrays' reference x values end up: x = 0, or "
+                    "the mean, minimum or maximum of them"),
+    )
 
     def __init__(
         self,
         xvalues: float | list[float] | dict[str, float] = 0.0,
         target: float | str = 0.0,
+        values_array: str | None = None,
     ) -> None:
         self.xvalues = xvalues
         self.target = target
+        if values_array is not None and not isinstance(values_array, str):
+            raise TypeError(nmu.type_error_str(values_array, "values_array", "string"))
+        self.values_array = values_array  # one value per array (#561)
         self._index: int = 0
         self._target_xvalue: float = 0.0
+        self.skipped: list[str] = []  # arrays with a NaN reference: not aligned
 
     # ------------------------------------------------------------------
     # Properties
@@ -2081,6 +2180,17 @@ class NMMainOpAlign(NMMainOp):
 
     def run_init(self) -> None:
         self._index = 0
+        self.skipped = []
+        if self.values_array:  # one value per array, in order (#561)
+            source = find_array(getattr(self, "_folder", None), self.values_array)
+            if source is None or source.nparray is None:
+                raise ValueError("Align: array %r not found" % self.values_array)
+            values = [float(v) for v in np.ravel(source.nparray)]
+            if len(values) != self._n_items:
+                raise ValueError(
+                    "Align: %s has %d values for %d arrays (one per array, in order)"
+                    % (self.values_array, len(values), self._n_items))
+            self._xvalues = values
         if isinstance(self._xvalues, list) and len(self._xvalues) != self._n_items:
             raise IndexError(
                 "NMMainOpAlign: xvalues list length must match number of "
@@ -2089,7 +2199,9 @@ class NMMainOpAlign(NMMainOp):
         if isinstance(self._target, (int, float)):
             self._target_xvalue = float(self._target)
         else:
-            values = self._collect_xvalues()
+            values = [v for v in self._collect_xvalues() if not math.isnan(v)]
+            if not values:
+                raise ValueError("Align: no reference values (all NaN)")
             if self._target == "mean":
                 self._target_xvalue = float(np.mean(values))
             elif self._target == "min":
@@ -2123,12 +2235,17 @@ class NMMainOpAlign(NMMainOp):
         xvalue = self._get_xvalue(data.name)
         if xvalue is None:
             return  # dict mode: name not found — skip
+        if math.isnan(xvalue):  # e.g. no onset found: left as it is
+            self.skipped.append(data.name)
+            return
         xshift = self._target_xvalue - xvalue
         data.xscale.start = data.xscale.start + xshift
         self._add_op_note(data, "xvalue=%.6g, target=%.6g, xshift=%.6g" % (
             xvalue, self._target_xvalue, xshift))
 
     def _op_params_str(self) -> str:
+        if self.values_array:
+            return "values_array=%r, target=%r" % (self.values_array, self._target)
         return "xvalues=%r, target=%r" % (self._xvalues, self._target)
 
 
@@ -2801,6 +2918,14 @@ class NMMainOpRescaleX(NMMainOp):
     """
 
     name = "rescale_x"
+    PARAMS = (
+        NMParam("to_units", TEXT, "To units", required=True,
+                tip="The new x units, e.g. s, ms or us (start and delta "
+                    "converted)"),
+        NMParam("from_units", TEXT, "From units",
+                tip="The arrays' x units now (blank: their own)"),
+    )
+    UPDATES_TEMPLATE = True
 
     def __init__(
         self,
@@ -2845,6 +2970,7 @@ class NMMainOpRescaleX(NMMainOp):
 
     def run_init(self) -> None:
         self._validate()
+        self._refuse_xarrays("Rescale X")  # #561
 
     def run(self, data: NMData, channel_name: str | None = None) -> None:
         from_units = self._from_units if self._from_units is not None \
@@ -2864,6 +2990,56 @@ class NMMainOpRescaleX(NMMainOp):
 
     def _op_params_str(self) -> str:
         return "to_units=%r, from_units=%r" % (self._to_units, self._from_units)
+
+
+# =========================================================================
+# Set X start
+# =========================================================================
+
+
+class NMMainOpSetXStart(NMMainOp):
+    """Set, or shift, each selected array's x start (#561); its values and
+    x delta are unchanged.
+
+    Parameters:
+        value: The new x start ("set"), or what is added to it ("shift").
+        mode: ``"set"`` (default): every array starts at *value*;
+            ``"shift"``: each array's start moves by *value*, so the arrays
+            keep their differences (e.g. -10: x 10 becomes 0).
+    """
+
+    name = "set_xstart"
+    PARAMS = (
+        NMParam("mode", CHOICE, "X start", default="set",
+                choices=(("set", "set to"), ("shift", "shift by")),
+                tip="Set each array's x start to the value (all start there), "
+                    "or shift it by the value (their differences kept)"),
+        NMParam("value", NUMBER, "Value", default=0.0, finite=True,
+                tip="e.g. set to 0; or shift by -10 to move x = 10 to 0"),
+    )
+    UPDATES_TEMPLATE = True
+    _VALID_MODES = ("set", "shift")
+
+    def __init__(self, value: float = 0.0, mode: str = "set") -> None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(nmu.type_error_str(value, "value", "float"))
+        if not math.isfinite(value):
+            raise ValueError("value must be finite, got %r" % value)
+        if mode not in self._VALID_MODES:
+            raise ValueError("mode must be one of %s, got %r" % (self._VALID_MODES, mode))
+        self.value = float(value)
+        self.mode = mode
+
+    def run_init(self) -> None:
+        self._refuse_xarrays("Set X Start")
+
+    def run(self, data: NMData, channel_name: str | None = None) -> None:
+        start = data.xscale.start
+        data.xscale.start = self.value if self.mode == "set" else start + self.value
+        self._add_op_note(data, "%s, from=%.6g" % (self._op_params_str(), start))
+
+    def _op_params_str(self) -> str:
+        return "value=%r, mode=%r" % (self.value, self.mode)
 
 
 # =========================================================================
@@ -3935,6 +4111,7 @@ _OP_REGISTRY: dict[str, type[NMMainOp]] = {
     "interpolate": NMMainOpInterpolate,
     "resample": NMMainOpResample,
     "rescale_x": NMMainOpRescaleX,
+    "set_xstart": NMMainOpSetXStart,
     # --- display (no output array; produces a figure) ---
     "plot": NMMainOpPlot,
 }

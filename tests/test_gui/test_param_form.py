@@ -144,3 +144,16 @@ def test_x_scale_back_to_point_numbers():
     assert [scale.index(x) for x in (0.0, 1.0, 1.6, 2.6)] == [0, 0, 1, 3]
     uneven = XScale(xarray=np.array([0.0, 1.0, 4.0, 9.0]))
     assert [uneven.index(x) for x in (0.4, 3.0, 20.0)] == [0, 2, 3]
+
+
+def test_array_picker_shows_long_names(qtbot):
+    """Long names (subfolder/name): the list opens wide enough; the one
+    chosen in full in the tooltip."""
+    form = ParamForm((NMParam("ref", ARRAY, "Array", tip="Pick one"),))
+    qtbot.addWidget(form)
+    long_name = "Stats_Record_A_All_0/ST_w0_rt_p_p0_x"
+    form.set_array_names("ref", ["A", long_name])
+    combo = form.control("ref")
+    assert combo.view().minimumWidth() > combo.fontMetrics().horizontalAdvance(long_name)
+    combo.setCurrentIndex(1)
+    assert combo.toolTip() == long_name + "\n\nPick one"

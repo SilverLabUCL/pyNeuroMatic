@@ -286,6 +286,25 @@ class TestNMToolStats(unittest.TestCase):
                 else:
                     self.assertEqual(len(saved), 1, (func, units, saved))
 
+    def test_results_to_numpy_units_when_the_first_step_fails(self):
+        """A rise time not found in the first array: its p0 and p1 x arrays
+        still have the x units, from the arrays where it was (#561)."""
+        self._setup_folder()
+        w = list(self.tool.windows)[0]
+        w._win_set({"func": {"name": "risetime+", "p0": 10, "p1": 90}, "xbgn": 9.0,
+                    "bsln_on": True, "bsln_func": "mean", "bsln_xbgn": 0.0,
+                    "bsln_xend": 8.0}, quiet=True)
+        results = self.tool._NMToolStats__results
+        for k, y in enumerate([np.full(21, -70.0), self._ramp()]):
+            data = NMData(NM, name="recordA%d" % k, nparray=y,
+                          xscale={"start": 0.0, "delta": 1.0, "units": "ms"})
+            w.compute(data)
+            results.setdefault(w.name, []).append(w.results)
+        f = self.tool._write_results_to_numpy()
+        for name in ("ST_w0_rt_p_p0_x", "ST_w0_rt_p_p1_x"):
+            self.assertEqual(f.data.get(name).yscale.units, "ms", name)
+            self.assertTrue(math.isnan(f.data.get(name).nparray[0]))
+
     def test_results_to_numpy_multistep_arrays_one_value_per_data(self):
         # Rise time records peak, p0 and p1 results per data array; each step
         # gets its own arrays, aligned with ST_w0_data. The last array has an

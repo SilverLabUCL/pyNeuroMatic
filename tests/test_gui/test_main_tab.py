@@ -205,6 +205,23 @@ def test_color_and_rainbow(app):
     curves = tab.plot_view.plots[0].listDataItems()
     hues = [c.opts["pen"].color().hsvHueF() for c in curves]
     assert len(curves) == 3 and hues == sorted(hues)
+    form = tab.forms["Plot"]
+    assert form._rows["reverse_colors"][0].isEnabled()  # with Rainbow
+    form.set_values({"reverse_colors": True})  # violet to red
+    _entry(app, "Plot")
+    curves = tab.plot_view.plots[0].listDataItems()
+    assert [c.opts["pen"].color().hsvHueF() for c in curves] == sorted(hues, reverse=True)
+    form.set_values({"colors": "one"})
+    assert not form._rows["reverse_colors"][0].isEnabled()  # one color: none
+
+
+def test_list_tips_dont_repeat_the_name(app):
+    combo = app.main.function_combo
+    tips = {combo.itemText(i): combo.itemData(i, QtCore.Qt.ItemDataRole.ToolTipRole)
+            for i in range(combo.count()) if combo.itemText(i)}
+    assert tips["Average"] == (
+        "Compute the average along each data point of the selected arrays")
+    assert tips["Delete Points"].startswith("Delete points from the selected arrays")
 
 
 def test_one_list_with_plot_and_its_form(app):
@@ -216,8 +233,9 @@ def test_one_list_with_plot_and_its_form(app):
     assert items == ["Choose…", "---", "Plot", "Table", "---", "Average", "Sum",
                      "SumSqr", "Min", "Max", "Concatenate", "---", "Insert Points",
                      "Delete Points", "Delete NaNs", "Redimension",
-                     "Reverse", "Rotate", "---", "Arithmetic", "Replace Values",
-                     "Baseline", "Normalize", "dF/F", "Rescale", "Smooth", "Filter",
+                     "Reverse", "Rotate", "---", "Rescale X", "Set X Start", "Resample",
+                     "Interpolate", "Align", "---", "Arithmetic", "Replace Values",
+                     "Baseline", "Normalize", "dF/F", "Rescale Y", "Smooth", "Filter",
                      "Differentiate", "Integrate"]
     assert tab.entry() is None  # "Choose…", as Stats1's
     assert tab.form() is None and tab.plot_ranges() == []
@@ -226,7 +244,7 @@ def test_one_list_with_plot_and_its_form(app):
     assert tab.status_label.text().endswith("Choose function: Plot, Average, Baseline, Filter…")
     combo.setCurrentText("Plot")
     form = tab.forms["Plot"]
-    assert [p.name for p in form.params] == ["colors", "color", "x_offset", "y_offset",
+    assert [p.name for p in form.params] == ["colors", "color", "reverse_colors", "x_offset", "y_offset",
                                              "reverse"]
     assert form.values()["colors"] == "rainbow"
     swatch = form.control("color")
@@ -636,7 +654,7 @@ def test_operation_forms(app):
     smooth.set_values({"method": "binomial"})
     assert not smooth._rows["window"][1].isEnabled()
     _select(app, channel=app.series.channels["A"], epoch_set="All")
-    tab.function_combo.setCurrentText("Rescale")
+    tab.function_combo.setCurrentText("Rescale Y")
     tab.run_button.click()  # no units: nothing changed, and why
     assert tab.status_label.text().endswith("To units: enter it")
     tab.function_combo.setCurrentText("Arithmetic")
@@ -648,9 +666,13 @@ def test_operation_forms(app):
 # --- Points operations (#559) ---------------------------------------------------
 
 def _operate(app, name, **values):
-    """Run operation *name* on channel A's epochs, not asked first."""
+    """Run operation *name* on channel A's epochs, not asked first (a
+    question it still asks, e.g. channel B left as it is: Yes, unless the
+    test answers)."""
     tab = app.main
     tab.set_config_option("ask_before_changing", False)
+    if hasattr(tab._confirm, "__self__"):  # still the dialog: no one to answer it
+        tab._confirm = lambda title, text: True
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, name, **values)
 
@@ -788,3 +810,182 @@ def test_an_x_array_that_no_longer_fits_is_said(app):
     app.series.get_data("A", "E2").set_xarray_from(None)
     _operate(app, "Reverse")  # still doesn't fit: still said
     assert app.main.status_label.text().startswith("Warning: The x array of RecordA0")
+
+
+# --- X scale operations (#561) ---------------------------------------------------
+
+def test_rescale_x_and_its_channel_template(app):
+    """Rescale X: ms to s, each epoch; the channel's template follows a run
+    on all its epochs. Its form says the arrays' units now."""
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    assert tab.forms["Rescale X"].note("from_units") == "currently ms"
+    assert tab.forms["Rescale Y"].note("from_units") == "currently (none)"
+    app.series.get_data("A", "E0").yscale.units = "pA"
+    tab.refresh()
+    assert tab.forms["Rescale Y"].note("from_units") == "currently (none), pA"
+    _operate(app, "Rescale X", to_units="s")
+    a1 = app.series.get_data("A", "E1")
+    assert (a1.xscale.delta, a1.xscale.units) == (0.0005, "s")
+    channel = app.series.channels["A"]
+    assert (channel.xscale.delta, channel.xscale.units) == (0.0005, "s")
+    assert app.series.get_data("B", "E1").xscale.units == "ms"  # B not run
+    assert tab.forms["Rescale X"].note("from_units") == "currently s"
+
+
+def test_x_scale_only_operations_arent_permanent(app):
+    """Rescale X and Align change only the x scale: said, and not asked
+    about (Ask before changing arrays); Resample changes the values."""
+    tab = app.main
+    tab.function_combo.setCurrentText("Align")
+    assert tab.function_info.text().startswith("X scale only: shift the x")
+    assert tab.function_info.text().endswith("The values aren't changed.")
+    tab.function_combo.setCurrentText("Resample")
+    assert tab.function_info.text().startswith("Permanent operation")
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or True
+    _select(app, all_channels=True, epoch_set="All")  # (one channel: asked)
+    _run(app, "Rescale X", to_units="s")  # Ask before changing arrays: on
+    assert asked == [] and app.series.get_data("A", "E0").xscale.units == "s"
+    _run(app, "Resample", delta=0.001)
+    assert len(asked) == 1  # permanent: asked
+
+
+def test_rescale_x_and_align_on_one_channel_ask_first(app):
+    """Channel A of A and B: B keeps its x, so asked first (even without
+    Ask before changing arrays); All channels: not asked."""
+    tab = app.main
+    asked = []
+    tab._confirm = lambda title, text: asked.append(text) or False  # No
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    _run(app, "Rescale X", to_units="s")
+    assert asked == ["Rescale X changes 3 arrays of Record. Channel B isn't changed, "
+                     "so its x units will differ from A's (choose All channels to "
+                     "change them together). Continue?"]
+    assert app.series.get_data("A", "E0").xscale.units == "ms"  # No: unchanged
+    _run(app, "Set X Start", value=1.0)
+    assert "its epochs will no longer line up in time with A's" in asked[-1]
+    _run(app, "Resample", delta=0.25)  # values kept at their x: not about B
+    assert "Channel B" not in asked[-1]
+    tab.set_config_option("ask_before_changing", False)
+    _select(app, all_channels=True, epoch_set="All")
+    _run(app, "Rescale X", to_units="s")
+    assert app.series.get_data("B", "E0").xscale.units == "s" and len(asked) == 3
+
+
+def test_rescale_x_refuses_an_x_array(app):
+    xs = app.folder.data.new("Xs", nparray=np.array([0.0, 1.0, 4.0, 9.0]))
+    app.series.get_data("A", "E1").set_xarray_from(xs)
+    _operate(app, "Rescale X", to_units="s")
+    assert app.main.status_label.text() == (
+        "Warning: RecordA1 has an x array (Xs): Rescale X changes start and "
+        "delta, not its values; change the x array itself")
+    assert app.series.get_data("A", "E0").xscale.units == "ms"  # none changed
+
+
+def test_resample_says_the_points_now_and_after(app):
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    form = tab.forms["Resample"]
+    assert form.note("delta") == "currently 0.5 ms, 4 points"
+    form.control("delta").setText("1")
+    form.control("delta").editingFinished.emit()
+    assert form.note("delta") == "currently 0.5 ms, 4 points; then about 2"
+    _operate(app, "Resample", delta=1.0)
+    a1 = app.series.get_data("A", "E1")
+    assert a1.xscale.delta == 1.0 and a1.nparray.size == 2
+    assert form.note("delta").startswith("currently 1 ms, 2 points")
+
+
+def test_interpolate_onto_each_channels_common_x(app):
+    """A common x axis per channel: A's epochs shifted apart are put onto
+    their overlap; B (its own x) onto its own."""
+    for epoch, start in (("E0", 0.0), ("E1", 0.5), ("E2", 1.0)):
+        app.series.get_data("A", epoch).xscale.start = start
+    _select(app, all_channels=True, epoch_set="All")
+    _operate_all = app.main
+    _operate_all.set_config_option("ask_before_changing", False)
+    _run(app, "Interpolate")
+    a0, b0 = app.series.get_data("A", "E0"), app.series.get_data("B", "E0")
+    assert (a0.xscale.start, a0.nparray.size) == (1.0, 2)  # overlap: x 1 to 1.5
+    assert np.allclose(a0.nparray, [2.0, 3.0])  # A0's points at x 1 and 1.5
+    assert (b0.xscale.start, b0.nparray.size) == (0.0, 4)  # B: unchanged x
+    # Onto a template's x: picked from the folder (or a subfolder)
+    form = app.main.forms["Interpolate"]
+    form.set_values({"x_source": "template"})
+    names = [form.control("template_name").itemText(i)
+             for i in range(form.control("template_name").count())]
+    assert "Single" in names
+
+
+def test_align_from_an_array_of_values(app):
+    """Align: one value per array from an array (e.g. Stats2's), at x = 0;
+    a NaN reference: that array left as it is, and said."""
+    tab = app.main
+    app.folder.data.new("Onsets", nparray=np.array([0.5, np.nan, 1.5]),
+                        yscale={"units": "ms"})
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    form = tab.forms["Align"]
+    assert [p.name for p in form.params] == ["values_array", "target"]  # an array only
+    _operate(app, "Align", values_array="Onsets", target=0.0)
+    starts = [app.series.get_data("A", e).xscale.start for e in ("E0", "E1", "E2")]
+    assert starts == [-0.5, 0.0, -1.5]
+    assert tab.status_label.text() == (
+        "Warning: RecordA1 not aligned: its reference value is NaN")
+    app.folder.data.new("Twos", nparray=np.array([1.0, 1.0, 1.0]), yscale={"units": "ms"})
+    tab.refresh()  # as the app does when arrays are added: Twos to pick
+    _operate(app, "Align", values_array="Twos", target="mean")  # mean 1: no shift
+    assert app.series.get_data("A", "E0").xscale.start == -0.5
+
+
+def test_set_x_start_sets_or_shifts(app):
+    """Set X Start: every array starts at the value, or each is shifted by
+    it (their differences kept); X scale only; refuses an x array."""
+    tab = app.main
+    for epoch, start in (("E0", 0.0), ("E1", 2.0), ("E2", 4.0)):
+        app.series.get_data("A", epoch).xscale.start = start
+    tab.function_combo.setCurrentText("Set X Start")
+    assert tab.function_info.text().startswith("X scale only: set the x-scale start")
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    assert tab.forms["Set X Start"].note("value") == "ms"  # the arrays' x units
+    _operate(app, "Set X Start", mode="shift", value=-10.0)
+    starts = [app.series.get_data("A", e).xscale.start for e in ("E0", "E1", "E2")]
+    assert starts == [-10.0, -8.0, -6.0]
+    _operate(app, "Set X Start", mode="set", value=0.0)
+    starts = [app.series.get_data("A", e).xscale.start for e in ("E0", "E1", "E2")]
+    assert starts == [0.0, 0.0, 0.0]
+    assert app.series.channels["A"].xscale.start == 0.0  # the template too
+    xs = app.folder.data.new("Xs", nparray=np.array([0.0, 1.0, 4.0, 9.0]))
+    app.series.get_data("A", "E1").set_xarray_from(xs)
+    _operate(app, "Set X Start", mode="set", value=5.0)
+    assert tab.status_label.text().endswith(
+        "Set X Start changes start and delta, not its values; change the x array itself")
+
+
+def test_align_needs_a_value_per_array(app):
+    app.folder.data.new("Two", nparray=np.array([0.5, 1.0]), yscale={"units": "ms"})
+    _operate(app, "Align", values_array="Two")
+    assert app.main.status_label.text().endswith(
+        "Align: Two has 2 values for 3 arrays (one per array, in order)")
+
+
+def test_align_lists_only_x_values(app):
+    """Align's Array: only arrays in the selected arrays' x units (ms),
+    e.g. Stats2's ..._x, not their y values, a duration (_dx) or text."""
+    folder = app.folder
+    sub = folder.toolfolders.new(name="Stats_Record_A_All_0")
+    sub.data.new("ST_w0_max_x", nparray=np.array([1.0, 1.5, 0.5]), yscale={"units": "ms"})
+    sub.data.new("ST_w0_max_y", nparray=np.array([3.0, 13.0, 23.0]), yscale={"units": "mV"})
+    sub.data.new("ST_w0_rt_p_dx", nparray=np.array([0.2, 0.3, 0.1]), yscale={"units": "ms"})
+    sub.data.new("ST_data_names", nparray=np.array(["a", "b", "c"], dtype=object))
+    spike = folder.toolfolders.new(name="Spike_Record_A_All_0")
+    for name in ("SP_first", "SP_isi", "SP_RX"):  # not x positions, one per array
+        spike.data.new(name, nparray=np.array([1.0, 2.0, 3.0]), yscale={"units": "ms"})
+    sub.data.new("ST_w0_rt_p_p0_x", nparray=np.array([np.nan, 1.0, 1.2]))  # no units
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    app.main.function_combo.setCurrentText("Align")
+    combo = app.main.form().control("values_array")
+    assert [combo.itemText(i) for i in range(combo.count())] == [
+        "Stats_Record_A_All_0/ST_w0_max_x", "Stats_Record_A_All_0/ST_w0_rt_p_p0_x"]
+    template = app.main.forms["Interpolate"].control("template_name")
+    assert template.count() > 1  # Interpolate: any array's x will do
