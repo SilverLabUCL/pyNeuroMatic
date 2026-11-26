@@ -9,6 +9,7 @@ from PyQt6 import QtCore, QtGui
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
+from pyneuromatic.gui.context_views import rainbow_color
 from pyneuromatic.gui.main_tab import MainToolTab, selected_arrays
 
 
@@ -231,10 +232,10 @@ def test_one_list_with_plot_and_its_form(app):
     combo = tab.function_combo
     items = [combo.itemText(i) or "---" for i in range(combo.count())]
     assert items == ["Choose…", "---", "Plot", "Table", "---", "Average", "Sum",
-                     "SumSqr", "Min", "Max", "Concatenate", "---", "Insert Points",
+                     "SumSqr", "Min", "Max", "---", "Concatenate", "Inequality", "Histogram", "---", "Insert Points",
                      "Delete Points", "Delete NaNs", "Redimension",
                      "Reverse", "Rotate", "---", "Rescale X", "Set X Start", "Resample",
-                     "Interpolate", "Align", "---", "Arithmetic", "Replace Values",
+                     "Interpolate", "Align", "---", "Arithmetic", "Arithmetic by Array", "Replace Values",
                      "Baseline", "Normalize", "dF/F", "Rescale Y", "Smooth", "Filter",
                      "Differentiate", "Integrate"]
     assert tab.entry() is None  # "Choose…", as Stats1's
@@ -284,23 +285,23 @@ def _run(app, name="Average", **values):
 
 
 def test_average_of_all_channels_in_one_subfolder(app):
-    """One run, every channel: MN_Avg_RecordA and MN_Avg_RecordB in a Main
+    """One run, every channel: Avg_RecordA and Avg_RecordB in a Main
     subfolder, made a data series; shown in Main2 and plotted."""
     _select(app, all_channels=True, epoch_set="All")
     _run(app, "Average", compute_sem=True)
     folder = app.folder.toolfolders["Main_Record_AB_All_0"]
-    assert list(folder.data.keys()) == ["MN_Avg_RecordA", "MN_SEM_RecordA",
-                                        "MN_Avg_RecordB", "MN_SEM_RecordB"]
-    assert np.allclose(folder.data["MN_Avg_RecordB"].nparray, np.arange(4.0) + 110)
-    series = folder.dataseries["MN_Avg_Record"]
+    assert list(folder.data.keys()) == ["Avg_RecordA", "SEM_RecordA",
+                                        "Avg_RecordB", "SEM_RecordB"]
+    assert np.allclose(folder.data["Avg_RecordB"].nparray, np.arange(4.0) + 110)
+    series = folder.dataseries["Avg_Record"]
     assert list(series.channels.keys()) == ["A", "B"]
-    assert "MN_SEM_Record" in folder.dataseries
+    assert "SEM_Record" in folder.dataseries
     assert folder.notes[0]["note"].startswith("NMMain: Average(")
     tab = app.main
     assert tab.mode_tabs.currentWidget() is tab.main2
     assert tab.main2.toolfolder() is folder
-    assert tab.main2.selected_array() == "MN_Avg_RecordA"
-    assert tab.plot_view.title_label.text() == "Main_Record_AB_All_0: MN_Avg_Record"
+    assert tab.main2.selected_array() == "Avg_RecordA"
+    assert tab.plot_view.title_label.text() == "Main_Record_AB_All_0: Avg_Record"
     assert len(tab.plot_view.plots) == 2  # A above B
     assert app.view_tabs.current_view() == ("tool", "Main")
 
@@ -311,7 +312,7 @@ def test_one_channel_and_the_command(app):
     _select(app, channel=app.series.channels["B"], epoch_set="Set1")
     _run(app, "Max")
     folder = app.folder.toolfolders["Main_Record_B_S1_0"]
-    assert np.allclose(folder.data["MN_Max_RecordB"].nparray, np.arange(4.0) + 120)
+    assert np.allclose(folder.data["Max_RecordB"].nparray, np.arange(4.0) + 120)
     commands = [e["command"] for e in manager.command_history.buffer]
     assert commands[-2] == "nm.main.op = NMMainOpMax(ignore_nans=True)"
     assert commands[-1] == (
@@ -354,7 +355,7 @@ def test_overwrite_in_settings_reuses_the_subfolder(app):
     assert [o[:3] for o in tab.config_options()] == [
         ("ignore_nans", "Ignore NaNs", True), ("overwrite", "Overwrite results", False),
         ("ask_before_changing", "Ask before changing arrays", True),
-        ("prefix_outputs", "Prefix outputs with MN_", True)]
+        ("prefix_outputs", "Prefix outputs with MN_", False)]
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, "Sum")
     _run(app, "Sum")
@@ -370,13 +371,13 @@ def test_main2_table_lists_the_outputs(app):
     tab = app.main
     _select(app, all_channels=True, epoch_set="All")
     _run(app, "Average")
-    tab.main2.select_array("MN_Avg_RecordB")
+    tab.main2.select_array("Avg_RecordB")
     tab.main2.table_action.trigger()
     model = tab.table_view.model
     headers = [model.headerData(c, QtCore.Qt.Orientation.Horizontal)
                for c in range(model.columnCount())]
-    assert headers[1:] == ["MN_Avg_RecordA", "MN_Avg_RecordB"]
-    assert tab.table_view.selected_array().name == "MN_Avg_RecordB"
+    assert headers[1:] == ["Avg_RecordA", "Avg_RecordB"]
+    assert tab.table_view.selected_array().name == "Avg_RecordB"
     assert app.context_panel.currentWidget() is app.table_panel
 
 
@@ -387,10 +388,10 @@ def test_ignore_nans_is_in_settings_not_the_form(app):
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, "Sum")
     folder = app.main._tool.toolfolder
-    assert folder.data["MN_Sum_RecordA"].nparray[0] == 0 + 20  # the NaN left out
+    assert folder.data["Sum_RecordA"].nparray[0] == 0 + 20  # the NaN left out
     tab.set_config_option("ignore_nans", False)
     _run(app, "Sum")
-    assert np.isnan(app.main._tool.toolfolder.data["MN_Sum_RecordA"].nparray[0])
+    assert np.isnan(app.main._tool.toolfolder.data["Sum_RecordA"].nparray[0])
     assert app.main._tool.config.ignore_nans is False
 
 
@@ -412,7 +413,7 @@ def test_x_range_and_its_lines(app):
     assert "x" in app.plot_widget.range_overlay.regions
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, "Average")
-    output = app.main._tool.toolfolder.data["MN_Avg_RecordA"]
+    output = app.main._tool.toolfolder.data["Avg_RecordA"]
     assert np.allclose(output.nparray, [11.0, 12.0])  # points at x 0.5 and 1
     assert output.xscale.start == 0.5
     commands = [e["command"] for e in manager.command_history.buffer]
@@ -464,14 +465,14 @@ def test_average_with_a_stdv_or_sem_band(app):
     stdv.setChecked(True)
     assert len(bands()) == 1
     group = tab.plot_view.shown.groups[0]
-    var = main2.toolfolder().data["MN_Var_RecordA"].nparray
+    var = main2.toolfolder().data["Var_RecordA"].nparray
     assert np.allclose(group.errors[0], np.sqrt(var))
-    assert tab.plot_view.title_label.text().endswith("MN_Avg_Record ± Stdv")
+    assert tab.plot_view.title_label.text().endswith("Avg_Record ± Stdv")
     sem.setChecked(True)  # one band at a time
     assert not stdv.isChecked()
     assert np.allclose(tab.plot_view.shown.groups[0].errors[0],
-                       main2.toolfolder().data["MN_SEM_RecordA"].nparray)
-    main2.select_array("MN_SEM_RecordA")  # not an average: no band
+                       main2.toolfolder().data["SEM_RecordA"].nparray)
+    main2.select_array("SEM_RecordA")  # not an average: no band
     assert not sem.isEnabled() and not stdv.isEnabled()
     _run(app, "Average", compute_var=False, compute_sem=False)  # no band to make
     assert not stdv.isEnabled() and not sem.isEnabled()
@@ -513,8 +514,8 @@ def test_ask_then_omit_leaves_epochs_out_of_the_average(app):
     _run(app, "Average")
     assert shown[0]  # Omit offered, for a function
     folder = tab._tool.toolfolder
-    assert np.allclose(folder.data["MN_Avg_RecordA"].nparray, np.arange(4.0) + 10)  # E0, E2
-    assert [d.name for d in folder.sources["MN_Avg_RecordA"]] == ["RecordA0", "RecordA2"]
+    assert np.allclose(folder.data["Avg_RecordA"].nparray, np.arange(4.0) + 10)  # E0, E2
+    assert [d.name for d in folder.sources["Avg_RecordA"]] == ["RecordA0", "RecordA2"]
     assert tab.status_label.text() == "Complete (omitted E1)"
     runs = [e["command"] for e in manager.command_history.buffer if "run_selection" in e["command"]]
     assert runs[-1].endswith("epochs='all', omit=['E1'])")
@@ -537,8 +538,8 @@ def test_overwrite_shows_each_runs_own_output(app):
     tab = app.main
     tab.set_config_option("overwrite", True)
     _select(app, channel=app.series.channels["A"], epoch_set="All")
-    for name, output in (("Average", "MN_Avg_RecordA"), ("Max", "MN_Max_RecordA"),
-                         ("Sum", "MN_Sum_RecordA"), ("Average", "MN_Avg_RecordA")):
+    for name, output in (("Average", "Avg_RecordA"), ("Max", "Max_RecordA"),
+                         ("Sum", "Sum_RecordA"), ("Average", "Avg_RecordA")):
         tab.mode_tabs.setCurrentWidget(tab.main1_page)
         _run(app, name)
         assert tab.main2.toolfolder().name == "Main_Record_A_All_0"
@@ -548,40 +549,41 @@ def test_overwrite_shows_each_runs_own_output(app):
 
 def test_overwrite_shows_this_runs_outputs_not_an_earlier_stdv(app):
     """With Overwrite, an earlier Average's Stdv isn't a later run's output:
-    Max chooses MN_Max_; an Average without Stdv makes MN_Avg_ alone."""
+    Max chooses Max_; an Average without Stdv makes Avg_ alone."""
     tab = app.main
     tab.set_config_option("overwrite", True)
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, "Average", compute_stdv=True)
-    assert tab._tool.outputs == ["MN_Avg_RecordA", "MN_Stdv_RecordA"]
+    assert tab._tool.outputs == ["Avg_RecordA", "Stdv_RecordA"]
     tab.mode_tabs.setCurrentWidget(tab.main1_page)
     _run(app, "Max")
-    assert tab._tool.outputs == ["MN_Max_RecordA"]
-    assert tab.main2.selected_array() == "MN_Max_RecordA"
+    assert tab._tool.outputs == ["Max_RecordA"]
+    assert tab.main2.selected_array() == "Max_RecordA"
     tab.mode_tabs.setCurrentWidget(tab.main1_page)
     _run(app, "Average", compute_stdv=False)  # the form kept it: unticked
-    assert tab._tool.outputs == ["MN_Avg_RecordA"]  # the Stdv is the earlier run's
-    assert tab.main2.selected_array() == "MN_Avg_RecordA"
+    assert tab._tool.outputs == ["Avg_RecordA"]  # the Stdv is the earlier run's
+    assert tab.main2.selected_array() == "Avg_RecordA"
 
 
 
-def test_outputs_without_the_mn_prefix(app):
-    """Settings › Main, Prefix outputs with MN_ off: Avg_RecordA, its SEM
-    and data series too; Main2's ± SEM and its data behind it still found."""
+def test_outputs_with_the_mn_prefix(app):
+    """Settings › Main, Prefix outputs with MN_: off by default (#563):
+    Avg_RecordA; on: MN_Avg_RecordA, its SEM and data series too; Main2's
+    ± SEM and its data behind it found either way."""
     tab = app.main
-    tab.set_config_option("prefix_outputs", False)
     assert tab._tool.config.prefix_outputs is False
+    tab.set_config_option("prefix_outputs", True)
     _select(app, channel=app.series.channels["A"], epoch_set="All")
     _run(app, "Average", compute_sem=True)
     folder = app.folder.toolfolders["Main_Record_A_All_0"]
-    assert list(folder.data.keys()) == ["Avg_RecordA", "SEM_RecordA"]
-    assert "Avg_Record" in folder.dataseries
+    assert list(folder.data.keys()) == ["MN_Avg_RecordA", "MN_SEM_RecordA"]
+    assert "MN_Avg_Record" in folder.dataseries
     main2 = tab.main2
-    assert main2.selected_array() == "Avg_RecordA"
+    assert main2.selected_array() == "MN_Avg_RecordA"
     assert main2.error_actions["sem"].isEnabled()
     assert not main2.error_actions["stdv"].isEnabled()  # not computed
     assert main2.background_action.isEnabled()
-    tab.set_config_option("prefix_outputs", True)
+    tab.set_config_option("prefix_outputs", False)
 
 
 def test_reset_sets_the_chosen_functions_form_back(app):
@@ -989,3 +991,113 @@ def test_align_lists_only_x_values(app):
         "Stats_Record_A_All_0/ST_w0_max_x", "Stats_Record_A_All_0/ST_w0_rt_p_p0_x"]
     template = app.main.forms["Interpolate"].control("template_name")
     assert template.count() > 1  # Interpolate: any array's x will do
+
+
+# --- Arithmetic by Array, Inequality, Histogram (#563) -----------------------------
+
+def test_arithmetic_by_array_lists_only_arrays_as_long(app):
+    """Its Array: only arrays with the selected arrays' points (4: not
+    Single's 2), e.g. an average; applied point by point."""
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    _run(app, "Average")  # Avg_RecordA: 11, 12, 13, 14, in a Main subfolder
+    tab.mode_tabs.setCurrentWidget(tab.main1_page)
+    tab.function_combo.setCurrentText("Arithmetic by Array")
+    form = tab.form()
+    combo = form.control("ref")
+    names = [combo.itemText(i) for i in range(combo.count())]
+    assert "Main_Record_A_All_0/Avg_RecordA" in names and "Single" not in names
+    assert form.note("ref") == "arrays of 4 points"
+    _operate(app, "Arithmetic by Array", op="-", ref="Main_Record_A_All_0/Avg_RecordA")
+    assert np.allclose(_a1(app), [0.0, 0.0, 0.0, 0.0])  # A1 is the average
+    assert np.allclose(app.series.get_data("A", "E0").nparray, [-10.0] * 4)
+    app.series.get_data("A", "E2").nparray = np.arange(6.0)  # lengths differ
+    tab.refresh()
+    assert form.control("ref").count() == 0
+    assert form.note("ref").startswith("the selected arrays differ in length")
+
+
+def test_inequality_outputs_a_series_in_a_main_subfolder(app):
+    """An output per array, IQ_RecordA0..2, made a data series IQ_Record
+    (an epoch each) in a Main subfolder, shown in Main2; a and b on the
+    Plot, dragged."""
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch=app.series.epochs["E0"],
+            epoch_set="All")
+    tab.function_combo.setCurrentText("Inequality")
+    form = tab.form()
+    form.set_values({"op": "<<", "a": 11.0, "b": 22.0})
+    form.changed.emit()
+    assert [(l.key, l.y) for l in tab.plot_levels(None)] == [("a", 11.0), ("b", 22.0)]
+    tab.set_plot_level("a", 10.5, final=True)  # dragged
+    assert form.values()["a"] == 10.5
+    _run(app, "Inequality", op="<<", a=10.5, b=22.0)
+    folder = app.folder.toolfolders["Main_Record_A_All_0"]
+    assert list(folder.data.keys()) == ["IQ_RecordA0", "IQ_RecordA1", "IQ_RecordA2"]
+    assert np.allclose(folder.data["IQ_RecordA1"].nparray, [0, 1, 1, 1])  # 10..13
+    series = folder.dataseries["IQ_Record"]
+    assert list(series.channels.keys()) == ["A"] and len(series.epochs) == 3
+    assert tab.mode_tabs.currentWidget() is tab.main2
+    main2 = tab.main2  # listed once, as its series (as Spike2's SPK_)
+    assert main2._array_names() == ["IQ_Record"]
+    assert main2.selected_array() == "IQ_Record"
+    plotted = main2.selected_outputs()
+    assert [d.name for d in plotted.arrays] == ["IQ_RecordA0", "IQ_RecordA1",
+                                                "IQ_RecordA2"]
+    # Drawn as segments, not one path: NaN-where-false outputs of long arrays
+    # (many runs between NaNs) crashed Qt's stroker (a segfault)
+    items = [i for p in tab.plot_view.plots for i in p.listDataItems()]
+    assert items and all(i.curve.opts["segmentedLineMode"] == "on" for i in items)
+    # The table too (the Plot | Table toggle): the subfolder's outputs
+    assert [d.name for d in tab.table_view.shown.arrays] == [
+        "IQ_RecordA0", "IQ_RecordA1", "IQ_RecordA2"]
+    # Overlaid: in a rainbow, an array a colour (red first)
+    colors = [i.opts["pen"].color().name() for i in items]
+    assert len(set(colors)) == 3 and colors[0] == rainbow_color(1 / 6).name()
+    tab.mode_tabs.setCurrentWidget(tab.main1_page)
+    form.set_values({"op": ">"})
+    assert [l.key for l in tab.plot_levels(None)] == ["a"]  # one level
+
+
+def test_histogram_of_each_array_or_all_together(app):
+    tab = app.main
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    _run(app, "Histogram", bins=2)
+    folder = app.folder.toolfolders["Main_Record_A_All_0"]
+    assert list(folder.data.keys()) == ["H_RecordA0", "H_RecordA1", "H_RecordA2"]
+    assert np.allclose(folder.data["H_RecordA0"].nparray, [2, 2])
+    assert "H_Record" in folder.dataseries
+    tab.mode_tabs.setCurrentWidget(tab.main1_page)
+    _run(app, "Histogram", combine="all", bins_by="width", bin_width=10.0)
+    hist = tab._tool.toolfolder.data["H_RecordA"]  # (Overwrite off: a new subfolder)
+    # 0..3, 10..13, 20..23: 4 in each bin of 10
+    assert np.allclose(hist.nparray, [4, 4, 4])
+    assert tab.main2._array_names() == ["H_RecordA"]  # one per channel: itself
+    items = tab.plot_view.plots[0].listDataItems()  # one array: the Plot's color
+    assert items[0].opts["pen"].color().name() == tab.plot_view.options.color
+    assert (hist.xscale.start, hist.xscale.delta) == (0.0, 10.0)
+    tab.mode_tabs.setCurrentWidget(tab.main1_page)
+    _run(app, "Histogram", combine="each", bins_by="number", value_min=5.0,
+         value_max=1.0)
+    assert tab.status_label.text().endswith("Values from must be less than to")
+
+
+def test_main2_remembers_each_folders_subfolder(app):
+    """Another folder chosen, then this one again: Main2 shows the Main
+    subfolder chosen here before, not the newest."""
+    tab = app.main
+    tab.set_config_option("overwrite", False)
+    _select(app, channel=app.series.channels["A"], epoch_set="All")
+    _run(app, "Average")
+    tab.mode_tabs.setCurrentWidget(tab.main1_page)
+    _run(app, "Average")  # a second subfolder, the newest
+    main2 = tab.main2
+    names = [main2.folder_combo.itemData(i) for i in range(main2.folder_combo.count())]
+    assert len(names) == 2
+    main2.folder_combo.setCurrentIndex(0)  # the first
+    other = app._manager.folders.new("Other")
+    app.selection_model.update({"folder": other, "dataseries": None, "source": None})
+    assert main2.toolfolder() is None
+    app.selection_model.update({"folder": app.folder, "dataseries": app.series,
+                                "source": "dataseries"})
+    assert main2.folder_combo.currentData() == names[0]

@@ -59,7 +59,7 @@ class NMToolMainConfig(NMToolConfig):
         "ignore_nans": {"type": bool, "default": True},
         "overwrite": {"type": bool, "default": False},
         "ask_before_changing": {"type": bool, "default": True},  # #557
-        "prefix_outputs": {"type": bool, "default": True},
+        "prefix_outputs": {"type": bool, "default": False},  # Avg_RecordA (#563)
     }
 
 
@@ -332,7 +332,7 @@ class NMToolMain(NMTool):
     def run_finish(self) -> bool:
         """Finalise the current op with the folder and prefix captured during
         run(): a function's outputs in a Main subfolder (#553)."""
-        if isinstance(self._op, NMMainOpAccumulate) and isinstance(self._run_folder, NMFolder):
+        if self._op.WRITES_OUTPUTS and isinstance(self._run_folder, NMFolder):
             self._write_outputs()
         else:
             self._op.run_finish(self._run_folder, self._run_prefix)
@@ -409,7 +409,7 @@ class NMToolMain(NMTool):
             self._op.name_prefix = ""
         folder.notes.add(self._run_note(), readonly=True)  # how they were made
         outputs = [n for n in folder.data.keys()
-                   if n in self._op.results.values() or self._is_companion(n)]
+                   if n in self._output_names() or self._is_companion(n)]
         self._outputs = outputs
         self._make_output_series(folder, outputs)
         # Which arrays each output was made from (e.g. to plot them behind it)
@@ -431,15 +431,31 @@ class NMToolMain(NMTool):
         return any(name == main.replace(op.out_prefix, companion, 1)
                    for companion in companions for main in op.results.values())
 
+    def _output_names(self) -> list[str]:
+        """The names of the arrays the function wrote this run: a channel
+        each (Average...), or Inequality's and Histogram's (#563)."""
+        names = getattr(self._op, "output_names", None)
+        if names is not None:
+            return list(names)
+        return list(self._op.results.values())
+
     def _output_channel(self, name: str) -> str | None:
-        channels = list(self._op.results) or self._run_channels
+        channels = (list(self._op.results) if isinstance(self._op, NMMainOpAccumulate)
+                    else []) or self._run_channels
         return next((c for c in channels if name.endswith(c) and len(name) > len(c)), None)
 
     def _make_output_series(self, folder: NMToolFolder, outputs: list[str]) -> None:
         """Each kind of output a data series, a channel each: e.g.
-        Avg_RecordA and Avg_RecordB make Avg_Record (as SPK_, #530)."""
+        Avg_RecordA and Avg_RecordB make Avg_Record (as SPK_, #530); one per
+        array, an epoch each: IQ_RecordA0, IQ_RecordA1 make IQ_Record
+        (#563)."""
         series: dict[str, dict] = {}
         for name in outputs:
+            parsed = nmu.parse_data_name(name)
+            if parsed is not None and parsed[1] in self._run_channels:
+                prefix, channel, epoch = parsed  # one per array: its epoch
+                series.setdefault(prefix, {})[(channel, epoch)] = folder.data[name]
+                continue
             channel = self._output_channel(name)
             if channel is None or len(channel) != 1 or not channel.isupper():
                 continue  # not one output per channel

@@ -1766,7 +1766,7 @@ class TestNMToolMain(unittest.TestCase):
         sub = self.tool.toolfolder
         self.assertIs(sub, folder.toolfolders.get(sub.name))
         self.assertTrue(sub.name.startswith("Main_"))
-        out = sub.data.get("MN_Avg_RecordA")  # MN_, as Stats' ST_
+        out = sub.data.get("Avg_RecordA")  # , as Stats' ST_
         np.testing.assert_array_almost_equal(out.nparray, [3.0, 6.0])
 
     # --- end-to-end: arithmetic ---
@@ -4261,11 +4261,11 @@ class TestMainFunctionsInSubfolders(unittest.TestCase):
         sub = tool.toolfolder
         self.assertEqual(sub.name, "Main_Record_AB_All_0")
         self.assertEqual(list(sub.data.keys()),
-                         ["MN_Avg_RecordA", "MN_Var_RecordA", "MN_Avg_RecordB", "MN_Var_RecordB"])
-        self.assertEqual(sorted(sub.dataseries.keys()), ["MN_Avg_Record", "MN_Var_Record"])
-        avg = sub.dataseries["MN_Avg_Record"]
+                         ["Avg_RecordA", "Var_RecordA", "Avg_RecordB", "Var_RecordB"])
+        self.assertEqual(sorted(sub.dataseries.keys()), ["Avg_Record", "Var_Record"])
+        avg = sub.dataseries["Avg_Record"]
         self.assertEqual(list(avg.channels.keys()), ["A", "B"])
-        self.assertIs(avg.get_data("B", "E0"), sub.data["MN_Avg_RecordB"])
+        self.assertIs(avg.get_data("B", "E0"), sub.data["Avg_RecordB"])
         self.assertIn("channels A, B, epochs all (n=6)", sub.notes[0]["note"])
         self.assertEqual(len(self.folder.data), 6)  # nothing added to the folder
 
@@ -4274,7 +4274,7 @@ class TestMainFunctionsInSubfolders(unittest.TestCase):
         tool.op = NMMainOpConcatenate()
         tool.run_selection(self.series, channel=["B"], epochs="all")
         self.assertEqual(tool.toolfolder.name, "Main_Record_B_All_0")
-        self.assertEqual(len(tool.toolfolder.data["MN_Cat_RecordB"].nparray), 12)
+        self.assertEqual(len(tool.toolfolder.data["Cat_RecordB"].nparray), 12)
         tool.overwrite = True
         tool.run_selection(self.series, channel=["B"], epochs="all")
         self.assertEqual(list(self.folder.toolfolders.keys()), ["Main_Record_B_All_0"])
@@ -4312,7 +4312,7 @@ class TestMainFunctionRangeAndSources(unittest.TestCase):
                          "ignore_nans=True, compute_stdv=False, compute_var=False, "
                          "compute_sem=False, xbgn=1.0, xend=2.5")
         tool.run_selection(self.series, channel="A", epochs="all")
-        out = tool.toolfolder.data["MN_Avg_RecordA"]
+        out = tool.toolfolder.data["Avg_RecordA"]
         np.testing.assert_array_almost_equal(out.nparray, [2.5, 3.5, 4.5, 5.5])
         self.assertEqual(out.xscale.start, 1.0)
         self.assertIn("xbgn=1.0, xend=2.5", tool.toolfolder.notes[0]["note"])
@@ -4325,15 +4325,15 @@ class TestMainFunctionRangeAndSources(unittest.TestCase):
         tool.op = NMMainOpAverage(compute_sem=True)
         tool.run_selection(self.series, channel="A", epochs="all")
         sub = tool.toolfolder
-        sources = sub.sources["MN_Avg_RecordA"]
+        sources = sub.sources["Avg_RecordA"]
         self.assertEqual([d.name for d in sources], ["RecordA0", "RecordA1"])
         self.assertIs(sources[0], self.folder.data["RecordA0"])
-        self.assertIs(copy.deepcopy(sub).sources["MN_Avg_RecordA"][0], sources[0])
+        self.assertIs(copy.deepcopy(sub).sources["Avg_RecordA"][0], sources[0])
         tool.overwrite = True  # the same subfolder: only this run's outputs replaced
         tool.op = NMMainOpAverage()
         tool.run_selection(self.series, channel="A", epochs="all")
         self.assertIs(tool.toolfolder, sub)
-        self.assertEqual(sorted(sub.sources), ["MN_Avg_RecordA", "MN_SEM_RecordA"])
+        self.assertEqual(sorted(sub.sources), ["Avg_RecordA", "SEM_RecordA"])
 
     def test_ignore_nans_from_the_config(self):
         self.assertTrue(self.nm.main.ignore_nans)
@@ -4362,14 +4362,14 @@ class TestMainOverwriteSharesTheSubfolder(unittest.TestCase):
         tool.run_selection(series, channel="A", epochs="all")
         sub = folder.toolfolders["Main_Record_A_All_0"]
         self.assertIs(tool.toolfolder, sub)
-        self.assertEqual(list(sub.data.keys()), ["MN_Avg_RecordA", "MN_Max_RecordA"])
-        self.assertEqual(sorted(sub.dataseries.keys()), ["MN_Avg_Record", "MN_Max_Record"])
+        self.assertEqual(list(sub.data.keys()), ["Avg_RecordA", "Max_RecordA"])
+        self.assertEqual(sorted(sub.dataseries.keys()), ["Avg_Record", "Max_Record"])
         series.get_data("A", "E1").nparray = np.arange(3.0) + 10
         tool.op = NMMainOpAverage()
         tool.run_selection(series, channel="A", epochs="all")
-        np.testing.assert_array_almost_equal(sub.data["MN_Avg_RecordA"].nparray,
+        np.testing.assert_array_almost_equal(sub.data["Avg_RecordA"].nparray,
                                              [5.0, 6.0, 7.0])  # replaced
-        np.testing.assert_array_almost_equal(sub.data["MN_Max_RecordA"].nparray,
+        np.testing.assert_array_almost_equal(sub.data["Max_RecordA"].nparray,
                                              [1.0, 2.0, 3.0])  # kept
         self.assertEqual(len(folder.toolfolders), 2)
 
@@ -4403,9 +4403,9 @@ class TestMainOmit(unittest.TestCase):
         tool.run_selection(self.series, channel="A", epochs="all")
         self.assertEqual(self.omitted, ["E1"])
         sub = tool.toolfolder
-        np.testing.assert_array_almost_equal(sub.data["MN_Avg_RecordA"].nparray,
+        np.testing.assert_array_almost_equal(sub.data["Avg_RecordA"].nparray,
                                              [50.5, 101.0])  # E0 and E2
-        self.assertEqual([d.name for d in sub.sources["MN_Avg_RecordA"]],
+        self.assertEqual([d.name for d in sub.sources["Avg_RecordA"]],
                          ["RecordA0", "RecordA2"])
         self.assertIn("(n=2)", sub.notes[0]["note"])
 
@@ -4515,6 +4515,24 @@ class TestMainOperations(unittest.TestCase):
         self.assertEqual((a0.xscale.start, a0.nparray.size), (-1.0, 3))
         self.assertIsNone(find_array(self.folder, "Main_x/none"))
         self.assertIn("RecordA0", array_names(self.folder))
+
+    def test_histogram_and_inequality_in_a_main_subfolder(self):
+        """nm.main writes them in a Main subfolder, a data series per kind
+        (#563); prefixed MN_ only if asked."""
+        from pyneuromatic.tools.nm_main_op import NMMainOpHistogram, NMMainOpInequality
+        tool = self.nm.main
+        self.assertFalse(tool.prefix_outputs)  # off by default
+        tool.op = NMMainOpInequality(op=">", a=11.0)
+        tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertEqual(tool.outputs, ["IQ_RecordA0", "IQ_RecordA1"])
+        self.assertIn("IQ_Record", tool.toolfolder.dataseries)
+        self.assertNotIn("IQ_RecordA0", self.folder.data)  # not in the data's folder
+        tool.prefix_outputs = True
+        tool.op = NMMainOpHistogram(combine="all", bins=2)
+        tool.run_selection(self.series, channel="A", epochs="all")
+        self.assertEqual(tool.outputs, ["MN_H_RecordA"])
+        self.assertEqual(tool.toolfolder.data["MN_H_RecordA"].nparray.sum(), 8)
+        tool.prefix_outputs = False
 
     def test_set_x_start_and_x_array_refusals(self):
         """Set X Start (#561); it and Rescale X refuse an x array before

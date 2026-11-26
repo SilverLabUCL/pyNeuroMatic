@@ -30,6 +30,15 @@ from pyneuromatic.gui.selection_model import (
 # Tab label used for the data view when a single data array is selected
 DATA_VIEW = "Data"
 
+# Rainbow: epochs coloured red to violet in order, in at most this many
+# colours, each drawn as one line (fast for thousands of epochs)
+RAINBOW_COLORS = 64
+
+
+def rainbow_color(fraction: float) -> QtGui.QColor:
+    """Red (0) to violet (1)."""
+    return QtGui.QColor.fromHsvF(0.8 * min(max(fraction, 0.0), 1.0), 0.9, 0.85)
+
 
 class ChannelToolBar(QtWidgets.QTabBar):
     """Tab bar of channel views followed by tool views.
@@ -275,7 +284,7 @@ class ValuesPlot(QtWidgets.QWidget):
         ``style`` is ``"points"``, ``"histogram"`` (x holds the bin edges,
         one more than y), ``"raster"`` (a tick at each spike: x its time,
         y its epoch, #529) or ``"waveforms"`` (y and x are lists, a trace
-        each, drawn on top of each other with their mean, #530).
+        each, drawn on top of each other in a rainbow, with their mean, #530).
         """
         if self.plot_widget is None:
             return
@@ -325,23 +334,34 @@ class ValuesPlot(QtWidgets.QWidget):
         self.plot_widget.setTitle(title)
 
     def _plot_waveforms(self, ys, xs) -> None:
-        """Traces on top of each other, light, and their mean (NaNs left
-        out) if they share their x values, dark."""
-        # One line, NaN between the traces: thousands of spikes draw at once
-        # (a line each took seconds, #530)
+        """Traces on top of each other, in a rainbow, and their mean (NaNs
+        left out) if they share their x values, in black."""
+        # In a rainbow, in order (red first), a line per colour, NaN between
+        # the traces: thousands of spikes draw at once (a line each took
+        # seconds, #530); drawn as segments (a path of many pieces can crash
+        # Qt's stroker)
         gap = np.array([np.nan])
-        x_all = np.concatenate([part for x in xs for part in (np.asarray(x, float), gap)])
-        y_all = np.concatenate([part for y in ys for part in (np.asarray(y, float), gap)])
-        self.plot_widget.plot(x_all, y_all, pen=pg.mkPen(color="#93c5fd", width=1),
-                              connect="finite")
+        n = len(ys)
+        colors = min(n, RAINBOW_COLORS)
+        for c in range(colors):
+            members = [i for i in range(n) if i * colors // n == c]
+            x_all = np.concatenate([part for i in members
+                                    for part in (np.asarray(xs[i], float), gap)])
+            y_all = np.concatenate([part for i in members
+                                    for part in (np.asarray(ys[i], float), gap)])
+            fraction = (c + 0.5) / colors if colors > 1 else 0.0
+            line = self.plot_widget.plot(
+                x_all, y_all, pen=pg.mkPen(color=rainbow_color(fraction), width=1),
+                connect="finite")
+            line.curve.setSegmentedLineMode("on")
         same_x = len(ys) > 1 and all(
             len(x) == len(xs[0]) and np.allclose(x, xs[0], equal_nan=True) for x in xs)
         if same_x:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN points
                 mean = np.nanmean(np.vstack(ys), axis=0)
-            self.plot_widget.plot(xs[0], mean, pen=pg.mkPen(color="#2563eb", width=2),
-                                  connect="finite")
+            self.plot_widget.plot(xs[0], mean, pen=pg.mkPen(color="#000000", width=2),
+                                  connect="finite")  # black: over the rainbow
 
     def clear(self, title: str | None = None) -> None:
         """Nothing plotted: the hint again (or *title*, e.g. no results yet)."""
