@@ -185,6 +185,32 @@ def _scope_text(selection: dict) -> str:
     return f" {operator} ".join(parts)
 
 
+class TraceSlider(QtWidgets.QSlider):
+    """The navigator's slider (#567): it gives up its room first when the
+    panel is narrow, and then, too short to drag, isn't drawn (nor
+    clicked)."""
+
+    MIN_USABLE_WIDTH = 40
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(QtCore.Qt.Orientation.Horizontal, parent)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored,
+                           QtWidgets.QSizePolicy.Policy.Fixed)
+
+    def usable(self) -> bool:
+        return self.width() >= self.MIN_USABLE_WIDTH
+
+    def paintEvent(self, event) -> None:
+        if self.usable():
+            super().paintEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if self.usable():
+            super().mousePressEvent(event)
+        else:
+            event.ignore()
+
+
 class ToolRail(QtWidgets.QWidget):
     """Vertical tool selector used to switch between tool workspaces."""
 
@@ -359,6 +385,15 @@ class PlotPanel(QtWidgets.QWidget):
         self.trace_last_button.setIconSize(QtCore.QSize(22, 22))
         navigator_layout.addWidget(self.trace_last_button)
 
+        # A slider through the traces < > visit (#567): quicker than < > with
+        # hundreds of epochs. It takes the row's spare room, and gives it up
+        # first: the panel needs no more width than without it (TraceSlider)
+        self.trace_slider = TraceSlider(self)
+        self.trace_slider.setRange(0, 0)
+        self.trace_slider.setEnabled(False)
+        self.trace_slider.setToolTip("Drag through the epochs")
+        navigator_layout.addWidget(self.trace_slider, stretch=1)
+
         # Epoch options, in a ⋯ menu beside the buttons: how far < > move,
         # whether they visit only the selected traces, and overlaid epochs
         self.step_menu = QtWidgets.QMenu("Stepping", self)
@@ -418,6 +453,9 @@ class PlotPanel(QtWidgets.QWidget):
         navigator_layout.addWidget(self.step_button)
 
         self.trace_name_label = QtWidgets.QLabel("No trace", self)
+        # Its whole name, e.g. RecordA5: the slider shrinks instead (#567)
+        self.trace_name_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum,
+                                            QtWidgets.QSizePolicy.Policy.Preferred)
         navigator_layout.addWidget(self.trace_name_label)
 
         # While stepping through the selection only, e.g. "(Set1: 250)"
@@ -428,7 +466,7 @@ class PlotPanel(QtWidgets.QWidget):
         # e.g. "Showing 3 of 8 traces" while traces are overlaid
         self.overlay_status_label = QtWidgets.QLabel("", self)
         navigator_layout.addSpacing(8)
-        navigator_layout.addWidget(self.overlay_status_label, stretch=1)
+        navigator_layout.addWidget(self.overlay_status_label)
 
         # Set checkboxes (and, for epochs, a Group dropdown) for the current
         # epoch or data array, as in NeuroMatic
@@ -527,6 +565,9 @@ class PlotPanel(QtWidgets.QWidget):
         self.rendered_trace_count = 0
         self.transform_error = ""  # why the plotted traces aren't transformed
         self.trace_index.valueChanged.connect(self._on_trace_index_changed)
+        self.trace_index.valueChanged.connect(self._sync_slider)
+        self.trace_slider.valueChanged.connect(self._on_slider_changed)
+        self.trace_slider.sliderMoved.connect(self._show_slider_tip)
         self.trace_first_button.clicked.connect(lambda: self._go_to("first"))
         self.trace_previous_button.clicked.connect(lambda: self._go_to("previous"))
         self.trace_next_button.clicked.connect(lambda: self._go_to("next"))
@@ -963,6 +1004,40 @@ class PlotPanel(QtWidgets.QWidget):
                               ("next", self.trace_next_button),
                               ("last", self.trace_last_button)):
             button.setEnabled(self._target_row(where) is not None)
+        self._sync_slider()
+
+    # --- the slider (#567) ------------------------------------------------
+
+    def _sync_slider(self, *_args) -> None:
+        """The slider: a notch per row < > visit (Selected Only: the
+        selection's), at the current one (or the nearest before it); Page
+        Up / Down move by Step."""
+        rows = self._step_rows() if self._trace_entries else []
+        position = max(bisect.bisect_right(rows, self.trace_index.value()) - 1, 0)
+        self.trace_slider.blockSignals(True)
+        self.trace_slider.setRange(0, max(len(rows) - 1, 0))
+        self.trace_slider.setPageStep(self.step_size.value())
+        self.trace_slider.setValue(position)
+        self.trace_slider.blockSignals(False)
+        self.trace_slider.setEnabled(len(rows) > 1 and self.trace_index.isEnabled())
+
+    def _slider_row(self, position: int) -> int | None:
+        rows = self._step_rows() if self._trace_entries else []
+        return rows[position] if 0 <= position < len(rows) else None
+
+    def _on_slider_changed(self, position: int) -> None:
+        """Dragged (or keys): the trace at that notch, as < > would show it."""
+        row = self._slider_row(position)
+        if row is not None and self.trace_index.isEnabled():
+            self.trace_index.setValue(row)
+
+    def _show_slider_tip(self, position: int) -> None:
+        """While dragging: the trace's name (e.g. E57), by the cursor."""
+        row = self._slider_row(position)
+        if row is None:
+            return
+        name = getattr(self._trace_entries[row][0], "name", str(row))
+        QtWidgets.QToolTip.showText(QtGui.QCursor.pos(), name, self.trace_slider)
 
     def _go_to(self, where: str) -> None:
         """Go to the first, previous, next or last trace (see :meth:`_target_row`)."""

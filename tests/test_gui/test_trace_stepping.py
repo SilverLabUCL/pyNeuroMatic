@@ -247,3 +247,69 @@ def test_notes_of_the_current_epoch(app):
     panel.trace_next_button.click()
     panel.notes_action.trigger()
     assert opened[-1][0] is panel._current_item.notes and panel._current_item is not epoch
+
+
+# --- the slider (#567) --------------------------------------------------------
+
+def test_slider_follows_and_moves_the_epoch(app):
+    """A notch per epoch: dragging shows that epoch; < > and the box move it."""
+    panel = app.plot_widget
+    slider = panel.trace_slider
+    assert slider.isEnabled() and (slider.minimum(), slider.maximum()) == (0, 9)
+    slider.setValue(6)  # dragged (or keys)
+    assert _at(panel) == "E6" and panel.trace_index.value() == 6
+    panel.trace_next_button.click()
+    assert slider.value() == 7
+    panel.trace_index.setValue(2)
+    assert slider.value() == 2
+    panel.step_size.setValue(3)
+    assert slider.pageStep() == 3  # Page Up / Down move by Step
+    slider.triggerAction(QtWidgets.QAbstractSlider.SliderAction.SliderPageStepAdd)
+    assert _at(panel) == "E5"
+
+
+def test_slider_with_selected_only(app):
+    """Selected Only: a notch per Set1 epoch (E1, E3, E7), as < > visit."""
+    panel = app.plot_widget
+    slider = panel.trace_slider
+    panel.selection_only_action.setChecked(True)
+    app.selection_model.update(epoch_set="Set1")
+    assert (slider.minimum(), slider.maximum()) == (0, 2)
+    slider.setValue(2)
+    assert _at(panel) == "E7"
+    slider.setValue(1)
+    assert _at(panel) == "E3"
+    panel.trace_index.setValue(5)  # outside the set: the notch before
+    assert slider.value() == 1
+    panel.selection_only_action.setChecked(False)
+    assert slider.maximum() == 9 and slider.value() == 5
+
+
+def test_slider_tip_names_the_epoch(app, monkeypatch):
+    panel = app.plot_widget
+    shown = []
+    monkeypatch.setattr(QtWidgets.QToolTip, "showText",
+                        lambda pos, text, widget=None: shown.append(text))
+    panel._show_slider_tip(4)
+    assert shown == ["E4"]
+
+
+def test_slider_off_with_one_trace(qtbot):
+    manager = NMManager(quiet=True)
+    folder = manager.folders.new("Demo", select=True)
+    series = folder.new_dataseries("Record", n_epochs=1, n_points=3)
+    window = NMAppWindow(manager)
+    qtbot.addWidget(window)
+    window.selection_model.update(dataseries=series)
+    assert not window.plot_widget.trace_slider.isEnabled()
+
+
+def test_slider_gives_up_its_room_first(app):
+    """It adds nothing to the panel's minimum width; too short to drag,
+    it isn't drawn."""
+    slider = app.plot_widget.trace_slider
+    assert slider.sizePolicy().horizontalPolicy() == QtWidgets.QSizePolicy.Policy.Ignored
+    slider.resize(14, slider.height())
+    assert not slider.usable()
+    slider.resize(200, slider.height())
+    assert slider.usable()
