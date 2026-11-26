@@ -21,9 +21,12 @@ from pyneuromatic.core.nm_channel import NMChannel
 from pyneuromatic.core.nm_data import NMData
 from pyneuromatic.core.nm_dataseries import NMDataSeries
 from pyneuromatic.core.nm_manager import NMManager
-from pyneuromatic.gui.context_views import ChannelTableModel, ChannelTable
+import pyneuromatic.core.nm_utilities as nmu
+from pyneuromatic.gui.context_views import (
+    RAINBOW_COLORS, ChannelTableModel, ChannelTable, rainbow_color)
 from pyneuromatic.core.nm_params import BOOLEAN, CHOICE, COLOR, NUMBER, NMParam, keywords
 from pyneuromatic.gui.param_form import ParamForm, XScale
+from pyneuromatic.gui.plot_levels import PlotLevel
 from pyneuromatic.gui.plot_ranges import PlotRange
 from pyneuromatic.gui.results_panel import ResultsPanel
 from pyneuromatic.gui.selection_model import epoch_scope_label, scoped_epoch_names
@@ -33,7 +36,8 @@ from pyneuromatic.tools.nm_tool_main import NMToolMain
 from pyneuromatic.tools.nm_main_op import array_names, find_array
 from pyneuromatic.tools.nm_main_op import (
     NMMainOpAlign, NMMainOpInterpolate, NMMainOpResample, NMMainOpRescaleX,
-    NMMainOpSetXStart,
+    NMMainOpSetXStart, NMMainOpArithmeticByArray, NMMainOpHistogram,
+    NMMainOpInequality,
     NMMainOpArithmetic, NMMainOpAverage, NMMainOpBaseline, NMMainOpConcatenate,
     NMMainOpDeleteNaNs, NMMainOpDeletePoints, NMMainOpDFOF, NMMainOpDifferentiate,
     NMMainOpFilter, NMMainOpInsertPoints, NMMainOpIntegrate, NMMainOpMax, NMMainOpMin,
@@ -144,16 +148,6 @@ def x_values(data: NMData, n: int) -> np.ndarray:
     return data.xscale.start + data.xscale.delta * np.arange(n)
 
 
-# Rainbow: epochs coloured red to violet in order, in at most this many
-# colours, each drawn as one line (fast for thousands of epochs)
-RAINBOW_COLORS = 64
-
-
-def rainbow_color(fraction: float) -> QtGui.QColor:
-    """Red (0) to violet (1)."""
-    return QtGui.QColor.fromHsvF(0.8 * min(max(fraction, 0.0), 1.0), 0.9, 0.85)
-
-
 @dataclass
 class PlotOptions:
     """How Main2 draws the epochs: a colour, or a rainbow; and each epoch's
@@ -165,6 +159,15 @@ class PlotOptions:
     y_offset: float = 0.0
     reverse: bool = False  # the last epoch first: no offset, the first color
     reverse_colors: bool = False  # the rainbow from violet to red
+
+
+def _draw_as_segments(item) -> None:
+    """Draw *item*'s line as separate segments (QPainter.drawLines), not one
+    path: a path with many pieces, e.g. Inequality's NaN-where-false outputs
+    of long arrays (thousands of runs between NaNs), crashes Qt's raster
+    stroker (a segfault, not an error)."""
+    curve = getattr(item, "curve", item)  # a PlotDataItem's PlotCurveItem
+    curve.setSegmentedLineMode("on")
 
 
 class SelectionPlot(QtWidgets.QWidget):
@@ -255,10 +258,12 @@ class SelectionPlot(QtWidgets.QWidget):
                                      pen=pg.mkPen(self.background_color, width=1),
                                      connect="finite")
                     back.setClipToView(True)
+                    _draw_as_segments(back)
             self._draw_bands(plot, group)  # e.g. ± SEM, behind the average
             for x, y, color in self._lines(group):
                 curve = plot.plot(x, y, pen=pg.mkPen(color, width=1), connect="finite")
                 curve.setClipToView(True)
+                _draw_as_segments(curve)
             first = group.arrays[0]
             units = first.yscale.units or None
             plot.setLabel("left", f"{group.label}  {first.yscale.label or ''}".strip(),
@@ -395,6 +400,12 @@ FUNCTIONS = {
     "Max": (POINTWISE.format("maximum"), NMMainOpMax),
     "Concatenate": ("Compute one long array of the selected arrays joined end to end",
                     NMMainOpConcatenate),
+    # One output per selected array (or, Histogram, of them all), in a Main
+    # subfolder as a data series (#563)
+    "Inequality": ("Test each point of the selected arrays (e.g. y > a), making "
+                   "an array of the results for each", NMMainOpInequality),
+    "Histogram": ("Compute the distribution of the values of each selected "
+                  "array, or of them all together", NMMainOpHistogram),
 }
 
 # Main1's operations (#557): they change the selected arrays themselves
@@ -402,6 +413,8 @@ FUNCTIONS = {
 OPERATIONS = {
     "Arithmetic": ("apply an arithmetic operation to the selected arrays, e.g. + 1 or * 2",
                    NMMainOpArithmetic),
+    "Arithmetic by Array": ("apply an array to the selected arrays, point by "
+                            "point, e.g. subtract an average", NMMainOpArithmeticByArray),
     "Replace Values": ("replace a value in the selected arrays with another, "
                        "e.g. NaN with 0", NMMainOpReplaceValues),
     "Baseline": ("subtract a baseline window's mean", NMMainOpBaseline),
@@ -481,12 +494,14 @@ def light(color: str, amount: float = 0.55) -> str:
     return QtGui.QColor(*mix).name()
 
 
+POINTWISE_FUNCTIONS = ("Average", "Sum", "SumSqr", "Min", "Max")
 # Main1's list: its groups, in order, divided: Display; the functions, which
 # make MN_ arrays shown in Main2; the Points operations, which change an
 # array's points (#559); the other operations
 LIST_GROUPS = (
     tuple(DISPLAY),
-    tuple(FUNCTIONS),
+    POINTWISE_FUNCTIONS,  # Average... point by point across the arrays
+    tuple(name for name in FUNCTIONS if name not in POINTWISE_FUNCTIONS),
     POINTS,
     XSCALE,
     tuple(name for name in OPERATIONS if name not in POINTS + XSCALE),
@@ -514,6 +529,14 @@ def make_function(name: str, values: dict[str, Any], ignore_nans: bool = True):
 # In x units but not one x position per array, so no use to Align: the
 # Spike tool's mean ISI (a duration), all spike times (raster), first spike
 NOT_X_POSITIONS = ("SP_isi", "SP_RX", "SP_first")
+
+
+def is_same_length(data: NMData | None, size: int) -> bool:
+    """*data* can be applied point by point to arrays of *size* points:
+    numbers, 1-D, as many points (Arithmetic by Array, #563)."""
+    values = getattr(data, "nparray", None)
+    return (isinstance(values, np.ndarray) and values.ndim == 1
+            and values.dtype.kind in "biuf" and values.size == size)
 
 
 def is_x_values(data: NMData | None, xunits: str) -> bool:
@@ -616,13 +639,53 @@ class Main2Panel(ResultsPanel):
         return (f"No Main outputs in {self._folder.name}: run a function in Main1 "
                 "(e.g. Average).")
 
+    def _per_array_series(self) -> dict[str, Any]:
+        """The subfolder's data series of an output per array (e.g. IQ_Record:
+        IQ_RecordA0, IQ_RecordA1...), listed as one, as Spike2's SPK_ (#563);
+        its arrays: in the strip (the subfolder, then the series)."""
+        folder = self.toolfolder()
+        if folder is None:
+            return {}
+        per_array = {}
+        for name, series in folder.dataseries.items():
+            arrays = [d for c in series.channels.values() for d in c.data]
+            if arrays and all((nmu.parse_data_name(d.name) or ("",))[0] == name
+                              for d in arrays):
+                per_array[name] = series
+        return per_array
+
     def _array_names(self) -> list[str]:
         folder = self.toolfolder()
-        return list(folder.data.keys()) if folder is not None else []
+        if folder is None:
+            return []
+        series = self._per_array_series()
+        in_series = {d.name for s in series.values()
+                     for c in s.channels.values() for d in c.data}
+        names = []
+        for name in folder.data.keys():
+            if name not in in_series:
+                names.append(name)
+            else:
+                parsed = nmu.parse_data_name(name)
+                if parsed is not None and parsed[0] not in names:
+                    names.append(parsed[0])  # the series, where its first array was
+        return names
+
+    def listed_name(self, name: str) -> str:
+        """The entry output *name* is listed under: its own, or its series'."""
+        parsed = nmu.parse_data_name(name)
+        if parsed is not None and parsed[0] in self._per_array_series():
+            return parsed[0]
+        return name
 
     def chosen_data(self) -> NMData | None:
         folder, name = self.toolfolder(), self.selected_array()
-        return folder.data.get(name) if folder is not None and name else None
+        if folder is None or not name:
+            return None
+        series = self._per_array_series().get(name)
+        if series is not None:  # its first array: plotted with all the series'
+            return next((d for c in series.channels.values() for d in c.data), None)
+        return folder.data.get(name)
 
     def _background_of(self, name: str | None) -> list[NMData]:
         """The arrays output *name* was made from, if it's an average (or
@@ -746,6 +809,8 @@ class MainToolTab(SelectionRunTab):
             form.ranges_changed.connect(self.ranges_changed)
             if name in POINT_RANGES:  # typed point numbers: the Plot's lines follow
                 form.changed.connect(self.ranges_changed)
+            if name == "Inequality":  # its a and b on the Plot follow
+                form.changed.connect(self.levels_changed)
             if name == "Resample":  # the number of points after, as typed
                 form.changed.connect(self._show_resample_note)
             self.forms[name] = form
@@ -859,6 +924,16 @@ class MainToolTab(SelectionRunTab):
         self.forms["Align"].set_array_names("values_array", [
             n for n in names if is_x_values(find_array(folder, n), xunits)])
         self.forms["Interpolate"].set_array_names("template_name", names)
+        # Arithmetic by Array: only arrays as long as the selected ones (#563)
+        sizes = sorted({int(d.nparray.size) for d in arrays
+                        if hasattr(d.nparray, "size")})
+        same = ([n for n in names if is_same_length(find_array(folder, n), sizes[0])]
+                if len(sizes) == 1 else [])
+        by_array = self.forms["Arithmetic by Array"]
+        by_array.set_array_names("ref", same)
+        by_array.set_note("ref", (
+            "" if not sizes else f"arrays of {sizes[0]} points" if len(sizes) == 1
+            else "the selected arrays differ in length: none can be used"))
         xunits = sorted({d.xscale.units or "" for d in arrays})  # Set X Start's
         self.forms["Set X Start"].set_note(
             "value", xunits[0] if len(xunits) == 1 else "(mixed units)" if xunits else "")
@@ -970,7 +1045,7 @@ class MainToolTab(SelectionRunTab):
 
     def _on_function_changed(self, *_args) -> None:
         name = self.entry()
-        if name in XSCALE:  # its pickers: the folder's arrays now
+        if name in XSCALE + ("Arithmetic by Array",):  # its pickers: the arrays now
             self._show_xscale_forms()
         self.form_stack.setCurrentWidget(self.forms[name] if name else self.no_form)
         self.reset_button.setEnabled(name is not None)
@@ -990,6 +1065,7 @@ class MainToolTab(SelectionRunTab):
             self.function_info.setText(info)
         self._on_mode_tab_changed(self.mode_tabs.currentIndex())  # Progress: functions'
         self.ranges_changed.emit()  # its x ranges on the Plot
+        self.levels_changed.emit()  # Inequality's levels
 
     def plot_ranges(self) -> list[PlotRange]:
         # The chosen function's x ranges (draggable, locked or hidden: the
@@ -1029,6 +1105,28 @@ class MainToolTab(SelectionRunTab):
         if bgn is None or end is None:
             return None
         return PlotRange("points", f"{name} {index} to {last}", bgn, end, color)
+
+    INEQUALITY_COLOR = "#7c3aed"
+
+    def plot_levels(self, data) -> list[PlotLevel]:
+        """Inequality's a (and b, for a range) as levels on the Plot (#563)."""
+        if self.entry() != "Inequality":
+            return []
+        form = self.form()
+        try:
+            values = form.values()
+        except ValueError:
+            return []
+        levels = [PlotLevel("a", "Inequality a", values["a"], self.INEQUALITY_COLOR)]
+        if form._rows["b"][1].isEnabled():  # a range
+            levels.append(PlotLevel("b", "Inequality b", values["b"],
+                                    self.INEQUALITY_COLOR))
+        return levels
+
+    def set_plot_level(self, key: str, y: float, final: bool) -> None:
+        """A dragged level: its box follows."""
+        if self.entry() == "Inequality" and key in ("a", "b"):
+            self.form().set_values({key: y})
 
     def set_plot_range(self, key: str, xbgn: float, xend: float, final: bool) -> None:
         """A dragged range: its boxes follow (Delete / Insert Points': its
@@ -1195,8 +1293,8 @@ class MainToolTab(SelectionRunTab):
         if self._tool.toolfolder is not None:
             self.main2.show_toolfolder(self._tool.toolfolder)
             outputs = self._tool.outputs
-            if outputs:
-                self.main2.select_array(outputs[0])
+            if outputs:  # (one per array: their series, e.g. IQ_Record)
+                self.main2.select_array(self.main2.listed_name(outputs[0]))
 
     def _on_run_finished(self, succeeded: bool) -> None:
         self._show_x_scale()  # e.g. Delete Points: the arrays' new lengths
@@ -1223,27 +1321,37 @@ class MainToolTab(SelectionRunTab):
 
     # --- Main2: the outputs ---------------------------------------------------
 
-    def _output_options(self) -> PlotOptions:
-        """Outputs are drawn in one color (the Plot's), not offset."""
-        return PlotOptions(color=self.plot_view.options.color, rainbow=False)
+    def _output_options(self, selected: Selected) -> PlotOptions:
+        """Outputs aren't offset; overlaid (e.g. IQ_Record's arrays), in a
+        rainbow (as Plot's, reversed if it is), else in the Plot's color."""
+        overlaid = any(len(g.arrays) > 1 for g in selected.groups)
+        return PlotOptions(color=self.plot_view.options.color, rainbow=overlaid,
+                           reverse_colors=self.plot_view.options.reverse_colors)
 
-    def _plot_outputs(self, selected: Selected) -> None:
-        self.plot_view.show_selected(selected, self._output_options())
+    def _show_outputs(self) -> bool:
+        """The chosen output plotted, and the subfolder's outputs in the
+        table (the chosen one's column selected): the Plot | Table toggle
+        and Main2's Plot and Table show the same. False: none chosen."""
+        selected = self.main2.selected_outputs()
+        if selected is None:
+            return False
+        self.plot_view.show_selected(selected, self._output_options(selected))
+        outputs = self.main2.all_outputs()
+        if outputs is not None:
+            self.table_view.show_selected(outputs)
+            self.table_view.select_array(self.main2.chosen_data())
         self.results_changed.emit()
-        self.view_requested.emit("plot")
+        return True
+
+    def _plot_outputs(self, _selected: Selected | None = None) -> None:
+        if self._show_outputs():
+            self.view_requested.emit("plot")
 
     def _on_output_chosen(self) -> None:
-        """The plot follows the output chosen in Main2 (while it's shown)."""
+        """The plot and table follow the output chosen in Main2 (while it's shown)."""
         if self.mode_tabs.currentWidget() is self.main2:
-            selected = self.main2.selected_outputs()
-            if selected is not None:
-                self.plot_view.show_selected(selected, self._output_options())
+            self._show_outputs()
 
     def _table_outputs(self) -> None:
-        selected = self.main2.all_outputs()
-        if selected is None:
-            return
-        self.table_view.show_selected(selected)
-        self.table_view.select_array(self.main2.chosen_data())
-        self.results_changed.emit()
-        self.view_requested.emit("table")
+        if self._show_outputs():
+            self.view_requested.emit("table")

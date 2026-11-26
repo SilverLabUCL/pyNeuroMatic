@@ -10,6 +10,7 @@ pytest.importorskip("pyqtgraph")
 
 from pyneuromatic.core.nm_manager import NMManager
 from pyneuromatic.gui.app_window import NMAppWindow
+from pyneuromatic.gui.context_views import rainbow_color
 from pyneuromatic.gui.spike2_dialogs import ISIDialog, PSTDialog, WaveformsDialog
 from pyneuromatic.gui.spike2_view import WAVEFORMS, Spike2Panel, SpikeTables
 import pyneuromatic.core.nm_command_history as nmch
@@ -304,12 +305,15 @@ def test_waveforms(app, monkeypatch):
     assert panel.selected_array() == WAVEFORMS
     widget = app.spike.plot_view.plot_widget
     items = widget.listDataItems()
-    assert len(items) == 2  # the waveforms, as one line, and their mean
-    x, y = items[0].getData()  # a NaN after each waveform
-    assert len(x) == 6 * (5 + 1) and np.isnan(x[5]) and np.isnan(y[5])
+    assert len(items) == 7  # the waveforms, a line per colour (6), and their mean
+    x, y = items[0].getData()  # the first waveform, then a NaN
+    assert len(x) == 5 + 1 and np.isnan(x[5]) and np.isnan(y[5])
     assert list(x[:5]) == [-2, -1, 0, 1, 2] and list(y[:5]) == [0, 0, 1, 1, 1]
-    _x, mean = items[1].getData()
-    assert len(mean) == 5
+    colors = [i.opts["pen"].color().name() for i in items[:6]]
+    assert colors[0] == rainbow_color(1 / 12).name() and len(set(colors)) == 6  # red first
+    assert all(i.curve.opts["segmentedLineMode"] == "on" for i in items[:6])
+    _x, mean = items[6].getData()
+    assert len(mean) == 5 and items[6].opts["pen"].color().name() == "#000000"
     assert widget.plotItem.titleLabel.text == "Spike_Record_A_All_0: SPK_ (6 waveforms)"
     assert not panel.epoch_x_action.isEnabled()
     lines = panel.details.toPlainText().splitlines()

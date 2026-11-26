@@ -67,6 +67,22 @@ def array_names(folder: NMFolder | None) -> list[str]:
     return names
 
 
+def _write_pending(op: "NMMainOp", folder: NMFolder | None) -> None:
+    """*op*'s outputs, made during the run (Inequality, Histogram, #563),
+    written into *folder* (nm.main: a Main subfolder; alone: the data's
+    folder), noted; their names in ``op.output_names``."""
+    folder = folder if folder is not None else getattr(op, "_folder", None)
+    op.output_names = []
+    if folder is None:
+        return
+    for name, values, xscale, yscale, note in op._pending:
+        name = op._make_out_name(folder, name)  # overwrite off: name_0, name_1...
+        out = op._write_out_array(folder, name, values, xscale=xscale, yscale=yscale)
+        if out is not None:
+            op._add_op_note(out, note)
+            op.output_names.append(name)
+
+
 def x_of(data: NMData) -> np.ndarray:
     """*data*'s x values: its x array if it fits, else from start and delta."""
     y, xarray = data.nparray, data.xarray
@@ -143,6 +159,11 @@ class NMMainOp:
     # It changes the arrays themselves (an operation); a function or display
     # makes new ones, or nothing (#557)
     CHANGES_DATA: bool = True
+    # Its outputs go in a Main subfolder (nm.main), viewed in Main2: the
+    # functions (Average...), Inequality, Histogram (#563)
+    WRITES_OUTPUTS: bool = False
+    # Before each output's name (nm.main: "MN_" or "")
+    name_prefix: str = ""
 
     @classmethod
     def form_keywords(cls, kwargs: dict) -> dict:
@@ -500,18 +521,29 @@ class NMMainOpArithmeticByArray(NMMainOp):
     """Apply an element-wise arithmetic operation using a reference array.
 
     The operation is applied as ``data = data op ref`` element-by-element.
-    When ``data`` and ``ref`` differ in length the operation is applied to
-    the overlap (``min(len(data), len(ref))``); elements beyond the overlap
-    are left unchanged.
+    ``data`` and ``ref`` must have the same number of points: point by
+    point, strictly (#563); a run with one that doesn't is refused before
+    any array changes.
 
     Parameters:
         ref: Reference operand — either an ``np.ndarray`` or a ``str`` data
-            name that will be looked up in the source folder at runtime.
+            name that will be looked up in the source folder at runtime
+            (``"subfolder/name"`` for a subfolder's, e.g. a Main output).
         op: Operation string — same choices as :class:`NMMainOpArithmetic`.
             Default is ``"x"``.
     """
 
     name = "arithmetic_by_array"
+    PARAMS = (
+        NMParam("op", CHOICE, "Operation", default="-",
+                choices=(("x", "× multiply"), ("/", "÷ divide"), ("+", "+ add"),
+                         ("-", "− subtract"), ("=", "= set to"), ("**", "^ power")),
+                tip="Each point, with the array's point of the same number"),
+        NMParam("ref", ARRAY, "Array",
+                tip="The array to apply, point by point (e.g. an average to "
+                    "subtract); only arrays with the selected arrays' number "
+                    "of points are listed"),
+    )
 
     def __init__(self, ref: np.ndarray | str | None = None, op: str = "x") -> None:
         self.ref = np.zeros(0) if ref is None else ref
@@ -558,7 +590,7 @@ class NMMainOpArithmeticByArray(NMMainOp):
                 raise ValueError(
                     "folder required to resolve ref %r" % self._ref
                 )
-            ref_data = folder.data.get(self._ref)
+            ref_data = find_array(folder, self._ref)
             if ref_data is None or not isinstance(ref_data.nparray, np.ndarray):
                 raise ValueError(
                     "ref %r not found in folder %r" % (self._ref, folder.name)
@@ -3066,6 +3098,7 @@ class NMMainOpAccumulate(NMMainOp):
 
     _output_prefix: str = ""
     CHANGES_DATA = False  # makes new arrays (#557)
+    WRITES_OUTPUTS = True
     # The part of each array used (#555): xbgn to xend, all by default
     PARAMS: tuple[NMParam, ...] = (X_RANGE,)
 
@@ -3599,8 +3632,9 @@ class NMMainOpConcatenate(NMMainOpAccumulate):
 class NMMainOpInequality(NMMainOp):
     """Apply an inequality test point-by-point to each data array.
 
-    Output is written as a new array ``IQ_{data.name}`` in the source
-    folder (non-destructive).  Original data is unchanged.
+    Output is written as a new array ``IQ_{data.name}`` (non-destructive):
+    by nm.main in a Main subfolder, viewed in Main2 (#563); run alone, in the
+    source folder.  Original data is unchanged.
 
     Args:
         op:            Operator string (see
@@ -3614,6 +3648,32 @@ class NMMainOpInequality(NMMainOp):
 
     name = "inequality"
     CHANGES_DATA = False  # makes new arrays, or a figure
+    WRITES_OUTPUTS = True  # in a Main subfolder (#563)
+    PARAMS = (
+        NMParam("op", CHOICE, "Test", default=">",
+                choices=((">", "y > a"), (">=", "y ≥ a"), ("<", "y < a"), ("<=", "y ≤ a"),
+                         ("==", "y = a"), ("!=", "y ≠ a"), ("<<", "a < y < b"),
+                         ("<=<=", "a ≤ y ≤ b"), ("<=<", "a ≤ y < b"), ("<<=", "a < y ≤ b")),
+                tip="The test of each point's value y"),
+        NMParam("a", NUMBER, "a", default=0.0, finite=True,
+                tip="The level (the lower one of a range); or drag its line on the Plot"),
+        NMParam("b", NUMBER, "b", default=1.0, finite=True,
+                when=("op", ("<<", "<=<=", "<=<", "<<=")),
+                tip="The upper level of a range; or drag its line on the Plot"),
+        NMParam("binary_output", CHOICE, "Output", default=True,
+                choices=((True, "1 where true, 0 where not"),
+                         (False, "the y-value where true, NaN where false")),
+                tip="What each output point is"),
+    )
+
+    @classmethod
+    def form_keywords(cls, kwargs: dict) -> dict:
+        kwargs = dict(kwargs)
+        if kwargs.get("op") not in nm_math._RANGE_INEQUALITY_OPS:
+            kwargs["b"] = None  # one level
+        elif kwargs.get("b") is not None and kwargs["b"] <= kwargs["a"]:
+            raise ValueError("b must be more than a")
+        return kwargs
 
     def __init__(
         self,
@@ -3628,6 +3688,8 @@ class NMMainOpInequality(NMMainOp):
         self.binary_output = binary_output
         self._out_prefix: str = "IQ_"
         self._results: dict = {}
+        self._pending: list = []  # (name, values, xscale, yscale, note)
+        self.output_names: list[str] = []
 
     @property
     def out_prefix(self) -> str:
@@ -3707,6 +3769,8 @@ class NMMainOpInequality(NMMainOp):
 
     def run_init(self) -> None:
         self._results = {}
+        self._pending = []
+        self.output_names = []
         if self._op in nm_math._RANGE_INEQUALITY_OPS and self._b is None:
             raise ValueError("range op %r requires b" % self._op)
 
@@ -3722,25 +3786,27 @@ class NMMainOpInequality(NMMainOp):
         )
         successes = int(np.sum(mask))
         condition = nm_math.inequality_condition_str(self._op, self._a, self._b)
-        base_name = self._out_prefix + data.name
-        out_name = self._make_out_name(self._folder, base_name) if self._folder is not None else base_name
-        if self._folder is not None:
-            xscale = {
-                "start": data.xscale.start,
-                "delta": data.xscale.delta,
-                "label": data.xscale.label,
-                "units": data.xscale.units,
-            }
-            yscale = {"label": data.yscale.label, "units": data.yscale.units}
-            out_data = self._write_out_array(self._folder, out_name, result,
-                                            xscale=xscale, yscale=yscale)
-            if out_data is not None:
-                self._add_op_note(out_data, condition)
+        out_name = self.name_prefix + self._out_prefix + data.name
+        xscale = {
+            "start": data.xscale.start,
+            "delta": data.xscale.delta,
+            "label": data.xscale.label,
+            "units": data.xscale.units,
+        }
+        yscale = ({"label": "true", "units": ""} if self._binary_output
+                  else {"label": data.yscale.label, "units": data.yscale.units})
+        # Written by run_finish: into nm.main's Main subfolder, or the
+        # data's folder (run_all alone) (#563)
+        self._pending.append((out_name, result, xscale, yscale, condition))
         self._results[out_name] = {
             "successes": successes,
             "failures": len(arr) - successes,
             "condition": condition,
         }
+
+    def run_finish(self, folder: NMFolder | None = None,
+                   prefix: str | None = None) -> None:
+        _write_pending(self, folder)
 
     def _op_params_str(self) -> str:
         return "op=%r, a=%r, b=%r, binary_output=%r" % (
@@ -3782,6 +3848,42 @@ class NMMainOpHistogram(NMMainOp):
 
     name = "histogram"
     CHANGES_DATA = False  # makes new arrays, or a figure
+    WRITES_OUTPUTS = True  # in a Main subfolder (#563)
+    PARAMS = (
+        NMParam("combine", CHOICE, "Histogram of", default="each",
+                choices=(("each", "each array"), ("all", "all arrays together")),
+                tip="One histogram per selected array, or one of all their "
+                    "values together (per channel)"),
+        X_RANGE,
+        NMParam("bins_by", CHOICE, "Bins by", default="number",
+                choices=(("number", "number of bins"), ("width", "bin width"))),
+        NMParam("bins", INTEGER, "Bins", default=10, minimum=1,
+                when=("bins_by", "number"), tip="How many bins, of equal width"),
+        NMParam("bin_width", NUMBER, "Bin width", default=1.0, finite=True,
+                minimum=0.0, when=("bins_by", "width"),
+                tip="Each bin's width, in the arrays' y units"),
+        NMParam("value_min", NUMBER, "Values from", default=-math.inf,
+                tip="The values counted, from (-inf: the smallest)"),
+        NMParam("value_max", NUMBER, "to", default=math.inf,
+                tip="The values counted, to (inf: the largest)"),
+        NMParam("density", BOOLEAN, "Density", default=False,
+                tip="A probability density (its area is 1), not counts"),
+    )
+
+    @classmethod
+    def form_keywords(cls, kwargs: dict) -> dict:
+        kwargs = dict(kwargs)
+        if kwargs.pop("bins_by", "number") == "width":
+            kwargs.pop("bins", None)
+            if not kwargs.get("bin_width"):
+                raise ValueError("Bin width: more than 0")
+        else:
+            kwargs.pop("bin_width", None)
+        lo, hi = kwargs.pop("value_min", -math.inf), kwargs.pop("value_max", math.inf)
+        if lo >= hi:
+            raise ValueError("Values from must be less than to")
+        kwargs["value_range"] = (lo, hi)
+        return kwargs
 
     def __init__(
         self,
@@ -3790,12 +3892,26 @@ class NMMainOpHistogram(NMMainOp):
         xend: float = math.inf,
         xrange: tuple | None = None,
         density: bool = False,
+        combine: str = "each",
+        bin_width: float | None = None,
+        value_range: tuple | None = None,
     ) -> None:
         self.bins = bins
         self.xbgn = xbgn
         self.xend = xend
         self.xrange = xrange
         self.density = density
+        if combine not in ("each", "all"):
+            raise ValueError("combine must be 'each' or 'all', got %r" % combine)
+        self.combine = combine  # one histogram per array, or of them all (#563)
+        if bin_width is not None and not bin_width > 0:
+            raise ValueError("bin_width must be > 0, got %r" % bin_width)
+        self.bin_width = bin_width
+        # The values counted (an end may be inf: the data's own), as xrange
+        self.value_range = value_range
+        self._pending: list = []
+        self._values: dict = {}  # combine="all": channel: values
+        self.output_names: list[str] = []
         self._out_prefix: str = "H_"
 
     @property
@@ -3901,6 +4017,43 @@ class NMMainOpHistogram(NMMainOp):
     def run_init(self) -> None:
         self._validate_window()
         self._results = {}
+        self._pending = []
+        self._values = {}
+        self._yscale = None
+
+    def _edges(self, values: np.ndarray):
+        """np.histogram's bins and range for *values*: a number of bins or
+        a bin width, over the value range (an inf end: the values' own)."""
+        lo, hi = self.value_range if self.value_range is not None else (
+            self._xrange if self._xrange is not None else (-math.inf, math.inf))
+        if values.size:
+            lo = float(np.min(values)) if math.isinf(lo) else lo
+            hi = float(np.max(values)) if math.isinf(hi) else hi
+        if not values.size or not (math.isfinite(lo) and math.isfinite(hi)):
+            return self._bins, None
+        if self.bin_width:
+            first = math.floor(lo / self.bin_width) * self.bin_width
+            n = max(int(math.ceil((hi - first) / self.bin_width)), 1)
+            if first + n * self.bin_width <= hi:
+                n += 1  # the largest value in the last bin
+            return first + self.bin_width * np.arange(n + 1), None
+        return self._bins, (lo, hi) if hi > lo else None
+
+    def _histogram(self, values: np.ndarray, name: str, yscale, note: str):
+        values = values[np.isfinite(values)]  # exclude NaN and Inf
+        bins, value_range = self._edges(values)
+        counts, edges = np.histogram(values, bins=bins, range=value_range,
+                                     density=self._density)
+        xscale = {
+            "start": float(edges[0]),
+            "delta": float(edges[1] - edges[0]),
+            "label": yscale.label,  # input y-axis → output x-axis
+            "units": yscale.units,
+        }
+        self._pending.append((name, counts.astype(float), xscale,
+                              {"label": "density" if self._density else "counts",
+                               "units": ""}, note))
+        return counts, edges, values.size
 
     def run(self, data: NMData, channel_name: str | None = None) -> None:
         if not isinstance(data.nparray, np.ndarray):
@@ -3914,41 +4067,50 @@ class NMMainOpHistogram(NMMainOp):
             )
             arr = arr[sl]
 
-        arr_finite = arr[np.isfinite(arr)]  # exclude NaN and Inf
-
-        counts, edges = np.histogram(
-            arr_finite, bins=self._bins,
-            range=self._xrange, density=self._density,
-        )
-
-        base_name = self._out_prefix + data.name
-        out_name = self._make_out_name(self._folder, base_name) if self._folder is not None else base_name
-        if self._folder is not None:
-            xscale = {
-                "start": float(edges[0]),
-                "delta": float(edges[1] - edges[0]),
-                "label": data.yscale.label,  # input y-axis → output x-axis
-                "units": data.yscale.units,
-            }
-            yscale = {
-                "label": "density" if self._density else "counts",
-                "units": "",
-            }
-            out_data = self._write_out_array(
-                self._folder, out_name, counts.astype(float),
-                xscale=xscale, yscale=yscale,
-            )
-            if out_data is not None:
-                self._add_op_note(out_data, self._op_params_str())
+        if self.combine == "all":  # one histogram of them all, per channel
+            key = channel_name
+            if key is None:
+                parsed = nmu.parse_data_name(data.name)
+                key = parsed[1] if parsed is not None else ""
+                self._parsed_prefix = parsed[0] if parsed is not None else ""
+            self._values.setdefault(key, []).append(arr)
+            self._yscale = self._yscale or data.yscale
+            return
+        out_name = self.name_prefix + self._out_prefix + data.name
+        counts, edges, n = self._histogram(arr, out_name, data.yscale,
+                                           self._op_params_str())
         self._results[out_name] = {
             "counts": counts,
             "edges": edges,
-            "n_excluded": data.nparray.size - len(arr_finite),
+            "n_excluded": arr.size - n,
         }
 
+    def run_finish(self, folder: NMFolder | None = None,
+                   prefix: str | None = None) -> None:
+        """Written: each array's histogram, or each channel's of them all
+        (e.g. H_RecordA), into *folder* (#563)."""
+        if self.combine == "all":
+            pfx = prefix if prefix is not None else getattr(self, "_parsed_prefix", "")
+            for channel, arrays in self._values.items():
+                values = np.concatenate(arrays)
+                name = self.name_prefix + self._out_prefix + (pfx or "") + channel
+                counts, edges, n = self._histogram(
+                    values, name, self._yscale,
+                    "%s, n=%d arrays" % (self._op_params_str(), len(arrays)))
+                self._results[name] = {"counts": counts, "edges": edges,
+                                       "n_excluded": values.size - n}
+        _write_pending(self, folder)
+
     def _op_params_str(self) -> str:
-        return "bins=%r, xbgn=%r, xend=%r, xrange=%r, density=%r" % (
+        text = "bins=%r, xbgn=%r, xend=%r, xrange=%r, density=%r" % (
             self._bins, self._xbgn, self._xend, self._xrange, self._density)
+        if self.combine != "each":
+            text += ", combine=%r" % self.combine
+        if self.bin_width:
+            text += ", bin_width=%r" % self.bin_width
+        if self.value_range is not None:
+            text += ", value_range=%r" % (self.value_range,)
+        return text
 
 
 # =========================================================================

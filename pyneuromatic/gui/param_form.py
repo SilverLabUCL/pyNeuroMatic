@@ -171,6 +171,14 @@ class ParamForm(QtWidgets.QWidget):
                 combo.currentIndexChanged.connect(
                     lambda _i, n=param.name: self._show_array_tip(n))
             self._controls[param.name] = combo
+            if param.kind == ARRAY:  # a note (set_note) goes under it
+                row = QtWidgets.QWidget(self)
+                column = QtWidgets.QVBoxLayout(row)
+                column.setContentsMargins(0, 0, 0, 0)
+                column.setSpacing(2)
+                column.addWidget(combo)
+                column.addStretch(0)
+                return row
             return combo
         row = QtWidgets.QWidget(self)
         layout = QtWidgets.QHBoxLayout(row)

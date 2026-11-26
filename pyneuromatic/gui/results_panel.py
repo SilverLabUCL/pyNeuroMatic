@@ -121,6 +121,9 @@ class ResultsPanel(QtWidgets.QWidget):
         # The array last chosen in each subfolder (_array_key): chosen again
         # on going back to it
         self._chosen_arrays: dict[tuple, str] = {}
+        # Each folder's chosen subfolder (by folder name), for when it's
+        # chosen again
+        self._chosen_toolfolders: dict[str, str] = {}
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -294,10 +297,15 @@ class ResultsPanel(QtWidgets.QWidget):
     def refresh(self, select: str | None = None) -> None:
         """Reload the tool's subfolder list, choosing *select* if given.
 
-        Otherwise the current choice is kept, or the newest folder is chosen.
+        Otherwise the current choice is kept (another folder: the one chosen
+        when it was last shown), or the newest folder is chosen.
         """
-        self._folder = self._current_folder()
-        previous = select or self.folder_combo.currentData()
+        folder = self._current_folder()
+        previous = self.folder_combo.currentData()
+        if folder is not self._folder and folder is not None:
+            previous = self._chosen_toolfolders.get(folder.name, previous)
+        previous = select or previous
+        self._folder = folder
         names: list[str] = []
         if self._folder is not None:
             names = [
@@ -335,6 +343,9 @@ class ResultsPanel(QtWidgets.QWidget):
             self.select_array(name)
 
     def _on_folder_changed(self, *_args) -> None:
+        name = self.folder_combo.currentData()
+        if self._folder is not None and name is not None:
+            self._chosen_toolfolders[self._folder.name] = name
         self._update_folder_actions()
         self._on_toolfolder_changed()
 
